@@ -19,8 +19,10 @@ import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModul
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  collectStructTypeParamNames,
   collectTypeParamNames,
   isGenericFunction,
+  isGenericStruct,
   mentionsTypeParam,
   rejectDollarInSymbolName,
 } from "./generics";
@@ -73,6 +75,7 @@ import {
   STRUCT_INTERFACE,
   StructInfo,
   StructRegistry,
+  StructTemplateInfo,
 } from "./program";
 import { analyzeBounds } from "./bounds";
 import { checkResultLocalsHandled } from "./result";
@@ -127,15 +130,20 @@ export class Checker {
     for (const stmt of this.program.file.children) {
       if (stmt.kind === N_IMPORT) {
         collectImports(this.ctx, stmt);
-      } else if (stmt.kind === N_CLASS) {
-        const info = declareStruct(this.ctx, stmt, STRUCT_CLASS);
-        if (info !== null) {
-          declared.push(info);
-        }
-      } else if (stmt.kind === N_INTERFACE) {
-        const info = declareStruct(this.ctx, stmt, STRUCT_INTERFACE);
-        if (info !== null) {
-          declared.push(info);
+      } else if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
+        // WP18 G5: a class or interface with type parameters is a template, not
+        // a struct. It declares no layout, so it is registered beside the
+        // function templates and the member loop below skips it: its members
+        // are collected once per instantiation instead.
+        const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE;
+        if (isGenericStruct(stmt)) {
+          this.ctx.errored = false;
+          this.registerStructTemplate(stmt, kind);
+        } else {
+          const info = declareStruct(this.ctx, stmt, kind);
+          if (info !== null) {
+            declared.push(info);
+          }
         }
       } else if (stmt.kind === N_TYPE_ALIAS) {
         // Names first, resolution last: an alias may name a class declared
@@ -177,6 +185,10 @@ export class Checker {
         checkDefiniteAssignment(this.ctx, info);
       }
     }
+    // Every instantiation an annotation in this module's signatures asked for
+    // now has its members, and so does every struct declared here, so the two
+    // checks that need both can run (WP18 G5).
+    this.finishPendingStructs();
 
     // Last, exactly where stage0 puts it, so two compilers report one file's
     // diagnostics in one order: every alias is resolved even when nothing
@@ -214,7 +226,12 @@ export class Checker {
       // the module declares. It has not run yet, but qualifying an imported
       // symbol would rename the *exporter's* function, so say so rather than
       // depend on the order.
-      if (sig.definedIn(this.program.source)) {
+      // WP18: an instantiation's symbol carries the prefix from the moment it is
+      // minted, because it may be created on either side of this pass — a
+      // signature annotation that names `Box<i32>` runs before it, and a
+      // `new Box<i32>(v)` in a body runs long after. Qualifying it again would
+      // spell the package twice.
+      if (sig.instance === null && sig.definedIn(this.program.source)) {
         sig.name = `${prefix}${sig.name}`;
       }
     }
@@ -259,6 +276,7 @@ export class Checker {
       this.program.aliases.has(name) ||
       this.program.enums.has(name) ||
       this.program.structs.has(name) ||
+      this.program.structTemplates.has(name) ||
       this.program.templates.has(name) ||
       this.ctx.sigs.has(name) ||
       this.program.constants.has(name)
@@ -449,31 +467,106 @@ export class Checker {
   }
 
   /**
+   * WP18 G5: one generic class or interface declaration. It shares the single
+   * declaration namespace with everything else, and like a function template it
+   * never becomes a layout: `Box` has no fields until an instantiation binds its
+   * parameters, so it is not in `structs` and `Box` on its own is not a type.
+   */
+  registerStructTemplate(stmt: Node, kind: i32): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    const what = kind === STRUCT_CLASS ? "class" : "interface";
+    if (name.length === 0) {
+      this.ctx.error(stmt, kind === STRUCT_CLASS ? "Classes must be named" : "Interfaces must be named");
+      return;
+    }
+    if (name.startsWith("nish_")) {
+      this.ctx.error(nameNode, "Names starting with `nish_` are reserved for the runtime");
+      return;
+    }
+    if (rejectDollarInSymbolName(this.ctx, name, what, nameNode)) {
+      return;
+    }
+    if (this.program.structs.has(name) || this.program.structTemplates.has(name)) {
+      this.ctx.error(nameNode, `Duplicate declaration of \`${name}\``);
+      return;
+    }
+    if (this.ctx.sigs.has(name) || this.program.templates.has(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared as a function`);
+      return;
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    const template = new StructTemplateInfo(name, kind, stmt, this.program.source);
+    template.exported = isExported(stmt);
+    template.typeParams = collectStructTypeParamNames(stmt);
+    this.program.addStructTemplate(template);
+  }
+
+  /**
    * Pass 3 (WP18): check every instantiation's body, to a fixed point. Each one
    * may request more, and the queue is drained rather than recursed into, so
    * `from` is a chain of requests and not a call stack.
    */
   drainInstantiations(): void {
+    this.finishPendingStructs();
     let at = 0;
     while (at < this.ctx.pending.length) {
       const info = this.ctx.pending[at];
       at = at + 1;
       // Appended here rather than at the request, so that `functions` is in the
-      // order the bodies are checked and the emitter walks it the same way.
-      this.program.functions.push(info.sig);
+      // order the bodies are checked and the emitter walks it the same way. A
+      // method of an instantiated class is the exception: `collectStructMembers`
+      // appended it where a declared class's method is appended, which keeps an
+      // instantiated class's functions together and in member order.
+      if (info.owner === null) {
+        this.program.functions.push(info.sig);
+      }
       this.checkInstanceBody(info);
+      this.finishPendingStructs();
     }
     this.ctx.pending = [];
+  }
+
+  /**
+   * The `implements` and definite-assignment checks owed by struct
+   * instantiations, run once every struct in the module has its members.
+   *
+   * They cannot run at the request, because an annotation that names `Box<i32>`
+   * may be resolved before the interface `Box` implements has been collected —
+   * the same reason a *declared* struct's two checks are a sub-pass of their
+   * own rather than the tail of `collectStructMembers`.
+   */
+  finishPendingStructs(): void {
+    let at = 0;
+    while (at < this.ctx.pendingFinish.length) {
+      const info = this.ctx.pendingFinish[at];
+      at = at + 1;
+      this.ctx.errored = false;
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        checkImplements(this.ctx, info);
+        checkDefiniteAssignment(this.ctx, info);
+      }
+    }
+    this.ctx.pendingFinish = [];
+    this.ctx.errored = false;
   }
 
   /** One instantiation's body, over its own side tables and with its own type bindings. */
   checkInstanceBody(info: Instantiation): void {
     const savedBindings = this.ctx.typeBindings;
     const savedInstance = this.ctx.currentInstance;
+    const savedStruct = this.ctx.currentStructInstance;
     this.program.enterInstance(info);
     this.ctx.typeBindings = info.bindings;
     this.ctx.currentInstance = info;
+    // A method of an instantiated class continues its class's chain: a body
+    // that names `Box<T[]>` expands exactly as a field of that type would.
+    this.ctx.currentStructInstance = info.owner;
     this.checkFunctionBody(info.sig);
+    this.ctx.currentStructInstance = savedStruct;
     this.ctx.currentInstance = savedInstance;
     this.ctx.typeBindings = savedBindings;
     this.program.leaveInstance();
@@ -533,7 +626,11 @@ export class Checker {
    */
   checkBodies(): void {
     for (const sig of this.program.functions) {
-      if (sig.definedIn(this.program.source)) {
+      // WP18 G5: a method of an instantiated class is already in this list —
+      // `collectStructMembers` put it where a declared class's method goes —
+      // but its body means something only with its own tables and type bindings
+      // installed, so `drainInstantiations` is what checks it.
+      if (sig.instance === null && sig.definedIn(this.program.source)) {
         this.checkFunctionBody(sig);
       }
     }
@@ -775,6 +872,29 @@ export class Checker {
     const struct = target.struct(imp.importedName);
     if (struct !== null && struct.origin === target.source) {
       this.bindStructImport(index, struct);
+      return;
+    }
+    // WP18 §11 G7: one definition per instantiation, in the module that
+    // declares the template, is the whole-program half of this package and has
+    // not landed. Refusing by name beats "has no exported function", which is
+    // what looking only at the exported signatures would say.
+    const structTemplate = target.structTemplate(imp.importedName);
+    if (structTemplate !== null) {
+      const what = structTemplate.kind === STRUCT_CLASS ? "class" : "interface";
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic ${what}, and a generic ` +
+          "class or interface cannot yet be instantiated from another module; declare it in the module that uses it"
+      );
+      return;
+    }
+    const template = target.template(imp.importedName);
+    if (template !== null) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic function, and a generic function cannot ` +
+          "yet be instantiated from another module; declare it in the module that calls it"
+      );
       return;
     }
     const sig = target.exported(imp.importedName);

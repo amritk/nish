@@ -456,7 +456,7 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.ClassDeclaration: {
-        if (node.typeParameters !== undefined || node.name === undefined) unsupported(node);
+        if (node.name === undefined) unsupported(node);
         emit(depth, `CLASS${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         const heritage = node.heritageClauses ?? [];
@@ -468,16 +468,24 @@ function printTypeScriptTree(source, sf) {
           if (!ts.isIdentifier(base)) unsupported(node);
           identifier(base, depth + 1);
         }
-        const implemented = (implementsClause?.types ?? []).map((t) => {
+        // WP18 G5: an implemented interface may be an instantiation, so stage1
+        // reads each entry with `parseType` and the node is a TYPE_REF whose
+        // child is the type-argument list — empty for the ungeneric spelling.
+        const implemented = implementsClause?.types ?? [];
+        list(depth + 1, implemented, (t, d) => {
           if (!ts.isIdentifier(t.expression)) unsupported(node);
-          return t.expression;
+          const [ts_, te] = span(t);
+          emit(d, "TYPE_REF", ts_, te, t.expression.text);
+          list(d + 1, t.typeArguments ?? [], type);
         });
-        list(depth + 1, implemented, identifier);
         list(depth + 1, node.members, member);
+        // The type parameters are the fifth child, after the members, because
+        // `self/nodes.ts` appends rather than renumbers (WP18 G5).
+        typeParameters(node.typeParameters, depth + 1);
         return;
       }
       case ts.SyntaxKind.InterfaceDeclaration: {
-        if (node.typeParameters !== undefined || node.heritageClauses !== undefined) unsupported(node);
+        if (node.heritageClauses !== undefined) unsupported(node);
         emit(depth, `INTERFACE${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.members, (m, d) => {
@@ -489,6 +497,7 @@ function printTypeScriptTree(source, sf) {
           type(m.type, d + 1);
           empty(d + 1);
         });
+        typeParameters(node.typeParameters, depth + 1);
         return;
       }
       // `type X = T;` (WP23). An alias is a declaration in stage1's tree and a

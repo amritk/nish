@@ -37,6 +37,7 @@ import {
   collectFunctionSignature,
   collectFunctionTemplate,
   collectImports,
+  collectStructTemplate,
   collectPlainParams,
   markEntryMain,
   rejectDollarInSymbolName,
@@ -47,13 +48,18 @@ import {
   Instantiation,
   MAX_INSTANTIATIONS,
   MAX_INSTANTIATIONS_PER_TEMPLATE,
+  StructInstantiation,
+  StructTemplateInfo,
   TemplateInfo,
   expandingAncestor,
+  expandingStructAncestor,
   instanceDisplayName,
   instanceSymbol,
+  instantiateWritten,
   mentionsTypeParam,
   newNodeTables,
   nonTerminatingParts,
+  nonTerminatingStructParts,
   swapTables,
 } from "./generics.js";
 import { expressionCheckers } from "./expressions.js";
@@ -101,6 +107,13 @@ export class Checker implements CheckContext {
   /** Local name -> generic template (WP18). A template is not in `sigs`: it has no signature. */
   readonly templates = new Map<string, TemplateInfo>();
   /**
+   * Local name -> generic class or interface (WP18 G5). A struct template is
+   * not in `program.structs` for the same reason a function template is not in
+   * `sigs`: it has no layout until an instantiation binds its parameters, so
+   * `Box` on its own is not a type and never becomes a `%struct`.
+   */
+  readonly structTemplates = new Map<string, StructTemplateInfo>();
+  /**
    * The type parameters in scope, bound to the types this instantiation gives
    * them. Set only while an instantiation's signature is resolved or its body
    * is checked, and read by the named-type resolver below — which is the whole
@@ -109,8 +122,24 @@ export class Checker implements CheckContext {
   private typeBindings?: Map<string, StaticType>;
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   private currentInstance?: Instantiation;
+  /**
+   * The struct instantiation whose members are being collected, or whose method
+   * body is being checked. It is the struct half of `currentInstance`, and the
+   * chain the struct termination rule walks — a field's type is resolved during
+   * collection rather than while a body runs, so this is what makes
+   * `class Nest<T> { inner: Nest<T[]> | null }` refusable by name (G5).
+   */
+  private currentStructInstance?: StructInstantiation;
   /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
   private readonly pending: Instantiation[] = [];
+  /**
+   * Instantiated structs whose `implements` and definite-assignment checks are
+   * still owed. They wait for the same reason a declared struct's do: both need
+   * every struct in the module to have its members, and an instantiation can be
+   * requested by an annotation resolved before the interface it implements has
+   * been collected.
+   */
+  private readonly pendingFinish: StructInfo[] = [];
   readonly loops: LoopInfo[] = [];
   current!: FunctionSig;
   private readonly isEntry: boolean;
@@ -183,8 +212,26 @@ export class Checker implements CheckContext {
       enumRefs: new WeakMap(),
       templates: new Map(),
       instantiations: new Map(),
+      structTemplates: new Map(),
+      structInstantiations: new Map(),
     };
-    registerNamedTypes(sourceFile, (name) => {
+    registerNamedTypes(sourceFile, (name, ref) => {
+      // WP18 G5: `Box<i32>` names one instantiated struct. It is answered first
+      // because it is the only branch that reads the type arguments at all; a
+      // template's name with the wrong number of them, or with none, is refused
+      // in there rather than falling through to "unsupported type reference".
+      const structTemplate = this.structTemplates.get(name);
+      if (structTemplate) return this.instantiateStructNode(structTemplate, ref);
+      // Beyond this point the name takes no type arguments: a type parameter,
+      // an ordinary class, an alias, an enum or an import. Leaving those to the
+      // caller's refusal keeps `Point<i32>` saying "unsupported type reference",
+      // which is what it said before generic classes existed.
+      //
+      // It sits *above* the type-parameter lookup rather than below it, and
+      // that is the whole of the rule: a `T` that was written `T<i32>` is not
+      // the `T` the tuple bound, so answering with the binding would drop the
+      // arguments in silence and compile `const y: T<i32> = x` as `T`.
+      if (ref?.typeArguments && ref.typeArguments.length > 0) return undefined;
       // WP18: a type parameter shadows everything while an instantiation is
       // being resolved, and exists at no other time — which is why no pass
       // below this line has ever met a type variable.
@@ -243,6 +290,14 @@ export class Checker implements CheckContext {
       this.sink.recover(() => {
         if (ts.isImportDeclaration(stmt)) this.program.imports.push(...collectImports(stmt, this.sf));
         else if (isStructDeclaration(stmt)) {
+          // WP18 G5: a class or interface with type parameters is a template,
+          // not a struct. It declares no layout, so it is registered beside the
+          // function templates and `collectStructMembers` below skips it: its
+          // members are collected once per instantiation instead.
+          if (stmt.typeParameters && stmt.typeParameters.length > 0) {
+            this.registerStructTemplate(collectStructTemplate(stmt, this.sf));
+            return;
+          }
           const info = declareStruct(this, stmt);
           this.typeNames.add(info.name);
           structs.push(info);
@@ -283,6 +338,10 @@ export class Checker implements CheckContext {
     for (const info of structs) {
       if (!info.poisoned && !this.sink.recover(() => finishStruct(this, info))) info.poisoned = true;
     }
+    // Every instantiation an annotation in this module's signatures asked for
+    // now has its members, and so does every struct declared here, so the two
+    // checks that need both can run (WP18 G5).
+    this.finishPendingStructs();
     // Every alias is resolved even when nothing names it, so that a broken
     // right-hand side and a cycle are reported where they are written rather
     // than at the first use — or never.
@@ -307,7 +366,15 @@ export class Checker implements CheckContext {
   private qualifySymbols(): void {
     const prefix = this.program.symbolPrefix;
     if (prefix === "") return;
-    for (const sig of this.program.functions) sig.name = prefix + sig.name;
+    for (const sig of this.program.functions) {
+      // WP18: an instantiation's symbol carries the prefix from the moment it
+      // is minted, because it may be created on either side of this pass —
+      // a signature annotation that names `Box<i32>` runs before it, and a
+      // `new Box<i32>(v)` in a body runs long after. Qualifying it again would
+      // spell the package twice.
+      if (sig.instance) continue;
+      sig.name = prefix + sig.name;
+    }
   }
 
   /**
@@ -340,6 +407,7 @@ export class Checker implements CheckContext {
       this.program.aliases.has(name) ||
       this.program.enums.has(name) ||
       this.program.structs.has(name) ||
+      this.structTemplates.has(name) ||
       this.sigs.has(name) ||
       this.templates.has(name) ||
       this.program.constants.has(name)
@@ -412,7 +480,17 @@ export class Checker implements CheckContext {
     if (this.program.constants.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }
-    if (this.program.aliases.has(sig.sourceName) || this.program.enums.has(sig.sourceName)) {
+    // A generic class belongs in this list and not in the one above it: the
+    // structs pass runs before this one, so `class Box<T>` is already
+    // registered whichever of the two was written first, and stage1 answers
+    // from `nameTaken`, which counts a template. Without it a module compiled
+    // with `%struct.Box$i32` and `@Box$i32.constructor` beside a
+    // `define internal i32 @Box$i32(i32)` and no diagnostic at all.
+    if (
+      this.program.aliases.has(sig.sourceName) ||
+      this.program.enums.has(sig.sourceName) ||
+      this.structTemplates.has(sig.sourceName)
+    ) {
       this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }
     if (sig.exported && sig.sourceName === "main") {
@@ -438,7 +516,12 @@ export class Checker implements CheckContext {
     if (this.program.structs.has(name)) {
       this.error(`\`${name}\` is already declared as a class or interface`, template.nameNode);
     }
-    if (this.program.aliases.has(name) || this.program.constants.has(name) || this.program.enums.has(name)) {
+    if (
+      this.program.aliases.has(name) ||
+      this.program.constants.has(name) ||
+      this.program.enums.has(name) ||
+      this.structTemplates.has(name)
+    ) {
       this.error(`\`${name}\` is already declared in this module`, template.nameNode);
     }
     if (template.exported && name === "main") {
@@ -485,7 +568,7 @@ export class Checker implements CheckContext {
     // Termination (§4). A request that puts one of its own type arguments
     // under a constructor is the shape whose chain has no end, and it is
     // refused by name rather than by a depth count.
-    const growing = expandingAncestor(this.currentInstance, template, args);
+    const growing = expandingAncestor(this.currentInstance, template, args, (n) => this.structInstance(n));
     if (growing) {
       // Written here rather than returned from a helper, for the reason the
       // clash message in `compilation.ts` is one literal: the code generator
@@ -575,14 +658,206 @@ export class Checker implements CheckContext {
    * `from` is a chain of requests and not a call stack.
    */
   drainInstantiations(): void {
+    this.finishPendingStructs();
     while (this.pending.length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
       const instance = this.pending.shift()!;
       // Appended here rather than at the request, so that `functions` is in
       // the order the bodies are checked and the emitter walks it the same way.
-      this.program.functions.push(instance.sig);
+      // A method of an instantiated class is the exception: `collectStructMembers`
+      // appended it where a declared class's method is appended, which is what
+      // keeps an instantiated class's functions together and in member order.
+      if (!instance.owner) this.program.functions.push(instance.sig);
       if (!this.sink.recover(() => this.checkInstanceBody(instance))) instance.sig.poisoned = true;
+      this.finishPendingStructs();
     }
+  }
+
+  /**
+   * The `implements` and definite-assignment checks owed by struct
+   * instantiations, run once every struct in the module has its members.
+   *
+   * They cannot run at the request, because an annotation that names
+   * `Box<i32>` may be resolved before the interface `Box` implements has been
+   * collected — the same reason a *declared* struct's two checks are a
+   * sub-pass of their own rather than the tail of `collectStructMembers`.
+   */
+  private finishPendingStructs(): void {
+    while (this.pendingFinish.length > 0) {
+      const info = this.pendingFinish.shift()!;
+      if (info.poisoned) continue;
+      if (!this.sink.recover(() => finishStruct(this, info))) info.poisoned = true;
+    }
+  }
+
+  /**
+   * WP18 G5: one generic class or interface declaration. It shares the single
+   * declaration namespace with everything else, and like a function template it
+   * never becomes a layout: `Box` has no fields until an instantiation binds
+   * its parameters, so it is not in `program.structs` and `Box` on its own is
+   * not a type.
+   */
+  private registerStructTemplate(template: StructTemplateInfo): void {
+    const name = template.sourceName;
+    if (this.program.structs.has(name) || this.structTemplates.has(name)) {
+      this.error(`Duplicate declaration of \`${name}\``, template.nameNode);
+    }
+    if (this.sigs.has(name) || this.templates.has(name)) {
+      this.error(`\`${name}\` is already declared as a function`, template.nameNode);
+    }
+    if (this.program.aliases.has(name) || this.program.enums.has(name) || this.program.constants.has(name)) {
+      this.error(`\`${name}\` is already declared in this module`, template.nameNode);
+    }
+    this.structTemplates.set(name, template);
+    this.program.structTemplates.set(name, template);
+  }
+
+  /** The instantiation a mangled struct name belongs to; `undefined` for a declared struct. */
+  structInstance(name: string): StructInstantiation | undefined {
+    return this.program.structInstantiations.get(name);
+  }
+
+  /**
+   * `Box<i32>` in an annotation. The arguments are resolved in the scope the
+   * annotation sits in, so `Box<T>` inside another template resolves `T`
+   * through `typeBindings` and `Box<Box<i32>>` nests without a special case.
+   */
+  private instantiateStructNode(template: StructTemplateInfo, ref?: ts.TypeReferenceNode): StaticType {
+    return instantiateWritten(this, template, ref?.typeArguments ?? [], ref ?? template.nameNode).type;
+  }
+
+  /**
+   * WP18 G5: the struct instantiation request. Answers the ordinary
+   * `StructInfo` one (template, type-argument tuple) names, creating it the
+   * first time it is asked for — and collecting its members immediately rather
+   * than queueing them, because the answer is a *type*, and a type has to have
+   * a layout the moment an annotation resolves to it.
+   *
+   * What is queued instead is each method's and the constructor's *body*, on
+   * the same worklist a generic function's body goes on. That is the whole of
+   * why an instantiated class costs so little: `info` is an ordinary struct
+   * (§3c), its members are ordinary signatures, and the only new thing about
+   * them is the side-table overlay every specialised body already needed.
+   */
+  instantiateStruct(template: StructTemplateInfo, args: StaticType[], at: ts.Node): StructInfo {
+    const name = instanceSymbol(template.sourceName, args);
+    const existing = this.program.structInstantiations.get(name);
+    if (existing) return existing.info;
+
+    // Termination, the struct half (§4). A field whose type puts one of the
+    // struct's own type arguments under a constructor starts a chain with no
+    // end, and it is refused by name rather than by a depth count.
+    const growing = expandingStructAncestor(this.currentStructInstance, template, args, (n) =>
+      this.structInstance(n)
+    );
+    if (growing) {
+      // Written out here rather than returned from a helper, for the reason the
+      // function half's is: the code generator reads the string literal at the
+      // diagnostic call, so a sentence assembled behind a function call carries
+      // NL0000 however many words of its own it has.
+      const parts = nonTerminatingStructParts(template, growing.ancestor, args, growing.index);
+      this.error(
+        `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` names \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; name \`${parts.param}\` itself, or a type that does not mention it`,
+        at
+      );
+    }
+    if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
+      this.error(
+        `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
+          "this compiler's limit rather than a rule of the language",
+        at
+      );
+    }
+    if (this.program.instantiations.size + this.program.structInstantiations.size >= MAX_INSTANTIATIONS) {
+      this.error(
+        `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
+          "rather than a rule of the language",
+        at
+      );
+    }
+
+    const bindings = new Map<string, StaticType>();
+    template.typeParams.forEach((param, i) => {
+      bindings.set(param, args[i]);
+    });
+    const info: StructInfo = {
+      name,
+      kind: template.kind,
+      type: { kind: "struct", name },
+      fields: [],
+      fieldsByName: new Map(),
+      size: 0,
+      align: 1,
+      methods: new Map(),
+      implements: [],
+      decl: template.decl,
+      exported: template.exported,
+    };
+    const instance: StructInstantiation = {
+      template,
+      typeArgs: args,
+      info,
+      bindings,
+      from: this.currentStructInstance,
+    };
+    template.count += 1;
+    // Registered before the members are collected, so a field that mentions the
+    // struct's own instantiation (`next: Node<i32> | null`) finds it rather
+    // than asking for it a second time.
+    this.program.structs.set(name, info);
+    this.program.structInstantiations.set(name, instance);
+    this.collectInstanceMembers(instance);
+    return info;
+  }
+
+  /**
+   * The fields, layout and member signatures of one instantiated struct, with
+   * its type parameters bound — and one queued body per method and
+   * constructor, each with side tables of its own.
+   */
+  private collectInstanceMembers(instance: StructInstantiation): void {
+    const savedBindings = this.typeBindings;
+    const savedStruct = this.currentStructInstance;
+    const savedInstance = this.currentInstance;
+    this.typeBindings = instance.bindings;
+    this.currentStructInstance = instance;
+    // A request made while collecting these members belongs to *this* struct's
+    // chain, not to whichever function body happened to name it first.
+    this.currentInstance = undefined;
+    const before = this.program.functions.length;
+    try {
+      if (!this.sink.recover(() => collectStructMembers(this, instance.info))) instance.info.poisoned = true;
+    } finally {
+      this.currentInstance = savedInstance;
+      this.currentStructInstance = savedStruct;
+      this.typeBindings = savedBindings;
+    }
+    const prefix = this.program.symbolPrefix;
+    for (let i = before; i < this.program.functions.length; i++) {
+      const sig = this.program.functions[i];
+      // A nested instantiation's member: `collectStructMembers` above resolved a
+      // field that asked for another struct, and that struct's own call here has
+      // already qualified and queued its members.
+      if (sig.instance) continue;
+      // WP21 S1: an instantiation's symbol is complete from the moment it is
+      // minted, because `qualifySymbols` runs once at the end of pass 1 and an
+      // instantiation may be created on either side of it.
+      // TODO(WP18 G7): the prefix must become the *template's* rather than this
+      // module's once a generic may be instantiated from another module; the
+      // two are the same one only because importing a template is refused.
+      sig.name = prefix + sig.name;
+      const member: Instantiation = {
+        owner: instance,
+        typeArgs: instance.typeArgs,
+        sig,
+        bindings: instance.bindings,
+        tables: newNodeTables(),
+        from: savedInstance,
+      };
+      sig.instance = member;
+      this.pending.push(member);
+    }
+    this.pendingFinish.push(instance.info);
   }
 
   /** One instantiation's body, over its own side tables and with its own type bindings. */
@@ -590,11 +865,16 @@ export class Checker implements CheckContext {
     const savedTables = swapTables(this.program, instance.tables);
     const savedBindings = this.typeBindings;
     const savedInstance = this.currentInstance;
+    const savedStruct = this.currentStructInstance;
     this.typeBindings = instance.bindings;
     this.currentInstance = instance;
+    // A method of an instantiated class continues its class's chain: a body
+    // that names `Box<T[]>` expands exactly as a field of that type would.
+    this.currentStructInstance = instance.owner;
     try {
       this.checkFunctionBody(instance.sig);
     } finally {
+      this.currentStructInstance = savedStruct;
       this.currentInstance = savedInstance;
       this.typeBindings = savedBindings;
       swapTables(this.program, savedTables);
@@ -661,6 +941,17 @@ export class Checker implements CheckContext {
     if (struct && struct.decl.getSourceFile() === target.sourceFile) {
       this.bindStructImport(imp, struct);
       return;
+    }
+    const structTemplate = target.structTemplates.get(imp.importedName);
+    if (structTemplate) {
+      // WP18 §11 G7, the same rule one level up: an instantiation is defined in
+      // the module that declares its template, and that half has not landed.
+      // Refusing by name beats "has no exported function".
+      this.error(
+        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic ${structTemplate.kind}, and a generic ` +
+          "class or interface cannot yet be instantiated from another module; declare it in the module that uses it",
+        imp.element
+      );
     }
     const template = target.templates.get(imp.importedName);
     if (template) {
@@ -825,6 +1116,11 @@ export class Checker implements CheckContext {
       // WP27 S1: a `declare function` has no body, so pass 2 has nothing to do
       // for it. Its signature was fully checked in pass 1.
       if (sig.foreign) continue;
+      // WP18 G5: a method of an instantiated class is already in this list —
+      // `collectStructMembers` put it where a declared class's method goes —
+      // but its body means something only with its own tables and type
+      // bindings installed, so `drainInstantiations` is what checks it.
+      if (sig.instance) continue;
       if (!this.sink.recover(() => this.checkFunctionBody(sig))) sig.poisoned = true;
     }
     return this.program;

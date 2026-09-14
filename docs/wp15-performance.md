@@ -535,7 +535,7 @@ Measured on `dst[i] = src[i] * 2.0`, 8192 doubles (L2-resident), 150k passes,
 | --- | ---: | --- |
 | before | 1205 ms | header reloaded per iteration |
 | **header and elements as separate alias domains** | **763 ms** | **1.58x**, sound today |
-| + the header treated as invariant | 373 ms | 3.23x, and it vectorises — needs §2c |
+| + the header treated as invariant | 373 ms | 3.23x, and it vectorises — was read as §2c's to buy; §2c measures main already there **on this shape**, and 2.48x short of it when the array is in a class field |
 | + `--unchecked-indexing` on top | 371 ms | 0.5%: the checks were never the cost |
 
 That last row is worth reading twice. **Bounds checks were not what the loop
@@ -565,28 +565,371 @@ aliasing problem and annotating the array headers moved it by nothing
 `opt -O2`, no header load survives inside the loop. The GEPs hoist on their own,
 so the check is on the loads.
 
-## 2c. Making the header invariant — the other 2x
+## 2c. Making the header invariant — **candidate 1 refuted, the item re-scoped**
 
-§2b stops the header from being *clobbered*; it does not say the header never
-*changes*. `push` can change `len` and `data`, so the load still has to happen
-once per loop, and the bounds compare still reads a value LLVM cannot fold —
-which is why the vectoriser is still out at 763 ms and in at 373 ms.
+§2b stopped the header from being *clobbered* and predicted that stopping it
+from *changing* was worth the same again: 763 ms with the domains, 373 ms with
+the header treated as invariant, "3.23x, and it vectorises — needs §2c". The
+prediction was re-measured on two loop shapes rather than one, and the two
+answers point in opposite directions.
 
-Closing it needs the header to be genuinely immutable for the loop's duration.
-Two candidates, in preference order:
+- On a loop over two array **parameters** — the shape §2b measured — the win is
+  banked already: main is where §2b said only an invariant header could put it,
+  and marking every header load moves the time by 2 ms.
+- On the same loop with the array in a **class field** — the shape `self/` is
+  written in, and `self/bounds.ts` is made of — nothing is banked. **2.48x** is
+  still on the table.
 
-1. **Fixed-length arrays.** `Int32Array`/`Float64Array` are aliases of `T[]`
-   today, `push` and all (`docs/LANGUAGE.md`, "Typed-array names are aliases").
-   Making them real fixed-length types gives the header an immutability the
-   emitter can state as `!invariant.load`, and gives a program a way to ask for
-   the fast shape by name.
-2. **A "no `push` reaches this loop" analysis.** Cheaper for existing code and
-   needs no new type, but it is a whole-program question once a callee is
-   involved, so it wants the same fixpoint `attributes.ts` already runs.
+So one of §2c's two candidates is finished and the other is not. **Candidate 1,
+marking the header `!invariant.load` off a `readonly T[]` spelling, is
+refuted**: it is a wrong answer rather than a slow one, and the program that
+shows it is below. **Candidate 2, hoisting the header in the emitter, is not
+refuted** — it is exactly what the field shape is waiting for, and the field
+shape is its acceptance program and its 2.48x the acceptance number. Item 1b
+stays open for it, narrowed to that.
 
-`readonly T[]` already carries most of the proof for case 1 and the emitter
-currently throws it away: a `readonly i32[]` parameter emits nothing but the
-`readonly` attribute. That is the cheapest place to start.
+### The box, and what every number in this section was run on
+
+x86-64, Ubuntu clang 18.1.3 (LLVM 18), four cores carrying several agents' test
+suites at once — a load average around 25 — which is why the measure is **CPU
+time (user + sys)** and not wall time, for the reason §2 gives. Min of 15 after
+3 warm-ups, `--profile speed`, 8192 doubles and 150,000 passes in every row.
+Each variant is compiled and linked with
+
+```bash
+node dist/index.js <prog>.ts -o <prog>.ll --profile speed
+# ... edit the .ll for the stripped and the marked rows ...
+scripts/build.sh <prog>.ll runtime/runtime.c -o <bin> --profile speed
+```
+
+and the second line `cmp`s equal to what the compiler's own `--link` writes, so
+the hand-edited `.ll` builds and the compiler's own are comparable. Every program is
+given in full, because a number whose program is not named cannot be audited and
+§1 says faster means measured.
+
+### The parameter shape: banked, and an invariant header adds nothing
+
+```ts
+export const scale = (dst: f64[], src: f64[]): void => {
+  let i: i32 = 0;
+  while (i < src.length) {
+    dst[i] = src[i] * 2.0;
+    i = i + 1;
+  }
+};
+
+export const main = (): number => {
+  const n: i32 = 8192;
+  const src: f64[] = new Array<f64>(n);
+  const dst: f64[] = new Array<f64>(n);
+  let i: i32 = 0;
+  while (i < n) {
+    src[i] = toF64(i);
+    i = i + 1;
+  }
+  let acc: f64 = 0.0;
+  let pass: i32 = 0;
+  while (pass < 150000) {
+    scale(dst, src);
+    acc = acc + dst[0];
+    src[0] = src[0] + 1.0;    // so that 150,000 passes are not one pass, folded
+    pass = pass + 1;
+  }
+  console.log(`${acc}`);
+  return 0;
+};
+```
+
+| build | CPU min | CPU median | |
+| --- | ---: | ---: | --- |
+| alias domains stripped out of the emitted `.ll` (§2b's "before") | 1208 ms | 1232 ms | reproduces §2b's 1205 ms |
+| **main today** | **305 ms** | 311 ms | **3.96x** |
+| + every header load `!invariant.load` (12 in the module) | 307 ms | 313 ms | noise: 2 ms |
+
+Main lands where §2b's invariant row is, with no invariant header anywhere in
+the module. After `opt -O3` the loop vectorises `<2 x double>` in `@scale` and
+again in the copy inlined into `@nish_main`; with the alias domains stripped it
+vectorises nowhere. Both halves of that — no header load left in the loop, and
+the loop vectorising — are pinned by `tests/cases/arr_alias_domains`, so the
+banked win cannot go quiet.
+
+The third row is where this section previously recorded a **byte-identical**
+binary. On this program it is not byte-identical: the marked build is 248 bytes
+smaller (18,784 against 19,032), because in *this* program the marking happens
+to be true — `main` never pushes — so LLVM is entitled to use it, and does, in
+the array-filling loop. What reproduces is the conclusion rather than the bytes:
+there is no time in it.
+
+### The field shape: 2.48x is still on the table, and invariance is not how to take it
+
+The same loop with the source array held in a class field, which is how `self/`
+is written — and the only change from the program above:
+
+```ts
+class Holder {
+  xs: f64[];
+  constructor(xs: f64[]) {
+    this.xs = xs;
+  }
+}
+
+export const scale = (dst: f64[], h: Holder): void => {
+  let i: i32 = 0;
+  while (i < h.xs.length) {
+    dst[i] = h.xs[i] * 2.0;
+    i = i + 1;
+  }
+};
+```
+
+with `main` building the same 8192 doubles, wrapping them in one `Holder` before
+the timing loop, and calling `scale(dst, h)` 150,000 times.
+
+| build | CPU min | CPU median | |
+| --- | ---: | ---: | --- |
+| alias domains stripped out of the emitted `.ll` | 1230 ms | 1249 ms | |
+| **main today** | **756 ms** | 768 ms | 1.63x on the domains, and **2.48x behind the parameter shape** |
+| + every header load `!invariant.load` (13 in the module) | 305 ms | 310 ms | |
+| + `const xs = h.xs` hoisted **by hand in the source** | 306 ms | 308 ms | |
+
+The last row is the one that decides the item. A hoist a programmer can write in
+the source recovers all of it, so the win does not need an invariance claim and
+does not need a language change: it needs the compiler to do that hoist, which
+is candidate 2. The third row only says the same thing in an unsound way.
+
+### What the 2.48x actually is, which is not a header load in the loop
+
+The obvious reading — the field shape pays for re-reading `h.xs`, `len` and
+`data` every iteration — is what the `opt -O2` dump of `@scale` alone shows, and
+it is **not** what the binary does. In the linked `--profile speed` build, no
+field-shape variant has a header load in its hot loop, unmodified `main`
+included. Disassembled, the inner loop of the 756 ms build is ten instructions
+at `4250`–`4278`: two bounds compares and their branches, an element load, the
+add, an element store, the increment and the latch. The `mov (%r12),%rsi` and
+`mov 0x10(%r12),%r8` that read `len` and `data` sit at `4240`–`4244`, in the
+per-pass preamble outside it. `opt -O3` agrees once `scale` is inlined into
+`@nish_main`: the field load and both header loads hoist in *every* field
+variant.
+
+What separates the two groups is **vectorisation**, and it is visible in the
+binary:
+
+| build | `mulpd`/`movupd` in the binary | CPU min |
+| --- | ---: | ---: |
+| field, main | **0** | 756 ms |
+| field + every header load `!invariant.load` | 4 | 305 ms |
+| field + `const xs = h.xs` in the source | 4 | 306 ms |
+| parameter | 4 | 305 ms |
+
+The field shape reads `h.xs.length` **twice** — once for the `while` condition,
+once for the bounds check — and hoisting the loads does not make the two one
+value. The parameter shape's two lengths become a single trip count under
+`opt -O2` (`llvm.umin.i64` of `src.length` and `dst.length`, computed in the
+preheader) and the loop has one exit; the field shape gets no `umin`, keeps both
+compares against separate values — in the binary `cmp %r9,%rdi` beside
+`cmp %r9,%rsi` — and a loop with that second exit is one the vectoriser
+declines. The source hoist is what collapses them, because it gives the two uses
+one `const`.
+
+**One piece of metadata does collapse them, and it is the unsound one.** With
+all 13 header loads marked `!invariant.load`, `@nish_main` acquires
+`%umin = tail call i64 @llvm.umin.i64(i64 %9, i64 8191)` and a `vector.body`,
+and the binary runs at 305 ms — row 2 of the table above. That is not a
+counter-example to the argument, it *is* the argument: the only annotation that
+makes the two lengths one value is the one that tells LLVM the location cannot
+change for the whole life of the program, which §2c's next part shows is a
+miscompile. Sound metadata does not reach it; the two probes below are what that
+looks like.
+
+That is what makes the criterion sharp, and it is worth stating before anyone
+builds to it: **"hoist the header once per loop" is satisfiable while buying
+nothing.** A preheader load plus a fresh `len` for each bounds check is "hoisted
+once per loop" and still runs at ~750 ms. It does *not* then resemble the
+parameter shape where it counts, and the resemblance is the trap: the probe
+below has no header load in its loop and no `umin`, two length values, two exits
+and no `vector.body`, while the parameter shape has `umin` in the preheader, one
+exit and `vector.ph`/`vector.body`. So "does my `opt -O2` dump look like the
+parameter shape's?" is not the acceptance test. The acceptance test is **one
+length value feeding both the loop condition and the bounds check**, and the
+thing to look for is the `umin` — or one compare where there were two.
+
+**Describing more of the heap to LLVM is not the fix, and that was probed rather
+than assumed.** Two hand edits to the field-shape `.ll`, neither of them
+proposed as sound — an array of records stores struct fields *inside* an element
+buffer, which is exactly why §2b left struct fields alone:
+
+| hand edit to the `.ll` | loads of `h.xs`, `len` or `data` left in `@scale`'s `opt -O2` loop | CPU min |
+| --- | ---: | ---: |
+| none (main) | 3 | 756 ms |
+| the array-typed field load put in the header scope | 1 | — |
+| + `!dereferenceable`/`!nonnull`/`!align` on it, so the header load can be speculated out of the bounds-checked block | **0** | **761 ms** |
+
+The last row is the instructive one: it reaches the state the naive criterion
+asks for — not one header load left in `@scale`'s loop under `opt -O2` — and the
+program is 5 ms *slower* than the one it was supposed to fix. Two lengths are
+still two lengths, there is still no `umin`, the loop still has the extra exit,
+and the binary still contains no vector instruction. Which is the argument for
+candidate 2 doing the hoist in the IR the emitter produces, where one value can
+feed both uses and every inlined copy inherits it, rather than for annotating
+the field load and hoping.
+
+### The multiplier is program-dependent, so the range is the honest answer
+
+§2b's middle row (763 ms, the domains alone) is not reproduced here on the
+parameter shape, and this note declines to book the whole distance from 1208 ms
+to 305 ms as the domains' either. What the domains are worth, measured in one
+run on one box on one compiler, is **1.63x on the field shape and 3.96x on the
+parameter shape** — the same metadata, the same element loop, two spellings of
+where the array is kept. §2b's own 1.58x is inside that range and stays the
+number that item 1a shipped with.
+
+The reason the range is wide is the reason this section exists: what the domains
+buy is a *hoist*, and the hoist is worth whatever else in the loop was standing
+on it. So quote the range, and name the shape with any single number.
+
+### Candidate 1 is unsound, and `readonly T[]` is why
+
+"`readonly T[]` already carries most of the proof" was wrong, and the way it is
+wrong is a wrong answer rather than a slow one. `readonly` constrains the
+*holder*, not the array: the callee may not write through it, and the caller
+still holds the mutable one.
+
+```ts
+const total = (xs: readonly i32[]): i32 => {
+  let s = 0;
+  let i = 0;
+  while (i < xs.length) {
+    s = s + xs[i];
+    i = i + 1;
+  }
+  return s;
+};
+
+export const main = (): number => {
+  const xs: i32[] = [1, 2, 3];
+  const a = total(xs);
+  xs.push(4);
+  const b = total(xs);
+  console.log(`${a} ${b}`);   // 6 10
+  return 0;
+};
+```
+
+`!invariant.load` does not mean "this does not change while the callee runs".
+LLVM's LangRef says the location holds the same value **at every point in the
+program where it is dereferenceable**, so one `push` anywhere in the array's
+life is undefined behaviour rather than a lost hoist.
+
+Be exact about what shows it, because this is the paragraph a reader checks by
+hand. Marking **every header load in the module** — the five of them, including
+the three in `@nish_main` where the `push` is — makes that program print `6 6`.
+Marking only the two inside `@total`, which is the whole of what a `readonly`
+parameter could ever justify, prints `6 10` here. That is not the marking being
+sound: the program is undefined either way, and the second spelling is the worse
+position to be in, because it is an entitlement LLVM has not cashed yet and no
+rule says when it will.
+
+The same experiment over the whole of `self/` is the scale of it. At this
+branch's head, 60 modules and **7,068** header loads marked, where the unmarked
+build links at **988,296** bytes (the pair was 6,675 and 939,784 before
+`2861f8c` reached this branch through `main`, so quote it with a commit or
+re-derive it). What comes out is not a slower compiler. The marked build links
+at **22,048 bytes — 2.2% of the unmarked compiler, measured twice and
+byte-identical between links — and it cannot parse its own argv**: handed a file
+to compile it answers ``compile: unknown flag `tiny.ts` `` and exits 2, where
+the unmarked build compiles the same file. `self/options.ts` is where argv
+parsing lives, and LLVM had taken the contradiction and deleted almost the whole
+program around it.
+
+The deletion is what reproduces; its severity is not. At two earlier heads, on
+this same box and the same clang/LLD 18.1.3, the marked build did not link at
+all — `ld.lld: undefined symbol: Options.constructor`, the same definition
+dropped one step further along — while a second box linked it at three different
+mark counts. Nobody has identified what varies, and nothing here needs it to be
+identified: a compiler deleted to 2.2% of itself and a compiler whose remains do
+not link are both the contradiction being taken, rather than an optimisation
+being declined.
+**An invariant header needs a proof that no `push` reaches the array for the
+whole of its life, and neither `readonly` nor a fixed-length spelling of
+`Int32Array` gives one while the array is still reachable from a mutable
+binding.** Fixed-length arrays stay a language question for M4's reference
+freeze (`docs/LANGUAGE.md`, "Typed-array names are aliases"); what this
+measurement removes is the speed argument for opening it.
+
+### What is left is candidate 2, and `self/bounds.ts` is where it is waiting
+
+The field shape is not a synthetic one. `knownAtMost` in
+[`self/bounds.ts`](../self/bounds.ts) is it, verbatim — a `while` over
+`state.atMostIndex.length` reading `state.atMostIndex[k]` and
+`state.atMostHolder[k]` — and it is the ordinary way to write a loop in a
+compiler whose state is a class.
+
+```bash
+node dist/index.js self/compile.ts -o build/selfir/ --profile speed
+opt -O2 -S -mtriple=x86_64-unknown-linux-gnu build/selfir/bounds.ll
+```
+
+```llvm
+bounds.ok:
+  %9  = load ptr, ptr %5, align 8, !alias.scope !22, !noalias !25   ; atMostIndex.data, per iteration
+land.rhs:
+  %13 = load i64, ptr %7, align 8, !alias.scope !22, !noalias !25   ; atMostHolder.len,  per iteration
+bounds.ok.1:
+  %15 = load ptr, ptr %8, align 8, !alias.scope !22, !noalias !25   ; atMostHolder.data, per iteration
+```
+
+Up to three header-domain loads an iteration — the first unconditionally, the
+other two only on a match, since `land.rhs` and `bounds.ok.1` are reached when
+`atMostIndex[k]` is the index being asked about — in a loop that otherwise only
+reads two elements. **24 functions in that one module** still carry a
+header-domain load inside a loop (counted by walking the `opt -O2` CFG for
+blocks that reach themselves), so the answer to "what real code has this shape"
+is: the compiler this repository is written in, all through.
+
+Two things to keep straight about that module, because the resemblance is to the
+*source* shape rather than to the mechanism. `knownAtMost` reads a class field
+holding an array in a loop, which is the shape verbatim; but its own field load
+is already hoisted to `entry`, and what keeps `len` and `data` in the loop is
+that they sit in conditionally-reached blocks where the load cannot be
+speculated — not the field-versus-element aliasing this section measured. Same
+symptom, a different cause, and one candidate 2's hoist also reaches, since a
+header the emitter loads in the preheader is loaded unconditionally.
+
+So candidate 2 stands, and it is what item 1b now means: hoist the header in the
+**emitter**, once per loop, wherever the compiler can prove nothing in the loop
+grows the array — which does not depend on an invariance claim, on `readonly`,
+or on what LLVM chooses to keep across GVN. The criterion is the sharp one
+above: **one length value feeding the loop condition and the bounds check
+both**, since a hoist that leaves two is worth nothing and the probe table
+proves it. It needs the whole-program "does not grow an array" fact that the
+`attributes.ts` fixpoint does not have yet — the same fact `checker/bounds.ts`
+wants, where *any* call drops every array length fact today for exactly this
+reason. Its acceptance is the field-shape program above, at the parameter
+shape's number: 756 ms to 305 ms, 2.48x, with the `self/bounds.ts` loops as the
+real-code check that the fact fires where it matters.
+
+What this section no longer claims is a **3.35x** it used to attribute to LLVM's
+GVN dropping `!alias.scope` from header loads it created itself. That number
+named no program, no flags and no file, so nobody could re-run it; under §1 it
+was not a measurement, and it is withdrawn rather than restated. Metadata
+preservation may still be a real second-order effect — but it would have to be
+measured on a named program before anything is built for it, and the field shape
+above is the one that is both measured and on real code.
+
+### The same refutation kills one more live proposal, so it is named here
+
+[`wp9-optimisation.md`](wp9-optimisation.md) ends its nbody section with a
+proposal to mark the loads of `bodies[i]` — array **data**, not the header —
+`!invariant.load` "inside that function", for a function that never stores an
+element. Candidate 1's refutation reaches it more directly than it reaches
+`readonly T[]`, and this note says so rather than leaving a live proposal for
+the same miscompile uncited. `!invariant.load` has no "inside that function":
+the LangRef scopes it to every point in the program where the location is
+dereferenceable, so a caller that writes `bodies[i]` between two calls is
+exactly the `6 10` → `6 6` program above with the element buffer in place of the
+header. The arena makes it worse rather than better, because it never frees: the
+window in which the location stays dereferenceable is the life of the process.
+Whatever closes nbody's gap, it is not that marking.
 
 ## 3. Fast defaults — **done**
 
@@ -1077,9 +1420,34 @@ measurement closed says so and says why.
    language change, and it re-ordered this list: it showed that the bounds
    checks everything below was written to eliminate cost 0.5% once the header
    is hoisted.
-1b. **An invariant array header** (§2c) — the other 2x, and the first item
-   that needs a language decision (fixed-length arrays) or a whole-program
-   analysis.
+1b. **An invariant array header** (§2c) — **candidate 1 refuted, candidate 2
+   open, and the item re-scoped to it**. What is closed is the `readonly T[]`
+   marking: `readonly` constrains the holder rather than the array, so a
+   caller's `push` between two calls makes the marking undefined behaviour and
+   not a lost hoist — a twenty-line program that must print `6 10` prints `6 6`
+   with every header load in its module marked — and the whole of `self/` marked
+   that way (60 modules, 7,068 header loads, 988,296 bytes unmarked) comes out
+   as a **22,048-byte** compiler — 2.2% of the unmarked one — that answers
+   ``compile: unknown flag `tiny.ts` `` where the unmarked build compiles the
+   file. The deletion is what reproduces; its severity is not, and two earlier
+   heads on the same box produced `ld.lld: undefined symbol:
+   Options.constructor` instead. What is **not** closed is the win. On a loop over two
+   array *parameters* it is banked — 305 ms against the 1208 ms that stripping
+   the alias domains reproduces, and an invariant header moves that by 2 ms —
+   but on the same loop with the array in a **class field**, which is how
+   `self/` is written, main is at 756 ms: **2.48x** still on the table,
+   recovered in full by writing `const xs = h.xs` by hand in the source. That
+   hand hoist is candidate 2 — the emitter hoisting the header in the preheader
+   where nothing in the loop can grow the array — and the field-shape program of
+   §2c is its acceptance program at 2.48x. Its criterion is **one length value
+   feeding the loop condition and the bounds check both**: §2c's probe reaches
+   zero header loads in the loop by hand and measures 761 ms, because two
+   lengths leave the second loop exit that stops the vectoriser. `self/bounds.ts`
+   is the source shape verbatim — `knownAtMost` over `state.atMostIndex.length`,
+   and 24 functions in that one module carry a header-domain load inside a loop.
+   The item's prerequisite is the whole-program "does not grow an array" fact
+   the `attributes.ts` fixpoint does not have yet, which is also what
+   `checker/bounds.ts` wants.
 1c. **Shortest-digit formatting** (§7a) — **done**. 35x on printing a double,
    and a correctness fix; the first item to spend the runtime budget.
 1d. **The private `Result` ABI** (§7b) — **done**. 1.40x on `bench/result`,

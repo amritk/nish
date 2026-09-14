@@ -30,11 +30,11 @@
  */
 import ts from "typescript";
 import { LANGUAGE } from "../branding.js";
-import { StaticType, assignable, mangleType, sameType, typeToString } from "../types.js";
+import { StaticType, assignable, mangleType, resolveTypeNode, sameType, typeToString } from "../types.js";
 import { CheckContext } from "./context.js";
 import { Scope } from "./scope.js";
 import { ConstInfo } from "./constants.js";
-import { FunctionSig, LocalVar } from "./program.js";
+import { FunctionSig, LocalVar, StructInfo } from "./program.js";
 
 /**
  * A generic function declaration, in either spelling. Nothing about it is
@@ -74,10 +74,61 @@ export interface NodeTables {
   caseValues: WeakMap<ts.CaseClause, bigint>;
 }
 
+/**
+ * A generic class or interface declaration (WP18 G5). It is the same idea as
+ * `TemplateInfo` one level up: nothing is resolved, because the field and
+ * method annotations mention `typeParams` and mean nothing until an
+ * instantiation binds them.
+ */
+export type StructTemplateInfo = {
+  /** The identifier as written; what every diagnostic about the template names. */
+  sourceName: string;
+  kind: "class" | "interface";
+  /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
+  typeParams: string[];
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
+  /** Where a diagnostic that names the template points. */
+  nameNode: ts.Node;
+  exported: boolean;
+  /** How many instantiations this template has produced, for the per-template cap. */
+  count: number;
+};
+
+/**
+ * One (struct template, type-argument tuple): the ordinary struct it names.
+ *
+ * `docs/wp18-generics.md` §3c is what makes this affordable — `info` is an
+ * ordinary `StructInfo` called `Box$i32`, so `llvmType`, `sameType`, the layout
+ * computation, `implements`, `structTypeDeclarations`, the DWARF composite type
+ * and the C header all work on it with no change at all.
+ */
+export type StructInstantiation = {
+  template: StructTemplateInfo;
+  /** One concrete type per entry of `template.typeParams`, in that order. */
+  typeArgs: StaticType[];
+  info: StructInfo;
+  /** `T` -> the type it stands for while this struct's members are collected. */
+  bindings: Map<string, StaticType>;
+  /**
+   * The struct instantiation whose members or whose method body asked for this
+   * one, or `undefined` for one named by ordinary code. The chain is what the
+   * termination rule walks and what the diagnostic quotes.
+   */
+  from?: StructInstantiation;
+};
+
 /** One (template, type-argument tuple): the specialised function it names. */
 export interface Instantiation {
-  template: TemplateInfo;
-  /** One concrete type per entry of `template.typeParams`, in that order. */
+  /**
+   * The generic function this specialises, or `undefined` when this is a method
+   * or constructor of an instantiated generic class — which needs the overlay
+   * and the type bindings for exactly the same reason and has no template of
+   * its own, because the class is the template.
+   */
+  template?: TemplateInfo;
+  /** The instantiated class this is a member of, when it is one. */
+  owner?: StructInstantiation;
+  /** One concrete type per entry of the template's parameters, in that order. */
   typeArgs: StaticType[];
   /** The specialised signature, appended to the defining module's `functions`. */
   sig: FunctionSig;
@@ -178,18 +229,51 @@ export function instanceDisplayName(base: string, args: readonly StaticType[]): 
 }
 
 /**
+ * The type arguments an instantiated generic struct was made from, by mangled
+ * name, or `undefined` for a struct somebody declared. `containsType` needs it
+ * because `Box$i32` is an *ordinary* struct type (§3c) and therefore carries no
+ * arguments of its own: without the lookup, `grow<T>` asking for `grow<Box<T>>`
+ * would look like a request for an unrelated named type and would not
+ * terminate.
+ */
+export type StructArguments = (name: string) => StructInstantiation | undefined;
+
+/**
  * Whether `inner` occurs as a strict subterm of `outer`. The termination rule
  * is stated over this: an instantiation that asks for one of the same template
  * with an argument that *contains* its own has put that argument under a type
  * constructor, and the chain it starts has no end.
  */
-export function containsType(inner: StaticType, outer: StaticType): boolean {
+export function containsType(inner: StaticType, outer: StaticType, argsOf: StructArguments): boolean {
   if (sameType(inner, outer)) return true;
-  if (outer.kind === "array") return containsType(inner, outer.elem);
-  if (outer.kind === "nullable") return containsType(inner, outer.inner);
-  if (outer.kind === "result") return containsType(inner, outer.ok) || containsType(inner, outer.err);
+  if (outer.kind === "array") return containsType(inner, outer.elem, argsOf);
+  if (outer.kind === "nullable") return containsType(inner, outer.inner, argsOf);
+  if (outer.kind === "result") {
+    return containsType(inner, outer.ok, argsOf) || containsType(inner, outer.err, argsOf);
+  }
+  if (outer.kind === "struct") {
+    for (const arg of argsOf(outer.name)?.typeArgs ?? []) {
+      if (containsType(inner, arg, argsOf)) return true;
+    }
+  }
   return false;
 }
+
+/**
+ * Which type argument of `previous` this request puts under a type constructor,
+ * or `-1` when none of them grew. Shared by the function and the struct halves
+ * of the rule, because both say the same thing about the same tuples.
+ */
+const growingArgument = (
+  previous: readonly StaticType[],
+  args: readonly StaticType[],
+  argsOf: StructArguments
+): number => {
+  for (let i = 0; i < args.length; i++) {
+    if (!sameType(previous[i], args[i]) && containsType(previous[i], args[i], argsOf)) return i;
+  }
+  return -1;
+};
 
 /**
  * The ancestor instantiation of the same template whose type arguments this
@@ -202,19 +286,38 @@ export function containsType(inner: StaticType, outer: StaticType): boolean {
 export function expandingAncestor(
   from: Instantiation | undefined,
   template: TemplateInfo,
-  args: readonly StaticType[]
+  args: readonly StaticType[],
+  argsOf: StructArguments
 ): { ancestor: Instantiation; index: number } | undefined {
   for (let at = from; at; at = at.from) {
     if (at.template !== template) continue;
-    for (let i = 0; i < args.length; i++) {
-      const previous = at.typeArgs[i];
-      if (!sameType(previous, args[i]) && containsType(previous, args[i])) {
-        return { ancestor: at, index: i };
-      }
-    }
+    const index = growingArgument(at.typeArgs, args, argsOf);
+    if (index >= 0) return { ancestor: at, index };
   }
   return undefined;
 }
+
+/**
+ * The struct half of the same rule (WP18 G5). A field's type is resolved while
+ * the struct is being collected rather than while a body runs, so the chain
+ * this walks is the one `Checker.currentStructInstance` maintains: the struct
+ * whose members are being collected, or the struct whose method body is being
+ * checked. `class Nest<T> { inner: Nest<T[]> | null }` is the shape it exists
+ * for, and `reject_generic_expanding_field` is its case.
+ */
+export const expandingStructAncestor = (
+  from: StructInstantiation | undefined,
+  template: StructTemplateInfo,
+  args: readonly StaticType[],
+  argsOf: StructArguments
+): { ancestor: StructInstantiation; index: number } | undefined => {
+  for (let at = from; at; at = at.from) {
+    if (at.template !== template) continue;
+    const index = growingArgument(at.typeArgs, args, argsOf);
+    if (index >= 0) return { ancestor: at, index };
+  }
+  return undefined;
+};
 
 /**
  * Bind the template's type parameters by matching one declared parameter
@@ -231,21 +334,22 @@ export function unifyAnnotation(
   annotation: ts.TypeNode,
   arg: StaticType,
   params: ReadonlySet<string>,
-  out: Map<string, StaticType>
+  out: Map<string, StaticType>,
+  argsOf: StructArguments
 ): void {
   switch (annotation.kind) {
     case ts.SyntaxKind.ParenthesizedType:
-      unifyAnnotation((annotation as ts.ParenthesizedTypeNode).type, arg, params, out);
+      unifyAnnotation((annotation as ts.ParenthesizedTypeNode).type, arg, params, out, argsOf);
       return;
     case ts.SyntaxKind.ArrayType:
       if (arg.kind === "array") {
-        unifyAnnotation((annotation as ts.ArrayTypeNode).elementType, arg.elem, params, out);
+        unifyAnnotation((annotation as ts.ArrayTypeNode).elementType, arg.elem, params, out, argsOf);
       }
       return;
     case ts.SyntaxKind.TypeOperator: {
       // `readonly T[]`: the modifier changes who may write, not the shape.
       const op = annotation as ts.TypeOperatorNode;
-      if (op.operator === ts.SyntaxKind.ReadonlyKeyword) unifyAnnotation(op.type, arg, params, out);
+      if (op.operator === ts.SyntaxKind.ReadonlyKeyword) unifyAnnotation(op.type, arg, params, out, argsOf);
       return;
     }
     case ts.SyntaxKind.UnionType: {
@@ -256,7 +360,7 @@ export function unifyAnnotation(
         (t) => !(ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword)
       );
       if (members.length === 1) {
-        unifyAnnotation(members[0], arg.kind === "nullable" ? arg.inner : arg, params, out);
+        unifyAnnotation(members[0], arg.kind === "nullable" ? arg.inner : arg, params, out, argsOf);
       }
       return;
     }
@@ -270,12 +374,25 @@ export function unifyAnnotation(
         return;
       }
       if ((name === "Array" || name === "ReadonlyArray") && args.length === 1 && arg.kind === "array") {
-        unifyAnnotation(args[0], arg.elem, params, out);
+        unifyAnnotation(args[0], arg.elem, params, out, argsOf);
         return;
       }
       if (name === "Result" && args.length === 2 && arg.kind === "result") {
-        unifyAnnotation(args[0], arg.ok, params, out);
-        unifyAnnotation(args[1], arg.err, params, out);
+        unifyAnnotation(args[0], arg.ok, params, out, argsOf);
+        unifyAnnotation(args[1], arg.err, params, out, argsOf);
+        return;
+      }
+      // A user generic: `Box<T>` against a `Box$i32` argument binds `T := i32`.
+      // The argument's own `StaticType` carries no type arguments, because an
+      // instantiated class is an ordinary struct (§3c), so they are read back
+      // out of the instantiation the mangled name belongs to.
+      if (arg.kind === "struct") {
+        const instance = argsOf(arg.name);
+        if (instance?.template.sourceName === name && instance.typeArgs.length === args.length) {
+          args.forEach((a, i) => {
+            unifyAnnotation(a, instance.typeArgs[i], params, out, argsOf);
+          });
+        }
       }
       return;
     }
@@ -300,6 +417,33 @@ export function mentionsTypeParam(annotation: ts.TypeNode, params: ReadonlySet<s
   return found;
 }
 
+
+/**
+ * The struct one written type-argument list names (WP18 G5). All three
+ * positions that may carry one go through here — an annotation (`Box<i32>`),
+ * `new Box<i32>(v)` and an `implements Container<T>` clause — so the arity rule
+ * is stated once and a reader is told the same thing wherever the mistake was
+ * made. The arguments are resolved in the scope the list sits in, which is what
+ * makes `Box<T>` inside another template and `Box<Box<i32>>` work with no case
+ * of their own.
+ */
+export const instantiateWritten = (
+  ctx: CheckContext,
+  template: StructTemplateInfo,
+  written: readonly ts.TypeNode[],
+  at: ts.Node
+): StructInfo => {
+  if (written.length !== template.typeParams.length) {
+    const example = template.typeParams.map(() => "number").join(", ");
+    throw ctx.error(
+      `\`${template.sourceName}\` is generic: it must be written with its type arguments, e.g. ` +
+        `\`${template.sourceName}<${example}>\``,
+      at
+    );
+  }
+  const args = written.map((node) => resolveTypeNode(node, ctx.sf, ctx.opts));
+  return ctx.instantiateStruct(template, args, at);
+};
 
 /**
  * A call whose callee is a generic template. The type arguments are inferred
@@ -332,8 +476,9 @@ export function checkGenericCall(
   const names = new Set(template.typeParams);
   const bindings = new Map<string, StaticType>();
   const argTypes = expr.arguments.map((arg) => ctx.checkExpression(arg, scope));
+  const argsOf: StructArguments = (name) => ctx.structInstance(name);
   parameters.forEach((p, i) => {
-    if (p.type) unifyAnnotation(p.type, argTypes[i], names, bindings);
+    if (p.type) unifyAnnotation(p.type, argTypes[i], names, bindings, argsOf);
   });
   for (const name of template.typeParams) {
     if (bindings.has(name)) continue;
@@ -389,3 +534,21 @@ export function nonTerminatingParts(
     param: template.typeParams[index],
   };
 }
+
+/**
+ * The same four names for the struct half (WP18 G5). A field, not a call, is
+ * what names the next instantiation, so the sentence says "names" where the
+ * function's says "asks for"; everything else about it is the same, including
+ * that it quotes the concrete chain rather than a depth.
+ */
+export const nonTerminatingStructParts = (
+  template: StructTemplateInfo,
+  ancestor: StructInstantiation,
+  args: readonly StaticType[],
+  index: number
+): { from: string; to: string; under: string; param: string } => ({
+  from: instanceDisplayName(template.sourceName, ancestor.typeArgs),
+  to: instanceDisplayName(template.sourceName, args),
+  under: typeToString(ancestor.typeArgs[index]),
+  param: template.typeParams[index],
+});

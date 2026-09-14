@@ -1485,6 +1485,23 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       o.status === 0 && body !== "" && loop !== "" && reloads === "",
       o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
     );
+    // WP15 §2b: the hoist above is not the whole of what the domains bought. The loop
+    // vectorises as well -- which §2c had read as something only an invariant header
+    // could buy ("3.23x, and it vectorises"), and which main reaches without one on
+    // this shape, a loop over two array *parameters*. Be clear about what this pins and
+    // what it does not: it pins §2b's banked win against going quiet -- the way that
+    // would happen is a header load creeping back into the loop and taking LICM, and
+    // the vectoriser, with it -- and it says nothing about WP15 item 1b, which is open
+    // for candidate 2 on a shape this case does not have. That shape is the same loop
+    // with the array in a class field, it is 2.48x short of this one, and its
+    // acceptance program is written out in wp15-performance.md §2c rather than living
+    // here, because a corpus case is compiled by both compilers and diffed against a
+    // golden, which is a poor place to keep a number nobody has earned yet.
+    check(
+      "arr_alias_domains: opt -O2 vectorises the element loop (<4 x i32> or <8 x i32>)",
+      o.status === 0 && /<(4|8) x i32>/.test(body),
+      o.status === 0 ? body : String(o.stderr)
+    );
   }
   if (has("opt")) {
     const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll");
@@ -1870,11 +1887,17 @@ if (!only || "layout".includes(only)) {
       fromC.set(m[1], Number(m[2]));
     }
     const diffs = [];
-    for (const [name, size] of fromC)
-      if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
+    // The fixture names its maker after the *LLVM* struct (`makeQ_i32` for
+    // `Q$i32`), and the C twin after the C one, which for an instantiated
+    // generic carries the reserved `nish_gen_` prefix `cStructName` gives it so
+    // that `Q<i32>` cannot collide with a class called `Q_i32`.
+    for (const [name, size] of fromC) {
+      const inIr = fromIr.get(name.replace(/^nish_gen_/, ""));
+      if (inIr !== size) diffs.push(`${name}: C ${size}, IR ${inIr}`);
+    }
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 16 && fromIr.size === 16 && diffs.length === 0,
+      fromC.size === 18 && fromIr.size === 18 && diffs.length === 0,
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
@@ -2915,6 +2938,41 @@ if (!only || "interop".includes(only)) {
         );
       }
     }
+  }
+
+  // ---- WP18 G5: an instantiated generic in the generated header --------------------
+  // `Box<i32>` is `%struct.Box$i32`, and `-pedantic` refuses a `$` in a C identifier,
+  // so the header has to spell it another way. If that way were the bare `$`-to-`_`
+  // collapse it would not be injective — `class Box_i32` declared in the same module
+  // collapses to the same thing — and the generator's one promise is to describe the
+  // ABI the module really defines. `cStructName` gives the instantiation the reserved
+  // `nish_gen_` prefix, which a declared name can never carry, so the fixture declares
+  // both and the header has to compile with both in it.
+  const genHeader = emit("tests/cases/gen_export_header.ts", ["--emit-header", sidecar("gen_export_header", "h")]);
+  const genHeaderText =
+    genHeader.status === 0 ? fs.readFileSync(sidecar("gen_export_header", "h"), "utf8") : "";
+  check(
+    "gen_export_header.h spells `Box<i32>` and a declared `Box_i32` as two different C structs",
+    genHeaderText.includes("struct nish_gen_Box_i32 {") &&
+      genHeaderText.includes("struct Box_i32 {") &&
+      genHeaderText.includes("struct nish_gen_Box_i32 *makeGeneric(int32_t v);") &&
+      genHeaderText.includes("struct Box_i32 *makeDeclared(int32_t v);"),
+    genHeaderText
+  );
+  if (HAS_CLANG && genHeader.status === 0) {
+    const syn = spawnSync("clang", [
+      ...strictC,
+      "-pedantic",
+      "-fsyntax-only",
+      "-x",
+      "c",
+      sidecar("gen_export_header", "h"),
+    ]);
+    check(
+      "gen_export_header.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    );
   }
 
   // ---- WP24 A1: asynchronous N-API exports (--emit-napi-async) --------------------
