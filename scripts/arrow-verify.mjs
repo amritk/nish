@@ -107,6 +107,25 @@ const takeLock = () => {
   return true;
 };
 
+/**
+ * Reproduce one tracked path in the copy: a file as its bytes, a symlink as the
+ * same link.
+ *
+ * A symlink has to stay a symlink. `tests/link/package_symlink` is a package
+ * reached twice, once through a link, and what the compiler is asked there is
+ * what that resolves to -- copying the target instead answers a different
+ * question than the tree asks, and `copyFileSync` on a link to a directory does
+ * not get that far: it throws `EISDIR` and takes the whole sweep with it.
+ */
+export const copyInto = (from, to) => {
+  if (fs.lstatSync(from).isSymbolicLink()) {
+    fs.symlinkSync(fs.readlinkSync(from), to);
+    return "link";
+  }
+  fs.copyFileSync(from, to);
+  return "file";
+};
+
 /** Copy every tracked file, so the copy resolves imports exactly as the repo does. */
 const copyTree = () => {
   fs.rmSync(work, { recursive: true, force: true });
@@ -121,13 +140,16 @@ const copyTree = () => {
     // longer has. Aborting the whole sweep on the first of them is not a useful
     // answer to "somebody deleted a file"; the copy is of what is there, and what
     // is not there is counted and named.
-    if (!fs.existsSync(from)) {
+    // `lstat` rather than `existsSync`, which follows a link: a tracked symlink
+    // whose target is gone is a link the tree still has, and copying it is how
+    // the sweep compiles what the repository actually holds.
+    if (!fs.lstatSync(from, { throwIfNoEntry: false })) {
       missing.push(rel);
       continue;
     }
     const to = path.join(tree, rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.copyFileSync(from, to);
+    copyInto(from, to);
   }
   return { files, missing };
 };

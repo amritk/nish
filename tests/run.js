@@ -35,7 +35,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
-import { diagnosticWords, diffEmitted, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
+import { copyInto, diagnosticWords, diffEmitted, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -6596,6 +6596,32 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
       cwd: root,
       encoding: "utf8",
     }).status;
+  // The sweep compiles a *copy* of the tracked tree, and a tracked symlink has to
+  // arrive in it as a symlink. `tests/link/package_symlink` is a package reached a
+  // second time through a link, and what the compiler answers there is what the link
+  // resolves to, so following it while copying would compile a tree the repository
+  // does not have. `copyFileSync` does not even get that far on a link to a
+  // directory: it throws `EISDIR`, which took the whole sweep down the first time
+  // `self/` was verified against a tree that had one.
+  const linkRoot = path.join(root, "build", "test", "wp22-symlink");
+  fs.rmSync(linkRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.join(linkRoot, "src", "pkg"), { recursive: true });
+  fs.symlinkSync("pkg", path.join(linkRoot, "src", "link"));
+  fs.mkdirSync(path.join(linkRoot, "copy"), { recursive: true });
+  let copiedAs = "";
+  try {
+    copiedAs = copyInto(path.join(linkRoot, "src", "link"), path.join(linkRoot, "copy", "link"));
+  } catch (error) {
+    copiedAs = `threw ${error.code}`;
+  }
+  check(
+    "WP22: the verifier copies a tracked symlink as a symlink",
+    copiedAs === "link" &&
+      fs.lstatSync(path.join(linkRoot, "copy", "link")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(linkRoot, "copy", "link")) === "pkg",
+    `copied as: ${copiedAs}`
+  );
+
   check(
     "WP22: the verifier refuses a flag it does not have, and a `--rev` without a revision",
     verify22("--debg", "tests/parser") === 2 &&
