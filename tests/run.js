@@ -1413,17 +1413,18 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       o.status === 0 && body !== "" && loop !== "" && reloads === "",
       o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
     );
-    // WP15 §2c: the hoist above is not the whole of what the domains bought. The loop
+    // WP15 §2b: the hoist above is not the whole of what the domains bought. The loop
     // vectorises as well -- which §2c had read as something only an invariant header
-    // could buy ("3.23x, and it vectorises"), and which main reaches without one. That
-    // is the measurement that closed the item (wp15-performance.md §2c: 371 ms against
-    // the 1199 ms the same build measures with the alias metadata stripped out, and a
-    // byte-identical binary when every header load is marked `!invariant.load`). It is
-    // pinned here rather than left as a number in a document, because a number does not
-    // notice when it stops being true, and the way this one would stop is a header load
-    // creeping back into the loop and taking LICM -- and the vectoriser -- with it.
-    // The case's own comment is deliberately not extended: `tests/cases/` is corpus,
-    // and editing a corpus file moves the byte offsets in `tests/self/goldens/`.
+    // could buy ("3.23x, and it vectorises"), and which main reaches without one on
+    // this shape, a loop over two array *parameters*. Be clear about what this pins and
+    // what it does not: it pins §2b's banked win against going quiet -- the way that
+    // would happen is a header load creeping back into the loop and taking LICM, and
+    // the vectoriser, with it -- and it says nothing about WP15 item 1b, which is open
+    // for candidate 2 on a shape this case does not have. That shape is the same loop
+    // with the array in a class field, it is 2.48x short of this one, and its
+    // acceptance program is written out in wp15-performance.md §2c rather than living
+    // here, because a corpus case is compiled by both compilers and diffed against a
+    // golden, which is a poor place to keep a number nobody has earned yet.
     check(
       "arr_alias_domains: opt -O2 vectorises the element loop (<4 x i32> or <8 x i32>)",
       o.status === 0 && /<(4|8) x i32>/.test(body),
