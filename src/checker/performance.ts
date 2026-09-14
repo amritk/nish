@@ -693,9 +693,17 @@ const checkSurvivingBoundsCheck = (walk: Walk, access: ts.Node): void => {
  * lets LLVM treat the call sites it can see as all of them: specialise the
  * body to their arguments, and drop the out-of-line copy once they are
  * inlined. The flag withdraws that for every function in the module at once,
- * and the loop is what makes it worth saying — measured 4% slower and 240
- * bytes larger on `bench/sieve`, whose hot `sieve` is exactly this shape, and
- * nothing at all on `bench/spectral` (WP15 §8).
+ * and the loop is what makes it worth saying.
+ *
+ * **What that is worth is a size, not a time.** On `bench/sieve`, whose hot
+ * `sieve` is exactly this shape, the flag is 240 bytes — 6,576 against 6,816 —
+ * because `opt -O3` inlines and deletes `@sieve` under the default and keeps
+ * the out-of-line copy under the flag. The wall clock does not move: five
+ * interleaved protocols put the two within 2.4% of each other with the sign
+ * flipping between them, and a paired run of 40 rounds had the flagged build
+ * ahead 22 times. `bench/spectral` is 64 bytes *smaller* with the flag and the
+ * same time either way. So the message names the missed specialisation and no
+ * speed figure, and WP15 §8 records the measurement.
  *
  * It cannot be noise for anybody who did not ask for it: the flag is opt-in,
  * so a default build reports none of these, and the rewrite the message names
@@ -740,6 +748,15 @@ const checkNotInlinable = (walk: Walk, call: ts.CallExpression): void => {
  * `checkSurvivingBoundsCheck` holds itself to. Unlike that one it ignores
  * `--unchecked-indexing`, because the clamp is not a check: the flag does not
  * remove it and neither rewrite depends on it.
+ *
+ * TODO(wp15): the named guard does not compile for an unsigned bound. On a
+ * `u32` the message still says to write `if (k >= 0 && k <= s.length)`, and
+ * the checker refuses the second half — ``Operator `<=` requires two numeric
+ * operands, got u32 and i32``. `NL9007` has the identical defect and had it
+ * before this rule existed, so the fix belongs to both: either the two
+ * messages name a rewrite an unsigned bound can write, or the domain learns
+ * `atMost` from an unsigned comparison. `slice`, the other rewrite here, does
+ * compile on a `u32` today.
  */
 const checkUnfoldedClamp = (walk: Walk, call: ts.CallExpression): void => {
   if (walk.loops.length === 0) return;
@@ -756,10 +773,11 @@ const checkUnfoldedClamp = (walk: Walk, call: ts.CallExpression): void => {
     if (name === undefined) continue;
     walk.ctx.reportPerformance(
       `\`${name}\` is not provably within \`${holder}\`, so this \`substring\` bound keeps the clamp ` +
-        `JavaScript specifies — an \`llvm.smin\` and an \`llvm.smax\` on every pass, which the optimiser will ` +
-        `not fold away for you, because the guard compares i32 and the clamp runs on its sext: prove it with a ` +
-        `test that reaches the call, as \`if (${name} >= 0 && ${name} <= ${holder}.length)\`, or use ` +
-        `\`slice\`, which has no clamp at all and panics where this would have clamped`,
+        `JavaScript specifies — an \`llvm.smin\` and an \`llvm.smax\` on every pass, which the optimiser folds ` +
+        `away only where it can hoist the receiver's length, and never where the receiver is a parameter, ` +
+        `because the guard compares i32 and the clamp runs on its sext: prove it with a test that reaches the ` +
+        `call, as \`if (${name} >= 0 && ${name} <= ${holder}.length)\`, or use \`slice\`, which has no clamp ` +
+        `at all and panics where this would have clamped`,
       bound
     );
   }

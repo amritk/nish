@@ -239,10 +239,16 @@ function emitCharCodeAt(ctx: EmitContext, expr: ts.CallExpression, str: string):
  *
  * The clamp cannot move a bound that is already inside the range, so dropping
  * it changes no answer — the checker recorded the verdict and the emitter
- * reads it, exactly as it does for a bounds check it may omit. LLVM will not
- * do this itself: a program's `if (a >= 0 && a <= s.length)` compares `i32`s
- * and the clamp runs on the `sext`, so `opt -O3` keeps all six intrinsic calls
+ * reads it, exactly as it does for a bounds check it may omit. LLVM does this
+ * itself only where it can hoist the receiver's length: with a string literal
+ * in a local it folds all six calls unaided, but where the receiver is a
+ * parameter the guard compares `i32`s, the clamp runs on their `sext`, and the
+ * length is re-read across an allocating call, so `opt -O3` keeps all six
  * whether the guard is there or not.
+ *
+ * `first` is emitted and clamped before `second` is evaluated at all, which is
+ * the order `bounds.ts` takes its verdicts in: a fact argument 1 establishes
+ * may not reach argument 0.
  */
 const clampBound = (ctx: EmitContext, bound: ts.Expression, len: string): string => {
   const value = emitIndex(ctx, bound);
