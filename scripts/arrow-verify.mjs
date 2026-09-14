@@ -109,22 +109,50 @@ const takeLock = () => {
 
 /**
  * Reproduce one tracked path in the copy: a file as its bytes, a symlink as the
- * same link.
+ * same link, and a link that would not land inside `root` as nothing at all.
  *
  * A symlink has to stay a symlink. `tests/link/package_symlink` is a package
  * reached twice, once through a link, and what the compiler is asked there is
  * what that resolves to -- copying the target instead answers a different
  * question than the tree asks, and `copyFileSync` on a link to a directory does
  * not get that far: it throws `EISDIR` and takes the whole sweep with it.
+ *
+ * Reproducing the target *verbatim* is only right while the target stays inside
+ * the copy. An absolute one (`/etc/hosts`) or a relative one that climbs past
+ * the root (`../../outside`) resolves out of the copy and into the live working
+ * tree -- and the whole design of this sweep is that both sides compile out of
+ * one directory. The `before` side would then read the file the rewrite is
+ * still sitting in, and answer with a zero that means nothing: exactly the
+ * defect class the `--applied` guards exist for. Such a link is therefore named
+ * and refused rather than followed. The repository has one tracked symlink
+ * today and it stays inside the tree, so this is a door being closed before
+ * anybody walks through it.
  */
-export const copyInto = (from, to) => {
-  if (fs.lstatSync(from).isSymbolicLink()) {
-    fs.symlinkSync(fs.readlinkSync(from), to);
-    return "link";
+export const copyInto = (from, to, root) => {
+  if (!fs.lstatSync(from).isSymbolicLink()) {
+    fs.copyFileSync(from, to);
+    return "file";
   }
-  fs.copyFileSync(from, to);
-  return "file";
+  const target = fs.readlinkSync(from);
+  // Where the link lands once the copy holds it, and whether that is under root.
+  const landing = path.resolve(path.dirname(to), target);
+  const inside = path.relative(root, landing);
+  const escapes =
+    path.isAbsolute(target) || path.isAbsolute(inside) || inside === ".." || inside.startsWith(`..${path.sep}`);
+  if (escapes) return "escapes";
+  fs.symlinkSync(target, to);
+  return "link";
 };
+
+/**
+ * Is this tracked path still in the working tree?
+ *
+ * `lstat` rather than `existsSync`, which follows a link: a tracked symlink
+ * whose target is gone is a link the tree still *has*, and the copy is of what
+ * the repository holds. `existsSync` answers "no" for it and would drop it out
+ * of the copy as though somebody had deleted it.
+ */
+export const presentInTree = (from) => Boolean(fs.lstatSync(from, { throwIfNoEntry: false }));
 
 /** Copy every tracked file, so the copy resolves imports exactly as the repo does. */
 const copyTree = () => {
@@ -134,24 +162,23 @@ const copyTree = () => {
     .split("\0")
     .filter(Boolean);
   const missing = [];
+  const escaping = [];
   for (const rel of files) {
     const from = path.join(root, rel);
     // `git ls-files` prints the index, which can name a file the working tree no
     // longer has. Aborting the whole sweep on the first of them is not a useful
     // answer to "somebody deleted a file"; the copy is of what is there, and what
-    // is not there is counted and named.
-    // `lstat` rather than `existsSync`, which follows a link: a tracked symlink
-    // whose target is gone is a link the tree still has, and copying it is how
-    // the sweep compiles what the repository actually holds.
-    if (!fs.lstatSync(from, { throwIfNoEntry: false })) {
+    // is not there is counted and named. A broken symlink is *not* one of those:
+    // see `presentInTree`.
+    if (!presentInTree(from)) {
       missing.push(rel);
       continue;
     }
     const to = path.join(tree, rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    copyInto(from, to);
+    if (copyInto(from, to, tree) === "escapes") escaping.push(rel);
   }
-  return { files, missing };
+  return { files, missing, escaping };
 };
 
 /**
@@ -627,7 +654,7 @@ const usage = `usage: node scripts/arrow-verify.mjs [--concise] [--debug] [--app
   --debug    compile everything with -g, so a moved position is a moved byte
   --applied  compare the working tree against --rev instead of deriving a rewrite
   --rev      the revision --applied compares against (default HEAD)
-  --verbose  name every skipped declaration, and every diagnostic that moved
+  --verbose  name every skipped declaration, and every subject whose diagnostics moved
 `;
 
 /**
@@ -703,6 +730,17 @@ const main = (argv) => {
     return 2;
   }
   const copied = copyTree();
+  // A link out of the copy is not a file to count and carry on past, the way a
+  // deleted one is: it would make one side of the comparison read the working
+  // tree, so there is no sweep to run until somebody looks at it.
+  if (copied.escaping.length > 0) {
+    process.stderr.write(
+      `arrow-verify: ${copied.escaping.length} tracked symlink(s) point outside the tree, so a compile ` +
+        "would read through them into the working tree instead of the copy and prove nothing:\n"
+    );
+    for (const rel of copied.escaping) process.stderr.write(`escapes  ${rel}\n`);
+    return 2;
+  }
   if (copied.missing.length > 0) {
     process.stdout.write(
       `arrow-verify: ${copied.missing.length} tracked file(s) are not in the working tree and were not copied\n`
@@ -898,7 +936,7 @@ const main = (argv) => {
   );
   process.stdout.write(
     `arrow-verify: ${differed} difference(s), of which ${reworded} refused differently; ` +
-      `${moved} diagnostic(s) whose positions moved\n`
+      `${moved} subject(s) whose diagnostic positions moved\n`
   );
   return differed > 0 || blind.length > 0 ? 1 : 0;
 };

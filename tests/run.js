@@ -35,7 +35,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
-import { copyInto, diagnosticWords, diffEmitted, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
+import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -6621,19 +6621,62 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   fs.rmSync(linkRoot, { recursive: true, force: true });
   fs.mkdirSync(path.join(linkRoot, "src", "pkg"), { recursive: true });
   fs.symlinkSync("pkg", path.join(linkRoot, "src", "link"));
-  fs.mkdirSync(path.join(linkRoot, "copy"), { recursive: true });
-  let copiedAs = "";
-  try {
-    copiedAs = copyInto(path.join(linkRoot, "src", "link"), path.join(linkRoot, "copy", "link"));
-  } catch (error) {
-    copiedAs = `threw ${error.code}`;
-  }
+  fs.symlinkSync("gone", path.join(linkRoot, "src", "broken"));
+  fs.symlinkSync("/etc", path.join(linkRoot, "src", "absolute"));
+  fs.symlinkSync("../../outside", path.join(linkRoot, "src", "climbing"));
+  const copyRoot = path.join(linkRoot, "copy");
+  fs.mkdirSync(copyRoot, { recursive: true });
+  // `copyInto` is given the copy root, because that is the boundary a link has
+  // to land inside of; the link itself sits directly in it here.
+  const copyLink = (name) => {
+    try {
+      return copyInto(path.join(linkRoot, "src", name), path.join(copyRoot, name), copyRoot);
+    } catch (error) {
+      return `threw ${error.code}`;
+    }
+  };
+  const copiedAs = copyLink("link");
   check(
     "WP22: the verifier copies a tracked symlink as a symlink",
     copiedAs === "link" &&
-      fs.lstatSync(path.join(linkRoot, "copy", "link")).isSymbolicLink() &&
-      fs.readlinkSync(path.join(linkRoot, "copy", "link")) === "pkg",
+      fs.lstatSync(path.join(copyRoot, "link")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(copyRoot, "link")) === "pkg",
     `copied as: ${copiedAs}`
+  );
+
+  // `git ls-files` names the index, and a tracked link whose target is gone is
+  // still a link the tree holds. `lstat` rather than `existsSync` is what keeps
+  // it from being counted as a missing file and dropped out of the copy.
+  const brokenAs = copyLink("broken");
+  check(
+    "WP22: the verifier copies a tracked symlink whose target is gone",
+    brokenAs === "link" &&
+      fs.lstatSync(path.join(copyRoot, "broken")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(copyRoot, "broken")) === "gone" &&
+      !fs.existsSync(path.join(copyRoot, "broken")),
+    `copied as: ${brokenAs}`
+  );
+
+  check(
+    "WP22: a tracked symlink whose target is gone is still in the tree, not a missing file",
+    presentInTree(path.join(linkRoot, "src", "broken")) === true &&
+      presentInTree(path.join(linkRoot, "src", "nothing-here")) === false,
+    "a broken link is present; an absent path is not"
+  );
+
+  // A link that resolves out of the copy would make a compile read the live
+  // working tree instead of the reverted copy, so the `before` side of an
+  // `--applied` sweep would compile the rewrite it is supposed to be comparing
+  // against. Both shapes of escape are refused rather than reproduced.
+  const absoluteAs = copyLink("absolute");
+  const climbingAs = copyLink("climbing");
+  check(
+    "WP22: the verifier refuses a symlink that resolves outside the copy",
+    absoluteAs === "escapes" &&
+      climbingAs === "escapes" &&
+      !fs.existsSync(path.join(copyRoot, "absolute")) &&
+      !fs.existsSync(path.join(copyRoot, "climbing")),
+    `absolute: ${absoluteAs}, climbing: ${climbingAs}`
   );
 
   check(
