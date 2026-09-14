@@ -596,12 +596,12 @@ the way to re-derive it is to run the tool rather than to read this table:
 
 | | When the gap was measured | Now |
 | --- | --- | --- |
-| registry codes | 351 | 385 |
-| provoked by something that outlives stage0 | 175 | **325** |
+| registry codes | 351 | 399 |
+| provoked by something that outlives stage0 | 175 | **338** |
 | provoked by nothing | 176 | 0 |
-| unreachable, each with a reason on file | — | 60 |
+| unreachable, each with a reason on file | — | 61 |
 
-What moved it is `tests/wordings/`, 124 cases: one small program per code,
+What moved it is `tests/wordings/`, 126 cases: one small program per code,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
 message in its `.err`. A reword fails it twice — the message no longer matches, and the
 generator gives the new words a new number, so the code no longer matches
@@ -610,15 +610,15 @@ provoked nor named in `tests/wordings/unreachable.txt`. That last rule is the
 part that keeps the gap closed: a diagnostic added next year arrives with a
 case or with a sentence saying why it cannot have one.
 
-**60 codes are unreachable, and that is a finding about the compiler rather
+**61 codes are unreachable, and that is a finding about the compiler rather
 than a test nobody wrote.** In six kinds, all listed with reasons in
 `tests/wordings/unreachable.txt`:
 
 | | What it is |
 | --- | --- |
-| 27 | **retired**: the fragment matches nothing the compiler prints any more. Mostly the inheritance and `super(...)` rules WP25 removed, plus two long forms of WP15 §8 warnings, the `case` label rule WP23 reworded to admit an enum member (`NL2123`, superseded by `NL2284`), Phase 0's blanket generic sentence before WP18 named the kind it is on (`NL1045`, superseded by `NL1054` and `NL1055`), and one — `NL2287` — that never fired at all, because WP23 reserved the number and no message in either compiler produces the fragment. The generator keeps the number on purpose, so these cost a string and are correct as they stand |
-| 12 | **not diagnostics at all**: `scripts/gen-diagnostic-codes.mjs` scans for `fail(`/`error(` calls, and catches the driver's `console.error` usage errors (`unknown option:`, `--target: unsupported target`, the four lines of the exit-70 report) and the `fail(...)` helper that writes the N-API shim's *generated C*. No `--json` object can ever carry one. Their wordings are real and are pinned — by the WP12 block of `tests/run.js` and by the interop checks — but they are not rules, and `RULE_COUNT` is about four percent larger than the number of rules a user can be shown |
-| 12 | **preempted**: Phase 0 owns `async`, generators, generic type parameters and labels, so the checker's sentences for them never fire — including its own `Generic classes are not supported yet`, which `NL1054` reaches first; a class name is registered before any function signature, so `NL2075` cannot precede `NL2074`; the single-module `check()` path is not the driver's |
+| 28 | **retired**: the fragment matches nothing the compiler prints any more. Mostly the inheritance and `super(...)` rules WP25 removed, plus two long forms of WP15 §8 warnings, the `case` label rule WP23 reworded to admit an enum member (`NL2123`, superseded by `NL2284`), Phase 0's blanket generic sentence before WP18 named the kind it is on (`NL1045`, superseded by `NL1054` and `NL1055`), and one — `NL2287` — that never fired at all, because WP23 reserved the number and no message in either compiler produces the fragment. The generator keeps the number on purpose, so these cost a string and are correct as they stand |
+| 13 | **not diagnostics at all**: `scripts/gen-diagnostic-codes.mjs` scans for `fail(`/`error(` calls, and catches the driver's `console.error` usage errors (`unknown option:`, `--target: unsupported target`, the four lines of the exit-70 report) and the `fail(...)` helper that writes the N-API shim's *generated C*. No `--json` object can ever carry one. Their wordings are real and are pinned — by the WP12 block of `tests/run.js` and by the interop checks — but they are not rules, and `RULE_COUNT` is about four percent larger than the number of rules a user can be shown |
+| 11 | **preempted**: Phase 0 owns `async`, generators, generic type parameters and labels, so the checker's sentences for them never fire — including its own `Generic classes are not supported yet`, which `NL1054` reaches first; a class name is registered before any function signature, so `NL2075` cannot precede `NL2074`; the single-module `check()` path is not the driver's |
 | 4 | **shadowed**: `codeFor` walks the table longest fragment first, and these four fragments are substrings of a longer fragment *of the same message* (`NL1022` under `NL1005`, `NL1041` under `NL1007`, `NL2019` under `NL2095`, `NL2031` under `NL2118`) |
 | 3 | **structurally impossible**: no import syntax reaches `NL2211`; `NL2216` is an internal invariant; the `new` dispatch has a `*` fallback, so `NL2252`'s table never misses |
 | 2 | **backstops**: WP18's two instantiation caps, which need 257 tuples for one template or 4,097 in a module. Reachable, and the only entries here that are a judgement about what this corpus should carry rather than a fact about the compiler — which is why they say so, and why they are the first place to look if this list starts growing |
@@ -627,30 +627,36 @@ than a test nobody wrote.** In six kinds, all listed with reasons in
 
 Writing a program per code asks the two compilers a question no oracle asks,
 for the same reason §A2 gives about flags: **every oracle compiles the programs
-that are checked in, and none of these programs was.** Fifty-eight of the 124
+that are checked in, and none of these programs was.** Forty-three of the 126
 cases do not get the same answer from both compilers, and they are in
 `tests/wordings/parser_refusals.txt` and `tests/wordings/stage1_divergence.txt`
-rather than in anybody's memory:
+rather than in anybody's memory. **Both counts are the ones
+`node tests/diagnostic_coverage.js --compiler build/nish --strict-refusals`
+prints at the end of its run**, and both have moved since this section was
+written — 58 of 124 then, 43 of 126 now — so re-derive them rather than quoting
+this paragraph:
 
-- **45 are declared and expected.** stage1's parser refuses the syntax by name
-  before the phase that owns the rule can state it — §A3's 602-row class. The
-  consequence is exact and is the reason the count is carried apart: **those 45
-  wordings do not survive R6.** They are stage0's, this corpus pins them while
-  stage0 lives, and after the deletion a user sees stage1's syntax error
-  instead, which `reject_oracle.js` already pins.
-- **13 are not declared anywhere, and seven of those are not about wording at
-  all.** stage1 *compiles* seven programs stage0 refuses: a `u64` and an `i64`
-  literal past 2^53 (it emits IR for the rounded value), `new Point<i32>()`
-  with its type arguments ignored, a `for...of` variable with an annotation,
-  one with an initializer, a `for...of` head with two declarators, and a
-  generic declaring the same type parameter twice. The first four are rules
-  `docs/LANGUAGE.md` states and the compiler that is going to survive does not
-  enforce, which is a checker gap rather than a wording one, and WP18's
-  `<T, T>` is a sixth of the same shape. The other six refuse the program with
-  a different sentence, and two of those sentences carry **no code at all** — stage1 says
-  ``Operator `++` requires a numeric operand`` and ``Unsupported statement `;` ``
-  where stage0 says the coded ones, so stage1's uncoded backlog is three where
-  stage0's is one.
+- **41 are declared and expected**, from 45 when the member-header family
+  closed (R3 in §5). stage1's parser refuses the syntax by name before the
+  phase that owns the rule can state it — §A3's 602-row class. The consequence
+  is exact and is the reason the count is carried apart: **those 41 wordings do
+  not survive R6.** They are stage0's, this corpus pins them while stage0
+  lives, and after the deletion a user sees stage1's syntax error instead,
+  which `reject_oracle.js` already pins.
+- **2 are not declared anywhere, and one of those is not about wording at
+  all**, from 13 when this was written. stage1 *compiles* one program stage0
+  refuses: WP18's `<T, T>`, a generic declaring the same type parameter twice,
+  which is a checker gap rather than a wording one. Eleven of the thirteen
+  closed in the meantime — the two 2^53 literals, `new Point<i32>()`, the three
+  `for...of` head rules, `++` on a string, the void ternary, the two clash
+  wordings and the generic imported across modules, which WP18's
+  monomorphisation closed — each of them now the same sentence at the same
+  column on both sides with a `reject_*` case of its own. The other one refuses
+  the program with a different sentence that carries **no code at all** —
+  stage1 says ``Unsupported statement `;` `` where stage0 says the coded one.
+  That is what the tool's `uncoded=` count is measuring: five for stage1
+  against four for stage0, where the four are the same `tests/link/` messages
+  on both sides.
 - One smaller thing, recorded here rather than in a list: stage0 prints a
   syntax error as a `--json` object on stdout and stage1 prints it only on
   stderr, and `--json` is not one of `--parity`'s fourteen variations. The
@@ -781,12 +787,16 @@ code that no program provokes fails the run until somebody writes the case or
 writes the reason.
 
 **State: item 4 is met.** The four goldens are in `tests/self/goldens/` with
-their numbers in §2B, and the wording half is closed — 325 of the 385 registry
-codes are provoked by a program that outlives stage0, and the other 60 are
+their numbers in §2B, and the wording half is closed — 338 of the 399 registry
+codes are provoked by a program that outlives stage0, and the other 61 are
 unreachable with a reason on file. What is left behind on purpose is named in
-§2B too: 45 wordings that are stage0's because stage1's parser refuses the
-syntax first, and 13 programs the two compilers do not answer the same way,
-seven of which stage1 compiles.
+§2B too: 41 wordings that are stage0's because stage1's parser refuses the
+syntax first, and 2 programs the two compilers do not answer the same way, one
+of which stage1 compiles. Both lists are meant to shrink and both have: the
+wordings from 45, when the *member header* family closed (see R3 below), and
+the divergences from 13 to 3 and then to 2. Every number in this paragraph is one
+`node tests/diagnostic_coverage.js` prints — the registry grows, so read them
+from a run rather than from here.
 
 **Why it blocks.** This is the one everybody gets wrong. Deleting the seed is
 easy; noticing six months later that nothing checks the diagnostics is not.
@@ -803,29 +813,111 @@ nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
-**State: the script half is done, and the CI half is one operating system
-short for a different reason than it was.** `scripts/bootstrap.sh` reads
-`NISH_BOOTSTRAP`, and the `bootstrap` job in `ci.yml` downloads the last
-release's binary and builds `self/` with it. It runs on Linux alone. What used
-to be in the way was the runner: `macos-latest` was commented out of the test
-matrix over two bash 3.2 defects. Both have landed — `scripts/build.sh` spells
-its nine empty-array expansions `${arr[@]+"${arr[@]}"}`, and
-`scripts/smoke.sh` collects its program list with `while read` rather than with
-`mapfile`, a bash 4 builtin bash 3.2 does not have — so the row is one
-uncommented line, and it stays commented out on cost: it is the whole `test`
-job again, behind a `brew install llvm@18`, on every push
-([wp10-ci.md](wp10-ci.md#ci-matrix)). **What is in the way of *this* gate is
-the seed**, and it would be in the way whatever the matrix does: a release
-attaches
-`nish-<version>-x86_64-linux` and nothing else, so there is no darwin binary to
-bootstrap from and this half of G3 lands with G5's remaining three binaries
-rather than on its own. Without a release the job has no seed and says so in an annotation rather than
-passing quietly — a freeze nobody checked must not read as a freeze that held.
-**That branch is now the unused one:** v0.1.1 is released with its binary
-attached, so the job downloads a real seed and the annotation is what a
-regression would look like rather than the normal case. (v0.1.0 is a tag with
-no release behind it and no assets, so it is not a seed and never was — see
+**State: the script half is done, the Linux half of the CI half is done and
+honest, and the second operating system is short two things rather than one.**
+`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, `ci.yml`'s `seeds` job asks the
+last release which seed binaries it attaches, and its `bootstrap` job builds
+`self/` with each one. A release attaches `x86_64-linux` and nothing else, so
+that is one row, on Linux.
+
+The `test` row on macOS is **not** back, and for the first time the reason is a
+measurement rather than an estimate. It was run on 2026-09-13 and `npm test`
+fails there with five failures in four families, all of them checks that encode
+an ELF/Linux assumption and none of them a compiler bug: an empty `.debug_line`
+in a Mach-O executable (DWARF lives in the `.o` files until `dsymutil` runs,
+twice), a `--threads` link that ld64 *accepts* where ELF refuses it, and
+`stage3 == stage2` failing at identical size because Mach-O's debug map records
+each `.o`'s path and mtime. The bash 3.2 defects that used to block the row are
+genuinely fixed; these are what is behind them
+([wp10-ci.md](wp10-ci.md#ci-matrix)). The fourth family also stands between the
+release workflow and a darwin binary, because
+`scripts/bootstrap.sh --verify` asserts that same comparison.
+
+**A seed the job cannot find is no longer green, and "there is no seed" is not
+one state.** The gate has been wrong in both directions here, a round apart,
+and the correction is to stop asking one job to say three things with two
+colours.
+
+It first named the asset it wanted, warned, and exited 0 — and a warning above
+a green check is a green check. That is this document's own §A5 in a second
+place: a gate wearing the colour of a gate that held, while nothing had been
+checked. The correction for *that* made every missing seed red, which is the
+other error and a worse one: `release.yml`'s `release` job is `needs: ci`, so a
+repository with no release could never cut the release that would supply the
+seed the gate is waiting for. That is the 0.1.0 base case
+([wp12-release.md](wp12-release.md#release-procedure)) and it is every fork on
+the day it is forked — and it is the same argument that keeps the macOS `test`
+row out, applied to a job sitting on the release path.
+
+So the lookup is a job of its own, `seeds`, and `bootstrap` is a **matrix over
+its answer** — one row per seed the last release actually attaches. A platform
+with no seed has no row, and when there is no release at all there are no rows
+and `bootstrap` is skipped:
+
+| The checks list says | It means |
+| --- | --- |
+| `seeds` green, a `bootstrap (<seed>)` row green | the freeze was checked with that seed, on that seed's own platform, and it held |
+| `seeds` green, no row for a platform | the freeze was *not* checked there, and nothing is wrong: no release carries a seed for it yet. The `seeds` summary names every platform in both states |
+| `seeds` green, `bootstrap` **skipped** | the same for every platform at once: there is no release at all |
+| `seeds` **red** | a seed that should exist does not — a release missing an asset `release.yml` attaches |
+| a `bootstrap` row **red** | `self/` does not build with the last release: the rolling freeze broken, which is what the pair exists to catch |
+
+Which missing seed is which is decided by **platform**, because the two cases
+are genuinely different, and the decision is data rather than prose:
+[`.github/seed-targets.json`](../.github/seed-targets.json) marks a platform
+`attached` when `release.yml` builds a seed for it. A release that attaches no
+`nish-<version>-x86_64-linux.tar.gz` is a regression in `release.yml` or in the
+asset name, and costs the freeze its only check, so it is red — with the
+recovery in the annotation, since that red also blocks the release that would
+fix it. A release that attaches nothing for **darwin** is neither: nothing
+builds that binary yet, which is [G5](#g5--distribution-does-not-need-node), so
+there is no row and the `seeds` summary says the freeze is unchecked there.
+Each of the other three platforms joins the red list on the day `release.yml`
+starts building its binary and the file is marked to say so.
+
+**The lookup is a file rather than a `run:` block, and `npm test` runs it.**
+`.github/seed-matrix.sh` is the step body, and the WP19 block of `tests/run.js`
+drives it against a stand-in for `gh` through each state: the seed present, the
+`attached` seed missing (exit 1, with the `::error::`), no release at all, and
+a seed appearing for a platform that had none — which is the claim that the
+macOS row arrives with no edit to `ci.yml`, checked rather than asserted in a
+comment. Both times this logic was got wrong it was inline shell in a workflow
+that nothing could run.
+
+That file is also where the asset name is spelled, once. `release.yml` looks
+its own up rather than writing it out, and the same block of `tests/run.js`
+checks every row against the compiler's own target table: each `triple` is one
+`src/codegen/target.ts` calls canonical, and each `asset` is that triple with
+the vendor and the ABI dropped (`x86_64-unknown-linux-gnu` → `x86_64-linux`,
+`aarch64-apple-darwin` → `aarch64-darwin`). The four spellings used to live in
+two comments calling each other a contract, and two of them — `aarch64-darwin`
+and `x86_64-darwin` — were described there as triples the compiler accepts,
+which it never has: it knows `aarch64-apple-darwin` and `x86_64-apple-darwin`,
+and their `-macosx` and `arm64-` aliases.
+
+On Linux this is the ordinary path rather than the interesting one: v0.2.0 is
+released with `nish-0.2.0-x86_64-linux.tar.gz` attached, so the job downloads a
+real seed and a red one would be a regression. (v0.1.0 is a tag with no release
+behind it and no assets, so it is not a seed and never was — see
 [wp12-release.md](wp12-release.md#release-procedure) step 2.)
+
+**So the darwin half of G3 is short two things, and the runner is neither of
+them:**
+
+1. the **seed** — a release attaches `nish-<version>-x86_64-linux` and nothing
+   else, so there is no darwin binary to bootstrap from, which is
+   [G5](#g5--distribution-does-not-need-node); and
+2. the **ld64 fixed point** — the fourth family above. `--verify` asserts
+   `stage3 == stage2` byte for byte, and without that fixed a `bootstrap` row
+   on macOS would be red on the day its seed arrived, which is the other way a
+   gate lies about itself. That comparison now carries a note at the site
+   saying what was measured on Mach-O, so the next person to reach it does not
+   have to find it from a workflow comment.
+
+Neither is a line in `ci.yml`, and neither is claimed here. The matrix is the
+release's answer rather than a list in the workflow, so the macOS row appears
+on the day a release carries a darwin seed — which is the day the second of
+those two has to be true.
 
 #### What the seeded run proves, and what it does not
 
@@ -1004,8 +1096,8 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **green when last measured, and that is the only form this row may take.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared. The mode has now been recorded green three times and found red on the next run twice — §A5 and §A7 — both times because the corpus had grown a program that asked a question the old one could not. Quote §A7's number with its date, and re-run the mode before quoting it at all |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed, so that row is one uncommented line whenever the suite is fast enough to pay for it. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
-| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Outstanding, carried rather than closed: the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS fails five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, from Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row therefore needs two things and not one: the darwin seed (G5), and that fixed point ([wp10-ci.md](wp10-ci.md#ci-matrix)) |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 338 codes provoked by `tests/wordings/` and the surviving negatives and 61 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. **What the move costs is the limit worth stating rather than discovering: a rule the checker owns is a rule the member has to parse to reach.** Eight shapes do not reach it — `m?()` with no return type, `x? = 5` with no annotation, `static x;`, `static` alone, `static x: i32 = 0` with no `;` before the `}`, `static m(): i32;`, `static m() { }` and `static { }` — and each is a stage1 syntax error about the *other* defect where stage0 names the member and its rule. Those sentences moved out of stage1's reach rather than into it, which is §A3's declared class seen from the inside, counted by `reject_oracle.js` and declared by `--parity` (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`, `reject_cls_static_field_untyped`, `reject_cls_static_block`, and `self/parser.ts`'s `parseMemberModifiers` for the rest). Putting a copy of the rule back in the parser would restore an uncoded sentence in the phase that cannot name the member, which is the duplication the change removes; the shapes are named here and there instead. **One caveat on that declaration**: the two lists are shrink-only under `--strict-refusals`, but the reject oracle's parser bucket is a count in a summary line and nothing compares it to a ceiling, so the next rule that leaves the parser's reach migrates a case into the bucket silently. Read the bucket's number across such a change. The modifiers themselves now agree in full: `readonly` on a method or a constructor is ``unsupported modifier `readonly` `` from both compilers rather than accepted by stage1 (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`, `reject_cls_method_readonly_optional`), and because stage0 reports the first modifier in *source* order the parser records which of `static` and `readonly` came first, so `static readonly m()` and `readonly static m()` get different sentences and each gets the same one from both (`reject_cls_method_static_readonly`, `reject_cls_method_readonly_static`). An *interface* field takes the same modifiers, for the reason the checker takes one function for both: `readonly x: i32` compiles on both where stage1's parser used to refuse it, and `static x: i32` is ``Field `x` of interface `I`: `static` members are not supported`` on both. What is still one-sided and older than this work is `class C { constructor: i32 = 0; }`, which stage1 compiles and the `typescript` package calls a syntax error — the direction `stage1_divergence.txt` calls serious, recorded in `parseMember` because no corpus program has the shape and nothing measures it. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **2, from 13** — one of which stage1 compiles — and what is left is not more of the same: one is WP18's (`<T, T>`) and belongs to that package rather than to this one, and the other is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |

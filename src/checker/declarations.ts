@@ -14,12 +14,20 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
 import { LANGUAGE } from "../branding.js";
-import { CompilerOptions, isForeignScalar, resolveTypeNode, typeToString } from "../types.js";
+import {
+  CompilerOptions,
+  StaticType,
+  isForeignType,
+  rejectForeignPointer,
+  resolveTypeNode,
+  typeToString,
+} from "../types.js";
 import { ConstInfo } from "./constants.js";
-import { TemplateInfo } from "./generics.js";
+import { StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 import { isNishSpecifier, nishModuleNames } from "./nish-modules.js";
 import { STD_PREFIX } from "../branding.js";
+import { parseBareSpecifier } from "../packages.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL = "nish_main";
@@ -76,14 +84,17 @@ export function collectFunctionSignature(
     throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
   }
 
-  const params = collectPlainParams(decl.parameters, sf, opts);
+  const params = collectPlainParams(decl.parameters, sf, opts, foreign);
   const returnType = resolveTypeNode(decl.type, sf, opts);
 
   if (foreign) {
-    // S1 crosses the boundary with scalars only. That is not timidity about C:
-    // with no pointer among the arguments or the result there is nothing for
-    // escape analysis to be wrong about, which is the whole reason S1 can be
-    // sound without answering WP27 §3's questions.
+    // S1 crossed the boundary with scalars only, and S2 adds exactly one thing
+    // to that list: `CPtr`, an address C owns. The soundness argument is the
+    // same one, not a weaker one — no pointer *this compiler allocated* crosses
+    // the boundary in either direction, so there is still nothing for the
+    // escape analysis to be wrong about. What is new is a pointer coming back
+    // that the compiler must never mistake for one of its own, which is what
+    // `types.ts`'s `cptr` member and `isPointerParam`'s allow-list are for.
     if (hasExportModifier(decl)) {
       throw new CompileError(
         `\`declare function ${decl.name.text}\` cannot be exported: it is a C function this program calls, not one it defines`,
@@ -92,21 +103,42 @@ export function collectFunctionSignature(
       );
     }
     for (const p of params) {
-      if (!isForeignScalar(p.type)) {
+      if (!isForeignType(p.type)) {
         throw new CompileError(
-          `Parameter \`${p.name}\` of \`declare function ${decl.name.text}\` is ${typeToString(p.type)}, and a declared C function takes scalars only`,
+          `Parameter \`${p.name}\` of \`declare function ${decl.name.text}\` is ${typeToString(p.type)}, and a declared C function takes scalars and \`CPtr\` only`,
+          decl,
+          sf
+        );
+      }
+      // A parameter cannot be `CPtr | null`, and the asymmetry with the return
+      // type is the rule §3 states as "`null` only from a foreign call": the
+      // callee is the only thing that can say "no address", so `null` arrives
+      // from C and is narrowed before it goes back. Without this a program
+      // could hand C a null it never got from C, which is the one thing the
+      // narrowing was there to stop.
+      if (p.type.kind === "nullable") {
+        throw new CompileError(
+          `Parameter \`${p.name}\` of \`declare function ${decl.name.text}\` cannot be nullable: a foreign pointer is narrowed with \`!== null\` before it is passed back, because only the C function it came from can hand out a null one`,
           decl,
           sf
         );
       }
     }
-    if (!isForeignScalar(returnType)) {
+    if (!isForeignType(returnType)) {
       throw new CompileError(
-        `\`declare function ${decl.name.text}\` returns ${typeToString(returnType)}, and a declared C function returns a scalar only`,
+        `\`declare function ${decl.name.text}\` returns ${typeToString(returnType)}, and a declared C function returns a scalar or \`CPtr\` only`,
         decl.type,
         sf
       );
     }
+  } else {
+    // WP27 S2: a foreign pointer never crosses a boundary this compiler
+    // describes. `--emit-header`, `--emit-dts` and `--emit-napi` all render an
+    // exported signature, and none of the three has a spelling for an address
+    // whose provenance and lifetime are unknown — so rather than teach three
+    // generators to skip it, the type is refused where it would reach them.
+    // The parameters were answered for by `collectPlainParams` above.
+    rejectForeignPointer(returnType, "the return type of a function this program defines", decl.type ?? decl, sf);
   }
 
   return {
@@ -128,10 +160,27 @@ export function collectFunctionSignature(
  * constructors do not come through here: they prepend `this` and resolve types
  * against their owner (`checker/classes.ts`, `collectParams`).
  */
+/** An arrow function's declared return type; an arrow is never foreign (WP27 S2). */
+const arrowReturnType = (node: ts.TypeNode, sf: ts.SourceFile, opts: CompilerOptions): StaticType => {
+  const type = resolveTypeNode(node, sf, opts);
+  rejectForeignPointer(type, "the return type of a function this program defines", node, sf);
+  return type;
+};
+
 export function collectPlainParams(
   parameters: readonly ts.ParameterDeclaration[],
   sf: ts.SourceFile,
-  opts: CompilerOptions
+  opts: CompilerOptions,
+  /**
+   * A `declare function`'s parameters, which are the one place a `CPtr` is
+   * welcome (WP27 S2). The flag is here rather than a guard at each caller
+   * because this is the single list every non-method signature is built from,
+   * so a new spelling of a function cannot arrive without answering the
+   * question. Spelled at every call site rather than defaulted, because
+   * `self/declarations.ts` has to spell it — the language has no default
+   * parameters — and the two files are read side by side.
+   */
+  foreign: boolean
 ): Param[] {
   const params: Param[] = [];
   const seen = new Set<string>();
@@ -144,7 +193,9 @@ export function collectPlainParams(
     if (!p.type) throw new CompileError(`Parameter \`${p.name.text}\` needs a type annotation`, p, sf);
     if (seen.has(p.name.text)) throw new CompileError(`Duplicate parameter \`${p.name.text}\``, p, sf);
     seen.add(p.name.text);
-    params.push({ name: p.name.text, type: resolveTypeNode(p.type, sf, opts) });
+    const type = resolveTypeNode(p.type, sf, opts);
+    if (!foreign) rejectForeignPointer(type, "a parameter of a function this program defines", p.type, sf);
+    params.push({ name: p.name.text, type });
   }
   return params;
 }
@@ -190,8 +241,8 @@ export function collectArrowSignature(
   return {
     name,
     sourceName: name,
-    params: collectPlainParams(arrow.parameters, sf, opts),
-    returnType: resolveTypeNode(arrow.type, sf, opts),
+    params: collectPlainParams(arrow.parameters, sf, opts, false),
+    returnType: arrowReturnType(arrow.type, sf, opts),
     decl: arrow,
     nameNode: decl.name,
     // The declaration is the statement, not the arrow: `-g` measures the
@@ -284,6 +335,83 @@ export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.Sou
     count: 0,
   };
 }
+
+/**
+ * The modifiers a class or interface declaration may not carry, whichever
+ * spelling declares it.
+ *
+ * It lives here, beside the other declaration-level rules, rather than inside
+ * `declareStruct`, because a *generic* class never reaches `declareStruct` —
+ * it is a template, and `collectStructTemplate` below is the only pass that
+ * sees the declaration itself. Two copies of the loop would mean
+ * `export default class Box<T>` compiling while `export default class Box`
+ * is refused, which is what happened; one function called from both spellings
+ * is what makes "refused identically" a property of the code rather than of a
+ * test.
+ */
+export const rejectStructModifiers = (
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration,
+  kind: "class" | "interface",
+  sf: ts.SourceFile
+): void => {
+  const modifiers = ts.canHaveModifiers(decl) ? (ts.getModifiers(decl) ?? []) : [];
+  for (const m of modifiers) {
+    if (m.kind === ts.SyntaxKind.AbstractKeyword) {
+      throw new CompileError("Abstract classes are not supported", decl, sf);
+    }
+    if (m.kind === ts.SyntaxKind.DeclareKeyword) {
+      throw new CompileError(`\`declare ${kind}\` is not supported`, decl, sf);
+    }
+    if (m.kind === ts.SyntaxKind.DefaultKeyword) {
+      throw new CompileError("`export default` is not supported; use a named `export`", decl, sf);
+    }
+  }
+};
+
+/**
+ * A generic `class` or `interface` declaration (WP18 G5). Nothing below the
+ * name is read here: the field, method and heritage annotations mention the
+ * type parameters, so they stay as syntax and are resolved once per
+ * instantiation, exactly as a function template's are. The member rules —
+ * `static`, getters, index signatures, a missing annotation — are therefore
+ * enforced where they always were, at each instantiation's `collectStructMembers`.
+ *
+ * The *declaration's* own rules are not members and have nowhere else to be
+ * enforced, so they are enforced here, out of the same function `declareStruct`
+ * calls: a template is refused for exactly what the non-generic spelling is
+ * refused for.
+ */
+export const collectStructTemplate = (
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration,
+  sf: ts.SourceFile
+): StructTemplateInfo => {
+  const kind = ts.isClassDeclaration(decl) ? "class" : "interface";
+  if (!decl.name) throw new CompileError(`${kind === "class" ? "Classes" : "Interfaces"} must be named`, decl, sf);
+  const name = decl.name.text;
+  if (name.startsWith("nish_")) {
+    throw new CompileError("Names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(name, kind, decl.name, sf);
+  rejectStructModifiers(decl, kind, sf);
+  // A generic `interface` has the same one heritage rule a declared one has,
+  // and for the same reason: there is no layout to inherit, only fields to
+  // list. Refusing it here rather than at the instantiation keeps the message
+  // pointing at the `extends` the programmer wrote.
+  for (const clause of decl.heritageClauses ?? []) {
+    if (clause.token === ts.SyntaxKind.ExtendsKeyword && kind === "interface") {
+      throw new CompileError("Interface inheritance (`extends`) is not supported; list every field", clause, sf);
+    }
+  }
+  return {
+    sourceName: name,
+    kind,
+    typeParams: collectTypeParams(decl.typeParameters ?? [], sf),
+    decl,
+    nameNode: decl.name,
+    exported: hasExportModifier(decl),
+    count: 0,
+  };
+};
 
 /** The arrow spelling of the same thing: `const identity = <T>(x: T): T => x`. */
 export function collectArrowTemplate(
@@ -408,18 +536,23 @@ export function collectImports(decl: ts.ImportDeclaration, sf: ts.SourceFile): I
   // The hint goes after the interpolation deliberately, so that the longest
   // literal run of this template — and with it the diagnostic code the rule has
   // always had — is still the sentence before it.
-  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
-  // `nish/` names a standard-library module, which is ordinary source and is
-  // resolved like any other file, only from beside the compiler. Everything
-  // else is still refused: there is no package resolution (wp21 §5b).
+  // Four forms are legal. `nish:` names a builtin and resolves to no file;
+  // `nish/` names a standard-library module, which is ordinary source resolved
+  // from beside the compiler; `./x` and `../x` name a file; and since WP21 S2 a
+  // package name resolves through `node_modules` and the `nish` export
+  // condition (wp21 §5b). What is left is a specifier that is none of them —
+  // an absolute path, a URL scheme, a scope with no package after it — and the
+  // message lists the four rather than naming the one thing it refused,
+  // because the mistake is almost always a form the reader thought was legal.
   if (
     !isNishSpecifier(specifier) &&
     !specifier.startsWith(STD_PREFIX) &&
     !specifier.startsWith("./") &&
-    !specifier.startsWith("../")
+    !specifier.startsWith("../") &&
+    parseBareSpecifier(specifier) === null
   ) {
     throw new CompileError(
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames().join(", ")} and ${STD_PREFIX}<module>)`,
+      `Import specifier \`${specifier}\` must be relative (\`./x\`, \`../x\`), a package name (\`hash\`, \`@scope/hash\`), or one of ${nishModuleNames().join(", ")} and ${STD_PREFIX}<module>`,
       decl.moduleSpecifier,
       sf
     );

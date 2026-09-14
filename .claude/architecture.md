@@ -56,9 +56,9 @@ Compilation                                                            src/compi
 - **The runtime has two budgets.** Every `.text*` section of
   `clang -Oz -c <file>`, summed, for each of the runtime's two translation
   units: `runtime/runtime.c` — the core every program touches, which is a closed
-  set — stays under 3,584 bytes and is 3,480 today; `runtime/runtime_os.c` — the
+  set — stays under 3,584 bytes and is 3,515 today; `runtime/runtime_os.c` — the
   syscall wrappers, which is the surface that grows as the language reaches
-  further into the operating system — stays under 1,280 and is 1,190. They are
+  further into the operating system — stays under 1,280 and is 1,251. They are
   apart so that a new builtin for files, directories, processes, the environment
   or the clock cannot move the core's number; the source bytes of either are
   history rather than a limit. `tests/run.js` measures both on every run

@@ -553,16 +553,27 @@ section summed, clang 18.1.3 on linux-x64:
 
 | File | `.text` | `.text.unlikely.` | Total | Budget | Headroom |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `runtime/runtime.c` | 3,449 | 31 (`nish_die`) | **3,480** | **3,584** | 104 |
-| `runtime/runtime_os.c` | 1,155 | 35 (`nish_io_fail`) | **1,190** | **1,280** | 90 |
-| both | 4,604 | 66 | 4,670 | 4,864 | 194 |
-| `runtime.c -DNISH_THREADS=1` | 3,574 | 31 | **3,605** | **3,840** | 235 |
+| `runtime/runtime.c` | 3,484 | 31 (`nish_die`) | **3,515** | **3,584** | 69 |
+| `runtime/runtime_os.c` | 1,216 | 35 (`nish_io_fail`) | **1,251** | **1,280** | 29 |
+| both | 4,700 | 66 | 4,766 | 4,864 | 98 |
+| `runtime.c -DNISH_THREADS=1` | 3,609 | 31 | **3,640** | **3,840** | 200 |
 
-The third row is the runtime before the split, unchanged: 3,480 + 1,190 is
-exactly the 4,670 that one file measured, and every moved function is byte for
-byte the size it was (`nish_readdir` 294, `nish_spawn_impl` 319,
-`nish_monotonic_nanos` 36, `nish_spawn_to` 33, `nish_getenv` 80). The split
-itself cost nothing to measure and nothing to link.
+`runtime_os.c` was 1,190 until WP21 S2 put an `fstat`/`S_ISDIR` guard in
+`nish_read_file_or_null`, which is 61 bytes and buys the answer `null` for a
+directory: `open(O_RDONLY)` accepts one, `lseek` then answers `LONG_MAX`, and
+the arena was asked for that many bytes. The ceiling did not move for it — 29
+bytes of headroom is what the surface costs now, and the next syscall wrapper
+is the one that has to argue for a raise. `runtime.c` has drifted 3,480 → 3,484
+over the same span, from work that had nothing to do with this table; the rows
+above are all freshly measured, so the `both` row is their sum and not the sum
+of an older pair.
+
+The split itself is what the numbers were taken to check, and it cost nothing:
+at the time it was made, 3,480 + 1,190 was exactly the 4,670 that one file
+measured, and every moved function was byte for byte the size it was
+(`nish_readdir` 294, `nish_spawn_impl` 319, `nish_monotonic_nanos` 36,
+`nish_spawn_to` 33, `nish_getenv` 80). It cost nothing to measure and nothing
+to link.
 
 Each budget is the next 256-byte boundary above its measurement, which is the
 rule the 4,864 was set by. The consequences of the two numbers are deliberately
@@ -582,6 +593,30 @@ different:
 
 That the two sum to 4,864, the single budget they replace, is a coincidence of
 where the 256-byte boundaries fall and not a constraint on either.
+
+### What FFI does and does not do to the budget
+
+WP27 lets a program declare and call a C function of its own, and
+[wp27-ffi.md](wp27-ffi.md) §6 raises the objection that this makes the C in this
+project an *open* set, so describing the runtime as closed would be keeping two
+stories. Recorded here as a decision rather than left as an inference:
+
+**The budgets measure what ships in every binary, and a foreign call does not.**
+The two numbers above are the `.text*` of `runtime/runtime.c` and
+`runtime/runtime_os.c` — the two translation units `scripts/build.sh` compiles
+into every program whether or not the program uses a byte of them. A
+`declare function` adds a `declare` line to one program's IR and a symbol to one
+program's link line; it adds nothing to either translation unit, and a program
+that declares none is byte for byte the size it was. So the core stays a closed
+set and the OS half stays the surface that grows with the language's own reach,
+and both sentences above are still true as written.
+
+What the objection is right about is the half the budget never covered. FFI does
+open the set of C a *program* can reach, and the thing that used to bound it was
+not this budget but `docs/LANGUAGE.md`, by having no way to name a foreign
+function at all. That bound is the one WP27 removed, deliberately, and the cost
+is paid in the attribute fixpoint rather than in bytes: a program that calls C
+is no longer one the compiler can reason about end to end (wp27 §2).
 
 **What the split costs a program.** `nish_readdir` allocates through
 `nish_alloc_struct` and `nish_str_new`, which are now in another translation

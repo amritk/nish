@@ -26,9 +26,15 @@
 // (`self/paths.ts`): stage0 accepts a backslash too and the two agree for
 // every name either compiler is given.
 //
-// TODO(WP21 S2): when bare specifiers resolve through the `nish` export
-// condition, the package a module is in becomes something the resolver states
-// rather than something a path is read for, and only the mangling below stays.
+// **What WP21 S2 changed, and what it deliberately left.** A module reached by
+// a bare specifier no longer has its package read off its path: the resolver
+// states it, because the resolver is the thing that knows — it found the
+// manifest that made the directory a package. What still reads a path is a
+// module reached any other way, which is a relative import that happens to
+// point into `node_modules` (`tests/link/two_packages`) and every module inside
+// a package, whose own relative imports are its own package's. The two rules
+// agree wherever both apply, so the placeholder shrank to the cases the
+// resolver is never asked about rather than disappearing.
 
 import { splitByte, StringBuilder } from "./strings";
 
@@ -36,7 +42,7 @@ import { splitByte, StringBuilder } from "./strings";
 export const ROOT_PACKAGE: string = "";
 
 /** The directory segment that introduces a package, as npm lays one out. */
-const PACKAGE_ROOT_SEGMENT: string = "node_modules";
+export const PACKAGE_ROOT_SEGMENT: string = "node_modules";
 
 const SLASH: i32 = 47; // '/'
 const AT: i32 = 64; // '@'
@@ -157,3 +163,63 @@ export function packageSymbolPrefix(packageName: string): string {
   }
   return `${mangled}.`;
 }
+
+/**
+ * A bare import specifier taken apart (WP21 S2): `@scope/hash/blake3` is the
+ * package `@scope/hash` and the `exports` subpath `./blake3`.
+ *
+ * The subpath is spelled the way the manifest spells it — `.` for the package
+ * itself and `./x` for anything under it — so that it is the key looked up in
+ * the `exports` map with no further shaping. An `interface` rather than two
+ * functions over one specifier, because the two halves are read off the same
+ * split and answering them apart would be that split done twice.
+ */
+export interface BareSpecifier {
+  /** `hash`, `@scope/hash`. */
+  name: string;
+  /** `.` or `./blake3`: the key in the package's `exports` map. */
+  subpath: string;
+}
+
+/** `/`, `\` and `:` are what separates a package name from a path or a URL. */
+const isNameSegment = (segment: string): boolean =>
+  segment.length > 0 && !segment.startsWith(".") && segment.indexOf("\\") < 0 && segment.indexOf(":") < 0;
+
+/**
+ * `specifier` as a package name and subpath, or null when it is not a package
+ * specifier at all.
+ *
+ * Refused: an empty specifier, one that begins with `.` (that is a relative
+ * import and is resolved as one) or with `/` (an absolute path, which is a
+ * thing about the machine rather than about the program), a scope with no name
+ * after it, a trailing slash, any segment that begins with a `.` (which is what
+ * rules out a `..` climbing out of the package), and any `\` or `:` — the last
+ * being what keeps `nish:fs` and `http://x` from reading as package names.
+ *
+ * Deliberately not checked: whether the name is one npm would accept today.
+ * npm's own rules have changed and the registry still holds names that no
+ * longer pass them, so a name this compiler cannot resolve should fail by not
+ * being on disk, which names the package, rather than by a spelling rule.
+ */
+export const parseBareSpecifier = (specifier: string): BareSpecifier | null => {
+  const segments = splitByte(specifier, SLASH);
+  const scoped = specifier.startsWith("@");
+  const nameLength = scoped ? 2 : 1;
+  if (segments.length < nameLength) {
+    return null;
+  }
+  let i = 0;
+  while (i < segments.length) {
+    const segment = i === 0 && scoped ? segments[0].substring(1) : segments[i];
+    if (!isNameSegment(segment)) {
+      return null;
+    }
+    i = i + 1;
+  }
+  const rest = joinSegments(segments, nameLength, segments.length);
+  const parsed: BareSpecifier = {
+    name: joinSegments(segments, 0, nameLength),
+    subpath: rest.length === 0 ? "." : `./${rest}`,
+  };
+  return parsed;
+};

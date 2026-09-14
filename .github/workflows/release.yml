@@ -8,7 +8,16 @@
 #
 # The binary is also the seed: ci.yml's `bootstrap` job downloads it from the
 # last release and builds self/ with it (WP19 G3), so its name is a contract
-# between the two workflows. One platform for now -- WP19 G5 wants four.
+# between the two workflows -- and both of them read that name from
+# .github/seed-targets.json rather than spelling it out, because a contract
+# each side writes down separately is two strings that agree until one is
+# edited. That file carries all four of WP19 G5's platforms, the canonical
+# target triple each one is (src/codegen/target.ts), and which of them a
+# release attaches today; tests/run.js checks the triples against the
+# compiler's own table. One platform is attached for now -- WP19 G5 wants
+# four -- and a release that fails to attach one it is marked as attaching
+# turns ci.yml's `seeds` job red on the next run, because the rolling freeze
+# then has nothing to be checked with.
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
@@ -109,9 +118,31 @@ jobs:
       # beside runtime/ and it links only while the working directory happens
       # to be the unpacked folder, which is a trap rather than a distribution.
       #
-      # x86_64 linux only for now. WP19 G5 asks for four (x86_64 and aarch64,
-      # linux and darwin); darwin needs macos-latest, which is out of the CI
-      # matrix. See docs/wp19-stage0-retirement.md G5 for what stays open.
+      # x86_64 linux only for now, and the asset's name is looked up rather
+      # than spelled. WP19 G5 asks for four, and the four names are a contract
+      # with ci.yml rather than a label -- so both workflows read them from
+      # .github/seed-targets.json, which maps this host to the asset spelling
+      # and to the canonical triple it stands for. A contract each side writes
+      # out separately is two strings that agree until one of them is edited,
+      # which is what the two tables used to be. `attached` in that file is
+      # this step's own statement that it builds the seed, and ci.yml's `seeds`
+      # job turns red when a release does not carry one it promised.
+      #
+      # The derivation is the whole rule: the asset is the canonical triple
+      # with the vendor and the ABI dropped -- x86_64-unknown-linux-gnu ->
+      # x86_64-linux, aarch64-apple-darwin -> aarch64-darwin -- and
+      # tests/run.js checks every row of the file against both halves, against
+      # the compiler's own target table. Two of those four spellings were
+      # previously written down as triples the compiler accepts, and are not.
+      #
+      # What the other three wait on is a second and third runner in *this*
+      # workflow -- a release asset is built on a tag, so the CI test matrix
+      # would not supply one either way -- and, for darwin, the `--verify` on
+      # the bootstrap line below: `stage3 == stage2` does not hold under ld64,
+      # which records each .o's path and mtime in Mach-O's debug map, so that
+      # binary cannot be built as this step builds one yet
+      # (docs/wp10-ci.md#ci-matrix).
+      # See docs/wp19-stage0-retirement.md G5 for what stays open.
       #
       # stage2, not stage1: it is the first binary in the chain that no part of
       # stage0 emitted, and --verify is what says the stages agree.
@@ -119,7 +150,14 @@ jobs:
         id: binary
         run: |
           version="${GITHUB_REF_NAME#v}"
-          name="nish-$version-x86_64-linux"
+          host="$(uname -s)-$(uname -m)"
+          if ! asset="$(jq -er --arg host "$host" \
+            '.targets[] | select(.host == $host and .attached) | .asset' \
+            .github/seed-targets.json)"; then
+            echo "::error::.github/seed-targets.json marks no attached seed target for $host, so this runner does not know what to name its binary. Add the row -- its bootstrap row appears in ci.yml by itself once a release carries the asset -- or move this job to a host that has one."
+            exit 1
+          fi
+          name="nish-$version-$asset"
           stage="build/release/$name"
           mkdir -p "$stage/bin" "$stage/scripts"
           bash scripts/bootstrap.sh -o "$stage/bin/nish" --profile speed --verify

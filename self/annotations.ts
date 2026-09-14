@@ -17,6 +17,7 @@
 import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
 import { AliasInfo } from "./program";
+import { instantiateWritten } from "./generics";
 import {
   N_LIST,
   N_TYPE_ARRAY,
@@ -28,8 +29,10 @@ import {
   Node,
 } from "./nodes";
 import {
+  CPTR_NAME,
   K_ARRAY,
   T_BOOL,
+  T_CPTR,
   T_ERROR,
   T_F32,
   T_F64,
@@ -109,7 +112,55 @@ function scalarNamed(name: string, numberMode: i32): i32 {
   if (name === "f64") {
     return T_F64;
   }
+  // WP27 S2. Answered here rather than from a declared name because it is not
+  // declared anywhere: there is no `class CPtr` for a module to import, and the
+  // name means the same thing in every file.
+  if (name === CPTR_NAME) {
+    return T_CPTR;
+  }
   return -1;
+}
+
+/** An array's element type, refused when it is a foreign pointer (WP27 S2). */
+function elementType(node: Node, ctx: CheckContext): i32 {
+  const elem = resolveType(node, ctx);
+  if (rejectForeignPointer(ctx, elem, "an array element", node)) {
+    return T_ERROR;
+  }
+  return elem;
+}
+
+/**
+ * Where a `CPtr` may be written, and the one diagnostic for everywhere else
+ * (WP27 S2, `docs/wp27-ffi.md` §7). Answers true when it refused.
+ *
+ * The allowed positions are a `declare function`'s parameters and return type,
+ * and a local that holds what such a call answered. Everything else is refused,
+ * and the refusals are not timidity — each one is a place where the compiler
+ * would have to make a claim about the pointer that it cannot support:
+ *
+ *   - A field, an array element or a `Result` arm would put a foreign address
+ *     inside a value this compiler lays out and the arena owns, and the escape
+ *     analysis walks those. A `CPtr` is not arena memory and must never be
+ *     treated as though it were, which is the bug class WP26 fixed in `getenv`
+ *     and §2 says FFI re-opens in user code.
+ *   - A parameter or return type of a function this program defines would put
+ *     one across a boundary the C header, the `.d.ts` and the N-API shim all
+ *     describe, and none of the three has a spelling for an address whose
+ *     provenance and lifetime are unknown.
+ *
+ * What is left is a pointer that comes out of C, sits in a local and goes back
+ * into C, which needs no claim about it at all beyond its width.
+ */
+export function rejectForeignPointer(ctx: CheckContext, type: i32, position: string, node: Node): boolean {
+  if (ctx.table.stripNull(type) !== T_CPTR) {
+    return false;
+  }
+  ctx.error(
+    node,
+    `\`${CPTR_NAME}\` cannot be ${position}: a foreign pointer may only appear in a \`declare function\` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives`
+  );
+  return true;
 }
 
 /**
@@ -125,7 +176,7 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
       // them, because `T | null[]` groups the other way.
       return resolveType(node.children[0], ctx);
     case N_TYPE_ARRAY:
-      return ctx.table.arrayOf(resolveType(node.children[0], ctx));
+      return ctx.table.arrayOf(elementType(node.children[0], ctx));
     case N_TYPE_READONLY:
       return resolveReadonly(node, ctx);
     case N_TYPE_UNION:
@@ -171,7 +222,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     if (argc !== 1) {
       return ctx.errorType(node, "`Array` needs exactly one type argument, e.g. `Array<number>`");
     }
-    return ctx.table.arrayOf(resolveType(args.children[0], ctx));
+    return ctx.table.arrayOf(elementType(args.children[0], ctx));
   }
 
   // `ReadonlyArray<T>` is `readonly T[]`, the way `Array<T>` is `T[]`.
@@ -179,7 +230,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     if (argc !== 1) {
       return ctx.errorType(node, "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`");
     }
-    return ctx.table.readonlyArrayOf(resolveType(args.children[0], ctx));
+    return ctx.table.readonlyArrayOf(elementType(args.children[0], ctx));
   }
 
   const alias = typedArrayElement(name);
@@ -188,7 +239,17 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     return ctx.errorType(node, `\`${name}\` takes no type argument (it is an alias of \`${spelled}\`)`);
   }
 
+  // WP18 G5: a user generic with its arguments written. Answered after the
+  // built-in constructors above — so nothing that was already a type argument
+  // list changes meaning — and before the refusal below, so a template written
+  // with the wrong number of arguments is refused by the rule that names it
+  // rather than by "unsupported type reference".
   if (argc > 0) {
+    const written = ctx.program.structTemplate(name);
+    if (written !== null) {
+      const instantiated = instantiateWritten(ctx, written, args, node);
+      return instantiated === null ? T_ERROR : instantiated.type;
+    }
     return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`);
   }
 
@@ -205,6 +266,16 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   }
   if (alias >= 0) {
     return ctx.table.arrayOf(alias);
+  }
+
+  // WP18 G5: a generic class or interface named without its type arguments.
+  // Here rather than in the branch above, and after the scalars, because that
+  // is where stage0's named-type resolver answers a reference with no argument
+  // list: `Box` on its own is not a type, and the message says how to write it.
+  const bare = ctx.program.structTemplate(name);
+  if (bare !== null) {
+    instantiateWritten(ctx, bare, args, node);
+    return T_ERROR;
   }
 
   // WP18: a type parameter, while an instantiation is being resolved or
@@ -261,6 +332,12 @@ function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   const ok = resolveType(args.children[0], ctx);
   const err = resolveType(args.children[1], ctx);
   if (ok === T_ERROR || err === T_ERROR) {
+    return T_ERROR;
+  }
+  if (rejectForeignPointer(ctx, ok, "a `Result` arm", args.children[0])) {
+    return T_ERROR;
+  }
+  if (rejectForeignPointer(ctx, err, "a `Result` arm", args.children[1])) {
     return T_ERROR;
   }
   if (err === T_VOID) {

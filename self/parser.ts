@@ -26,11 +26,15 @@ import { Diagnostic, SourceFile } from "./diagnostics";
 import { Lexer } from "./lexer";
 import {
   FLAG_CONST,
+  FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_FOREIGN,
+  FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_READONLY,
+  FLAG_STATIC,
+  FLAG_STATIC_FIRST,
   N_ARRAY,
   N_BIGINT,
   N_BINARY,
@@ -711,17 +715,25 @@ export class Parser {
     this.advance(); // `class`
     const node = this.node(N_CLASS, start, this.end);
     node.children.push(this.parseIdentifier());
+    // Read where they are written and pushed last, where `nodes.ts` puts them:
+    // the first four children of an `N_CLASS` mean what they have always meant,
+    // so nothing downstream that indexes them moves (WP18 G5).
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.at(TOK_EXTENDS) ? this.parseHeritageName() : this.empty());
     const implemented = this.list();
     if (this.at(TOK_IMPLEMENTS)) {
       this.advance();
       while (true) {
-        implemented.children.push(this.parseIdentifier());
+        // A type reference rather than a bare identifier, because WP18 G5 lets
+        // an implemented interface be an instantiation (`implements Container<T>`)
+        // and `parseType` already reads exactly that shape.
+        implemented.children.push(this.parseType());
         if (!this.eat(TOK_COMMA)) break;
       }
     }
     node.children.push(this.closeList(implemented));
     node.children.push(this.parseClassBody());
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
   }
@@ -745,29 +757,139 @@ export class Parser {
 
   /**
    * `readonly`, `public`, `private`, `protected` and `static` in front of a
-   * member. Only `readonly` is recorded, because it is the only one the
-   * checker asks about; the accessibility three are accepted and ignored
-   * (docs/LANGUAGE.md, Classes), and `static` is refused where it stands.
+   * member. `readonly` and `static` are recorded; the accessibility three are
+   * accepted and ignored (docs/LANGUAGE.md, Classes).
+   *
+   * `static` used to be refused here, with a sentence of the parser's own.
+   * The checker states it now, because the checker is the phase that knows
+   * whether this is a field or a method and which class it is in, and stage0's
+   * message names all three — so refusing it here is what kept
+   * `nl2116_static_method` in `tests/wordings/parser_refusals.txt` rather than
+   * letting the two compilers say the same thing
+   * (docs/wp19-stage0-retirement.md R3).
+   *
+   * **What that move costs, deliberately.** A rule the checker owns is a rule a
+   * member has to *parse* to reach, and six shapes do not: `static x;` (no
+   * annotation), `static` alone, `static x: i32 = 0` with no `;` before the
+   * `}` (there is no ASI here), `static m(): i32;` (no body), `static m() { }`
+   * (no return type) and `static { }` (a static block). Each used to hear
+   * `static` from this function and now hears the syntax error about its other
+   * defect instead, while stage0 names the static member — and the same is true
+   * of `m?()` with no return type and `x? = 5` with no annotation, which never
+   * reach the marker's rule either. Both compilers still refuse every one of
+   * those programs, and the difference is §A3's declared class — stage1's first
+   * diagnostic is a syntax error — which `--parity` declares and
+   * `tests/self/reject_oracle.js` counts rather than fails
+   * (`tests/cases/reject_cls_static_field_untyped`, `reject_cls_static_block`,
+   * `reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`).
+   * Keeping a copy of the rule here would put the sentence back, uncoded and in
+   * a phase that cannot name the member, which is the duplication this change
+   * exists to remove.
+   *
+   * **That bucket counts; it does not gate.** `parser_refusals.txt` and
+   * `stage1_divergence.txt` are shrink-only under `--strict-refusals`, but the
+   * reject oracle's parser bucket is a tally in a summary line with no ceiling
+   * beside it, so a later change that moves one more rule out of this parser's
+   * reach migrates its case into the bucket without failing anything. Whoever
+   * moves the next rule should read the bucket's number before and after.
+   *
+   * A word is a modifier only while the token after it is not the start of
+   * what a member's *name* is followed by, because `static` is a name as well
+   * as a modifier: `static: i32` and `static(): i32` are a field and a method
+   * called `static`, and so are `static?: i32` and `static!: i32`, which is
+   * what stage0 calls them (``Field `static` of class `C` cannot be
+   * optional``).
    */
   parseMemberModifiers(): i32 {
     let flags = 0;
-    while (this.at(TOK_IDENT) && this.peek() !== TOK_LPAREN && this.peek() !== TOK_COLON) {
+    while (this.at(TOK_IDENT) && !this.startsMemberName()) {
       const word = this.value;
       if (word === "readonly") flags = flags | FLAG_READONLY;
-      else if (word === "static") this.report("`static` members are not supported", this.start, this.end);
-      else if (word !== "public" && word !== "private" && word !== "protected") return flags;
+      else if (word === "static") {
+        // `static` before `readonly` is the one ordering the checker needs; see
+        // FLAG_STATIC_FIRST in `self/nodes.ts`.
+        if ((flags & FLAG_READONLY) === 0) flags = flags | FLAG_STATIC_FIRST;
+        flags = flags | FLAG_STATIC;
+      } else if (word !== "public" && word !== "private" && word !== "protected") return flags;
       this.advance();
     }
     return flags;
   }
 
-  /** A field, a method, or the constructor. `constructor` is an identifier to the lexer. */
+  /**
+   * Whether the identifier in hand is a member's name rather than a modifier in
+   * front of one: a name is followed by `(`, `:`, `?`, `!`, `=` or `;`, and a
+   * modifier by the next word. The last two are the malformed members —
+   * `static = 5;` and `static;` have no annotation and neither compiles — and
+   * they are here because `static` is a name there too, which is what stage0
+   * calls them (``Field `static` of class `C` needs a type annotation``): the
+   * rule this function states is "the next token is not a name's follower", so
+   * it had better be the rule it applies.
+   */
+  startsMemberName(): boolean {
+    const next = this.peek();
+    return (
+      next === TOK_LPAREN ||
+      next === TOK_COLON ||
+      next === TOK_QUESTION ||
+      next === TOK_BANG ||
+      next === TOK_ASSIGN ||
+      next === TOK_SEMICOLON
+    );
+  }
+
+  /**
+   * The `?` or `!` that may follow a member's name, as a flag rather than as a
+   * refusal. Both are forbidden and the checker is what says so, in the words
+   * that name the member and its class.
+   */
+  parseMemberMarker(): i32 {
+    if (this.eat(TOK_QUESTION)) return FLAG_OPTIONAL;
+    if (this.eat(TOK_BANG)) return FLAG_DEFINITE;
+    return 0;
+  }
+
+  /**
+   * Whether the member about to be parsed is `m?(...)` — a method whose name
+   * carries the optional marker. That needs one token more lookahead than
+   * `peek` has, so it is a scan over the same source, the shape
+   * `startsConstEnum` uses. `m!(...)` is not a spelling TypeScript has, so
+   * only `?` is looked for.
+   */
+  markedMethodAhead(): boolean {
+    if (this.peek() !== TOK_QUESTION) return false;
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // the name
+    scan.next(); // `?`
+    scan.next();
+    return scan.kind === TOK_LPAREN;
+  }
+
+  /**
+   * A field, a method, or the constructor. `constructor` is an identifier to
+   * the lexer, and only `constructor(` is one: a member called `constructor`
+   * with a `:` after it takes the field path.
+   *
+   * That last part is a divergence older than this function's flags and is
+   * recorded rather than fixed: `class C { constructor: i32 = 0; }` **compiles**
+   * here and is a syntax error to the `typescript` package, which is the
+   * direction `tests/wordings/stage1_divergence.txt` calls the serious one —
+   * stage0 refuses a program stage1 accepts. No corpus program has the shape,
+   * so nothing measures it (docs/wp19-stage0-retirement.md §2B).
+   */
   parseMember(): Node {
     const start = this.start;
     const modifiers = this.parseMemberModifiers();
     if (this.at(TOK_IDENT) && this.value === "constructor" && this.peek() === TOK_LPAREN) {
       this.advance();
       const ctor = this.node(N_CONSTRUCTOR, start, this.end);
+      // The constructor carries its modifiers too, and for the same reason the
+      // field and the method do: `static constructor()` is a rule the checker
+      // states. Dropping them here is how a `static` constructor came to be
+      // compiled *and run* as the instance constructor once the parser stopped
+      // refusing the word (docs/wp19-stage0-retirement.md R3).
+      ctor.flags = modifiers;
       ctor.children.push(this.parseParameters());
       ctor.children.push(this.parseBlock());
       ctor.end = this.previousEnd;
@@ -778,9 +900,13 @@ export class Parser {
         `a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``
       );
     }
-    if (this.peek() === TOK_LPAREN) {
+    // `m?(): void` is a method with a marker, not a field: the `?` sits
+    // between the name and the parameter list, so the one token of lookahead
+    // that tells a method from a field has to look past it.
+    if (this.peek() === TOK_LPAREN || this.markedMethodAhead()) {
       const method = this.node(N_METHOD, start, this.end);
       method.children.push(this.parseIdentifier());
+      method.flags = modifiers | this.parseMemberMarker();
       method.children.push(this.parseParameters());
       method.children.push(this.parseReturnType());
       method.children.push(this.parseBlock());
@@ -788,8 +914,8 @@ export class Parser {
       return method;
     }
     const field = this.node(N_FIELD, start, this.end);
-    field.flags = modifiers;
     field.children.push(this.parseIdentifier());
+    field.flags = modifiers | this.parseMemberMarker();
     field.children.push(this.parseTypeAnnotation());
     field.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty());
     this.expectSemicolon();
@@ -801,6 +927,9 @@ export class Parser {
     this.advance(); // `interface`
     const node = this.node(N_INTERFACE, start, this.end);
     node.children.push(this.parseIdentifier());
+    // Pushed last, like a class's and a function's, so the field list keeps
+    // being child 1 for everything that already reads it (WP18 G5).
+    const typeParams = this.parseTypeParameters();
     const fields = this.list();
     if (this.expect(TOK_LBRACE)) {
       while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
@@ -809,8 +938,20 @@ export class Parser {
         if (!this.at(TOK_IDENT)) {
           fields.children.push(this.fail("an interface holds only annotated fields"));
         } else {
+          // The same modifiers a class member takes, because `collectField` is
+          // the same function for both: `readonly x: i32` is a real interface
+          // field on either compiler, and `static x: i32` is refused with the
+          // sentence that says `of interface \`I\``. Reading `?` here and not
+          // these would be an arbitrary split in one grammar rule.
+          const modifiers = this.parseMemberModifiers();
           const field = this.node(N_FIELD, fieldStart, this.end);
           field.children.push(this.parseIdentifier());
+          // `?` only, and not `!`: a definite-assignment assertion is not a
+          // spelling TypeScript allows on a property signature at all, so
+          // there is no stage0 sentence to agree with and the syntax error
+          // stays the right answer.
+          field.flags = modifiers;
+          if (this.eat(TOK_QUESTION)) field.flags = field.flags | FLAG_OPTIONAL;
           field.children.push(this.parseTypeAnnotation());
           field.children.push(this.empty());
           if (!this.eat(TOK_SEMICOLON)) this.eat(TOK_COMMA);
@@ -822,6 +963,7 @@ export class Parser {
       this.expect(TOK_RBRACE);
     }
     node.children.push(this.closeList(fields));
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
   }

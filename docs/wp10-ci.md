@@ -13,28 +13,40 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **commented out of the matrix**, on cost rather than on breakage; see below |
-| `bootstrap` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on five measured failures rather than on cost; see below |
+| `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
+| `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
 `.github/workflows/parity.yml` is the fourth job and does not run here: WP19
 G1's corpus half is nightly, on its own workflow, for the reasons under
 [the parity run](#the-parity-run-nightly) below.
 
-**The macOS job is one uncommented line away, and stays commented out.** Both
-of the things that used to *break* it are fixed; what keeps it out now is what
-it costs.
+**The macOS `test` row was run for the first time on 2026-09-13, and it fails.**
+That is new information rather than a guess, and it replaces the cost argument
+that used to stand here: `npm test` on `macos-latest` reports **five failures in
+four families**, none of them a compiler bug and all of them checks that encode
+an ELF/Linux assumption.
 
-It is the whole `test` job a second time — `npm ci`, typecheck, the full suite,
-smoke, the cookbook and registry checks, the size report — behind a
-`brew install llvm@18`, on the slowest runner GitHub rents, and every push
-would wait for it. Restore the row when the suite is fast, or put it on a
-schedule the way [the parity run](#the-parity-run-nightly) is. What it buys is
-the ld64 / Mach-O half of `build.sh` — `-dead_strip`, `-Wl,-x`, no
-`-fuse-ld=lld`, no `-fno-plt` — and Apple Silicon, and no Linux runner
-exercises either.
+| | What fails | Why |
+| --- | --- | --- |
+| 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
+| 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not: Mach-O's debug map records each `.o`'s path and mtime, which differ between two links |
 
-The two defects it was waiting for are both bash 3.2, which macOS ships as
+The fourth family reaches further than this job: `scripts/bootstrap.sh --verify`
+asserts the same `stage3 == stage2` comparison, so it also stands between the
+release workflow and a **darwin binary**
+([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
+
+Restoring the row therefore means porting four checks against hardware that has
+to be iterated on, which is a package of its own rather than a line in the
+matrix. The install half is already written and was exercised by that run: both
+"Install LLVM 18 + lld" steps in the `test` job are guarded by `runner.os`, so
+restoring the row is one uncommented line plus the five fixes.
+
+The two defects the row was waiting for before this are both bash 3.2,
+which macOS ships as
 `/bin/bash` (Apple will not ship GPLv3) and which this repository's shell
 scripts had been written against:
 
@@ -49,12 +61,94 @@ scripts had been written against:
   builtin that bash 3.2 does not have at all, so the smoke step died on the
   first line that used it. It reads the same pipeline with `while read` now.
 
-Neither would stop the row now. And whenever it does come back, it will not
-bring WP19 G3's second operating system with it: the `bootstrap` job needs a
-darwin *seed* binary and a release ships `x86_64-linux` alone, so that half
-waits on [wp19](wp19-stage0-retirement.md#g5-distribution-does-not-need-node).
-`fail-fast: false` is already set, so a macOS-only failure would not cancel
-the Linux row that says whether it is the platform or the change.
+Neither stops the row now, and neither is what the five failures above are.
+
+### The seeded build, and what a missing seed reports
+
+`bootstrap` builds `self/` with the **last released** binary rather than with
+stage0, which is the only thing that checks WP19's rolling freeze
+([G3](wp19-stage0-retirement.md#g3--the-seed-protocol-exists-and-ci-uses-it)).
+
+**There are three answers and only two colours, so the freeze is a pair of
+jobs.** `seeds` asks the last release which seed binaries it attaches — it
+needs `gh` and the checkout, no Node and no LLVM, so it answers in seconds
+rather than after two minutes of setup it may be about to throw away — and
+`bootstrap` is a **matrix over that answer**, one row per seed that actually
+exists. A platform with no seed therefore has no row, rather than a green one
+with a warning inside it. Read the pair:
+
+| The checks list says | It means |
+| --- | --- |
+| `seeds` green, a `bootstrap (<seed>)` row green | the freeze was checked with that seed, on that seed's own platform, and it held |
+| `seeds` green, no row for a platform | the freeze was *not* checked there, and nothing is wrong: no release carries a seed for it yet. The `seeds` summary names every platform in both states |
+| `seeds` green, `bootstrap` **skipped** | the same for every platform at once: there is no release at all |
+| `seeds` **red** | a seed that should exist does not — a release missing an asset `release.yml` attaches |
+| a `bootstrap` row **red** | `self/` does not build with the last release. That is the rolling freeze broken, and it is what this pair exists to catch |
+
+An absent row, and a grey job where there is nothing at all, are the
+distinctions the gate could not draw while it was one job. It has now been
+wrong in both directions. It first named the asset it wanted, warned, and
+exited 0 — and a warning above a green check is a green check, which is
+precisely the shape
+[§A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)
+is the written record of. The correction for that made every missing seed red,
+which is the opposite error: `release.yml`'s `release` job is `needs: ci`, so a
+repository with no release — the 0.1.0 base case
+([wp12-release.md](wp12-release.md#release-procedure)), and every fork on the
+day it is forked — could never cut the release that would supply the seed the
+gate was waiting for.
+
+**Which missing seed is red is decided by platform, and the list is data.**
+[`.github/seed-targets.json`](../.github/seed-targets.json) carries all four of
+G5's platforms, the canonical triple each one is, the asset name derived from
+it, and whether `release.yml` attaches it today. So:
+
+- **no release at all** — nothing to check the freeze against and nothing
+  wrong. No rows, `bootstrap` skipped, `seeds` green and saying so.
+- **a release with no asset for a platform marked `attached`** (`x86_64-linux`
+  today) — a regression in `release.yml` or in the asset name the two workflows
+  share. Red, and the annotation says how to get unstuck: attach the asset, or
+  delete the release, before cutting another.
+- **a release with no asset for a platform nothing builds for yet** (darwin and
+  `aarch64-linux`, until
+  [G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)) —
+  expected. No row for it, and the `seeds` summary lists it as unchecked.
+
+The one thing this pair may not do is report success without having built
+anything, and the one thing it may not do now is be red for a state in which
+nothing is wrong.
+
+**The lookup is a file, and `npm test` runs it.** `.github/seed-matrix.sh` is
+the step body, and the WP19 block of `tests/run.js` drives it against a
+stand-in for `gh` through each of those states — the seed present, the
+`attached` seed missing (exit 1 with an `::error::`), a seed missing for a
+platform nothing builds one for, no release at all, and a seed appearing for a
+platform that had none. Both times this logic was got
+wrong it was inline shell in a workflow that nothing could run; the checks are
+what make the third revision of it the last one that needs a reviewer to catch
+a regression.
+
+`.github/seed-targets.json` is also where the *asset name* is spelled, once.
+`release.yml` looks its own up rather than writing it out, and the same block
+of `tests/run.js` checks every row against the compiler's own target table:
+that each `triple` is one `src/codegen/target.ts` calls canonical, and that
+each `asset` is that triple with the vendor and the ABI dropped
+(`x86_64-unknown-linux-gnu` → `x86_64-linux`, `aarch64-apple-darwin` →
+`aarch64-darwin`). The four spellings used to live in two comments calling each
+other a contract, and two of them — `aarch64-darwin` and `x86_64-darwin` — were
+described as triples the compiler accepts, which it never has.
+
+G3 asks for this on **both** operating systems and it runs on Linux alone,
+because a release attaches `x86_64-linux` and nothing else. Two things have to
+land before the second platform: the darwin **seed**, which is
+[G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and the
+**ld64 fixed point** — the fourth family in the table above, which is the
+comparison `scripts/bootstrap.sh --verify` makes, and which now carries a note
+at the comparison itself saying what was measured. A macOS row that arrived
+before that was fixed would be red on the day its seed did, which is the other
+way a gate lies about itself. Neither is a line in `ci.yml`: the matrix is the
+release's answer, so the row appears when the seed does.
+
 
 ### The parity run, nightly
 

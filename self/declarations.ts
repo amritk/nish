@@ -13,10 +13,11 @@
 import { CheckContext } from "./context";
 import { isNishSpecifier, nishModuleNames } from "./nish_modules";
 import { STD_PREFIX } from "./branding";
-import { resolveType } from "./annotations";
+import { parseBareSpecifier } from "./packages";
+import { rejectForeignPointer, resolveType } from "./annotations";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
-import { isForeignScalar, T_ERROR, T_I32, T_VOID } from "./types";
+import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL: string = "nish_main";
@@ -31,7 +32,19 @@ export function isExported(node: Node): boolean {
  * member's `this` is `params[0]`, which is the calling convention the whole
  * emitter is written against.
  */
-export function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i32): void {
+export function collectParams(
+  ctx: CheckContext,
+  sig: FunctionSig,
+  list: Node,
+  owner: i32,
+  /**
+   * A `declare function`'s parameters, which are the one place a `CPtr` is
+   * welcome (WP27 S2). The flag is here rather than a guard at each caller
+   * because this is the single list every signature is built from, so a new
+   * spelling of a function cannot arrive without answering the question.
+   */
+  foreign: boolean
+): void {
   if (owner >= 0) {
     sig.paramNames.push("this");
     sig.paramTypes.push(owner);
@@ -48,6 +61,9 @@ export function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, o
     if (duplicate) {
       ctx.error(param, `Duplicate parameter \`${name}\``);
       continue;
+    }
+    if (!foreign) {
+      rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1]);
     }
     sig.paramNames.push(name);
     sig.paramTypes.push(type);
@@ -68,7 +84,8 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
   if (name.startsWith("nish_")) {
     ctx.error(decl.children[0], "Function names starting with `nish_` are reserved for the runtime");
   }
-  collectParams(ctx, sig, decl.children[1], -1);
+  const foreign = sig.foreign();
+  collectParams(ctx, sig, decl.children[1], -1, foreign);
   const returnAnnotation = decl.children[2];
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(decl.children[0], `Function \`${name}\` needs an explicit return type annotation`);
@@ -76,20 +93,29 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
   }
-  if (sig.foreign()) {
+  if (foreign) {
     checkForeignSignature(ctx, sig, decl, name);
+  } else {
+    // WP27 S2: a foreign pointer never crosses a boundary this compiler
+    // describes. `--emit-header`, `--emit-dts` and `--emit-napi` all render an
+    // exported signature, and none of the three has a spelling for an address
+    // whose provenance and lifetime are unknown — so rather than teach three
+    // generators to skip it, the type is refused where it would reach them.
+    // The parameters were answered for by `collectParams` above.
+    rejectForeignPointer(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation);
   }
   return sig;
 }
 
 /**
- * The rules a `declare function` adds (WP27 S1): no body, not exported, and a
- * scalar in every position.
+ * The rules a `declare function` adds (WP27 S1, widened by S2): no body, not
+ * exported, and a scalar or a `CPtr` in every position.
  *
- * The scalar rule is what makes S1 sound rather than merely small — with no
- * pointer crossing the boundary there is nothing for escape analysis to be
- * wrong about — so widening it is a decision about the memory model and not a
- * relaxation of a type check (`docs/wp27-ffi.md` §3).
+ * The rule is what makes this sound rather than merely small, and S2 does not
+ * weaken it: no pointer *this compiler allocated* crosses the boundary in
+ * either direction, so there is still nothing for the escape analysis to be
+ * wrong about. What S2 adds is a pointer coming back that the compiler must
+ * never mistake for one of its own (`docs/wp27-ffi.md` §2, §3).
  */
 function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void {
   if (sig.body() !== null) {
@@ -103,20 +129,31 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   }
   let i = 0;
   while (i < sig.paramTypes.length) {
-    if (!isForeignScalar(sig.paramTypes[i])) {
+    if (!isForeignType(ctx.table, sig.paramTypes[i])) {
       const spelled = ctx.table.typeName(sig.paramTypes[i]);
       ctx.error(
         decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars only`
+        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars and \`CPtr\` only`
+      );
+    } else if (ctx.table.isNullable(sig.paramTypes[i])) {
+      // A parameter cannot be `CPtr | null`, and the asymmetry with the return
+      // type is the rule §3 states as "`null` only from a foreign call": the
+      // callee is the only thing that can say "no address", so `null` arrives
+      // from C and is narrowed before it goes back. Without this a program
+      // could hand C a null it never got from C, which is the one thing the
+      // narrowing was there to stop.
+      ctx.error(
+        decl,
+        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` cannot be nullable: a foreign pointer is narrowed with \`!== null\` before it is passed back, because only the C function it came from can hand out a null one`
       );
     }
     i = i + 1;
   }
-  if (!isForeignScalar(sig.returnType)) {
+  if (!isForeignType(ctx.table, sig.returnType)) {
     const spelled = ctx.table.typeName(sig.returnType);
     ctx.error(
       decl.children[2],
-      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar only`
+      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar or \`CPtr\` only`
     );
   }
 }
@@ -163,24 +200,26 @@ export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
  */
 export function collectImports(ctx: CheckContext, decl: Node): void {
   const specifier = decl.text;
-  // `nish:` is the one bare form: it names a builtin module rather than a
-  // file, so it is let through here and validated in pass 1b, where an unknown
-  // one reads as a bad module instead of a missing file. The hint goes after
-  // the interpolation deliberately, so the longest literal run of this
-  // template — and with it the code the rule has always had — is unchanged.
-  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
-  // `nish/` names a standard-library module, which is ordinary source resolved
-  // like any other file, only from beside the compiler. Everything else is
-  // still refused: there is no package resolution (wp21 §5b).
+  // Four forms are legal. `nish:` names a builtin and resolves to no file, so
+  // it is let through here and validated in pass 1b, where an unknown one reads
+  // as a bad module instead of a missing file; `nish/` names a standard-library
+  // module, which is ordinary source resolved from beside the compiler; `./x`
+  // and `../x` name a file; and since WP21 S2 a package name resolves through
+  // `node_modules` and the `nish` export condition (wp21 §5b). What is left is
+  // a specifier that is none of them — an absolute path, a URL scheme, a scope
+  // with no package after it — and the message lists the four rather than
+  // naming the one thing it refused, because the mistake is almost always a
+  // form the reader thought was legal.
   if (
     !isNishSpecifier(specifier) &&
     !specifier.startsWith(STD_PREFIX) &&
     !specifier.startsWith("./") &&
-    !specifier.startsWith("../")
+    !specifier.startsWith("../") &&
+    parseBareSpecifier(specifier) === null
   ) {
     ctx.errorAtSpecifier(
       decl,
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames()} and ${STD_PREFIX}<module>)`
+      `Import specifier \`${specifier}\` must be relative (\`./x\`, \`../x\`), a package name (\`hash\`, \`@scope/hash\`), or one of ${nishModuleNames()} and ${STD_PREFIX}<module>`
     );
     return;
   }

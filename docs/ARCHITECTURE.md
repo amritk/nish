@@ -211,9 +211,9 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (3,480 bytes of `.text*` at `-Oz` against a budget of
+`runtime/runtime.c` (3,515 bytes of `.text*` at `-Oz` against a budget of
 3,584, plus 10,068 bytes of `.rodata` that is almost all Ryu's two
-power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,190
+power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,251
 bytes against 1,280) provide, in the order of `RUNTIME_FUNCTIONS`, the symbols
 below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
 `scripts/size-report.sh`, which reports every row:
@@ -493,7 +493,14 @@ toolchain-dependent steps when LLVM is not installed:
   flag the library API cannot express falls back to a real CLI spawn, and the
   two paths are compared byte for byte on every run over one case per shape and
   over the whole corpus under `node tests/run.js --verify-batch` (CI's
-  `batch-parity` job).
+  `batch-parity` job). The link is against the runtime and the driver **as
+  object files**, built once per run instead of recompiled per case (470 ms a
+  link became 91 ms), keyed on the defines the runtime needs — today only
+  `-DNISH_THREADS=1`. Two `runtime objects:` checks hold that up: the binary
+  linked against the objects must be byte-identical to the one built from the
+  sources, and a `--threads` module must *fail* to link against the default
+  objects, so a case handed the wrong runtime is a link error rather than a
+  program with two arenas.
 - **Diagnostics** (WP10): the caret excerpt format, syntax errors.
 - **Link tests** (`tests/link/<name>/`): whole programs built with `--link`,
   expected exit code and stdout, `declare`/`define` attribute agreement,
