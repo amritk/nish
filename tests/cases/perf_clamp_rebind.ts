@@ -12,8 +12,8 @@ export const main = (): number => {
 
   // Argument 0 rebinds `s` and then bounds `n` by the *new*, longer string.
   // The length the emitter loaded is the old two-byte one, so the clamp on `n`
-  // has to stay: without it the copy starts inside `"hi"` and runs nine bytes
-  // past its end.
+  // has to stay: without it the copy starts at the end of `"hi"` and runs
+  // nine bytes past it.
   const a = s.substring((s = long).length > 0 ? (n = s.length) : (n = s.length), n);
   console.log(`a [${a}] ${a.length}`);
 

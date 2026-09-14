@@ -67,7 +67,7 @@ function provenScan(s: string, rounds: number): number {
 }
 
 export function main(): number {
-  const BYTES = 40960; // bench:n
+  const BYTES = 40960; // 2,560 slices a round, and a multiple of 16
   const ROUNDS = 400;
   const REPS = 15;
   const s = text(BYTES);
