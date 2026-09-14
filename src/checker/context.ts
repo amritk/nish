@@ -9,8 +9,8 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
 import { CompilerOptions, StaticType } from "../types.js";
-import { TemplateInfo } from "./generics.js";
-import { CheckedProgram, FunctionSig } from "./program.js";
+import { StructInstantiation, StructTemplateInfo, TemplateInfo } from "./generics.js";
+import { CheckedProgram, FunctionSig, StructInfo } from "./program.js";
 import { Scope } from "./scope.js";
 
 /**
@@ -35,6 +35,13 @@ export interface CheckContext {
    * instantiates, not something that can be called.
    */
   readonly templates: ReadonlyMap<string, TemplateInfo>;
+  /**
+   * Generic classes and interfaces declared in this module (WP18 G5). Separate
+   * from `program.structs` for the reason `templates` is separate from `sigs`:
+   * a template has no layout, so it is what an annotation instantiates rather
+   * than something an annotation can name.
+   */
+  readonly structTemplates: ReadonlyMap<string, StructTemplateInfo>;
   /** The function whose body is being checked. */
   readonly current: FunctionSig;
   /** Enclosing loops, innermost last; empty outside any loop. Handlers push and pop. */
@@ -83,6 +90,19 @@ export interface CheckContext {
    * points.
    */
   instantiate(template: TemplateInfo, args: StaticType[], at: ts.Node): FunctionSig;
+  /**
+   * WP18 G5: the ordinary struct one (struct template, type-argument tuple)
+   * names, created — members, layout and queued member bodies — the first time
+   * it is asked for. `at` is where a termination or cap diagnostic points.
+   */
+  instantiateStruct: (template: StructTemplateInfo, args: StaticType[], at: ts.Node) => StructInfo;
+  /**
+   * The instantiation a mangled struct name belongs to, or `undefined` when the
+   * name is a struct somebody declared. An instantiated class is an ordinary
+   * struct and its `StaticType` carries no arguments (§3c), so this is where
+   * the termination rule and inference read them back.
+   */
+  structInstance: (name: string) => StructInstantiation | undefined;
 }
 
 /** Returns true when the statement definitely terminates control flow. */

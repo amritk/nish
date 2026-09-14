@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker/index.js";
+import { StructTemplateInfo } from "./checker/generics.js";
 import { isNishSpecifier } from "./checker/nish-modules.js";
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
 import { emitProgram } from "./codegen/emitter.js";
@@ -261,21 +262,122 @@ export class Compilation {
     for (const unit of this.modules) unit.checker.entryHasMain = hasMain;
     for (const unit of this.modules) unit.checker.checkBodies();
     this.sink.throwIfErrors();
-    // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
-    // point. It runs per module in load order because an instantiation is
-    // checked by the module that declares its template, in that module's scope.
-    // WP18 G7: to a fixed point over the *whole program*, not one pass per
-    // module. An instantiation is owned by the module that declares its
-    // template, so a body checked in a module loaded late can queue work in one
-    // loaded early — which a single pass in load order would walk straight
-    // past, leaving a `declare` with no `define` anywhere in the program.
+    // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed point.
+    // An instantiation is checked by the module that declares its template, in
+    // that module's scope — so WP18 G7 makes this a fixed point over the *whole
+    // program* rather than one pass per module in load order: a body checked in
+    // a module loaded late can queue work in one loaded early, which a single
+    // pass would walk straight past, leaving a `declare` with no `define`
+    // anywhere in the program.
     let queued = true;
     while (queued) {
       queued = false;
       for (const unit of this.modules) if (unit.checker.drainInstantiations()) queued = true;
     }
+    // After the fixed point, where the instantiation set is final.
+    this.rejectInstantiatedStructClashes();
     this.sink.throwIfErrors();
     this.checked = true;
+  }
+
+  /**
+   * WP18 G5 + WP21 §9c: the struct-name rule, one pass later.
+   *
+   * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
+   * that both declare `Holder<T>` and both instantiate it at `i32` produce two
+   * different `%struct.Holder$i32`. `declaredStructs` catches that when both
+   * instantiations came from a *signature*, because it runs before bodies are
+   * checked; an instantiation a body asked for does not exist yet then, so the
+   * set is only final here.
+   *
+   * It has to be caught rather than left: the second module's registration
+   * replaces the layout the first one's objects were built with, so a field
+   * read through an imported signature lands on the wrong offset. That is a
+   * miscompile, not a link error — the same failure WP21 S1 exists to prevent
+   * for plain functions, and the same one `tests/link/two_packages_struct`
+   * pins for a declared class.
+   *
+   * **Two modules of one package clash for the same reason, and are refused
+   * here too.** Packages are what make `Holder` and `Holder` two names in
+   * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
+   * which is a program-wide `%struct` name and a program-wide method symbol
+   * whichever package asked for it. A declared `class Holder` in two modules
+   * of one package is caught before bodies, by `@Holder.constructor` clashing
+   * in `rejectSymbolClashes`; the generic spelling has no symbol until an
+   * instantiation exists, so it reached the emitter unremarked and produced
+   * two different `%struct.Holder$i32` plus an `invalid redefinition of
+   * function 'Holder$i32.constructor'` from `llvm-as` — with no diagnostic.
+   * `tests/link/generic_class_clash` is that program.
+   *
+   * One message per template rather than per instantiation: two modules that
+   * both declare `Holder<T>` and both use it at `i32` and at `string` have
+   * made one mistake, not two.
+   */
+  private rejectInstantiatedStructClashes(): void {
+    const owner = new Map<string, ModuleUnit>();
+    const reported = new Set<StructTemplateInfo>();
+    for (const unit of this.modules) {
+      for (const instance of unit.checker.program.structInstantiations.values()) {
+        // The module that declares the template is the one that owns every
+        // instantiation of it, whoever the annotation was written by.
+        if (instance.template.decl.getSourceFile() !== unit.sourceFile) continue;
+        const first = owner.get(instance.info.name);
+        if (first === undefined) {
+          owner.set(instance.info.name, unit);
+          continue;
+        }
+        if (reported.has(instance.template)) continue;
+        reported.add(instance.template);
+        if (first.packageName === unit.packageName) {
+          this.reportStructModuleClash(instance.template, first, unit);
+          continue;
+        }
+        this.reportStructPackageClash(instance.info, first, unit, instance.template.nameNode);
+      }
+    }
+  }
+
+  /**
+   * Two modules of one package, each declaring a generic class or interface of
+   * the same name, each instantiating it.
+   *
+   * The sentence is `rejectSymbolClashes`'s generic-function one with the noun
+   * changed, because it is the same rule one level up: a name that becomes a
+   * program-wide symbol must be unique across the program, and an
+   * instantiation is named after the template it came from.
+   */
+  private reportStructModuleClash(template: StructTemplateInfo, first: ModuleUnit, unit: ModuleUnit): void {
+    this.sink.report(
+      new CompileError(
+        `Generic ${template.kind} \`${template.sourceName}\` is also declared in ${first.fileName}; a class or interface name must be unique across the program, and an instantiation is named after its template`,
+        template.nameNode,
+        unit.sourceFile
+      )
+    );
+  }
+
+  /**
+   * The one sentence both halves of that rule say. It is one method rather than
+   * two call sites because the diagnostic-code generator keys a rule on the
+   * literal at its `new CompileError(...)`, so a second copy of these words
+   * would be a second code for one rule.
+   *
+   * TODO(WP21 §7): package-scoped struct layouts, and the diagnostic for two
+   * versions of one package meeting in a diamond, are that stage's.
+   */
+  private reportStructPackageClash(
+    info: StructInfo,
+    first: ModuleUnit,
+    unit: ModuleUnit,
+    at: ts.Node
+  ): void {
+    this.sink.report(
+      new CompileError(
+        `${info.kind === "class" ? "Class" : "Interface"} \`${info.name}\` is declared in package ${describePackage(first.packageName)} and again in package ${describePackage(unit.packageName)}; a class or interface name is still program-wide, so two packages cannot both declare one`,
+        at,
+        unit.sourceFile
+      )
+    );
   }
 
   /**
@@ -301,16 +403,8 @@ export class Compilation {
         // so two packages that both declare `Node` would be silently treated
         // as declaring one type. Say so, in the words `docs/wp21-packages.md`
         // §7 uses, rather than letting the layouts merge.
-        // TODO(WP21 §7): package-scoped struct layouts, and the diagnostic for
-        // two versions of one package meeting in a diamond, are that stage's.
         if (first.packageName !== unit.packageName) {
-          this.sink.report(
-            new CompileError(
-              `${info.kind === "class" ? "Class" : "Interface"} \`${info.name}\` is declared in package ${describePackage(first.packageName)} and again in package ${describePackage(unit.packageName)}; a class or interface name is still program-wide, so two packages cannot both declare one`,
-              info.decl.name ?? info.decl,
-              unit.sourceFile
-            )
-          );
+          this.reportStructPackageClash(info, first, unit, info.decl.name ?? info.decl);
         }
       }
     }

@@ -55,9 +55,10 @@
  *
  * `tests/wordings/stage1_divergence.txt` is the other list, and it is not a
  * declaration of anything: it names the programs the two compilers answer
- * differently — five of which stage1 *compiles* — found by writing this corpus
+ * differently — some of which stage1 *compiles* — found by writing this corpus
  * and reported rather than fixed, because a code is keyed on its message text
- * and rewording one retires the code.
+ * and rewording one retires the code. The summary line counts both lists; the
+ * counts move, so read them there rather than here.
  *
  * `npm test` runs this tool over stage1 with `--strict-refusals`, so both
  * lists have to match what stage1 does exactly: they can shrink, and they
@@ -350,9 +351,10 @@ const main = async (argv) => {
   // The coverage gate asks a question about the *corpus* — does some program
   // provoke every rule? — so it is asked of the compiler that states the rules,
   // which is stage0 today and the seed after R6. It is not asked of stage1:
-  // stage1's parser refuses 44 of these programs before the phase that owns the
-  // rule can word it, so its coverage is lower by construction and gating on it
-  // would be gating on §A3's declared class. `--require-coverage` is therefore
+  // stage1's parser refuses a tranche of these programs before the phase that
+  // owns the rule can word it — the count is the one the summary line below
+  // prints — so its coverage is lower by construction and gating on it would be
+  // gating on §A3's declared class. `--require-coverage` is therefore
   // opt-in, and `tests/run.js` passes it on exactly one of its two runs.
   // A filtered run never gates either: with a handful of programs compiled,
   // "nothing provokes this code" would be a fact about the filter.

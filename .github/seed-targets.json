@@ -1,0 +1,39 @@
+{
+  "note": [
+    "The seeds WP19 G3's rolling freeze is checked with, and the one place their names are spelled.",
+    "release.yml attaches an asset called nish-<version>-<asset>.tar.gz and ci.yml's `seeds` job looks for exactly that name, so the spelling is a contract between the two workflows. Both read it from here rather than stating it, because a contract each side writes out separately is two strings that agree until one of them is edited.",
+    "`triple` is the canonical target triple src/codegen/target.ts accepts, and `asset` is that triple with the vendor and the ABI dropped: x86_64-unknown-linux-gnu -> x86_64-linux, aarch64-apple-darwin -> aarch64-darwin. That derivation is the whole rule, and tests/run.js checks both halves against the compiler's own table, so a row that invents a platform the compiler cannot target fails there rather than on a release day.",
+    "`attached` is whether release.yml builds and attaches this seed today, and it is what tells the two kinds of missing seed apart. A release that carries no seed for an `attached` target FAILS the `seeds` job: a host that could have checked the rolling freeze and did not is a broken gate. A target that is not `attached` yet gets no bootstrap row at all until a release carries one (WP19 G5) -- an absent row says the freeze was not checked there, where a green row with a warning inside it would say it was.",
+    "`host` is `uname -s`-`uname -m` on that platform and `runner` is the GitHub-hosted label that provides it."
+  ],
+  "targets": [
+    {
+      "asset": "x86_64-linux",
+      "triple": "x86_64-unknown-linux-gnu",
+      "host": "Linux-x86_64",
+      "runner": "ubuntu-latest",
+      "attached": true
+    },
+    {
+      "asset": "aarch64-linux",
+      "triple": "aarch64-unknown-linux-gnu",
+      "host": "Linux-aarch64",
+      "runner": "ubuntu-24.04-arm",
+      "attached": false
+    },
+    {
+      "asset": "aarch64-darwin",
+      "triple": "aarch64-apple-darwin",
+      "host": "Darwin-arm64",
+      "runner": "macos-latest",
+      "attached": false
+    },
+    {
+      "asset": "x86_64-darwin",
+      "triple": "x86_64-apple-darwin",
+      "host": "Darwin-x86_64",
+      "runner": "macos-13",
+      "attached": false
+    }
+  ]
+}

@@ -17,9 +17,14 @@
 
 import { CheckContext } from "./context";
 import { resolveType } from "./annotations";
+import { instantiateWritten } from "./generics";
 import { isExported, collectParams } from "./declarations";
 import {
+  FLAG_DEFINITE,
+  FLAG_OPTIONAL,
   FLAG_READONLY,
+  FLAG_STATIC,
+  FLAG_STATIC_FIRST,
   N_CONSTRUCTOR,
   N_EMPTY,
   N_FALSE,
@@ -30,6 +35,7 @@ import {
   N_STRING,
   N_TEMPLATE,
   N_TRUE,
+  N_TYPE_REF,
   N_UNARY,
   Node,
 } from "./nodes";
@@ -99,7 +105,12 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], "Names starting with `nish_` are reserved for the runtime");
     return null;
   }
-  if (ctx.program.structs.has(name)) {
+  // A generic class counts as a declaration of the name, exactly as a declared
+  // one counts against a template in `registerStructTemplate`: `class Box<T>`
+  // followed by `class Box` is one name declared twice, and the declared class
+  // would be unreachable because `Box` in an annotation resolves to the
+  // template.
+  if (ctx.program.structs.has(name) || ctx.program.structTemplates.has(name)) {
     ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``);
     return null;
   }
@@ -153,6 +164,33 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${owner.name}\``);
     return;
   }
+  // The three member headers the parser flags rather than refuses
+  // (`self/nodes.ts`). Each is a rule about the *member*, so the sentence
+  // names it and its class, which is what the parser could not do and why
+  // these were stage0's wordings alone.
+  //
+  // The order is stage0's and is load-bearing: a field carries the name's
+  // marker and its modifiers at once, and `static x?: i32` has to get the same
+  // one of the three sentences from both compilers. stage0 reads the marker
+  // first for a field (`src/checker/classes.ts`, collectField) and the
+  // modifiers first for a method (rejectMethodModifiers), so the two lists
+  // below are deliberately not in the same order as each other.
+  //
+  // A field is the member `readonly` is *legal* on, which is why there is no
+  // call to `rejectMemberModifiers` here: `static` is the only modifier a field
+  // cannot carry, and it is read after the marker.
+  if ((decl.flags & FLAG_OPTIONAL) !== 0) {
+    ctx.error(decl, `${what} cannot be optional (every field has a fixed slot)`);
+    return;
+  }
+  if ((decl.flags & FLAG_DEFINITE) !== 0) {
+    ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`);
+    return;
+  }
+  if ((decl.flags & FLAG_STATIC) !== 0) {
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function or const)`);
+    return;
+  }
   const type = resolveType(decl.children[1], ctx);
   if (type === T_VOID) {
     ctx.error(decl.children[1], `${what} cannot have type void`);
@@ -187,11 +225,48 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   owner.fields.push(field);
 }
 
+/**
+ * The modifiers a method or a constructor may not carry, in stage0's order.
+ *
+ * stage0 walks the modifier list in source order and reports the first one the
+ * member cannot have (`rejectMethodModifiers` in `src/checker/classes.ts`);
+ * both `static` and `readonly` are, so which of the two was written first
+ * decides the sentence. The parser hands that over as `FLAG_STATIC_FIRST`
+ * rather than as a list, because it is the only ordering anything asks about.
+ * `public` / `private` / `protected` are accepted and ignored on both sides,
+ * and every other modifier is a word stage1's parser never reads as one.
+ *
+ * Answers whether it reported, so a caller that must stop can.
+ */
+function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boolean {
+  const isStatic = (decl.flags & FLAG_STATIC) !== 0;
+  const isReadonly = (decl.flags & FLAG_READONLY) !== 0;
+  const staticFirst = (decl.flags & FLAG_STATIC_FIRST) !== 0;
+  if (isStatic && (!isReadonly || staticFirst)) {
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function)`);
+    return true;
+  }
+  if (isReadonly) {
+    ctx.error(decl, `${what}: unsupported modifier \`readonly\``);
+    return true;
+  }
+  return false;
+}
+
 function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${owner.name}\``);
+    return;
+  }
+  // As in `collectField` above, and worth the repetition rather than a shared
+  // helper: the two sentences differ, and so does the order — stage0 reads a
+  // method's modifiers before its `?` (`rejectMethodModifiers`), so
+  // `readonly m?()` is about the modifier and not about the marker.
+  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${owner.name}\``)) return;
+  if ((decl.flags & FLAG_OPTIONAL) !== 0) {
+    ctx.error(decl, `${what} of class \`${owner.name}\` cannot be optional`);
     return;
   }
   const symbol = `${owner.name}.${name}`;
@@ -221,6 +296,22 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
     ctx.error(decl, `Class \`${owner.name}\` has more than one constructor (no overloads)`);
     return;
   }
+  // stage0 reads a constructor's modifiers with the same function it reads a
+  // method's (`rejectMethodModifiers`), so the sentence is the method's with
+  // `Constructor` in front of it, and the order is the same: after the
+  // duplicate check, before anything about the body. Without this a `static`
+  // constructor is not merely accepted, it *runs* — as the instance
+  // constructor, which is the one thing `static` says it is not
+  // (`tests/cases/reject_cls_ctor_static`).
+  //
+  // Reported and then collected anyway, rather than returned from: a class
+  // whose only constructor is dropped has no constructor at all, and the
+  // definite-assignment pass would open the report with `Field \`x\` ... has no
+  // initializer and no constructor assigns it` — advice about a constructor
+  // that is right there. stage0 says one thing here because it throws out of
+  // the class, and this is that, without the throw.
+  const modifiers = `Constructor of class \`${owner.name}\``;
+  rejectMemberModifiers(ctx, decl, modifiers);
   const symbol = `${owner.name}.constructor`;
   const sig = new FunctionSig(symbol, symbol, decl);
   sig.origin = ctx.source;
@@ -256,7 +347,32 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
       return;
     }
     for (const iface of decl.children[2].children) {
-      const target = ctx.program.struct(iface.text);
+      // WP18 G5: `class Box<T> implements Container<T>` names an instantiated
+      // interface. It is resolved here, while `T` is bound to *this*
+      // instantiation's argument, so the check is the ordinary field-prefix one
+      // against `Container$i32` rather than a comparison between two
+      // uninstantiated field lists — which would need a type variable, and a
+      // type parameter is never a type in this implementation.
+      if (iface.kind !== N_TYPE_REF) {
+        // `implements number[]`: stage0 sees a heritage expression that is not
+        // an identifier and says this, so stage1 says it where its own grammar
+        // puts the same mistake.
+        ctx.error(iface, "`implements` must name a declared interface");
+        continue;
+      }
+      const template = ctx.program.structTemplate(iface.text);
+      let target: StructInfo | null = null;
+      if (template !== null) {
+        target = instantiateWritten(ctx, template, iface.children[0], iface);
+        if (target === null) {
+          continue;
+        }
+      } else if (iface.children[0].children.length > 0) {
+        ctx.error(iface, "`implements` must name a declared interface");
+        continue;
+      } else {
+        target = ctx.program.struct(iface.text);
+      }
       if (target === null || target.kind !== STRUCT_INTERFACE) {
         ctx.error(iface, `\`${iface.text}\` is not a declared interface`);
         continue;

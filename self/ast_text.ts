@@ -25,9 +25,12 @@
 
 import {
   FLAG_CONST,
+  FLAG_DEFINITE,
   FLAG_EXPORTED,
+  FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_READONLY,
+  FLAG_STATIC,
   N_STRING,
   N_TEMPLATE_TEXT,
   N_UNARY,
@@ -49,13 +52,25 @@ function indent(depth: i32): string {
 /**
  * The modifiers a node carries, appended to its kind so that `export` and
  * `const` are compared too: `FUNCTION+export`, `VAR+const`, `UNARY+postfix`.
+ *
+ * The member-header three — `+static`, `+optional`, `+definite` — are here for
+ * the reason the others are: a flag the dump does not print is a flag
+ * `tests/parser_oracle.js` cannot compare, and these three are the whole
+ * difference between a field the checker refuses and one it accepts
+ * (docs/wp19-stage0-retirement.md R3). `FLAG_STATIC_FIRST` is deliberately not
+ * printed: it is not a modifier the source wrote, it is which of two the source
+ * wrote first, and the TypeScript tree has the modifier list rather than the
+ * answer.
  */
 function kindWithFlags(node: Node): string {
   let name = nodeName(node.kind);
   if (node.kind === N_UNARY) return node.flags === FLAG_POSTFIX ? `${name}+postfix` : `${name}+prefix`;
   if ((node.flags & FLAG_EXPORTED) !== 0) name = `${name}+export`;
   if ((node.flags & FLAG_CONST) !== 0) name = `${name}+const`;
+  if ((node.flags & FLAG_STATIC) !== 0) name = `${name}+static`;
   if ((node.flags & FLAG_READONLY) !== 0) name = `${name}+readonly`;
+  if ((node.flags & FLAG_OPTIONAL) !== 0) name = `${name}+optional`;
+  if ((node.flags & FLAG_DEFINITE) !== 0) name = `${name}+definite`;
   return name;
 }
 

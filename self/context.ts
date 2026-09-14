@@ -10,7 +10,14 @@
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { StringMap } from "./map";
 import { Node } from "./nodes";
-import { CheckedProgram, FunctionSig, Instantiation, TemplateInfo } from "./program";
+import {
+  CheckedProgram,
+  FunctionSig,
+  Instantiation,
+  StructInfo,
+  StructInstantiation,
+  TemplateInfo,
+} from "./program";
 import { T_ERROR, T_F64, T_I32, TypeTable } from "./types";
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
@@ -55,8 +62,24 @@ export class CheckContext {
   typeBindings: StringMap;
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   currentInstance: Instantiation | null;
+  /**
+   * The struct instantiation whose members are being collected, or whose method
+   * body is being checked (WP18 G5). It is the struct half of `currentInstance`
+   * and the chain the struct termination rule walks — a field's type is
+   * resolved during collection rather than while a body runs, so this is what
+   * makes `class Nest<T> { inner: Nest<T[]> | null }` refusable by name.
+   */
+  currentStructInstance: StructInstantiation | null;
   /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
   pending: Instantiation[];
+  /**
+   * Instantiated structs whose `implements` and definite-assignment checks are
+   * still owed. They wait for the same reason a declared struct's do: both need
+   * every struct in the module to have its members, and an instantiation can be
+   * requested by an annotation resolved before the interface it implements has
+   * been collected.
+   */
+  pendingFinish: StructInfo[];
   /**
    * The loops and `switch`es enclosing the statement being checked, innermost
    * last. `break` marks the innermost; `continue` needs a real loop, because a
@@ -111,7 +134,9 @@ export class CheckContext {
     this.errored = false;
     this.typeBindings = new StringMap();
     this.currentInstance = null;
+    this.currentStructInstance = null;
     this.pending = [];
+    this.pendingFinish = [];
   }
 
   /**
