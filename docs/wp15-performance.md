@@ -1470,27 +1470,62 @@ measurement closed says so and says why.
    - **bounds check not eliminated** — shipped with item 6, not waiting.
      `NL9007`, `tests/cases/perf_bounds_loop` / `perf_bounds_quiet`. This row
      had gone stale.
-   - **clamp not folded** — shipped, `NL9008`, and with it the fold it had
-     presupposed. Measuring first showed the premise was wrong: LLVM does *not*
-     fold `substring`'s clamp when a dominating guard proves the bound, because
-     the guard compares `i32` and the clamp runs on its `sext`, so `opt -O3`
-     keeps all six `llvm.smin` / `llvm.smax` calls either way. So the compiler
-     folds it, out of the §2 facts it already has, and the warning is for the
-     bounds where the proof did not come off. A literal `0` is proven for every
-     string, which is why `s.substring(0, n)` — the commonest spelling there is
-     — loses two of its six intrinsic calls with nothing rewritten: the
-     cookbook's `head` went from six to four. Measured **3.5x** (91 ms against
-     26 ms) on a loop that does nothing but `substring`, which is the ceiling
-     rather than the expectation; §4's 1.18x for `slice` over `substring` is
-     what the same instructions are worth on lexer-shaped code.
-     `tests/cases/perf_clamp` / `perf_clamp_quiet`.
-   - **not inlinable** — shipped, `NL9009`, and it is smaller than the row
-     sounded. `--no-strict-exports` measured **4% slower and 240 bytes larger**
-     on `bench/sieve` (848 ms against 882 ms, 6,576 bytes against 6,816) and
-     **nothing at all** on `bench/spectral`, whose binary is in fact 64 bytes
-     *smaller* without the flag. So the warning fires only at a call inside a
-     loop to a function the module does not export, and only when the flag is
-     given — which means it can never be noise for a default build.
+   - **clamp not folded** — shipped, `NL9009`, and with it the fold it had
+     presupposed. Measuring first showed the premise was half wrong, and the
+     half that stands is the half the warning fires on. Where the receiver is a
+     *parameter*, `opt -O3` keeps all six `llvm.smin` / `llvm.smax` calls
+     whether or not a dominating guard proves both ends: the guard compares
+     `i32` and the clamp runs on the `sext`, the length is re-read on every
+     pass, and `nish_str_new` — which every `substring` calls — is not
+     `readnone`, so nothing proves the second read equals the first. Where it
+     can hoist the length, LLVM does find it unaided: a string literal in a
+     local with `const n = s.length` and a loop counter folds from six to zero
+     at `-O3` before this change. So the claim is shape-qualified wherever it
+     is written down (`checker/bounds.ts`, `emit/strings.ts`, the message
+     itself), and the compiler folds the clamp out of the §2 facts it already
+     has rather than leaving it to a pass that only sometimes gets there.
+
+     A literal `0` is proven for every string, which is why `s.substring(0, n)`
+     — the commonest spelling there is — loses two of its six intrinsic calls
+     with nothing rewritten: the cookbook's `head` went from six to four. Over
+     `self/` the fold takes **218 `llvm.smin`/`llvm.smax` calls to 190**
+     (12.8%), with three bounds it could not prove left warning — one in
+     `self/strings.ts` and two on one line of `self/manifest.ts`.
+
+     **What the fold is worth in time is `bench/substr.ts`**, which is
+     committed so that the figure can be re-derived: two scans of a 40 KB
+     string into 16-byte pieces, same control flow and same guard, differing
+     only in whether the §2 proof comes off, timed in alternating rounds inside
+     the program. Measured **1.10x** (21.5 ms against 19.5 ms for 1,024,000
+     calls, minimum of 15, `taskset -c 2`) — about 2 ns a call, which is the
+     four intrinsics. Slice width is what moves it: at four bytes a slice the
+     same program measures **1.20x** (55.3 ms against 46.1 ms), because the
+     clamp is a fixed cost per call and the `memcpy` is not. That is the
+     ceiling, on a loop that does nothing but slice; §4's 1.18x for `slice`
+     over `substring` is what the same instructions plus the two swap calls are
+     worth on lexer-shaped code. `tests/cases/perf_clamp`,
+     `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`.
+   - **not inlinable** — shipped, `NL9008`, and it is smaller than the row
+     sounded: **it is a size, not a time.** `--no-strict-exports` costs
+     `bench/sieve` **240 bytes** — 6,576 against 6,816 — and the mechanism is
+     visible in the IR: `opt -O3` inlines and deletes `@sieve` under the
+     default, where it is `internal`, and keeps the out-of-line copy under the
+     flag. The wall clock does not move. Five interleaved protocols on a
+     pinned core put the two builds within 2.4% of each other with the sign
+     flipping between them (minimum of 25: 746.9 ms against 764.8; three runs
+     of 20: 741.0/748.1, 752.3/761.1, 754.8/747.0; a paired run of 40: 732.1
+     against 720.7, with the flagged build ahead in 22 rounds of 40), which is
+     a machine, not a compiler. An earlier draft of this note reported 848 ms
+     against 882 ms and called it 4% slower; that figure does not reproduce and
+     is withdrawn. `bench/spectral` is the same either way (450.6 ms against
+     453.2, minimum of 20) and its binary is 64 bytes *smaller* with the flag,
+     since the single call site is inlined in the linked build regardless and
+     only the surviving copy differs.
+
+     The warning therefore names the missed whole-program specialisation and
+     no speed figure. It still fires only at a call inside a loop to a function
+     the module does not export, and only when the flag is given — which means
+     it can never be noise for a default build.
      `tests/cases/perf_inline` / `perf_inline_quiet`.
    - **wasteful struct padding** — still not shipped, and what blocks it is
      the *report* rather than the analysis. The layout is already computed
