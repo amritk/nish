@@ -308,7 +308,12 @@ node scripts/arrow-verify.mjs --applied self     # the rewrite the tree already 
 **`scripts/arrowify.mjs` is textual, driven by the parse tree.** `typescript`
 locates each declaration and the splice is computed from its spans, so every
 byte outside the edit survives: comments, blank lines, formatting, and the
-body's own indentation. That is not tidiness. Moving `{` to sit after `=>`
+body's own indentation. *Every* span, including the keyword's and the
+parentheses': those came from `indexOf` at first, and a comment is allowed to
+contain the word `function` or a parenthesis, so the splice began or ended
+inside the comment and wrote back a file that no longer parsed — silently,
+because a tool that located its own edit by searching has nothing left to check
+the search against. That is not tidiness. Moving `{` to sit after `=>`
 leaves every line of the body where it already was, so a block-bodied rewrite
 **preserves the line count of the file** and cannot move a `-g` line number or
 the line of a diagnostic somebody pinned. Columns hold too, with two exceptions
@@ -327,6 +332,7 @@ What it will not touch, and why each one is a decision rather than a gap:
 | class methods and constructors | §3: a method is not an arrow and will not become one |
 | anything below the top level | Nish-0 has no nested functions, so a nested one is a program this tool has no opinion about |
 | a comment between the signature and the `{` | it would have to be rewritten rather than moved, and a codemod that silently drops a comment is worse than one that refuses |
+| a comment between `function` and the parameter list | the same rule from the other side: the keyword, the name and the space around them are the one region the splice throws away, and a comment in there has nowhere to go |
 
 **Each of the first four is recognised by the syntax that makes it that form,
 and that sentence is load-bearing.** The first draft recognised `declare` by
@@ -364,6 +370,15 @@ codemod in place first and a derived sweep has nothing left to rewrite, so it
 compiles the same source twice and reports zero differences over a rewrite it
 never saw. A derived run that rewrites nothing, and an applied run with nothing
 changed since the revision, both **fail** rather than passing quietly.
+
+**A comparison is evidence only where the change reached it.** A program whose
+own modules are identical on both sides is compiled twice and agrees with
+itself, so the summary says how many of the programs and rejections sit on a
+source the change touched — `1 of 77 program(s)` over `docs/cookbook`, where one
+listing still had a `function` in it — rather than letting `0 difference(s)`
+stand for a coverage it does not have. That matters most for the incremental
+sweeps the migration is meant to be done with, where the surface is mostly
+converted already and the number that shrinks is exactly this one.
 
 The rejections are compared in two halves, and only one of them is fatal. The
 **words** — severity, the stable `NL` code, the message, every position

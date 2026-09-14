@@ -161,7 +161,16 @@ const sweepRejections = () => {
  * an entry point: tooling that reads Nish with a pattern is the part of this
  * migration that keeps being wrong.
  */
+const importCache = new Map();
 const importsOf = (rel) => {
+  const cached = importCache.get(rel);
+  if (cached !== undefined) return cached;
+  const found = readImports(rel);
+  importCache.set(rel, found);
+  return found;
+};
+
+const readImports = (rel) => {
   const file = path.join(root, rel);
   if (!fs.existsSync(file)) return [];
   const sf = ts.createSourceFile(rel, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
@@ -288,6 +297,18 @@ export const diffModules = (before, after) => {
 };
 
 /**
+ * What a comparison is evidence of, which is not the same as what it compared.
+ *
+ * A program whose own modules are identical on both sides is compiled twice and
+ * agrees with itself; counting it as covered is how a sweep over a surface that
+ * is already migrated — or over a slice where one file in seventy-seven still
+ * had a `function` in it — reports a reassuring `0 difference(s)` that stands
+ * for nothing at all. So each program and each rejection is asked whether the
+ * change reached its own import closure, and the summary says how many did.
+ */
+export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touched.has(file));
+
+/**
  * The files that differ between a revision and the working tree, with both
  * texts. A change outside the sweep's scope is counted and named rather than
  * dropped: this sweep says nothing about it, and a caller who rewrote a file
@@ -299,7 +320,7 @@ const changedSince = (rev, scope) => {
   const all = execFileSync("git", ["diff", "--name-only", rev, "--", "*.ts"], { cwd: root, maxBuffer: 1 << 28 })
     .toString()
     .split("\n")
-    .filter((rel) => rel.length > 0 && !rel.startsWith("src/"));
+    .filter((rel) => rel.length > 0);
   const outside = all.filter((rel) => !inScope.has(rel));
   const changes = all
     .filter((rel) => inScope.has(rel))
@@ -339,7 +360,8 @@ const main = (argv) => {
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
   const rest = argv.filter((a) => !a.startsWith("--"));
   const revAt = argv.indexOf("--rev");
-  const rev = revAt >= 0 ? argv[revAt + 1] : "HEAD";
+  const revArg = revAt >= 0 ? argv[revAt + 1] : undefined;
+  const rev = revAt >= 0 ? revArg : "HEAD";
   const filters = revAt >= 0 ? rest.filter((a) => a !== rev) : rest;
   const concise = flags.has("--concise");
   const debug = flags.has("--debug");
@@ -353,8 +375,10 @@ const main = (argv) => {
     process.stderr.write("arrow-verify: dist/index.js is missing; run `npm run build` first\n");
     return 2;
   }
-  if (revAt >= 0 && rev === undefined) {
-    process.stderr.write("arrow-verify: --rev needs a revision\n");
+  // A `--rev` that swallowed the next flag would compare the working tree with
+  // the index and go on printing the revision's name in the banner.
+  if (revAt >= 0 && (revArg === undefined || revArg.startsWith("-"))) {
+    process.stderr.write(`arrow-verify: --rev needs a revision, not ${revArg ?? "the end of the command"}\n`);
     return 2;
   }
   if (applied && concise) {
@@ -402,10 +426,13 @@ const main = (argv) => {
   const saidBefore = new Map(negatives.map((rel) => [rel, diagnose(rel)]));
 
   let rewritten = 0;
-  let touched = 0;
+  const touched = new Set();
   const skipped = [];
   if (applied) {
-    for (const change of changes) put(change.rel, change.after);
+    for (const change of changes) {
+      put(change.rel, change.after);
+      touched.add(change.rel);
+    }
   } else {
     for (const rel of scope) {
       const file = path.join(tree, rel);
@@ -416,24 +443,35 @@ const main = (argv) => {
       if (result.changed === 0) continue;
       fs.writeFileSync(file, result.text);
       rewritten += result.changed;
-      touched += 1;
+      touched.add(rel);
     }
     process.stdout.write(
       `arrow-verify: rewrote ${rewritten} declaration(s)${concise ? ", concise bodies" : ""} in ` +
-        `${touched} of ${scope.length} file(s), ${skipped.length} left alone\n`
+        `${touched.size} of ${scope.length} file(s), ${skipped.length} left alone\n`
     );
-    // A derived sweep that rewrote nothing compiles the same source twice and
-    // then reports that it found no difference, which is true and proves
-    // nothing. It is what happens when §8b's recipe is run in the wrong order —
-    // the codemod has already rewritten the tree in place — so say so and fail
-    // rather than handing back a zero somebody will read as a verification.
-    if (rewritten === 0) {
-      process.stderr.write(
-        "arrow-verify: nothing in scope was rewritten, so both compiles saw the same source. " +
-          `Use \`--applied\` to verify a rewrite that is already in the tree.\n`
-      );
-      return 1;
-    }
+  }
+
+  // What the run is evidence of. A derived sweep that rewrote nothing, and an
+  // applied sweep whose changes reach no program, compile the same source twice
+  // and then report that they found no difference — true, and worth nothing. It
+  // is what happens when §8b's recipe is run in the wrong order, the codemod
+  // having already rewritten the tree in place, so say so and fail rather than
+  // handing back a zero somebody will read as a verification.
+  const coveredPrograms = relPrograms.filter((rel) => sitsOnChange(rel, touched));
+  const coveredNegatives = negatives.filter((rel) => sitsOnChange(rel, touched));
+  process.stdout.write(
+    `arrow-verify: ${coveredPrograms.length} of ${relPrograms.length} program(s) and ` +
+      `${coveredNegatives.length} of ${negatives.length} rejection(s) sit on changed source; ` +
+      `the rest are identical on both sides and prove nothing\n`
+  );
+  if (coveredPrograms.length === 0 && coveredNegatives.length === 0) {
+    process.stderr.write(
+      applied
+        ? `arrow-verify: nothing this sweep compiles has changed since ${rev}, so there is no rewrite to verify\n`
+        : "arrow-verify: nothing in scope was rewritten, so both compiles saw the same source. " +
+            "Use `--applied` to verify a rewrite that is already in the tree.\n"
+    );
+    return 1;
   }
 
   const after = compileAll(relPrograms, path.join(work, "after"), debug);
