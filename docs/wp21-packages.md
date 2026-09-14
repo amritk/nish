@@ -591,6 +591,16 @@ disappeared and `packages.ts` says so.
   splits it into the specific ones §5c and §6 want, the mode mismatch named with
   both modes among them, and a `TODO(WP21 S3)` sits at each of the four places
   that would change.
+
+  One message does not license a false one, and the second clause of this one
+  was: it said the package's `exports` `` declares no `nish` condition ``, which
+  the ranking above can make untrue — a manifest whose `nish-i32` names
+  something that is not a file never reaches its perfectly good `nish` row, and
+  the author who checks that row finds it correct and is no further forward. It
+  reports what this compiler came away with instead — `` its `exports` gave this
+  compiler no file to compile for `.` `` — which holds for every shape that
+  reaches it. The registry calls that `NL3015` and keeps `NL3013` reserved for
+  the spelling it replaced (`tests/wordings/unreachable.txt`).
 - **No `engines.nish` floor**, for the same reason: it is a message rather than
   a file, and it is S3's.
 - **No `realpath`, so a symlinked package is a second package.** Node's resolver
