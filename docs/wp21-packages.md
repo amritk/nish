@@ -593,6 +593,24 @@ disappeared and `packages.ts` says so.
   that would change.
 - **No `engines.nish` floor**, for the same reason: it is a message rather than
   a file, and it is S3's.
+- **No `realpath`, so a symlinked package is a second package.** Node's resolver
+  realpaths what it finds, which is how one package reached both as
+  `node_modules/shared` and as `node_modules/app2/node_modules/shared` — a
+  symlink to the first, and the layout pnpm always produces and npm produces
+  whenever it cannot hoist — is one module there. Here it is two, and the S1
+  clash check refuses the program: `` Exported function `val` is also defined
+  in … ``. That is a real limitation rather than a decision, and it is *declared*
+  rather than fixed for one reason: the language has no `realpath` builtin, so
+  `self/` cannot call one, and a stage0 that resolved symlinks would compile
+  programs stage1 refuses — trading a limitation both compilers share for a
+  divergence between them, which §10b spends a paragraph refusing. Closing it
+  means the builtin (a `nish:fs` addition, and so another work package's call) or
+  a rule that needs no path at all, such as deciding package identity from the
+  manifest rather than from the directory — which is S3's question because it is
+  the same question diamond dependencies ask (§7). `tests/link/package_symlink`
+  is the case: both compilers run it and both must refuse it with the same
+  sentence, so the day either one stops refusing is a failing test rather than a
+  surprise.
 - **No cache.** §3's stated cost — compile time grows with the dependency tree —
   is unpaid, and S4 is the payment.
 - **Struct names are still program-wide**, exactly as §9c left them.

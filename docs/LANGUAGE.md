@@ -987,6 +987,13 @@ and their `.ll` goldens are byte-identical files.
     what an ordinary npm package gets, in words that name what is missing. A
     package that is not installed at all is `` Cannot find package `@x/y` ``
     (`tests/cases/reject_bare_package`).
+  - **A package is where its path says, and a symlink is not followed.** One
+    package installed twice, or reached both directly and through a symlink —
+    pnpm's layout, and npm's whenever it cannot hoist — is two packages of one
+    name, and that is refused by the clash check rather than merged the way
+    Node's `realpath` merges it (`tests/link/package_symlink`,
+    `docs/wp21-packages.md` §10d). Both compilers refuse it alike: resolving a
+    symlink needs a call the language does not have.
   - **Only the `nish` conditions are honoured**, and a subpath is an exact key:
     `default`, `import` and `node` are skipped rather than matched, and the
     `"./*"` pattern form is not read. A target is a string beginning with `./`

@@ -3,12 +3,12 @@ node_modules/
 # from the `node_modules/<name>` directory it sits in, so the fixture for two
 # packages compiling together has to be laid out the way npm lays one out.
 !tests/link/*/node_modules/
-# ...including the one fixture that nests a second `node_modules` inside the
-# first on purpose. A walk that climbs above the directory the compiler was run
-# in spells `..` and cannot read the name of what it climbs into, so neither
-# compiler steps over a `node_modules` ancestor there;
-# `tests/link/package_doubled` is the tree that says so (WP21 S2, §10a).
-!tests/link/*/node_modules/node_modules/
+# ...including the two fixtures that nest a second `node_modules` inside the
+# first on purpose: `tests/link/package_doubled`, where the walk cannot name a
+# `node_modules` ancestor it reached by spelling `..` (WP21 S2, §10a), and
+# `tests/link/package_symlink`, where one package is reached twice because
+# neither compiler has a `realpath` (§10d).
+!tests/link/*/node_modules/**/node_modules/
 # ...and the one the cookbook needs, for the same reason: the bare-specifier
 # entry (WP21 S2) is only a demonstration if the package it imports is laid out
 # the way npm lays one out.
