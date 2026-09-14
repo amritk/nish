@@ -285,7 +285,7 @@ export function cResultName(table: TypeTable, t: i32): string {
  * the two names that cross into C, because they collapse the same characters
  * and differ only in whether their input is entirely the mangler's.
  */
-function collapseSeparators(name: string, escapeUnderscore: boolean): string {
+const collapseSeparators = (name: string, escapeUnderscore: boolean): string => {
   const out = new StringBuilder();
   let i = 0;
   while (i < name.length) {
@@ -301,7 +301,7 @@ function collapseSeparators(name: string, escapeUnderscore: boolean): string {
     i = i + 1;
   }
   return out.toText();
-}
+};
 
 /**
  * The C spelling of a class or interface name.
