@@ -16,7 +16,7 @@
 // interface it names.
 
 import { CheckContext } from "./context";
-import { resolveType } from "./annotations";
+import { rejectForeignPointer, resolveType } from "./annotations";
 import { instantiateWritten } from "./generics";
 import { isExported, collectParams } from "./declarations";
 import {
@@ -196,6 +196,11 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
     ctx.error(decl.children[1], `${what} cannot have type void`);
     return;
   }
+  // WP27 S2: a field would put a foreign address inside a value the arena owns
+  // and the escape analysis walks. `self/annotations.ts` has the reasoning.
+  if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
+    return;
+  }
 
   const field = new FieldInfo(name, type, decl);
   field.index = owner.fields.length;
@@ -275,7 +280,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   sig.exported = owner.exported;
   sig.owner = owner;
   sig.role = ROLE_METHOD;
-  collectParams(ctx, sig, decl.children[1], owner.type);
+  collectParams(ctx, sig, decl.children[1], owner.type, false);
   const returnAnnotation = decl.children[2];
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(
@@ -285,6 +290,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
     sig.returnType = T_ERROR;
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
+    rejectForeignPointer(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation);
   }
   owner.methodIndex.set(name, owner.methodSigs.length);
   owner.methodSigs.push(sig);
@@ -319,7 +325,7 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
   sig.owner = owner;
   sig.role = ROLE_CONSTRUCTOR;
   sig.returnType = T_VOID;
-  collectParams(ctx, sig, decl.children[0], owner.type);
+  collectParams(ctx, sig, decl.children[0], owner.type, false);
   owner.ctor = sig;
   ctx.program.functions.push(sig);
 }

@@ -33,6 +33,7 @@ import {
   isNumeric,
   isReadonlyArray,
   llvmType,
+  rejectForeignPointer,
   resolveTypeNode,
   sameType,
   typeToString,
@@ -282,7 +283,9 @@ newCheckers.Array = (ctx, expr, scope) => {
   if (expr.typeArguments?.length !== 1) {
     throw ctx.error("`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`", expr);
   }
-  return checkNewArray(ctx, expr, scope, resolveTypeNode(expr.typeArguments[0], ctx.sf, ctx.opts));
+  const elem = resolveTypeNode(expr.typeArguments[0], ctx.sf, ctx.opts);
+  rejectForeignPointer(elem, "an array element", expr.typeArguments[0], ctx.sf);
+  return checkNewArray(ctx, expr, scope, elem);
 };
 
 /** `new Int32Array(n)` / `new Float64Array(n)` / `new BigInt64Array(n)`: `new Array<T>(n)` with `T` fixed by the name. */

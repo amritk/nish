@@ -43,6 +43,8 @@ NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
 NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
 NL2227  retired: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2320
+NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2321
+NL2305  retired: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2322
 NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------

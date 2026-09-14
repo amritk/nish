@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 402;
+export const RULE_COUNT: i32 = 406;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -55,8 +55,12 @@ export const RULE_COUNT: i32 = 402;
  */
 export function diagnosticRules(): string[] {
   return [
+    ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
+    "NL2323",
     "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
     "NL2039",
+    "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
+    "NL2324",
     " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
     "NL1001",
     "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
@@ -239,8 +243,12 @@ export function diagnosticRules(): string[] {
     "NL2164",
     " (an override keeps the signature; there is no overloading)",
     "NL2001",
+    ", and a declared C function returns a scalar or `CPtr` only",
+    "NL2321",
     "` cannot declare methods (interfaces describe layout only)",
     "NL2048",
+    ", and a declared C function takes scalars and `CPtr` only",
+    "NL2322",
     "the command line at https://github.com/amritk/nish/issues",
     "NL3007",
     " generic instantiations, which is this compiler's limit ",

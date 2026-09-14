@@ -15,7 +15,7 @@
  */
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
-import { CompilerOptions, StaticType, TYPED_ARRAY_ALIASES, resolveTypeNode } from "../types.js";
+import { CPTR_NAME, CompilerOptions, StaticType, TYPED_ARRAY_ALIASES, resolveTypeNode } from "../types.js";
 
 /** One `type X = T;` declaration, and its resolution once something has asked for it. */
 export type AliasInfo = {
@@ -54,6 +54,10 @@ export const BUILTIN_TYPE_NAMES: ReadonlySet<string> = new Set([
   "Array",
   "ReadonlyArray",
   "Result",
+  // WP27 S2. `resolveTypeNode` answers `CPtr` before it consults a declared
+  // name, so an alias under it would never be looked at -- silently, which is
+  // the part this set exists to refuse.
+  CPTR_NAME,
   ...Object.keys(TYPED_ARRAY_ALIASES),
 ]);
 

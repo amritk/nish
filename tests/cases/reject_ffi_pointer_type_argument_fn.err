@@ -1,0 +1,2 @@
+`CPtr` cannot be a type argument of `id`: a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives
+|             ^~~~~

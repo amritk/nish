@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 320 programs, 5380 dump lines.
+# 322 programs, 5418 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1966,6 +1966,31 @@ function test(): i32 -> @test [exported]
   local 14:9 wide: i64 (const)
   callee 14:16 widen -> @widen
   callee 15:10 pick -> @pick
+program tests/cases/ffi_pointer.ts
+module tests/cases/ffi_pointer.ts (entry)
+function calloc(count: u64, size: u64): CPtr | null -> @calloc
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function realloc(block: CPtr, size: u64): CPtr | null -> @realloc
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function free(block: CPtr): void -> @free
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function doubled(n: i32): i32 -> @doubled
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: calloc doubled free nish_arena_mark nish_arena_release nish_print nish_str_from_i32 realloc
+  stackSites=0 stackLocals=0
+  local 24:9 first: CPtr | null (const)
+  callee 24:17 calloc -> @calloc
+  local 28:9 grown: CPtr | null (const)
+  callee 28:17 realloc -> @realloc
+  callee 30:5 free -> @free
+  callee 33:3 free -> @free
+  callee 34:18 doubled -> @doubled
 program tests/cases/ffi_scalar.ts
 module tests/cases/ffi_scalar.ts (entry)
 function abs(n: i32): i32 -> @abs
@@ -4740,6 +4765,21 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   callee 5:32 abs -> @abs
   callee 5:42 pureDouble -> @pureDouble
+program docs/cookbook/decl_ffi_pointer.ts
+module docs/cookbook/decl_ffi_pointer.ts (entry)
+function calloc(count: u64, size: u64): CPtr | null -> @calloc
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function free(block: CPtr): void -> @free
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: calloc free
+  stackSites=0 stackLocals=0
+  local 5:9 block: CPtr | null (const)
+  callee 5:17 calloc -> @calloc
+  callee 9:3 free -> @free
 program docs/cookbook/decl_locals.ts
 module docs/cookbook/decl_locals.ts (entry)
 function polynomial(x: i32, k: i32): i32 -> @polynomial
