@@ -103,8 +103,7 @@ const forbiddenType = (name: string): string => {
 };
 
 /** `Object.<member>` calls that mutate an object's shape or its prototype chain. */
-const isShapeMutation = (member: string): boolean => {
-  return (
+const isShapeMutation = (member: string): boolean => (
     member === "assign" ||
     member === "create" ||
     member === "defineProperty" ||
@@ -112,7 +111,6 @@ const isShapeMutation = (member: string): boolean => {
     member === "setPrototypeOf" ||
     member === "getPrototypeOf"
   );
-};
 
 /**
  * Whether an element-access key *looks* numeric. It is a syntactic test, not

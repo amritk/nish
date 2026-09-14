@@ -543,9 +543,7 @@ const lengthHolder = (ctx: CheckContext, expr: Node): Local | null => {
  * the values past `2^63` are in the picture, so `--number-mode f64` gets the
  * constant-index proofs and nothing else.
  */
-const isIndexType = (type: i32): boolean => {
-  return type === T_I32 || type === T_I64 || isUnsigned(type);
-};
+const isIndexType = (type: i32): boolean => type === T_I32 || type === T_I64 || isUnsigned(type);
 
 /** A local that can be an index: an integer, signed or unsigned. */
 const indexLocal = (program: CheckedProgram, expr: Node): Local | null => {
@@ -768,9 +766,7 @@ const isIncrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
   return false;
 };
 
-const keepsLowerBound = (ctx: CheckContext, v: Local): boolean => {
-  return !ctx.wrapping || isUnsigned(v.type);
-};
+const keepsLowerBound = (ctx: CheckContext, v: Local): boolean => !ctx.wrapping || isUnsigned(v.type);
 
 /**
  * Whether the value of `expr` cannot be negative. A literal and a `.length`

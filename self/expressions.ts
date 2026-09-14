@@ -421,9 +421,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * `isAssignment` over *token kinds*; this one reads the operator text a
  * `N_BINARY` node carries, which is what the checker has.
  */
-const writesLeft = (op: string): boolean => {
-  return op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op));
-};
+const writesLeft = (op: string): boolean => op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op));
 
 /**
  * Operators that answer a boolean whatever their operands are. Their result
@@ -431,8 +429,7 @@ const writesLeft = (op: string): boolean => {
  * width from the other rather than from the context: `kind === 3` folds with
  * `kind` an `i64`, and `x < 1.0` makes `1.0` an `f64`.
  */
-const yieldsBool = (op: string): boolean => {
-  return (
+const yieldsBool = (op: string): boolean => (
     op === "===" ||
     op === "!==" ||
     op === "==" ||
@@ -442,12 +439,9 @@ const yieldsBool = (op: string): boolean => {
     op === ">" ||
     op === ">="
   );
-};
 
 /** The compound assignments whose operator is bitwise rather than arithmetic. */
-export const isBitwiseCompound = (op: string): boolean => {
-  return op === "&=" || op === "|=" || op === "^=" || op === "<<=" || op === ">>=" || op === ">>>=";
-};
+export const isBitwiseCompound = (op: string): boolean => op === "&=" || op === "|=" || op === "^=" || op === "<<=" || op === ">>=" || op === ">>>=";
 
 /**
  * `x &= e`, `p.f |= e`, `a[i] ^= e`: the operand rule of `&` applied to
@@ -517,9 +511,7 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * stays integer arithmetic, where taking the `f64` the call wants would make
  * every `+` in it mix widths (bench/spectral.ts).
  */
-const literalHint = (other: i32, fallback: i32): i32 => {
-  return isNumeric(other) ? other : fallback;
-};
+const literalHint = (other: i32, fallback: i32): i32 => isNumeric(other) ? other : fallback;
 
 /**
  * Whether stage0's `peekType` would answer for this node — which is what
@@ -667,9 +659,7 @@ const f64Hint = (ctx: CheckContext, left: i32, right: i32): string => {
   return fromMode ? " (`number` is f64 under --number-mode f64; convert with toI32/toI64)" : "";
 };
 
-const isShift = (op: string): boolean => {
-  return op === "<<" || op === ">>" || op === ">>>";
-};
+const isShift = (op: string): boolean => op === "<<" || op === ">>" || op === ">>>";
 
 /**
  * `===` and `!==`: numbers and booleans by value, strings by content, classes,

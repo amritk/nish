@@ -34,20 +34,16 @@ import {
 } from "./tokens";
 
 /** Whether the token's `value` is text the reader wants to see as it is. */
-const hasText = (kind: i32): boolean => {
-  return kind === TOK_IDENT || kind === TOK_NUMBER || kind === TOK_BIGINT || kind === TOK_PRIVATE_IDENT;
-};
+const hasText = (kind: i32): boolean => kind === TOK_IDENT || kind === TOK_NUMBER || kind === TOK_BIGINT || kind === TOK_PRIVATE_IDENT;
 
 /** Whether the token's `value` is decoded bytes, reported as a length. */
-const hasBytes = (kind: i32): boolean => {
-  return (
+const hasBytes = (kind: i32): boolean => (
     kind === TOK_STRING ||
     kind === TOK_TEMPLATE ||
     kind === TOK_TEMPLATE_HEAD ||
     kind === TOK_TEMPLATE_MIDDLE ||
     kind === TOK_TEMPLATE_TAIL
   );
-};
 
 export const main = (): number => {
   if (process.argv.length < 2) {

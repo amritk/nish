@@ -42,8 +42,7 @@ const X86_64_DARWIN_LAYOUT: string =
 const WASM32_LAYOUT: string = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20";
 
 /** The canonical triples, in the order `--target` lists them when it refuses one. */
-export const supportedTargets = (): string[] => {
-  return [
+export const supportedTargets = (): string[] => [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
     "x86_64-apple-darwin",
@@ -51,7 +50,6 @@ export const supportedTargets = (): string[] => {
     "wasm32-unknown-unknown",
     "wasm32-wasi",
   ];
-};
 
 /** The layout of a canonical triple, or the empty string when it is not one. */
 const layoutOf = (triple: string): string => {

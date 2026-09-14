@@ -15,9 +15,7 @@ import { splitByte, StringBuilder } from "./strings";
 const SLASH: i32 = 47; // '/'
 const DOT: i32 = 46; // '.'
 
-const isAbsolutePath = (p: string): boolean => {
-  return p.length > 0 && p.charCodeAt(0) === SLASH;
-};
+const isAbsolutePath = (p: string): boolean => p.length > 0 && p.charCodeAt(0) === SLASH;
 
 /**
  * `p` split on `/` with the empty pieces dropped, so `//a//b/` gives
@@ -35,14 +33,10 @@ const splitSegments = (p: string): string[] => {
 };
 
 /** Whether `segment` is exactly `..`. */
-const isParent = (segment: string): boolean => {
-  return segment.length === 2 && segment.charCodeAt(0) === DOT && segment.charCodeAt(1) === DOT;
-};
+const isParent = (segment: string): boolean => segment.length === 2 && segment.charCodeAt(0) === DOT && segment.charCodeAt(1) === DOT;
 
 /** Whether `segment` is exactly `.`. */
-const isHere = (segment: string): boolean => {
-  return segment.length === 1 && segment.charCodeAt(0) === DOT;
-};
+const isHere = (segment: string): boolean => segment.length === 1 && segment.charCodeAt(0) === DOT;
 
 /**
  * `path.posix.normalize` for a path with no trailing slash to preserve:

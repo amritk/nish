@@ -995,9 +995,7 @@ export class Checker {
 }
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
-const nameOf = (sig: FunctionSig): Node => {
-  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
-};
+const nameOf = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 // ---- WP15 §8: the `performance` diagnostic class --------------------------------
 //
@@ -1438,9 +1436,7 @@ const isLocalRef = (ctx: CheckContext, expr: Node, local: Local): boolean => {
 // warning nobody can act on is worse than no warning.
 
 /** The builtins that hand back freshly allocated memory by plain identifier. */
-const perfIsReadBuiltin = (name: string): boolean => {
-  return name === "readFileSync" || name === "readFileSyncOrNull";
-};
+const perfIsReadBuiltin = (name: string): boolean => name === "readFileSync" || name === "readFileSyncOrNull";
 
 /**
  * `expr` allocates from the arena in a way the checker can see for itself: a
@@ -1483,9 +1479,7 @@ const perfAllocatesVisibly = (ctx: CheckContext, expr: Node): boolean => {
  * register: the rule uses this to decide when to stay quiet, and counting a
  * borderline type as a pointer only ever means one warning fewer.
  */
-const perfIsPointerType = (ctx: CheckContext, type: i32): boolean => {
-  return ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
-};
+const perfIsPointerType = (ctx: CheckContext, type: i32): boolean => ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
 
 /**
  * A use of `local` that can let the value it holds outlive the statement it
@@ -1642,13 +1636,9 @@ class PerfConst {
   }
 }
 
-const perfNoConst = (): PerfConst => {
-  return new PerfConst(false, 0);
-};
+const perfNoConst = (): PerfConst => new PerfConst(false, 0);
 
-const perfMagnitude = (value: i64): i64 => {
-  return value < 0 ? -value : value;
-};
+const perfMagnitude = (value: i64): i64 => value < 0 ? -value : value;
 
 /**
  * The exact value of a constant integer expression, or "not a constant". Only

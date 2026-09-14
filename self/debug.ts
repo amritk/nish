@@ -138,9 +138,7 @@ const bitsOf = (type: i32): i32 => {
  * `bitsOf` for a type id that may be an enum (WP23): an enum is an `i32`, and
  * `intBits` is deliberately 0 for it so that arithmetic stays refused.
  */
-const bitsOfIn = (table: TypeTable, type: i32): i32 => {
-  return table.isEnum(type) ? 32 : bitsOf(type);
-};
+const bitsOfIn = (table: TypeTable, type: i32): i32 => table.isEnum(type) ? 32 : bitsOf(type);
 
 /**
  * A metadata string literal: backslash and double quote escaped, as `src/`

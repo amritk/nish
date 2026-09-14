@@ -53,8 +53,7 @@ export const RULE_COUNT: i32 = 399;
  * must be a literal (`self/target.ts` holds its table the same way). Longest
  * fragment first, so a specific rule wins over a general one it contains.
  */
-export const diagnosticRules = (): string[] => {
-  return [
+export const diagnosticRules = (): string[] => [
     "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
     "NL2039",
     " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
@@ -840,11 +839,9 @@ export const diagnosticRules = (): string[] => {
     "Cannot push ",
     "NL2186",
   ];
-};
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
-export const performanceRules = (): string[] => {
-  return [
+export const performanceRules = (): string[] => [
     "allocates a dynamically sized array on every iteration of this loop",
     "NL9001",
     "is rebuilt from its own value on every iteration of this loop",
@@ -860,7 +857,6 @@ export const performanceRules = (): string[] => {
     "is at or beyond the",
     "NL9004",
   ];
-};
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

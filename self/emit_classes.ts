@@ -65,9 +65,7 @@ export const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
 };
 
 /** `%struct.<name>` without the trailing `*`. */
-const structTypeName = (info: StructInfo): string => {
-  return `%struct.${info.name}`;
-};
+const structTypeName = (info: StructInfo): string => `%struct.${info.name}`;
 
 /** Address of `field` inside the object `receiver` (a `%struct.X*` value). */
 const structFieldPointer = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {

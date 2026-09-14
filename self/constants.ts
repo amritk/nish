@@ -138,9 +138,7 @@ const isFractional = (text: string): boolean => {
 };
 
 /** The name a diagnostic gives a folded value's type. */
-const valueTypeName = (ctx: CheckContext, value: ConstValue): string => {
-  return ctx.table.typeName(value.type);
-};
+const valueTypeName = (ctx: CheckContext, value: ConstValue): string => ctx.table.typeName(value.type);
 
 /** Report against the module that *declared* the constant, not the one folding it. */
 const reject = (ctx: CheckContext, info: ConstInfo, node: Node, message: string): ConstValue => {
@@ -313,9 +311,7 @@ const foldUnary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32
  * are refused); the folder never sees those, because the parser turns them
  * down before a constant is folded.
  */
-const foldsToBool = (op: string): boolean => {
-  return op === "<" || op === "<=" || op === ">" || op === ">=" || op === "===" || op === "!==";
-};
+const foldsToBool = (op: string): boolean => op === "<" || op === "<=" || op === ">" || op === ">=" || op === "===" || op === "!==";
 
 const foldBinary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   const op = expr.text;
@@ -483,17 +479,11 @@ const narrowConstant = (
 // not `nsw` is on, so these are the wrap the flagged signed instructions no
 // longer perform, written without overflowing a signed value.
 
-const wrapAdd = (a: i64, b: i64): i64 => {
-  return toI64(toU64(a) + toU64(b));
-};
+const wrapAdd = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b));
 
-const wrapSub = (a: i64, b: i64): i64 => {
-  return toI64(toU64(a) - toU64(b));
-};
+const wrapSub = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b));
 
-const wrapMul = (a: i64, b: i64): i64 => {
-  return toI64(toU64(a) * toU64(b));
-};
+const wrapMul = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b));
 
 /** `a + b` leaves the 64-bit range only when both operands share a sign and the sum does not. */
 const addOverflows = (a: i64, b: i64): boolean => {

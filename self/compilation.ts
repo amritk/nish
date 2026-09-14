@@ -648,14 +648,10 @@ export class Compilation {
 }
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
-const nameNode = (sig: FunctionSig): Node => {
-  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
-};
+const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 /** How a diagnostic names a package: the program's own has no name to give. */
-const describePackage = (packageName: string): string => {
-  return packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
-};
+const describePackage = (packageName: string): string => packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
 
 /**
  * The wording of a duplicate-symbol rejection (WP21 S1).

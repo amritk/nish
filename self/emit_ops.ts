@@ -39,9 +39,7 @@ import { intBits, isFloat, isInteger, isUnsigned, T_BOOL, T_F32, T_I32, T_STRING
  * is emitted instead; an `f32` is written with the hex of the *double* it
  * equals, rounded through `toF32` so that double is exactly a float.
  */
-export const floatText = (value: f64, type: i32): string => {
-  return type === T_F32 ? f32Hex(value) : f64Hex(value);
-};
+export const floatText = (value: f64, type: i32): string => type === T_F32 ? f32Hex(value) : f64Hex(value);
 
 /**
  * A numeric literal as LLVM writes it. `i32` truncates to 32 bits, which is
@@ -127,14 +125,10 @@ export const signedOpcode = (opcode: string, type: i32): string => {
   return opcode;
 };
 
-const isDivision = (opcode: string): boolean => {
-  return opcode === "sdiv" || opcode === "srem" || opcode === "udiv" || opcode === "urem";
-};
+const isDivision = (opcode: string): boolean => opcode === "sdiv" || opcode === "srem" || opcode === "udiv" || opcode === "urem";
 
 /** `INT_MIN` at the width `ty` names, for the signed division overflow check. */
-const intMin = (ty: string): string => {
-  return ty === "i32" ? "-2147483648" : "-9223372036854775808";
-};
+const intMin = (ty: string): string => ty === "i32" ? "-2147483648" : "-9223372036854775808";
 
 /**
  * `<opcode> <ty> lhs, rhs` for an integer type, with the checked division
@@ -274,13 +268,9 @@ const bitwiseOpcode = (op: string): string => {
  * sign-filling on `i32`/`i64`, zero-filling on the unsigned widths, which
  * makes `>>` and `>>>` the same instruction there.
  */
-const shiftOpcodeFor = (opcode: string, type: i32): string => {
-  return opcode === "ashr" && isUnsigned(type) ? "lshr" : opcode;
-};
+const shiftOpcodeFor = (opcode: string, type: i32): string => opcode === "ashr" && isUnsigned(type) ? "lshr" : opcode;
 
-const isShiftOpcode = (opcode: string): boolean => {
-  return opcode === "shl" || opcode === "ashr" || opcode === "lshr";
-};
+const isShiftOpcode = (opcode: string): boolean => opcode === "shl" || opcode === "ashr" || opcode === "lshr";
 
 /**
  * The value of a shift count the compiler can already see: an integer
@@ -334,9 +324,7 @@ const emitShiftCount = (emitter: Emitter, type: i32, count: Node): string => {
 };
 
 /** The right operand: a masked count for a shift, the plain value for `& | ^`. */
-const emitRightOperand = (emitter: Emitter, opcode: string, type: i32, right: Node): string => {
-  return isShiftOpcode(opcode) ? emitShiftCount(emitter, type, right) : emitter.emitExpression(right);
-};
+const emitRightOperand = (emitter: Emitter, opcode: string, type: i32, right: Node): string => isShiftOpcode(opcode) ? emitShiftCount(emitter, type, right) : emitter.emitExpression(right);
 
 // ---- Binary expressions ------------------------------------------------------------
 
@@ -453,9 +441,7 @@ export const emitAssignment = (emitter: Emitter, expr: Node): string => {
 };
 
 /** Whether `op` is one of `&= |= ^= <<= >>= >>>=`, which the field and element emitters ask too. */
-export const isBitwiseAssignment = (op: string): boolean => {
-  return op.length > 1 && op.endsWith("=") && bitwiseOpcode(op).length > 0;
-};
+export const isBitwiseAssignment = (op: string): boolean => op.length > 1 && op.endsWith("=") && bitwiseOpcode(op).length > 0;
 
 /**
  * The right-hand half of `t op= e` once `old` — whatever the target held — is
@@ -480,16 +466,10 @@ const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
 };
 
 /** The arithmetic behind a compound assignment: `+=` is `+`. */
-export const withoutEquals = (op: string): string => {
-  return op.substring(0, op.length - 1);
-};
+export const withoutEquals = (op: string): string => op.substring(0, op.length - 1);
 
 /** The integer opcode of a compound arithmetic assignment, in its signed spelling. */
-export const compoundIntegerOpcode = (op: string): string => {
-  return integerOpcode(withoutEquals(op));
-};
+export const compoundIntegerOpcode = (op: string): string => integerOpcode(withoutEquals(op));
 
 /** The floating-point opcode of the same. */
-export const compoundFloatOpcode = (op: string): string => {
-  return floatOpcode(withoutEquals(op));
-};
+export const compoundFloatOpcode = (op: string): string => floatOpcode(withoutEquals(op));

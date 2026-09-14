@@ -66,9 +66,7 @@ const terminatorName = (stmt: Node): string => {
 };
 
 /** A statement list in its own scope; true when the list terminates the path. */
-export const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean => {
-  return checkStatements(ctx, block.children, scope.child());
-};
+export const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean => checkStatements(ctx, block.children, scope.child());
 
 /** A statement list in `scope`; the caller decides whether that is a new one. */
 export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope): boolean => {

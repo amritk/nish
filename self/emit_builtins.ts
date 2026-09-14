@@ -48,14 +48,10 @@ import {
 const PARSE_RUNTIME: string = "nish_parse_number";
 const SAT_I32: string = "llvm.fptosi.sat.i32.f64";
 
-const callIntrinsic = (emitter: Emitter, name: string, ret: string, args: string): string => {
-  return emitter.fn.emitValue(`call ${ret} ${emitter.useRuntime(name)}(${args})`);
-};
+const callIntrinsic = (emitter: Emitter, name: string, ret: string, args: string): string => emitter.fn.emitValue(`call ${ret} ${emitter.useRuntime(name)}(${args})`);
 
 /** The first argument of a call, which is what most builtins take. */
-const firstArgument = (expr: Node): Node => {
-  return expr.children[1].children[0];
-};
+const firstArgument = (expr: Node): Node => expr.children[1].children[0];
 
 // ---- Conversions --------------------------------------------------------------------
 
@@ -263,11 +259,9 @@ const emitPanic = (emitter: Emitter, expr: Node): string => {
 };
 
 /** `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
-const emitParseCall = (emitter: Emitter, s: string, mode: i32): string => {
-  return emitter.fn.emitValue(
+const emitParseCall = (emitter: Emitter, s: string, mode: i32): string => emitter.fn.emitValue(
     `call double ${emitter.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`
   );
-};
 
 // ---- Dotted builtins -------------------------------------------------------------------
 
@@ -569,9 +563,7 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   return callee.text === "spawnSync" || callee.text === "spawnSyncTo";
 };
 
-export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] => {
-  return identifierBuiltinCalleesNamed(program, table, call, call.children[0].text);
-};
+export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] => identifierBuiltinCalleesNamed(program, table, call, call.children[0].text);
 
 /** The same, under the name a `nish:` import bound — see `builtinCalleesNamed`. */
 export const identifierBuiltinCalleesNamed = (

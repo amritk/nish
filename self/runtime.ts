@@ -57,9 +57,7 @@ export const EFFECT_READ: i32 = 1;
 export const EFFECT_WRITE: i32 = 2;
 
 /** The more impure of two effects, which is how a caller inherits its callees'. */
-export const maxEffect = (a: i32, b: i32): i32 => {
-  return a >= b ? a : b;
-};
+export const maxEffect = (a: i32, b: i32): i32 => a >= b ? a : b;
 
 export class RuntimeFunction {
   name: string;
@@ -126,9 +124,7 @@ const intrinsic = (name: string, ret: string, params: string): RuntimeFunction =
 };
 
 /** `nounwind willreturn`, which is what almost every runtime symbol carries. */
-const plain = (name: string, signature: string, effect: i32): RuntimeFunction => {
-  return new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect);
-};
+const plain = (name: string, signature: string, effect: i32): RuntimeFunction => new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect);
 
 /**
  * The runtime ABI as one ordered table, with a name index beside it.

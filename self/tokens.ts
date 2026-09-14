@@ -136,9 +136,7 @@ export const TOK_BIGINT: i32 = 97; // 1n
 
 export const TOK_COUNT: i32 = 98;
 
-export const isKeyword = (kind: i32): boolean => {
-  return kind >= TOK_KEYWORD_FIRST && kind <= TOK_KEYWORD_LAST;
-};
+export const isKeyword = (kind: i32): boolean => kind >= TOK_KEYWORD_FIRST && kind <= TOK_KEYWORD_LAST;
 
 // The name of each kind, for the token dump and for diagnostics. A `switch` on
 // a dense range is a jump table, which is why the kinds are numbered the way

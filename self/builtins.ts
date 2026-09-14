@@ -34,8 +34,7 @@ import {
 } from "./types";
 
 /** `Math.sqrt` and friends: one `f64` in, one `f64` out. */
-const isF64Unary = (name: string): boolean => {
-  return (
+const isF64Unary = (name: string): boolean => (
     name === "sqrt" ||
     name === "floor" ||
     name === "ceil" ||
@@ -46,12 +45,9 @@ const isF64Unary = (name: string): boolean => {
     name === "exp" ||
     name === "log"
   );
-};
 
 /** Whether a bare identifier names a builtin namespace rather than a value. */
-export const isNamespace = (name: string): boolean => {
-  return name === "console" || name === "Math" || name === "process" || name === "String" || name === "Arena";
-};
+export const isNamespace = (name: string): boolean => name === "console" || name === "Math" || name === "process" || name === "String" || name === "Arena";
 
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */
 const conversionTarget = (name: string): i32 => {
@@ -110,9 +106,7 @@ export const isBuiltinFunction = (name: string): boolean => {
 };
 
 /** `console.log(x)`, `write(s)` and the rest accept these and nothing else. */
-const isStringifiable = (type: i32): boolean => {
-  return isNumeric(type) || type === T_BOOL || type === T_STRING;
-};
+const isStringifiable = (type: i32): boolean => isNumeric(type) || type === T_BOOL || type === T_STRING;
 
 /**
  * The arity wording every builtin and every array or string method uses:
@@ -208,9 +202,7 @@ const SUPPORTED_BUILTINS: string =
   "Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used";
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
-const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 => {
-  return ctx.errorType(at, `Unknown builtin \`${name}\` (supported: ${SUPPORTED_BUILTINS})`);
-};
+const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 => ctx.errorType(at, `Unknown builtin \`${name}\` (supported: ${SUPPORTED_BUILTINS})`);
 
 /**
  * A dotted builtin reached without its dot, because a `nish:` import renamed
@@ -223,9 +215,7 @@ export const checkImportedDottedBuiltin = (
   scope: Scope,
   namespace: string,
   member: string
-): i32 => {
-  return checkProcess(ctx, call, call.children[1], `${namespace}.${member}`, member, scope);
-};
+): i32 => checkProcess(ctx, call, call.children[1], `${namespace}.${member}`, member, scope);
 
 export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   const access = call.children[0];
@@ -409,9 +399,7 @@ const checkArena = (
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
-export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
-  return checkBuiltinFunctionNamed(ctx, call, scope, call.children[0].text);
-};
+export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope): i32 => checkBuiltinFunctionNamed(ctx, call, scope, call.children[0].text);
 
 /**
  * The same, under a name the call site does not spell. A `nish:` import binds

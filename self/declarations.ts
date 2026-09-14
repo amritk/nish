@@ -21,9 +21,7 @@ import { isForeignScalar, T_ERROR, T_I32, T_VOID } from "./types";
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL: string = "nish_main";
 
-export const isExported = (node: Node): boolean => {
-  return (node.flags & FLAG_EXPORTED) !== 0;
-};
+export const isExported = (node: Node): boolean => (node.flags & FLAG_EXPORTED) !== 0;
 
 /**
  * The parameters of a function, method or constructor, appended to `sig`.
@@ -200,10 +198,6 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
 };
 
 /** Whether a top-level node is a declaration this pass collects a signature for. */
-export const isFunctionDeclaration = (node: Node): boolean => {
-  return node.kind === N_FUNCTION;
-};
+export const isFunctionDeclaration = (node: Node): boolean => node.kind === N_FUNCTION;
 
-export const isImportDeclaration = (node: Node): boolean => {
-  return node.kind === N_IMPORT;
-};
+export const isImportDeclaration = (node: Node): boolean => node.kind === N_IMPORT;

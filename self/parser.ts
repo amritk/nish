@@ -207,8 +207,7 @@ export const binaryPrecedence = (kind: i32): i32 => {
 };
 
 /** Whether the token assigns: `=` and the compound forms the language has. */
-export const isAssignment = (kind: i32): boolean => {
-  return (
+export const isAssignment = (kind: i32): boolean => (
     kind === TOK_ASSIGN ||
     kind === TOK_PLUS_ASSIGN ||
     kind === TOK_MINUS_ASSIGN ||
@@ -222,7 +221,6 @@ export const isAssignment = (kind: i32): boolean => {
     kind === TOK_SHR_ASSIGN ||
     kind === TOK_USHR_ASSIGN
   );
-};
 
 export class Parser {
   /**
@@ -1690,6 +1688,4 @@ export class Parser {
 }
 
 /** Parse `source`; the diagnostics are on the parser, which the caller keeps. */
-export const parse = (parser: Parser): Node => {
-  return parser.parseSourceFile();
-};
+export const parse = (parser: Parser): Node => parser.parseSourceFile();

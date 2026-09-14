@@ -46,9 +46,7 @@ const fallThrough = (emitter: Emitter, target: IRBlock): boolean => {
 };
 
 /** A condition the compiler can see is always taken: `while (true)`, or none at all. */
-const isAlwaysTrue = (cond: Node): boolean => {
-  return cond.kind === N_EMPTY || unwrapParens(cond).kind === N_TRUE;
-};
+const isAlwaysTrue = (cond: Node): boolean => cond.kind === N_EMPTY || unwrapParens(cond).kind === N_TRUE;
 
 /** Emit a loop body with `loop` on the stack so `break`/`continue` find their targets. */
 const emitLoopBody = (emitter: Emitter, body: Node, loop: LoopTarget): void => {
@@ -266,9 +264,7 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
 };
 
 /** The `BLOCK` of a clause: after the label for a `case`, the only child for a `default`. */
-const clauseBody = (clause: Node): Node => {
-  return clause.kind === N_CASE ? clause.children[1] : clause.children[0];
-};
+const clauseBody = (clause: Node): Node => clause.kind === N_CASE ? clause.children[1] : clause.children[0];
 
 /** Where a label jumps: its own body, or the first one below it that exists. */
 const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRBlock => {

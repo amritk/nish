@@ -53,19 +53,13 @@ const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64";
  * when a slot holds a value. `inlineElementStruct` in `self/program.ts`
  * carries the rule and the two exclusions.
  */
-const inlineStruct = (emitter: Emitter, elem: i32): StructInfo | null => {
-  return inlineElementStruct(emitter.program, emitter.table, elem);
-};
+const inlineStruct = (emitter: Emitter, elem: i32): StructInfo | null => inlineElementStruct(emitter.program, emitter.table, elem);
 
 /** Bytes from one element to the next: `sizeof` for an inline record, the value's size otherwise. */
-const elementSize = (emitter: Emitter, elem: i32): i32 => {
-  return elementStride(emitter.program, emitter.table, elem);
-};
+const elementSize = (emitter: Emitter, elem: i32): i32 => elementStride(emitter.program, emitter.table, elem);
 
 /** The LLVM type of one slot: `%struct.P` inline, the value type otherwise. */
-const slotType = (emitter: Emitter, elem: i32): string => {
-  return elementLLVMType(emitter.program, emitter.table, elem);
-};
+const slotType = (emitter: Emitter, elem: i32): string => elementLLVMType(emitter.program, emitter.table, elem);
 
 // ---- Alias domains ------------------------------------------------------------------
 
@@ -114,11 +108,9 @@ export const elementAccess = (emitter: Emitter): string => {
 // ---- Header access ------------------------------------------------------------------
 
 /** Address of header field `index` (0 len, 1 cap, 2 data). */
-const headerFieldPointer = (emitter: Emitter, arr: string, index: i32): string => {
-  return emitter.fn.emitValue(
+const headerFieldPointer = (emitter: Emitter, arr: string, index: i32): string => emitter.fn.emitValue(
     `getelementptr inbounds ${HEADER}, ${HEADER_PTR} ${arr}, i64 0, i32 ${index}`
   );
-};
 
 /** Load header field `index`, in the header alias domain. */
 const loadHeaderField = (emitter: Emitter, arr: string, index: i32, type: string): string => {
@@ -132,9 +124,7 @@ const storeHeaderField = (emitter: Emitter, arr: string, index: i32, value: stri
   emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter)}`);
 };
 
-const loadLength = (emitter: Emitter, arr: string): string => {
-  return loadHeaderField(emitter, arr, 0, "i64");
-};
+const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64");
 
 /**
  * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`. For

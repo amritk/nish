@@ -57,9 +57,7 @@ import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
  * every other type is its own alignment, which is right for every scalar
  * and every pointer.
  */
-export const sizeOfField = (ctx: CheckContext, type: i32): i32 => {
-  return ctx.table.alignOf(type);
-};
+export const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type);
 
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
 export const roundUpTo = (value: i32, align: i32): i32 => {
@@ -85,9 +83,7 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): void => {
 };
 
 /** The word a message uses for this struct's kind. */
-const kindWord = (info: StructInfo): string => {
-  return info.kind === STRUCT_CLASS ? "class" : "interface";
-};
+const kindWord = (info: StructInfo): string => info.kind === STRUCT_CLASS ? "class" : "interface";
 
 /**
  * Register a name so an annotation anywhere in the module resolves it. The
@@ -442,9 +438,7 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
   }
 };
 
-const describeField = (ctx: CheckContext, field: FieldInfo): string => {
-  return `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
-};
+const describeField = (ctx: CheckContext, field: FieldInfo): string => `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
 
 /**
  * The struct names a type mentions, following `T[]` and `T | null` inwards.

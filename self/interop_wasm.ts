@@ -135,9 +135,7 @@ export const wasmType = (table: TypeTable, t: i32, position: i32): string => {
   }
 };
 
-const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean => {
-  return wasmType(table, t, position).length > 0;
-};
+const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean => wasmType(table, t, position).length > 0;
 
 /**
  * Why this function is not on the bridge, or `""` when it is. Naming the
@@ -409,8 +407,7 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[]): WasmBrid
 };
 
 /** Names the loader's own locals use; a parameter spelled the same gets an underscore. */
-const wasmIsLoaderLocal = (name: string): boolean => {
-  return (
+const wasmIsLoaderLocal = (name: string): boolean => (
     name === "raw" ||
     name === "memory" ||
     name === "header" ||
@@ -422,11 +419,8 @@ const wasmIsLoaderLocal = (name: string): boolean => {
     name === "instance" ||
     name === "bytes"
   );
-};
 
-const wasmJsParam = (name: string): string => {
-  return wasmIsLoaderLocal(name) ? `${name}_` : name;
-};
+const wasmJsParam = (name: string): string => wasmIsLoaderLocal(name) ? `${name}_` : name;
 
 /** One non-array argument: packed, masked to its unsigned width, or as it came. */
 const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32): string => {

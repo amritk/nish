@@ -91,9 +91,7 @@ export const emitToString = (emitter: Emitter, expr: Node): string => {
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime(callee)}(${ty} ${value})`);
 };
 
-export const emitConcat = (emitter: Emitter, lhs: string, rhs: string): string => {
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
-};
+export const emitConcat = (emitter: Emitter, lhs: string, rhs: string): string => emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
 
 // ---- Template literals ----------------------------------------------------------------
 
@@ -134,9 +132,7 @@ const loadStringLength = (emitter: Emitter, str: string): string => {
 };
 
 /** The bytes themselves: past the 8-byte length header. */
-const stringData = (emitter: Emitter, str: string): string => {
-  return emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`);
-};
+const stringData = (emitter: Emitter, str: string): string => emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`);
 
 /** `llvm.smax(0, llvm.smin(value, len))`: JavaScript's `substring` clamp. */
 const clampToLength = (emitter: Emitter, value: string, len: string): string => {
@@ -147,9 +143,7 @@ const clampToLength = (emitter: Emitter, value: string, len: string): string => 
 };
 
 /** A fresh arena string holding `n` bytes copied from `bytes`. */
-const newString = (emitter: Emitter, bytes: string, n: string): string => {
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`);
-};
+const newString = (emitter: Emitter, bytes: string, n: string): string => emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`);
 
 /**
  * The range check of `s.slice(from, to)`: `0 <= from <= to <= len`, or a cold
@@ -206,11 +200,9 @@ const emitSlice = (emitter: Emitter, expr: Node, str: string): string => {
 };
 
 /** `nish_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
-const emitOccursAt = (emitter: Emitter, str: string, at: string, sub: string): string => {
-  return emitter.fn.emitValue(
+const emitOccursAt = (emitter: Emitter, str: string, at: string, sub: string): string => emitter.fn.emitValue(
     `call zeroext i1 ${emitter.useRuntime("nish_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
   );
-};
 
 /**
  * `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is —

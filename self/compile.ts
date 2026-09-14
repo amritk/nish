@@ -71,9 +71,7 @@ const USAGE: string =
  */
 const PROFILE_NAMES: string = "speed, size, debug, wasi";
 
-const isProfile = (name: string): boolean => {
-  return name === "speed" || name === "size" || name === "debug" || name === "wasi";
-};
+const isProfile = (name: string): boolean => name === "speed" || name === "size" || name === "debug" || name === "wasi";
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one

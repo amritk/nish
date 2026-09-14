@@ -58,9 +58,7 @@ import {
 
 // ---- Types and addresses --------------------------------------------------
 
-const resultTypeName = (layout: ResultLayout): string => {
-  return `%struct.${layout.name}`;
-};
+const resultTypeName = (layout: ResultLayout): string => `%struct.${layout.name}`;
 
 /** `%struct.nish_result.i32.str = type { i1, i32, i8* }`. */
 export const resultTypeDecl = (table: TypeTable, type: i32): string => {
@@ -119,9 +117,7 @@ const storeSlot = (
 };
 
 /** The discriminant: a `boolean` field, so one byte at offset 0. */
-const loadOk = (emitter: Emitter, layout: ResultLayout, receiver: string): string => {
-  return loadSlot(emitter, layout, receiver, layout.okIndex, T_BOOL);
-};
+const loadOk = (emitter: Emitter, layout: ResultLayout, receiver: string): string => loadSlot(emitter, layout, receiver, layout.okIndex, T_BOOL);
 
 /**
  * Storage for one `Result`: an entry-block alloca when the escape analysis
@@ -138,9 +134,7 @@ const allocateResultIn = (emitter: Emitter, layout: ResultLayout, stack: boolean
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${ty}*`);
 };
 
-const allocateResult = (emitter: Emitter, layout: ResultLayout, site: Node | null): string => {
-  return allocateResultIn(emitter, layout, site !== null && emitter.isStackSite(site));
-};
+const allocateResult = (emitter: Emitter, layout: ResultLayout, site: Node | null): string => allocateResultIn(emitter, layout, site !== null && emitter.isStackSite(site));
 
 const construct = (
   emitter: Emitter,
@@ -341,9 +335,7 @@ export const unpackResult = (emitter: Emitter, type: i32, word: string, stack: b
  * only because no host can name the symbol. An imported function is exported
  * by definition, so a cross-module call is always packed.
  */
-export const privateResultAbi = (emitter: Emitter, exported: boolean): boolean => {
-  return emitter.opts.strictExports && !exported;
-};
+export const privateResultAbi = (emitter: Emitter, exported: boolean): boolean => emitter.opts.strictExports && !exported;
 
 /** The tag with both payload slots still `undef`; the live arm fills one in. */
 const armsFor = (isOk: boolean): string => {

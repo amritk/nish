@@ -87,9 +87,7 @@ export class StructExpansion {
 }
 
 /** The type parameter list of an `N_FUNCTION`: its fifth child (WP18). */
-export const typeParameterList = (decl: Node): Node => {
-  return decl.children.length > 4 ? decl.children[4] : decl.children[0];
-};
+export const typeParameterList = (decl: Node): Node => decl.children.length > 4 ? decl.children[4] : decl.children[0];
 
 /**
  * The type parameter list of an `N_CLASS` (fifth child) or an `N_INTERFACE`
@@ -157,9 +155,7 @@ export const instanceDisplayName = (table: TypeTable, base: string, args: i32[])
  * arm is the same type as the un-narrowed one, and the mangling already ignores
  * the proof, so the tuple has to as well or two ids would ask for one symbol.
  */
-export const canonicalArgument = (table: TypeTable, type: i32): i32 => {
-  return table.isResult(type) ? table.withState(type, R_UNKNOWN) : type;
-};
+export const canonicalArgument = (table: TypeTable, type: i32): i32 => table.isResult(type) ? table.withState(type, R_UNKNOWN) : type;
 
 /**
  * Whether `inner` occurs as a subterm of `outer`. The termination rule is

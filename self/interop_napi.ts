@@ -85,9 +85,7 @@ import {
 } from "./types";
 
 /** `a Float64Array`, `an Int32Array`. */
-export const withArticle = (noun: string): string => {
-  return `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`;
-};
+export const withArticle = (noun: string): string => `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`;
 
 const napiStartsWithVowel = (noun: string): boolean => {
   if (noun.length === 0) {
@@ -170,9 +168,7 @@ export class ScalarReader {
 }
 
 /** A getter that writes the parameter's own type: no temporary, no narrowing. */
-const napiDirectReader = (jsType: string, tag: string, getter: string, c: string, lossless: boolean): ScalarReader => {
-  return new ScalarReader(jsType, tag, getter, c, c, "", "", lossless);
-};
+const napiDirectReader = (jsType: string, tag: string, getter: string, c: string, lossless: boolean): ScalarReader => new ScalarReader(jsType, tag, getter, c, c, "", "", lossless);
 
 /** `napi_get_value_uint32` writes a `uint32_t`; `u8` and `u16` are one cast away from it. */
 const napiUnsignedReader = (c: string): ScalarReader => {
@@ -519,9 +515,7 @@ const napiScalarBox = (table: TypeTable, t: i32): string => {
   }
 };
 
-const napiScalarBoxCall = (box: string, value: string, dest: string): string => {
-  return box === "napi_get_undefined" ? `napi_get_undefined(env, ${dest})` : `${box}(env, ${value}, ${dest})`;
-};
+const napiScalarBoxCall = (box: string, value: string, dest: string): string => box === "napi_get_undefined" ? `napi_get_undefined(env, ${dest})` : `${box}(env, ${value}, ${dest})`;
 
 /** The boxing plan for a result of this type, or `null` when it cannot cross. */
 const napiBoxer = (table: TypeTable, t: i32): Boxer | null => {

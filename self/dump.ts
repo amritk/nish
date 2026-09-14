@@ -41,9 +41,7 @@ import {
 import { T_BOOL, T_F64, T_STRING, TypeTable } from "./types";
 
 /** A boolean as the dump spells it; the language does not interpolate one. */
-const flag = (value: boolean): string => {
-  return value ? "true" : "false";
-};
+const flag = (value: boolean): string => value ? "true" : "false";
 
 /** The strings in byte order, which is what `[...set].sort()` gives stage0. */
 const sortedStrings = (set: StringSet): string[] => {
@@ -192,9 +190,7 @@ const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
 };
 
 /** `line:col`, as `src/dump.ts` writes a position. */
-const position = (source: SourceFile, offset: i32): string => {
-  return `${source.lineOf(offset)}:${source.columnOf(offset)}`;
-};
+const position = (source: SourceFile, offset: i32): string => `${source.lineOf(offset)}:${source.columnOf(offset)}`;
 
 /**
  * The locals and callees of one body, in source order, read back out of the

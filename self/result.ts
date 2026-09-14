@@ -103,9 +103,7 @@ export const resultLayout = (table: TypeTable, type: i32): ResultLayout => {
 // ---- `Ok(...)` and `Err(...)` ---------------------------------------------
 
 /** The two constructors, consulted only when no user function has the name. */
-export const isResultConstructor = (name: string): boolean => {
-  return name === "Ok" || name === "Err";
-};
+export const isResultConstructor = (name: string): boolean => name === "Ok" || name === "Err";
 
 /**
  * `Ok(v)` / `Err(e)`. Like the `null` literal they carry no type of their

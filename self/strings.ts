@@ -93,14 +93,10 @@ const HEX_LOWER: string = "0123456789abcdef";
 const HEX_UPPER: string = "0123456789ABCDEF";
 
 /** The low nibble of `value` as one lowercase hex digit. */
-export const hexDigitLower = (value: i32): string => {
-  return HEX_LOWER.substring(value & 15, (value & 15) + 1);
-};
+export const hexDigitLower = (value: i32): string => HEX_LOWER.substring(value & 15, (value & 15) + 1);
 
 /** The low nibble of `value` as one uppercase hex digit. */
-export const hexDigitUpper = (value: i32): string => {
-  return HEX_UPPER.substring(value & 15, (value & 15) + 1);
-};
+export const hexDigitUpper = (value: i32): string => HEX_UPPER.substring(value & 15, (value & 15) + 1);
 
 /** `value` as exactly `digits` uppercase hex digits, most significant first. */
 export const hexOfI64 = (value: i64, digits: i32): string => {
@@ -119,18 +115,14 @@ export const hexOfI64 = (value: i64, digits: i32): string => {
  * round-trip exactly, so the hex form is the only one always valid, and
  * `f64ToBits` (WP14 B1) is what makes it reachable from the language at all.
  */
-export const f64Hex = (value: f64): string => {
-  return `0x${hexOfI64(f64ToBits(value), 16)}`;
-};
+export const f64Hex = (value: f64): string => `0x${hexOfI64(f64ToBits(value), 16)}`;
 
 /**
  * The same for an `f32`. LLVM writes a `float` constant with the *64-bit* hex
  * of the double it equals and requires that double to be exactly
  * representable as a float, which the round trip through `toF32` guarantees.
  */
-export const f32Hex = (value: f64): string => {
-  return f64Hex(toF64(toF32(value)));
-};
+export const f32Hex = (value: f64): string => f64Hex(toF64(toF32(value)));
 
 /**
  * `s` as a JSON string literal, matching `JSON.stringify` byte for byte: the

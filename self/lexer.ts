@@ -191,9 +191,7 @@ const CH_HASH: i32 = 35;
 /** End of input, and the answer to every read past it. */
 const CH_EOF: i32 = -1;
 
-export const isDigit = (c: i32): boolean => {
-  return c >= CH_0 && c <= CH_9;
-};
+export const isDigit = (c: i32): boolean => c >= CH_0 && c <= CH_9;
 
 /**
  * The first byte of an identifier. Bytes above 127 are accepted so that a
@@ -206,9 +204,7 @@ export const isIdentStart = (c: i32): boolean => {
   return c === CH_UNDERSCORE || c === CH_DOLLAR || c > 127;
 };
 
-export const isIdentPart = (c: i32): boolean => {
-  return isIdentStart(c) || isDigit(c);
-};
+export const isIdentPart = (c: i32): boolean => isIdentStart(c) || isDigit(c);
 
 /** The value of a hex digit, or -1. */
 export const hexValue = (c: i32): i32 => {

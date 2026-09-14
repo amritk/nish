@@ -78,9 +78,7 @@ export const FLOW_LOCAL: i32 = 0;
 export const FLOW_RETURNED: i32 = 1;
 export const FLOW_LEAKS: i32 = 2;
 
-const worse = (a: i32, b: i32): i32 => {
-  return a >= b ? a : b;
-};
+const worse = (a: i32, b: i32): i32 => a >= b ? a : b;
 
 /**
  * Whether an identifier builtin answers fresh arena memory, which is what makes
@@ -99,11 +97,9 @@ const worse = (a: i32, b: i32): i32 => {
  * `Set`; a module constant in this language is a scalar or a string, so the set
  * is a function here and the two are read side by side.
  */
-const isAllocatingBuiltin = (name: string): boolean => {
-  return (
+const isAllocatingBuiltin = (name: string): boolean => (
     name === "readFileSync" || name === "readFileSyncOrNull" || name === "getenv" || name === "readdirSync"
   );
-};
 
 export class EscapeResult {
   /** Node id -> the allocation there is lowered to an entry-block alloca. */

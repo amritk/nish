@@ -73,9 +73,7 @@ const missingField = (cls: StructInfo, assigned: Assigned): FieldInfo | null => 
 };
 
 /** `this.name`, as a member access whose receiver is `this`. */
-const thisAccess = (node: Node): boolean => {
-  return node.kind === N_MEMBER && node.children[0].kind === N_THIS;
-};
+const thisAccess = (node: Node): boolean => node.kind === N_MEMBER && node.children[0].kind === N_THIS;
 
 /** The fields `expr` definitely assigns: `this.a = this.b = v` assigns both. */
 const assignedBy = (expr: Node, out: Assigned): void => {
@@ -211,9 +209,7 @@ const walkStatement = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned:
   }
 };
 
-const terminated = (): Assigned => {
-  return new Assigned(true);
-};
+const terminated = (): Assigned => new Assigned(true);
 
 const walkIf = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned => {
   checkReads(ctx, cls, stmt.children[0], assigned, false);

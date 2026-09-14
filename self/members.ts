@@ -139,9 +139,7 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
 };
 
 /** The `StructInfo` behind a struct-typed value; the emitter relies on the same lookup. */
-export const structOf = (ctx: CheckContext, type: i32): StructInfo | null => {
-  return ctx.program.struct(ctx.table.nameOf(type));
-};
+export const structOf = (ctx: CheckContext, type: i32): StructInfo | null => ctx.program.struct(ctx.table.nameOf(type));
 
 /** `receiver.method(args)` where `receiver` is a value. */
 export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {

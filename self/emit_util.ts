@@ -52,9 +52,7 @@ export const dottedName = (expr: Node): string => {
  * `Math`, so the recorded type *is* the answer — the same test as
  * `program.types.has(receiver)` in `src/`.
  */
-export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolean => {
-  return program.nodeTypes[receiver.id] >= 0;
-};
+export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolean => program.nodeTypes[receiver.id] >= 0;
 
 /**
  * The type an expression produces *before* the coercion recorded on it
@@ -109,9 +107,7 @@ export const arrayMethodName = (program: CheckedProgram, table: TypeTable, call:
 };
 
 /** `recv.push(v)` on an array receiver. */
-export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
-  return arrayMethodName(program, table, node) === "push";
-};
+export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => arrayMethodName(program, table, node) === "push";
 
 /**
  * WP15 §2a: `expr` is an array whose slots hold their elements *inline*, so a
@@ -129,13 +125,10 @@ export const storesInlineElements = (program: CheckedProgram, table: TypeTable, 
 };
 
 /** `parts.join(sep)` bumps one string out of the arena, so it is an allocation site. */
-export const isJoinCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
-  return arrayMethodName(program, table, node) === "join";
-};
+export const isJoinCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => arrayMethodName(program, table, node) === "join";
 
 /** The byte methods that lower inline on a string receiver (WP14 A2). */
-export const isStringMethod = (name: string): boolean => {
-  return (
+export const isStringMethod = (name: string): boolean => (
     name === "charCodeAt" ||
     name === "substring" ||
     name === "slice" ||
@@ -143,7 +136,6 @@ export const isStringMethod = (name: string): boolean => {
     name === "startsWith" ||
     name === "endsWith"
   );
-};
 
 /** `call` invokes one of the byte methods on a string receiver. */
 export const isStringMethodCall = (program: CheckedProgram, call: Node): boolean => {
@@ -176,9 +168,7 @@ export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean 
  * is neither an allocation site nor a concatenation, and this is the test that
  * keeps the two trees answering the same way.
  */
-export const isTemplateExpression = (node: Node): boolean => {
-  return node.kind === N_TEMPLATE && node.children.length > 1;
-};
+export const isTemplateExpression = (node: Node): boolean => node.kind === N_TEMPLATE && node.children.length > 1;
 
 /** Head, holes and middles/tail in order, with the empty text parts dropped. */
 export const templateParts = (node: Node): Node[] => {

@@ -354,9 +354,7 @@ export class ParamUse {
   }
 }
 
-const use = (kind: i32): ParamUse => {
-  return new ParamUse(kind);
-};
+const use = (kind: i32): ParamUse => new ParamUse(kind);
 
 const argumentUse = (callee: FunctionSig, index: i32): ParamUse => {
   const result = new ParamUse(USE_ARGUMENT);
@@ -1420,9 +1418,7 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
   return changed;
 };
 
-const hasAttr = (attrs: string[], name: string): boolean => {
-  return attrs.indexOf(name) >= 0;
-};
+const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0;
 
 // ---- Counted loops ------------------------------------------------------------------------
 
@@ -1503,9 +1499,7 @@ export const isCountedLoop = (unit: AnalysisUnit, table: TypeTable, loop: Node):
   return !bodyDisturbs(loop.children[3], guarded);
 };
 
-const absOf = (value: i32): i32 => {
-  return value < 0 ? -value : value;
-};
+const absOf = (value: i32): i32 => value < 0 ? -value : value;
 
 const isName = (expr: Node, name: string): boolean => {
   const e = unwrapParens(expr);
