@@ -6345,33 +6345,58 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // mean "no difference".
   const side = (over) => ({ status: 0, stdout: "", said: "", emitted: new Map(), ...over });
   const bytes = (text) => new Map([["main.ll", Buffer.from(text)]]);
-  for (const [what, a, b, expected] of [
-    ["identical modules", side({ emitted: bytes("x") }), side({ emitted: bytes("x") }), "emitted"],
-    ["a module that differs", side({ emitted: bytes("x") }), side({ emitted: bytes("y") }), "emitted"],
-    ["a dump on stdout", side({ stdout: "tree" }), side({ stdout: "tree" }), "dump"],
-    ["refused on one side only", side({ status: 1, said: "{}" }), side({}), "status"],
+  const warn = (line) => `{"severity":"performance","code":"NL9001","message":"m","line":${line}}`;
+  for (const [what, a, b, expected, differences, moved] of [
+    ["identical modules", side({ emitted: bytes("x") }), side({ emitted: bytes("x") }), "emitted", 0, false],
+    ["a module that differs", side({ emitted: bytes("x") }), side({ emitted: bytes("y") }), "emitted", 1, false],
+    ["a dump on stdout", side({ stdout: "tree" }), side({ stdout: "tree" }), "dump", 0, false],
+    ["refused on one side only", side({ status: 1, said: "{}" }), side({}), "status", 0, false],
     [
       "refused on both, same words",
       side({ status: 1, said: '{"code":"NL2204","message":"m","line":3}' }),
       side({ status: 1, said: '{"code":"NL2204","message":"m","line":9}' }),
       "refusal",
+      0,
+      true,
     ],
     [
       "refused on both, different words",
       side({ status: 1, said: '{"code":"NL2204","message":"m"}' }),
       side({ status: 1, said: "" }),
       "reworded",
+      0,
+      false,
     ],
-    ["compiled clean and produced nothing", side({}), side({}), "blind"],
-    ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind"],
+    ["compiled clean and produced nothing", side({}), side({}), "blind", 0, false],
+    ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind", 0, false],
+    // A compile that succeeded still has a diagnostic surface, and it was read on
+    // neither side: a `performance:` warning could move, change or disappear under a
+    // rewrite and the sweep reported `0 difference(s)`. 76 corpus programs warn, most of
+    // `self/` among them, and `--concise` moves every warning below a collapsed
+    // declaration -- so the silence was pointed straight at the migration.
+    [
+      "a warning that only moved",
+      side({ emitted: bytes("x"), said: warn(9) }),
+      side({ emitted: bytes("x"), said: warn(7) }),
+      "emitted",
+      0,
+      true,
+    ],
+    [
+      "a warning that disappeared",
+      side({ emitted: bytes("x"), said: warn(9) }),
+      side({ emitted: bytes("x") }),
+      "emitted",
+      1,
+      false,
+    ],
   ]) {
     const answer = verdict(a, b);
-    const differences = (answer.differences ?? []).length;
-    const expectedDifferences = what === "a module that differs" ? 1 : 0;
+    const found = (answer.differences ?? []).length;
     check(
       `WP22: the verifier gives every subject one verdict -- ${what} is \`${expected}\``,
-      answer.kind === expected && differences === expectedDifferences,
-      `answered \`${answer.kind}\` with ${differences} difference(s)`
+      answer.kind === expected && found === differences && (answer.moved ?? false) === moved,
+      `answered \`${answer.kind}\` with ${found} difference(s), moved=${answer.moved ?? false}`
     );
   }
 

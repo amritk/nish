@@ -382,7 +382,7 @@ compared: both are compiled, and `verdict` answers with exactly one of
 | `status` | refused on one side and not the other — the rewrite changed whether the program compiles |
 | `refusal` | refused on both, and the words of its `--json` diagnostics agree with the positions stripped (`moved` says a caret shifted, which `--concise` does by construction) |
 | `reworded` | refused on both, for different words — a `reject_*` case that starts compiling, or is refused under another rule, which §8c calls the worst thing a codemod can do |
-| `emitted` | compiled on both, compared file by file over the union of what each side wrote — sidecars included, not only `.ll` |
+| `emitted` | compiled on both, compared file by file over the union of what each side wrote — the WP8 sidecars included, which is why `--emit-header` and friends are redirected into the subject's own directory rather than left to resolve against the working directory, where both sides would write one path and the second would overwrite the first |
 | `dump` | compiled on both and wrote nothing, so stdout is the output: `--emit-ast` and `--emit-checked` print there |
 | `blind` | none of the above. Nothing to compare, which **fails the run** |
 
@@ -399,6 +399,18 @@ the discipline has to be in the code both halves run, not applied twice.
 A dump's stdout *does* change when its declarations become arrows. That is a
 real consequence with a golden behind it, so it is a difference rather than
 something to wave through.
+
+**A compile that succeeded is compared by its diagnostics too**, which is the
+half this tool's own header promises — "a declaration that changes shape can
+move a line and a column without moving a byte of anybody's IR" — and did not
+deliver: the `--json` read was asked only where the status was non-zero, so a
+`performance:` warning could move, change or disappear under a rewrite and the
+sweep answered `0 difference(s)`. 76 corpus programs warn on a successful
+compile, most of `self/` among them, and `--concise` moves every warning below a
+collapsed declaration, so the silence was pointed straight at the migration.
+Every subject that says anything is now read on both sides by the rule the
+refusals use: the words may not change, a position may, and the summary prints
+how many moved so that quiet cannot be mistaken for absence.
 
 The flags each side is compiled with come out of the copy rather than out of the
 working tree, so `--applied` gives the before side the `.args` the *revision*
@@ -501,7 +513,7 @@ ship, is excluded from the package rather than shipped broken.
 *for* by climbing to its parent, and expects to find a statement there.** Both
 were fixed by one predicate, `isFunctionResult` in `checker/declarations.ts`.
 The obvious next question is how many more there are, and it is a question
-worth answering before 1,647 rewrites rather than one file at a time
+worth answering before 1,649 rewrites rather than one file at a time
 afterwards.
 
 **Empirically: none in the compiler, and three in the codemod** — the sweep is

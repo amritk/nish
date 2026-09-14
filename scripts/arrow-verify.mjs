@@ -77,6 +77,35 @@ import { rewrite } from "./arrowify.mjs";
 
 const work = path.join(root, "build", "arrowify");
 const tree = path.join(work, "tree");
+const lock = path.join(root, "build", "arrowify.lock");
+
+/**
+ * One sweep at a time, because they share `build/arrowify`: a second run's
+ * `copyTree` deletes the tree the first is compiling out of, and the first then
+ * dies somewhere arbitrary with whatever error the missing file happened to
+ * produce. `mkdir` is the atomic test-and-set every filesystem has.
+ *
+ * A lock left behind by a run that was killed is a directory to delete, and the
+ * message says so rather than leaving somebody to guess.
+ */
+const takeLock = () => {
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
+  try {
+    fs.mkdirSync(lock);
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    return false;
+  }
+  const release = () => fs.rmSync(lock, { recursive: true, force: true });
+  process.on("exit", release);
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.on(signal, () => {
+      release();
+      process.exit(130);
+    });
+  }
+  return true;
+};
 
 /** Copy every tracked file, so the copy resolves imports exactly as the repo does. */
 const copyTree = () => {
@@ -235,13 +264,31 @@ const diagnose = (rel) => {
 };
 
 /**
- * The `--json` diagnostics of every subject this side of the sweep refused. A
- * subject that compiled has none, and asking for them would cost a process each.
+ * Whether a compile said anything a diagnostic comparison should read: a
+ * refusal, or a warning on a compile that otherwise succeeded. The progress
+ * lines a successful compile prints (`wrote <path>`, on stderr so that stdout
+ * carries objects and nothing else) are not that.
  */
-const readRefusals = (subjects, results) =>
-  new Map(
-    subjects.filter((rel) => results.get(rel).status !== 0).map((rel) => [rel, diagnose(rel).said])
-  );
+const speaks = (run) =>
+  run.status !== 0 ||
+  run.stderr.split("\n").some((line) => line.trim().length > 0 && !line.startsWith("wrote "));
+
+/**
+ * The `--json` diagnostics of every subject that had any, this side of the
+ * sweep.
+ *
+ * **A successful compile has diagnostics too**, and they were read on neither
+ * side: `readRefusals` asked only where the status was non-zero, so a
+ * `performance:` warning — 76 corpus programs emit one, most of `self/` among
+ * them — could move, change or disappear under a rewrite and the sweep would
+ * report `0 difference(s)`. That is precisely the half this tool's own header
+ * claims to cover: "a declaration that changes shape can move [a line and a
+ * column] without moving a byte of anybody's IR". It is asked of every subject
+ * now, and asked only where a subject spoke, so the cost is one process per
+ * program that has something to say rather than per program.
+ */
+const readDiagnostics = (subjects, results) =>
+  new Map(subjects.filter((rel) => speaks(results.get(rel))).map((rel) => [rel, diagnose(rel).said]));
 
 /**
  * One program's diagnostics with every position stripped: the severity, the
@@ -276,14 +323,14 @@ export const diagnosticWords = (said) =>
 const compileAll = (relPrograms, out, debug) => {
   const results = new Map();
   for (const rel of relPrograms) {
-    const dir = path.join(out, rel.replace(/[/.]/g, "_"));
+    const dir = path.join(out, subjectDir(rel));
     fs.mkdirSync(dir, { recursive: true });
     const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "-o", `${dir}/`];
     // The flags come out of the *copy*, not out of the working tree, so that each
     // side is compiled the way its own `.args` sidecar says. Reading them from the
     // working tree made `--applied` hand the before side the after side's flags,
     // and a changed `.args` then verified as clean.
-    args.push(...extraArgs(path.join(tree, rel)));
+    args.push(...intoDir(extraArgs(path.join(tree, rel)), dir));
     if (debug) args.push("-g");
     const run = spawnSync(process.execPath, args, { encoding: "utf8" });
     results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir });
@@ -292,11 +339,43 @@ const compileAll = (relPrograms, out, debug) => {
 };
 
 /**
+ * One subject's own output directory name, and it has to be injective.
+ * `a/b.ts` and `a_b.ts` both became `a_b_ts` under a `[/.]` → `_` replacement,
+ * and two subjects sharing a directory can hide each other's difference: the
+ * second side's identical write covers the first's. There is no such pair in
+ * the corpus today, which is the only reason this was latent rather than wrong.
+ */
+const subjectDir = (rel) => encodeURIComponent(rel);
+
+/**
+ * The flags that name an output file of their own, which the compiler resolves
+ * against its working directory rather than against `-o`. Pointed where the
+ * `.args` sidecar points them, the WP8 sidecars land outside the directory this
+ * sweep compares — so both sides write the *same* path and the after side
+ * overwrites the before side before anything can read it. Each is redirected
+ * into the subject's own directory, keeping the basename, which is what makes
+ * "every file each side wrote" true rather than aspirational.
+ */
+const OUTPUT_FLAGS = new Set(["--emit-header", "--emit-dts", "--emit-napi", "--emit-napi-async"]);
+
+const intoDir = (args, dir) => {
+  const out = [];
+  for (let i = 0; i < args.length; i += 1) {
+    out.push(args[i]);
+    if (OUTPUT_FLAGS.has(args[i]) && i + 1 < args.length) {
+      out.push(path.join(dir, path.basename(args[i + 1])));
+      i += 1;
+    }
+  }
+  return out;
+};
+
+/**
  * Every file a compile wrote, keyed by its path relative to the output
  * directory. Every file rather than every `.ll`: the WP8 sidecars — the C
- * header, the `.d.ts` and its loader, the N-API shim — land in the same
- * directory, and a comparison that collected only modules would go quiet about
- * them the first time an in-scope program asked for one.
+ * header, the `.d.ts` and its loader, the N-API shim — are redirected into this
+ * directory by `intoDir`, and a comparison that collected only modules would go
+ * quiet about them the first time an in-scope program asked for one.
  */
 const emittedFiles = (dir) => {
   const out = new Map();
@@ -385,24 +464,46 @@ export const verdict = (a, b) => {
     // `--json` object by contract (AGENTS.md, "Machine-readable surfaces"), so
     // a refusal that produced none is a subject this sweep cannot read rather
     // than one it agrees with.
-    if (a.said.length === 0 && b.said.length === 0) return { kind: "blind" };
+    if (a.said.length === 0 && b.said.length === 0) {
+      return { kind: "blind", why: "was refused and printed no diagnostics to compare" };
+    }
     if (diagnosticWords(a.said) !== diagnosticWords(b.said)) return { kind: "reworded" };
     return { kind: "refusal", moved: a.said !== b.said };
   }
+  // A compile that succeeded still has a diagnostic surface — the performance
+  // warnings — and it is compared by the same rule the refusals are: the words
+  // may not change, a position may move. Under `--concise` every warning below a
+  // collapsed declaration moves by construction, so a move is reported rather
+  // than failed; what may not happen is a warning that appears, disappears, or
+  // says something else.
+  const talk = diagnosticWords(a.said) === diagnosticWords(b.said);
+  const moved = talk && a.said !== b.said;
+  const spoke = a.said.length > 0 || b.said.length > 0;
+  const said = talk ? [] : [{ name: "--json", why: "says something else after the change" }];
   const names = new Set([...a.emitted.keys(), ...b.emitted.keys()]);
   if (names.size > 0) {
-    return { kind: "emitted", compared: names.size, differences: diffEmitted(a.emitted, b.emitted) };
+    return {
+      kind: "emitted",
+      compared: names.size,
+      spoke,
+      moved,
+      differences: [...diffEmitted(a.emitted, b.emitted), ...said],
+    };
   }
   if (a.stdout.length > 0 || b.stdout.length > 0) {
     return {
       kind: "dump",
-      differences:
-        a.stdout === b.stdout
+      spoke,
+      moved,
+      differences: [
+        ...(a.stdout === b.stdout
           ? []
-          : [{ name: "stdout", why: `differs (${a.stdout.length} vs ${b.stdout.length} bytes)` }],
+          : [{ name: "stdout", why: `differs (${a.stdout.length} vs ${b.stdout.length} bytes)` }]),
+        ...said,
+      ],
     };
   }
-  return { kind: "blind" };
+  return { kind: "blind", why: "compiled clean and produced nothing to compare" };
 };
 
 /**
@@ -540,6 +641,14 @@ const main = (argv) => {
     `arrow-verify: ${relPrograms.length} program(s), ${negatives.length} rejection(s), ` +
       `${scope.length} source file(s)${debug ? ", with -g" : ""}${applied ? `, against ${rev}` : ""}\n`
   );
+  if (!takeLock()) {
+    process.stderr.write(
+      `arrow-verify: another sweep holds ${path.relative(root, lock)}; two of them share one work ` +
+        "directory and would delete each other's tree. Wait for it, or remove that directory if no " +
+        "sweep is running.\n"
+    );
+    return 2;
+  }
   const copied = copyTree();
   if (copied.missing.length > 0) {
     process.stdout.write(
@@ -573,7 +682,7 @@ const main = (argv) => {
   // A subject the compiler refuses prints its refusal and nothing else, so that is
   // what there will be to compare — and this side of it has to be read now, while
   // the before side is still what is in the tree.
-  const saidBefore = readRefusals(subjects, before);
+  const saidBefore = readDiagnostics(subjects, before);
 
   let rewritten = 0;
   const touched = new Set();
@@ -625,7 +734,7 @@ const main = (argv) => {
   }
 
   const after = compileAll(subjects, path.join(work, "after"), debug);
-  const saidAfter = readRefusals(subjects, after);
+  const saidAfter = readDiagnostics(subjects, after);
 
   // One loop, one exit path. Which list a subject came from decides how it is
   // reported and nothing else; `verdict` decides what happened to it.
@@ -635,6 +744,7 @@ const main = (argv) => {
   let refusals = 0;
   let reworded = 0;
   let moved = 0;
+  let spoke = 0;
   const blind = [];
   for (const rel of subjects) {
     const a = before.get(rel);
@@ -672,22 +782,38 @@ const main = (argv) => {
       continue;
     }
     if (answer.kind === "blind") {
-      blind.push(rel);
+      blind.push({ rel, why: answer.why });
       continue;
     }
     if (answer.kind === "dump") dumps += 1;
     else compared += answer.compared;
+    if (answer.spoke) {
+      spoke += 1;
+      if (answer.moved) {
+        moved += 1;
+        if (flags.has("--verbose")) {
+          process.stdout.write(
+            `MOVED ${rel}\n      before ${(saidBefore.get(rel) ?? "").split("\n")[0]}\n` +
+              `      after  ${(saidAfter.get(rel) ?? "").split("\n")[0]}\n`
+          );
+        }
+      }
+    }
     for (const difference of answer.differences) {
       differed += 1;
       process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`);
-      if (answer.kind === "emitted") {
+      if (answer.kind === "emitted" && difference.name !== "--json") {
         process.stdout.write(`      diff ${path.join(a.dir, difference.name)} ${path.join(b.dir, difference.name)}\n`);
+      }
+      if (difference.name === "--json") {
+        process.stdout.write(`      before ${diagnosticWords(saidBefore.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
+        process.stdout.write(`      after  ${diagnosticWords(saidAfter.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
       }
     }
   }
 
-  for (const rel of blind) {
-    process.stdout.write(`BLIND ${rel}: compiled clean and produced nothing to compare\n`);
+  for (const one of blind) {
+    process.stdout.write(`BLIND ${one.rel}: ${one.why}\n`);
   }
 
   if (skipped.length > 0 && flags.has("--verbose")) {
@@ -698,8 +824,11 @@ const main = (argv) => {
       `${refusals} refusal(s) compared, ${blind.length} with nothing to compare\n`
   );
   process.stdout.write(
+    `arrow-verify: ${spoke} compile(s) that also warned, compared by their words too\n`
+  );
+  process.stdout.write(
     `arrow-verify: ${differed} difference(s), of which ${reworded} refused differently; ` +
-      `${moved} refusal(s) whose positions moved\n`
+      `${moved} diagnostic(s) whose positions moved\n`
   );
   return differed > 0 || blind.length > 0 ? 1 : 0;
 };
