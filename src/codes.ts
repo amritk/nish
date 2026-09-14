@@ -65,6 +65,8 @@ const RULES: string[] = [
     "NL2276",
     "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
     "NL2285",
+    "; a class or interface name must be unique across the program, and an instantiation is named after its template",
+    "NL3013",
     "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
     "NL2300",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
@@ -126,7 +128,9 @@ const RULES: string[] = [
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
     "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
-    "NL2316",
+    "NL2320",
+    "` under a type constructor instead of passing it on, so the chain has no end; name `",
+    "NL2319",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
     "NL2309",
     "`declare function` declares a C function this program calls, so it must have no body",
@@ -166,7 +170,7 @@ const RULES: string[] = [
     "`Result` needs exactly two type arguments, e.g. `Result<number, string>`",
     "NL2150",
     " entry point: its `exports` gave this compiler no file to compile for `",
-    "NL3015",
+    "NL3014",
     "` values; compare each with `null` and then compare the narrowed values",
     "NL2108",
     "`main` must return void or an i32 number (the process exit code), not ",
@@ -203,6 +207,8 @@ const RULES: string[] = [
     "NL2156",
     ", not in your program. Please report it with the input file and",
     "NL3002",
+    "` is generic: it must be written with its type arguments, e.g. ",
+    "NL2317",
     "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
     "NL2143",
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
@@ -342,7 +348,7 @@ const RULES: string[] = [
     "; use `obj.name` (no dynamic property lookup)",
     "NL1009",
     "` directory above the importing module has it",
-    "NL3014",
+    "NL3015",
     "` is already declared as a class or interface",
     "NL2074",
     "` takes no type argument (it is an alias of `",
@@ -389,8 +395,6 @@ const RULES: string[] = [
     "NL1006",
     " (object layout is fixed at compile time)",
     "NL1007",
-    " entry point: its `exports` declares no `",
-    "NL3013",
     "` in a constant requires boolean operands",
     "NL2069",
     "` is a builtin value and cannot be called",
@@ -663,6 +667,8 @@ const RULES: string[] = [
     "NL4003",
     "` expects a value of type ",
     "NL2269",
+    "` is not generic, so `new ",
+    "NL2318",
     "`, which already extends `",
     "NL2110",
     "`Reflect` is forbidden in ",
@@ -815,6 +821,8 @@ const RULES: string[] = [
     "NL2249",
     "unknown option: ",
     "NL3008",
+    "` is a generic ",
+    "NL2316",
     "` requires two ",
     "NL2100",
     "Unknown class `",
@@ -854,7 +862,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 398;
+export const RULE_COUNT = 402;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

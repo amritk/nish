@@ -258,7 +258,7 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
       // A class or interface value is a pointer to its `struct` (declared in the
       // header with the flattened fields, WP2); a `T | null` is the same
       // pointer, possibly NULL.
-      return `struct ${table.nameOf(t)} *`;
+      return `struct ${cStructName(table.nameOf(t))} *`;
     case K_NULLABLE:
       return cType(table, table.refOf(t), position, false);
     // WP17: a `Result` small enough to pack travels *by value* — in either
@@ -282,15 +282,66 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
  */
 export function cResultName(table: TypeTable, t: i32): string {
-  const name = table.resultStructName(t);
+  return collapseSeparators(table.resultStructName(t), false);
+}
+
+/**
+ * `.` and `$` to `_`, and optionally the `_` the user wrote to `_0`. Shared by
+ * the two names that cross into C, because they collapse the same characters
+ * and differ only in whether their input is entirely the mangler's.
+ */
+const collapseSeparators = (name: string, escapeUnderscore: boolean): string => {
   const out = new StringBuilder();
   let i = 0;
   while (i < name.length) {
     const c = name.charCodeAt(i);
-    out.addChar(c === CHAR_DOT || c === CHAR_DOLLAR ? CHAR_UNDERSCORE : c);
+    if (c === CHAR_DOT || c === CHAR_DOLLAR) {
+      out.addChar(CHAR_UNDERSCORE);
+    } else if (escapeUnderscore && c === CHAR_UNDERSCORE) {
+      out.addChar(CHAR_UNDERSCORE);
+      out.addChar(CHAR_ZERO);
+    } else {
+      out.addChar(c);
+    }
     i = i + 1;
   }
   return out.toText();
+};
+
+/**
+ * The C spelling of a class or interface name.
+ *
+ * A *declared* class or interface is already a C identifier and passes through
+ * untouched, so the header of every program that existed before generics says
+ * exactly what it always said. An instantiated generic is not: `Box$i32`
+ * (WP18 G5) carries the mangling's `$` and `.`, and `-pedantic` refuses a `$`
+ * in a C identifier. A *type* name is not a linker symbol, so unlike
+ * `cFunctionName` there is nothing to bind it back to with `NISH_SYMBOL` — the
+ * struct simply has a C spelling and an LLVM spelling, and only the layout
+ * crosses.
+ *
+ * Collapsing `$` and `.` to `_` is what `cResultName` does, but the collapse is
+ * not what makes that one injective: `nish_result.` is a prefix a user's own
+ * class can never spell, and every name under it is the mangler's alone. An
+ * instantiated generic's name is half user-chosen, so it needs both halves of
+ * the argument written out:
+ *
+ *   - the reserved `nish_` prefix, because a program may declare
+ *     `class Box_i32` beside `Box<i32>` and a bare collapse would emit two
+ *     conflicting `struct Box_i32` definitions, which is a header that does
+ *     not compile (`tests/cases/gen_export_header`);
+ *   - an escape for the `_` the user wrote, because the template's name and a
+ *     class-typed argument are user identifiers: `Box_arr$i32` and
+ *     `Box$arr.i32` would otherwise collapse to one name. A user's `_` becomes
+ *     `_0`, and a digit can never follow one of the mangling's separators --
+ *     no type tag and no identifier begins with one -- so a `_0` in the output
+ *     is always the one the user wrote.
+ */
+export function cStructName(name: string): string {
+  if (name.indexOf("$") < 0) {
+    return name;
+  }
+  return `nish_gen_${collapseSeparators(name, true)}`;
 }
 
 /** The by-value spelling: one 64-bit word, `_word` as in the DWARF and the note. */

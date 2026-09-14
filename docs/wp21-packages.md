@@ -599,8 +599,8 @@ disappeared and `packages.ts` says so.
   the author who checks that row finds it correct and is no further forward. It
   reports what this compiler came away with instead — `` its `exports` gave this
   compiler no file to compile for `.` `` — which holds for every shape that
-  reaches it. The registry calls that `NL3015` and keeps `NL3013` reserved for
-  the spelling it replaced (`tests/wordings/unreachable.txt`).
+  reaches it. The registry calls that `NL3014`; the spelling it replaced never
+  reached a release, so there is no number reserved for it.
 - **No `engines.nish` floor**, for the same reason: it is a message rather than
   a file, and it is S3's.
 - **No `realpath`, so a symlinked package is a second package.** Node's resolver

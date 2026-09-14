@@ -31,7 +31,7 @@ import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes";
 import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
-import { StringMap } from "./map";
+import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
@@ -567,7 +567,91 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.drainInstantiations();
     }
+    this.rejectInstantiatedStructClashes();
     return !this.sink.hasErrors();
+  }
+
+  /**
+   * WP18 G5 + WP21 section 9c: the struct-name rule, one pass later.
+   *
+   * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
+   * that both declare `Holder<T>` and both instantiate it at `i32` produce two
+   * different `%struct.Holder$i32`. `declaredStructs` catches that when both
+   * instantiations came from a *signature*, because it runs before bodies are
+   * checked; an instantiation a body asked for does not exist yet then, so the
+   * set is only final here.
+   *
+   * It has to be caught rather than left: the second module's registration
+   * replaces the layout the first one's objects were built with, so a field
+   * read through an imported signature lands on the wrong offset. That is a
+   * miscompile, not a link error.
+   *
+   * Two modules of one package clash for the same reason and are refused here
+   * too. Packages are what make `Holder` and `Holder` two names in
+   * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
+   * which is a program-wide `%struct` name and a program-wide method symbol
+   * whichever package asked for it. A declared `class Holder` in two modules of
+   * one package is caught before bodies, by `@Holder.constructor` clashing in
+   * `rejectSymbolClashes`; the generic spelling has no symbol until an
+   * instantiation exists, so it reached the emitter unremarked and produced two
+   * different `%struct.Holder$i32` and an invalid redefinition of
+   * `@Holder$i32.constructor`, with no diagnostic at all
+   * (`tests/link/generic_class_clash`).
+   *
+   * One message per template rather than per instantiation: two modules that
+   * both declare `Holder<T>` and both use it at `i32` and at `string` have made
+   * one mistake, not two.
+   */
+  rejectInstantiatedStructClashes(): void {
+    const owners = new StringMap();
+    const ownerPackages: string[] = [];
+    const ownerPaths: string[] = [];
+    const reported = new StringSet();
+    for (const unit of this.modules) {
+      for (const instance of unit.checker.program.structInstantiationList) {
+        // The module that declares the template owns every instantiation of
+        // it, whoever the annotation was written by.
+        if (instance.template.origin !== unit.source) {
+          continue;
+        }
+        const name = instance.info.name;
+        const seen = owners.get(name, -1);
+        if (seen < 0) {
+          owners.set(name, ownerPackages.length);
+          ownerPackages.push(unit.packageName);
+          ownerPaths.push(unit.path);
+          continue;
+        }
+        // A template is one declaration in one module, so its module's path and
+        // its own name name it uniquely -- which is the object identity stage0
+        // keys this set on.
+        if (!reported.add(`${unit.path}#${instance.template.sourceName}`)) {
+          continue;
+        }
+        const at = instance.template.decl.children[0];
+        if (ownerPackages[seen] === unit.packageName) {
+          // The sentence `rejectSymbolClashes` writes for a generic function,
+          // with the noun changed: it is the same rule one level up.
+          const kindWord = instance.template.kind === STRUCT_CLASS ? "class" : "interface";
+          this.sink.report(
+            unit.source,
+            at.start,
+            at.end,
+            `Generic ${kindWord} \`${instance.template.sourceName}\` is also declared in ${ownerPaths[seen]}; a class or interface name must be unique across the program, and an instantiation is named after its template`
+          );
+          continue;
+        }
+        const what = instance.info.kind === STRUCT_CLASS ? "Class" : "Interface";
+        const here = describePackage(unit.packageName);
+        const there = describePackage(ownerPackages[seen]);
+        this.sink.report(
+          unit.source,
+          at.start,
+          at.end,
+          `${what} \`${name}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
+        );
+      }
+    }
   }
 
   /** Every class and interface declared anywhere in the program, by name. */

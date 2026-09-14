@@ -1,1 +1,1 @@
-Generic classes are not supported
+`Box` is not generic, so `new Box` takes no type arguments

@@ -16,6 +16,7 @@
 # purpose: a released compiler handed that number to a rule, so it may never be
 # handed to another one. The entry costs a string and matches nothing.
 NL2001  retired: the overload/override rule the inheritance work removed
+NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
@@ -41,9 +42,8 @@ NL2157  retired: `super`, removed with inheritance
 NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
 NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
-NL2227  retired: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2316
+NL2227  retired: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2320
 NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
-NL3013  retired: the WP21 S2 message said a package's `exports` "declares no `nish` condition", which the ranking in §10a can make false — a manifest whose `nish-i32` names no file never reaches its good `nish` row; the live rule is NL3015, which reports what the compiler came away with
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------
 # `codeFor` walks the table longest fragment first, so a fragment that is a
@@ -62,7 +62,7 @@ NL2174  `async` methods are Phase 0's (NL1015)
 NL2205  generators are Phase 0's (NL1044)
 NL2207  generic functions are Phase 0's (NL1054)
 NL2208  generic methods are Phase 0's (NL1055)
-NL2293  the checker's `Generic classes are not supported yet` is preempted by Phase 0's NL1054, which refuses the type parameter first
+NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
 NL2217  labelled `break` is Phase 0's (NL1046)
 NL2218  labelled `continue` is Phase 0's (NL1046)
 

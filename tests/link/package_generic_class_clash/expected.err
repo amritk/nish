@@ -1,0 +1,1 @@
+a class or interface name is still program-wide, so two packages cannot both declare one
