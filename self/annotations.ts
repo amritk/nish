@@ -17,6 +17,7 @@
 import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
 import { AliasInfo } from "./program";
+import { instantiateWritten } from "./generics";
 import {
   N_LIST,
   N_TYPE_ARRAY,
@@ -238,7 +239,17 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     return ctx.errorType(node, `\`${name}\` takes no type argument (it is an alias of \`${spelled}\`)`);
   }
 
+  // WP18 G5: a user generic with its arguments written. Answered after the
+  // built-in constructors above — so nothing that was already a type argument
+  // list changes meaning — and before the refusal below, so a template written
+  // with the wrong number of arguments is refused by the rule that names it
+  // rather than by "unsupported type reference".
   if (argc > 0) {
+    const written = ctx.program.structTemplate(name);
+    if (written !== null) {
+      const instantiated = instantiateWritten(ctx, written, args, node);
+      return instantiated === null ? T_ERROR : instantiated.type;
+    }
     return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`);
   }
 
@@ -255,6 +266,16 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   }
   if (alias >= 0) {
     return ctx.table.arrayOf(alias);
+  }
+
+  // WP18 G5: a generic class or interface named without its type arguments.
+  // Here rather than in the branch above, and after the scalars, because that
+  // is where stage0's named-type resolver answers a reference with no argument
+  // list: `Box` on its own is not a type, and the message says how to write it.
+  const bare = ctx.program.structTemplate(name);
+  if (bare !== null) {
+    instantiateWritten(ctx, bare, args, node);
+    return T_ERROR;
   }
 
   // WP18: a type parameter, while an instantiation is being resolved or

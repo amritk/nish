@@ -1,0 +1,1 @@
+`Crate` in `./wordings_generic_class` is a generic class, and a generic class or interface cannot yet be instantiated from another module; declare it in the module that uses it

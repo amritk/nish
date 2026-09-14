@@ -52,11 +52,11 @@ export const INTERNAL = "NL0003";
  */
 const RULES: string[] = [
     ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
-    "NL2318",
+    "NL2322",
     "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
     "NL2039",
     "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
-    "NL2319",
+    "NL2323",
     " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
     "NL1001",
     "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
@@ -69,6 +69,8 @@ const RULES: string[] = [
     "NL2276",
     "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
     "NL2285",
+    "; a class or interface name must be unique across the program, and an instantiation is named after its template",
+    "NL3013",
     "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
     "NL2300",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
@@ -129,6 +131,8 @@ const RULES: string[] = [
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` under a type constructor instead of passing it on, so the chain has no end; name `",
+    "NL2319",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
     "NL2309",
     "`declare function` declares a C function this program calls, so it must have no body",
@@ -139,6 +143,8 @@ const RULES: string[] = [
     "NL2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "NL2114",
+    ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
+    "NL3012",
     "` is not supported; a module has no top-level code, so only `const` is available",
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",
@@ -201,6 +207,8 @@ const RULES: string[] = [
     "NL2156",
     ", not in your program. Please report it with the input file and",
     "NL3002",
+    "` is generic: it must be written with its type arguments, e.g. ",
+    "NL2317",
     "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
     "NL2143",
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
@@ -228,11 +236,11 @@ const RULES: string[] = [
     " (an override keeps the signature; there is no overloading)",
     "NL2001",
     ", and a declared C function returns a scalar or `CPtr` only",
-    "NL2316",
+    "NL2320",
     "` cannot declare methods (interfaces describe layout only)",
     "NL2048",
     ", and a declared C function takes scalars and `CPtr` only",
-    "NL2317",
+    "NL2321",
     "the command line at https://github.com/amritk/nish/issues",
     "NL3007",
     " generic instantiations, which is this compiler's limit ",
@@ -661,6 +669,8 @@ const RULES: string[] = [
     "NL4003",
     "` expects a value of type ",
     "NL2269",
+    "` is not generic, so `new ",
+    "NL2318",
     "`, which already extends `",
     "NL2110",
     "`Reflect` is forbidden in ",
@@ -813,6 +823,8 @@ const RULES: string[] = [
     "NL2249",
     "unknown option: ",
     "NL3008",
+    "` is a generic ",
+    "NL2316",
     "` requires two ",
     "NL2100",
     "Unknown class `",
@@ -852,7 +864,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 397;
+export const RULE_COUNT = 403;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

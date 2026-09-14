@@ -6,9 +6,11 @@
 // Scans README.md, CHANGELOG.md, std/README.md, and docs/**/*.md. For each `[text](target)` or
 // `[ref]: target` outside a fenced code block: http(s)/mailto targets are
 // skipped; a relative path must exist; a `#fragment` must match a heading of
-// the target file (GitHub slug rules: lower-case, punctuation removed, spaces
-// to `-`, duplicates suffixed `-1`, `-2`, ...). A bare `#fragment` refers to
-// the current file. Absolute paths and directories are allowed as targets.
+// the target file (GitHub slug rules: lower-case, punctuation deleted, each
+// remaining space to one `-`, duplicates suffixed `-1`, `-2`, ... -- see
+// headingSlugs below, which is written to agree with github-slugger rather than
+// to approximate it). A bare `#fragment` refers to the current file. Absolute
+// paths and directories are allowed as targets.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +46,27 @@ function proseLines(text) {
   });
 }
 
+// GitHub slugs a heading with `github-slugger`, which is three steps and no
+// more: lower-case it, DELETE every character that is not a letter, a number, a
+// mark, `_` or `-`, then turn each remaining space into one `-`. The deletion
+// and the substitution are separate passes, so a character that vanishes
+// between two spaces leaves both spaces behind and the slug keeps a hyphen for
+// each: `G5 — Distribution` is `g5--distribution`, with two.
+//
+// This checker used to collapse whitespace runs instead (`.replace(/\s+/g,
+// "-")`), which is the same answer for every heading whose words are separated
+// by one space and a different one for every heading containing an em dash, a
+// slash or any other deleted character with a space on both sides. Every anchor
+// of that shape passed here and landed nowhere on github.com -- a link gate
+// that is green while the links are broken, which is worth more attention than
+// the five links it was hiding. It also dropped `_`, which GitHub keeps.
+//
+// The character class below is `[^\p{L}\p{N}\p{M}\p{Pc}\- ]`, which agrees with
+// github-slugger 2.0.0 on all 886 headings in this repository. It is not
+// character-for-character that package's 8 KB generated table: the table is
+// generated against the Unicode version of the day and deletes code points
+// unassigned back then that are letters now, which is a difference in scripts
+// no heading here is written in.
 /** GitHub-style heading slugs for a Markdown file, in order. */
 function headingSlugs(text) {
   const seen = new Map();
@@ -55,9 +78,8 @@ function headingSlugs(text) {
       .replace(/`([^`]*)`/g, "$1") // inline code keeps its text
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links keep their text
       .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s-]/gu, "")
-      .trim()
-      .replace(/\s+/g, "-");
+      .replace(/[^\p{L}\p{N}\p{M}\p{Pc}\- ]/gu, "") // deleted, not replaced
+      .replace(/ /g, "-"); // one hyphen per space, runs included
     const n = seen.get(slug) ?? 0;
     seen.set(slug, n + 1);
     if (n > 0) slug = `${slug}-${n}`;

@@ -97,7 +97,9 @@ The declaration form is a spelling, not a lowering
 checked signature and never the syntax that produced it, so the legacy
 `function` spelling and the arrow above compile to the same module, instruction
 for instruction — attribute group included. `function` is still accepted, and
-this listing is the only one in the cookbook that uses it.
+this listing is now the only one in the cookbook that uses it: `decl_ffi` was
+the last of the others, and what it has left is `declare function`, which is a
+different thing (§9).
 
 <!-- cookbook:begin fn_add_function -->
 ```ts
@@ -346,6 +348,116 @@ attributes #5 = { nounwind noreturn cold }
 !4 = !{!2}
 ```
 <!-- cookbook:end gen_infer -->
+
+### A generic class
+
+An instantiated generic class is an *ordinary struct*, which is what makes the
+whole feature affordable: `Box<i32>` is `%struct.Box$i32` with `Box`'s fields at
+`T = i32`, its methods are `@Box$i32.get` and `@Box$i32.constructor`, and the
+layout, the `dereferenceable` on `%this`, the attribute groups and the TBAA
+nodes are all computed from the instantiation rather than from the template.
+Compare the two below: the `i32` box is four bytes and the `string` box is
+eight, and the string constructor's `%v` loses `nocapture` because it is stored
+into a field — which is exactly what a hand-written `BoxStr` would do.
+
+<!-- cookbook:begin gen_class -->
+```ts
+class Box<T> {
+  value: T;
+
+  constructor(v: T) {
+    this.value = v;
+  }
+
+  get(): T {
+    return this.value;
+  }
+}
+
+export const main = (): i32 => {
+  const n = new Box<i32>(7);
+  const s = new Box<string>("hi");
+  console.log(s.get());
+  return n.get();
+};
+```
+
+```llvm
+%struct.Box$i32 = type { i32 }
+%struct.Box$str = type { i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"hi\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %n.addr = alloca %struct.Box$i32*, align 8
+  %Box$i32.obj = alloca %struct.Box$i32, align 8
+  %s.addr = alloca %struct.Box$str*, align 8
+  %Box$str.obj = alloca %struct.Box$str, align 8
+  call void @Box$i32.constructor(%struct.Box$i32* %Box$i32.obj, i32 7)
+  store %struct.Box$i32* %Box$i32.obj, %struct.Box$i32** %n.addr, align 8
+  call void @Box$str.constructor(%struct.Box$str* %Box$str.obj, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*))
+  store %struct.Box$str* %Box$str.obj, %struct.Box$str** %s.addr, align 8
+  %0 = load %struct.Box$str*, %struct.Box$str** %s.addr, align 8
+  %1 = call i8* @Box$str.get(%struct.Box$str* %0)
+  call void @nish_print(i8* %1)
+  %2 = load %struct.Box$i32*, %struct.Box$i32** %n.addr, align 8
+  %3 = call i32 @Box$i32.get(%struct.Box$i32* %2)
+  ret i32 %3
+}
+
+define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %v) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
+  store i32 %v, i32* %0, align 4, !tbaa !4
+  ret void
+}
+
+define internal noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4, !tbaa !4
+  ret i32 %1
+}
+
+define internal void @Box$str.constructor(%struct.Box$str* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %v) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$str, %struct.Box$str* %this, i32 0, i32 0
+  store i8* %v, i8** %0, align 8, !tbaa !7
+  ret void
+}
+
+define internal noundef nonnull align 8 i8* @Box$str.get(%struct.Box$str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$str, %struct.Box$str* %this, i32 0, i32 0
+  %1 = load i8*, i8** %0, align 8, !tbaa !7
+  ret i8* %1
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Box$i32", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"ptr", !1, i64 0}
+!6 = !{!"Box$str", !5, i64 0}
+!7 = !{!6, !5, i64 0}
+```
+<!-- cookbook:end gen_class -->
 
 ## Types
 
@@ -703,17 +815,22 @@ small: with no pointer among the arguments or the result, there is nothing for
 escape analysis to be wrong about (`tests/cases/ffi_scalar`, and the four
 `reject_ffi_*` cases).
 
+The listing is also where the two senses of the word `function` sit side by
+side. `declare function abs` is an *ambient* declaration and defines nothing, so
+it is not a competing spelling for what `pureDouble` and `main` do and stays
+exactly as it is written; the two definitions beside it are arrows bound to a
+`const`, which is how Nish declares a function
+([wp22-arrow-functions.md](wp22-arrow-functions.md) §1 and §9). An arrow
+spelling for the ambient one would need a function type, and Phase 0 forbids
+those.
+
 <!-- cookbook:begin decl_ffi -->
 ```ts
 declare function abs(n: i32): i32;
 
-function pureDouble(n: i32): i32 {
-  return n * 2;
-}
+const pureDouble = (n: i32): i32 => n * 2;
 
-export function main(): i32 {
-  return abs(-7) + pureDouble(3);
-}
+export const main = (): i32 => abs(-7) + pureDouble(3);
 ```
 
 ```llvm

@@ -205,27 +205,22 @@ const checkFunctionLike: Validator = (node, sf) => {
 };
 
 /**
- * WP18: a generic *function* is monomorphised, so Phase 0 lets `<T>` through on
- * one and the checker instantiates it. Everything else that can carry a type
- * parameter list still cannot: a class or interface would need a layout per
- * instantiation and a type alias is not a type of its own, so both are refused
- * here, by the rule they break rather than by "unsupported".
+ * WP18: a generic function, class and interface are all monomorphised, so Phase
+ * 0 lets `<T>` through on each of them and the checker instantiates it. A type
+ * alias is the one declaration that still cannot carry one, and the reason is
+ * not that nobody has implemented it: an alias renames a type that already
+ * exists, so there is nothing for a type argument to specialise.
  */
 const checkGenericDeclaration: Validator = (node, sf) => {
-  const decl = node as ts.ClassLikeDeclaration | ts.InterfaceDeclaration | ts.TypeAliasDeclaration;
-  if (decl.typeParameters && decl.typeParameters.length > 0) {
-    const what = ts.isTypeAliasDeclaration(decl)
-      ? "type alias"
-      : ts.isInterfaceDeclaration(decl)
-        ? "interface"
-        : "class";
-    fail(
-      `Generic type parameters are forbidden on a ${what} in ${LANGUAGE} (a generic function is monomorphised; ` +
-        "a generic class is not supported yet)",
-      decl.typeParameters[0],
-      sf
-    );
-  }
+  const decl = node as ts.ClassLikeDeclaration | ts.TypeAliasDeclaration;
+  if (!decl.typeParameters || decl.typeParameters.length === 0) return;
+  const what = ts.isTypeAliasDeclaration(decl) ? "type alias" : "class expression";
+  fail(
+    `Generic type parameters are forbidden on a ${what} in ${LANGUAGE}; a generic function, class or interface ` +
+      "is monomorphised, and an alias only renames a type that already exists",
+    decl.typeParameters[0],
+    sf
+  );
 };
 
 /**
@@ -463,9 +458,7 @@ const validators: Partial<Record<ts.SyntaxKind, Validator>> = {
   [ts.SyntaxKind.FunctionExpression]: checkFunctionLike,
   [ts.SyntaxKind.ArrowFunction]: checkFunctionLike,
   [ts.SyntaxKind.MethodDeclaration]: checkMethodTypeParameters,
-  [ts.SyntaxKind.ClassDeclaration]: checkGenericDeclaration,
   [ts.SyntaxKind.ClassExpression]: checkGenericDeclaration,
-  [ts.SyntaxKind.InterfaceDeclaration]: checkGenericDeclaration,
   [ts.SyntaxKind.TypeAliasDeclaration]: checkGenericDeclaration,
   [ts.SyntaxKind.VariableDeclarationList]: checkVariableDeclarationList,
   [ts.SyntaxKind.EnumDeclaration]: checkEnum,

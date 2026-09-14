@@ -23,7 +23,7 @@ import {
   typeToString,
 } from "../types.js";
 import { ConstInfo } from "./constants.js";
-import { TemplateInfo } from "./generics.js";
+import { StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 import { isNishSpecifier, nishModuleNames } from "./nish-modules.js";
 import { STD_PREFIX } from "../branding.js";
@@ -334,6 +334,83 @@ export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.Sou
     count: 0,
   };
 }
+
+/**
+ * The modifiers a class or interface declaration may not carry, whichever
+ * spelling declares it.
+ *
+ * It lives here, beside the other declaration-level rules, rather than inside
+ * `declareStruct`, because a *generic* class never reaches `declareStruct` —
+ * it is a template, and `collectStructTemplate` below is the only pass that
+ * sees the declaration itself. Two copies of the loop would mean
+ * `export default class Box<T>` compiling while `export default class Box`
+ * is refused, which is what happened; one function called from both spellings
+ * is what makes "refused identically" a property of the code rather than of a
+ * test.
+ */
+export const rejectStructModifiers = (
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration,
+  kind: "class" | "interface",
+  sf: ts.SourceFile
+): void => {
+  const modifiers = ts.canHaveModifiers(decl) ? (ts.getModifiers(decl) ?? []) : [];
+  for (const m of modifiers) {
+    if (m.kind === ts.SyntaxKind.AbstractKeyword) {
+      throw new CompileError("Abstract classes are not supported", decl, sf);
+    }
+    if (m.kind === ts.SyntaxKind.DeclareKeyword) {
+      throw new CompileError(`\`declare ${kind}\` is not supported`, decl, sf);
+    }
+    if (m.kind === ts.SyntaxKind.DefaultKeyword) {
+      throw new CompileError("`export default` is not supported; use a named `export`", decl, sf);
+    }
+  }
+};
+
+/**
+ * A generic `class` or `interface` declaration (WP18 G5). Nothing below the
+ * name is read here: the field, method and heritage annotations mention the
+ * type parameters, so they stay as syntax and are resolved once per
+ * instantiation, exactly as a function template's are. The member rules —
+ * `static`, getters, index signatures, a missing annotation — are therefore
+ * enforced where they always were, at each instantiation's `collectStructMembers`.
+ *
+ * The *declaration's* own rules are not members and have nowhere else to be
+ * enforced, so they are enforced here, out of the same function `declareStruct`
+ * calls: a template is refused for exactly what the non-generic spelling is
+ * refused for.
+ */
+export const collectStructTemplate = (
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration,
+  sf: ts.SourceFile
+): StructTemplateInfo => {
+  const kind = ts.isClassDeclaration(decl) ? "class" : "interface";
+  if (!decl.name) throw new CompileError(`${kind === "class" ? "Classes" : "Interfaces"} must be named`, decl, sf);
+  const name = decl.name.text;
+  if (name.startsWith("nish_")) {
+    throw new CompileError("Names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(name, kind, decl.name, sf);
+  rejectStructModifiers(decl, kind, sf);
+  // A generic `interface` has the same one heritage rule a declared one has,
+  // and for the same reason: there is no layout to inherit, only fields to
+  // list. Refusing it here rather than at the instantiation keeps the message
+  // pointing at the `extends` the programmer wrote.
+  for (const clause of decl.heritageClauses ?? []) {
+    if (clause.token === ts.SyntaxKind.ExtendsKeyword && kind === "interface") {
+      throw new CompileError("Interface inheritance (`extends`) is not supported; list every field", clause, sf);
+    }
+  }
+  return {
+    sourceName: name,
+    kind,
+    typeParams: collectTypeParams(decl.typeParameters ?? [], sf),
+    decl,
+    nameNode: decl.name,
+    exported: hasExportModifier(decl),
+    count: 0,
+  };
+};
 
 /** The arrow spelling of the same thing: `const identity = <T>(x: T): T => x`. */
 export function collectArrowTemplate(

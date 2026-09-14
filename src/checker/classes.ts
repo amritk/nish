@@ -63,9 +63,15 @@ import {
   typeToString,
 } from "../types.js";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
-import { hasExportModifier, isFunctionResult, rejectDollarInSymbolName } from "./declarations.js";
+import {
+  hasExportModifier,
+  isFunctionResult,
+  rejectDollarInSymbolName,
+  rejectStructModifiers,
+} from "./declarations.js";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
 import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
+import { instanceSymbol, instantiateWritten } from "./generics.js";
 import { CheckedProgram, FieldInfo, FunctionSig, LocalVar, Param, StructInfo } from "./program.js";
 import { Scope } from "./scope.js";
 
@@ -221,21 +227,21 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
   const name = decl.name.text;
   if (name.startsWith("nish_")) throw ctx.error("Names starting with `nish_` are reserved for the runtime", decl.name);
   rejectDollarInSymbolName(name, kind, decl.name, ctx.sf);
-  if (ctx.program.structs.has(name)) throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
+  // A generic class counts as a declaration of the name, exactly as a declared
+  // one counts against a template in `registerStructTemplate`: without the
+  // second half `class Box<T>` followed by `class Box` compiled, and the
+  // declared class was unreachable because `Box` in an annotation resolves to
+  // the template.
+  if (ctx.program.structs.has(name) || ctx.structTemplates.has(name)) {
+    throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
+  }
   if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
     throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
   }
   if (ctx.sigs.has(name)) throw ctx.error(`\`${name}\` is already declared as a function`, decl.name);
-  for (const m of modifierKinds(decl)) {
-    if (m === ts.SyntaxKind.AbstractKeyword) throw ctx.error("Abstract classes are not supported", decl);
-    if (m === ts.SyntaxKind.DeclareKeyword) throw ctx.error(`\`declare ${kind}\` is not supported`, decl);
-    if (m === ts.SyntaxKind.DefaultKeyword) throw ctx.error("`export default` is not supported; use a named `export`", decl);
-  }
-  if (decl.typeParameters) {
-    // Phase 0 already refused this; the message is kept for a struct that
-    // reaches the checker another way (WP18 §11, G5 lifts the restriction).
-    throw ctx.error(`Generic ${kind === "class" ? "classes" : "interfaces"} are not supported yet`, decl);
-  }
+  // Shared with `collectStructTemplate`, which is the only pass a *generic*
+  // class or interface reaches, so the two spellings are refused by one loop.
+  rejectStructModifiers(decl, kind, ctx.sf);
   // A class's `extends` is refused in pass 1b, so the struct is registered
   // first and a rejected class does not cascade into every use of its name.
   for (const clause of decl.heritageClauses ?? []) {
@@ -451,10 +457,19 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
     for (const clause of info.decl.heritageClauses ?? []) {
       if (clause.token !== ts.SyntaxKind.ImplementsKeyword) continue;
       for (const t of clause.types) {
-        if (!ts.isIdentifier(t.expression) || t.typeArguments) {
-          throw ctx.error("`implements` must name a declared interface", t);
-        }
-        const target = ctx.program.structs.get(t.expression.text);
+        if (!ts.isIdentifier(t.expression)) throw ctx.error("`implements` must name a declared interface", t);
+        // WP18 G5: `class Box<T> implements Container<T>` names an instantiated
+        // interface. It is resolved here, while `T` is bound to *this*
+        // instantiation's argument, so the check is the ordinary field-prefix
+        // one against `Container$i32` rather than a comparison between two
+        // uninstantiated field lists — which would need a type variable, and a
+        // type parameter is never a type in this implementation
+        // (`docs/wp18-generics.md` §15.1).
+        const template = ctx.structTemplates.get(t.expression.text);
+        if (!template && t.typeArguments) throw ctx.error("`implements` must name a declared interface", t);
+        const target = template
+          ? instantiateWritten(ctx, template, t.typeArguments ?? [], t)
+          : ctx.program.structs.get(t.expression.text);
         if (target?.kind !== "interface") {
           throw ctx.error(`\`${t.expression.text}\` is not a declared interface`, t.expression);
         }
@@ -756,13 +771,32 @@ export function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Sc
   return undefined;
 }
 
+/**
+ * The struct `new X(...)` builds, template or not (WP18 G5).
+ *
+ * `new Box<f64>(3.0)` names a *template*, and the struct it means is the one
+ * its written type arguments instantiate — so a lookup in `structs` by the
+ * written name finds nothing, and a numeric literal argument would lose the
+ * width its parameter gives it. The two contextual-type walks that ask what a
+ * `new` argument is expected to be both come through here.
+ *
+ * Resolving the type arguments again cannot fail: every caller runs while an
+ * argument of that same `new` is being checked, so `newCheckers` has already
+ * resolved the list and interned the instantiation, and `resolveTypeNode`
+ * answers from the same bindings with the same result.
+ */
+export const newTargetStruct = (ctx: CheckContext, call: ts.NewExpression): StructInfo | undefined => {
+  if (!ts.isIdentifier(call.expression)) return undefined;
+  const template = ctx.structTemplates.get(call.expression.text);
+  if (!template) return ctx.program.structs.get(call.expression.text);
+  if ((call.typeArguments?.length ?? 0) !== template.typeParams.length) return undefined;
+  const args = (call.typeArguments ?? []).map((node) => resolveTypeNode(node, ctx.sf, ctx.opts));
+  return ctx.program.structs.get(instanceSymbol(template.sourceName, args));
+};
+
 /** The user function, method, or constructor a call resolves to, when that is already known. */
 function calleeSignature(ctx: CheckContext, call: ts.CallExpression | ts.NewExpression): FunctionSig | undefined {
-  if (ts.isNewExpression(call)) {
-    if (!ts.isIdentifier(call.expression)) return undefined;
-    const info = ctx.program.structs.get(call.expression.text);
-    return info?.ctor;
-  }
+  if (ts.isNewExpression(call)) return newTargetStruct(ctx, call)?.ctor;
   if (ts.isIdentifier(call.expression)) return ctx.sigs.get(call.expression.text);
   if (ts.isPropertyAccessExpression(call.expression)) {
     // The receiver is checked before the arguments, so its type is recorded by now.
@@ -916,12 +950,20 @@ methodCallCheckers.struct = (ctx, expr, receiver, scope) => {
 newCheckers["*"] = (ctx, expr, scope) => {
   if (!ts.isIdentifier(expr.expression)) throw ctx.error("`new` requires a class name", expr.expression);
   const name = expr.expression.text;
-  const info = ctx.program.structs.get(name);
+  // WP18 G5: `new Box<i32>(7)` writes its type arguments out, because `new` is
+  // one of the two positions a one-token parser reads a type-argument list in
+  // (§2a) and a constructor's own arguments need not mention every parameter.
+  const template = ctx.structTemplates.get(name);
+  const info = template
+    ? instantiateWritten(ctx, template, expr.typeArguments ?? [], expr.expression)
+    : ctx.program.structs.get(name);
   if (!info) throw ctx.error(`Unknown class \`${name}\``, expr.expression);
   if (info.kind === "interface") {
     throw ctx.error(`Cannot \`new\` interface \`${name}\`; use an object literal: \`{ ... }\``, expr);
   }
-  if (expr.typeArguments) throw ctx.error("Generic classes are not supported", expr);
+  if (!template && expr.typeArguments) {
+    throw ctx.error(`\`${name}\` is not generic, so \`new ${name}\` takes no type arguments`, expr.typeArguments[0]);
+  }
   const args = expr.arguments ?? [];
   const ctor = info.ctor;
   if (ctor) {

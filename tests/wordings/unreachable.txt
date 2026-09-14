@@ -16,6 +16,7 @@
 # purpose: a released compiler handed that number to a rule, so it may never be
 # handed to another one. The entry costs a string and matches nothing.
 NL2001  retired: the overload/override rule the inheritance work removed
+NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
@@ -41,8 +42,8 @@ NL2157  retired: `super`, removed with inheritance
 NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
 NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
-NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2316
-NL2305  retired: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2317
+NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2320
+NL2305  retired: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2321
 NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------
@@ -62,7 +63,7 @@ NL2174  `async` methods are Phase 0's (NL1015)
 NL2205  generators are Phase 0's (NL1044)
 NL2207  generic functions are Phase 0's (NL1054)
 NL2208  generic methods are Phase 0's (NL1055)
-NL2293  the checker's `Generic classes are not supported yet` is preempted by Phase 0's NL1054, which refuses the type parameter first
+NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
 NL2217  labelled `break` is Phase 0's (NL1046)
 NL2218  labelled `continue` is Phase 0's (NL1046)
 
@@ -101,6 +102,7 @@ NL3003  the internal-error diagnostic carries the INTERNAL constant NL0003, not 
 NL3005  a line of the exit-70 report
 NL3007  a line of the exit-70 report
 NL3008  `unknown option:` is a usage error (exit 2), not a diagnostic
+NL3012  `--emit-napi-async requires --threads` is a usage error (exit 2), not a diagnostic
 NL4001  a comment in the C header `--emit-napi` writes
 NL4002  a comment in the C header `--emit-header` writes
 NL4003  an error string in the generated N-API shim

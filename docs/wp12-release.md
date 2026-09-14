@@ -175,10 +175,18 @@ step below is done by hand.
 
    The binary is not only a convenience for people without Node: it is the
    **seed** the next release is built from, which is why it is verified and
-   smoke-tested before it ships and why its name is fixed. `ci.yml`'s
-   `bootstrap` job downloads exactly `nish-<version>-x86_64-linux` from the
-   latest release, so renaming the asset breaks the freeze check rather than
-   the release.
+   smoke-tested before it ships and why its name is fixed. That name is not
+   written here or in the workflow: both this step and `ci.yml`'s `seeds` job
+   read it from `.github/seed-targets.json`, where each platform carries the
+   canonical triple it is and the asset name derived from that triple by
+   dropping the vendor and the ABI. A release that does not attach a seed the
+   file marks `attached` turns `seeds` **red**, because a release that exists
+   and carries no seed for a platform it is supposed to carry one for is a
+   regression rather than a state of the world
+   ([wp10-ci.md](wp10-ci.md#the-seeded-build-and-what-a-missing-seed-reports)).
+   A repository with no release at all is the other case, and there the check
+   has no rows rather than failing: red would be a release train that can never
+   leave, since `release.yml`'s `release` job is `needs: ci`.
 
 4. **npm publish is manual, and is blocked on the name.** `nish` on the
    public registry is somebody else's package — see "Open decision: the npm
@@ -220,9 +228,9 @@ npm pack --dry-run   # only dist/, runtime/, scripts/, README.md, LICENSE, docs/
 **`nish` 0.N is built by the last patch release of 0.(N−1).** The seed is a
 released binary one minor version back, never the working tree, and the whole
 0.N line — 0.N.0 and every patch after it — is built by that same seed.
-`scripts/bootstrap.sh` selects it with `NISH_BOOTSTRAP`, and CI's bootstrap job
-passes the last release, which is what enforces the rule rather than hoping for
-it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
+`scripts/bootstrap.sh` selects it with `NISH_BOOTSTRAP`, and CI's `bootstrap`
+job passes the last release, which is what enforces the rule rather than hoping
+for it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
 publishes a rule of the same shape; the reason to write ours down now is that a
 policy decided in the abstract costs nobody an argument during a release.
 
