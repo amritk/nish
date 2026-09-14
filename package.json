@@ -19,6 +19,7 @@
     "dist",
     "runtime",
     "scripts",
+    "!scripts/arrow-verify.mjs",
     "std",
     "README.md",
     "LICENSE",

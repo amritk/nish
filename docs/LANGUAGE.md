@@ -641,7 +641,14 @@ spelling; the two compile to identical IR, instruction for instruction
   (`` Parameter `x` needs a type annotation ``; `explicit return type`,
   `tests/cases/reject_missing_return_type`).
 - Functions may call each other in any order; signatures are collected
-  before bodies are checked (`tests/cases/locals`, `cf_fib`).
+  before bodies are checked (`tests/cases/locals`, `cf_fib`). **This holds for
+  the arrow form too**, which is not what a reader who knows that a `const` is
+  not hoisted in JavaScript would expect: a module-level `const` bound to an
+  arrow *is* a function declaration, so it is in scope for the whole module and
+  not only below its own line, and two of them may call each other
+  (`tests/cases/fn_arrow_hoisting`). Nothing else would let a file be converted
+  from one spelling to the other without reordering it
+  ([wp22-arrow-functions.md](wp22-arrow-functions.md) §8b).
 - Calls take exactly the declared number of arguments (`expects 1 argument`,
   `tests/cases/reject_arity`), each of exactly the declared type
   (`` Argument 1 of `area`: expected Shape, got Rect ``,
