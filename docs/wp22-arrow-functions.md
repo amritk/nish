@@ -140,7 +140,7 @@ are not stage D's to take (§9).
 
 | Surface | `function` | arrow | Note |
 | --- | --- | --- | --- |
-| `self/` | **723** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own. 721 when this table was first taken; `--emit-napi-async` added two, which is why the number to act on is the one `arrowify --check self/*.ts` prints |
+| `self/` | **733** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own. **Re-derive this one rather than reading it**: 721 when the table was first taken, 723 after `--emit-napi-async`, 733 after generic classes — `self/` grows, and `node scripts/arrowify.mjs --check self/*.ts` is the number to act on |
 | `tests/cases/` | **688** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates |
 | `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
@@ -153,11 +153,11 @@ are not stage D's to take (§9).
 | `self/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
 | `self/parser.ts` | arrow parsing | — | done in stage B |
 
-**1,649 definitions**, against 78 when stage C's docs half was finished. The
+**1,659 definitions**, against 78 when stage C's docs half was finished. The
 number matters to one decision and no other: §10 argues stage D on the size of
 what is left, and the honest figure for that argument is this one rather than
-the 798 the row above used to carry. It was 1,647 when the row was taken and is
-1,649 two releases of `self/` later, which is the whole reason the sentence
+the 798 the row above used to carry. It was 1,647 when the row was taken and
+1,659 three releases of `self/` later, which is the whole reason the sentence
 above says to re-derive it rather than to read it here.
 
 ## 8. The order, and why it is forced
@@ -295,7 +295,7 @@ The reason the docs half went first is the reason the rest of C can now go at
 all: `regen.sh` made "did this rewrite change anything?" a single command, and
 a question you can ask in one command is a question you ask on every file
 rather than on the ones you are worried about. `self/` had no such command —
-its 723 declarations are a program whose output is checked by the bootstrap,
+its 733 declarations are a program whose output is checked by the bootstrap,
 which is the slowest check in the repository — so stage C's expensive half
 starts by building one.
 
@@ -449,7 +449,7 @@ not a flourish, and finding out why is what this preparation was for.** Biome's
 block-bodied arrow whose body is one `return` fails `npm run lint` in every
 directory Biome reads, which is every Nish surface except the test fixtures.
 A block-only rewrite of `self/` would land **119 lint errors**, one per
-single-return declaration of its 723, and `npm run lint` may not get worse than
+single-return declaration of its 733 at the time it was counted, and `npm run lint` may not get worse than
 `main`. The rewrite is therefore two passes and not one, and the order is the
 point:
 
@@ -513,7 +513,7 @@ ship, is excluded from the package rather than shipped broken.
 *for* by climbing to its parent, and expects to find a statement there.** Both
 were fixed by one predicate, `isFunctionResult` in `checker/declarations.ts`.
 The obvious next question is how many more there are, and it is a question
-worth answering before 1,649 rewrites rather than one file at a time
+worth answering before 1,659 rewrites rather than one file at a time
 afterwards.
 
 **Empirically: none in the compiler, and three in the codemod** — the sweep is
