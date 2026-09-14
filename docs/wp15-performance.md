@@ -1480,10 +1480,19 @@ measurement closed says so and says why.
      `readnone`, so nothing proves the second read equals the first. Where it
      can hoist the length, LLVM does find it unaided: a string literal in a
      local with `const n = s.length` and a loop counter folds from six to zero
-     at `-O3` before this change. So the claim is shape-qualified wherever it
-     is written down (`checker/bounds.ts`, `emit/strings.ts`, the message
-     itself), and the compiler folds the clamp out of the §2 facts it already
-     has rather than leaving it to a pass that only sometimes gets there.
+     at `-O3` before this change — and so, for that matter, does
+     `tests/cases/perf_clamp`, the case that ships the warning, whose receiver
+     is a literal. So the claim is shape-qualified wherever it is written down
+     (`checker/bounds.ts`, `emit/strings.ts`, the message itself), and the
+     compiler folds the clamp out of the §2 facts it already has rather than
+     leaving it to a pass that only sometimes gets there.
+
+     "Keeps all six" is exact for the call with two guarded bounds. Its
+     neighbour `s.substring(0, i)`, `i` guarded, goes six to **two** at `-O3`
+     before this change: the optimiser folds the literal `0`'s clamp and the
+     swap and keeps the clamp on `i` — the one bound the warning is about. So
+     the shape the warning fires on is the shape the optimiser does not reach,
+     which is what the rule needed to be true and is narrower than "all six".
 
      A literal `0` is proven for every string, which is why `s.substring(0, n)`
      — the commonest spelling there is — loses two of its six intrinsic calls
@@ -1500,14 +1509,20 @@ measurement closed says so and says why.
      calls: the program's own minimum of 15, best of seven runs under
      `taskset -c 2` on a busy shared machine, where the spread between runs is
      wider than the effect and the minimum is the only stable statistic) —
-     about 2 ns a call, which is the four intrinsics. Slice width is what
-     moves it: with `at + 16` changed to `at + 4` throughout, the same program
-     measures **1.20x** (55.3 ms against 46.1 ms), because the clamp is a fixed
-     cost per call and the `memcpy` is not. That is the
-     ceiling, on a loop that does nothing but slice; §4's 1.18x for `slice`
-     over `substring` is what the same instructions plus the two swap calls are
-     worth on lexer-shaped code. `tests/cases/perf_clamp`,
-     `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`.
+     about 2 ns a call, which is **six** intrinsic calls rather than the four
+     the emitter left out. Exported so that neither scan is inlined away and
+     run through `opt -O3`, the two bodies come out at six calls against zero:
+     dropping the clamps is what lets LLVM prove `at <= at + 16` and fold the
+     swap pair too, which it cannot do while each end has been through an
+     `smin`/`smax`. The whole gap is still this change, and nothing else
+     differs between the two scans. Slice width is what moves it: with
+     `at + 16` changed to `at + 4` throughout, the same program measures
+     **1.20x** (55.3 ms against 46.1 ms), because the clamp is a fixed cost per
+     call and the `memcpy` is not. That is the ceiling, on a loop that does
+     nothing but slice; §4's 1.18x for `slice` over `substring` is what the
+     same instructions plus the two swap calls are worth on lexer-shaped code.
+     `tests/cases/perf_clamp`, `perf_clamp_quiet`, `perf_clamp_order`,
+     `perf_clamp_rebind`.
    - **not inlinable** — shipped, `NL9008`, and it is smaller than the row
      sounded: **it is a size, not a time.** `--no-strict-exports` costs
      `bench/sieve` **240 bytes** — 6,576 against 6,816 — and the mechanism is

@@ -1005,13 +1005,46 @@ function judgeClampBound(ctx: CheckContext, state: State, holder: Local | null, 
 /**
  * Whether evaluating `node` can rebind the local `v`.
  *
- * An assignment or a step written inside it is the only thing that can: a
- * callee cannot reach a caller's local, which is the same aliasing argument
- * the whole fact domain rests on. It is asked of a `substring` receiver,
- * because `emitSubstring` loads the length of the receiver *value* before
- * either bound runs — so once an argument has rebound the variable, a fact
- * stated against that variable is a fact about a different string, and the
- * length it bounds is not the length the clamp would have used.
+ * An assignment or a step written inside it is the only thing that can. It is
+ * asked of a `substring` receiver, because `emitSubstring` loads the length of
+ * the receiver *value* before either bound runs — so once an argument has
+ * rebound the variable, a fact stated against that variable is a fact about a
+ * different string, and the length it bounds is not the length the clamp would
+ * have used.
+ *
+ * "A callee cannot reach a caller's local" is the conclusion, not the
+ * mechanism, and the mechanism is eight separate refusals. A syntactic scan of
+ * the argument list is complete only while every one of these holds; any of
+ * them relaxing makes a write reachable that this function does not see, and
+ * nothing in the suite would fail:
+ *
+ *   - no arrow function and no nested `function` in a body — both are
+ *     `Unsupported ... in Phase 1`, so an argument cannot call something that
+ *     assigns to a local of *this* frame. This is the one to watch. The moment
+ *     an arrow *expression* is legal in a body, `s.substring(n, f())` rebinds
+ *     the receiver with no assignment syntax anywhere in the argument list and
+ *     this answers false.
+ *   - no top-level `let` — a callee has no mutable module binding to write
+ *     through either.
+ *   - a parameter cannot be assigned — a receiver bound to a parameter cannot
+ *     be rebound at all, here or anywhere.
+ *   - only a simple variable is an assignment target — `[s, n] = ...` is
+ *     refused, so `localOf` on the left-hand side sees every write there is.
+ *   - `+=` is numeric — so `=` is the only operator that writes a `string`,
+ *     and `isBoundsAssignment` covers it.
+ *   - no comma expression — an argument is one expression, so a write cannot
+ *     ride along beside a value.
+ *   - no spread argument — the argument list is positionally the bound list,
+ *     so argument 0 *is* bound 0 and the interleaved walk is the emitter's
+ *     order.
+ *   - no address of a local — `CPtr` is an address a C function owns and hands
+ *     back, never one of ours, so nothing outside the frame has a pointer to
+ *     write through.
+ *
+ * If one of those goes, the scan stops being a proof and the conservative
+ * answer is to drop the holder at *any* call inside an argument instead. That
+ * is sound without this list, and costs fold reach that today's language does
+ * not make anyone pay for.
  */
 function writesLocal(program: CheckedProgram, node: Node, v: Local): boolean {
   const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--");

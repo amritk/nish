@@ -989,7 +989,7 @@ if (!only || "performance".includes(only)) {
     "performance: an unfolded `substring` clamp warns once per bound, naming the bound and the guard",
     clamp.status === 0 &&
       clampLines.length === 2 &&
-      clampLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "16:33,16:39" &&
+      clampLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "25:33,25:39" &&
       clampLines[0].includes("`from` is not provably within `s`, so this `substring` bound keeps the clamp") &&
       clampLines[1].includes("`to` is not provably within `s`") &&
       clampLines.every((l) => l.includes("or use `slice`, which has no clamp at all")),

@@ -3515,11 +3515,11 @@ function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_str_new
   stackSites=0 stackLocals=0
-  local 7:9 s: string (const)
-  local 8:7 total: i32 (let)
-  local 12:7 step: i32 (let)
-  local 14:11 from: i32 (const)
-  local 15:11 to: i32 (const)
+  local 16:9 s: string (const)
+  local 17:7 total: i32 (let)
+  local 21:7 step: i32 (let)
+  local 23:11 from: i32 (const)
+  local 24:11 to: i32 (const)
 program tests/cases/perf_clamp_order.ts
 module tests/cases/perf_clamp_order.ts (entry)
 function width(): i32 -> @width
@@ -5732,43 +5732,43 @@ function text(bytes: i32): string -> @text
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_alloc_struct nish_array_grow nish_str_new
   stackSites=1 stackLocals=1
-  local 28:9 parts: string[] (const)
-  local 29:7 n: i32 (let)
+  local 36:9 parts: string[] (const)
+  local 37:7 n: i32 (let)
 function clampedScan(s: string, rounds: i32): i32 -> @clampedScan
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_str_new
   stackSites=0 stackLocals=0
-  local 40:7 total: i32 (let)
-  local 41:12 r: i32 (let)
-  local 42:9 at: i32 (let)
-  local 44:13 end: i32 (const)
+  local 48:7 total: i32 (let)
+  local 49:12 r: i32 (let)
+  local 50:9 at: i32 (let)
+  local 52:13 end: i32 (const)
 function provenScan(s: string, rounds: i32): i32 -> @provenScan
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_str_new
   stackSites=0 stackLocals=0
-  local 55:7 total: i32 (let)
-  local 56:12 r: i32 (let)
-  local 57:9 at: i32 (let)
-  local 59:13 end: i32 (const)
+  local 63:7 total: i32 (let)
+  local 64:12 r: i32 (let)
+  local 65:9 at: i32 (let)
+  local 67:13 end: i32 (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: clampedScan nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_div nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 provenScan text
   stackSites=0 stackLocals=0
-  local 70:9 BYTES: i32 (const)
-  local 71:9 ROUNDS: i32 (const)
-  local 72:9 REPS: i32 (const)
-  local 73:9 s: string (const)
-  callee 73:13 text -> @text
-  local 75:7 clampedUs: i64 (let)
-  local 76:7 provenUs: i64 (let)
-  local 77:7 checksum: i32 (let)
-  local 78:12 rep: i32 (let)
-  local 79:11 a: i64 (const)
-  callee 80:16 clampedScan -> @clampedScan
-  local 81:11 b: i64 (const)
-  callee 82:27 provenScan -> @provenScan
-  local 83:11 c: i64 (const)
-  local 91:9 calls: i32 (const)
+  local 78:9 BYTES: i32 (const)
+  local 79:9 ROUNDS: i32 (const)
+  local 80:9 REPS: i32 (const)
+  local 81:9 s: string (const)
+  callee 81:13 text -> @text
+  local 83:7 clampedUs: i64 (let)
+  local 84:7 provenUs: i64 (let)
+  local 85:7 checksum: i32 (let)
+  local 86:12 rep: i32 (let)
+  local 87:11 a: i64 (const)
+  callee 88:16 clampedScan -> @clampedScan
+  local 89:11 b: i64 (const)
+  callee 90:27 provenScan -> @provenScan
+  local 91:11 c: i64 (const)
+  local 99:9 calls: i32 (const)
 program bench/sum.ts --number-mode f64
 module bench/sum.ts (entry)
 function add(a: f64, b: f64): f64 -> @add [exported]
