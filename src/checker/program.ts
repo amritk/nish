@@ -2,7 +2,7 @@
 import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
 import { EnumInfo } from "./enums.js";
-import { Instantiation, TemplateInfo } from "./generics.js";
+import { Instantiation, StructInstantiation, StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { ConstInfo } from "./constants.js";
 import { BuiltinExport } from "./nish-modules.js";
 import { StaticType, alignOf, llvmType } from "../types.js";
@@ -288,6 +288,21 @@ export interface CheckedProgram {
    * the two compilers can be compared before the IR is (`docs/wp18-generics.md` §3a).
    */
   instantiations: Map<string, Instantiation>;
+  /**
+   * Generic classes and interfaces this module declares (WP18 G5), keyed by the
+   * name as written. Like a function template, a struct template is *not* in
+   * `structs`: it has no fields and no layout until an instantiation binds its
+   * parameters, so `Box` on its own never becomes a `%struct`.
+   */
+  structTemplates: Map<string, StructTemplateInfo>;
+  /**
+   * Every instantiated generic struct, keyed by its mangled name (`Box$i32`)
+   * and in discovery order. The `StructInfo` each one carries is also in
+   * `structs` under the same key and is an ordinary struct in every way
+   * (`docs/wp18-generics.md` §3c); this map is what remembers the *arguments*
+   * it was made from, which the termination rule and inference read back.
+   */
+  structInstantiations: Map<string, StructInstantiation>;
   /** Classes and interfaces visible in this module (declared or imported), keyed by name (WP2). */
   structs: Map<string, StructInfo>;
   /**
@@ -347,8 +362,18 @@ export interface CheckedProgram {
  * `StructInfo.methodSigs` and in `StructInfo.ctor` at once and then writes
  * `sig.poisoned` through one of them; with value slots those are three
  * objects and the write is lost. Every registry in that compiler is built the
- * same way. Contiguous *class* arrays are therefore a separate change with a
- * migration of its own, and §2a of `docs/wp15-performance.md` records why.
+ * same way, and the aliasing is not confined to registries: 54 comparisons
+ * across ten modules ask whether an element of a `Local[]` or a `Node[]` *is*
+ * a given object, twenty of them in `self/bounds.ts`, where the seven lines
+ * that retract a fact do it by testing `!==` against the variable being
+ * clobbered — an identity test that never matches leaves the fact standing and
+ * the compiler emits no bounds check where one is needed.
+ *
+ * So a **contiguous *class* array is not deferred work, it is a decision**: an
+ * array of classes is one pointer per slot, permanently, and a program that
+ * wants the contiguous layout spells the element type `interface`. §2a of
+ * `docs/wp15-performance.md` has the costing, the counting rule behind each
+ * number, and the goldens that catch the failure.
  *
  * **An interface some class `implements` is not a record either.** `implements`
  * is prefix subtyping reached through a `bitcast` (WP25), so a `Shape[]` may

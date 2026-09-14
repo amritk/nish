@@ -170,7 +170,7 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
       // A class or interface value is a pointer to its `struct` (declared in the
       // header with the flattened fields, WP2); a `T | null` is the same
       // pointer, possibly NULL.
-      return `struct ${(t as { name: string }).name} *`;
+      return `struct ${cStructName((t as { name: string }).name)} *`;
     case "nullable":
       return cType((t as { inner: StaticType }).inner, position);
     // WP17: a `Result` small enough to pack travels *by value* — in either
@@ -196,6 +196,47 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
 export function cResultName(t: StaticType): string {
   return resultStructName(t).replace(/[.$]/g, "_");
 }
+
+/**
+ * The reserved prefix an instantiated generic's C name carries. `nish_` is
+ * already refused in a declared class, interface or function name ("reserved
+ * for the runtime"), which is exactly what makes this half of the spelling
+ * impossible for a user to reach.
+ */
+const GENERIC_C_PREFIX = "nish_gen_";
+
+/**
+ * The C spelling of a class or interface name.
+ *
+ * A *declared* class or interface is already a C identifier and passes through
+ * untouched, so the header of every program that existed before generics says
+ * exactly what it always said. An instantiated generic is not: `Box$i32`
+ * (WP18 §3c) carries the mangling's `$` and `.`, and `-pedantic` refuses a `$`
+ * in a C identifier — measured, clang 18.1.3. A *type* name is not a linker
+ * symbol, so unlike `cFunctionName` there is nothing to bind back with
+ * `NISH_SYMBOL`: the struct simply has a C spelling and an LLVM spelling, and
+ * only the layout crosses.
+ *
+ * Collapsing `$` and `.` to `_` is what `cResultName` does, but the collapse is
+ * not what makes *that* injective — `nish_result.` is a prefix a user's own
+ * class can never spell, and every name under it is built by `mangleType`
+ * alone. An instantiated generic's name is half user-chosen, so it needs both
+ * halves of that argument spelled out:
+ *
+ *   - **the reserved prefix**, because a program may declare `class Box_i32`
+ *     beside `Box<i32>` and a bare collapse would emit two conflicting
+ *     `struct Box_i32` definitions — a header that does not compile, from a
+ *     generator whose one promise is to describe the ABI the module defines
+ *     (`tests/cases/gen_export_header`);
+ *   - **an escape for the `_` the user wrote**, because the template's name and
+ *     a class-typed argument are user identifiers: `Box_arr<i32>` is
+ *     `Box_arr$i32` and `Box<i32[]>` is `Box$arr.i32`, which collapse to one
+ *     name. A user's `_` becomes `_0`, and a digit can never follow one of the
+ *     mangling's separators — no type tag and no identifier begins with one —
+ *     so a `_0` in the output is always the one the user wrote.
+ */
+export const cStructName = (name: string): string =>
+  name.includes("$") ? `${GENERIC_C_PREFIX}${name.replace(/_/g, "_0").replace(/[.$]/g, "_")}` : name;
 
 /** The by-value spelling: one 64-bit word, `_word` as in the DWARF and the note. */
 export function cResultWord(t: StaticType): string {
