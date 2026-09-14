@@ -20,6 +20,7 @@ import { StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 import { isNishSpecifier, nishModuleNames } from "./nish-modules.js";
 import { STD_PREFIX } from "../branding.js";
+import { parseBareSpecifier } from "../packages.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL = "nish_main";
@@ -485,18 +486,23 @@ export function collectImports(decl: ts.ImportDeclaration, sf: ts.SourceFile): I
   // The hint goes after the interpolation deliberately, so that the longest
   // literal run of this template — and with it the diagnostic code the rule has
   // always had — is still the sentence before it.
-  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
-  // `nish/` names a standard-library module, which is ordinary source and is
-  // resolved like any other file, only from beside the compiler. Everything
-  // else is still refused: there is no package resolution (wp21 §5b).
+  // Four forms are legal. `nish:` names a builtin and resolves to no file;
+  // `nish/` names a standard-library module, which is ordinary source resolved
+  // from beside the compiler; `./x` and `../x` name a file; and since WP21 S2 a
+  // package name resolves through `node_modules` and the `nish` export
+  // condition (wp21 §5b). What is left is a specifier that is none of them —
+  // an absolute path, a URL scheme, a scope with no package after it — and the
+  // message lists the four rather than naming the one thing it refused,
+  // because the mistake is almost always a form the reader thought was legal.
   if (
     !isNishSpecifier(specifier) &&
     !specifier.startsWith(STD_PREFIX) &&
     !specifier.startsWith("./") &&
-    !specifier.startsWith("../")
+    !specifier.startsWith("../") &&
+    parseBareSpecifier(specifier) === null
   ) {
     throw new CompileError(
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames().join(", ")} and ${STD_PREFIX}<module>)`,
+      `Import specifier \`${specifier}\` must be relative (\`./x\`, \`../x\`), a package name (\`hash\`, \`@scope/hash\`), or one of ${nishModuleNames().join(", ")} and ${STD_PREFIX}<module>`,
       decl.moduleSpecifier,
       sf
     );

@@ -1,1 +1,1 @@
-Only relative import specifiers are supported
+must be relative (`./x`, `../x`), a package name

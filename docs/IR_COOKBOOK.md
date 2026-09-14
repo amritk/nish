@@ -1108,6 +1108,45 @@ attributes #2 = { nounwind willreturn }
 ```
 <!-- cookbook:end mod_main -->
 
+### Modules: a package imported by name
+
+`import { scale } from "cookbook_pkg"` resolves through `node_modules` and the
+`nish` export condition, and what it resolves to is the package's **source**
+(WP21 S2, [wp21-packages.md](wp21-packages.md) §2). The package is compiled into
+this program like any other module, so the only thing the IR shows of it is the
+prefix on its symbols: a dependency's functions are `<package>.<name>`, and the
+root package — the program being compiled — keeps the bare names it always had.
+
+<!-- cookbook:begin mod_package -->
+```ts
+import { scale } from "cookbook_pkg";
+
+export const main = (): number => scale(7);
+```
+
+```llvm
+declare noundef i32 @cookbook_pkg.scale(i32 noundef) #0
+declare void @nish_free_arena() #2
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %0 = call i32 @cookbook_pkg.scale(i32 7)
+  ret i32 %0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+```
+<!-- cookbook:end mod_package -->
+
 ## Statements
 
 ### `if` / `else`

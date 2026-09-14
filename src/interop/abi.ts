@@ -46,9 +46,11 @@ export function externalFunctions(compilation: Compilation): ExternalFunction[] 
     // of what an Nish consumer sees, and that the projection is the embedding
     // program's to choose. So the foreign surface is the root package's, which
     // for every single-package program is all of it and changes nothing.
-    // TODO(WP21 S2): re-exporting a dependency's function from the root
-    // package is how it should reach the C ABI, and needs `export { f } from`,
-    // which the language does not have.
+    // Re-exporting a dependency's function from the root package is how it
+    // should reach the C ABI, and that needs `export { f } from`, which the
+    // language does not have. So it waits on that construct rather than on a
+    // stage of WP21: none of S3, S4 or S5 owns it (`docs/wp21-packages.md`
+    // §10d).
     if (program.packageName !== ROOT_PACKAGE) continue;
     for (const sig of program.functions) {
       if (sig === program.entryMain) continue;

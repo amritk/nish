@@ -13,6 +13,7 @@
 import { CheckContext } from "./context";
 import { isNishSpecifier, nishModuleNames } from "./nish_modules";
 import { STD_PREFIX } from "./branding";
+import { parseBareSpecifier } from "./packages";
 import { resolveType } from "./annotations";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
@@ -161,24 +162,26 @@ export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
  */
 export const collectImports = (ctx: CheckContext, decl: Node): void => {
   const specifier = decl.text;
-  // `nish:` is the one bare form: it names a builtin module rather than a
-  // file, so it is let through here and validated in pass 1b, where an unknown
-  // one reads as a bad module instead of a missing file. The hint goes after
-  // the interpolation deliberately, so the longest literal run of this
-  // template — and with it the code the rule has always had — is unchanged.
-  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
-  // `nish/` names a standard-library module, which is ordinary source resolved
-  // like any other file, only from beside the compiler. Everything else is
-  // still refused: there is no package resolution (wp21 §5b).
+  // Four forms are legal. `nish:` names a builtin and resolves to no file, so
+  // it is let through here and validated in pass 1b, where an unknown one reads
+  // as a bad module instead of a missing file; `nish/` names a standard-library
+  // module, which is ordinary source resolved from beside the compiler; `./x`
+  // and `../x` name a file; and since WP21 S2 a package name resolves through
+  // `node_modules` and the `nish` export condition (wp21 §5b). What is left is
+  // a specifier that is none of them — an absolute path, a URL scheme, a scope
+  // with no package after it — and the message lists the four rather than
+  // naming the one thing it refused, because the mistake is almost always a
+  // form the reader thought was legal.
   if (
     !isNishSpecifier(specifier) &&
     !specifier.startsWith(STD_PREFIX) &&
     !specifier.startsWith("./") &&
-    !specifier.startsWith("../")
+    !specifier.startsWith("../") &&
+    parseBareSpecifier(specifier) === null
   ) {
     ctx.errorAtSpecifier(
       decl,
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames()} and ${STD_PREFIX}<module>)`
+      `Import specifier \`${specifier}\` must be relative (\`./x\`, \`../x\`), a package name (\`hash\`, \`@scope/hash\`), or one of ${nishModuleNames()} and ${STD_PREFIX}<module>`
     );
     return;
   }
