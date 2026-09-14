@@ -798,13 +798,25 @@ export class Parser {
   }
 
   /**
-   * Whether the identifier in hand is a member's name rather than a modifier
-   * in front of one: a name is followed by `(`, `:`, `?` or `!`, and a
-   * modifier by the next word.
+   * Whether the identifier in hand is a member's name rather than a modifier in
+   * front of one: a name is followed by `(`, `:`, `?`, `!`, `=` or `;`, and a
+   * modifier by the next word. The last two are the malformed members —
+   * `static = 5;` and `static;` have no annotation and neither compiles — and
+   * they are here because `static` is a name there too, which is what stage0
+   * calls them (``Field `static` of class `C` needs a type annotation``): the
+   * rule this function states is "the next token is not a name's follower", so
+   * it had better be the rule it applies.
    */
   startsMemberName(): boolean {
     const next = this.peek();
-    return next === TOK_LPAREN || next === TOK_COLON || next === TOK_QUESTION || next === TOK_BANG;
+    return (
+      next === TOK_LPAREN ||
+      next === TOK_COLON ||
+      next === TOK_QUESTION ||
+      next === TOK_BANG ||
+      next === TOK_ASSIGN ||
+      next === TOK_SEMICOLON
+    );
   }
 
   /**
