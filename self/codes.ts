@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 398;
+export const RULE_COUNT: i32 = 399;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -70,7 +70,7 @@ export function diagnosticRules(): string[] {
     "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
     "NL2285",
     "; a class or interface name must be unique across the program, and an instantiation is named after its template",
-    "NL3012",
+    "NL3013",
     "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
     "NL2300",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
@@ -143,6 +143,8 @@ export function diagnosticRules(): string[] {
     "NL2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "NL2114",
+    ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
+    "NL3012",
     "` is not supported; a module has no top-level code, so only `const` is available",
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",

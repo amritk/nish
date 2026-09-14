@@ -857,7 +857,11 @@ WP20's threads, and "do not block Node's event loop" is a change to the
 generated N-API shim — `napi_create_async_work` plus a promise on the
 JavaScript side, with the Nish function left exactly as synchronous as it
 is — whose entire cost is WP20's T0 thread-local arena. That one item has no
-language surface and is the note's only recommendation to build. The rest is
+language surface, was the note's only recommendation to build, and **is now
+built**: `--emit-napi-async` adds a promise-returning `<name>Async` beside every
+export whose arguments and result are scalars, and a 220 ms call that stalled
+Node's event loop for 218 ms now stalls it for 0.36 ms while taking exactly as
+long to compute. The rest is
 declined with the rule each refusal breaks, including the tempting one:
 accepting `async` as an erased no-op keyword would make a program mean
 something different under Node than it does here, in the direction

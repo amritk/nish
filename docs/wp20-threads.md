@@ -416,7 +416,9 @@ and it must name the field that disqualified the type rather than the type.
   [wp24-async.md](wp24-async.md) is the plan of record for the question, and it
   reaches the same answer from the other side: the I/O surface is synchronous
   and there is nothing to await, so what an asker usually wants is T0 plus an
-  asynchronous N-API export, and the rest is this note's T1 to T4.
+  asynchronous N-API export, and the rest is this note's T1 to T4. That export
+  is built on top of T0 — `--emit-napi-async`, wp24 §5.1 — which makes T0 the
+  first row of this table to have a customer outside it.
 - **A race detector.** §1 explains why the static rule replaces it rather
   than complementing it.
 - **Atomics as a user-facing type.** They would be the escape hatch from T2,
