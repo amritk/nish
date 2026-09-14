@@ -6003,7 +6003,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // is nowhere to put it, so the declaration is refused instead of quietly losing it.
   for (const [what, source, expected] of [
     ["the keyword inside a leading comment", "export /* the function below */ function f(): i32 {\n  return 1;\n}\n", "rewritten"],
-    ["a `)` inside a parameter comment", "function h(a: i32 /* ) */ ) {\n  console.log(`${a}`);\n}\n", "rewritten"],
+    ["a `)` inside a parameter comment", "function h(a: i32 /* ) */ ) {\n  use(a);\n}\n", "rewritten"],
     ["a comment between `function` and the name", "function /* named */ k(): i32 {\n  return 1;\n}\n", "refused"],
     ["a comment between the name and the `(`", "function g /* ( a ) */ (): i32 {\n  return 1;\n}\n", "refused"],
   ]) {
