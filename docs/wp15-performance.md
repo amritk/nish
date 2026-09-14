@@ -280,9 +280,10 @@ value slots those are separate objects and every such write is lost. A stage1
 built with class arrays as values rejects `self/` with 41 errors of the form
 "`Field ctor of class StructInfo` has no initializer and no constructor assigns
 it" — the registry handing back a copy whose constructor never ran. Every
-registry in that compiler is built the same way, so **contiguous class arrays
-are a separate change with a migration of its own**, and the migration is the
-work, not the layout.
+registry in that compiler is built the same way. That was first read as a
+migration somebody would do later; it was then costed, and it is not one, so
+**an array of classes is one pointer per slot by decision** — the subsection
+after "Measured" below is the costing and what it found.
 
 An **interface some class `implements` is not a record either**: that array is
 the language's only polymorphic container — a `Shape[]` holding a `Square` and
@@ -354,6 +355,166 @@ and the layout test move with it. The wasm bridge and the N-API shim decline
 these functions exactly as before: the missing half was never the layout, it is
 that JS has no typed array of a struct, so a host would need a per-field unpack
 loop and a JS object per element — marshalling rather than a view.
+
+### Class elements: measured against `self/`, and closed rather than deferred
+
+§2a left class elements out and called the migration "the work, not the
+layout". The migration was then looked at properly, against the program that
+has to survive it, and it is not a migration of `self/`: it is a change to what
+`T[]` *means* for every class `T`, and `self/` is only the largest program that
+would be caught by it. Three things were checked, in rising order of how hard
+they are to route around.
+
+**One `FunctionSig`, three holders.** `collectMethod` ends
+
+```ts
+owner.methodIndex.set(name, owner.methodSigs.length);
+owner.methodSigs.push(sig);
+ctx.program.functions.push(sig);          // self/structs.ts
+```
+
+and `collectConstructor` the same with `owner.ctor = sig`. Pass 2 reaches the
+signature through `program.functions` and writes `sig.poisoned = true`
+(`self/checker.ts`); the emitter reaches it through `methodSigs`. With value
+slots those are two copies and a pointer, the write lands on one of them, and
+the emitter emits a body the checker rejected. `declareStruct` has the same
+shape one level up: it calls `addStruct`, which does
+`structList.push(info)`, and then hands `info` back for `collectStructMembers`
+to fill in — so the registry's copy would keep `size = 0` and `ctor = null`
+for every struct in the program. This is the aliasing §2a describes, and it is
+the tractable part: a registry can be rewritten to construct in place, and
+`(FunctionSig | null)[]` keeps today's pointer semantics for a registry that
+should not copy.
+
+**Fifty-four comparisons ask whether an element of such an array *is* a given
+object.** Not equal — the same object. The count is a walk of every file in
+`self/` with the TypeScript compiler API rather than a grep, and the rule is
+worth stating because the obvious grep is what got this wrong the first time:
+a `===` or `!==` whose **two operands are both class-typed**, where at least
+one of them is an element read out of a **class-typed array** — either `a[i]`
+directly or the binding of a `for (const x of a)`. That is **54 operators on
+50 lines in 10 modules**:
+
+| module | operators | lines |
+| --- | ---: | ---: |
+| `self/bounds.ts` | 20 | 16 |
+| `self/attributes.ts` | 13 | 13 |
+| `self/escape.ts` | 11 | 11 |
+| `self/checker.ts` | 4 | 4 |
+| `emit.ts`, `emit_util.ts`, `assignment.ts`, `symbols.ts`, `dump.ts`, `interop_abi.ts` | 1 each | 1 each |
+
+```ts
+if (state.belowIndex[k] === i && state.belowHolder[k] === w) { ... }  // self/bounds.ts
+for (const x of list) { if (x === v) { return true; } }              // self/bounds.ts, contains()
+if (this.declared[i] === local) { ... }                              // self/checker.ts, the §8 walk
+if (this.slotLocals[i] === local) { ... }                            // self/emit.ts
+if (this.refLocals[i] === local) { ... }                             // self/escape.ts
+if (this.narrowedVars[i] === variable) { ... }                       // self/symbols.ts
+if (list.children[i] === node) { ... }                               // self/attributes.ts
+```
+
+The `contains()` line is the one a grep for `x[i] === y` cannot see and the
+one the `nonNegative` family is built on, and a grep for `===` cannot see the
+`!==` half at all — which is where the real hazard turned out to be. Every one
+of those arrays is `Local[]` or `Node[]`, and `Local` and `Node` are classes. A
+value slot makes each comparison weigh an interior pointer against the
+original, which is never equal. (Widen the rule to *every* class-typed identity
+comparison in `self/`, element-sourced or not, and it is 80 across 19 modules;
+that is the ceiling on what the change could alter the meaning of.)
+
+**In `self/bounds.ts` the failure mode is a miscompile, not a slow program.**
+Twenty of the 54 are there, in the module whose seven `Local[]` fact arrays are
+the WP15 §2 proof itself, and they split in two. The *lookups* —
+`knownBelow`, `knownAtMost`, `maxIndexOf`, `knownMinLength` — answering "not
+found" only loses proofs, and a check that survives is indeed a slower program.
+The *invalidation* is the other half, and this module's own header calls it
+"the whole soundness argument": `forget` and `forgetUpperBounds` keep a fact by
+testing `!==` against the variable being clobbered, nine operators on the seven
+lines `self/bounds.ts:333`, `:345`, `:357`, `:374`, `:383`, `:395` and `:408`.
+An identity test that never matches makes every one of those guards always
+true, so no fact is ever forgotten and the analysis proves things that stopped
+being true:
+
+```ts
+const xs: i32[] = [7];
+let i = 0;
+if (i >= 0 && i < xs.length) { i = i + 1; console.log(xs[i]); }
+```
+
+The guard proves `i < xs.length` for `i = 0`; the increment has to retract it.
+Today that program emits one `bounds.fail` block and prints
+`index out of range: 1 >= 1` with exit 1. Compiled with those seven lines
+forced always-true it emits **no bounds check at all**, reads one element past
+the end of a one-element array, prints whatever is there and exits 0. That is
+a wrong program, not a slow one.
+
+**And the suite does say so** — which is why nothing new has to be written to
+guard a migration that is not happening. `tests/cases/arr_bounds_proven.ll` is
+a golden whose entire assertion is the *absence* of the check: not one
+`bounds.fail` block, not one `nish_panic_index`. Simulating the lookup half —
+every fact lookup answering "not found" — takes it from **0 `nish_panic_index`
+calls to 5**, in five `bounds.fail` blocks, 197 golden lines against 249, and
+`arr_bounds_proven: IR matches golden` fails; `perf_bounds_quiet` fails the
+same way. Simulating the invalidation half instead — the half that is a wrong
+program rather than a slow one — leaves both of those **passing**, and fails
+`perf_bounds_loop: IR matches golden` alone. One golden of the three, not
+three: the two halves are caught by different cases, and rounding that up is
+the same kind of error this subsection exists to remove. It is the *first* case
+that loses its check — "Two arrays, one length: nothing says `ys` is as long as
+`xs`" — where the loop guard proves `i < xs.length`, `xs` has a literal length
+of 3, and the `maxIndex` fact that `i = i + 1` has to retract survives instead.
+Three `bounds.fail` blocks become two, the removed one sits in the `i` loop,
+and the two surviving `NL9007` warnings are at lines 20 and 28, not line 12.
+That is the *fewer checks* direction the snippet above turns into a bad read,
+and the shape that detects it is a literal-length array plus a bound surviving
+an increment — not the downward cursor of the third case, which keeps its check
+either way. And for a regression that would be `self/`'s alone,
+`tests/self/ir_oracle.js` compares `IR(stage0, p)` with `IR(stage1, p)` byte for
+byte over the whole corpus. The hazard is loud. What it is not is benign.
+
+**And the syntax tree would be storage rather than a tree.** `Node` is one
+class carrying the union of every kind's fields — the Nish-0 design
+`.claude/selfhost.md` describes — and its children are `children: Node[]`.
+Under value elements `parser.finish` pushes a child into `node.children` and
+its caller pushes the returned `node` into *its* parent's children, so every
+node is copied once per level of nesting it ends up under, and the deepest
+expressions in a real program pay that most. `self/attributes.ts` already asks
+`list.children[i] === node`, which stops being answerable at all. A syntax
+tree is the one structure in a compiler that is all identity and no traversal
+locality, which makes it the worst candidate there is for the layout §2a
+shipped — and `Local[]` and `Node[]`, the two arrays this section keeps coming
+back to, are the two most common class-typed arrays in `self/`. The same walk
+counts the *declarations* of such a slot, under a rule worth stating as
+precisely as the one above: every syntactic position that declares a slot and
+carries an explicit type annotation — a property declaration or interface
+member, a variable declaration, a parameter — whose annotation is `C[]` where
+the element type is a class, or a union whose every non-`null` member is one,
+so that `Local[]` and `(FunctionSig | null)[]` both count. A *return* type is
+not a slot and is excluded, which is what separates holding one of these from
+merely mentioning one. That is **168 declarations over 36 element classes**,
+with `Local[]` at 47 and `Node[]` at 18 ahead of everything else. This is not a
+corner of the compiler that the migration would touch.
+
+**What it would have bought, and what already buys it.** §2a's 2.27x is a
+property of the *layout*, not of the struct kind: it is what a contiguous array
+of small records buys on a loop whose allocation order and traversal order
+differ. A program that wants it can have it today by declaring the element type
+an `interface`, which is what §2a shipped, and `C | null` is the way back to a
+pointer array. What a class element would add over an `interface` element is
+methods and a constructor on the element type — worth something, but not worth
+changing what `xs.push(c); c.m()` means, which is the price, and not worth it
+against a language where nothing else copies a class.
+
+So this is **closed by decision rather than deferred**: an array of classes is
+one pointer per slot, permanently, and the contiguous shape is spelled
+`interface`. `docs/LANGUAGE.md` already states the rule that way, and
+`inlineElementStruct` is where the decision lives in the code — in
+`src/checker/program.ts`, which carries the argument, and in `self/program.ts`,
+which carries the rule and points at it. The first of those read "a separate
+change with a migration of its own" until this section was written, and the
+second sent the reader to it for the full argument; both say "a decision and
+not deferred work" now, because a comment that defers is a comment that invites
+somebody to pick the work up.
 
 ## 2b. The array header is not the array's elements — **done**
 
@@ -975,15 +1136,29 @@ measurement closed says so and says why.
    header is hoisted the checks cost about 0.5%. An index proven here also
    takes `nish_panic_index` out of the function's callee set, so a function
    whose every index is proven keeps `willreturn`.
-7. **Contiguous record arrays** (§2a) — **done for `interface` elements**.
-   2.27x on a loop whose allocation order and traversal order differ, and
-   nothing at all when they agree — the measurement that re-scoped the item.
-   The layout, the escape rule (`NL2290`/`NL2291`) that makes the dangling
-   interior pointer a compile error, and the C header and layout test that move
-   with the ABI, in both compilers. **Class elements are not part of it**: a class has identity, and
-   `self/` keeps one `FunctionSig` in three places at once and writes through
-   whichever it has to hand, so value slots lose the write. That migration is
-   its own item.
+7. **Contiguous record arrays** (§2a) — **done for `interface` elements, and
+   closed for class elements**. 2.27x on a loop whose allocation order and
+   traversal order differ, and nothing at all when they agree — the measurement
+   that re-scoped the item. The layout, the escape rule (`NL2290`/`NL2291`)
+   that makes the dangling interior pointer a compile error, and the C header
+   and layout test that move with the ABI, in both compilers. **Class elements
+   are not a deferred half any more.** The migration was costed against `self/`
+   and it is not a migration of `self/`: it changes what `T[]` means for every
+   class `T`. One `FunctionSig` is held in `program.functions`, in
+   `StructInfo.methodSigs` and in `StructInfo.ctor` at once and written through
+   whichever is to hand; **54 comparisons on 50 lines in 10 modules** ask
+   whether an element of a `Local[]` or a `Node[]` *is* a given object, 20 of
+   them inside `self/bounds.ts` — nine on the seven lines of `forget` and
+   `forgetUpperBounds`, where an identity test that never matches means a fact
+   is never retracted and the compiler emits no check where one is needed, a
+   miscompile rather than a slow program, and one `perf_bounds_loop` fails on:
+   `arr_bounds_proven` and `perf_bounds_quiet` fail on the *lookup* half
+   instead, which costs checks and not soundness; and the syntax tree itself
+   would become storage, copied once per level of nesting. What the layout buys
+   is available today by declaring the element type an `interface`,
+   and `C | null` is the way back to a pointer array — so an array of classes is
+   one pointer per slot by decision. §2a records the three findings and how each
+   number was counted.
 8. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
    the one self-hosting most depends on.
 

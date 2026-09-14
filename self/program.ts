@@ -832,8 +832,15 @@ export class CheckedProgram {
  * An interface some class `implements` stays a pointer too, because that array
  * is the language's only polymorphic container and every implementer is longer
  * than the interface; so does a `C | null`, because a null element has no bytes
- * to be. The full argument, and the `self/` evidence behind it, is in
- * `src/checker/program.ts`.
+ * to be.
+ *
+ * A class element staying a pointer is a **decision and not deferred work**:
+ * the migration was costed against this compiler, which is the program it
+ * would cost the most, and the answer was no. The full argument, and the
+ * `self/` evidence behind it — the aliased `FunctionSig`, the identity
+ * comparisons in `bounds.ts` that a value slot would make a miscompile, and
+ * the syntax tree becoming storage — is in `src/checker/program.ts` and in
+ * §2a of `docs/wp15-performance.md`.
  */
 export function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null {
   if (!table.isStruct(elem)) {
