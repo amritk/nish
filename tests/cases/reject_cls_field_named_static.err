@@ -1,0 +1,1 @@
+Field `static` of class `Point` cannot be optional (every field has a fixed slot)

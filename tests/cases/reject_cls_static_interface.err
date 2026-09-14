@@ -1,0 +1,1 @@
+Field `size` of interface `Config`: `static` members are not supported (use a top-level function or const)

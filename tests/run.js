@@ -4511,8 +4511,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // outcomes are declared per case rather than in general:
       // `parser_refusals.txt` for the constructs stage1's parser turns down
       // before the phase that owns the rule can word it (§A3), and
-      // `stage1_divergence.txt` for the eleven programs the two compilers do
-      // not yet answer the same way at all. `--strict-refusals` is what makes
+      // `stage1_divergence.txt` for the programs the two compilers do not yet
+      // answer the same way at all — a handful, and the count is on the summary
+      // line this check prints rather than in this comment, because it moves. `--strict-refusals` is what makes
       // both lists shrink-only: a case that starts agreeing fails until the
       // line naming it is deleted.
       const stage1Wordings = spawnSync(
