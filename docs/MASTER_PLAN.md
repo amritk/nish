@@ -563,8 +563,9 @@ analysis that makes a proven index emit no bounds check;
 contiguous *record* arrays with the checker rule that makes the dangling
 interior pointer a compile error (**done** for an `interface` nobody
 implements, 2.27x where allocation order and traversal order differ; a class
-has identity and keeps its pointer slot, and §2a says what that migration
-would be); and generics by monomorphisation with discriminated unions. §9 has the
+has identity and keeps its pointer slot **by decision** — §2a costs the
+migration against `self/` and closes it rather than deferring it); and generics
+by monomorphisation with discriminated unions. §9 has the
 order with the reason for each position, and
 [wp15-performance.md](wp15-performance.md) has the design.
 
@@ -747,9 +748,9 @@ document does not need a second one open beside it to be current:
 | 2 | The `performance` diagnostic class — **done** | the framework — `--no-warn-performance` in `src/index.ts`, `PerformanceWarning` in `src/diagnostics.ts` — plus the two warnings that needed no new analysis, quadratic string building and allocation in a loop, ruled in `docs/LANGUAGE.md` and tested by `tests/cases/perf_*`. The other four warnings in WP15 §8 wait on the analyses that feed them |
 | 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
-| 5 | The fast slice beside JavaScript's `substring` | |
+| 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
 | 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/checker/bounds.ts`, `self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
-| 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
+| 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `self/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `self/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. Generic **functions** have landed in both compilers — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 the order for classes, constraints and the whole-program rule. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
