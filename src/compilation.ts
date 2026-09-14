@@ -92,6 +92,30 @@ type ResolvedModule = {
 const isFile = (candidate: string): boolean => fs.existsSync(candidate) && fs.statSync(candidate).isFile();
 
 /**
+ * The file's text, or `null` when it cannot be read at all: `readFileSyncOrNull`
+ * in the language, spelled here because the package walk is written in terms of
+ * it on the other side.
+ *
+ * Everything else in this compiler reads a file it was *told about* — a root on
+ * the command line, a module a specifier named — and a failure there is the
+ * user's own path, reported as one. A manifest is different: nobody named it,
+ * the resolver went looking, so an unreadable `package.json` is an answer about
+ * that directory rather than an error about a file. `self/compilation.ts` has
+ * exactly this shape, and it has to: the language has no exceptions, so it could
+ * never have been written any other way. What it buys here is that a filesystem
+ * race cannot escape as an exception, which `DiagnosticSink.recover` would
+ * rethrow and the CLI would report as exit 70 — an internal error for something
+ * that is not a bug in this compiler (orientation rule 7).
+ */
+const readFileOrNull = (file: string): string | null => {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+};
+
+/**
  * How many directories the `node_modules` walk visits before it gives up
  * (`Compilation.findPackageDir`), and the twin of the same constant in
  * `self/compilation.ts`.
@@ -291,17 +315,40 @@ export class Compilation {
     // `cwd` builtin it has no room for. See `findPackageDir`.
     const packageDir = this.findPackageDir(path.dirname(importer.fileName), parsed.name);
     if (packageDir === null) throw cannotFindPackage(importer, imp, parsed.name);
-    const manifest = fs.readFileSync(path.join(packageDir, "package.json"), "utf8");
-    const target = nishExportTarget(
-      manifest,
-      parsed.subpath,
-      packageConditionFor(this.opts.numberMode),
-      PACKAGE_CONDITION
-    );
+    // `findPackageDir` only answers a directory whose manifest it could read, so
+    // `null` here is a file that vanished between the two reads. It takes the
+    // same route as a manifest with nothing in it for us, which is the honest
+    // answer and the one `self/compilation.ts` gives: this compiler found no
+    // Nish entry point in that package. Reading it unguarded would throw past
+    // `DiagnosticSink.recover`, which rethrows anything that is not a
+    // `CompileError`, and report a race in the user's own tree as exit 70 —
+    // an internal error for something that is not a bug in this compiler
+    // (orientation rule 7).
+    const manifest = readFileOrNull(path.join(packageDir, "package.json"));
+    const target =
+      manifest === null
+        ? null
+        : nishExportTarget(
+            manifest,
+            parsed.subpath,
+            packageConditionFor(this.opts.numberMode),
+            PACKAGE_CONDITION
+          );
     if (target === null) throw noNishEntryPoint(importer, imp, parsed);
     // Back to an absolute path here, because that is a module's identity in this
     // compiler; `importedName` is what turns it into the name the IR carries,
     // and it answers the same string a relative walk would have spelled.
+    //
+    // It is *not* a real path: `resolve` normalises, it does not follow a
+    // symlink, so one package reached through two links is two modules and the
+    // WP21 S1 clash check refuses the program. Node's resolver calls `realpath`
+    // and gets one, which makes pnpm's store — and npm's nested layout — resolve
+    // there and not here. Doing the same on this side alone would be worse than
+    // the limitation: `self/` has no `realpath` to call (the language has no
+    // such builtin), so stage0 would start compiling programs stage1 refuses.
+    // TODO(WP21 S3): close it on both sides, which needs the builtin or a rule
+    // that does without one. `tests/link/package_symlink` is the declared case,
+    // and `docs/wp21-packages.md` §10d states it.
     const resolved = path.resolve(path.join(packageDir, target));
     // The manifest named a file that is not there, which is the package's own
     // mistake and not the consumer's — but it is still a module that could not
@@ -341,7 +388,12 @@ export class Compilation {
     for (let steps = 0; steps <= PACKAGE_WALK_LIMIT; steps++) {
       if (path.basename(dir) !== PACKAGE_ROOT_SEGMENT) {
         const candidate = path.join(dir, PACKAGE_ROOT_SEGMENT, name);
-        if (isFile(path.join(candidate, "package.json"))) return candidate;
+        // A directory whose manifest this compiler cannot *read* is not the
+        // package — the walk carries on past it rather than stopping there with
+        // a message about a file the user never named. Asking by reading rather
+        // than by `stat` is also what `self/compilation.ts` can ask, so the two
+        // walks accept and reject the same directories.
+        if (readFileOrNull(path.join(candidate, "package.json")) !== null) return candidate;
       }
       const parent = parentDirectory(dir);
       if (parent.length === 0) return null;
