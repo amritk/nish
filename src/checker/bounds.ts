@@ -80,9 +80,26 @@
  * than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
  * analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
  * clamp is dead code: `CheckedProgram.provenClamps` says which bounds those
- * are and `emit/strings.ts` writes them through. LLVM does not find this on
- * its own — the guard a program writes is on the `i32` and the clamp is on its
- * `sext`, and `opt -O3` keeps all six calls either way.
+ * are and `emit/strings.ts` writes them through.
+ *
+ * **Where LLVM finds this by itself, and where it does not.** It needs the
+ * receiver's length to be one value it can reason about: give it a string
+ * literal bound to a local and a hoisted `const n = s.length`, and `opt -O3`
+ * folds all six calls out of the pre-PR IR unaided. Where the receiver is a
+ * *parameter* it does not: the guard a program writes compares `i32`s and the
+ * clamp runs on their `sext`, the length is re-read on every pass, and
+ * `nish_str_new` — which every `substring` calls — is not `readnone`, so
+ * nothing proves the second read equals the first. All six survive there
+ * whether or not a dominating guard proves both ends, which is the shape §8's
+ * warning is written against.
+ *
+ * **A bound is judged where the emitter evaluates it, not where the call
+ * ends.** `emitSubstring` clamps argument 0 before argument 1 runs, so
+ * `walkExpression` interleaves the verdicts with the argument walk and drops
+ * the receiver's holder as soon as an argument rebinds it. Judging both ends
+ * against the state the whole argument list left behind folded the clamp on a
+ * negative `k` in `s.substring(k, (k = s.length))` and read three bytes before
+ * the string body.
  */
 import ts from "typescript";
 import { CheckContext } from "./context.js";
@@ -841,19 +858,61 @@ const provesClamp = (
 };
 
 /**
- * Record which of a `substring`'s bounds the clamp cannot move. Nothing is
- * pushed on to the unproven list here: the warning for the bounds that stay
- * clamped is reported by `checkPerformance`, which re-derives the shape from
- * the syntax and reads this table for the verdict, so that all of WP15 §8's
- * warnings still come out of one source-order walk.
+ * Record whether the clamp on **one** `substring` bound can be dropped.
+ *
+ * The unit is the bound rather than the call, and that is the whole of the
+ * soundness argument. `emitSubstring` clamps argument 0 and only then
+ * evaluates argument 1, so the verdict on a bound has to be taken in the state
+ * that reaches *that* bound: `walkExpression` calls this from inside the
+ * argument loop. Judging both ends against the state the whole argument list
+ * left behind proved `k` in range in `s.substring(k, (k = s.length))` — on a
+ * negative `k`, whose clamp the emitter had already dropped — and read three
+ * bytes before the string body.
+ *
+ * Judging after the bound's own walk rather than before it is not a third
+ * order: the only shapes `provesClamp` can prove are a bare identifier and a
+ * decimal literal, and walking either changes nothing.
+ *
+ * Nothing is pushed on to the unproven list here: the warning for the bounds
+ * that stay clamped is reported by `checkPerformance`, which re-derives the
+ * shape from the syntax and reads this table for the verdict, so that all of
+ * WP15 §8's warnings still come out of one source-order walk.
  */
-const judgeClamp = (walk: Walk, state: State, call: ts.CallExpression): void => {
-  const parts = substringBounds(walk.ctx.program, call);
-  if (parts === undefined) return;
-  const holder = lengthHolder(walk.ctx.program, parts.receiver);
-  for (const bound of parts.bounds) {
-    if (provesClamp(walk, state, holder, bound)) walk.provenClamps.add(bound);
-  }
+const judgeClampBound = (
+  walk: Walk,
+  state: State,
+  holder: LocalVar | undefined,
+  bound: ts.Expression
+): void => {
+  if (provesClamp(walk, state, holder, bound)) walk.provenClamps.add(bound);
+};
+
+/**
+ * Whether evaluating `node` can rebind the local `v`.
+ *
+ * An assignment or a step written inside it is the only thing that can: a
+ * callee cannot reach a caller's local, which is the same aliasing argument
+ * the whole fact domain rests on. It is asked of a `substring` receiver,
+ * because `emitSubstring` loads the length of the receiver *value* before
+ * either bound runs — so once an argument has rebound the variable, a fact
+ * stated against that variable is a fact about a different string, and the
+ * length it bounds is not the length the clamp would have used.
+ */
+const writesLocal = (program: CheckedProgram, node: ts.Node, v: LocalVar): boolean => {
+  let found = false;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isBinaryExpression(n) && isAssignmentOperator(n.operatorToken.kind)) {
+      if (localOf(program, n.left) === v) found = true;
+    } else if (ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n)) {
+      const steps =
+        n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken;
+      if (steps && localOf(program, n.operand) === v) found = true;
+    }
+    if (!found) ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return found;
 };
 
 /** The proof itself: `0 <= i` and `i < holder.length`, by whichever route the state has. */
@@ -889,18 +948,28 @@ const walkExpression = (walk: Walk, state: State, expr: ts.Expression): void => 
     const callee = unwrapParens(e.expression);
     if (ts.isPropertyAccessExpression(callee)) walkExpression(walk, state, callee.expression);
     else if (!ts.isIdentifier(callee)) walkExpression(walk, state, callee);
-    for (const arg of e.arguments) walkExpression(walk, state, arg);
+    // A `substring`'s clamps are decided one bound at a time, interleaved with
+    // the arguments, because that is the order `emitSubstring` writes them in:
+    // bound 0 is clamped before bound 1 is evaluated, so nothing bound 1 does
+    // may reach back. The receiver's length is read before either, so the
+    // holder is dropped the moment an argument rebinds it — a literal `0`
+    // still folds after that, because no string has a negative length.
+    const clamped = substringBounds(program, e);
+    let holder = clamped === undefined ? undefined : lengthHolder(program, clamped.receiver);
+    for (const arg of e.arguments) {
+      walkExpression(walk, state, arg);
+      if (clamped === undefined) continue;
+      if (holder !== undefined && writesLocal(program, arg, holder)) holder = undefined;
+      judgeClampBound(walk, state, holder, arg);
+    }
     const chars = charCodeAccess(program, e);
     if (chars !== undefined) {
       // `charCodeAt` is inlined to a load; it calls nothing and mutates nothing.
       judge(walk, state, chars);
       return;
     }
-    // The clamp runs before the copy, so the bounds are judged against the
-    // facts that reach the call rather than the ones that survive it. The call
-    // still forgets array lengths below: `nish_str_new` is a callee like any
-    // other, and nothing about this verdict changes what it may do.
-    judgeClamp(walk, state, e);
+    // `nish_str_new` is a callee like any other, so the array lengths go here
+    // whether or not this call was a `substring`.
     forgetArrayLengths(state);
     return;
   }
