@@ -761,18 +761,29 @@ export class Parser {
    * (docs/wp19-stage0-retirement.md R3).
    *
    * **What that move costs, deliberately.** A rule the checker owns is a rule a
-   * member has to *parse* to reach, and four shapes do not: `static x;` (no
-   * annotation), `static m(): i32;` (no body), `static m() { }` (no return
-   * type) and `static { }` (a static block). Each used to hear `static` from
-   * this function and now hears the syntax error about its other defect
-   * instead, while stage0 names the static member. Both compilers still refuse
-   * the program, and the difference is §A3's declared class — stage1's first
+   * member has to *parse* to reach, and six shapes do not: `static x;` (no
+   * annotation), `static` alone, `static x: i32 = 0` with no `;` before the
+   * `}` (there is no ASI here), `static m(): i32;` (no body), `static m() { }`
+   * (no return type) and `static { }` (a static block). Each used to hear
+   * `static` from this function and now hears the syntax error about its other
+   * defect instead, while stage0 names the static member — and the same is true
+   * of `m?()` with no return type and `x? = 5` with no annotation, which never
+   * reach the marker's rule either. Both compilers still refuse every one of
+   * those programs, and the difference is §A3's declared class — stage1's first
    * diagnostic is a syntax error — which `--parity` declares and
    * `tests/self/reject_oracle.js` counts rather than fails
-   * (`tests/cases/reject_cls_static_field_untyped`,
-   * `reject_cls_static_block`). Keeping a copy of the rule here would put the
-   * sentence back, uncoded and in a phase that cannot name the member, which
-   * is the duplication this change exists to remove.
+   * (`tests/cases/reject_cls_static_field_untyped`, `reject_cls_static_block`,
+   * `reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`).
+   * Keeping a copy of the rule here would put the sentence back, uncoded and in
+   * a phase that cannot name the member, which is the duplication this change
+   * exists to remove.
+   *
+   * **That bucket counts; it does not gate.** `parser_refusals.txt` and
+   * `stage1_divergence.txt` are shrink-only under `--strict-refusals`, but the
+   * reject oracle's parser bucket is a tally in a summary line with no ceiling
+   * beside it, so a later change that moves one more rule out of this parser's
+   * reach migrates its case into the bucket without failing anything. Whoever
+   * moves the next rule should read the bucket's number before and after.
    *
    * A word is a modifier only while the token after it is not the start of
    * what a member's *name* is followed by, because `static` is a name as well
@@ -847,7 +858,18 @@ export class Parser {
     return scan.kind === TOK_LPAREN;
   }
 
-  /** A field, a method, or the constructor. `constructor` is an identifier to the lexer. */
+  /**
+   * A field, a method, or the constructor. `constructor` is an identifier to
+   * the lexer, and only `constructor(` is one: a member called `constructor`
+   * with a `:` after it takes the field path.
+   *
+   * That last part is a divergence older than this function's flags and is
+   * recorded rather than fixed: `class C { constructor: i32 = 0; }` **compiles**
+   * here and is a syntax error to the `typescript` package, which is the
+   * direction `tests/wordings/stage1_divergence.txt` calls the serious one —
+   * stage0 refuses a program stage1 accepts. No corpus program has the shape,
+   * so nothing measures it (docs/wp19-stage0-retirement.md §2B).
+   */
   parseMember(): Node {
     const start = this.start;
     const modifiers = this.parseMemberModifiers();
@@ -905,12 +927,19 @@ export class Parser {
         if (!this.at(TOK_IDENT)) {
           fields.children.push(this.fail("an interface holds only annotated fields"));
         } else {
+          // The same modifiers a class member takes, because `collectField` is
+          // the same function for both: `readonly x: i32` is a real interface
+          // field on either compiler, and `static x: i32` is refused with the
+          // sentence that says `of interface \`I\``. Reading `?` here and not
+          // these would be an arbitrary split in one grammar rule.
+          const modifiers = this.parseMemberModifiers();
           const field = this.node(N_FIELD, fieldStart, this.end);
           field.children.push(this.parseIdentifier());
           // `?` only, and not `!`: a definite-assignment assertion is not a
           // spelling TypeScript allows on a property signature at all, so
           // there is no stage0 sentence to agree with and the syntax error
           // stays the right answer.
+          field.flags = modifiers;
           if (this.eat(TOK_QUESTION)) field.flags = field.flags | FLAG_OPTIONAL;
           field.children.push(this.parseTypeAnnotation());
           field.children.push(this.empty());
