@@ -152,14 +152,9 @@ const sweepRejections = () => {
 };
 
 /**
- * The modules one source imports, as repo-relative paths. A specifier that
- * names a builtin namespace (`nish:fs`) or a package outside the tree resolves
- * to nothing and is skipped — those are not this repository's files to rewrite.
- *
- * Read from the parse tree rather than from a regular expression, for the
- * reason WP22 §8 gives about the three regexes that decided whether a case had
- * an entry point: tooling that reads Nish with a pattern is the part of this
- * migration that keeps being wrong.
+ * The modules one source imports, memoised: the closure is walked once for the
+ * whole scope and then again per program, to ask which of them the change
+ * reached, so without this every file would be parsed a few hundred times.
  */
 const importCache = new Map();
 const importsOf = (rel) => {
@@ -170,6 +165,16 @@ const importsOf = (rel) => {
   return found;
 };
 
+/**
+ * The modules one source imports, as repo-relative paths. A specifier that
+ * names a builtin namespace (`nish:fs`) or a package outside the tree resolves
+ * to nothing and is skipped — those are not this repository's files to rewrite.
+ *
+ * Read from the parse tree rather than from a regular expression, for the
+ * reason WP22 §8 gives about the three regexes that decided whether a case had
+ * an entry point: tooling that reads Nish with a pattern is the part of this
+ * migration that keeps being wrong.
+ */
 const readImports = (rel) => {
   const file = path.join(root, rel);
   if (!fs.existsSync(file)) return [];
