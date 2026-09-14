@@ -46,6 +46,10 @@
 # built stage1, the compiler `self/` describes has to agree with itself and
 # then reproduce itself. Both are asserted whatever the seed is.
 #
+# `stage3 == stage2` is a raw byte comparison, and on Mach-O two links of the
+# same input do not produce the same bytes. The note at the comparison itself
+# says what has been measured and what that blocks; on ELF it holds.
+#
 # The first one is asserted only when the seed is stage0. The reason is not
 # that it is a weaker claim with another seed — it is a different claim with
 # another seed, and the two are worth keeping apart:
@@ -325,6 +329,23 @@ if [ "$build_to" -ge 3 ]; then
   rm -rf "$work/stage3.modules"
   "$work/stage2" self/compile.ts --link "$work/stage3" --profile "$profile" >/dev/null
   [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
+  # The two executables compared as bytes, which is the strongest form of
+  # "stage2 reproduces itself" and is the right comparison on ELF.
+  #
+  # It is not one that holds on Mach-O, and that is measured rather than
+  # expected: on macos-latest (2026-09-13, WP19 R2) stage3 and stage2 differed
+  # at identical size — 597,048 bytes both — while every IR equality above
+  # passed, so it is the linker that is not reproducible there and not the
+  # compiler. What differs is ld64's debug map, which records each .o's path
+  # and mtime.
+  #
+  # Nothing here excludes those bytes, because which ones differ has to be
+  # established on a macOS machine before they can be excluded, and a comparison
+  # relaxed on a guess is worth less than one that fails. Until someone does
+  # that, this line stands in front of two things: a darwin *release* binary,
+  # which release.yml builds by running exactly this (WP19 G5), and a darwin
+  # seed for the rolling freeze, which ci.yml's `bootstrap` job would then
+  # verify with (G3). Both are named as open in docs/wp10-ci.md.
   if [ "$verify" -eq 1 ]; then
     if cmp -s "$work/stage2" "$work/stage3"; then
       say "  stage3 == stage2: byte-identical binaries"
