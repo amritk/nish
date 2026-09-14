@@ -50,6 +50,7 @@ import {
   MAX_INSTANTIATIONS_PER_TEMPLATE,
   StructInstantiation,
   StructTemplateInfo,
+  StructTemplateOwner,
   TemplateInfo,
   TemplateOwner,
   expandingAncestor,
@@ -762,6 +763,8 @@ export class Checker implements CheckContext {
     if (this.program.aliases.has(name) || this.program.enums.has(name) || this.program.constants.has(name)) {
       this.error(`\`${name}\` is already declared in this module`, template.nameNode);
     }
+    // WP18 G7: as for a function template — every instantiation belongs here.
+    template.owner = this;
     this.structTemplates.set(name, template);
     this.program.structTemplates.set(name, template);
   }
@@ -794,9 +797,17 @@ export class Checker implements CheckContext {
    * them is the side-table overlay every specialised body already needed.
    */
   instantiateStruct(template: StructTemplateInfo, args: StaticType[], at: ts.Node): StructInfo {
+    // WP18 G7: the instantiation belongs to the module that *declares* the
+    // template, exactly as a generic function's does. The struct's own name
+    // carries no package prefix — `%struct.<name>` is program-wide and WP21 §9c
+    // leaves it that way — but its methods do, and theirs must be the owner's.
+    const owner = template.owner ?? this;
     const name = instanceSymbol(template.sourceName, args);
-    const existing = this.program.structInstantiations.get(name);
-    if (existing) return existing.info;
+    const existing = owner.program.structInstantiations.get(name);
+    if (existing) {
+      this.noteForeignStruct(owner, existing.info);
+      return existing.info;
+    }
 
     // Termination, the struct half (§4). A field whose type puts one of the
     // struct's own type arguments under a constructor starts a chain with no
@@ -822,7 +833,7 @@ export class Checker implements CheckContext {
         at
       );
     }
-    if (this.program.instantiations.size + this.program.structInstantiations.size >= MAX_INSTANTIATIONS) {
+    if (owner.program.structInstantiations.size + this.program.instantiations.size >= MAX_INSTANTIATIONS) {
       this.error(
         `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
           "rather than a rule of the language",
@@ -830,6 +841,22 @@ export class Checker implements CheckContext {
       );
     }
 
+    const info = owner.ownStructInstantiation(template, args, name, this.currentStructInstance);
+    this.noteForeignStruct(owner, info);
+    return info;
+  }
+
+  /**
+   * WP18 G7: create one instantiated struct and collect its members, in the
+   * module that declares its template. Only `instantiateStruct` calls it, and it
+   * calls it on the owner rather than on itself.
+   */
+  ownStructInstantiation(
+    template: StructTemplateInfo,
+    args: StaticType[],
+    name: string,
+    from?: StructInstantiation
+  ): StructInfo {
     const bindings = new Map<string, StaticType>();
     template.typeParams.forEach((param, i) => {
       bindings.set(param, args[i]);
@@ -847,13 +874,7 @@ export class Checker implements CheckContext {
       decl: template.decl,
       exported: template.exported,
     };
-    const instance: StructInstantiation = {
-      template,
-      typeArgs: args,
-      info,
-      bindings,
-      from: this.currentStructInstance,
-    };
+    const instance: StructInstantiation = { template, typeArgs: args, info, bindings, from };
     template.count += 1;
     // Registered before the members are collected, so a field that mentions the
     // struct's own instantiation (`next: Node<i32> | null`) finds it rather
@@ -862,6 +883,20 @@ export class Checker implements CheckContext {
     this.program.structInstantiations.set(name, instance);
     this.collectInstanceMembers(instance);
     return info;
+  }
+
+  /**
+   * Register an instantiated struct another module owns, so this one can hold
+   * values of it: its layout joins `structs` and it joins `reachableStructs`,
+   * which is the path an *imported* class's layout and method `declare`s already
+   * travel (`closeReachableStructs`). Reusing it rather than inventing a second
+   * one is what keeps `%struct.Box$i32 = type { ... }` and the `declare`s for
+   * `@Box$i32.get` correct here without the emitter learning a new rule.
+   */
+  private noteForeignStruct(owner: StructTemplateOwner, info: StructInfo): void {
+    if (owner === this || this.program.structs.get(info.name) === info) return;
+    this.program.structs.set(info.name, info);
+    this.program.reachableStructs.push(info);
   }
 
   /**
@@ -998,14 +1033,8 @@ export class Checker implements CheckContext {
     }
     const structTemplate = target.structTemplates.get(imp.importedName);
     if (structTemplate) {
-      // WP18 §11 G7, the same rule one level up: an instantiation is defined in
-      // the module that declares its template, and that half has not landed.
-      // Refusing by name beats "has no exported function".
-      this.error(
-        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic ${structTemplate.kind}, and a generic ` +
-          "class or interface cannot yet be instantiated from another module; declare it in the module that uses it",
-        imp.element
-      );
+      this.bindStructTemplateImport(imp, structTemplate);
+      return;
     }
     const template = target.templates.get(imp.importedName);
     if (template) {
@@ -1037,6 +1066,45 @@ export class Checker implements CheckContext {
     }
     imp.sig = sig;
     this.sigs.set(imp.localName, sig);
+  }
+
+  /**
+   * WP18 G7: an imported generic class or interface. The template joins this
+   * module's table so an annotation resolves it, and the instantiation it names
+   * is created, collected, counted and emitted by the module that *declares* it
+   * — this one only ever gets the layout and a `declare` per method.
+   *
+   * A class may not be renamed on import because `%struct.<name>` is fixed by
+   * the exporter (`bindStructImport`), and that holds one level up: `Box<i32>`
+   * is `%struct.Box$i32` whatever the importer calls `Box`, so an `as` rename
+   * would spell one type two ways.
+   */
+  private bindStructTemplateImport(imp: ImportBinding, template: StructTemplateInfo): void {
+    if (!template.exported) {
+      this.error(
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`,
+        imp.element
+      );
+    }
+    if (imp.localName !== imp.importedName) {
+      this.error(
+        `${template.kind === "class" ? "Classes" : "Interfaces"} cannot be renamed on import (\`${imp.importedName} as ${imp.localName}\`): the type name is part of the ABI`,
+        imp.element
+      );
+    }
+    if (this.nameTaken(imp.localName)) {
+      const origin = this.program.imports.find(
+        (o) => o !== imp && o.localName === imp.localName && (o.struct !== undefined || o.structTemplate !== undefined)
+      );
+      this.error(
+        origin
+          ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`,
+        imp.element
+      );
+    }
+    imp.structTemplate = template;
+    this.structTemplates.set(imp.localName, template);
   }
 
   /**

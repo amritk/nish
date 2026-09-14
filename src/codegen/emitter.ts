@@ -291,7 +291,7 @@ export class Emitter implements EmitContext {
       // until something instantiates it — so the import itself writes nothing.
       // What this module declares is whichever instantiations it asked for, and
       // those are in `externalInstances` below.
-      if (imp.template) continue;
+      if (imp.template || imp.structTemplate) continue;
       const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
       if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
       declare(sigs);

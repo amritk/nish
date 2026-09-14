@@ -52,6 +52,22 @@ export type TemplateOwner = {
 };
 
 /**
+ * The struct half of `TemplateOwner` (WP18 G7). An instantiated generic class is
+ * created and its members collected by the module that declares the template,
+ * for the same reason a generic function's body is checked there: the field and
+ * method annotations are resolved against *that* module's scope.
+ */
+export type StructTemplateOwner = {
+  readonly program: { structInstantiations: Map<string, StructInstantiation> };
+  ownStructInstantiation: (
+    template: StructTemplateInfo,
+    args: StaticType[],
+    name: string,
+    from?: StructInstantiation
+  ) => StructInfo;
+};
+
+/**
  * A generic function declaration, in either spelling. Nothing about it is
  * resolved: `decl` carries the parameter and return annotations, which mention
  * `typeParams` and therefore mean nothing until an instantiation binds them.
@@ -104,6 +120,13 @@ export interface NodeTables {
  * instantiation binds them.
  */
 export type StructTemplateInfo = {
+  /**
+   * The module that declares it (WP18 G7). Every instantiation of it belongs to
+   * that module whoever wrote the annotation, which is what makes its methods'
+   * package prefix the *template's* rather than the caller's — the struct's own
+   * name is program-wide and carries no prefix at all (WP21 §9c).
+   */
+  owner?: StructTemplateOwner;
   /** The identifier as written; what every diagnostic about the template names. */
   sourceName: string;
   kind: "class" | "interface";

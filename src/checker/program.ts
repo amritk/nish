@@ -183,6 +183,12 @@ export interface ImportBinding {
    * declared is whichever *instantiations* this module goes on to ask for.
    */
   template?: TemplateInfo;
+  /**
+   * Set instead of `sig` when the imported name is an exported generic class or
+   * interface (WP18 G7). Like `template`, it declares no symbol of its own: what
+   * this module declares is whichever *instantiations* it goes on to name.
+   */
+  structTemplate?: StructTemplateInfo;
   /** Set instead of `sig` when the imported name is an exported module constant (WP14). */
   constant?: ConstInfo;
   /**
