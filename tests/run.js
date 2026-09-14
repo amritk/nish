@@ -1557,6 +1557,23 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       o.status === 0 && body !== "" && loop !== "" && reloads === "",
       o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
     );
+    // WP15 §2b: the hoist above is not the whole of what the domains bought. The loop
+    // vectorises as well -- which §2c had read as something only an invariant header
+    // could buy ("3.23x, and it vectorises"), and which main reaches without one on
+    // this shape, a loop over two array *parameters*. Be clear about what this pins and
+    // what it does not: it pins §2b's banked win against going quiet -- the way that
+    // would happen is a header load creeping back into the loop and taking LICM, and
+    // the vectoriser, with it -- and it says nothing about WP15 item 1b, which is open
+    // for candidate 2 on a shape this case does not have. That shape is the same loop
+    // with the array in a class field, it is 2.48x short of this one, and its
+    // acceptance program is written out in wp15-performance.md §2c rather than living
+    // here, because a corpus case is compiled by both compilers and diffed against a
+    // golden, which is a poor place to keep a number nobody has earned yet.
+    check(
+      "arr_alias_domains: opt -O2 vectorises the element loop (<4 x i32> or <8 x i32>)",
+      o.status === 0 && /<(4|8) x i32>/.test(body),
+      o.status === 0 ? body : String(o.stderr)
+    );
   }
   if (has("opt")) {
     const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll");
