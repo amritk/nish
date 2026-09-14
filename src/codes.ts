@@ -135,6 +135,8 @@ const RULES: string[] = [
     "NL2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "NL2114",
+    ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
+    "NL3012",
     "` is not supported; a module has no top-level code, so only `const` is available",
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",
@@ -844,7 +846,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 393;
+export const RULE_COUNT = 394;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

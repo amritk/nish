@@ -95,6 +95,7 @@ const advertisedFlags = (): string[] => [
   "--emit-header",
   "--emit-dts",
   "--emit-napi",
+  "--emit-napi-async",
   "--target",
   "--profile",
 ];
