@@ -867,7 +867,7 @@ export class Compilation {
  * so its walk is driven by the module's name now too (`docs/wp21-packages.md`
  * §10a, `tests/link/package_doubled`).
  */
-function parentDirectory(dir: string): string {
+const parentDirectory = (dir: string): string => {
   if (dir.length > 0 && dir.charCodeAt(0) === SLASH) {
     const parent = dirname(dir);
     return parent === dir ? "" : parent; // `/` is the top of an absolute walk
@@ -881,7 +881,7 @@ function parentDirectory(dir: string): string {
     return `${dir}/..`;
   }
   return dirname(dir);
-}
+};
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
