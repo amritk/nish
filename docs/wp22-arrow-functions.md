@@ -7,7 +7,7 @@ the `llvm-as` pass and the native round trip (§8 has what each stage cost). C's
 docs half landed first — `README.md`, `docs/LANGUAGE.md`, every
 `docs/cookbook/` snippet, `examples/`, the playground and the `.claude/` rules —
 and §8a records the two concise-body bugs that rewrite found. **`self/` is
-arrows now too**: all 736 of its declarations, in the two passes §8b prescribes,
+arrows now too**: all 739 of its declarations, in the two passes §8b prescribes,
 with `arrow-verify --applied` comparing 1,407 emitted files byte for byte across
 each of them and the bootstrap reproducing stage1 from the rewritten source.
 What is left of C is `tests/cases/`, which the goldens gate; a `function`
@@ -142,7 +142,7 @@ are not stage D's to take (§9).
 
 | Surface | `function` | arrow | Note |
 | --- | --- | --- | --- |
-| `self/` | **0** | 752 | **Done.** 736 declarations were rewritten in two passes and `arrowify --check self/*.ts` now answers `0 declaration(s) left to rewrite`, which is the form this row should always have been read in: it was 721 when the table was first taken, 723 after `--emit-napi-async`, 734 by the time the migration ran, and 736 once WP21's package resolution had been merged in |
+| `self/` | **0** | 755 | **Done.** 739 declarations were rewritten in two passes and `arrowify --check self/*.ts` now answers `0 declaration(s) left to rewrite`, which is the form this row should always have been read in: it was 721 when the table was first taken, 723 after `--emit-napi-async`, 734 by the time the migration ran, 736 once WP21's package resolution had been merged in, and 739 after `CPtr` |
 | `tests/cases/` | **693** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates. Derived the same way: `arrowify --check tests/cases/*.ts` answers 689, and four more carry a body while having no arrow spelling — two `export default`, one `async`, one `function*` — which this column counts and the seven `declare function` lines it does not |
 | `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
