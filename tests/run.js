@@ -6369,6 +6369,26 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     ],
     ["compiled clean and produced nothing", side({}), side({}), "blind", 0, false],
     ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind", 0, false],
+    // A file added since the revision has no `<rev>:<path>`, so `--applied` empties it
+    // out of the copy for the before compile -- and reading it anyway ended the sweep in
+    // a stack trace at the exact moment §8b's recipe needs a verdict, which is what
+    // Phase 2 splitting or adding a `self/` module looks like.
+    [
+      "a subject added since the revision",
+      side({ absent: true, status: null }),
+      side({ emitted: bytes("x") }),
+      "absent",
+      0,
+      false,
+    ],
+    [
+      "a subject deleted since the revision",
+      side({ emitted: bytes("x") }),
+      side({ absent: true, status: null }),
+      "absent",
+      0,
+      false,
+    ],
     // A compile that succeeded still has a diagnostic surface, and it was read on
     // neither side: a `performance:` warning could move, change or disappear under a
     // rewrite and the sweep reported `0 difference(s)`. 76 corpus programs warn, most of

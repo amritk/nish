@@ -270,7 +270,7 @@ const diagnose = (rel) => {
  * carries objects and nothing else) are not that.
  */
 const speaks = (run) =>
-  run.status !== 0 ||
+  (!run.absent && run.status !== 0) ||
   run.stderr.split("\n").some((line) => line.trim().length > 0 && !line.startsWith("wrote "));
 
 /**
@@ -325,6 +325,17 @@ const compileAll = (relPrograms, out, debug) => {
   for (const rel of relPrograms) {
     const dir = path.join(out, subjectDir(rel));
     fs.mkdirSync(dir, { recursive: true });
+    // A subject can be legitimately absent on one side: a file added since the
+    // revision has no `<rev>:<path>`, so `--applied` empties it out of the copy
+    // for the before compile. Reading it anyway is how this crashed — `extraArgs`
+    // opens the source for its `// smoke: args` marker — and a stack trace is the
+    // wrong answer at the exact moment §8b's recipe needs one, because the tool's
+    // own header tells a migrator to add a module the rewrite created and then ask.
+    // It is a verdict instead.
+    if (!fs.existsSync(path.join(tree, rel))) {
+      results.set(rel, { status: null, absent: true, stdout: "", stderr: "", dir });
+      continue;
+    }
     const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "-o", `${dir}/`];
     // The flags come out of the *copy*, not out of the working tree, so that each
     // side is compiled the way its own `.args` sidecar says. Reading them from the
@@ -357,6 +368,12 @@ const subjectDir = (rel) => encodeURIComponent(rel);
  * "every file each side wrote" true rather than aspirational.
  */
 const OUTPUT_FLAGS = new Set(["--emit-header", "--emit-dts", "--emit-napi", "--emit-napi-async"]);
+
+// `--link <exe>` names a path too and is deliberately not in that set: this sweep
+// compiles and never links, `compileAll` never passes it, and no `.args` sidecar
+// in the corpus carries it. If one ever does, it belongs in `OUTPUT_FLAGS` with
+// the rest — an executable written outside the compared directory is the same
+// hole, and both sides would write the same path.
 
 const intoDir = (args, dir) => {
   const out = [];
@@ -457,6 +474,20 @@ export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touc
  * map of files it wrote.
  */
 export const verdict = (a, b) => {
+  // Absence first: a subject that exists on one side only has no before-and-after
+  // to compare, and the sweep may not call that agreement. It is the shape a
+  // module *added* by a rewrite has — Phase 2 splitting a `self/` module is the
+  // obvious one — so the message says which side it was missing from rather than
+  // leaving a migrator with a stack trace where a verdict should be.
+  if (a.absent === true || b.absent === true) {
+    if (a.absent === true && b.absent === true) {
+      return { kind: "blind", why: "has no source on either side, so nothing was compiled" };
+    }
+    return {
+      kind: "absent",
+      why: a.absent === true ? "did not exist before the change" : "exists only before the change",
+    };
+  }
   if (a.status !== b.status) return { kind: "status" };
   if (a.status !== 0) {
     // A refusal with nothing in it is the same empty comparison in its last
@@ -750,9 +781,26 @@ const main = (argv) => {
     const a = before.get(rel);
     const b = after.get(rel);
     const answer = verdict(
-      { status: a.status, stdout: a.stdout, said: saidBefore.get(rel) ?? "", emitted: emittedFiles(a.dir) },
-      { status: b.status, stdout: b.stdout, said: saidAfter.get(rel) ?? "", emitted: emittedFiles(b.dir) }
+      {
+        status: a.status,
+        absent: a.absent === true,
+        stdout: a.stdout,
+        said: saidBefore.get(rel) ?? "",
+        emitted: emittedFiles(a.dir),
+      },
+      {
+        status: b.status,
+        absent: b.absent === true,
+        stdout: b.stdout,
+        said: saidAfter.get(rel) ?? "",
+        emitted: emittedFiles(b.dir),
+      }
     );
+    if (answer.kind === "absent") {
+      differed += 1;
+      process.stdout.write(`DIFF  ${rel}: ${answer.why}, so there is nothing to compare it against\n`);
+      continue;
+    }
     if (answer.kind === "status") {
       differed += 1;
       process.stdout.write(`DIFF  ${rel}: exit ${a.status} before, ${b.status} after\n`);

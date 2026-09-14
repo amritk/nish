@@ -141,7 +141,7 @@ are not stage D's to take (§9).
 | Surface | `function` | arrow | Note |
 | --- | --- | --- | --- |
 | `self/` | **733** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own. **Re-derive this one rather than reading it**: 721 when the table was first taken, 723 after `--emit-napi-async`, 733 after generic classes — `self/` grows, and `node scripts/arrowify.mjs --check self/*.ts` is the number to act on |
-| `tests/cases/` | **688** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates |
+| `tests/cases/` | **693** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates. Derived the same way: `arrowify --check tests/cases/*.ts` answers 689, and four more carry a body while having no arrow spelling — two `export default`, one `async`, one `function*` — which this column counts and the seven `declare function` lines it does not |
 | `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
 | `bench/` | 22 | 0 | `bench/run.mjs` reads the same `.args` sidecars `tests/` does |
@@ -153,12 +153,14 @@ are not stage D's to take (§9).
 | `self/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
 | `self/parser.ts` | arrow parsing | — | done in stage B |
 
-**1,659 definitions**, against 78 when stage C's docs half was finished. The
+**1,664 definitions**, against 78 when stage C's docs half was finished. The
 number matters to one decision and no other: §10 argues stage D on the size of
 what is left, and the honest figure for that argument is this one rather than
 the 798 the row above used to carry. It was 1,647 when the row was taken and
-1,659 three releases of `self/` later, which is the whole reason the sentence
-above says to re-derive it rather than to read it here.
+1,664 three releases of `self/` later — and five of that difference is not drift
+at all but a row that had been counting the rewritable declarations rather than
+the definitions its own column names. Both numbers are re-derivable from the
+commands beside them, which is the only property worth having here.
 
 ## 8. The order, and why it is forced
 
@@ -513,7 +515,7 @@ ship, is excluded from the package rather than shipped broken.
 *for* by climbing to its parent, and expects to find a statement there.** Both
 were fixed by one predicate, `isFunctionResult` in `checker/declarations.ts`.
 The obvious next question is how many more there are, and it is a question
-worth answering before 1,659 rewrites rather than one file at a time
+worth answering before 1,664 rewrites rather than one file at a time
 afterwards.
 
 **Empirically: none in the compiler, and three in the codemod** — the sweep is
