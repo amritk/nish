@@ -729,15 +729,29 @@ preheader) and the loop has one exit; the field shape gets no `umin`, keeps both
 compares against separate values — in the binary `cmp %r9,%rdi` beside
 `cmp %r9,%rsi` — and a loop with that second exit is one the vectoriser
 declines. The source hoist is what collapses them, because it gives the two uses
-one `const`; metadata cannot, because it does not make two values one.
+one `const`.
+
+**One piece of metadata does collapse them, and it is the unsound one.** With
+all 13 header loads marked `!invariant.load`, `@nish_main` acquires
+`%umin = tail call i64 @llvm.umin.i64(i64 %9, i64 8191)` and a `vector.body`,
+and the binary runs at 305 ms — row 2 of the table above. That is not a
+counter-example to the argument, it *is* the argument: the only annotation that
+makes the two lengths one value is the one that tells LLVM the location cannot
+change for the whole life of the program, which §2c's next part shows is a
+miscompile. Sound metadata does not reach it; the two probes below are what that
+looks like.
 
 That is what makes the criterion sharp, and it is worth stating before anyone
 builds to it: **"hoist the header once per loop" is satisfiable while buying
 nothing.** A preheader load plus a fresh `len` for each bounds check is "hoisted
-once per loop", makes the `opt -O2` dump look like the parameter shape, and
-still runs at ~750 ms. The acceptance criterion is therefore **one length value
-feeding both the loop condition and the bounds check**, not merely a load
-outside the loop body.
+once per loop" and still runs at ~750 ms. It does *not* then resemble the
+parameter shape where it counts, and the resemblance is the trap: the probe
+below has no header load in its loop and no `umin`, two length values, two exits
+and no `vector.body`, while the parameter shape has `umin` in the preheader, one
+exit and `vector.ph`/`vector.body`. So "does my `opt -O2` dump look like the
+parameter shape's?" is not the acceptance test. The acceptance test is **one
+length value feeding both the loop condition and the bounds check**, and the
+thing to look for is the `umin` — or one compare where there were two.
 
 **Describing more of the heap to LLVM is not the fix, and that was probed rather
 than assumed.** Two hand edits to the field-shape `.ll`, neither of them
@@ -753,11 +767,11 @@ buffer, which is exactly why §2b left struct fields alone:
 The last row is the instructive one: it reaches the state the naive criterion
 asks for — not one header load left in `@scale`'s loop under `opt -O2` — and the
 program is 5 ms *slower* than the one it was supposed to fix. Two lengths are
-still two lengths, the loop still has the extra exit, and the binary still
-contains no vector instruction. Which is the argument for candidate 2 doing the
-hoist in the IR the emitter produces, where one value can feed both uses and
-every inlined copy inherits it, rather than for annotating the field load and
-hoping.
+still two lengths, there is still no `umin`, the loop still has the extra exit,
+and the binary still contains no vector instruction. Which is the argument for
+candidate 2 doing the hoist in the IR the emitter produces, where one value can
+feed both uses and every inlined copy inherits it, rather than for annotating
+the field load and hoping.
 
 ### The multiplier is program-dependent, so the range is the honest answer
 
@@ -819,15 +833,22 @@ The same experiment over the whole of `self/` is the scale of it. At this
 branch's head, 60 modules and **7,068** header loads marked, where the unmarked
 build links at **988,296** bytes (the pair was 6,675 and 939,784 before
 `2861f8c` reached this branch through `main`, so quote it with a commit or
-re-derive it). What comes out is not a slower compiler. In the run that produced
-one, the marked build linked at **21,824 bytes — 2.3% of the unmarked
-compiler — and the binary could not parse its own argv**: LLVM had taken the
-contradiction and deleted almost the whole program. On the box these numbers
-were taken it does not get that far: `ld.lld` answers `undefined symbol:
-Options.constructor`, a definition LTO dropped for the same reason, which is the
-same deletion one step further along. Which of the two a given toolchain
-produces is not stable, and it does not need to be: both are the compiler being
-destroyed rather than an optimisation being declined.
+re-derive it). What comes out is not a slower compiler. The marked build links
+at **22,048 bytes — 2.2% of the unmarked compiler, measured twice and
+byte-identical between links — and it cannot parse its own argv**: handed a file
+to compile it answers ``compile: unknown flag `tiny.ts` `` and exits 2, where
+the unmarked build compiles the same file. `self/options.ts` is where argv
+parsing lives, and LLVM had taken the contradiction and deleted almost the whole
+program around it.
+
+The deletion is what reproduces; its severity is not. At two earlier heads, on
+this same box and the same clang/LLD 18.1.3, the marked build did not link at
+all — `ld.lld: undefined symbol: Options.constructor`, the same definition
+dropped one step further along — while a second box linked it at three different
+mark counts. Nobody has identified what varies, and nothing here needs it to be
+identified: a compiler deleted to 2.2% of itself and a compiler whose remains do
+not link are both the contradiction being taken, rather than an optimisation
+being declined.
 **An invariant header needs a proof that no `push` reaches the array for the
 whole of its life, and neither `readonly` nor a fixed-length spelling of
 `Int32Array` gives one while the array is still reachable from a mutable
@@ -1406,9 +1427,11 @@ measurement closed says so and says why.
    not a lost hoist — a twenty-line program that must print `6 10` prints `6 6`
    with every header load in its module marked — and the whole of `self/` marked
    that way (60 modules, 7,068 header loads, 988,296 bytes unmarked) comes out
-   as a 21,824-byte compiler that cannot parse its own argv where it links at
-   all, and as `ld.lld: undefined symbol: Options.constructor` where LTO drops
-   the definition instead. What is **not** closed is the win. On a loop over two
+   as a **22,048-byte** compiler — 2.2% of the unmarked one — that answers
+   ``compile: unknown flag `tiny.ts` `` where the unmarked build compiles the
+   file. The deletion is what reproduces; its severity is not, and two earlier
+   heads on the same box produced `ld.lld: undefined symbol:
+   Options.constructor` instead. What is **not** closed is the win. On a loop over two
    array *parameters* it is banked — 305 ms against the 1208 ms that stripping
    the alias domains reproduces, and an invariant header moves that by 2 ms —
    but on the same loop with the array in a **class field**, which is how
