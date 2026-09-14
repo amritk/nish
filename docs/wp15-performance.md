@@ -455,16 +455,19 @@ a golden whose entire assertion is the *absence* of the check: not one
 every fact lookup answering "not found" — takes it from **0 `nish_panic_index`
 calls to 5**, in five `bounds.fail` blocks, 197 golden lines against 249, and
 `arr_bounds_proven: IR matches golden` fails; `perf_bounds_quiet` fails the
-same way. Simulating the invalidation half instead fails `perf_bounds_loop: IR
-matches golden`, and it is the *first* case that loses its check — "Two arrays,
-one length: nothing says `ys` is as long as `xs`", where the loop guard proves
-`i < xs.length`, `xs` has a literal length of 3, and the `maxIndex` fact that
-`i = i + 1` has to retract survives instead. Three `bounds.fail` blocks become
-two, the removed one sits in the `i` loop, and the two surviving `NL9007`
-warnings are the ones at lines 20 and 28, not the one at line 12. That is the
-*fewer checks* direction that the snippet above turns into a bad read — and the
-shape that detects it is a literal-length array plus a bound surviving an
-increment, not the downward cursor of the third case, which keeps its check
+same way. Simulating the invalidation half instead — the half that is a wrong
+program rather than a slow one — leaves both of those **passing**, and fails
+`perf_bounds_loop: IR matches golden` alone. One golden of the three, not
+three: the two halves are caught by different cases, and rounding that up is
+the same kind of error this subsection exists to remove. It is the *first* case
+that loses its check — "Two arrays, one length: nothing says `ys` is as long as
+`xs`" — where the loop guard proves `i < xs.length`, `xs` has a literal length
+of 3, and the `maxIndex` fact that `i = i + 1` has to retract survives instead.
+Three `bounds.fail` blocks become two, the removed one sits in the `i` loop,
+and the two surviving `NL9007` warnings are at lines 20 and 28, not line 12.
+That is the *fewer checks* direction the snippet above turns into a bad read,
+and the shape that detects it is a literal-length array plus a bound surviving
+an increment — not the downward cursor of the third case, which keeps its check
 either way. And for a regression that would be `self/`'s alone,
 `tests/self/ir_oracle.js` compares `IR(stage0, p)` with `IR(stage1, p)` byte for
 byte over the whole corpus. The hazard is loud. What it is not is benign.
