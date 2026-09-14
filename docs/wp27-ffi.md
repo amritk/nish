@@ -300,5 +300,23 @@ it: `tests/self/ir_oracle.js` compares the emitted IR byte for byte and
 `tests/self/reject_oracle.js` compares every refusal's wording, which is the
 strongest thing this repository can say about a lowering.
 
+A wording is not a span, though, and the reject oracle compares only wordings:
+it asks that stage1 exit non-zero and that its output contain each `.err`
+fragment. `reject_ffi_pointer_array` was refused by both compilers with the same
+code and the same sentence while stage0 spanned it on `CPtr[]` and stage1 on
+`CPtr`, and nothing in the suite could see it. Two things see it now, and
+neither of them changed the oracle:
+
+- The `.err` fragments for `reject_ffi_pointer_array` include the excerpt's
+  caret run, which fixes the **start** column in whichever compiler the oracle
+  is pointed at and outlives `src/`. It cannot fix the end column, because the
+  match is a substring and `^~~~~~` contains `^~~~` — which is exactly the
+  direction stage0 was wrong in, so this half is necessary and not sufficient.
+- `tests/run.js` compares that case's `--json` objects between the two
+  compilers byte for byte, `endColumn` included, as it already did for
+  `reject_multi_error`. That is the half that sees a widening, and it is the
+  half that dies with stage0; a span golden that outlives both is WP19's to
+  settle, with the rest of §2B's wording coverage.
+
 The differential oracle is still out of the picture, for §5's reason and not a
 new one.

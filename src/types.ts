@@ -697,8 +697,16 @@ export function resolveTypeNode(
     case ts.SyntaxKind.UnknownKeyword:
       throw new CompileError(`\`unknown\` is forbidden in ${LANGUAGE}`, node, sourceFile);
     case ts.SyntaxKind.ArrayType: {
-      const elem = resolveTypeNode((node as ts.ArrayTypeNode).elementType, sourceFile, opts);
-      rejectForeignPointer(elem, "an array element", node, sourceFile);
+      // The refusal is spanned on the *element* annotation, not on the whole
+      // `T[]`: the message names the element type, `Array<T>` and
+      // `ReadonlyArray<T>` already report on their argument through
+      // `elementType` below, and every other element-level complaint lands on
+      // the element (`Nope[]` reports `Nope`). `self/annotations.ts`'s
+      // `elementType` spans it the same way, and the two compilers have to
+      // agree on the span, not only on the code and the words.
+      const element = (node as ts.ArrayTypeNode).elementType;
+      const elem = resolveTypeNode(element, sourceFile, opts);
+      rejectForeignPointer(elem, "an array element", element, sourceFile);
       return arrayOf(elem);
     }
     case ts.SyntaxKind.TypeOperator: {
