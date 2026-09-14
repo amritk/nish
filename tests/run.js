@@ -4706,11 +4706,13 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // WP21 S2's declared limitation, asked of the compiler that survives: a
       // package reached through a symlink is a second package, because neither
       // compiler has a `realpath` to call — stage0 could grow one and is
-      // deliberately not allowed to (`docs/wp21-packages.md` §10d). What is
-      // compared is the *sentence*, not the whole of stderr: `export const val`
-      // is a declaration whose clash the two compilers point at with different
-      // columns, which is a span difference of its own and not this fixture's
-      // subject.
+      // deliberately not allowed to (`docs/wp21-packages.md` §10d). The two
+      // answers are compared with each other rather than each to a fragment, so
+      // "both refuse it with the same sentence" is pinned rather than asserted;
+      // what is stripped first is the `file:line:column:` prefix, because
+      // `export const val` is a declaration the two point at with different
+      // columns, and that span difference is its own subject and not this
+      // fixture's.
       const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
       const symlinkApp = path.join(symlinkSrc, "app");
       if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
@@ -4718,15 +4720,32 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           .readFileSync(path.join(symlinkSrc, "expected.err"), "utf8")
           .trim();
         const outDir = path.join(shipDir, "package_symlink-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_symlink-stage0") + path.sep;
         fs.rmSync(outDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
         const ourSymlink = spawnSync(compiler, ["main.ts", "-o", outDir], {
           cwd: symlinkApp,
           encoding: "utf8",
         });
+        const theirSymlink = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: symlinkApp,
+          encoding: "utf8",
+        });
+        /** Just the sentences of a report: no position, no echoed source line. */
+        const sentences = (text) =>
+          text
+            .split("\n")
+            .filter((line) => line.includes(": error: "))
+            .map((line) => line.slice(line.indexOf(": error: ") + ": error: ".length))
+            .join("\n");
         check(
-          "the self-hosted compiler: a symlinked copy is a second package for it too",
-          ourSymlink.status === 1 && ourSymlink.stderr.includes(symlinkNeedle),
-          `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}`
+          "the self-hosted compiler: a symlinked copy is a second package for it too, in stage0's words",
+          ourSymlink.status === 1 &&
+            theirSymlink.status === 1 &&
+            ourSymlink.stderr.includes(symlinkNeedle) &&
+            sentences(ourSymlink.stderr) === sentences(theirSymlink.stderr),
+          `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}` +
+            `stage0 ${theirSymlink.status}: ${theirSymlink.stderr}`
         );
       }
 

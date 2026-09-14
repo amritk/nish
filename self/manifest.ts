@@ -38,6 +38,13 @@
 //   - A target is a string beginning with `./`, with no `..` segment and no
 //     backslash escape. Anything else — a nested condition object, an array of
 //     targets, an escaped path — is treated as no target at all.
+//   - The scan stops at the first thing it cannot read past — a missing comma,
+//     a key that is not a string — and answers with what it found before it,
+//     where Node refuses the whole manifest as malformed JSON. A mode-qualified
+//     condition after such a break is therefore not seen, and the plain one
+//     before it wins. Both compilers do the identical thing, which is what this
+//     reader is for; the resolution is a diagnostic either way, and telling a
+//     package author their JSON is broken is S3's to add.
 //
 // Each of those answers null here and becomes one diagnostic in `Compilation`.
 // TODO(WP21 S3): §5c and §6 want that one message split into the specific ones —

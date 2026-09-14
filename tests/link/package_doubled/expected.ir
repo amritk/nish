@@ -1,4 +1,4 @@
 define internal noundef i32 @helper()
-define internal noundef i32 @zed.helper()
-define noundef i32 @zed.zed()
-declare noundef i32 @zed.zed()
+define internal noundef i32 @nish_absent_zed.helper()
+define noundef i32 @nish_absent_zed.zed()
+declare noundef i32 @nish_absent_zed.zed()

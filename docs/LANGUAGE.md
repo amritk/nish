@@ -980,12 +980,16 @@ and their `.ll` goldens are byte-identical files.
     package write `nish` above `nish-f64` and never have its f64 source
     compiled, with nothing said about it — the silent mismatch this spelling
     exists to make loud.
-  - **Presence of the condition is the claim.** A package that has no `nish`
-    condition for the subpath asked for is
-    `` Package `plainjs` has no Nish entry point: its `exports` declares no
-    `nish` condition for `.` `` (`tests/link/package_not_nish`) — which is
-    what an ordinary npm package gets, in words that name what is missing. A
-    package that is not installed at all is `` Cannot find package `@x/y` ``
+  - **Presence of the condition is the claim.** A package that offers this
+    compiler no file for the subpath asked for is
+    `` Package `plainjs` has no Nish entry point: its `exports` gave this
+    compiler no file to compile for `.` `` (`tests/link/package_not_nish`) —
+    which is what an ordinary npm package gets, in words that name what is
+    missing. The sentence reports what the compiler came away with rather than
+    what the manifest declares, because the two are not the same thing: a
+    `nish-f64` that names something other than a file outranks a `nish` that is
+    there and correct, and is what the message is about. A package that is not
+    installed at all is `` Cannot find package `@x/y` ``
     (`tests/cases/reject_bare_package`).
   - **A package is where its path says, and a symlink is not followed.** One
     package installed twice, or reached both directly and through a symlink —

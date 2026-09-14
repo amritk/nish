@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 397;
+export const RULE_COUNT: i32 = 398;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -169,6 +169,8 @@ export function diagnosticRules(): string[] {
     "NL2142",
     "`Result` needs exactly two type arguments, e.g. `Result<number, string>`",
     "NL2150",
+    " entry point: its `exports` gave this compiler no file to compile for `",
+    "NL3015",
     "` values; compare each with `null` and then compare the narrowed values",
     "NL2108",
     "`main` must return void or an i32 number (the process exit code), not ",

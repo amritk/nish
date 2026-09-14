@@ -1,1 +1,1 @@
-has no Nish entry point: its `exports` declares no `nish` condition for `.`
+has no Nish entry point: its `exports` gave this compiler no file to compile for `.`

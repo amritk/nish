@@ -96,16 +96,14 @@ const isFile = (candidate: string): boolean => fs.existsSync(candidate) && fs.st
  * in the language, spelled here because the package walk is written in terms of
  * it on the other side.
  *
- * Everything else in this compiler reads a file it was *told about* — a root on
- * the command line, a module a specifier named — and a failure there is the
- * user's own path, reported as one. A manifest is different: nobody named it,
- * the resolver went looking, so an unreadable `package.json` is an answer about
- * that directory rather than an error about a file. `self/compilation.ts` has
- * exactly this shape, and it has to: the language has no exceptions, so it could
- * never have been written any other way. What it buys here is that a filesystem
- * race cannot escape as an exception, which `DiagnosticSink.recover` would
- * rethrow and the CLI would report as exit 70 — an internal error for something
- * that is not a bug in this compiler (orientation rule 7).
+ * A read that throws here does not reach the internal-error path — `isSystemError`
+ * in `src/index.ts` catches every `ErrnoException` and exits 1 — so what was
+ * wrong with the unguarded `readFileSync` this replaced was never the exit code.
+ * It was the *sentence*: `cannot open <absolute path>: EACCES`, with no span and
+ * with a path spelled the way WP19 §A3 keeps out of diagnostics, where
+ * `self/compilation.ts` reads the same file with `readFileSyncOrNull` and words
+ * the failure itself. Two compilers, one tree, two different answers — which is
+ * the divergence, and the reason this file reads like that one.
  */
 const readFileOrNull = (file: string): string | null => {
   try {
@@ -262,9 +260,24 @@ export class Compilation {
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {
         const found = this.resolveSpecifier(unit, imp);
+        // The file is read *here*, not inside `load`, because a file that will
+        // not open is a fact about this import and belongs at the specifier
+        // with the name the importer wrote. Reading it inside `load` made it an
+        // `ErrnoException` instead, which the CLI reports as a bare
+        // `cannot open <absolute path>: EACCES` with no span — a wording, a
+        // position and a path convention (WP19 §A3 keeps absolute paths out of
+        // diagnostics) that `self/compilation.ts` does not share, because it
+        // reads with `readFileSyncOrNull` and words the failure itself. This is
+        // that same read, in the same place, answering the same two sentences.
+        const text = readFileOrNull(found.path);
+        if (text === null) {
+          throw imp.specifier.startsWith(STD_PREFIX)
+            ? notStandardLibrary(unit, imp)
+            : missingModule(unit, imp, found.path);
+        }
         unit.resolved.set(
           imp.specifier,
-          this.load(found.path, importedName(unit, found.path), undefined, false, found.packageName)
+          this.load(found.path, importedName(unit, found.path), text, false, found.packageName)
         );
       });
     }
@@ -319,11 +332,9 @@ export class Compilation {
     // `null` here is a file that vanished between the two reads. It takes the
     // same route as a manifest with nothing in it for us, which is the honest
     // answer and the one `self/compilation.ts` gives: this compiler found no
-    // Nish entry point in that package. Reading it unguarded would throw past
-    // `DiagnosticSink.recover`, which rethrows anything that is not a
-    // `CompileError`, and report a race in the user's own tree as exit 70 —
-    // an internal error for something that is not a bug in this compiler
-    // (orientation rule 7).
+    // Nish entry point in that package. Read unguarded it was a sentence stage1
+    // never says — `cannot open <absolute path>: EACCES`, no span, and exit 1
+    // all the same — rather than an exit code, which `readFileOrNull` says.
     const manifest = readFileOrNull(path.join(packageDir, "package.json"));
     const target =
       manifest === null
@@ -426,11 +437,7 @@ export class Compilation {
     const name = imp.specifier.slice(STD_PREFIX.length);
     const resolved = path.join(PKG_ROOT, STD_DIR, `${name}.ts`);
     if (name.length > 0 && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
-    throw new CompileError(
-      `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames().join(", ")})`,
-      imp.node.moduleSpecifier,
-      importer.sourceFile
-    );
+    throw notStandardLibrary(importer, imp);
   }
 
   /**
@@ -656,6 +663,19 @@ function importedName(importer: ModuleUnit, target: string): string {
 }
 
 /**
+ * A `nish/<name>` that the standard library beside this compiler does not
+ * offer — or offers as a file that will not open, which is the same answer for
+ * the same reason: what the specifier names is not something this compiler can
+ * compile. `self/compilation.ts` words both cases with this one sentence too.
+ */
+const notStandardLibrary = (importer: ModuleUnit, imp: ImportBinding): CompileError =>
+  new CompileError(
+    `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames().join(", ")})`,
+    imp.node.moduleSpecifier,
+    importer.sourceFile
+  );
+
+/**
  * The one wording for a module that is not on disk, whether a relative
  * specifier named it or a package's `exports` did.
  *
@@ -687,6 +707,13 @@ const cannotFindPackage = (importer: ModuleUnit, imp: ImportBinding, name: strin
  * should fail naming the thing that is missing, not with a module-not-found
  * that reads like the consumer mistyped their own file name.
  *
+ * The second clause reports what *this compiler* came away with rather than
+ * what the package declares, and the difference is not pedantry: with the
+ * mode-qualified condition outranking the plain one (§10a), a manifest whose
+ * `nish-i32` names something that is not a file never reaches its perfectly
+ * good `nish` row — so a sentence saying the `exports` "declares no `nish`
+ * condition" would send the author to check a line that is there and correct.
+ *
  * TODO(WP21 S3): the boundary diagnostics split this one message into the
  * specific ones — a package that offers Nish in the *other* number mode, named
  * with both modes in the message, and an `engines.nish` floor above this
@@ -696,7 +723,7 @@ const cannotFindPackage = (importer: ModuleUnit, imp: ImportBinding, name: strin
  */
 const noNishEntryPoint = (importer: ModuleUnit, imp: ImportBinding, parsed: BareSpecifier): CompileError =>
   new CompileError(
-    `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` declares no \`${PACKAGE_CONDITION}\` condition for \`${parsed.subpath}\``,
+    `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\``,
     imp.node.moduleSpecifier,
     importer.sourceFile
   );

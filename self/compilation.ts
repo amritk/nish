@@ -438,12 +438,17 @@ export class Compilation {
       // shaped in a way `manifest.ts` does not read. Saying it in these words is
       // §6's point: a bare import of an ordinary npm package should fail naming
       // the thing that is missing, not with a module-not-found that reads like
-      // the consumer mistyped their own file name.
+      // the consumer mistyped their own file name. The second clause says what
+      // this compiler came away with rather than what the package declares,
+      // because the mode-qualified condition outranks the plain one (§10a): a
+      // manifest whose `nish-i32` names something that is not a file never
+      // reaches its perfectly good `nish` row, and a sentence about what the
+      // `exports` declares would send its author to a line that is correct.
       //
       // TODO(WP21 S3): the boundary diagnostics split this one message into the
       // specific ones — a package that offers Nish in the *other* number mode,
       // named with both modes, and an `engines.nish` floor above this compiler.
-      failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` declares no \`${PACKAGE_CONDITION}\` condition for \`${parsed.subpath}\``;
+      failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\``;
       return failed;
     }
     // The manifest may name a file that is not there, which is the package's

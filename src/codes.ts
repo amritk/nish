@@ -165,6 +165,8 @@ const RULES: string[] = [
     "NL2142",
     "`Result` needs exactly two type arguments, e.g. `Result<number, string>`",
     "NL2150",
+    " entry point: its `exports` gave this compiler no file to compile for `",
+    "NL3015",
     "` values; compare each with `null` and then compare the narrowed values",
     "NL2108",
     "`main` must return void or an i32 number (the process exit code), not ",
@@ -852,7 +854,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 397;
+export const RULE_COUNT = 398;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
