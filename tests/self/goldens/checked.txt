@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 323 programs, 5419 dump lines.
+# 324 programs, 5436 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -5227,6 +5227,24 @@ module docs/cookbook/mod_math.ts (entry)
 function square(n: i32): i32 -> @square [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
+program docs/cookbook/mod_package.ts
+module docs/cookbook/mod_package.ts (entry)
+import scale from "cookbook_pkg" -> function @cookbook_pkg.scale
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: cookbook_pkg.scale
+  stackSites=0 stackLocals=0
+  callee 3:35 scale -> @cookbook_pkg.scale
+module docs/cookbook/node_modules/cookbook_pkg/index.ts [package cookbook_pkg]
+function helper(n: i32): i32 -> @cookbook_pkg.helper
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function scale(n: i32): i32 -> @cookbook_pkg.scale [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: cookbook_pkg.helper
+  stackSites=0 stackLocals=0
+  callee 3:45 helper -> @cookbook_pkg.helper
 program docs/cookbook/opt_nsw.ts
 module docs/cookbook/opt_nsw.ts (entry)
 function poly(x: i32, y: i32): i32 -> @poly

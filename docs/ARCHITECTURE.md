@@ -211,9 +211,9 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (3,480 bytes of `.text*` at `-Oz` against a budget of
+`runtime/runtime.c` (3,515 bytes of `.text*` at `-Oz` against a budget of
 3,584, plus 10,068 bytes of `.rodata` that is almost all Ryu's two
-power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,190
+power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,251
 bytes against 1,280) provide, in the order of `RUNTIME_FUNCTIONS`, the symbols
 below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
 `scripts/size-report.sh`, which reports every row:
