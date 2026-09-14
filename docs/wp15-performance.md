@@ -465,10 +465,9 @@ warnings are the ones at lines 20 and 28, not the one at line 12. That is the
 *fewer checks* direction that the snippet above turns into a bad read — and the
 shape that detects it is a literal-length array plus a bound surviving an
 increment, not the downward cursor of the third case, which keeps its check
-either way. And for a
-regression that would be `self/`'s alone, `tests/self/ir_oracle.js` compares
-`IR(stage0, p)` with `IR(stage1, p)` byte for byte over the whole corpus. The
-hazard is loud. What it is not is benign.
+either way. And for a regression that would be `self/`'s alone,
+`tests/self/ir_oracle.js` compares `IR(stage0, p)` with `IR(stage1, p)` byte for
+byte over the whole corpus. The hazard is loud. What it is not is benign.
 
 **And the syntax tree would be storage rather than a tree.** `Node` is one
 class carrying the union of every kind's fields — the Nish-0 design
@@ -490,8 +489,8 @@ the element type is a class, or a union whose every non-`null` member is one,
 so that `Local[]` and `(FunctionSig | null)[]` both count. A *return* type is
 not a slot and is excluded, which is what separates holding one of these from
 merely mentioning one. That is **168 declarations over 36 element classes**,
-with `Local[]` at 47 and `Node[]` at 18 ahead of everything else.
-This is not a corner of the compiler that the migration would touch.
+with `Local[]` at 47 and `Node[]` at 18 ahead of everything else. This is not a
+corner of the compiler that the migration would touch.
 
 **What it would have bought, and what already buys it.** §2a's 2.27x is a
 property of the *layout*, not of the struct kind: it is what a contiguous array
@@ -1152,8 +1151,8 @@ measurement closed says so and says why.
    miscompile rather than a slow program, and one `perf_bounds_loop` fails on:
    `arr_bounds_proven` and `perf_bounds_quiet` fail on the *lookup* half
    instead, which costs checks and not soundness; and the syntax tree itself
-   would become storage, copied once per level of nesting. What the
-   layout buys is available today by declaring the element type an `interface`,
+   would become storage, copied once per level of nesting. What the layout buys
+   is available today by declaring the element type an `interface`,
    and `C | null` is the way back to a pointer array — so an array of classes is
    one pointer per slot by decision. §2a records the three findings and how each
    number was counted.
