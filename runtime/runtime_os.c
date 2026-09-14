@@ -56,11 +56,26 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
 }
 
 /* `readFileSyncOrNull(path)`: null rather than a message, so a program can
-   turn a missing file into its own diagnostic and carry on. */
+   turn a missing file into its own diagnostic and carry on.
+ *
+ * The `S_ISREG` guard is what makes "or null" true of a **directory**, which
+ * `open(O_RDONLY)` accepts: `lseek` then answers `LONG_MAX` on Linux and the
+ * arena is asked for that many bytes, so the program dies with `out of memory`
+ * instead of answering null. Node's `readFileSync` raises `EISDIR` and the
+ * stage0 twin turns that into null, so without this the two compilers answered
+ * differently for one tree — a package whose `exports` names a directory, which
+ * WP21 S2 made reachable (`tests/link/package_dir_target`). `fstat` on the
+ * descriptor rather than `stat` on the path, so the answer is about the file
+ * that was opened and not about whatever the name means a moment later. */
 nish_str *nish_read_file_or_null(const nish_str *path) {
   int fd = open(path->data, O_RDONLY);
-  off_t len = fd < 0 ? -1 : lseek(fd, 0, SEEK_END);
-  if (len < 0) return 0;
+  if (fd < 0) return 0;
+  struct stat st;
+  off_t len = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) ? lseek(fd, 0, SEEK_END) : -1;
+  if (len < 0) {
+    close(fd);
+    return 0;
+  }
   nish_str *s = nish_alloc_struct(8 + len + 1);
   uint64_t got = 0;
   ssize_t n;

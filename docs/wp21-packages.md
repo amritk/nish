@@ -624,6 +624,29 @@ disappeared and `packages.ts` says so.
 - **No cache.** §3's stated cost — compile time grows with the dependency tree —
   is unpaid, and S4 is the payment.
 - **Struct names are still program-wide**, exactly as §9c left them.
+- **A generic template cannot cross a package boundary**, so WP18's rule for
+  naming an instantiation and this note's rule for naming a dependency never
+  meet. `sum<i32>`'s symbols are minted with the *instantiating* module's
+  package prefix ([wp18-generics.md](wp18-generics.md), `TODO(WP18 G7)`), which
+  would be the consumer's package rather than the template's — and the checker
+  refuses `import { Box }` for a generic class, interface or function before any
+  of that can happen, whatever module or package it came from. So no program
+  either stage compiles can ask whose prefix wins. It becomes a real question
+  the day G7 lifts that refusal, and the two notes say the same thing about it
+  from their own sides.
+- **A target that names a directory is a missing module, not a package error.**
+  `"nish": "./src"` passes the reader — it begins with `./`, climbs nowhere,
+  carries no escape — and the resolver is then sent at something that opens and
+  is not a file, which is one of exactly two shapes a tree can steer either
+  compiler at. Both answer `` Cannot find module `X` (looked for …) `` at the
+  specifier (`tests/link/package_dir_target`), and a `package.json` that is
+  itself a directory is the other: the walk reads rather than `stat`s, so it
+  carries on past the candidate and both end at `` Cannot find package ``
+  (`tests/link/package_dir_manifest`). The second of those took a runtime fix:
+  `open(O_RDONLY)` accepts a directory and `lseek` then answers `LONG_MAX`, so
+  `nish_read_file_or_null` asked the arena for that and stage1 died with
+  `out of memory` where stage0 reported a module. It guards with `S_ISREG` now
+  (`runtime/runtime_os.c`, 61 bytes, inside the same ceiling).
 - **A dependency's exports are not the program's C ABI**, and no stage of this
   note makes them one. `--emit-header`, `--emit-dts` and `--emit-napi` declare
   the *root package's* functions (§4: a package's artifact rows are the

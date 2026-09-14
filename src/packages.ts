@@ -41,7 +41,7 @@
  * layout bare resolution produces. So the placeholder shrank to the cases the
  * resolver is never asked about, rather than disappearing.
  *
- * TODO(WP21 S7): two packages that declare the same class or interface name
+ * TODO(WP21 §7): two packages that declare the same class or interface name
  * still collide, because a struct's identity is its name program-wide
  * (`%struct.<name>`, and `StaticType` equality). `Compilation` reports that in
  * those words now; deciding what a `Point` from two versions of one package
