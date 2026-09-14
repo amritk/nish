@@ -2440,13 +2440,16 @@ const RUNTIME_TEXT_BUDGET = 3584;
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime_os.c`.
  *
- * Measured 1,190 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 1,155 plus
+ * Measured 1,251 bytes on 2026-09-14 with clang 18.1.3 on linux-x64 (`.text` 1,216 plus
  * `.text.unlikely.` 35, which is `nish_io_fail`), for the file I/O, the directory and
- * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. The
- * budget is the next 256-byte boundary above it, 90 bytes of headroom, which is less than
- * one syscall wrapper on purpose: `nish_readdir` alone is 294 bytes, so the next builtin
- * that reaches into the operating system has to raise this number in the commit that adds
- * it, with the measurement, and cannot borrow room from the arena to hide in.
+ * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. It
+ * was 1,190 until WP21 S2 put the `fstat`/`S_ISDIR` guard in `nish_read_file_or_null`,
+ * which is 61 of those bytes and is what makes reading a directory answer null rather
+ * than ask the arena for `LONG_MAX`. The budget is the next 256-byte boundary above the
+ * original measurement, so what is left is now **29 bytes** — less than a tenth of one
+ * syscall wrapper, since `nish_readdir` alone is 294, so the next builtin that reaches
+ * into the operating system raises this number in the commit that adds it, with the
+ * measurement, and cannot borrow room from the arena to hide in.
  *
  * The two together are 4,864 -- exactly the single budget they replace, which is a
  * coincidence and not a constraint.

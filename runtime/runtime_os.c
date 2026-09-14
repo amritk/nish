@@ -58,20 +58,27 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
 /* `readFileSyncOrNull(path)`: null rather than a message, so a program can
    turn a missing file into its own diagnostic and carry on.
  *
- * The `S_ISREG` guard is what makes "or null" true of a **directory**, which
+ * The `S_ISDIR` guard is what makes "or null" true of a **directory**, which
  * `open(O_RDONLY)` accepts: `lseek` then answers `LONG_MAX` on Linux and the
  * arena is asked for that many bytes, so the program dies with `out of memory`
  * instead of answering null. Node's `readFileSync` raises `EISDIR` and the
  * stage0 twin turns that into null, so without this the two compilers answered
  * differently for one tree — a package whose `exports` names a directory, which
- * WP21 S2 made reachable (`tests/link/package_dir_target`). `fstat` on the
- * descriptor rather than `stat` on the path, so the answer is about the file
- * that was opened and not about whatever the name means a moment later. */
+ * WP21 S2 made reachable (`tests/link/package_dir_target`).
+ *
+ * The test is `!S_ISDIR` rather than `S_ISREG` on purpose: a directory is the
+ * only thing whose `lseek(SEEK_END)` answers `LONG_MAX`, and refusing anything
+ * else would answer null where Node answers bytes. `/dev/null` is the case to
+ * keep in mind — `readFileSync` there is `""` in Node and in `shim.mjs`, and a
+ * narrower guard would have made it `null` here and split the two compilers
+ * again for the entry a command line can name. `fstat` on the descriptor
+ * rather than `stat` on the path, so the answer is about the file that was
+ * opened and not about whatever the name means a moment later. */
 nish_str *nish_read_file_or_null(const nish_str *path) {
   int fd = open(path->data, O_RDONLY);
   if (fd < 0) return 0;
   struct stat st;
-  off_t len = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) ? lseek(fd, 0, SEEK_END) : -1;
+  off_t len = fstat(fd, &st) == 0 && !S_ISDIR(st.st_mode) ? lseek(fd, 0, SEEK_END) : -1;
   if (len < 0) {
     close(fd);
     return 0;
