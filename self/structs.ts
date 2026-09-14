@@ -101,7 +101,12 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], "Names starting with `nish_` are reserved for the runtime");
     return null;
   }
-  if (ctx.program.structs.has(name)) {
+  // A generic class counts as a declaration of the name, exactly as a declared
+  // one counts against a template in `registerStructTemplate`: `class Box<T>`
+  // followed by `class Box` is one name declared twice, and the declared class
+  // would be unreachable because `Box` in an annotation resolves to the
+  // template.
+  if (ctx.program.structs.has(name) || ctx.program.structTemplates.has(name)) {
     ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``);
     return null;
   }

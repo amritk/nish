@@ -1216,6 +1216,12 @@ export const main = (): i32 => {
   their non-generic spellings (`tests/cases/reject_generic_declare_class`,
   `reject_generic_export_default`, `reject_generic_abstract`,
   `reject_generic_interface_extends`).
+- **A template claims its name in the one declaration namespace.** `class
+  Box<T>` is a declaration of `Box`, so a function, a constant, an alias, an
+  enum or a second class of that name is refused whichever was written first —
+  the structs pass runs before the functions pass, so the template is always
+  the one already there (`tests/cases/reject_generic_class_fn_clash`,
+  `reject_generic_class_after_fn`, `reject_generic_class_redeclared`).
 - **An instantiation's name is program-wide**, because `%struct.Box$i32` and
   `@Box$i32.constructor` are. So two modules may not both declare a generic
   class or interface of one name once both instantiate it:

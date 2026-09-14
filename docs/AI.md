@@ -443,6 +443,10 @@ export const main = (): i32 => {
   Box<T>`, `export default class Box<T>`, `abstract class Box<T>` and
   `interface Box<T> extends Base` are refused in the words their non-generic
   spellings are refused in.
+- **A template claims its name.** `class Box<T>` is a declaration of `Box`, so
+  a function, constant, alias, enum or second class of that name is refused
+  whichever was written first: `` `Box` is already declared in this module ``,
+  or `` Duplicate declaration of `Box` `` for a second class.
 - **Two modules may not both declare a generic class of one name** once both
   instantiate it: `%struct.Box$i32` is program-wide, so
   `` Generic class `Holder` is also declared in helper.ts ``.

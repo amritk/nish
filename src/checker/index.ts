@@ -479,7 +479,17 @@ export class Checker implements CheckContext {
     if (this.program.constants.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }
-    if (this.program.aliases.has(sig.sourceName) || this.program.enums.has(sig.sourceName)) {
+    // A generic class belongs in this list and not in the one above it: the
+    // structs pass runs before this one, so `class Box<T>` is already
+    // registered whichever of the two was written first, and stage1 answers
+    // from `nameTaken`, which counts a template. Without it a module compiled
+    // with `%struct.Box$i32` and `@Box$i32.constructor` beside a
+    // `define internal i32 @Box$i32(i32)` and no diagnostic at all.
+    if (
+      this.program.aliases.has(sig.sourceName) ||
+      this.program.enums.has(sig.sourceName) ||
+      this.structTemplates.has(sig.sourceName)
+    ) {
       this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }
     if (sig.exported && sig.sourceName === "main") {
@@ -505,7 +515,12 @@ export class Checker implements CheckContext {
     if (this.program.structs.has(name)) {
       this.error(`\`${name}\` is already declared as a class or interface`, template.nameNode);
     }
-    if (this.program.aliases.has(name) || this.program.constants.has(name) || this.program.enums.has(name)) {
+    if (
+      this.program.aliases.has(name) ||
+      this.program.constants.has(name) ||
+      this.program.enums.has(name) ||
+      this.structTemplates.has(name)
+    ) {
       this.error(`\`${name}\` is already declared in this module`, template.nameNode);
     }
     if (template.exported && name === "main") {

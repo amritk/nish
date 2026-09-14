@@ -226,7 +226,14 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
   const name = decl.name.text;
   if (name.startsWith("nish_")) throw ctx.error("Names starting with `nish_` are reserved for the runtime", decl.name);
   rejectDollarInSymbolName(name, kind, decl.name, ctx.sf);
-  if (ctx.program.structs.has(name)) throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
+  // A generic class counts as a declaration of the name, exactly as a declared
+  // one counts against a template in `registerStructTemplate`: without the
+  // second half `class Box<T>` followed by `class Box` compiled, and the
+  // declared class was unreachable because `Box` in an annotation resolves to
+  // the template.
+  if (ctx.program.structs.has(name) || ctx.structTemplates.has(name)) {
+    throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
+  }
   if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
     throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
   }
