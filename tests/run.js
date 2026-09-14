@@ -6305,6 +6305,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
       "reworded",
     ],
     ["compiled clean and produced nothing", side({}), side({}), "blind"],
+    ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind"],
   ]) {
     const answer = verdict(a, b);
     const differences = (answer.differences ?? []).length;

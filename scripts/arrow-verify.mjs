@@ -369,8 +369,9 @@ export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touc
  *                  what each side wrote;
  *   - `dump`     — compiled on both and wrote nothing, so stdout is what it
  *                  produced: `--emit-ast` and `--emit-checked` print there;
- *   - `blind`    — none of the above. Nothing to compare is a failure, because a
- *                  sweep cannot verify what it cannot see.
+ *   - `blind`    — none of the above, including a refusal that printed no
+ *                  diagnostics at all. Nothing to compare is a failure, because
+ *                  a sweep cannot verify what it cannot see.
  *
  * Each side is `{ status, stdout, said, emitted }`: the exit status, stdout, the
  * `--json` diagnostics (read only where the status says there are some), and the
@@ -379,6 +380,12 @@ export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touc
 export const verdict = (a, b) => {
   if (a.status !== b.status) return { kind: "status" };
   if (a.status !== 0) {
+    // A refusal with nothing in it is the same empty comparison in its last
+    // hiding place: `"" === ""` is true and says nothing. Every failure is a
+    // `--json` object by contract (AGENTS.md, "Machine-readable surfaces"), so
+    // a refusal that produced none is a subject this sweep cannot read rather
+    // than one it agrees with.
+    if (a.said.length === 0 && b.said.length === 0) return { kind: "blind" };
     if (diagnosticWords(a.said) !== diagnosticWords(b.said)) return { kind: "reworded" };
     return { kind: "refusal", moved: a.said !== b.said };
   }
