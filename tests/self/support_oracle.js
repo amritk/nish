@@ -44,7 +44,7 @@ const CASES = path.join(root, "tests", "self", "cases.txt");
  * both sides when stage0 is not in the tree, so the rest of the oracle still
  * runs; the summary says how many went.
  */
-const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ )/;
+const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ |pkg |spec )/;
 
 /**
  * stage0's IR escape and float-hex, or null when `dist/` is not there — a
@@ -55,10 +55,20 @@ const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ )/;
 async function stage0Escapes() {
   const strings = path.join(root, "dist", "codegen", "emit", "strings.js");
   const builtins = path.join(root, "dist", "codegen", "emit", "builtins.js");
+  const manifest = path.join(root, "dist", "manifest.js");
+  const packages = path.join(root, "dist", "packages.js");
   if (!fs.existsSync(strings) || !fs.existsSync(builtins)) return null;
+  if (!fs.existsSync(manifest) || !fs.existsSync(packages)) return null;
   const { escapeBytes } = await import(pathToFileURL(strings).href);
   const { f32Constant, f64Constant } = await import(pathToFileURL(builtins).href);
-  return { escapeBytes, f32Constant, f64Constant };
+  // WP21 S2: the manifest reader and the specifier split, whose stage1 twins
+  // must answer the same file for the same `package.json`. Unlike `node:path`
+  // there is no third implementation to compare against — the rule is this
+  // project's — so stage0 is the oracle and these lines go with it when `dist/`
+  // is not in the tree.
+  const { nishExportTarget } = await import(pathToFileURL(manifest).href);
+  const { parseBareSpecifier } = await import(pathToFileURL(packages).href);
+  return { escapeBytes, f32Constant, f64Constant, nishExportTarget, parseBareSpecifier };
 }
 
 // ---- The pieces the driver prints -----------------------------------------------------
@@ -153,6 +163,21 @@ function expected(caseText, stage0) {
     } else if (section === "rel") {
       out.push(`# rel ${JSON.stringify(first)} ${JSON.stringify(second)}`);
       out.push(`relative ${JSON.stringify(path.posix.relative(first, second))}`);
+    } else if (section === "pkg") {
+      const [, subpath, primary, fallback, manifest] = fields;
+      out.push(`# pkg ${JSON.stringify(subpath)} ${primary} ${fallback} ${JSON.stringify(manifest)}`);
+      if (stage0 !== null) {
+        const target = stage0.nishExportTarget(manifest, subpath, primary, fallback);
+        out.push(`pkg ${target === null ? "null" : JSON.stringify(target)}`);
+      }
+    } else if (section === "spec") {
+      out.push(`# spec ${JSON.stringify(first)}`);
+      if (stage0 !== null) {
+        const parsed = stage0.parseBareSpecifier(first);
+        out.push(
+          parsed === null ? "spec null" : `spec ${JSON.stringify(parsed.name)} ${JSON.stringify(parsed.subpath)}`
+        );
+      }
     } else if (section === "num") {
       out.push(`# num ${first}`);
       if (stage0 !== null) {

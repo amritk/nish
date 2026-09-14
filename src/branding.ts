@@ -52,6 +52,34 @@ export const BUILTIN_SCHEME = `${CLI}:`;
  */
 export const STD_PREFIX = `${CLI}/`;
 
+/**
+ * The `exports` condition a package declares to say that it has Nish source
+ * for an Nish consumer to compile (`docs/wp21-packages.md` §2, §6).
+ *
+ * It is here for the reason `STD_PREFIX` is: it is a spelling of the project's
+ * name, and **both compilers have to agree on it before either can resolve a
+ * bare specifier** — a package that matched under stage0 and not under stage1
+ * would be a program that compiles with one compiler and not the other.
+ *
+ * Its *presence* in a package's `exports` is the claim that the package is
+ * Nish, which is what lets a bare import of an ordinary npm package fail
+ * saying so rather than with a module-not-found that reads like the consumer's
+ * own mistake.
+ */
+export const PACKAGE_CONDITION = CLI;
+
+/**
+ * The mode-qualified spellings of the condition above: `nish-i32`, `nish-f64`.
+ *
+ * `--number-mode` decides what `number` *is*, so it is a compile-time ABI and
+ * a package can be silently wrong about it — `docs/wp21-packages.md` §6 has the
+ * benchmark that prints two different answers under the two modes with nothing
+ * in its source announcing which it was written for. Putting the mode in the
+ * condition makes a mismatch a *resolution* failure at the package boundary,
+ * before a byte of the dependency is checked, and costs no manifest key.
+ */
+export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CONDITION}-${numberMode}`;
+
 /** `NISH_DEBUG=1` prints the stack behind an internal compiler error. */
 export const ENV_DEBUG = `${CLI.toUpperCase()}_DEBUG`;
 

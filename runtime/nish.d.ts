@@ -144,9 +144,13 @@ declare function writeError(s: string): void;
  * — the guard-then-panic shape `self/` uses everywhere in place of an assert.
  */
 declare function panic(message: string): never;
-/** The whole file as a string; a missing file prints a message and exits 1. */
+/**
+ * The whole file as a string; a path that cannot be read as one — missing, a
+ * directory, a parent that cannot be searched — prints `nish: cannot read
+ * <path>` and exits 1.
+ */
 declare function readFileSync(path: string): string;
-/** The same read, answering `null` where the other exits. */
+/** The same read, answering `null` for every path the other exits over. */
 declare function readFileSyncOrNull(path: string): string | null;
 declare function writeFileSync(path: string, data: string): void;
 declare function appendFileSync(path: string, data: string): void;
