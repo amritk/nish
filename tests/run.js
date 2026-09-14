@@ -1009,14 +1009,20 @@ if (!only || "performance".includes(only)) {
   );
 
   // The proof is worth an instruction count, not just a quieter build: the two
-  // proven calls in perf_clamp_quiet lose a clamp pair each, and the two shapes
-  // with nothing to prove keep all six of theirs.
-  const clampQuietIr = fs.readFileSync(path.join(buildDir, "perf_clamp_quiet.ll"), "utf8");
+  // proven calls in perf_clamp_quiet lose a clamp pair each -- four pairs, so
+  // eight of the twenty-four calls -- and the two shapes with nothing to prove
+  // keep all six of theirs. Compiled here rather than read off the goldens
+  // section, so that `node tests/run.js performance` stands on its own.
+  const clampQuietCompile = compile("perf_clamp_quiet", "perf_clamp_quiet.ll");
+  const clampQuietIr =
+    clampQuietCompile.status === 0
+      ? fs.readFileSync(path.join(buildDir, "perf_clamp_quiet.ll"), "utf8")
+      : "";
   const clampCalls = (clampQuietIr.match(/call i64 @llvm\.(smin|smax)\.i64/g) ?? []).length;
   check(
-    "performance: a proven substring bound emits no clamp at all (4 of 24 intrinsic calls left out)",
-    clampCalls === 16,
-    `llvm.smin/smax calls in perf_clamp_quiet.ll: ${clampCalls}, expected 16`
+    "performance: a proven substring bound emits no clamp at all (8 of 24 intrinsic calls left out)",
+    clampQuietCompile.status === 0 && clampCalls === 16,
+    `llvm.smin/smax calls in perf_clamp_quiet.ll: ${clampCalls}, expected 16\n${clampQuietCompile.stderr}`
   );
 
   // WP15 §8: --no-strict-exports keeps a non-exported function an external
