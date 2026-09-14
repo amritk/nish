@@ -352,8 +352,18 @@ export interface CheckedProgram {
  * `StructInfo.methodSigs` and in `StructInfo.ctor` at once and then writes
  * `sig.poisoned` through one of them; with value slots those are three
  * objects and the write is lost. Every registry in that compiler is built the
- * same way. Contiguous *class* arrays are therefore a separate change with a
- * migration of its own, and §2a of `docs/wp15-performance.md` records why.
+ * same way, and the aliasing is not confined to registries: 54 comparisons
+ * across ten modules ask whether an element of a `Local[]` or a `Node[]` *is*
+ * a given object, twenty of them in `self/bounds.ts`, where the seven lines
+ * that retract a fact do it by testing `!==` against the variable being
+ * clobbered — an identity test that never matches leaves the fact standing and
+ * the compiler emits no bounds check where one is needed.
+ *
+ * So a **contiguous *class* array is not deferred work, it is a decision**: an
+ * array of classes is one pointer per slot, permanently, and a program that
+ * wants the contiguous layout spells the element type `interface`. §2a of
+ * `docs/wp15-performance.md` has the costing, the counting rule behind each
+ * number, and the goldens that catch the failure.
  *
  * **An interface some class `implements` is not a record either.** `implements`
  * is prefix subtyping reached through a `bitcast` (WP25), so a `Shape[]` may
