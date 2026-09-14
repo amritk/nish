@@ -49,8 +49,7 @@ import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
 import { CLI, LANGUAGE, PACKAGE_CONDITION, STD_PREFIX, packageConditionFor } from "./branding.js";
 import { nishExportTarget } from "./manifest.js";
-import { STD_DIR, stdModuleName, stdModuleNames } from "./std-modules.js";
-import { PKG_ROOT } from "./version.js";
+import { stdModuleName, stdModuleNames, stdModulePath } from "./std-modules.js";
 
 export interface ModuleUnit {
   /** Absolute path: the module's identity. */
@@ -283,7 +282,9 @@ export class Compilation {
             // where the importer sits: it did not resolve against the importer,
             // so naming it from there put the checkout path in the header
             // whenever the entry was named absolutely (WP19 §A3).
-            std ? stdModuleName(imp.specifier, STD_PREFIX.length) : importedName(unit, found.path),
+            std
+              ? stdModuleName(imp.specifier.slice(STD_PREFIX.length))
+              : importedName(unit, found.path),
             text,
             false,
             found.packageName
@@ -445,7 +446,7 @@ export class Compilation {
    */
   private resolveStdSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
     const name = imp.specifier.slice(STD_PREFIX.length);
-    const resolved = path.join(PKG_ROOT, STD_DIR, `${name}.ts`);
+    const resolved = stdModulePath(name);
     if (name.length > 0 && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
     throw notStandardLibrary(importer, imp);
   }
