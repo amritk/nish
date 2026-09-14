@@ -85,12 +85,22 @@ const copyTree = () => {
     .toString()
     .split("\0")
     .filter(Boolean);
+  const missing = [];
   for (const rel of files) {
+    const from = path.join(root, rel);
+    // `git ls-files` prints the index, which can name a file the working tree no
+    // longer has. Aborting the whole sweep on the first of them is not a useful
+    // answer to "somebody deleted a file"; the copy is of what is there, and what
+    // is not there is counted and named.
+    if (!fs.existsSync(from)) {
+      missing.push(rel);
+      continue;
+    }
     const to = path.join(tree, rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.copyFileSync(path.join(root, rel), to);
+    fs.copyFileSync(from, to);
   }
-  return files;
+  return { files, missing };
 };
 
 /**
@@ -219,7 +229,7 @@ const diagnose = (rel) => {
   const out = path.join(work, "diagnose");
   fs.mkdirSync(out, { recursive: true });
   const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "--json", "-o", `${out}/`];
-  args.push(...extraArgs(path.join(root, rel)));
+  args.push(...extraArgs(path.join(tree, rel)));
   const run = spawnSync(process.execPath, args, { encoding: "utf8" });
   return { status: run.status, said: (run.stdout ?? "").trim() };
 };
@@ -260,10 +270,14 @@ const compileAll = (relPrograms, out, debug) => {
     const dir = path.join(out, rel.replace(/[/.]/g, "_"));
     fs.mkdirSync(dir, { recursive: true });
     const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "-o", `${dir}/`];
-    args.push(...extraArgs(path.join(root, rel)));
+    // The flags come out of the *copy*, not out of the working tree, so that each
+    // side is compiled the way its own `.args` sidecar says. Reading them from the
+    // working tree made `--applied` hand the before side the after side's flags,
+    // and a changed `.args` then verified as clean.
+    args.push(...extraArgs(path.join(tree, rel)));
     if (debug) args.push("-g");
     const run = spawnSync(process.execPath, args, { encoding: "utf8" });
-    results.set(rel, { status: run.status, stderr: run.stderr, dir });
+    results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir });
   }
   return results;
 };
@@ -322,23 +336,42 @@ export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touc
  */
 const changedSince = (rev, scope) => {
   const inScope = new Set(scope);
-  const all = execFileSync("git", ["diff", "--name-only", rev, "--", "*.ts"], { cwd: root, maxBuffer: 1 << 28 })
+  const all = execFileSync(
+    "git",
+    ["diff", "--name-only", rev, "--", "*.ts", "*.args", "args"],
+    { cwd: root, maxBuffer: 1 << 28 }
+  )
     .toString()
     .split("\n")
     .filter((rel) => rel.length > 0);
-  const outside = all.filter((rel) => !inScope.has(rel));
+  const outside = all.filter((rel) => !inScope.has(owns(rel)));
   const changes = all
-    .filter((rel) => inScope.has(rel))
+    .filter((rel) => inScope.has(owns(rel)))
     .map((rel) => {
       const show = spawnSync("git", ["show", `${rev}:${rel}`], { cwd: root, maxBuffer: 1 << 28 });
       const file = path.join(root, rel);
       return {
         rel,
+        owner: owns(rel),
         before: show.status === 0 ? show.stdout : null,
         after: fs.existsSync(file) ? fs.readFileSync(file) : null,
       };
     });
   return { changes, outside };
+};
+
+/**
+ * The source a changed file belongs to. A `.args` sidecar is not a program but
+ * it decides how one is compiled, so a change to it is a change to that program
+ * — and it used to be invisible twice over: the diff only asked about `*.ts`,
+ * and both sides were then compiled with the flags in the *working tree*, so a
+ * `.args` somebody edited was verified as clean. `tests/link/<name>/args` is the
+ * same sidecar spelled per directory (`tests/self/corpus.js`).
+ */
+const owns = (rel) => {
+  if (rel.endsWith(".args")) return rel.replace(/\.args$/, ".ts");
+  if (path.basename(rel) === "args") return path.posix.join(path.posix.dirname(rel), "main.ts");
+  return rel;
 };
 
 /** Put one side of an `--applied` comparison into the copy of the tree. */
@@ -361,13 +394,29 @@ const usage = `usage: node scripts/arrow-verify.mjs [--concise] [--debug] [--app
   --verbose  name every skipped declaration, and every diagnostic that moved
 `;
 
+/**
+ * The flags this sweep has. An unknown one is refused rather than ignored, for
+ * the reason `arrowify` refuses one: `--debg` silently dropped `-g` and the
+ * banner went on saying nothing about it, and `--rev=HEAD~1` was a different
+ * token from `--rev`, so the guard that checks the revision never saw it and the
+ * run quietly compared against `HEAD`. A verifier is worth what its flags are.
+ */
+const FLAGS = new Set(["--concise", "--debug", "--applied", "--verbose", "--help", "--rev"]);
+
 const main = (argv) => {
-  const flags = new Set(argv.filter((a) => a.startsWith("--")));
-  const rest = argv.filter((a) => !a.startsWith("--"));
+  const words = argv.filter((a) => a.startsWith("-"));
+  const flags = new Set(words.map((a) => (a.startsWith("--rev=") ? "--rev" : a)));
+  const rest = argv.filter((a) => !a.startsWith("-"));
+  const inline = argv.find((a) => a.startsWith("--rev="));
   const revAt = argv.indexOf("--rev");
-  const revArg = revAt >= 0 ? argv[revAt + 1] : undefined;
-  const rev = revAt >= 0 ? revArg : "HEAD";
+  const revArg = inline !== undefined ? inline.slice("--rev=".length) : revAt >= 0 ? argv[revAt + 1] : undefined;
+  const rev = flags.has("--rev") ? revArg : "HEAD";
   const filters = revAt >= 0 ? rest.filter((a) => a !== rev) : rest;
+  const unknown = words.filter((a) => !FLAGS.has(a.startsWith("--rev=") ? "--rev" : a) && a !== revArg);
+  if (unknown.length > 0) {
+    process.stderr.write(`arrow-verify: unknown flag ${unknown.join(", ")}\n${usage}`);
+    return 2;
+  }
   const concise = flags.has("--concise");
   const debug = flags.has("--debug");
   const applied = flags.has("--applied");
@@ -382,7 +431,7 @@ const main = (argv) => {
   }
   // A `--rev` that swallowed the next flag would compare the working tree with
   // the index and go on printing the revision's name in the banner.
-  if (revAt >= 0 && (revArg === undefined || revArg.startsWith("-"))) {
+  if (flags.has("--rev") && (revArg === undefined || revArg.length === 0 || revArg.startsWith("-"))) {
     process.stderr.write(`arrow-verify: --rev needs a revision, not ${revArg ?? "the end of the command"}\n`);
     return 2;
   }
@@ -404,7 +453,13 @@ const main = (argv) => {
     `arrow-verify: ${relPrograms.length} program(s), ${negatives.length} rejection(s), ` +
       `${scope.length} source file(s)${debug ? ", with -g" : ""}${applied ? `, against ${rev}` : ""}\n`
   );
-  copyTree();
+  const copied = copyTree();
+  if (copied.missing.length > 0) {
+    process.stdout.write(
+      `arrow-verify: ${copied.missing.length} tracked file(s) are not in the working tree and were not copied\n`
+    );
+    if (flags.has("--verbose")) for (const rel of copied.missing) process.stdout.write(`gone     ${rel}\n`);
+  }
 
   // In `--applied` the copy starts as the working tree, so the *before* side is
   // the one that has to be put back; in the derived mode the copy is already
@@ -429,6 +484,12 @@ const main = (argv) => {
 
   const before = compileAll(relPrograms, path.join(work, "before"), debug);
   const saidBefore = new Map(negatives.map((rel) => [rel, diagnose(rel)]));
+  // A program the compiler refuses prints its refusal and nothing else, so that is
+  // what there will be to compare afterwards — and it has to be read now, while the
+  // before side is still what is in the tree.
+  const refusedBefore = new Map(
+    relPrograms.filter((rel) => before.get(rel).status !== 0).map((rel) => [rel, diagnose(rel)])
+  );
 
   let rewritten = 0;
   const touched = new Set();
@@ -436,7 +497,7 @@ const main = (argv) => {
   if (applied) {
     for (const change of changes) {
       put(change.rel, change.after);
-      touched.add(change.rel);
+      touched.add(change.owner);
     }
   } else {
     for (const rel of scope) {
@@ -503,8 +564,20 @@ const main = (argv) => {
     process.stdout.write(`      after  ${diagnosticWords(now.said).split("\n")[0] || "(nothing)"}\n`);
   }
 
+  // Every program in scope ends in exactly one outcome, and the summary names all
+  // of them. The hole this closes is the one this tool has had in three different
+  // shapes already: a program that is counted as covered and then quietly not
+  // diffed. A dump case emits no `.ll` at all (`--emit-ast`, `--emit-checked`), so
+  // the module comparison had nothing to say about it and said nothing; a program
+  // refused on both sides was skipped without anybody comparing the refusals. Both
+  // are compared now — by their stdout and by the words of their diagnostics — and
+  // a program that produces nothing either way is a *failure*, because the sweep
+  // cannot verify what it cannot see.
   let differed = 0;
   let compared = 0;
+  let dumps = 0;
+  let refusals = 0;
+  const blind = [];
   for (const rel of relPrograms) {
     const a = before.get(rel);
     const b = after.get(rel);
@@ -515,26 +588,62 @@ const main = (argv) => {
       if (said) process.stdout.write(`      ${said}\n`);
       continue;
     }
-    if (a.status !== 0) continue; // refused on both sides, for a reason the rewrite did not invent
+    // Refused on both sides: the refusal is this program's whole output, so it is
+    // what gets compared — by its words, with the positions stripped, exactly as a
+    // `reject_*` case is, because the caret is allowed to move and the rule is not.
+    if (a.status !== 0) {
+      const was = refusedBefore.get(rel);
+      const now = diagnose(rel);
+      refusals += 1;
+      if (was !== undefined && diagnosticWords(was.said) !== diagnosticWords(now.said)) {
+        differed += 1;
+        process.stdout.write(`DIFF  ${rel}: refused differently after the rewrite\n`);
+        process.stdout.write(`      before ${diagnosticWords(was.said).split("\n")[0] || "(nothing)"}\n`);
+        process.stdout.write(`      after  ${diagnosticWords(now.said).split("\n")[0] || "(nothing)"}\n`);
+      }
+      continue;
+    }
     const one = modules(a.dir);
     const two = modules(b.dir);
-    compared += new Set([...one.keys(), ...two.keys()]).size;
-    for (const difference of diffModules(one, two)) {
-      differed += 1;
-      process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`);
-      process.stdout.write(`      diff ${path.join(a.dir, difference.name)} ${path.join(b.dir, difference.name)}\n`);
+    const names = new Set([...one.keys(), ...two.keys()]);
+    if (names.size > 0) {
+      compared += names.size;
+      for (const difference of diffModules(one, two)) {
+        differed += 1;
+        process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`);
+        process.stdout.write(`      diff ${path.join(a.dir, difference.name)} ${path.join(b.dir, difference.name)}\n`);
+      }
+      continue;
     }
+    // No IR at all. A dump flag prints the answer on stdout instead, which is then
+    // the thing to compare.
+    if (a.stdout.length > 0 || b.stdout.length > 0) {
+      dumps += 1;
+      if (a.stdout !== b.stdout) {
+        differed += 1;
+        process.stdout.write(`DIFF  ${rel}: the dump on stdout differs (${a.stdout.length} vs ${b.stdout.length} bytes)\n`);
+      }
+      continue;
+    }
+    blind.push(rel);
+  }
+
+  for (const rel of blind) {
+    process.stdout.write(`BLIND ${rel}: compiled clean and produced nothing to compare\n`);
   }
 
   if (skipped.length > 0 && flags.has("--verbose")) {
     for (const line of skipped) process.stdout.write(`skip  ${line}\n`);
   }
-  process.stdout.write(`arrow-verify: ${compared} module(s) compared, ${differed} difference(s)\n`);
+  process.stdout.write(
+    `arrow-verify: ${compared} module(s), ${dumps} dump(s) and ${refusals} refusal(s) compared, ` +
+      `${differed} difference(s), ${blind.length} program(s) with nothing to compare\n`
+  );
   process.stdout.write(
     `arrow-verify: ${negatives.length} rejection(s) re-diagnosed, ${reworded} whose words changed, ` +
       `${moved} whose positions moved\n`
   );
-  return differed > 0 || reworded > 0 ? 1 : 0;
+  return differed > 0 || reworded > 0 || blind.length > 0 ? 1 : 0;
 };
 
 if (process.argv[1] === import.meta.filename) process.exit(main(process.argv.slice(2)));

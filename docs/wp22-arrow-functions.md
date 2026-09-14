@@ -371,6 +371,24 @@ compiles the same source twice and reports zero differences over a rewrite it
 never saw. A derived run that rewrites nothing, and an applied run with nothing
 changed since the revision, both **fail** rather than passing quietly.
 
+**Every program in scope ends in one of three outcomes, and the summary names
+all three.** A program that compiles is compared by its modules; one whose flags
+make it print instead of emit — `--emit-ast`, `--emit-checked` — is compared by
+its stdout; one the compiler refuses on both sides is compared by the words of
+its refusal, positions stripped, exactly as a `reject_*` case is. A program that
+produces none of the three is `BLIND` and fails the run. That is the fourth time
+this tool has had the same hole: `arrow-verify tests/cases/dump_ast.ts` used to
+rewrite the case, compare **zero** modules and exit 0, and a program refused on
+both sides was skipped without anybody reading the two refusals. A dump case's
+stdout *does* change when its declarations become arrows, which is a real
+consequence of the rewrite and a golden that will have to be regenerated — so it
+is reported as a difference rather than waved through.
+
+The flags each side is compiled with come out of the copy rather than out of the
+working tree, so `--applied` gives the before side the `.args` the *revision*
+had; a changed sidecar is part of the diff (`*.args`, and `tests/link/<name>/args`)
+and counts as a change to the program it belongs to.
+
 **A comparison is evidence only where the change reached it.** A program whose
 own modules are identical on both sides is compiled twice and agrees with
 itself, so the summary says how many of the programs and rejections sit on a
