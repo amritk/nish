@@ -600,7 +600,7 @@ export function unsignedMax(t: StaticType): bigint {
  * unchanged for every caller, including recursive ones (element types of
  * arrays, for instance) that would otherwise have to thread a lookup through.
  */
-export type NamedTypeResolver = (name: string) => StaticType | undefined;
+export type NamedTypeResolver = (name: string, ref?: ts.TypeReferenceNode) => StaticType | undefined;
 const namedTypeResolvers = new WeakMap<ts.SourceFile, NamedTypeResolver>();
 
 export function registerNamedTypes(sourceFile: ts.SourceFile, resolver: NamedTypeResolver): void {
@@ -690,6 +690,16 @@ export function resolveTypeNode(
           sourceFile
         );
       }
+      // WP18 G5: a user generic. `Box<i32>` names one instantiated struct, and
+      // the resolver mints it on demand — after the built-in constructors
+      // above, so nothing that was already a type argument list changes
+      // meaning, and before the arity refusals below, so a generic declared
+      // with the wrong number of arguments is refused by the rule that names
+      // its template rather than by "unsupported type reference".
+      if (ts.isIdentifier(ref.typeName) && ref.typeArguments && ref.typeArguments.length > 0) {
+        const instance = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text, ref);
+        if (instance) return instance;
+      }
       if (ts.isIdentifier(ref.typeName) && !ref.typeArguments) {
         switch (ref.typeName.text) {
           case "i32":
@@ -711,7 +721,7 @@ export function resolveTypeNode(
         }
         const alias = TYPED_ARRAY_ALIASES[ref.typeName.text];
         if (alias) return arrayOf(alias);
-        const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text);
+        const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text, ref);
         if (named) return named;
       }
       throw new CompileError(

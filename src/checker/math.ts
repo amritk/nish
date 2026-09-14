@@ -69,7 +69,7 @@ import { BuiltinCallChecker, calleeName, checkArity } from "./builtins.js";
 import { CheckContext } from "./context.js";
 import { Scope } from "./scope.js";
 import { lookup } from "../lookup.js";
-import { structOf } from "./classes.js";
+import { newTargetStruct, structOf } from "./classes.js";
 import { isFunctionResult } from "./declarations.js";
 
 // ---- Math.* -------------------------------------------------------------------
@@ -353,8 +353,10 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
     const index = parent.arguments?.indexOf(expr) ?? -1;
     if (index < 0) return undefined;
     // `new Pixel(255, 0, 0)`: `params[0]` is `this`, so the argument at
-    // `index` is `params[index + 1]`.
-    return ctx.program.structs.get(parent.expression.text)?.ctor?.params[index + 1]?.type;
+    // `index` is `params[index + 1]`. `newTargetStruct` is what makes the same
+    // true of `new Box<f64>(3.0)`, whose class is an instantiation rather than
+    // a name in `structs` (WP18 G5).
+    return newTargetStruct(ctx, parent)?.ctor?.params[index + 1]?.type;
   }
   if (ts.isCallExpression(parent)) {
     const index = parent.arguments.indexOf(expr);

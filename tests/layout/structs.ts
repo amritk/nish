@@ -441,3 +441,36 @@ export function P_y(p: P): f64 {
 export function P_tag(p: P): number {
   return p.tag;
 }
+
+// WP18 G5: an instantiated generic class is laid out exactly as the monomorphic
+// twin somebody would have written, so the C file declares that twin. One
+// source declaration, two layouts: `Q<i32>` is 12 bytes with `b` at 4, `Q<f64>`
+// is 24 with `b` at 8, and the trailing `c` is what makes the difference
+// visible rather than hidden in padding.
+class Q<T> {
+  a: boolean;
+  b: T;
+  c: boolean;
+
+  constructor(a: boolean, b: T, c: boolean) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+  }
+}
+
+// Named for the *LLVM* spelling of the instantiated struct with the `$` written
+// as `_`, because `tests/run.js` pairs a `make<Name>` with the `struct <Name>`
+// structs.c asserts the size of. The C spelling carries the reserved
+// `nish_gen_` prefix on top of that (`cStructName`), which is what keeps
+// `Q<i32>` from colliding with a class somebody called `Q_i32`, and the runner
+// strips it before it looks the maker up.
+export const makeQ_i32 = (b: i32): Q<i32> => new Q<i32>(true, b, false);
+export const makeQ_f64 = (b: f64): Q<f64> => new Q<f64>(true, b, false);
+
+export const Q_i32_a = (p: Q<i32>): boolean => p.a;
+export const Q_i32_b = (p: Q<i32>): i32 => p.b;
+export const Q_i32_c = (p: Q<i32>): boolean => p.c;
+export const Q_f64_a = (p: Q<f64>): boolean => p.a;
+export const Q_f64_b = (p: Q<f64>): f64 => p.b;
+export const Q_f64_c = (p: Q<f64>): boolean => p.c;

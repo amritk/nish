@@ -13,6 +13,7 @@ import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
+import { instantiateWritten } from "./generics";
 import { assignInto, checkExpression } from "./expressions";
 import {
   N_ARRAY,
@@ -237,7 +238,19 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (arrayType !== -1) {
     return arrayType;
   }
-  const info = ctx.program.struct(name);
+  // WP18 G5: `new Box<i32>(7)` writes its type arguments out, because `new` is
+  // one of the two positions a one-token parser reads a type-argument list in
+  // and a constructor's own arguments need not mention every parameter.
+  const template = ctx.program.structTemplate(name);
+  let info: StructInfo | null = null;
+  if (template !== null) {
+    info = instantiateWritten(ctx, template, expr.children[1], callee);
+    if (info === null) {
+      return T_ERROR;
+    }
+  } else {
+    info = ctx.program.struct(name);
+  }
   if (info === null) {
     return ctx.errorType(callee, `Unknown class \`${name}\``);
   }
@@ -245,11 +258,12 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return ctx.errorType(expr, `Cannot \`new\` interface \`${name}\`; use an object literal: \`{ ... }\``);
   }
   // The parser reads `new Box<number>()`'s type arguments because `new
-  // Array<T>(n)` needs them; a declared class has none to take, and stage1 was
-  // compiling the program with the arguments ignored
-  // (`tests/cases/reject_cls_new_generic`).
-  if (expr.children[1].children.length > 0) {
-    return ctx.errorType(expr, "Generic classes are not supported");
+  // Array<T>(n)` needs them; a class that is *not* generic has none to take.
+  if (template === null && expr.children[1].children.length > 0) {
+    return ctx.errorType(
+      expr.children[1].children[0],
+      `\`${name}\` is not generic, so \`new ${name}\` takes no type arguments`
+    );
   }
   const ctor = info.ctor;
   if (ctor !== null) {

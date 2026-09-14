@@ -24,6 +24,7 @@ import {
   cFunctionName,
   cParamName,
   cPrototype,
+  cStructName,
   cType,
   ExternalFunction,
   guardStem,
@@ -74,7 +75,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   const elem = table.refOf(t);
   const inline = inlineElementStruct(program, table, elem);
   if (inline !== null) {
-    return `struct ${inline.name} elements, inline`;
+    return `struct ${cStructName(inline.name)} elements, inline`;
   }
   const c = cType(table, elem, POS_RETURN, false);
   return c.length > 0 ? `${c} elements` : "nish_array * elements";
@@ -112,7 +113,7 @@ function structDefinitions(compilation: Compilation): string[] {
   lines.push(" * alignment; a class that `implements` an interface lists its fields first).");
   lines.push(" * Objects live in the arena; a `T | null` parameter or field may be NULL. */");
   for (const info of structs) {
-    lines.push(`struct ${info.name};`);
+    lines.push(`struct ${cStructName(info.name)};`);
   }
   let i = 0;
   while (i < structs.length) {
@@ -122,11 +123,11 @@ function structDefinitions(compilation: Compilation): string[] {
     lines.push("");
     lines.push(`/* ${files[i]}: ${kind} ${info.name}${ifaces} */`);
     if (info.fields.length === 0) {
-      lines.push(`/* struct ${info.name} has no fields; it stays incomplete (pointers only). */`);
+      lines.push(`/* struct ${cStructName(info.name)} has no fields; it stays incomplete (pointers only). */`);
       i = i + 1;
       continue;
     }
-    lines.push(`struct ${info.name} {`);
+    lines.push(`struct ${cStructName(info.name)} {`);
     for (const f of info.fields) {
       const t = cFieldType(table, f.type);
       // A C keyword as a field name gets the same `_` suffix as a parameter.
