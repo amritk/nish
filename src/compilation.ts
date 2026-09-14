@@ -282,9 +282,7 @@ export class Compilation {
             // where the importer sits: it did not resolve against the importer,
             // so naming it from there put the checkout path in the header
             // whenever the entry was named absolutely (WP19 §A3).
-            std
-              ? stdModuleName(imp.specifier.slice(STD_PREFIX.length))
-              : importedName(unit, found.path),
+            std ? stdModuleName(imp.specifier.slice(STD_PREFIX.length)) : importedName(unit, found.path),
             text,
             false,
             found.packageName

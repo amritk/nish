@@ -7,12 +7,19 @@
 # and between wp19 §A2 and §A3 it found a miscompile that eleven oracles and
 # 1,161 checks had not.
 #
-# Why here rather than in ci.yml's `test` job: it is roughly 9,000 compilations
-# by each compiler over 623 programs, plus linking a stage1 binary first --
-# about forty minutes against three for `npm test`, and it grows with every
-# flag the suite adds. Making every push wait on that is the trade wp19 §A5
-# argues against; the flag-set half, which takes seconds and is what found
+# Why here rather than in ci.yml's `test` job: it is one compilation by each
+# compiler for every program of the corpus under every flag variation -- 13,020
+# runs over 868 programs as this lands, against 9,345 over 623 when this
+# paragraph was first written -- plus linking a stage1 binary first. Tens of
+# minutes against three for `npm test`, and it grows with every program and
+# every flag the suite adds. Making every push wait on that is the trade wp19
+# §A5 argues against; the flag-set half, which takes seconds and is what found
 # `--no-warn-performance` and `--out-dir`, already runs inside `npm test`.
+#
+# Those two counts are `programs x variations`, so they are re-derivable from
+# the tree rather than remembered -- but they are still a fact about a corpus on
+# a date, and this one has grown by a third in two weeks. The run prints its own
+# count in the summary line; read that rather than this comment.
 #
 # Why nightly rather than never: G1 was recorded green on an empty difference
 # set, and the claim stopped being true without anybody editing it -- arrows
@@ -36,12 +43,14 @@ on:
         required: false
         type: string
 
-# `issues: write` is what the last step needs: a red gate opens an issue and a
-# green one closes it, so the gate's state lives somewhere a person passes
-# rather than in a run log somebody has to think to open.
+# Read-only at the top, so that every job inherits the smaller of the two
+# tokens. The `record` job below asks for `issues: write` for itself, because
+# it is the only one that writes an issue -- and because the job beside it runs
+# `npm ci`, `npm run build` and the corpus, which is to say arbitrary code out
+# of the repository and its dependency tree. That code has no business holding
+# a token that can open, comment on and close issues.
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: parity-${{ github.ref }}
@@ -51,9 +60,15 @@ jobs:
   parity:
     name: parity (the corpus, every variation)
     runs-on: ubuntu-latest
-    # The measured run is ~40 minutes on a machine that is not a hosted runner.
-    # Two hours is room for a slower one, and short enough that a hang is
-    # reported the same morning rather than after six.
+    outputs:
+      status: ${{ steps.parity.outputs.status }}
+    # No hosted-runner measurement exists yet -- this workflow has never run --
+    # and the local ones are on a shared four-core box, so they measure the
+    # neighbours as much as the compilers (wp19 §A7). Two hours is room for a
+    # corpus a third larger than the one the estimate came from, and short
+    # enough that a hang is reported the same morning rather than after six.
+    # A timeout is not silence any more: the `record` job below reads a run
+    # that never reached the mode as **unmeasured** and opens the issue for it.
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +122,10 @@ jobs:
       - name: Say what this proved
         if: always()
         run: |
+          # A run that died before the mode wrote anything still reports, and
+          # reports that: `tail` on a file that is not there would fail the
+          # step instead, which is the state disappearing rather than printing.
+          [ -f "$RUNNER_TEMP/parity.log" ] || : > "$RUNNER_TEMP/parity.log"
           {
             echo "### Parity ($(date -u +%Y-%m-%d), ubuntu-latest, LLVM 18)"
             echo
@@ -124,35 +143,76 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # And a gate whose state lives only in a run log is one step short of the
-      # silence wp19 §A5 is about. The mode running nightly fixes "nobody
-      # remembered to type the command"; it does not fix "nobody opened the
-      # run". So a full run that is not green opens an issue -- or adds a
-      # comment to the one already open, so a week of red is one thread rather
-      # than seven -- and a full run that is green closes it. The repository
-      # itself then carries the answer, and a reopened gate arrives as a
-      # notification instead of as a number somebody has to re-derive.
-      #
-      # Only a **full** run may touch the issue. `workflow_dispatch` takes an
-      # `only` filter, and a green subset is exactly the claim §A5 records
-      # going wrong: an empty difference set over part of the corpus read as an
-      # empty difference set. A filtered run therefore reports into the job
-      # summary and nowhere else.
-      #
-      # Two states are not green and both open the issue, because both leave
-      # the gate unproved for the day: an undeclared difference, and a run that
-      # never got as far as the mode.
-      - name: A gate that is not green says so where it will be seen
+      # The log is handed to the `record` job as an artifact rather than as a
+      # job output, because the output map is a place for short strings and
+      # this is forty lines of table. `if-no-files-found: ignore` is the state
+      # the next job reads as "the run never reached the mode".
+      - name: Keep the log for the recording job
         if: always() && inputs.only == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-log
+          path: ${{ runner.temp }}/parity.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # And a gate whose state lives only in a run log is one step short of the
+  # silence wp19 §A5 is about. The mode running nightly fixes "nobody
+  # remembered to type the command"; it does not fix "nobody opened the run".
+  # So a full run that is not green opens an issue -- or adds a comment to the
+  # one already open, so a week of red is one thread rather than seven -- and a
+  # full run that is green closes it. The repository itself then carries the
+  # answer, and a reopened gate arrives as a notification instead of as a
+  # number somebody has to re-derive.
+  #
+  # It is a **separate job** for one reason: this is the only thing in the
+  # workflow that needs `issues: write`, and the job that runs the corpus runs
+  # `npm ci` and then a few thousand compilations of whatever is in the tree.
+  # Granting that step a token that can write to the issue tracker costs
+  # nothing to avoid -- a job boundary and an artifact -- and a workflow-level
+  # `issues: write` would hand it to every step in the file.
+  #
+  # Only a **full** run may touch the issue. `workflow_dispatch` takes an
+  # `only` filter, and a green subset is exactly the claim §A5 records going
+  # wrong: an empty difference set over part of the corpus read as an empty
+  # difference set. A filtered run therefore reports into the job summary and
+  # nowhere else, which is why this job does not run at all for one.
+  #
+  # Two states are not green and both open the issue, because both leave the
+  # gate unproved for the day: an undeclared difference, and a run that never
+  # got as far as the mode.
+  record:
+    name: a gate that is not green says so where it will be seen
+    needs: parity
+    if: always() && inputs.only == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # A run that died before the mode wrote anything leaves no artifact, and
+      # that is one of the two states this job reports. It must not be an error.
+      - name: Fetch the log
+        id: log
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: parity-log
+          path: ${{ runner.temp }}
+
+      - name: Open, comment on, or close the issue
         env:
           GH_TOKEN: ${{ github.token }}
-          STATUS: ${{ steps.parity.outputs.status }}
+          GH_REPO: ${{ github.repository }}
+          STATUS: ${{ needs.parity.outputs.status }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # Absolute, because a relative link in an issue body is not
           # resolved against the repository the way one in a file is.
           WP19: ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/wp19-stage0-retirement.md
           TITLE: "WP19 G1: the parity gate is not green"
         run: |
+          log="$RUNNER_TEMP/parity.log"
+          [ -f "$log" ] || : > "$log"
           today="$(date -u +%Y-%m-%d)"
           # `gh issue list` reads the API directly. `--search` would go through
           # the search index, which lags by minutes and would open a second
@@ -162,14 +222,14 @@ jobs:
 
           if [ "$STATUS" = "0" ]; then
             [ -n "$number" ] || { echo "green, and no issue open"; exit 0; }
-            gh issue comment "$number" --body "Green again on $today: \`$(tail -n 1 "$RUNNER_TEMP/parity.log")\`. [The run]($RUN_URL)."
+            gh issue comment "$number" --body "Green again on $today: \`$(tail -n 1 "$log")\`. [The run]($RUN_URL)."
             gh issue close "$number" --reason completed
             echo "green: closed #$number"
             exit 0
           fi
 
-          if [ -s "${RUNNER_TEMP}/parity.log" ]; then
-            evidence="$(tail -n 40 "$RUNNER_TEMP/parity.log")"
+          if [ -s "$log" ]; then
+            evidence="$(tail -n 40 "$log")"
             what="\`node tests/run.js --parity\` reported an undeclared difference."
           else
             evidence="(the run produced no parity output)"

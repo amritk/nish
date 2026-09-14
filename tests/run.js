@@ -1244,8 +1244,7 @@ const pinsModuleId = (title, entry, outName, imported, want) => {
     ? spawnSync("node", [cli, entry, "-o", `${absOut}${path.sep}`], { cwd: root, encoding: "utf8" })
     : { status: 1, stderr: `no such fixture: ${path.relative(root, entry)}\n` };
   const file = path.join(absOut, imported);
-  const header =
-    r.status === 0 && fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n")[0] : "";
+  const header = r.status === 0 && fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n")[0] : "";
   check(title, present && header === want, `--- expected\n${want}\n--- actual\n${header}\n${r.stderr}`);
 };
 
