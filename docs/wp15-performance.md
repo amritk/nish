@@ -1501,9 +1501,9 @@ measurement closed says so and says why.
      `taskset -c 2` on a busy shared machine, where the spread between runs is
      wider than the effect and the minimum is the only stable statistic) —
      about 2 ns a call, which is the four intrinsics. Slice width is what
-     moves it: at four bytes a slice the same program measures **1.20x**
-     (55.3 ms against 46.1 ms), because the clamp is a fixed cost per call and
-     the `memcpy` is not. That is the
+     moves it: with `at + 16` changed to `at + 4` throughout, the same program
+     measures **1.20x** (55.3 ms against 46.1 ms), because the clamp is a fixed
+     cost per call and the `memcpy` is not. That is the
      ceiling, on a loop that does nothing but slice; §4's 1.18x for `slice`
      over `substring` is what the same instructions plus the two swap calls are
      worth on lexer-shaped code. `tests/cases/perf_clamp`,
