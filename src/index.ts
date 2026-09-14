@@ -123,6 +123,8 @@ const usageText = (): string =>
     "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus",
     "                             <file>.mjs, a loader that marshals typed arrays",
     "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
+    "  --emit-napi-async <shim.c> the same shim, plus a promise-returning `<name>Async` for every",
+    "                             export that can run off the loop thread; requires --threads",
     "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
     "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
     `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
@@ -214,6 +216,11 @@ function main(argv: string[]): number {
   let emitHeader: string | undefined;
   let emitDts: string | undefined;
   let emitNapi: string | undefined;
+  // WP24 A1: the same generator with the asynchronous exports added. A separate
+  // output rather than a modifier on `--emit-napi`, so that one build can write
+  // both and a host can diff them -- and so the flag has nothing to say when it
+  // is absent, which is what keeps an existing shim byte-identical.
+  let emitNapiAsync: string | undefined;
   let uncheckedIndexing = false;
   let target: string | undefined; // WP9: canonical triple, validated below
   let nsw = true;
@@ -246,6 +253,9 @@ function main(argv: string[]): number {
     } else if (arg === "--emit-napi") {
       emitNapi = argv[++i];
       if (!emitNapi) usage();
+    } else if (arg === "--emit-napi-async") {
+      emitNapiAsync = argv[++i];
+      if (!emitNapiAsync) usage();
     } else if (arg === "--link") {
       link = argv[++i];
       if (!link) usage();
@@ -316,6 +326,22 @@ function main(argv: string[]): number {
     }
   }
   if (inputs.length === 0) usage();
+  // WP24 A1: an asynchronous export runs the compiled function on a libuv
+  // worker while the JS thread keeps going, so both halves of the arena have to
+  // be thread-local -- and the storage class is decided per module, not only in
+  // the runtime. Without `--threads` a module that allocates inline reads
+  // `@nish_arena` as a plain global (`examples/arrays.ts` is one), which the
+  // generated shim's own `#error` cannot see. Nor does the link catch it: a
+  // non-TLS reference against the runtime's `_Thread_local` definition links
+  // without complaint in the `-shared -fPIC` napi build, which is how an addon
+  // would end up reading two different arenas with no diagnostic anywhere. So
+  // it is refused here, where both facts are known, rather than turned on
+  // silently: the arena's storage class is ABI, and no flag should change it as
+  // a side effect of asking for a sidecar.
+  if (emitNapiAsync !== undefined && !threads) {
+    console.error(`${CLI}: --emit-napi-async requires --threads (its exports allocate on a worker thread)`);
+    return EXIT_USAGE;
+  }
 
   let modules: EmittedModule[];
   let outputs: string[];
@@ -406,6 +432,7 @@ function main(argv: string[]): number {
     // The `.d.ts` declares `load()`; the `.mjs` next to it implements it (array marshalling included).
     [emitDts && wasmLoaderPath(emitDts), () => generateWasmLoader(compilation, emitDts!)],
     [emitNapi, () => generateNapiShim(compilation)],
+    [emitNapiAsync, () => generateNapiShim(compilation, true)],
   ];
   for (const [file, generate] of sidecars) {
     if (file === undefined) continue;
@@ -449,7 +476,8 @@ function main(argv: string[]): number {
  * show the stack only on request so users are not buried in frames.
  */
 function reportInternalError(err: unknown, argv: string[]): number {
-  const takesValue = /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi|--target)$/;
+  const takesValue =
+    /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi|--emit-napi-async|--target)$/;
   const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
   const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

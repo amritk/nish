@@ -16,7 +16,10 @@
  *     The compiles run in process (tests/batch_worker.js), many cases to a
  *     worker, rather than one `node dist/index.js` per case; the two paths are
  *     compared against each other below, and `--verify-batch` widens that
- *     comparison to the whole corpus.
+ *     comparison to the whole corpus. The link is against the runtime and the
+ *     driver as object files, built once per run (`runtimeObjects`) rather than
+ *     recompiled per case; the `runtime objects:` checks at the end of the run
+ *     are what say that is the same link.
  *
  *  B. Pipeline checks: the runtime unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
@@ -52,6 +55,106 @@ fs.mkdirSync(buildDir, { recursive: true });
  * repaired on the way past.
  */
 const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c"];
+
+/** The driver every case without its own `.c` and without an `export main` is linked with. */
+const DRIVER_C = path.join(root, "tests", "driver.c");
+
+/**
+ * The C a case is linked against -- `runtime.c`, `runtime_os.c` and the shared
+ * driver -- compiled to object files once per run instead of once per case.
+ *
+ * The measurement, on a four-core Linux box: naming the three sources in a
+ * case's link costs 470 ms, linking the same module against prebuilt objects
+ * costs 91 ms, and building the objects costs 362 ms once. Over the 183 cases
+ * that carry a `.out` that is the difference between 86 s of clang and 17 s.
+ *
+ * **`defines` is the cache key, and it is the whole of what can make one case
+ * need a differently built runtime.** Today that is `-DNISH_THREADS=1` alone,
+ * which moves `nish_arena` into thread-local storage. A wrong-but-fast link
+ * would be worse than a slow one, so the key is checked rather than trusted,
+ * in the two `runtime objects:` checks after section A: one relinks a case from
+ * the sources and requires the same bytes out, and one requires a `--threads`
+ * module linked against the *default* objects to **fail**. It does — `ld`
+ * refuses a TLS reference against a non-TLS definition — so a case handed the
+ * wrong objects is a red line rather than a program with two arenas.
+ *
+ * Nothing here survives a run. The objects are built on their first use in each
+ * process, so a `runtime.c` edited between runs can never be linked against the
+ * object a previous run left behind.
+ */
+const runtimeObjectCache = new Map();
+const runtimeObjects = (defines) => {
+  const key = defines.join(" ");
+  const cached = runtimeObjectCache.get(key);
+  if (cached !== undefined) return cached;
+  const dir = path.join(buildDir, "runtime-obj", key.replace(/[^A-Za-z0-9]+/g, "_") || "default");
+  fs.mkdirSync(dir, { recursive: true });
+  const built = { objects: [], driver: null, error: null };
+  for (const src of [...RUNTIME_C, DRIVER_C]) {
+    const obj = path.join(dir, path.basename(src).replace(/\.c$/, ".o"));
+    const cc = spawnSync("clang", ["-O2", ...defines, "-c", src, "-o", obj], { cwd: root });
+    if (cc.status !== 0) {
+      built.error = `could not compile ${src}${key.length > 0 ? ` with ${key}` : ""}:\n${cc.stderr}`;
+      break;
+    }
+    if (src === DRIVER_C) built.driver = obj;
+    else built.objects.push(obj);
+  }
+  runtimeObjectCache.set(key, built);
+  return built;
+};
+
+/**
+ * The first case linked under each object key, kept so the equivalence check
+ * can replay it from the sources. `fromSource` is the command line this suite
+ * used before the objects existed, argument for argument.
+ */
+const linkSpecimens = new Map();
+
+/**
+ * Link one compiled case into a runnable binary, against the prebuilt runtime.
+ *
+ * `driver` is `DRIVER_C` for the shared driver, a path for a case that brings
+ * its own `.c`, and null when the module carries its own `main`. `defines` says
+ * how the runtime has to have been built, and is what selects the objects.
+ *
+ * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
+ * way it always did; a runtime that would not compile is reported as a link
+ * failure against the case, because that is what it is from here.
+ */
+const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {}) => {
+  const rt = runtimeObjects(defines);
+  if (rt.error !== null) return { status: 1, stdout: "", stderr: rt.error };
+  const tail = libm ? ["-lm"] : [];
+  const driverObject = driver === DRIVER_C ? rt.driver : driver;
+  const args = [
+    "-Wno-override-module",
+    "-O2",
+    ll,
+    ...(driverObject === null ? [] : [driverObject]),
+    ...rt.objects,
+    ...tail,
+  ];
+  if (!linkSpecimens.has(defines.join(" "))) {
+    linkSpecimens.set(defines.join(" "), {
+      ll,
+      fromObjects: args,
+      // `-D` sits on the from-source line because it is compiling the runtime
+      // there; on the object line it is already baked in, which is precisely
+      // what the byte comparison of the two is asserting.
+      fromSource: [
+        "-Wno-override-module",
+        "-O2",
+        ...defines,
+        ll,
+        ...(driver === null ? [] : [driver]),
+        ...RUNTIME_C,
+        ...tail,
+      ],
+    });
+  }
+  return spawnSync("clang", [...args, "-o", exe], { cwd: root });
+};
 
 /**
  * The seed every stage1 binary in this suite is built with (WP19 G2.3):
@@ -296,33 +399,25 @@ for (const name of cases) {
   }
 
   if (fs.existsSync(side("out")) && HAS_CLANG) {
-    const driver = fs.existsSync(side("c")) ? side("c") : path.join(root, "tests", "driver.c");
+    const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C;
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
     // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
     const hasEntry = /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"));
     const exe = path.join(buildDir, name);
     // WP20 T0: a case compiled with `--threads` references `@nish_arena` as a
     // thread-local global, so runtime.c has to define it as one. The macro is
-    // what `scripts/build.sh --threads` passes, and the link is the check: ELF
-    // refuses a non-TLS reference to a TLS definition, so a case that got this
-    // wrong fails here rather than running with two arenas.
+    // what `scripts/build.sh --threads` passes, and the link is still the check:
+    // ELF refuses a non-TLS reference to a TLS definition, so a case that got
+    // this wrong fails here rather than running with two arenas. Since the
+    // runtime is now a prebuilt object, the macro is also what picks *which*
+    // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : [];
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
-    const cc = spawnSync(
-      "clang",
-      [
-        "-Wno-override-module",
-        "-O2",
-        ...threads,
-        outLl,
-        ...(hasEntry ? [] : [driver]),
-        ...RUNTIME_C,
-        "-lm",
-        "-o",
-        exe,
-      ],
-      { cwd: root }
-    );
+    const cc = linkNative(exe, outLl, {
+      driver: hasEntry ? null : driver,
+      defines: threads,
+      libm: true,
+    });
     if (cc.status !== 0) {
       check(`${name}: links natively`, false, String(cc.stderr));
       continue;
@@ -1338,9 +1433,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
   if (HAS_CLANG && fs.existsSync(panicLl)) {
     const exe = path.join(buildDir, "arr_bounds_panic");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, ...RUNTIME_C, "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, panicLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "arr_bounds_panic: exits 1 with `index out of range: 5 >= 3` on stderr (stdout keeps the earlier line)",
@@ -1525,9 +1618,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   );
   if (HAS_CLANG && ns.status === 0) {
     const exe = path.join(buildDir, "mem_stack_struct_nostack");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", noStackLl, ...RUNTIME_C, "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, noStackLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "mem_stack_struct with --no-stack-alloc prints the same output",
@@ -1822,6 +1913,11 @@ if (!only || "layout".includes(only)) {
     }
     if (HAS_CLANG) {
       const exe = path.join(buildDir, "layout_structs");
+      // Named as sources rather than linked against the prebuilt objects, and
+      // that is the point: `-Wall -Wextra -Werror` on this line covers the two
+      // runtime translation units as well as `structs.c`. Swapping them for
+      // objects to save a third of a second would take the warning flags off
+      // the runtime, which is a check, not an overhead.
       const cc = spawnSync(
         "clang",
         [
@@ -1878,9 +1974,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;
     const exe = path.join(buildDir, name);
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ll, ...RUNTIME_C, "-lm", "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, ll, { libm: true });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       `${name}: exits 1 with "${needle}" on stderr`,
@@ -1894,6 +1988,10 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
 }
 
 // ---- B. Pipeline checks -----------------------------------------------------------
+// The two runtime unit tests below name the runtime's sources rather than the
+// prebuilt objects, deliberately: what they assert *is* that the two
+// translation units "compile warning-free together", so compiling them is the
+// check and a cached object would skip it. Two links is what that costs.
 if (!only && HAS_CLANG) {
   const rt = spawnSync(
     "clang",
@@ -2816,6 +2914,198 @@ if (!only || "interop".includes(only)) {
           String(w.stderr) + (cmp ? String(cmp.stdout) + String(cmp.stderr) : "")
         );
       }
+    }
+  }
+
+  // ---- WP24 A1: asynchronous N-API exports (--emit-napi-async) --------------------
+  // The shim runs the Nish function on whatever thread N-API handed it, which for a
+  // `require()`d addon is Node's main thread, so a 200 ms call blocked Node's event
+  // loop for 200 ms (wp24-async.md 5.1). `--emit-napi-async` adds a promise-returning
+  // `<name>Async` beside every export whose arguments and result are plain scalars and
+  // runs it on libuv's thread pool. The compiled function does not change, so what is
+  // under test is the generated C: that the flag is additive and inert when absent,
+  // that a build without the thread-local arena is refused rather than raced, and that
+  // the two call shapes agree on every answer.
+  const asyncSrc = "tests/self/interop_async.ts";
+  const asyncSync = emit(asyncSrc, ["--emit-napi", sidecar("interop_async_sync", "napi.c")], "interop_async_sync");
+  // `--emit-napi-async` requires `--threads`: its exports allocate on a libuv
+  // worker, so the module has to reference the thread-local arena as well. No
+  // sidecar's text depends on the flag -- only the IR's storage class does.
+  const asyncShim = emit(
+    asyncSrc,
+    ["--threads", "--emit-napi-async", sidecar("interop_async", "napi.c")],
+    "interop_async"
+  );
+  const asyncNoThreads = spawnSync(
+    "node",
+    [cli, asyncSrc, "-o", sidecar("interop_async_bad", "ll"), "--emit-napi-async", sidecar("interop_async_bad", "napi.c")],
+    { cwd: root }
+  );
+  check(
+    "--emit-napi-async without --threads is a usage error, not a silently non-thread-local arena",
+    asyncNoThreads.status === 2 &&
+      String(asyncNoThreads.stderr).includes("--emit-napi-async requires --threads") &&
+      !fs.existsSync(sidecar("interop_async_bad", "napi.c")),
+    String(asyncNoThreads.stderr)
+  );
+  check(
+    "--emit-napi-async writes its shim",
+    asyncShim.status === 0 && fs.existsSync(sidecar("interop_async", "napi.c")),
+    asyncShim.stderr
+  );
+  const shimAsync = fs.existsSync(sidecar("interop_async", "napi.c"))
+    ? fs.readFileSync(sidecar("interop_async", "napi.c"), "utf8")
+    : "";
+  const shimPlain = fs.existsSync(sidecar("interop_async_sync", "napi.c"))
+    ? fs.readFileSync(sidecar("interop_async_sync", "napi.c"), "utf8")
+    : "";
+  check(
+    "interop_async.napi.c registers spinAsync/digestAsync beside the synchronous exports and queues them on libuv",
+    shimAsync.includes('{"spin", nish_napi_spin},') &&
+      shimAsync.includes('{"spinAsync", nish_napi_async_spin},') &&
+      shimAsync.includes('{"digestAsync", nish_napi_async_digest},') &&
+      // A `void` result is the shape whose work item has no `result` field and
+      // whose completion callback boxes `undefined` without reading one.
+      shimAsync.includes('{"touchAsync", nish_napi_async_touch},') &&
+      shimAsync.includes("napi_get_undefined(env, &out) != napi_ok)") &&
+      shimAsync.includes("napi_create_promise(env, &nish_deferred, &nish_promise)") &&
+      shimAsync.includes("napi_create_async_work(env, NULL, nish_name, nish_napi_exec_spin, nish_napi_done_spin,") &&
+      shimAsync.includes("napi_queue_async_work(env, nish_w->work)") &&
+      shimAsync.includes("napi_resolve_deferred(env, nish_w->deferred, out)"),
+    shimAsync
+  );
+  check(
+    "the exec callback brackets the call with the worker's own arena mark/release and never touches env",
+    shimAsync.includes("static void nish_napi_exec_spin(napi_env env, void *data) {") &&
+      shimAsync.includes("(void)env; /* N-API forbids reaching the JS engine here") &&
+      shimAsync.includes("uint64_t nish_mark = nish_arena_mark();") &&
+      shimAsync.includes("nish_arena_release(nish_mark);"),
+    shimAsync
+  );
+  check(
+    "a bad argument to an asynchronous export rejects the promise instead of throwing",
+    shimAsync.includes(
+      'return nish_napi_reject(env, nish_deferred, nish_promise, "spinAsync: argument 1 (rounds) must be a number");'
+    ) && shimAsync.includes("static napi_value nish_napi_reject(napi_env env, napi_deferred deferred, napi_value promise,"),
+    shimAsync
+  );
+  check(
+    "the string and borrowed-array exports stay synchronous and the shim names the reason",
+    shimAsync.includes("-- no `labelAsync`: it returns string, which lives in the worker thread's arena") &&
+      shimAsync.includes("-- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads") &&
+      !shimAsync.includes('{"labelAsync"') &&
+      !shimAsync.includes('{"totalAsync"'),
+    shimAsync
+  );
+  check(
+    "an asynchronous shim refuses to compile without the thread-local arena, rather than racing it",
+    shimAsync.includes("#if !defined(NISH_THREADS)") &&
+      shimAsync.includes(
+        '#error "--emit-napi-async needs the thread-local arena: build with scripts/build.sh --threads"'
+      ),
+    shimAsync
+  );
+  // The flag has to be inert: an addon adopts it one call site at a time, so
+  // --emit-napi keeps writing exactly the shim it wrote before A1 existed.
+  check(
+    "--emit-napi is unchanged by the flag existing: no promise, no async work, no NISH_THREADS guard",
+    asyncSync.status === 0 &&
+      shimPlain.length > 0 &&
+      !shimPlain.includes("napi_create_promise") &&
+      !shimPlain.includes("napi_create_async_work") &&
+      !shimPlain.includes("NISH_THREADS") &&
+      !shimPlain.includes("Async"),
+    shimPlain
+  );
+
+  if (!HAS_CLANG) {
+    skip("clang not found: the asynchronous N-API addon is not built or run");
+  } else if (!hasNodeHeaders) {
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the asynchronous N-API addon is skipped`);
+  } else if (shimAsync.length === 0) {
+    check("interop_async.napi.c compiles and runs", false, "--emit-napi-async wrote no file");
+  } else {
+    const withThreads = spawnSync("clang", [
+      ...strictC,
+      `-I${nodeInclude}`,
+      "-DNISH_THREADS=1",
+      "-fsyntax-only",
+      sidecar("interop_async", "napi.c"),
+    ]);
+    check(
+      "interop_async.napi.c compiles under -std=c11 -Wall -Wextra -Werror with -DNISH_THREADS",
+      withThreads.status === 0,
+      String(withThreads.stderr)
+    );
+    // The guard is the whole defence against two threads bumping one arena, so
+    // it is checked by compiling, not only by reading the `#error` out of the text.
+    const noThreads = spawnSync("clang", [
+      ...strictC,
+      `-I${nodeInclude}`,
+      "-fsyntax-only",
+      sidecar("interop_async", "napi.c"),
+    ]);
+    check(
+      "the same file is rejected without -DNISH_THREADS, naming --threads",
+      noThreads.status !== 0 && String(noThreads.stderr).includes("build with scripts/build.sh --threads"),
+      String(noThreads.stderr)
+    );
+
+    const asyncAddon = path.join(interopDir, "interop_async.node");
+    const ab = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_async", "ll"),
+        "runtime/runtime.c",
+        sidecar("interop_async", "napi.c"),
+        "-o",
+        asyncAddon,
+        "--profile",
+        "napi",
+        "--threads",
+      ],
+      { cwd: root }
+    );
+    check("napi profile builds interop_async.node with --threads", ab.status === 0, String(ab.stderr));
+    if (ab.status === 0) {
+      // 4000 rounds rather than the 20000 of the documented measurement: enough
+      // work that a blocked loop is unambiguous, little enough that the suite does
+      // not spend a second on it. The numbers in wp24-async.md 11c are the harness
+      // run by hand at the larger size.
+      const ax = spawnSync("node", ["examples/node-addon-async.mjs", asyncAddon, "20000"], { cwd: root });
+      const out = String(ax.stdout);
+      // `call <n> ms ... worst loop stall <n> ms`, for each call shape.
+      const timings = (label) => {
+        const m = out.match(
+          new RegExp(`${label}[^\\n]*call\\s+([0-9.]+) ms[^\\n]*worst loop stall\\s+([0-9.]+) ms`)
+        );
+        return m === null ? null : { call: Number(m[1]), stall: Number(m[2]) };
+      };
+      const syncRun = timings("sync spin\\(\\)");
+      const asyncRun = timings("async spinAsync\\(\\)");
+      check(
+        "node-addon-async.mjs: both call shapes agree, concurrent calls agree, and a bad argument rejects",
+        ax.status === 0 &&
+          out.includes("same answer from both: true") &&
+          out.includes("32 concurrent digestAsync calls agree with digest: true") &&
+          out.includes("touchAsync(1000) resolves to undefined") &&
+          out.includes('spinAsync("nope") rejects: spinAsync: argument 1 (rounds) must be a number'),
+        out + String(ax.stderr)
+      );
+      // The asynchronous call takes just as long; what changes is whether the loop
+      // is stalled for it. The claim is compared against each call's *own*
+      // duration rather than against a fixed number of milliseconds, so this
+      // stays a check about scheduling instead of a speed test on whatever
+      // machine it runs on: a slow box makes both numbers bigger together.
+      check(
+        "the synchronous call stalls the event loop for its whole duration and the asynchronous one does not",
+        syncRun !== null &&
+          asyncRun !== null &&
+          syncRun.stall > 0.5 * syncRun.call &&
+          asyncRun.stall < 0.25 * asyncRun.call,
+        `sync ${JSON.stringify(syncRun)}, async ${JSON.stringify(asyncRun)}\n${out}`
+      );
     }
   }
 
@@ -4850,7 +5140,16 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   );
   // Every flag the driver accepts is listed: a wrapper that reads --help to
   // learn the surface must not be missing one.
-  const documented = ["--json", "--link", "--emit-header", "--emit-dts", "--emit-napi", "--target", "--profile"];
+  const documented = [
+    "--json",
+    "--link",
+    "--emit-header",
+    "--emit-dts",
+    "--emit-napi",
+    "--emit-napi-async",
+    "--target",
+    "--profile",
+  ];
   const undocumented = documented.filter((f) => !help.stdout.includes(f));
   check(
     `--help lists every advertised flag (${documented.length} checked)`,
@@ -5634,6 +5933,71 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
   );
 } else if (!HAS_CLANG) {
   skip("clang not installed: differential tests skipped");
+}
+
+// ---- The gate on the prebuilt runtime objects ------------------------------------
+//
+// The links above are fast because `runtime.c`, `runtime_os.c` and the driver
+// are compiled once per run rather than once per case, and a fast link that
+// quietly used the wrong runtime would be worse than the slow one it replaced.
+// Two checks, and between them they cover both ways that could happen. They sit
+// at the end of the run rather than beside section A because they replay what
+// this run actually linked: every section that links a case has gone past by
+// here, so a set of defines that only some later block asks for is covered too.
+//
+// One: for every set of defines a case asked for, the first case linked with it
+// is linked *again* from the sources -- the command line this suite used before
+// the objects existed, argument for argument -- and the two binaries have to be
+// byte-identical. That is the whole claim stated directly: the object is what
+// clang would have produced inline. It is a fact about the linker's own
+// pipeline rather than about the runtime, and it is asserted rather than
+// assumed on every platform; if it ever turns out to be platform-specific the
+// honest narrowing is a counted skip, the way the `.text` budgets have one, and
+// not a weaker comparison.
+if (HAS_CLANG && linkSpecimens.size > 0) {
+  for (const [key, spec] of linkSpecimens) {
+    const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`;
+    const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`);
+    const bySource = spawnSync("clang", [...spec.fromSource, "-o", `${stem}.src`], { cwd: root });
+    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", `${stem}.obj`], { cwd: root });
+    const linked = bySource.status === 0 && byObjects.status === 0;
+    const same = linked && fs.readFileSync(`${stem}.src`).equals(fs.readFileSync(`${stem}.obj`));
+    check(
+      `runtime objects: linking ${path.basename(spec.ll)} against ${label} gives the bytes the sources do`,
+      same,
+      linked
+        ? `${fs.statSync(`${stem}.src`).size} bytes from the sources, ` +
+          `${fs.statSync(`${stem}.obj`).size} from the objects; the two links were\n` +
+          `  clang ${spec.fromSource.join(" ")}\n  clang ${spec.fromObjects.join(" ")}`
+        : String(bySource.stderr) + String(byObjects.stderr)
+    );
+  }
+}
+
+// Two: the cache key has to be load-bearing. A `--threads` module wants
+// `@nish_arena` in thread-local storage and the default objects define it as an
+// ordinary global, so handing a case the wrong objects has to be a link error
+// rather than a program with two arenas. `ld` does refuse it -- "TLS reference
+// ... mismatches non-TLS definition" -- and this is where that is written down,
+// because it is the property the whole cache rests on.
+const threadsLl = path.join(buildDir, "mem_threads_arena.ll");
+if (HAS_CLANG && fs.existsSync(threadsLl)) {
+  const rt = runtimeObjects([]);
+  const exe = path.join(buildDir, "runtime-obj", "threads_against_default");
+  const cc =
+    rt.error === null
+      ? spawnSync("clang", ["-Wno-override-module", "-O2", threadsLl, ...rt.objects, "-lm", "-o", exe], {
+          cwd: root,
+        })
+      : null;
+  check(
+    "runtime objects: a --threads module refuses to link against the default runtime",
+    cc !== null && cc.status !== 0,
+    cc === null
+      ? rt.error
+      : "it linked. The object cache's key is then not load-bearing, and a case could be\n" +
+        "handed a runtime built for another one and run with two arenas instead of failing."
+  );
 }
 
 // The summary counts what did *not* run as well as what did. A skip is not a

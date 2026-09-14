@@ -89,6 +89,27 @@ is **data, not code**: a source file next to the output it must produce.
     --verify-batch` does that for the whole corpus, and CI's `batch-parity` job
     runs it on every pull request. Do not make section A faster without keeping
     that comparison able to see it.
+- **The C a case links against is built once per run, not once per case.**
+  `runtime/runtime.c`, `runtime/runtime_os.c` and `tests/driver.c` become object
+  files on their first use and every `.out` case links against those: measured,
+  470 ms a link became 91 ms, with 362 ms paid once. `runtimeObjects(defines)`
+  owns them and `linkNative` is the one place a case is linked.
+  - **`defines` is the cache key and the whole of what can vary.** Today that is
+    `-DNISH_THREADS=1` alone, which puts `nish_arena` in thread-local storage. A
+    case that needs a differently built runtime therefore cannot be handed this
+    one — and that is checked, not trusted: `runtime objects: a --threads module
+    refuses to link against the default runtime` fails if the key ever stops
+    mattering. A wrong-but-fast link is worse than a slow one.
+  - **The objects are what clang would have produced inline, byte for byte.**
+    The other `runtime objects:` check relinks a case from the sources with the
+    exact command line this suite used before and compares the binaries.
+  - **Three links still name the sources on purpose**: the two runtime unit
+    tests, whose subject *is* that the translation units compile warning-free
+    together, and the layout link, whose `-Wall -Wextra -Werror` covers the
+    runtime as well as `structs.c`. Caching those would remove a check, not an
+    overhead.
+  - Nothing survives a run: the objects are rebuilt on first use in each
+    process, so an edited `runtime.c` can never be linked against a stale one.
 - **Toolchain-dependent checks skip, never fail, without LLVM.** `run.js` probes
   for `llvm-as` / `clang` and skips assembly, linking and native runs when they
   are missing. Do not write a check that assumes a tool is present; gate it the
