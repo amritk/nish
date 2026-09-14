@@ -81,15 +81,15 @@ export class IRBlock {
  * written `unreachable, !dbg !9`, so testing only for a following space would
  * miss the terminator and the emitter would add a second one.
  */
-function startsWithWord(text: string, word: string): boolean {
+const startsWithWord = (text: string, word: string): boolean => {
   if (!text.startsWith(word)) {
     return false;
   }
   return text.length === word.length || !isWordByte(text.charCodeAt(word.length));
-}
+};
 
 /** The `\w` of a regular expression: a letter, a digit or an underscore. */
-function isWordByte(code: i32): boolean {
+const isWordByte = (code: i32): boolean => {
   if (code >= 48 && code <= 57) {
     return true;
   }
@@ -100,7 +100,7 @@ function isWordByte(code: i32): boolean {
     return true;
   }
   return code === 95;
-}
+};
 
 /** One parameter of a `define`: `<type> <attrs...> %<name>`. */
 export class IRParam {
@@ -431,7 +431,7 @@ export class IRModule {
  * digits are read here instead so that filling a reserved slot needs no
  * `parseInt` call at run time.
  */
-function metadataIndex(ref: string): i32 {
+const metadataIndex = (ref: string): i32 => {
   let value = 0;
   let i = 1; // past the `!`
   while (i < ref.length) {
@@ -439,4 +439,4 @@ function metadataIndex(ref: string): i32 {
     i = i + 1;
   }
   return value;
-}
+};

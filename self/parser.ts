@@ -192,7 +192,7 @@ import {
  * `||` binds loosest, then `&&`, then the bitwise trio, equality, relational,
  * shifts, additive, multiplicative.
  */
-export function binaryPrecedence(kind: i32): i32 {
+export const binaryPrecedence = (kind: i32): i32 => {
   if (kind === TOK_OR_OR) return 1;
   if (kind === TOK_AND_AND) return 2;
   if (kind === TOK_PIPE) return 3;
@@ -204,10 +204,10 @@ export function binaryPrecedence(kind: i32): i32 {
   if (kind === TOK_PLUS || kind === TOK_MINUS) return 9;
   if (kind === TOK_STAR || kind === TOK_SLASH || kind === TOK_PERCENT) return 10;
   return 0;
-}
+};
 
 /** Whether the token assigns: `=` and the compound forms the language has. */
-export function isAssignment(kind: i32): boolean {
+export const isAssignment = (kind: i32): boolean => {
   return (
     kind === TOK_ASSIGN ||
     kind === TOK_PLUS_ASSIGN ||
@@ -222,7 +222,7 @@ export function isAssignment(kind: i32): boolean {
     kind === TOK_SHR_ASSIGN ||
     kind === TOK_USHR_ASSIGN
   );
-}
+};
 
 export class Parser {
   /**
@@ -1690,6 +1690,6 @@ export class Parser {
 }
 
 /** Parse `source`; the diagnostics are on the parser, which the caller keeps. */
-export function parse(parser: Parser): Node {
+export const parse = (parser: Parser): Node => {
   return parser.parseSourceFile();
-}
+};

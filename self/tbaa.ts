@@ -14,24 +14,24 @@ import { Emitter } from "./emit";
 import { FieldInfo, STRUCT_INTERFACE, StructInfo } from "./program";
 
 /** The root and the `char` node every scalar hangs off, as clang spells them. */
-function charNode(emitter: Emitter): string {
+const charNode = (emitter: Emitter): string => {
   const root = emitter.metadata(`!{!"nish TBAA"}`);
   return emitter.metadata(`!{!"omnipotent char", ${root}, i64 0}`);
-}
+};
 
 /**
  * The scalar node for a field type, named by its LLVM type so that two modules
  * agree under LTO. Every pointer shares one node (`ptr`): the struct path
  * already keeps one class's fields away from another's.
  */
-function scalarNode(emitter: Emitter, type: i32): string {
+const scalarNode = (emitter: Emitter, type: i32): string => {
   const ty = emitter.llvm(type);
   const name = ty.endsWith("*") ? "ptr" : ty;
   return emitter.metadata(`!{!"${name}", ${charNode(emitter)}, i64 0}`);
-}
+};
 
 /** `!{!"Body", <double>, i64 0, <double>, i64 8, ...}`: the whole layout, in offset order. */
-function structNode(emitter: Emitter, info: StructInfo): string {
+const structNode = (emitter: Emitter, info: StructInfo): string => {
   let members = "";
   let i = 0;
   while (i < info.fields.length) {
@@ -41,14 +41,14 @@ function structNode(emitter: Emitter, info: StructInfo): string {
     i = i + 1;
   }
   return emitter.metadata(`!{!"${info.name}"${members}}`);
-}
+};
 
 /**
  * `, !tbaa !N` for a load or store of `field`, or `""` where the access must
  * stay conservative: under `--no-optimize-attributes`, and for an interface or
  * a class that implements one, whose layouts really do overlap.
  */
-export function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string {
+export const fieldTbaa = (emitter: Emitter, info: StructInfo, field: FieldInfo): string => {
   if (!emitter.opts.optimizeAttributes) {
     return "";
   }
@@ -58,4 +58,4 @@ export function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo):
   const base = structNode(emitter, info);
   const scalar = scalarNode(emitter, field.type);
   return `, !tbaa ${emitter.metadata(`!{${base}, ${scalar}, i64 ${field.offset}}`)}`;
-}
+};

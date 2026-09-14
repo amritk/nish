@@ -28,38 +28,38 @@ import { isFloat } from "./types";
 
 // ---- Branch helpers -----------------------------------------------------------
 
-function branch(emitter: Emitter, target: IRBlock): void {
+const branch = (emitter: Emitter, target: IRBlock): void => {
   emitter.fn.emit(`br label %${target.label}`);
-}
+};
 
-function condBranch(emitter: Emitter, cond: string, ifTrue: IRBlock, ifFalse: IRBlock): void {
+const condBranch = (emitter: Emitter, cond: string, ifTrue: IRBlock, ifFalse: IRBlock): void => {
   emitter.fn.emit(`br i1 ${cond}, label %${ifTrue.label}, label %${ifFalse.label}`);
-}
+};
 
 /** Branch to `target` unless the current block already ended; answers whether it did branch. */
-function fallThrough(emitter: Emitter, target: IRBlock): boolean {
+const fallThrough = (emitter: Emitter, target: IRBlock): boolean => {
   if (emitter.fn.currentBlock().terminated()) {
     return false;
   }
   branch(emitter, target);
   return true;
-}
+};
 
 /** A condition the compiler can see is always taken: `while (true)`, or none at all. */
-function isAlwaysTrue(cond: Node): boolean {
+const isAlwaysTrue = (cond: Node): boolean => {
   return cond.kind === N_EMPTY || unwrapParens(cond).kind === N_TRUE;
-}
+};
 
 /** Emit a loop body with `loop` on the stack so `break`/`continue` find their targets. */
-function emitLoopBody(emitter: Emitter, body: Node, loop: LoopTarget): void {
+const emitLoopBody = (emitter: Emitter, body: Node, loop: LoopTarget): void => {
   emitter.loops.push(loop);
   emitter.emitStatement(body);
   emitter.loops.pop();
-}
+};
 
 // ---- Statements ---------------------------------------------------------------
 
-export function emitIf(emitter: Emitter, stmt: Node): void {
+export const emitIf = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn;
   const hasElse = stmt.children[2].kind !== N_EMPTY;
   const thenBlock = fn.newBlock("if.then");
@@ -84,9 +84,9 @@ export function emitIf(emitter: Emitter, stmt: Node): void {
   if (reachesEnd) {
     fn.placeBlock(endBlock);
   }
-}
+};
 
-export function emitWhile(emitter: Emitter, stmt: Node): void {
+export const emitWhile = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn;
   const condBlock = fn.newBlock("while.cond");
   const bodyBlock = fn.newBlock("while.body");
@@ -105,9 +105,9 @@ export function emitWhile(emitter: Emitter, stmt: Node): void {
   if (isAlwaysTrue(stmt.children[0]) && !loop.hasBreak) {
     fn.emit("unreachable");
   }
-}
+};
 
-export function emitDo(emitter: Emitter, stmt: Node): void {
+export const emitDo = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn;
   const bodyBlock = fn.newBlock("do.body");
   const condBlock = fn.newBlock("do.cond");
@@ -126,7 +126,7 @@ export function emitDo(emitter: Emitter, stmt: Node): void {
   if (isAlwaysTrue(stmt.children[1]) && !loop.hasBreak) {
     fn.emit("unreachable");
   }
-}
+};
 
 /**
  * `for (init; cond; inc) body` becomes `for.cond` -> `for.body` -> `for.inc`
@@ -135,7 +135,7 @@ export function emitDo(emitter: Emitter, stmt: Node): void {
  * head). `for.end` is placed only when something can reach it: the condition's
  * false edge or a `break`.
  */
-export function emitFor(emitter: Emitter, stmt: Node): void {
+export const emitFor = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn;
   const initializer = stmt.children[0];
   const condition = stmt.children[1];
@@ -185,7 +185,7 @@ export function emitFor(emitter: Emitter, stmt: Node): void {
       fn.emit("unreachable");
     }
   }
-}
+};
 
 /**
  * `switch` becomes LLVM's `switch`: one table of constant-to-label pairs and a
@@ -197,7 +197,7 @@ export function emitFor(emitter: Emitter, stmt: Node): void {
  * `case 1: case 2: body`. Every other clause ends in a terminator (the checker
  * proved it), except the last, which may fall out into `sw.end`.
  */
-export function emitSwitch(emitter: Emitter, stmt: Node): void {
+export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn;
   const clauses = stmt.children[1].children;
   const bodies: (IRBlock | null)[] = [];
@@ -263,15 +263,15 @@ export function emitSwitch(emitter: Emitter, stmt: Node): void {
   if (reachesEnd) {
     fn.placeBlock(endBlock);
   }
-}
+};
 
 /** The `BLOCK` of a clause: after the label for a `case`, the only child for a `default`. */
-function clauseBody(clause: Node): Node {
+const clauseBody = (clause: Node): Node => {
   return clause.kind === N_CASE ? clause.children[1] : clause.children[0];
-}
+};
 
 /** Where a label jumps: its own body, or the first one below it that exists. */
-function targetOf(bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRBlock {
+const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRBlock => {
   let i = from;
   while (i < bodies.length) {
     const body = bodies[i];
@@ -281,16 +281,16 @@ function targetOf(bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRB
     i = i + 1;
   }
   return endBlock;
-}
+};
 
-export function emitBreak(emitter: Emitter): void {
+export const emitBreak = (emitter: Emitter): void => {
   const target = emitter.loops[emitter.loops.length - 1];
   target.hasBreak = true;
   branch(emitter, target.breakBlock);
-}
+};
 
 /** `continue` looks past any enclosing `switch` for the innermost loop. */
-export function emitContinue(emitter: Emitter): void {
+export const emitContinue = (emitter: Emitter): void => {
   let i = emitter.loops.length - 1;
   while (i >= 0) {
     const target = emitter.loops[i].continueBlock;
@@ -300,15 +300,15 @@ export function emitContinue(emitter: Emitter): void {
     }
     i = i - 1;
   }
-}
+};
 
 /** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding. */
-export function emitThrow(emitter: Emitter, stmt: Node): void {
+export const emitThrow = (emitter: Emitter, stmt: Node): void => {
   emitter.emitExpression(stmt.children[0]);
   emitter.declare("declare void @llvm.trap()");
   emitter.fn.emit("call void @llvm.trap()");
   emitter.fn.emit("unreachable");
-}
+};
 
 // ---- Expressions --------------------------------------------------------------
 
@@ -317,7 +317,7 @@ export function emitThrow(emitter: Emitter, stmt: Node): void {
  * a `phi`. The incoming labels are read after emitting each arm, because an
  * arm may itself contain branches (a nested `?:`, an `&&`).
  */
-export function emitConditional(emitter: Emitter, expr: Node): string {
+export const emitConditional = (emitter: Emitter, expr: Node): string => {
   const fn = emitter.fn;
   const trueBlock = fn.newBlock("cond.true");
   const falseBlock = fn.newBlock("cond.false");
@@ -339,10 +339,10 @@ export function emitConditional(emitter: Emitter, expr: Node): string {
   return fn.emitValue(
     `phi ${emitter.llvm(emitter.typeOf(expr))} [ ${whenTrue}, %${trueEdge} ], [ ${whenFalse}, %${falseEdge} ]`
   );
-}
+};
 
 /** `a && b` / `a || b`: the right operand runs only when the left did not decide the result. */
-export function emitLogical(emitter: Emitter, expr: Node): string {
+export const emitLogical = (emitter: Emitter, expr: Node): string => {
   const isAnd = expr.text === "&&";
   const fn = emitter.fn;
   const rhsBlock = fn.newBlock(isAnd ? "land.rhs" : "lor.rhs");
@@ -363,10 +363,10 @@ export function emitLogical(emitter: Emitter, expr: Node): string {
 
   fn.placeBlock(endBlock);
   return fn.emitValue(`phi i1 [ ${isAnd ? "false" : "true"}, %${lhsEdge} ], [ ${rhs}, %${rhsEdge} ]`);
-}
+};
 
 /** `x op= e`: JS reads `x` before evaluating `e`; the expression's value is the stored result. */
-export function emitCompoundAssignment(emitter: Emitter, expr: Node): string {
+export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => {
   const local = targetLocal(emitter, expr.children[0]);
   const old = loadLocal(emitter, local);
   const rhs = emitter.emitExpression(expr.children[1]);
@@ -375,10 +375,10 @@ export function emitCompoundAssignment(emitter: Emitter, expr: Node): string {
     : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), local.type, old, rhs);
   storeLocal(emitter, local, value);
   return value;
-}
+};
 
 /** `++x`/`x++`/`--x`/`x--`: postfix yields the old value, prefix the new one. */
-export function emitIncDec(emitter: Emitter, expr: Node): string {
+export const emitIncDec = (emitter: Emitter, expr: Node): string => {
   const local = targetLocal(emitter, expr.children[0]);
   const float = isFloat(local.type);
   const increment = expr.text === "++";
@@ -392,4 +392,4 @@ export function emitIncDec(emitter: Emitter, expr: Node): string {
   const value = emitter.fn.emitValue(`${opcode} ${emitter.llvm(local.type)} ${old}, ${one}`);
   storeLocal(emitter, local, value);
   return expr.flags === FLAG_POSTFIX ? old : value;
-}
+};

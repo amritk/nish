@@ -49,7 +49,7 @@ export const T_FIRST_DERIVED: i32 = 12;
  * the C ABI spells both (`int64_t`, `uint64_t`), so excluding them would refuse
  * a signature the compiler can already write into a header.
  */
-export function isForeignScalar(t: i32): boolean {
+export const isForeignScalar = (t: i32): boolean => {
   return (
     t === T_ERROR ||
     t === T_I32 ||
@@ -63,7 +63,7 @@ export function isForeignScalar(t: i32): boolean {
     t === T_BOOL ||
     t === T_VOID
   );
-}
+};
 
 // The kinds of the types that are not scalars. `kindOf` answers one of these
 // or the scalar id itself, so a `switch` over a kind is exhaustive.
@@ -106,17 +106,17 @@ export const ARRAY_STRUCT: string = "%struct.nish_array";
  * IEEE-754 types. Every float lowering is the same instruction at both
  * widths; only the LLVM type name and the constant encoding differ.
  */
-export function isFloat(type: i32): boolean {
+export const isFloat = (type: i32): boolean => {
   return type === T_F32 || type === T_F64;
-}
+};
 
 /** Unsigned integers: the predicate that picks `udiv`, `icmp ult`, `lshr`, `zext`, `uitofp`. */
-export function isUnsigned(type: i32): boolean {
+export const isUnsigned = (type: i32): boolean => {
   return type === T_U8 || type === T_U16 || type === T_U32 || type === T_U64;
-}
+};
 
 /** Width in bits of an integer type; 0 for everything else, which is also the membership test. */
-export function intBits(type: i32): i32 {
+export const intBits = (type: i32): i32 => {
   switch (type) {
     case T_U8:
       return 8;
@@ -133,15 +133,15 @@ export function intBits(type: i32): i32 {
     default:
       return 0;
   }
-}
+};
 
-export function isInteger(type: i32): boolean {
+export const isInteger = (type: i32): boolean => {
   return intBits(type) > 0;
-}
+};
 
-export function isNumeric(type: i32): boolean {
+export const isNumeric = (type: i32): boolean => {
   return isInteger(type) || isFloat(type);
-}
+};
 
 /**
  * Every type in one program, interned.

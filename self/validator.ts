@@ -40,7 +40,7 @@ import {
 } from "./nodes";
 
 /** The message for an identifier that may never appear as a value, or "". */
-function forbiddenValue(name: string): string {
+const forbiddenValue = (name: string): string => {
   if (name === "eval") {
     return "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)";
   }
@@ -71,10 +71,10 @@ function forbiddenValue(name: string): string {
     return "`debugger` is forbidden in " + LANGUAGE + " (no debugger hook)";
   }
   return "";
-}
+};
 
 /** The message for a type name that may never be referenced, or "". */
-function forbiddenType(name: string): string {
+const forbiddenType = (name: string): string => {
   if (name === "Function") {
     return "`Function` type is forbidden in " + LANGUAGE + " (no dynamic function values)";
   }
@@ -100,10 +100,10 @@ function forbiddenType(name: string): string {
     return "`unknown` is forbidden in " + LANGUAGE;
   }
   return "";
-}
+};
 
 /** `Object.<member>` calls that mutate an object's shape or its prototype chain. */
-function isShapeMutation(member: string): boolean {
+const isShapeMutation = (member: string): boolean => {
   return (
     member === "assign" ||
     member === "create" ||
@@ -112,14 +112,14 @@ function isShapeMutation(member: string): boolean {
     member === "setPrototypeOf" ||
     member === "getPrototypeOf"
   );
-}
+};
 
 /**
  * Whether an element-access key *looks* numeric. It is a syntactic test, not
  * a type test — Phase 0 has no types — so it accepts anything arithmetic and
  * refuses the shapes that could only be a property name.
  */
-function isNumericIndexShape(expr: Node): boolean {
+const isNumericIndexShape = (expr: Node): boolean => {
   switch (expr.kind) {
     case N_IDENT:
       return true;
@@ -149,7 +149,7 @@ function isNumericIndexShape(expr: Node): boolean {
     default:
       return false;
   }
-}
+};
 
 /**
  * Sweep a whole tree. Every rejection is reported and the walk continues, so
@@ -157,11 +157,11 @@ function isNumericIndexShape(expr: Node): boolean {
  * behaviour stage0's sink gives Phase 0 and the reason it is a *sweep* rather
  * than a bail-out.
  */
-export function validate(ctx: CheckContext, node: Node): void {
+export const validate = (ctx: CheckContext, node: Node): void => {
   visit(ctx, node, false);
-}
+};
 
-function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
+const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => {
   switch (node.kind) {
     case N_IDENT: {
       const message = forbiddenValue(node.text);
@@ -221,7 +221,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
   for (const child of node.children) {
     visit(ctx, child, inTypePosition);
   }
-}
+};
 
 /**
  * An enum member's value has to be a numeric literal, because an enum lowers
@@ -229,7 +229,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
  * *checker* adds on top is what needs the type model: the literal must be an
  * integer and it must fit in `i32` (WP23).
  */
-function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void {
+const rejectComputedEnumMembers = (ctx: CheckContext, node: Node): void => {
   for (const member of node.children[1].children) {
     const initializer = member.children[1];
     if (initializer.kind !== N_EMPTY && !isNumericLiteralShape(initializer)) {
@@ -239,17 +239,17 @@ function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void {
       );
     }
   }
-}
+};
 
 /** A numeric literal, or one with a leading `-`: everything an enum member may be. */
-function isNumericLiteralShape(expr: Node): boolean {
+const isNumericLiteralShape = (expr: Node): boolean => {
   if (expr.kind === N_NUMBER) {
     return true;
   }
   return expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER;
-}
+};
 
-function rejectForbiddenMember(ctx: CheckContext, node: Node): void {
+const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
   // Against the member name, as stage0 hands `access.name` to `fail`
   // (`src/validator.ts`), not against the whole access.
   if (node.text === "__proto__") {
@@ -267,9 +267,9 @@ function rejectForbiddenMember(ctx: CheckContext, node: Node): void {
       "`Object." + node.text + "` is forbidden in " + LANGUAGE + " (object layout is fixed at compile time)"
     );
   }
-}
+};
 
-function rejectForbiddenIndex(ctx: CheckContext, node: Node): void {
+const rejectForbiddenIndex = (ctx: CheckContext, node: Node): void => {
   const key = node.children[1];
   if (key.kind === N_STRING || key.kind === N_TEMPLATE) {
     ctx.error(
@@ -286,9 +286,9 @@ function rejectForbiddenIndex(ctx: CheckContext, node: Node): void {
       "Element access requires a numeric index in " + LANGUAGE + " (no dynamic property lookup)"
     );
   }
-}
+};
 
-function rejectForbiddenNew(ctx: CheckContext, node: Node): void {
+const rejectForbiddenNew = (ctx: CheckContext, node: Node): void => {
   const callee = node.children[0];
   if (callee.kind !== N_IDENT) {
     return;
@@ -298,9 +298,9 @@ function rejectForbiddenNew(ctx: CheckContext, node: Node): void {
   } else if (callee.text === "Proxy") {
     ctx.error(node, "`new Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)");
   }
-}
+};
 
-function rejectForbiddenCall(ctx: CheckContext, node: Node): void {
+const rejectForbiddenCall = (ctx: CheckContext, node: Node): void => {
   const callee = node.children[0];
   if (callee.kind !== N_IDENT) {
     return;
@@ -310,10 +310,10 @@ function rejectForbiddenCall(ctx: CheckContext, node: Node): void {
   } else if (callee.text === "Function") {
     ctx.error(node, "`Function` constructor is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
   }
-}
+};
 
 /** `T | null` is the only union; anything else is refused with one message. */
-function checkNullUnion(ctx: CheckContext, node: Node): void {
+const checkNullUnion = (ctx: CheckContext, node: Node): void => {
   let nulls = 0;
   for (const member of node.children) {
     if (member.kind === N_TYPE_NULL) {
@@ -326,4 +326,4 @@ function checkNullUnion(ctx: CheckContext, node: Node): void {
       "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"
     );
   }
-}
+};

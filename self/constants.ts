@@ -56,32 +56,32 @@ export class ConstValue {
   }
 }
 
-function intValue(type: i32, value: i64): ConstValue {
+const intValue = (type: i32, value: i64): ConstValue => {
   const out = new ConstValue(type);
   out.intValue = type === T_I32 ? toI64(toI32(value)) : value;
   return out;
-}
+};
 
-function floatValue(value: f64): ConstValue {
+const floatValue = (value: f64): ConstValue => {
   const out = new ConstValue(T_F64);
   out.floatValue = value;
   return out;
-}
+};
 
-function boolValue(value: boolean): ConstValue {
+const boolValue = (value: boolean): ConstValue => {
   const out = new ConstValue(T_BOOL);
   out.intValue = value ? toI64(1) : toI64(0);
   return out;
-}
+};
 
-function stringValue(value: string): ConstValue {
+const stringValue = (value: string): ConstValue => {
   const out = new ConstValue(T_STRING);
   out.textValue = value;
   return out;
-}
+};
 
 /** Digits of an integer literal as written: decimal, `0x`, `0b`, `0o`, with `_` separators. */
-export function parseIntegerLiteral(text: string): i64 {
+export const parseIntegerLiteral = (text: string): i64 => {
   let radix = toI64(10);
   let i = 0;
   if (text.length > 2 && text.charCodeAt(0) === 48) {
@@ -119,10 +119,10 @@ export function parseIntegerLiteral(text: string): i64 {
     i = i + 1;
   }
   return value;
-}
+};
 
 /** Whether a literal as written has a fraction or an exponent, so it is not an integer. */
-function isFractional(text: string): boolean {
+const isFractional = (text: string): boolean => {
   if (text.startsWith("0x") || text.startsWith("0X") || text.startsWith("0b") || text.startsWith("0o")) {
     return false;
   }
@@ -135,25 +135,25 @@ function isFractional(text: string): boolean {
     i = i + 1;
   }
   return false;
-}
+};
 
 /** The name a diagnostic gives a folded value's type. */
-function valueTypeName(ctx: CheckContext, value: ConstValue): string {
+const valueTypeName = (ctx: CheckContext, value: ConstValue): string => {
   return ctx.table.typeName(value.type);
-}
+};
 
 /** Report against the module that *declared* the constant, not the one folding it. */
-function reject(ctx: CheckContext, info: ConstInfo, node: Node, message: string): ConstValue {
+const reject = (ctx: CheckContext, info: ConstInfo, node: Node, message: string): ConstValue => {
   ctx.sink.report(info.origin, node.start, node.end, message);
   return new ConstValue(T_ERROR);
-}
+};
 
 /**
  * Fold `info`'s initialiser, once. The result is checked against the
  * annotation, so `expected` below is a hint that gives a bare literal its
  * width — `const N: i64 = 3` is an `i64` three — and never a coercion.
  */
-export function foldConstant(ctx: CheckContext, info: ConstInfo): void {
+export const foldConstant = (ctx: CheckContext, info: ConstInfo): void => {
   if (info.folded) {
     return;
   }
@@ -204,9 +204,9 @@ export function foldConstant(ctx: CheckContext, info: ConstInfo): void {
   info.intValue = value.intValue;
   info.floatValue = value.floatValue;
   info.textValue = value.textValue;
-}
+};
 
-function fold(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue {
+const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   switch (expr.kind) {
     case N_PAREN:
       return fold(ctx, info, expr.children[0], expected);
@@ -242,9 +242,9 @@ function fold(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): Co
         "A module constant's initialiser must be a literal, another constant, or arithmetic over them"
       );
   }
-}
+};
 
-function foldNumber(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue {
+const foldNumber = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   if (expected === T_F64) {
     return floatValue(Number(expr.text));
   }
@@ -260,9 +260,9 @@ function foldNumber(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
   const out = new ConstValue(type);
   out.intValue = parseIntegerLiteral(expr.text);
   return out;
-}
+};
 
-function foldIdentifier(ctx: CheckContext, info: ConstInfo, expr: Node): ConstValue {
+const foldIdentifier = (ctx: CheckContext, info: ConstInfo, expr: Node): ConstValue => {
   const scope = info.scope;
   const target: ConstInfo | null = scope === null ? null : scope.constant(expr.text);
   if (target === null) {
@@ -279,9 +279,9 @@ function foldIdentifier(ctx: CheckContext, info: ConstInfo, expr: Node): ConstVa
   value.floatValue = target.floatValue;
   value.textValue = target.textValue;
   return value;
-}
+};
 
-function foldUnary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue {
+const foldUnary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   const operand = fold(ctx, info, expr.children[0], expected);
   if (operand.type === T_ERROR) {
     return operand;
@@ -305,7 +305,7 @@ function foldUnary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32
     expr,
     `Unsupported unary operator \`${expr.text}\` on ${valueTypeName(ctx, operand)} in a constant`
   );
-}
+};
 
 /**
  * Whether an operator answers a boolean whatever its operands are. The
@@ -313,11 +313,11 @@ function foldUnary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32
  * are refused); the folder never sees those, because the parser turns them
  * down before a constant is folded.
  */
-function foldsToBool(op: string): boolean {
+const foldsToBool = (op: string): boolean => {
   return op === "<" || op === "<=" || op === ">" || op === ">=" || op === "===" || op === "!==";
-}
+};
 
-function foldBinary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue {
+const foldBinary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   const op = expr.text;
   const left = expr.children[0];
   const right = expr.children[1];
@@ -380,9 +380,9 @@ function foldBinary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
     return foldFloat(ctx, info, op, expr, a.floatValue, b.floatValue);
   }
   return foldInt(ctx, info, op, expr, a, b);
-}
+};
 
-function foldComparison(op: string, a: ConstValue, b: ConstValue): ConstValue {
+const foldComparison = (op: string, a: ConstValue, b: ConstValue): ConstValue => {
   if (a.type === T_F64) {
     if (op === "<") {
       return boolValue(a.floatValue < b.floatValue);
@@ -405,16 +405,16 @@ function foldComparison(op: string, a: ConstValue, b: ConstValue): ConstValue {
     return boolValue(a.intValue > b.intValue);
   }
   return boolValue(a.intValue >= b.intValue);
-}
+};
 
-function foldInt(
+const foldInt = (
   ctx: CheckContext,
   info: ConstInfo,
   op: string,
   expr: Node,
   a: ConstValue,
   b: ConstValue
-): ConstValue {
+): ConstValue => {
   if (op === "/" || op === "%") {
     // The two failures the emitted divisor check catches at run time
     // (docs/LANGUAGE.md, "Checked integer division"), refused at compile time.
@@ -439,7 +439,7 @@ function foldInt(
     return narrowConstant(ctx, info, expr, a.type, mulOverflows(a.intValue, b.intValue), wrapMul(a.intValue, b.intValue));
   }
   return reject(ctx, info, expr, `Unsupported operator \`${op}\` in a constant`);
-}
+};
 
 /**
  * Bring a 64-bit result back into `type`, the way the instruction it replaces
@@ -457,14 +457,14 @@ function foldInt(
  * width, which is why the `toI32` round trip is tested here rather than in
  * `intValue`.
  */
-function narrowConstant(
+const narrowConstant = (
   ctx: CheckContext,
   info: ConstInfo,
   expr: Node,
   type: i32,
   over: boolean,
   wide: i64
-): ConstValue {
+): ConstValue => {
   const value = type === T_I64 ? wide : toI64(toI32(wide));
   const overflowed = over || value !== wide;
   if (overflowed && !ctx.wrapping) {
@@ -477,26 +477,26 @@ function narrowConstant(
     );
   }
   return intValue(type, value);
-}
+};
 
 // Two's-complement 64-bit arithmetic. `u64` is defined as wrapping whether or
 // not `nsw` is on, so these are the wrap the flagged signed instructions no
 // longer perform, written without overflowing a signed value.
 
-function wrapAdd(a: i64, b: i64): i64 {
+const wrapAdd = (a: i64, b: i64): i64 => {
   return toI64(toU64(a) + toU64(b));
-}
+};
 
-function wrapSub(a: i64, b: i64): i64 {
+const wrapSub = (a: i64, b: i64): i64 => {
   return toI64(toU64(a) - toU64(b));
-}
+};
 
-function wrapMul(a: i64, b: i64): i64 {
+const wrapMul = (a: i64, b: i64): i64 => {
   return toI64(toU64(a) * toU64(b));
-}
+};
 
 /** `a + b` leaves the 64-bit range only when both operands share a sign and the sum does not. */
-function addOverflows(a: i64, b: i64): boolean {
+const addOverflows = (a: i64, b: i64): boolean => {
   const zero = toI64(0);
   const sum = wrapAdd(a, b);
   if (a > zero && b > zero) {
@@ -506,10 +506,10 @@ function addOverflows(a: i64, b: i64): boolean {
     return sum >= zero;
   }
   return false;
-}
+};
 
 /** `a - b`, by the same sign argument: only a mixed pair can leave the range. */
-function subOverflows(a: i64, b: i64): boolean {
+const subOverflows = (a: i64, b: i64): boolean => {
   const zero = toI64(0);
   const difference = wrapSub(a, b);
   if (a >= zero && b < zero) {
@@ -519,7 +519,7 @@ function subOverflows(a: i64, b: i64): boolean {
     return difference >= zero;
   }
   return false;
-}
+};
 
 /**
  * `a * b` overflowed 64 bits exactly when dividing the wrapped product back by
@@ -527,7 +527,7 @@ function subOverflows(a: i64, b: i64): boolean {
  * 2^64, which is more than any divisor can absorb. `-1` is taken out first
  * because it is the one divisor that would trip the `MIN / -1` check.
  */
-function mulOverflows(a: i64, b: i64): boolean {
+const mulOverflows = (a: i64, b: i64): boolean => {
   const zero = toI64(0);
   const minusOne = toI64(-1);
   const min = toI64(1) << toI64(63);
@@ -541,9 +541,9 @@ function mulOverflows(a: i64, b: i64): boolean {
     return a === min;
   }
   return wrapMul(a, b) / a !== b;
-}
+};
 
-function foldFloat(ctx: CheckContext, info: ConstInfo, op: string, expr: Node, x: f64, y: f64): ConstValue {
+const foldFloat = (ctx: CheckContext, info: ConstInfo, op: string, expr: Node, x: f64, y: f64): ConstValue => {
   if (op === "+") {
     return floatValue(x + y);
   }
@@ -560,7 +560,7 @@ function foldFloat(ctx: CheckContext, info: ConstInfo, op: string, expr: Node, x
     return floatValue(x % y);
   }
   return reject(ctx, info, expr, `Unsupported operator \`${op}\` on f64 in a constant`);
-}
+};
 
 /** A compile-time integer, and whether there was one. */
 export class CaseValue {
@@ -580,7 +580,7 @@ export class CaseValue {
  * is not an integer — and, for a caller that runs the checker without Phase 0,
  * whatever else it let through.
  */
-export function enumMemberValue(expr: Node): CaseValue {
+export const enumMemberValue = (expr: Node): CaseValue => {
   if (expr.kind === N_NUMBER) {
     return isFractional(expr.text)
       ? new CaseValue(false, toI64(0))
@@ -591,7 +591,7 @@ export function enumMemberValue(expr: Node): CaseValue {
     return new CaseValue(operand.known, -operand.value);
   }
   return new CaseValue(false, toI64(0));
-}
+};
 
 /**
  * The value a `case` label selects on. It has to be known at compile time,
@@ -599,7 +599,7 @@ export function enumMemberValue(expr: Node): CaseValue {
  * negation, or a module constant — which is where a program's token and node
  * kinds live. Anything else is a runtime value and belongs in an `if`.
  */
-export function caseValue(ctx: CheckContext, expr: Node): CaseValue {
+export const caseValue = (ctx: CheckContext, expr: Node): CaseValue => {
   if (expr.kind === N_PAREN) {
     return caseValue(ctx, expr.children[0]);
   }
@@ -628,4 +628,4 @@ export function caseValue(ctx: CheckContext, expr: Node): CaseValue {
     return new CaseValue(true, constant.intValue);
   }
   return new CaseValue(false, toI64(0));
-}
+};

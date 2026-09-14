@@ -15,16 +15,16 @@ import { splitByte, StringBuilder } from "./strings";
 const SLASH: i32 = 47; // '/'
 const DOT: i32 = 46; // '.'
 
-function isAbsolutePath(p: string): boolean {
+const isAbsolutePath = (p: string): boolean => {
   return p.length > 0 && p.charCodeAt(0) === SLASH;
-}
+};
 
 /**
  * `p` split on `/` with the empty pieces dropped, so `//a//b/` gives
  * `["a", "b"]` and the caller reads "absolute" off the first byte instead of
  * off a leading empty segment.
  */
-function splitSegments(p: string): string[] {
+const splitSegments = (p: string): string[] => {
   const parts: string[] = [];
   for (const part of splitByte(p, SLASH)) {
     if (part.length > 0) {
@@ -32,17 +32,17 @@ function splitSegments(p: string): string[] {
     }
   }
   return parts;
-}
+};
 
 /** Whether `segment` is exactly `..`. */
-function isParent(segment: string): boolean {
+const isParent = (segment: string): boolean => {
   return segment.length === 2 && segment.charCodeAt(0) === DOT && segment.charCodeAt(1) === DOT;
-}
+};
 
 /** Whether `segment` is exactly `.`. */
-function isHere(segment: string): boolean {
+const isHere = (segment: string): boolean => {
   return segment.length === 1 && segment.charCodeAt(0) === DOT;
-}
+};
 
 /**
  * `path.posix.normalize` for a path with no trailing slash to preserve:
@@ -51,7 +51,7 @@ function isHere(segment: string): boolean {
  * one (you cannot go above `/`). The empty result is `/` when absolute and
  * `.` when not, as Node's is.
  */
-export function normalizePath(p: string): string {
+export const normalizePath = (p: string): string => {
   const absolute = isAbsolutePath(p);
   const out: string[] = [];
   for (const segment of splitSegments(p)) {
@@ -73,7 +73,7 @@ export function normalizePath(p: string): string {
     return `/${joined}`;
   }
   return joined.length === 0 ? "." : joined;
-}
+};
 
 /**
  * `path.posix.resolve(base, spec)` for an already-resolved `base`: an
@@ -85,7 +85,7 @@ export function normalizePath(p: string): string {
  * every program whose inputs are named the same way (D4: stage1 emits `.ll`
  * and a wrapper links).
  */
-export function resolvePath(base: string, spec: string): string {
+export const resolvePath = (base: string, spec: string): string => {
   if (isAbsolutePath(spec)) {
     return normalizePath(spec);
   }
@@ -93,7 +93,7 @@ export function resolvePath(base: string, spec: string): string {
     return normalizePath(spec);
   }
   return normalizePath(`${base}/${spec}`);
-}
+};
 
 /**
  * `path.posix.dirname`: trailing slashes ignored, then everything before the
@@ -104,7 +104,7 @@ export function resolvePath(base: string, spec: string): string {
  * oracle compares it against, and every path that becomes a module identity
  * goes through `normalizePath` anyway.
  */
-export function dirname(p: string): string {
+export const dirname = (p: string): string => {
   const absolute = isAbsolutePath(p);
   let end = p.length;
   while (end > 0 && p.charCodeAt(end - 1) === SLASH) {
@@ -124,10 +124,10 @@ export function dirname(p: string): string {
     return absolute ? "/" : ".";
   }
   return cut === 0 ? "/" : p.substring(0, cut);
-}
+};
 
 /** `path.posix.basename`: everything after the last `/`, trailing slashes ignored. */
-export function basename(p: string): string {
+export const basename = (p: string): string => {
   let end = p.length;
   while (end > 0 && p.charCodeAt(end - 1) === SLASH) {
     end = end - 1;
@@ -143,7 +143,7 @@ export function basename(p: string): string {
     }
   }
   return p.substring(start, end);
-}
+};
 
 /**
  * `basename(p)` without `suffix`, when it ends with it and something is left.
@@ -155,20 +155,20 @@ export function basename(p: string): string {
  * from this is a module's name, so a basename that is nothing but the suffix
  * keeps it.
  */
-export function basenameWithout(p: string, suffix: string): string {
+export const basenameWithout = (p: string, suffix: string): string => {
   const name = basename(p);
   if (suffix.length > 0 && suffix.length < name.length && name.endsWith(suffix)) {
     return name.substring(0, name.length - suffix.length);
   }
   return name;
-}
+};
 
 /**
  * The file a module specifier names: `./x` and `./x.js` both mean `x.ts`,
  * which is `src/compilation.ts`'s rule (TypeScript's ESM convention) written
  * out. The result is the module's identity, so it goes through `resolvePath`.
  */
-export function resolveModule(importerDir: string, specifier: string): string {
+export const resolveModule = (importerDir: string, specifier: string): string => {
   const resolved = resolvePath(importerDir, specifier);
   if (resolved.endsWith(".js")) {
     return `${resolved.substring(0, resolved.length - 3)}.ts`;
@@ -177,7 +177,7 @@ export function resolveModule(importerDir: string, specifier: string): string {
     return resolved;
   }
   return `${resolved}.ts`;
-}
+};
 
 /**
  * `path.posix.relative(from, to)` for two paths **rooted at the same base**:
@@ -192,7 +192,7 @@ export function resolveModule(importerDir: string, specifier: string): string {
  * dropped, one `..` is emitted per segment left in `from`, and the rest of
  * `to` follows.
  */
-export function relativePath(from: string, to: string): string {
+export const relativePath = (from: string, to: string): string => {
   const fromParts = pathSegments(normalizePath(from));
   const toParts = pathSegments(normalizePath(to));
   let common = 0;
@@ -211,10 +211,10 @@ export function relativePath(from: string, to: string): string {
     i = i + 1;
   }
   return out.join("/");
-}
+};
 
 /** The meaningful segments of a normalised path: no empties, no bare `.`. */
-function pathSegments(p: string): string[] {
+const pathSegments = (p: string): string[] => {
   const out: string[] = [];
   for (const part of splitByte(p, SLASH)) {
     if (part.length > 0 && part !== ".") {
@@ -222,10 +222,10 @@ function pathSegments(p: string): string[] {
     }
   }
   return out;
-}
+};
 
 /** `parts` joined with `/` and normalised, for building a path in pieces. */
-export function joinPath(parts: string[]): string {
+export const joinPath = (parts: string[]): string => {
   const out = new StringBuilder();
   let first = true;
   for (const part of parts) {
@@ -239,4 +239,4 @@ export function joinPath(parts: string[]): string {
     first = false;
   }
   return out.isEmpty() ? "." : normalizePath(out.toText());
-}
+};

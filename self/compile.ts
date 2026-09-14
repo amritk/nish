@@ -71,9 +71,9 @@ const USAGE: string =
  */
 const PROFILE_NAMES: string = "speed, size, debug, wasi";
 
-function isProfile(name: string): boolean {
+const isProfile = (name: string): boolean => {
   return name === "speed" || name === "size" || name === "debug" || name === "wasi";
-}
+};
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one
@@ -84,7 +84,7 @@ function isProfile(name: string): boolean {
  * turns into its own message: the compiler has no exceptions and the path is
  * the useful half of the diagnostic.
  */
-function makeDirectory(dir: string): boolean {
+const makeDirectory = (dir: string): boolean => {
   if (dir.length === 0 || dir === "." || dir === "/") {
     return true;
   }
@@ -93,17 +93,17 @@ function makeDirectory(dir: string): boolean {
     return false;
   }
   return mkdirSync(dir);
-}
+};
 
 /** `makeDirectory(dirname(file))`, reported once and the same way everywhere. */
-function makeDirectoryFor(file: string): boolean {
+const makeDirectoryFor = (file: string): boolean => {
   const dir = dirname(file);
   if (makeDirectory(dir)) {
     return true;
   }
   console.error(`compile: cannot create directory ${dir}`);
   return false;
-}
+};
 
 /**
  * Where each module's IR goes, in module order — the same rules as
@@ -125,7 +125,7 @@ function makeDirectoryFor(file: string): boolean {
  * that order: the spelling first, because it is an answer about the string and
  * not about the file system, and it is the one every caller in the tree writes.
  */
-function planOutputs(stems: string[], paths: string[], output: string, link: string): string[] {
+const planOutputs = (stems: string[], paths: string[], output: string, link: string): string[] => {
   const out: string[] = [];
   if (output.length > 0) {
     if (output.endsWith("/")) {
@@ -155,15 +155,15 @@ function planOutputs(stems: string[], paths: string[], output: string, link: str
     out.push(path.endsWith(".ts") ? `${path.substring(0, path.length - 3)}.ll` : `${path}.ll`);
   }
   return out;
-}
+};
 
-function perModule(stems: string[], dir: string): string[] {
+const perModule = (stems: string[], dir: string): string[] => {
   const out: string[] = [];
   for (const stem of stems) {
     out.push(`${dir}/${stem}.ll`);
   }
   return out;
-}
+};
 
 /**
  * The diagnostics of a failed compilation, in whichever of stage0's two shapes
@@ -171,7 +171,7 @@ function perModule(stems: string[], dir: string): string[] {
  * error and no excerpt, for an editor to read; the default is the human report
  * on stderr, capped where stage0 caps it.
  */
-function report(compilation: Compilation, json: boolean): void {
+const report = (compilation: Compilation, json: boolean): void => {
   if (!json) {
     writeError(`${compilation.sink.format(20)}\n`);
     return;
@@ -179,7 +179,7 @@ function report(compilation: Compilation, json: boolean): void {
   for (const diagnostic of compilation.sink.sorted()) {
     console.log(diagnostic.json());
   }
-}
+};
 
 /**
  * The WP15 §8 performance warnings, in the same two shapes and on the same two
@@ -192,7 +192,7 @@ function report(compilation: Compilation, json: boolean): void {
  * an accident of placement: advice about code that does not compile is noise,
  * and the caller returns before this on an error.
  */
-function reportPerformance(compilation: Compilation, enabled: boolean, json: boolean): void {
+const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
   if (!enabled) {
     return;
   }
@@ -206,7 +206,7 @@ function reportPerformance(compilation: Compilation, enabled: boolean, json: boo
     return;
   }
   writeError(`${compilation.sink.formatWarnings(20)}\n`);
-}
+};
 
 /**
  * A failure that belongs to the command line rather than to the program: it
@@ -214,13 +214,13 @@ function reportPerformance(compilation: Compilation, enabled: boolean, json: boo
  * an `error:` prefix on stderr, or as one flat object on stdout under
  * `--json`, and this answers in the same two shapes.
  */
-function reportRootFailure(message: string, json: boolean): void {
+const reportRootFailure = (message: string, json: boolean): void => {
   if (json) {
     console.log(`{"severity":"error","code":"${codeFor("error", message)}","message":${jsonQuote(message)}}`);
     return;
   }
   console.error(`error: ${message}`);
-}
+};
 
 /**
  * A `--link` failure: the C toolchain could not be used, so the run is wrong
@@ -228,15 +228,15 @@ function reportRootFailure(message: string, json: boolean): void {
  * `src/index.ts`) and both carry the band-0 code, so a reader parses one shape
  * whichever compiler it ran.
  */
-function reportToolchainFailure(message: string, json: boolean): void {
+const reportToolchainFailure = (message: string, json: boolean): void => {
   if (json) {
     console.log(`{"severity":"error","code":"${TOOLCHAIN}","message":${jsonQuote(message)}}`);
     return;
   }
   console.error(message);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   if (process.argv.length < 2) {
     console.error(USAGE);
     return 2;
@@ -509,7 +509,7 @@ export function main(): number {
     return 0;
   }
   return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json);
-}
+};
 
 /**
  * The package root: the directory holding `scripts/`, `runtime/` and `std/`.
@@ -524,7 +524,7 @@ export function main(): number {
  * `self/` module is compiled on its own by `tests/run.js`. Everything that
  * needs the root is handed it through `Options.packageRoot`.
  */
-function packageRoot(): string {
+const packageRoot = (): string => {
   const candidates: string[] = [`${dirname(process.argv[0])}/..`, "."];
   for (const root of candidates) {
     if (readFileSyncOrNull(`${root}/scripts/build.sh`) !== null) {
@@ -532,7 +532,7 @@ function packageRoot(): string {
     }
   }
   return "";
-}
+};
 
 /**
  * `--link`: hand the emitted IR and `runtime/runtime.c` to
@@ -546,14 +546,14 @@ function packageRoot(): string {
  * same stream. Its stderr is inherited, so a clang diagnostic reaches the
  * caller as it happens rather than after the link has finished.
  */
-function linkProgram(
+const linkProgram = (
   outputs: string[],
   link: string,
   profile: string,
   debugInfo: boolean,
   threads: boolean,
   json: boolean
-): number {
+): number => {
   const root = packageRoot();
   if (root.length === 0) {
     reportToolchainFailure(
@@ -607,7 +607,7 @@ function linkProgram(
     console.error(`linked ${link}: ${binary.length} bytes (${profile})`);
   }
   return 0;
-}
+};
 
 /**
  * The WP8 sidecars, after the IR and in stage0's order: the header, the wasm
@@ -619,7 +619,7 @@ function linkProgram(
  * compile that named no output has the IR itself on stdout. Each sidecar's
  * directory is made the way the IR's is; false when one could not be.
  */
-function writeSidecars(compilation: Compilation): boolean {
+const writeSidecars = (compilation: Compilation): boolean => {
   const opts = compilation.opts;
   if (
     opts.emitHeader.length === 0 &&
@@ -662,4 +662,4 @@ function writeSidecars(compilation: Compilation): boolean {
     console.error(`wrote ${opts.emitNapiAsync}`);
   }
   return true;
-}
+};

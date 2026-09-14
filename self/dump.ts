@@ -41,12 +41,12 @@ import {
 import { T_BOOL, T_F64, T_STRING, TypeTable } from "./types";
 
 /** A boolean as the dump spells it; the language does not interpolate one. */
-function flag(value: boolean): string {
+const flag = (value: boolean): string => {
   return value ? "true" : "false";
-}
+};
 
 /** The strings in byte order, which is what `[...set].sort()` gives stage0. */
-function sortedStrings(set: StringSet): string[] {
+const sortedStrings = (set: StringSet): string[] => {
   const out: string[] = [];
   let i = 0;
   while (i < set.size()) {
@@ -67,7 +67,7 @@ function sortedStrings(set: StringSet): string[] {
     a = a + 1;
   }
   return out;
-}
+};
 
 /**
  * The attribute pass's facts for one function, in `src/dump.ts`'s `factsText`
@@ -76,7 +76,7 @@ function sortedStrings(set: StringSet): string[] {
  * does not return a struct, because `checked_oracle.js` compares these lines
  * byte for byte like all the others.
  */
-function factsText(table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out: string[]): void {
+const factsText = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out: string[]): void => {
   let effect = "none";
   if (facts.effect === EFFECT_READ) {
     effect = "read";
@@ -133,10 +133,10 @@ function factsText(table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out
     }
   }
   out.push(`  stackSites=${sites} stackLocals=${facts.stackLocals.length}`);
-}
+};
 
 /** `name(a: i32, b: string): void`, the signature as `src/dump.ts` writes it. */
-function signatureText(table: TypeTable, sig: FunctionSig): string {
+const signatureText = (table: TypeTable, sig: FunctionSig): string => {
   const params: string[] = [];
   let i = 0;
   while (i < sig.paramNames.length) {
@@ -144,9 +144,9 @@ function signatureText(table: TypeTable, sig: FunctionSig): string {
     i = i + 1;
   }
   return `${sig.sourceName}(${params.join(", ")}): ${table.typeName(sig.returnType)}`;
-}
+};
 
-function structText(table: TypeTable, info: StructInfo, out: string[]): void {
+const structText = (table: TypeTable, info: StructInfo, out: string[]): void => {
   const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
   const exported = info.exported ? " exported" : "";
   out.push(`struct ${info.name} (${kind}) size=${info.size} align=${info.align}${exported}`);
@@ -175,10 +175,10 @@ function structText(table: TypeTable, info: StructInfo, out: string[]): void {
     out.push(`  method ${info.methodIndex.keyAt(i)} -> @${info.methodSigs[i].name}`);
     i = i + 1;
   }
-}
+};
 
 /** The folded value in source syntax, so a dump can be pasted back into a program. */
-function constantSyntax(table: TypeTable, info: ConstInfo): string {
+const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
   if (info.type === T_STRING) {
     return jsonQuote(info.textValue);
   }
@@ -189,40 +189,40 @@ function constantSyntax(table: TypeTable, info: ConstInfo): string {
     return info.intValue === toI64(0) ? "false" : "true";
   }
   return `${info.intValue}`;
-}
+};
 
 /** `line:col`, as `src/dump.ts` writes a position. */
-function position(source: SourceFile, offset: i32): string {
+const position = (source: SourceFile, offset: i32): string => {
   return `${source.lineOf(offset)}:${source.columnOf(offset)}`;
-}
+};
 
 /**
  * The locals and callees of one body, in source order, read back out of the
  * side tables. This is the half of the dump that pass 2 fills in, so it is
  * also the half that says whether pass 2 bound the same things stage0 did.
  */
-function bodyTables(
+const bodyTables = (
   program: CheckedProgram,
   source: SourceFile,
   table: TypeTable,
   sig: FunctionSig,
   out: string[]
-): void {
+): void => {
   const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3];
   // Any body, not just a block: a concise arrow body is the expression it
   // returns, and a call inside it is a callee like any other.
   if (body.kind !== N_EMPTY) {
     walkBody(program, source, table, body, out);
   }
-}
+};
 
-function walkBody(
+const walkBody = (
   program: CheckedProgram,
   source: SourceFile,
   table: TypeTable,
   node: Node,
   out: string[]
-): void {
+): void => {
   if (node.kind === N_VAR_DECL) {
     const local = program.nodeLocals[node.id];
     if (local !== null) {
@@ -250,7 +250,7 @@ function walkBody(
   for (const child of node.children) {
     walkBody(program, source, table, child, out);
   }
-}
+};
 
 /**
  * One module of a checked program, in the order `src/dump.ts` writes it: the
@@ -260,7 +260,7 @@ function walkBody(
  * is filtered by origin rather than printed as the checker's table holds it —
  * pass 1b adds every imported name to the importer's tables too.
  */
-function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void {
+const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void => {
   const program = unit.checker.program;
   const source = unit.source;
   // The package is printed only when there is one to print (WP21 S1): the root
@@ -335,7 +335,7 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
       program.leaveInstance();
     }
   }
-}
+};
 
 /**
  * The `--emit-checked` dump of a whole checked program: every module in load
@@ -343,7 +343,7 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
  * for `--emit-checked` and this file's `main` prints it for the oracle, so the
  * two can never drift into two spellings of the same dump.
  */
-export function checkedText(compilation: Compilation): string {
+export const checkedText = (compilation: Compilation): string => {
   // The dump prints the attribute pass's facts, so the fixpoint has to have
   // run: `dumpChecked` in `src/dump.ts` opens with the same call, and it is
   // memoised there and here so a compile that also emits does not pay twice.
@@ -353,5 +353,5 @@ export function checkedText(compilation: Compilation): string {
     dumpModule(unit, compilation.table, facts, out);
   }
   return `${out.join("\n")}\n`;
-}
+};
 

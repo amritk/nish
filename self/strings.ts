@@ -69,7 +69,7 @@ export class StringBuilder {
  * The bytes are UTF-8 and `charCodeAt` zero-extends, so this is code-point
  * order for anything valid, which is what a stable output wants.
  */
-export function compareStrings(a: string, b: string): i32 {
+export const compareStrings = (a: string, b: string): i32 => {
   let shared = a.length;
   if (b.length < shared) {
     shared = b.length;
@@ -87,23 +87,23 @@ export function compareStrings(a: string, b: string): i32 {
     return 0;
   }
   return a.length < b.length ? -1 : 1;
-}
+};
 
 const HEX_LOWER: string = "0123456789abcdef";
 const HEX_UPPER: string = "0123456789ABCDEF";
 
 /** The low nibble of `value` as one lowercase hex digit. */
-export function hexDigitLower(value: i32): string {
+export const hexDigitLower = (value: i32): string => {
   return HEX_LOWER.substring(value & 15, (value & 15) + 1);
-}
+};
 
 /** The low nibble of `value` as one uppercase hex digit. */
-export function hexDigitUpper(value: i32): string {
+export const hexDigitUpper = (value: i32): string => {
   return HEX_UPPER.substring(value & 15, (value & 15) + 1);
-}
+};
 
 /** `value` as exactly `digits` uppercase hex digits, most significant first. */
-export function hexOfI64(value: i64, digits: i32): string {
+export const hexOfI64 = (value: i64, digits: i32): string => {
   const out = new StringBuilder();
   let shift = (digits - 1) * 4;
   while (shift >= 0) {
@@ -111,7 +111,7 @@ export function hexOfI64(value: i64, digits: i32): string {
     shift = shift - 4;
   }
   return out.toText();
-}
+};
 
 /**
  * An `f64` as LLVM writes it: `0x` and the 16 uppercase hex digits of the
@@ -119,18 +119,18 @@ export function hexOfI64(value: i64, digits: i32): string {
  * round-trip exactly, so the hex form is the only one always valid, and
  * `f64ToBits` (WP14 B1) is what makes it reachable from the language at all.
  */
-export function f64Hex(value: f64): string {
+export const f64Hex = (value: f64): string => {
   return `0x${hexOfI64(f64ToBits(value), 16)}`;
-}
+};
 
 /**
  * The same for an `f32`. LLVM writes a `float` constant with the *64-bit* hex
  * of the double it equals and requires that double to be exactly
  * representable as a float, which the round trip through `toF32` guarantees.
  */
-export function f32Hex(value: f64): string {
+export const f32Hex = (value: f64): string => {
   return f64Hex(toF64(toF32(value)));
-}
+};
 
 /**
  * `s` as a JSON string literal, matching `JSON.stringify` byte for byte: the
@@ -138,7 +138,7 @@ export function f32Hex(value: f64): string {
  * byte verbatim — including `0x7f` and the UTF-8 continuation bytes, which
  * `JSON.stringify` also passes through.
  */
-export function jsonQuote(s: string): string {
+export const jsonQuote = (s: string): string => {
   const out = new StringBuilder();
   out.addChar(34);
   let i = 0;
@@ -169,7 +169,7 @@ export function jsonQuote(s: string): string {
   }
   out.addChar(34);
   return out.toText();
-}
+};
 
 /**
  * The body of an LLVM `c"..."` constant: printable ASCII verbatim except `"`
@@ -177,7 +177,7 @@ export function jsonQuote(s: string): string {
  * from `jsonQuote` — LLVM has no `\n` — and mixing the two writes IR that
  * assembles into the wrong bytes, so they sit side by side here.
  */
-export function irEscape(s: string): string {
+export const irEscape = (s: string): string => {
   const out = new StringBuilder();
   let i = 0;
   while (i < s.length) {
@@ -192,7 +192,7 @@ export function irEscape(s: string): string {
     i = i + 1;
   }
   return out.toText();
-}
+};
 
 /**
  * `text` cut at every occurrence of one byte, exactly as JavaScript's
@@ -201,7 +201,7 @@ export function irEscape(s: string): string {
  * empties gone drop them; a splitter that dropped them for everybody could
  * not tell `a//b` from `a/b`, which is the distinction `paths.ts` is built on.
  */
-export function splitByte(text: string, separator: i32): string[] {
+export const splitByte = (text: string, separator: i32): string[] => {
   const parts: string[] = [];
   let start = 0;
   let i = 0;
@@ -214,10 +214,10 @@ export function splitByte(text: string, separator: i32): string[] {
   }
   parts.push(text.substring(start, text.length));
   return parts;
-}
+};
 
 /** `s` repeated `count` times; `count <= 0` is the empty string. */
-export function repeatString(s: string, count: i32): string {
+export const repeatString = (s: string, count: i32): string => {
   const out = new StringBuilder();
   let i = 0;
   while (i < count) {
@@ -225,4 +225,4 @@ export function repeatString(s: string, count: i32): string {
     i = i + 1;
   }
   return out.toText();
-}
+};

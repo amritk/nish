@@ -53,7 +53,7 @@ export const RULE_COUNT: i32 = 399;
  * must be a literal (`self/target.ts` holds its table the same way). Longest
  * fragment first, so a specific rule wins over a general one it contains.
  */
-export function diagnosticRules(): string[] {
+export const diagnosticRules = (): string[] => {
   return [
     "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
     "NL2039",
@@ -840,10 +840,10 @@ export function diagnosticRules(): string[] {
     "Cannot push ",
     "NL2186",
   ];
-}
+};
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
-export function performanceRules(): string[] {
+export const performanceRules = (): string[] => {
   return [
     "allocates a dynamically sized array on every iteration of this loop",
     "NL9001",
@@ -860,14 +860,14 @@ export function performanceRules(): string[] {
     "is at or beyond the",
     "NL9004",
   ];
-}
+};
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
  * (`error`, `syntax error`, `performance`) and `text` the message without
  * its location prefix.
  */
-export function codeFor(kind: string, text: string): string {
+export const codeFor = (kind: string, text: string): string => {
   if (kind === "syntax error") {
     return SYNTAX;
   }
@@ -891,4 +891,4 @@ export function codeFor(kind: string, text: string): string {
     j = j + 2;
   }
   return UNCODED;
-}
+};

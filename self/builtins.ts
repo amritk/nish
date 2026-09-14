@@ -34,7 +34,7 @@ import {
 } from "./types";
 
 /** `Math.sqrt` and friends: one `f64` in, one `f64` out. */
-function isF64Unary(name: string): boolean {
+const isF64Unary = (name: string): boolean => {
   return (
     name === "sqrt" ||
     name === "floor" ||
@@ -46,15 +46,15 @@ function isF64Unary(name: string): boolean {
     name === "exp" ||
     name === "log"
   );
-}
+};
 
 /** Whether a bare identifier names a builtin namespace rather than a value. */
-export function isNamespace(name: string): boolean {
+export const isNamespace = (name: string): boolean => {
   return name === "console" || name === "Math" || name === "process" || name === "String" || name === "Arena";
-}
+};
 
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */
-function conversionTarget(name: string): i32 {
+const conversionTarget = (name: string): i32 => {
   if (name === "toI32") {
     return T_I32;
   }
@@ -80,9 +80,9 @@ function conversionTarget(name: string): i32 {
     return T_F64;
   }
   return -1;
-}
+};
 
-export function isBuiltinFunction(name: string): boolean {
+export const isBuiltinFunction = (name: string): boolean => {
   if (conversionTarget(name) >= 0) {
     return true;
   }
@@ -107,42 +107,42 @@ export function isBuiltinFunction(name: string): boolean {
     name === "isDirectorySync" ||
     name === "getenv"
   );
-}
+};
 
 /** `console.log(x)`, `write(s)` and the rest accept these and nothing else. */
-function isStringifiable(type: i32): boolean {
+const isStringifiable = (type: i32): boolean => {
   return isNumeric(type) || type === T_BOOL || type === T_STRING;
-}
+};
 
 /**
  * The arity wording every builtin and every array or string method uses:
  * "expects exactly 1 argument". A *user* method says "expects 1 argument(s)"
  * instead (`checkMethodArguments`), and both are pinned by `.err` goldens.
  */
-export function checkBuiltinArity(
+export const checkBuiltinArity = (
   ctx: CheckContext,
   call: Node,
   name: string,
   args: Node,
   arity: i32
-): boolean {
+): boolean => {
   if (args.children.length === arity) {
     return true;
   }
   const plural = arity === 1 ? "" : "s";
   ctx.error(call, `\`${name}\` expects exactly ${arity} argument${plural}, got ${args.children.length}`);
   return false;
-}
+};
 
 /** A `void` builtin used as a value; the check stage0 makes against the parent node. */
-function requireStatementPosition(ctx: CheckContext, call: Node, name: string): void {
+const requireStatementPosition = (ctx: CheckContext, call: Node, name: string): void => {
   const statement = ctx.statementExpression;
   if (statement === null || statement !== call) {
     ctx.error(call, `\`${name}\` returns void and can only be used as a statement`);
   }
-}
+};
 
-function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void {
+const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void => {
   const got = checkExpression(ctx, arg, scope, want);
   if (got !== T_ERROR && got !== want) {
     // "an argument of type" rather than the bare type, so the message has a
@@ -150,17 +150,17 @@ function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: str
     // same way in `src/checker/builtins.ts` and `src/checker/math.ts`.
     ctx.error(arg, `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`);
   }
-}
+};
 
 // ---- Namespace properties -----------------------------------------------------------
 
 /** `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch`. */
-export function checkNamespaceProperty(
+export const checkNamespaceProperty = (
   ctx: CheckContext,
   expr: Node,
   namespace: string,
   member: string
-): i32 {
+): i32 => {
   if (namespace === "Math" && (member === "PI" || member === "E")) {
     return T_F64;
   }
@@ -187,7 +187,7 @@ export function checkNamespaceProperty(
     return ctx.errorType(expr.children[0], `Unknown identifier \`${namespace}\``);
   }
   return ctx.errorType(expr, `Unknown builtin \`${namespace}.${member}\``);
-}
+};
 
 // ---- Dotted calls -------------------------------------------------------------------
 
@@ -208,26 +208,26 @@ const SUPPORTED_BUILTINS: string =
   "Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used";
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
-function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 {
+const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 => {
   return ctx.errorType(at, `Unknown builtin \`${name}\` (supported: ${SUPPORTED_BUILTINS})`);
-}
+};
 
 /**
  * A dotted builtin reached without its dot, because a `nish:` import renamed
  * it. `process.exit` is the only one any module exports today; a second would
  * add a branch here rather than a path of its own.
  */
-export function checkImportedDottedBuiltin(
+export const checkImportedDottedBuiltin = (
   ctx: CheckContext,
   call: Node,
   scope: Scope,
   namespace: string,
   member: string
-): i32 {
+): i32 => {
   return checkProcess(ctx, call, call.children[1], `${namespace}.${member}`, member, scope);
-}
+};
 
-export function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 {
+export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   const access = call.children[0];
   const receiver = access.children[0];
   const args = call.children[1];
@@ -267,16 +267,16 @@ export function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i
     return T_STRING;
   }
   return unknownBuiltin(ctx, call.children[0], name);
-}
+};
 
-function checkConsole(
+const checkConsole = (
   ctx: CheckContext,
   call: Node,
   args: Node,
   name: string,
   member: string,
   scope: Scope
-): i32 {
+): i32 => {
   if (member !== "log" && member !== "error") {
     return unknownBuiltin(ctx, call.children[0], name);
   }
@@ -292,16 +292,16 @@ function checkConsole(
   }
   requireStatementPosition(ctx, call, name);
   return T_VOID;
-}
+};
 
-function checkMath(
+const checkMath = (
   ctx: CheckContext,
   call: Node,
   args: Node,
   name: string,
   member: string,
   scope: Scope
-): i32 {
+): i32 => {
   if (isF64Unary(member) || member === "pow") {
     const arity = member === "pow" ? 2 : 1;
     if (checkBuiltinArity(ctx, call, name, args, arity)) {
@@ -344,9 +344,9 @@ function checkMath(
     return T_F64;
   }
   return unknownBuiltin(ctx, call.children[0], name);
-}
+};
 
-function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): void {
+const requireF64 = (ctx: CheckContext, name: string, arg: Node, scope: Scope): void => {
   const got = checkExpression(ctx, arg, scope, T_F64);
   if (got === T_F64 || got === T_ERROR) {
     return;
@@ -359,16 +359,16 @@ function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): v
     return;
   }
   ctx.error(arg, `\`${name}\` expects f64, got ${ctx.table.typeName(got)}`);
-}
+};
 
-function checkProcess(
+const checkProcess = (
   ctx: CheckContext,
   call: Node,
   args: Node,
   name: string,
   member: string,
   scope: Scope
-): i32 {
+): i32 => {
   if (member !== "exit") {
     return unknownBuiltin(ctx, call.children[0], name);
   }
@@ -377,16 +377,16 @@ function checkProcess(
   }
   requireStatementPosition(ctx, call, name);
   return T_VOID;
-}
+};
 
-function checkArena(
+const checkArena = (
   ctx: CheckContext,
   call: Node,
   args: Node,
   name: string,
   member: string,
   scope: Scope
-): i32 {
+): i32 => {
   if (member === "mark" || member === "used") {
     checkBuiltinArity(ctx, call, name, args, 0);
     return T_I64;
@@ -404,14 +404,14 @@ function checkArena(
     return T_VOID;
   }
   return unknownBuiltin(ctx, call.children[0], name);
-}
+};
 
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
-export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope): i32 {
+export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   return checkBuiltinFunctionNamed(ctx, call, scope, call.children[0].text);
-}
+};
 
 /**
  * The same, under a name the call site does not spell. A `nish:` import binds
@@ -419,12 +419,12 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
  * imported rather than by what the identifier says — which is also what makes
  * `as` work.
  */
-export function checkBuiltinFunctionNamed(
+export const checkBuiltinFunctionNamed = (
   ctx: CheckContext,
   call: Node,
   scope: Scope,
   name: string
-): i32 {
+): i32 => {
   const args = call.children[1];
 
   const target = conversionTarget(name);
@@ -574,14 +574,14 @@ export function checkBuiltinFunctionNamed(
     return ctx.table.nullableOf(T_STRING);
   }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``);
-}
+};
 
 /**
  * Whether an expression statement ends the path: `process.exit(n)` and
  * `panic(m)` do, exactly as `return` does, which is what lets a non-`void`
  * function end with one.
  */
-export function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean {
+export const terminatesControlFlow = (ctx: CheckContext, expr: Node): boolean => {
   if (expr.kind !== N_CALL) {
     return false;
   }
@@ -600,7 +600,7 @@ export function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean {
     return false;
   }
   return callee.children[0].text === "process" && callee.text === "exit";
-}
+};
 
 /**
  * Whether an expression *is* `process.argv`. The array is built once by the
@@ -608,7 +608,7 @@ export function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean {
  * way it likes and may not write it: a store, a `push` or a `pop` would
  * change what every other module sees and would outlive an `Arena.reset`.
  */
-export function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean {
+export const isArgvExpression = (ctx: CheckContext, expr: Node, scope: Scope): boolean => {
   // `(process.argv).push(...)` is the same write as `process.argv.push(...)`,
   // so the parentheses are stepped through rather than hiding it.
   let inner = expr;
@@ -631,4 +631,4 @@ export function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): b
   }
   // A local called `process` shadows the namespace, as it would in TypeScript.
   return scope.lookup("process") === null && ctx.program.constant("process") === null;
-}
+};

@@ -34,12 +34,12 @@ import {
 } from "./tokens";
 
 /** Whether the token's `value` is text the reader wants to see as it is. */
-function hasText(kind: i32): boolean {
+const hasText = (kind: i32): boolean => {
   return kind === TOK_IDENT || kind === TOK_NUMBER || kind === TOK_BIGINT || kind === TOK_PRIVATE_IDENT;
-}
+};
 
 /** Whether the token's `value` is decoded bytes, reported as a length. */
-function hasBytes(kind: i32): boolean {
+const hasBytes = (kind: i32): boolean => {
   return (
     kind === TOK_STRING ||
     kind === TOK_TEMPLATE ||
@@ -47,9 +47,9 @@ function hasBytes(kind: i32): boolean {
     kind === TOK_TEMPLATE_MIDDLE ||
     kind === TOK_TEMPLATE_TAIL
   );
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   if (process.argv.length < 2) {
     console.error("usage: dump_tokens <file>");
     return 2;
@@ -83,4 +83,4 @@ export function main(): number {
   }
   write(`${lines.join("\n")}\n`);
   return failed ? 1 : 0;
-}
+};

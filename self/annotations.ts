@@ -51,7 +51,7 @@ const SUPPORTED_TYPES: string =
   "(Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)";
 
 /** The element type of a typed-array alias, or -1 when `name` is not one. */
-export function typedArrayElement(name: string): i32 {
+export const typedArrayElement = (name: string): i32 => {
   if (name === "Int32Array") {
     return T_I32;
   }
@@ -65,7 +65,7 @@ export function typedArrayElement(name: string): i32 {
     return T_I64;
   }
   return -1;
-}
+};
 
 /**
  * The scalar type a bare name spells, or -1 when it is not a scalar keyword.
@@ -73,7 +73,7 @@ export function typedArrayElement(name: string): i32 {
  * integer-only by design (docs/wp14-selfhost.md §5) and string equality
  * compares the lengths first anyway.
  */
-function scalarNamed(name: string, numberMode: i32): i32 {
+const scalarNamed = (name: string, numberMode: i32): i32 => {
   if (name === "number") {
     return numberMode === NUMBER_MODE_I32 ? T_I32 : T_F64;
   }
@@ -111,14 +111,14 @@ function scalarNamed(name: string, numberMode: i32): i32 {
     return T_F64;
   }
   return -1;
-}
+};
 
 /**
  * Resolve one annotation into a type id. Anything outside the rigid set is a
  * rejection: the language has no `any`, no `unknown`, no union but `T | null`, no
  * generics beyond `Array<T>`, and no structural object types.
  */
-export function resolveType(node: Node, ctx: CheckContext): i32 {
+export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
     case N_TYPE_PAREN:
       // Transparent, as `ParenthesizedType` is in `src/types.ts`: the
@@ -136,7 +136,7 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
     default:
       return ctx.errorType(node, `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`);
   }
-}
+};
 
 /**
  * `readonly T[]`. TypeScript allows the modifier on nothing else (TS1354,
@@ -144,7 +144,7 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
  * a scalar or a class is not a construct this compiler has yet to support — it
  * is not TypeScript either, and the message says which rule it broke.
  */
-function resolveReadonly(node: Node, ctx: CheckContext): i32 {
+const resolveReadonly = (node: Node, ctx: CheckContext): i32 => {
   const inner = resolveType(node.children[0], ctx);
   if (inner === T_ERROR) {
     return T_ERROR; // D1: the inner annotation already reported; do not report twice
@@ -156,10 +156,10 @@ function resolveReadonly(node: Node, ctx: CheckContext): i32 {
     );
   }
   return ctx.table.readonlyArrayOf(ctx.table.refOf(inner));
-}
+};
 
 /** A named type, with or without type arguments. */
-function resolveReference(node: Node, ctx: CheckContext): i32 {
+const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   const name = node.text;
   const args = node.children[0];
   const argc = args.kind === N_LIST ? args.children.length : 0;
@@ -264,7 +264,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   }
 
   return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`);
-}
+};
 
 /**
  * `Result<T, E>` (WP16). Written like a generic, but there are no user
@@ -275,7 +275,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
  * nothing to hand back, and it carries no `value` field at all. `E` may not
  * be, because a failure that says nothing is what `panic` is for.
  */
-function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i32 {
+const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i32 => {
   if (argc !== 2) {
     return ctx.errorType(node, "`Result` needs exactly two type arguments, e.g. `Result<number, string>`");
   }
@@ -291,14 +291,14 @@ function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     );
   }
   return ctx.table.resultOf(ok, err, R_UNKNOWN);
-}
+};
 
 /**
  * `T | null`. The validator already refuses every other union, so this only
  * has to find the non-null member and require it to be a pointer type — a
  * scalar has no null value to add.
  */
-function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
+const resolveNullableUnion = (node: Node, ctx: CheckContext): i32 => {
   let inner = -1;
   let nulls = 0;
   for (const member of node.children) {
@@ -333,7 +333,7 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
     );
   }
   return ctx.table.nullableOf(inner);
-}
+};
 
 /**
  * Whether `name` is a type the language already spells for itself, and so may
@@ -342,7 +342,7 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
  * alias under one of these names would simply never be looked at -- silently,
  * which is the part worth refusing.
  */
-export function builtinTypeName(name: string): boolean {
+export const builtinTypeName = (name: string): boolean => {
   if (scalarNamed(name, NUMBER_MODE_I32) >= 0) {
     return true;
   }
@@ -358,7 +358,7 @@ export function builtinTypeName(name: string): boolean {
     name === "ReadonlyArray" ||
     name === "Result"
   );
-}
+};
 
 /**
  * The type `info` names, resolved once. A second reference gets the memo, and
@@ -369,7 +369,7 @@ export function builtinTypeName(name: string): boolean {
  * A failed resolution clears the mark instead of memoising `T_ERROR`, so a
  * second use reports the same real error rather than a spurious cycle.
  */
-export function aliasType(info: AliasInfo, ctx: CheckContext): i32 {
+export const aliasType = (info: AliasInfo, ctx: CheckContext): i32 => {
   if (info.resolving) {
     ctx.error(info.decl, `Type alias \`${info.name}\` is defined in terms of itself`);
     return T_ERROR;
@@ -385,4 +385,4 @@ export function aliasType(info: AliasInfo, ctx: CheckContext): i32 {
   }
   info.type = resolved;
   return resolved;
-}
+};

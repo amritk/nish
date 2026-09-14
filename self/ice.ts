@@ -64,7 +64,7 @@ const ENV_DEBUG: string = "NISH_DEBUG";
  * Report a broken compiler invariant and answer the exit status for it. Every
  * caller is `process.exit(internalError(...))`, which ends the path.
  */
-export function internalError(message: string): i32 {
+export const internalError = (message: string): i32 => {
   // stage0 also prints the crash as a `--json` object (`NL0003`), and this does
   // not. It cannot: `process.argv` needs an `export function main` and this is
   // a library module, the language has no mutable module state to stash the
@@ -78,4 +78,4 @@ export function internalError(message: string): i32 {
   console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
   console.error("the command line at https://github.com/amritk/nish/issues");
   return EXIT_INTERNAL;
-}
+};

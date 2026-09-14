@@ -39,25 +39,25 @@ import { intBits, isFloat, isInteger, isUnsigned, T_BOOL, T_F32, T_I32, T_STRING
  * is emitted instead; an `f32` is written with the hex of the *double* it
  * equals, rounded through `toF32` so that double is exactly a float.
  */
-export function floatText(value: f64, type: i32): string {
+export const floatText = (value: f64, type: i32): string => {
   return type === T_F32 ? f32Hex(value) : f64Hex(value);
-}
+};
 
 /**
  * A numeric literal as LLVM writes it. `i32` truncates to 32 bits, which is
  * what makes `-2147483648` spell `INT_MIN`; the wider integers are exact as
  * written, because the checker proved the literal fits.
  */
-export function numericConstant(text: string, type: i32): string {
+export const numericConstant = (text: string, type: i32): string => {
   if (isInteger(type)) {
     const value = parseIntegerLiteral(text);
     return type === T_I32 ? `${toI32(value)}` : `${value}`;
   }
   return floatText(Number(text), type);
-}
+};
 
 /** The LLVM constant for a folded module constant, by the type it was declared with. */
-export function constantText(emitter: Emitter, info: ConstInfo): string {
+export const constantText = (emitter: Emitter, info: ConstInfo): string => {
   if (info.type === T_BOOL) {
     return info.intValue === toI64(0) ? "false" : "true";
   }
@@ -68,7 +68,7 @@ export function constantText(emitter: Emitter, info: ConstInfo): string {
     return floatText(info.floatValue, info.type);
   }
   return `${info.intValue}`;
-}
+};
 
 // ---- Integer arithmetic -----------------------------------------------------------
 
@@ -84,7 +84,7 @@ export function constantText(emitter: Emitter, info: ConstInfo): string {
  * result. The proof under the attribute is "the checker recorded a signed
  * type", and `isUnsigned` is where that proof is read.
  */
-export function intOpcode(emitter: Emitter, opcode: string, type: i32): string {
+export const intOpcode = (emitter: Emitter, opcode: string, type: i32): string => {
   if (!emitter.opts.nsw || isUnsigned(type)) {
     return opcode;
   }
@@ -92,14 +92,14 @@ export function intOpcode(emitter: Emitter, opcode: string, type: i32): string {
     return opcode;
   }
   return `${opcode} nsw`;
-}
+};
 
 /**
  * The unsigned instruction that means on an unsigned type what the signed one
  * means on a signed type. Anything absent (`add`, `sub`, `mul`, `icmp eq`,
  * `icmp ne`, the bitwise ops) is bit-identical for both signednesses.
  */
-export function signedOpcode(opcode: string, type: i32): string {
+export const signedOpcode = (opcode: string, type: i32): string => {
   if (!isUnsigned(type)) {
     return opcode;
   }
@@ -125,23 +125,23 @@ export function signedOpcode(opcode: string, type: i32): string {
     return "icmp uge";
   }
   return opcode;
-}
+};
 
-function isDivision(opcode: string): boolean {
+const isDivision = (opcode: string): boolean => {
   return opcode === "sdiv" || opcode === "srem" || opcode === "udiv" || opcode === "urem";
-}
+};
 
 /** `INT_MIN` at the width `ty` names, for the signed division overflow check. */
-function intMin(ty: string): string {
+const intMin = (ty: string): string => {
   return ty === "i32" ? "-2147483648" : "-9223372036854775808";
-}
+};
 
 /**
  * `<opcode> <ty> lhs, rhs` for an integer type, with the checked division
  * described above. `opcode` is the *signed* spelling; the unsigned form is
  * selected from `type`, so every caller names one opcode per operator.
  */
-export function emitIntBinary(emitter: Emitter, opcode: string, type: i32, lhs: string, rhs: string): string {
+export const emitIntBinary = (emitter: Emitter, opcode: string, type: i32, lhs: string, rhs: string): string => {
   const ty = emitter.llvm(type);
   const op = signedOpcode(opcode, type);
   const fn = emitter.fn;
@@ -166,12 +166,12 @@ export function emitIntBinary(emitter: Emitter, opcode: string, type: i32, lhs: 
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
   return fn.emitValue(`${op} ${ty} ${lhs}, ${rhs}`);
-}
+};
 
 // ---- Operator tables --------------------------------------------------------------
 
 /** The integer opcode for an arithmetic or comparison operator, in its signed spelling. */
-function integerOpcode(op: string): string {
+const integerOpcode = (op: string): string => {
   if (op === "+") {
     return "add";
   }
@@ -206,10 +206,10 @@ function integerOpcode(op: string): string {
     return "icmp ne";
   }
   process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
-}
+};
 
 /** The floating-point opcode for the same operator. */
-export function floatOpcode(op: string): string {
+export const floatOpcode = (op: string): string => {
   if (op === "+") {
     return "fadd";
   }
@@ -244,10 +244,10 @@ export function floatOpcode(op: string): string {
     return "fcmp une";
   }
   process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
-}
+};
 
 /** The bitwise opcode for `& | ^ << >> >>>` and their compound forms. */
-function bitwiseOpcode(op: string): string {
+const bitwiseOpcode = (op: string): string => {
   if (op === "&" || op === "&=") {
     return "and";
   }
@@ -267,20 +267,20 @@ function bitwiseOpcode(op: string): string {
     return "lshr";
   }
   return "";
-}
+};
 
 /**
  * `>>` is the one operator whose opcode depends on the operand's signedness:
  * sign-filling on `i32`/`i64`, zero-filling on the unsigned widths, which
  * makes `>>` and `>>>` the same instruction there.
  */
-function shiftOpcodeFor(opcode: string, type: i32): string {
+const shiftOpcodeFor = (opcode: string, type: i32): string => {
   return opcode === "ashr" && isUnsigned(type) ? "lshr" : opcode;
-}
+};
 
-function isShiftOpcode(opcode: string): boolean {
+const isShiftOpcode = (opcode: string): boolean => {
   return opcode === "shl" || opcode === "ashr" || opcode === "lshr";
-}
+};
 
 /**
  * The value of a shift count the compiler can already see: an integer
@@ -297,7 +297,7 @@ class ConstantCount {
   }
 }
 
-function constantCount(expr: Node): ConstantCount {
+const constantCount = (expr: Node): ConstantCount => {
   let inner = expr;
   let negative = false;
   for (;;) {
@@ -315,7 +315,7 @@ function constantCount(expr: Node): ConstantCount {
   }
   const value = parseIntegerLiteral(inner.text);
   return new ConstantCount(true, negative ? -value : value);
-}
+};
 
 /**
  * The masked count as an LLVM value. A literal is masked here (`x << 33`
@@ -323,7 +323,7 @@ function constantCount(expr: Node): ConstantCount {
  * The count is a value of the shifted type, because LLVM requires both
  * operands of a shift to agree.
  */
-function emitShiftCount(emitter: Emitter, type: i32, count: Node): string {
+const emitShiftCount = (emitter: Emitter, type: i32, count: Node): string => {
   const ty = emitter.llvm(type);
   const mask = toI64(intBits(type) - 1);
   const literal = constantCount(count);
@@ -331,17 +331,17 @@ function emitShiftCount(emitter: Emitter, type: i32, count: Node): string {
     return `${literal.value & mask}`;
   }
   return emitter.fn.emitValue(`and ${ty} ${emitter.emitExpression(count)}, ${mask}`);
-}
+};
 
 /** The right operand: a masked count for a shift, the plain value for `& | ^`. */
-function emitRightOperand(emitter: Emitter, opcode: string, type: i32, right: Node): string {
+const emitRightOperand = (emitter: Emitter, opcode: string, type: i32, right: Node): string => {
   return isShiftOpcode(opcode) ? emitShiftCount(emitter, type, right) : emitter.emitExpression(right);
-}
+};
 
 // ---- Binary expressions ------------------------------------------------------------
 
 /** Every operator that reads both operands and writes neither. */
-export function emitBinary(emitter: Emitter, expr: Node): string {
+export const emitBinary = (emitter: Emitter, expr: Node): string => {
   const op = expr.text;
   if (op === "&&" || op === "||") {
     return emitLogical(emitter, expr);
@@ -365,19 +365,19 @@ export function emitBinary(emitter: Emitter, expr: Node): string {
     return emitIntBinary(emitter, integerOpcode(op), type, lhs, rhs);
   }
   return emitter.fn.emitValue(`${floatOpcode(op)} ${emitter.llvm(type)} ${lhs}, ${rhs}`);
-}
+};
 
 /** `a & b` and friends: evaluate left then right (JS order), then one instruction. */
-function emitBitwise(emitter: Emitter, expr: Node, type: i32): string {
+const emitBitwise = (emitter: Emitter, expr: Node, type: i32): string => {
   const opcode = shiftOpcodeFor(bitwiseOpcode(expr.text), type);
   const lhs = emitter.emitExpression(expr.children[0]);
   const rhs = emitRightOperand(emitter, opcode, type, expr.children[1]);
   return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${lhs}, ${rhs}`);
-}
+};
 
 // ---- Unary expressions -------------------------------------------------------------
 
-export function emitUnary(emitter: Emitter, expr: Node): string {
+export const emitUnary = (emitter: Emitter, expr: Node): string => {
   const op = expr.text;
   if (op === "++" || op === "--") {
     return emitIncDec(emitter, expr);
@@ -401,35 +401,35 @@ export function emitUnary(emitter: Emitter, expr: Node): string {
     return emitter.fn.emitValue(`xor ${ty} ${emitter.emitExpression(operand)}, -1`);
   }
   process.exit(internalError(`emitter: unexpected unary operator \`${op}\``));
-}
+};
 
 // ---- Locals ------------------------------------------------------------------------
 
 /** Read a mutable local from its alloca slot. */
-export function loadLocal(emitter: Emitter, local: Local): string {
+export const loadLocal = (emitter: Emitter, local: Local): string => {
   const ty = emitter.llvm(local.type);
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${emitter.slotOf(local)}${emitter.alignSuffix(local.type)}`);
-}
+};
 
 /** Write a mutable local back to its alloca slot. */
-export function storeLocal(emitter: Emitter, local: Local, value: string): void {
+export const storeLocal = (emitter: Emitter, local: Local, value: string): void => {
   const ty = emitter.llvm(local.type);
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${emitter.slotOf(local)}${emitter.alignSuffix(local.type)}`);
-}
+};
 
 /** The local a simple assignment target names. */
-export function targetLocal(emitter: Emitter, target: Node): Local {
+export const targetLocal = (emitter: Emitter, target: Node): Local => {
   const local = emitter.program.nodeLocals[target.id];
   if (local !== null) {
     return local;
   }
   process.exit(internalError(`emitter: no binding for the assignment target \`${target.text}\``));
-}
+};
 
 // ---- Assignment ---------------------------------------------------------------------
 
 /** `x = e`, `x op= e` and their field and element forms, keyed by the target. */
-export function emitAssignment(emitter: Emitter, expr: Node): string {
+export const emitAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0];
   if (target.kind === N_MEMBER) {
     return emitFieldAssignment(emitter, expr);
@@ -450,12 +450,12 @@ export function emitAssignment(emitter: Emitter, expr: Node): string {
     return emitBitwiseAssignment(emitter, expr);
   }
   return emitCompoundAssignment(emitter, expr);
-}
+};
 
 /** Whether `op` is one of `&= |= ^= <<= >>= >>>=`, which the field and element emitters ask too. */
-export function isBitwiseAssignment(op: string): boolean {
+export const isBitwiseAssignment = (op: string): boolean => {
   return op.length > 1 && op.endsWith("=") && bitwiseOpcode(op).length > 0;
-}
+};
 
 /**
  * The right-hand half of `t op= e` once `old` — whatever the target held — is
@@ -464,32 +464,32 @@ export function isBitwiseAssignment(op: string): boolean {
  * and where they store the result, so all three come here and the shift-count
  * mask cannot go missing on one of them.
  */
-export function emitBitwiseCombine(emitter: Emitter, op: string, type: i32, old: string, right: Node): string {
+export const emitBitwiseCombine = (emitter: Emitter, op: string, type: i32, old: string, right: Node): string => {
   const opcode = shiftOpcodeFor(bitwiseOpcode(op), type);
   const rhs = emitRightOperand(emitter, opcode, type, right);
   return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${old}, ${rhs}`);
-}
+};
 
 /** `x &= e`: JS reads `x` before evaluating `e`; the expression's value is what was stored. */
-function emitBitwiseAssignment(emitter: Emitter, expr: Node): string {
+const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
   const local = targetLocal(emitter, expr.children[0]);
   const old = loadLocal(emitter, local);
   const value = emitBitwiseCombine(emitter, expr.text, local.type, old, expr.children[1]);
   storeLocal(emitter, local, value);
   return value;
-}
+};
 
 /** The arithmetic behind a compound assignment: `+=` is `+`. */
-export function withoutEquals(op: string): string {
+export const withoutEquals = (op: string): string => {
   return op.substring(0, op.length - 1);
-}
+};
 
 /** The integer opcode of a compound arithmetic assignment, in its signed spelling. */
-export function compoundIntegerOpcode(op: string): string {
+export const compoundIntegerOpcode = (op: string): string => {
   return integerOpcode(withoutEquals(op));
-}
+};
 
 /** The floating-point opcode of the same. */
-export function compoundFloatOpcode(op: string): string {
+export const compoundFloatOpcode = (op: string): string => {
   return floatOpcode(withoutEquals(op));
-}
+};

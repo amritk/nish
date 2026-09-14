@@ -78,9 +78,9 @@ export const FLOW_LOCAL: i32 = 0;
 export const FLOW_RETURNED: i32 = 1;
 export const FLOW_LEAKS: i32 = 2;
 
-function worse(a: i32, b: i32): i32 {
+const worse = (a: i32, b: i32): i32 => {
   return a >= b ? a : b;
-}
+};
 
 /**
  * Whether an identifier builtin answers fresh arena memory, which is what makes
@@ -99,11 +99,11 @@ function worse(a: i32, b: i32): i32 {
  * `Set`; a module constant in this language is a scalar or a string, so the set
  * is a function here and the two are read side by side.
  */
-function isAllocatingBuiltin(name: string): boolean {
+const isAllocatingBuiltin = (name: string): boolean => {
   return (
     name === "readFileSync" || name === "readFileSyncOrNull" || name === "getenv" || name === "readdirSync"
   );
-}
+};
 
 export class EscapeResult {
   /** Node id -> the allocation there is lowered to an entry-block alloca. */
@@ -792,21 +792,21 @@ class EscapeAnalysis {
  * `allocates` is not part of the proof, only of the profit: a callee that never
  * bumps the arena has nothing to reclaim, so the pair of calls is skipped.
  */
-export function reclaimsReturnedString(callee: FunctionSig, facts: FactsTable): boolean {
+export const reclaimsReturnedString = (callee: FunctionSig, facts: FactsTable): boolean => {
   if (callee.returnType !== T_STRING) {
     return false;
   }
   const g = facts.get(callee.name);
   return g !== null && g.allocates && !g.allocEscapes && !g.usesArenaControl;
-}
+};
 
-export function analyzeEscapes(
+export const analyzeEscapes = (
   unit: AnalysisUnit,
   table: TypeTable,
   sig: FunctionSig,
   facts: FactsTable,
   opts: Options
-): EscapeResult {
+): EscapeResult => {
   const analysis = new EscapeAnalysis(
     unit,
     table,
@@ -823,4 +823,4 @@ export function analyzeEscapes(
   analysis.visit(body);
   analysis.decide();
   return analysis.result;
-}
+};

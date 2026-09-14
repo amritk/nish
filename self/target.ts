@@ -42,7 +42,7 @@ const X86_64_DARWIN_LAYOUT: string =
 const WASM32_LAYOUT: string = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20";
 
 /** The canonical triples, in the order `--target` lists them when it refuses one. */
-export function supportedTargets(): string[] {
+export const supportedTargets = (): string[] => {
   return [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
@@ -51,10 +51,10 @@ export function supportedTargets(): string[] {
     "wasm32-unknown-unknown",
     "wasm32-wasi",
   ];
-}
+};
 
 /** The layout of a canonical triple, or the empty string when it is not one. */
-function layoutOf(triple: string): string {
+const layoutOf = (triple: string): string => {
   if (triple === "x86_64-unknown-linux-gnu") {
     return X86_64_LINUX_LAYOUT;
   }
@@ -71,10 +71,10 @@ function layoutOf(triple: string): string {
     return WASM32_LAYOUT;
   }
   return "";
-}
+};
 
 /** Other spellings people type, each mapped to a canonical triple. */
-function aliasOf(spec: string): string {
+const aliasOf = (spec: string): string => {
   if (spec === "x86_64-linux-gnu" || spec === "x86_64-linux") {
     return "x86_64-unknown-linux-gnu";
   }
@@ -94,7 +94,7 @@ function aliasOf(spec: string): string {
     return "wasm32-wasi";
   }
   return "";
-}
+};
 
 /**
  * The triple of the machine the compiler is running on, from what the runtime
@@ -108,7 +108,7 @@ function aliasOf(spec: string): string {
  * the two compilers resolve `--target host` to the same triple on the same
  * machine (`tests/run.js`, the WP14 block).
  */
-export function hostTriple(): string {
+export const hostTriple = (): string => {
   const arch = process.arch;
   let cpu = "";
   if (arch === "x64") {
@@ -127,13 +127,13 @@ export function hostTriple(): string {
     return `${cpu}-apple-darwin`;
   }
   return "";
-}
+};
 
 /**
  * Resolve a `--target` argument: a supported triple, one of its aliases, or
  * `host`. Null for anything else, so the driver can list what it accepts.
  */
-export function resolveTarget(spec: string): Target | null {
+export const resolveTarget = (spec: string): Target | null => {
   if (spec === "host") {
     const triple = hostTriple();
     return triple.length === 0 ? null : new Target(triple, layoutOf(triple));
@@ -147,12 +147,12 @@ export function resolveTarget(spec: string): Target | null {
     return new Target(alias, layoutOf(alias));
   }
   return null;
-}
+};
 
 /** The module-header lines that pin a module to `target`. */
-export function targetHeader(target: Target): string[] {
+export const targetHeader = (target: Target): string[] => {
   const lines: string[] = [];
   lines.push(`target datalayout = "${target.datalayout}"`);
   lines.push(`target triple = "${target.triple}"`);
   return lines;
-}
+};

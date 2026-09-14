@@ -53,19 +53,19 @@ const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64";
  * when a slot holds a value. `inlineElementStruct` in `self/program.ts`
  * carries the rule and the two exclusions.
  */
-function inlineStruct(emitter: Emitter, elem: i32): StructInfo | null {
+const inlineStruct = (emitter: Emitter, elem: i32): StructInfo | null => {
   return inlineElementStruct(emitter.program, emitter.table, elem);
-}
+};
 
 /** Bytes from one element to the next: `sizeof` for an inline record, the value's size otherwise. */
-function elementSize(emitter: Emitter, elem: i32): i32 {
+const elementSize = (emitter: Emitter, elem: i32): i32 => {
   return elementStride(emitter.program, emitter.table, elem);
-}
+};
 
 /** The LLVM type of one slot: `%struct.P` inline, the value type otherwise. */
-function slotType(emitter: Emitter, elem: i32): string {
+const slotType = (emitter: Emitter, elem: i32): string => {
   return elementLLVMType(emitter.program, emitter.table, elem);
-}
+};
 
 // ---- Alias domains ------------------------------------------------------------------
 
@@ -77,7 +77,7 @@ function slotType(emitter: Emitter, elem: i32): string {
  * Measured at 1.6x on an element loop; the proof and the four allocation
  * shapes it covers are written out in `src/codegen/emit/arrays.ts`.
  */
-function aliasScopeList(emitter: Emitter, wantHeader: boolean): string {
+const aliasScopeList = (emitter: Emitter, wantHeader: boolean): string => {
   const domain = emitter.metadata(`!{!"nish array"}`);
   const header = emitter.metadata(`!{!"header", ${domain}}`);
   const element = emitter.metadata(`!{!"elements", ${domain}}`);
@@ -89,70 +89,70 @@ function aliasScopeList(emitter: Emitter, wantHeader: boolean): string {
     return headerList;
   }
   return elementList;
-}
+};
 
 /**
  * `, !alias.scope ..., !noalias ...` for a load or store of an array header
  * field. Both halves are needed: `alias.scope` alone says only where the
  * access is, and the `noalias` on the other side is what makes it NoAlias.
  */
-function headerAccess(emitter: Emitter): string {
+const headerAccess = (emitter: Emitter): string => {
   if (!emitter.opts.optimizeAttributes) {
     return "";
   }
   return `, !alias.scope ${aliasScopeList(emitter, true)}, !noalias ${aliasScopeList(emitter, false)}`;
-}
+};
 
 /** The same, for a load or store of array element data. */
-export function elementAccess(emitter: Emitter): string {
+export const elementAccess = (emitter: Emitter): string => {
   if (!emitter.opts.optimizeAttributes) {
     return "";
   }
   return `, !alias.scope ${aliasScopeList(emitter, false)}, !noalias ${aliasScopeList(emitter, true)}`;
-}
+};
 
 // ---- Header access ------------------------------------------------------------------
 
 /** Address of header field `index` (0 len, 1 cap, 2 data). */
-function headerFieldPointer(emitter: Emitter, arr: string, index: i32): string {
+const headerFieldPointer = (emitter: Emitter, arr: string, index: i32): string => {
   return emitter.fn.emitValue(
     `getelementptr inbounds ${HEADER}, ${HEADER_PTR} ${arr}, i64 0, i32 ${index}`
   );
-}
+};
 
 /** Load header field `index`, in the header alias domain. */
-function loadHeaderField(emitter: Emitter, arr: string, index: i32, type: string): string {
+const loadHeaderField = (emitter: Emitter, arr: string, index: i32, type: string): string => {
   const ptr = headerFieldPointer(emitter, arr, index);
   return emitter.fn.emitValue(`load ${type}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter)}`);
-}
+};
 
 /** Store `value` into header field `index`, in the header alias domain. */
-function storeHeaderField(emitter: Emitter, arr: string, index: i32, value: string, type: string): void {
+const storeHeaderField = (emitter: Emitter, arr: string, index: i32, value: string, type: string): void => {
   const ptr = headerFieldPointer(emitter, arr, index);
   emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter)}`);
-}
+};
 
-function loadLength(emitter: Emitter, arr: string): string {
+const loadLength = (emitter: Emitter, arr: string): string => {
   return loadHeaderField(emitter, arr, 0, "i64");
-}
+};
 
 /**
  * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`. For
  * an inline record the slot type is the struct itself, so this *is* the
  * element's value: the GEP strides by `sizeof` and lands on the object.
  */
-function elementPointer(emitter: Emitter, arr: string, elem: i32, idx: string): string {
+const elementPointer = (emitter: Emitter, arr: string, elem: i32, idx: string): string => {
   const ty = slotType(emitter, elem);
   const data = loadHeaderField(emitter, arr, 2, "i8*");
   const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
   return emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${idx}`);
-}
+};
 
 /**
  * Read element `idx`: the slot's value, or — for an inline record — the slot's
  * *address*, which is what a struct value is everywhere else in the emitter.
  */
-function loadElement(emitter: Emitter, arr: string, elem: i32, idx: string): string {
+const loadElement = (emitter: Emitter, arr: string, elem: i32, idx: string): string => {
   const slot = elementPointer(emitter, arr, elem, idx);
   if (inlineStruct(emitter, elem) !== null) {
     return slot;
@@ -161,7 +161,7 @@ function loadElement(emitter: Emitter, arr: string, elem: i32, idx: string): str
   return emitter.fn.emitValue(
     `load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
   );
-}
+};
 
 /**
  * Write `value` into the slot at `ptr`. For an inline record that is a copy of
@@ -169,7 +169,7 @@ function loadElement(emitter: Emitter, arr: string, elem: i32, idx: string): str
  * duplicated into the slot rather than referenced from it. `llvm.memcpy` wants
  * the ranges equal or disjoint, and two whole objects of one class always are.
  */
-function storeElement(emitter: Emitter, ptr: string, elem: i32, value: string): void {
+const storeElement = (emitter: Emitter, ptr: string, elem: i32, value: string): void => {
   const info = inlineStruct(emitter, elem);
   if (info === null) {
     const ty = emitter.llvm(elem);
@@ -188,7 +188,7 @@ function storeElement(emitter: Emitter, ptr: string, elem: i32, value: string): 
   emitter.fn.emit(
     `call void @${MEMCPY}(i8* ${a}${dst}, i8* ${a}${src}, i64 ${info.size}, i1 false)${elementAccess(emitter)}`
   );
-}
+};
 
 /**
  * Lower a numeric expression and widen it to i64: `sext` from a signed
@@ -196,7 +196,7 @@ function storeElement(emitter: Emitter, ptr: string, elem: i32, value: string): 
  * above `INT_MAX` from becoming a negative i64 and failing the unsigned bounds
  * compare), `fptosi` from double (truncates).
  */
-export function emitIndex(emitter: Emitter, expr: Node): string {
+export const emitIndex = (emitter: Emitter, expr: Node): string => {
   const type = emitter.typeOf(expr);
   const literal = unwrapParens(expr);
   // Fold the widening of a constant index. The `i32` truncation is the one the
@@ -214,22 +214,22 @@ export function emitIndex(emitter: Emitter, expr: Node): string {
     return emitter.fn.emitValue(`fptosi ${ty} ${value} to i64`);
   }
   return emitter.fn.emitValue(`${isUnsigned(type) ? "zext" : "sext"} ${ty} ${value} to i64`);
-}
+};
 
 /** Convert an i64 length back to the `number` type the checker recorded for `expr`. */
-export function emitNumberFromI64(emitter: Emitter, value: string, expr: Node): string {
+export const emitNumberFromI64 = (emitter: Emitter, value: string, expr: Node): string => {
   if (emitter.typeOf(expr) === T_F64) {
     return emitter.fn.emitValue(`sitofp i64 ${value} to double`);
   }
   return emitter.fn.emitValue(`trunc i64 ${value} to i32`);
-}
+};
 
 /**
  * `idx < len` (unsigned) or a branch to a cold block that panics and never
  * returns. `len` is a value rather than an array, so `s.charCodeAt(i)` shares
  * this one check, this one panic and this one message.
  */
-export function emitRangeCheck(emitter: Emitter, idx: string, len: string): void {
+export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void => {
   if (emitter.opts.uncheckedIndexing) {
     return;
   }
@@ -242,7 +242,7 @@ export function emitRangeCheck(emitter: Emitter, idx: string, len: string): void
   fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${idx}, i64 ${len})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
-}
+};
 
 /**
  * The bounds check of `a[i]`: the array's length, then the shared range check.
@@ -254,18 +254,18 @@ export function emitRangeCheck(emitter: Emitter, idx: string, len: string): void
  * every check and trusts the program, while a proof removes one check and the
  * safety is unchanged (WP15 §2.1/§2.2, `self/bounds.ts`).
  */
-function emitBoundsCheck(emitter: Emitter, arr: string, idx: string, site: Node): void {
+const emitBoundsCheck = (emitter: Emitter, arr: string, idx: string, site: Node): void => {
   if (emitter.opts.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
     return;
   }
   emitRangeCheck(emitter, idx, loadLength(emitter, arr));
-}
+};
 
 /**
  * Allocate a header with `len = cap = n`; `data` is stored by `storeData`.
  * Answers the `%struct.nish_array*`: an alloca when `site` is on the stack.
  */
-function emitHeader(emitter: Emitter, n: string, site: Node): string {
+const emitHeader = (emitter: Emitter, n: string, site: Node): string => {
   emitter.declareType(ARRAY_TYPE);
   let arr = "";
   if (emitter.isStackSite(site)) {
@@ -279,7 +279,7 @@ function emitHeader(emitter: Emitter, n: string, site: Node): string {
   storeHeaderField(emitter, arr, 0, n, "i64");
   storeHeaderField(emitter, arr, 1, n, "i64");
   return arr;
-}
+};
 
 /**
  * The non-negative integer a literal length denotes, or -1 for anything else.
@@ -290,7 +290,7 @@ function emitHeader(emitter: Emitter, n: string, site: Node): string {
  * decides the site is stackable from the literal and the emitter types the
  * slot `[n x T]` from it.
  */
-export function literalLength(expr: Node): i32 {
+export const literalLength = (expr: Node): i32 => {
   const e = unwrapParens(expr);
   if (e.kind !== N_NUMBER) {
     return -1;
@@ -300,30 +300,30 @@ export function literalLength(expr: Node): i32 {
     return -1;
   }
   return toI32(n);
-}
+};
 
 /**
  * Element storage as an `i8*`: `[count x T]` on the stack when `site` is a
  * stack allocation (the count is then a literal), else `bytes` from the arena.
  * A `count` of -1 means the length is not a literal.
  */
-function emitData(emitter: Emitter, site: Node, elem: i32, count: i32, bytes: string): string {
+const emitData = (emitter: Emitter, site: Node, elem: i32, count: i32, bytes: string): string => {
   if (count >= 0 && emitter.isStackSite(site)) {
     const ty = `[${count} x ${slotType(emitter, elem)}]`;
     const slot = emitter.fn.emitAlloca("arr.data", ty, 8);
     return emitter.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`);
   }
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`);
-}
+};
 
-function storeData(emitter: Emitter, arr: string, data: string): void {
+const storeData = (emitter: Emitter, arr: string, data: string): void => {
   storeHeaderField(emitter, arr, 2, data, "i8*");
-}
+};
 
 // ---- Construction -------------------------------------------------------------------
 
 /** `[a, b, c]`: elements are evaluated first (left to right), then stored into fresh storage. */
-export function emitArrayLiteral(emitter: Emitter, expr: Node): string {
+export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.table.refOf(emitter.typeOf(expr));
   const ty = slotType(emitter, elem);
   const values: string[] = [];
@@ -344,14 +344,14 @@ export function emitArrayLiteral(emitter: Emitter, expr: Node): string {
     }
   }
   return arr;
-}
+};
 
 /**
  * `new Array<T>(n)`: `n` zeroed elements. A negative `n` becomes a huge
  * allocation and aborts in the arena. `new Int32Array(n)` and friends are the
  * same lowering with `T` fixed by the checker.
  */
-export function emitNewArray(emitter: Emitter, expr: Node): string {
+export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.table.refOf(emitter.typeOf(expr));
   const size = elementSize(emitter, elem);
   const n = emitIndex(emitter, expr.children[2].children[0]);
@@ -375,25 +375,25 @@ export function emitNewArray(emitter: Emitter, expr: Node): string {
   emitter.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)${elementAccess(emitter)}`);
   storeData(emitter, arr, data);
   return arr;
-}
+};
 
 // ---- Element access -------------------------------------------------------------------
 
-export function emitElementAccess(emitter: Emitter, expr: Node): string {
+export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.typeOf(expr);
   emitter.declareType(ARRAY_TYPE);
   const arr = emitter.emitExpression(expr.children[0]);
   const idx = emitIndex(emitter, expr.children[1]);
   emitBoundsCheck(emitter, arr, idx, expr);
   return loadElement(emitter, arr, elem, idx);
-}
+};
 
 /**
  * `a[i] = v`: array, index, value, then the check and the store (the value is
  * the expression's result). `a[i] op= v`: array, index, check, load, value,
  * op, store, matching JavaScript's read-before-right-operand order.
  */
-export function emitElementAssignment(emitter: Emitter, expr: Node): string {
+export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0];
   const elem = emitter.typeOf(target);
   const ty = emitter.llvm(elem);
@@ -423,22 +423,22 @@ export function emitElementAssignment(emitter: Emitter, expr: Node): string {
   }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
   return value;
-}
+};
 
 // ---- Members ----------------------------------------------------------------------------
 
 /** `a.length`, in the `number` width the checker recorded. */
-export function emitArrayLength(emitter: Emitter, expr: Node): string {
+export const emitArrayLength = (emitter: Emitter, expr: Node): string => {
   emitter.declareType(ARRAY_TYPE);
   const arr = emitter.emitExpression(expr.children[0]);
   return emitNumberFromI64(emitter, loadLength(emitter, arr), expr);
-}
+};
 
 /** The byte length of a runtime string, shared by `join`. */
-function stringLength(emitter: Emitter, str: string): string {
+const stringLength = (emitter: Emitter, str: string): string => {
   const header = emitter.fn.emitValue(`bitcast i8* ${str} to i64*`);
   return emitter.fn.emitValue(`load i64, i64* ${header}${emitter.align8()}`);
-}
+};
 
 /**
  * `===` for an element type: strings compare by content, floats with
@@ -446,7 +446,7 @@ function stringLength(emitter: Emitter, str: string): string {
  * everything else — integers, booleans, and the pointers of classes,
  * interfaces and arrays — with `icmp eq`.
  */
-function emitElementEquals(emitter: Emitter, elem: i32, a: string, b: string): string {
+const emitElementEquals = (emitter: Emitter, elem: i32, a: string, b: string): string => {
   if (elem === T_STRING) {
     return emitter.fn.emitValue(
       `call zeroext i1 ${emitter.useRuntime("nish_str_eq")}(i8* ${a}, i8* ${b})`
@@ -454,10 +454,10 @@ function emitElementEquals(emitter: Emitter, elem: i32, a: string, b: string): s
   }
   const opcode = isFloat(elem) ? "fcmp oeq" : "icmp eq";
   return emitter.fn.emitValue(`${opcode} ${emitter.llvm(elem)} ${a}, ${b}`);
-}
+};
 
 /** `a.push(v)`: grow when full, store at `len`, and answer the new length. */
-function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string {
+const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
   const fn = emitter.fn;
   const value = emitter.emitExpression(expr.children[1].children[0]);
   const lenPtr = headerFieldPointer(emitter, arr, 0);
@@ -477,7 +477,7 @@ function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
   return emitNumberFromI64(emitter, newLen, expr);
-}
+};
 
 /**
  * `a.pop()`: the last element, with the length decremented. An empty array
@@ -485,7 +485,7 @@ function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
  * `0 >= 0`, which is the access being attempted — because there is no
  * `undefined` to return and no second return type to widen to.
  */
-function emitPop(emitter: Emitter, arr: string, elem: i32): string {
+const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
   const fn = emitter.fn;
   const lenPtr = headerFieldPointer(emitter, arr, 0);
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
@@ -505,7 +505,7 @@ function emitPop(emitter: Emitter, arr: string, elem: i32): string {
   // dropped. The bytes are still there; the next `push` reuses them, which is
   // why the checker counts `pop` as a mutation.
   return loadElement(emitter, arr, elem, last);
-}
+};
 
 /**
  * `a.indexOf(v)`: the first index whose element is `=== v`, or -1. The scan is
@@ -513,7 +513,7 @@ function emitPop(emitter: Emitter, arr: string, elem: i32): string {
  * one search per element type anyway. The loop counts up to `len` and
  * terminates on its own, which is what keeps `willreturn` sound.
  */
-function emitArrayIndexOf(emitter: Emitter, expr: Node, arr: string, elem: i32): string {
+const emitArrayIndexOf = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
   const fn = emitter.fn;
   const value = emitter.emitExpression(expr.children[1].children[0]);
   const len = loadLength(emitter, arr);
@@ -550,7 +550,7 @@ function emitArrayIndexOf(emitter: Emitter, expr: Node, arr: string, elem: i32):
   fn.placeBlock(endBlock);
   const found = fn.emitValue(`phi i64 [ ${at}, %${testBlock.label} ], [ -1, %${missBlock.label} ]`);
   return emitNumberFromI64(emitter, found, expr);
-}
+};
 
 /**
  * `parts.join(sep)` on a `string[]`: one pass over the lengths, one
@@ -562,7 +562,7 @@ function emitArrayIndexOf(emitter: Emitter, expr: Node, arr: string, elem: i32):
  * The separator is copied before every part but the first, with the *length*
  * selected rather than the branch taken, so the copy loop stays one block.
  */
-function emitJoin(emitter: Emitter, expr: Node, arr: string): string {
+const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const fn = emitter.fn;
   const args = expr.children[1];
   const sep = args.children.length > 0 ? emitter.emitExpression(args.children[0]) : emitter.stringConstant(",");
@@ -645,9 +645,9 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string {
   const tail = fn.emitValue(`load i8*, i8** ${cursorSlot}, align 8`);
   fn.emit(`store i8 0, i8* ${tail}, align 1`);
   return out;
-}
+};
 
-export function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32): string {
+export const emitArrayMethodCall = (emitter: Emitter, expr: Node, receiver: i32): string => {
   const elem = emitter.table.refOf(receiver);
   emitter.declareType(ARRAY_TYPE);
   const arr = emitter.emitExpression(expr.children[0].children[0]);
@@ -662,7 +662,7 @@ export function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32)
     return emitArrayIndexOf(emitter, expr, arr, elem);
   }
   return emitJoin(emitter, expr, arr);
-}
+};
 
 // ---- `for (const x of a)` ------------------------------------------------------------------
 
@@ -672,7 +672,7 @@ export function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32)
  * so the body reads and writes it like any local. `break` leaves to
  * `forof.end`, `continue` goes to `forof.inc`.
  */
-export function emitForOf(emitter: Emitter, stmt: Node): void {
+export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const decl = stmt.children[0].children[0].children[0];
   const local = emitter.program.nodeLocals[decl.id];
   if (local === null) {
@@ -723,4 +723,4 @@ export function emitForOf(emitter: Emitter, stmt: Node): void {
   fn.emit(`br label %${condBlock.label}`);
 
   fn.placeBlock(endBlock);
-}
+};

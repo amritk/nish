@@ -21,9 +21,9 @@ import { isForeignScalar, T_ERROR, T_I32, T_VOID } from "./types";
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL: string = "nish_main";
 
-export function isExported(node: Node): boolean {
+export const isExported = (node: Node): boolean => {
   return (node.flags & FLAG_EXPORTED) !== 0;
-}
+};
 
 /**
  * The parameters of a function, method or constructor, appended to `sig`.
@@ -31,7 +31,7 @@ export function isExported(node: Node): boolean {
  * member's `this` is `params[0]`, which is the calling convention the whole
  * emitter is written against.
  */
-export function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i32): void {
+export const collectParams = (ctx: CheckContext, sig: FunctionSig, list: Node, owner: i32): void => {
   if (owner >= 0) {
     sig.paramNames.push("this");
     sig.paramTypes.push(owner);
@@ -52,14 +52,14 @@ export function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, o
     sig.paramNames.push(name);
     sig.paramTypes.push(type);
   }
-}
+};
 
 /**
  * One `function` declaration's signature. The body is not looked at: pass 2
  * checks bodies once every callee in the program is known, which is what lets
  * functions call each other in any order.
  */
-export function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig {
+export const collectFunctionSignature = (ctx: CheckContext, decl: Node): FunctionSig => {
   const name = decl.children[0].text;
   const sig = new FunctionSig(name, name, decl);
   sig.origin = ctx.source;
@@ -80,7 +80,7 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
     checkForeignSignature(ctx, sig, decl, name);
   }
   return sig;
-}
+};
 
 /**
  * The rules a `declare function` adds (WP27 S1): no body, not exported, and a
@@ -91,7 +91,7 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
  * wrong about — so widening it is a decision about the memory model and not a
  * relaxation of a type check (`docs/wp27-ffi.md` §3).
  */
-function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void {
+const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   if (sig.body() !== null) {
     ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body");
   }
@@ -119,14 +119,14 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
       `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar only`
     );
   }
-}
+};
 
 /**
  * The entry module's `export function main`, renamed to `@nish_main` so the
  * emitter's C-ABI wrapper can own `@main`. The wrapper hands an `i32` to the
  * OS, so `main` returns `void` or an `i32`-lowered number.
  */
-export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
+export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
   if (sig.paramTypes.length > 0) {
     // Against the first parameter, as stage0 hands `sig.decl.parameters[0]` to
     // the error (`markEntryMain` in `src/checker/declarations.ts`), not against
@@ -154,14 +154,14 @@ export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
   }
   sig.name = ENTRY_MAIN_SYMBOL;
   ctx.program.entryMain = sig;
-}
+};
 
 /**
  * One binding per name in an `import`. The parser has already refused every
  * form but `import { a, b as c } from "..."`, so what is left is the
  * specifier rule and the empty list.
  */
-export function collectImports(ctx: CheckContext, decl: Node): void {
+export const collectImports = (ctx: CheckContext, decl: Node): void => {
   const specifier = decl.text;
   // `nish:` is the one bare form: it names a builtin module rather than a
   // file, so it is let through here and validated in pass 1b, where an unknown
@@ -197,13 +197,13 @@ export function collectImports(ctx: CheckContext, decl: Node): void {
     // ones that turn out to be functions or constants.
     ctx.program.typeNames.add(spec.text);
   }
-}
+};
 
 /** Whether a top-level node is a declaration this pass collects a signature for. */
-export function isFunctionDeclaration(node: Node): boolean {
+export const isFunctionDeclaration = (node: Node): boolean => {
   return node.kind === N_FUNCTION;
-}
+};
 
-export function isImportDeclaration(node: Node): boolean {
+export const isImportDeclaration = (node: Node): boolean => {
   return node.kind === N_IMPORT;
-}
+};

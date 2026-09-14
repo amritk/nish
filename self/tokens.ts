@@ -136,14 +136,14 @@ export const TOK_BIGINT: i32 = 97; // 1n
 
 export const TOK_COUNT: i32 = 98;
 
-export function isKeyword(kind: i32): boolean {
+export const isKeyword = (kind: i32): boolean => {
   return kind >= TOK_KEYWORD_FIRST && kind <= TOK_KEYWORD_LAST;
-}
+};
 
 // The name of each kind, for the token dump and for diagnostics. A `switch` on
 // a dense range is a jump table, which is why the kinds are numbered the way
 // they are; a `string[]` indexed by kind would cost a heap array and a load.
-export function tokenName(kind: i32): string {
+export const tokenName = (kind: i32): string => {
   switch (kind) {
     case TOK_END:
       return "END";
@@ -340,4 +340,4 @@ export function tokenName(kind: i32): string {
     default:
       return "?";
   }
-}
+};
