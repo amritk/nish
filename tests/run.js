@@ -35,7 +35,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
-import { diagnosticWords, diffModules } from "../scripts/arrow-verify.mjs";
+import { diagnosticWords, diffModules, sitsOnChange } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -5323,16 +5323,49 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // `../tests/self/corpus.js`, which `files` does not ship, and nothing said so because
     // nobody runs a corpus sweep out of an install. Either it resolves or it does not
     // ship; this is what makes that a check rather than a habit.
+    //
+    // The specifiers are read from the parse tree and not from a pattern, because the
+    // forms a pattern misses are the ones nobody looks at: `import "./x.js";` with no
+    // clause, `export { a } from "./x.js"`, a dynamic `import()`, and any of them in
+    // single quotes. A guard that only sees `import ... from "..."` is a guard the
+    // regression it was written for can walk straight past.
+    const ts = require("typescript");
+    const specifiersOf = (text, name) => {
+      const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+      const found = [];
+      const visit = (node) => {
+        const fixed =
+          (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined
+            ? node.moduleSpecifier
+            : undefined;
+        if (fixed !== undefined && ts.isStringLiteral(fixed)) found.push(fixed.text);
+        const dynamic =
+          ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+            ? node.arguments[0]
+            : undefined;
+        if (dynamic !== undefined && ts.isStringLiteral(dynamic)) found.push(dynamic.text);
+        ts.forEachChild(node, visit);
+      };
+      visit(sf);
+      return found;
+    };
+    // `@scope/name/deep` and `name/deep` are both the package plus a subpath, and it is
+    // the package that `dependencies` names.
+    const packageOf = (spec) =>
+      spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
     const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-    const deps = new Set(Object.keys(manifest.dependencies));
+    // A tarball with no `dependencies` at all is a thing a refactor can produce, and it
+    // should fail this one check rather than throw and take the whole packaging block
+    // with it.
+    const deps = new Set(Object.keys(manifest.dependencies ?? {}));
     const shippedScripts = files.filter((f) => f.startsWith("scripts/") && /\.(mjs|js)$/.test(f));
     const unresolved = [];
     for (const rel of shippedScripts) {
-      const text = fs.readFileSync(path.join(root, rel), "utf8");
-      for (const [, spec] of text.matchAll(/^import[^;]*?from\s+"([^"]+)"/gm)) {
+      for (const spec of specifiersOf(fs.readFileSync(path.join(root, rel), "utf8"), rel)) {
         if (spec.startsWith("node:")) continue;
         if (!spec.startsWith(".")) {
-          if (!deps.has(spec)) unresolved.push(`${rel} imports \`${spec}\`, which is not a dependency`);
+          const pkg = packageOf(spec);
+          if (!deps.has(pkg)) unresolved.push(`${rel} imports \`${spec}\`, and \`${pkg}\` is not a dependency`);
           continue;
         }
         const target = path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
@@ -5759,6 +5792,52 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     );
   }
 
+  // Every position the splice cuts at comes from the tree, because a comment can contain
+  // the syntax a search would find first: the word `function` in a leading comment, a
+  // parenthesis in a comment after the name or inside the parameter list. Locating an
+  // edit by `indexOf` put the splice inside the comment and wrote back a file that no
+  // longer parses, with exit 0 -- the worst thing a codemod can do to a file nobody is
+  // reading line by line. Where the comment sits in the one region the rewrite discards
+  // -- between `function` and the parameter list, which becomes `const NAME = ` -- there
+  // is nowhere to put it, so the declaration is refused instead of quietly losing it.
+  for (const [what, source, expected] of [
+    ["the keyword inside a leading comment", "export /* the function below */ function f(): i32 {\n  return 1;\n}\n", "rewritten"],
+    ["a `)` inside a parameter comment", "function h(a: i32 /* ) */ ) {\n  console.log(`${a}`);\n}\n", "rewritten"],
+    ["a comment between `function` and the name", "function /* named */ k(): i32 {\n  return 1;\n}\n", "refused"],
+    ["a comment between the name and the `(`", "function g /* ( a ) */ (): i32 {\n  return 1;\n}\n", "refused"],
+  ]) {
+    const spliced = arrowify(source, "splice.ts");
+    const reparsed = ts.createSourceFile("splice.ts", spliced.text, ts.ScriptTarget.Latest, true);
+    const rewritten = spliced.changed === 1 && spliced.skipped.length === 0;
+    const refused = spliced.changed === 0 && spliced.skipped.length === 1 && spliced.text === source;
+    check(
+      `WP22: the codemod splices from the tree, not from a text search -- ${what}`,
+      reparsed.parseDiagnostics.length === 0 && (expected === "rewritten" ? rewritten : refused),
+      `${spliced.changed} rewritten, ${spliced.skipped.length} left alone, ` +
+        `${reparsed.parseDiagnostics.length} parse error(s): ${JSON.stringify(spliced.text)}`
+    );
+  }
+
+  // The CLI's own refusals. `--check` answers with an exit code and `--stdout` with a
+  // file, so asking for both used to answer 0 with the rewrites still pending; and a
+  // misspelled `--concise` was ignored, which is a collapse pass that did not happen in
+  // a recipe whose whole point is which pass ran.
+  const cli22 = (...args) =>
+    spawnSync("node", [path.join(root, "scripts", "arrowify.mjs"), ...args], { cwd: root, encoding: "utf8" }).status;
+  // A copy, never a corpus file: the flag these ask about is one an unfixed codemod
+  // *ignores*, and an ignored flag means the run rewrites whatever it was handed. This
+  // check writing over a golden case on the way to failing is precisely the accident it
+  // exists to make impossible.
+  const oneFunction = path.join(buildDir, "arrow-flags.ts");
+  fs.writeFileSync(oneFunction, fs.readFileSync(path.join(casesDir, "add.ts")));
+  check(
+    "WP22: the codemod refuses a flag it does not have, and a pair of flags it cannot answer both of",
+    cli22("--consise", oneFunction) === 2 &&
+      cli22("--check", "--stdout", oneFunction) === 2 &&
+      cli22("--check", oneFunction) === 1,
+    "expected 2, 2 and 1"
+  );
+
   // WP22 §9 keeps `declare function` legal because it defines nothing. A body-less
   // declaration *without* `declare` is not that: it is an overload signature, which the
   // language does not have, and the checker refuses the line
@@ -5802,7 +5881,18 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     `${onlyAfter.length} found after, ${onlyBefore.length} found before`
   );
 
-  // The second: a rejection is compared by its words with every position stripped, so a
+  // The second: a program is only evidence about a rewrite if the rewrite reached the
+  // modules it compiles. Counting one that did not is how a sweep over a slice that is
+  // already migrated reports `0 difference(s)` for compiling the same source twice.
+  check(
+    "WP22: the verifier counts a program as evidence only when the change reached it",
+    sitsOnChange("tests/link/std_testing/main.ts", new Set(["std/testing.ts"])) &&
+      sitsOnChange("tests/link/std_testing/main.ts", new Set(["tests/link/std_testing/main.ts"])) &&
+      !sitsOnChange("tests/link/std_testing/main.ts", new Set(["self/lexer.ts"])),
+    "an imported module counts, an unrelated file does not"
+  );
+
+  // The third: a rejection is compared by its words with every position stripped, so a
   // `reject_*` case that starts compiling, or is refused under a different rule, differs
   // and fails the run -- while a caret that moved is only reported, because under
   // `--concise` the lines move by construction (WP22 §8c).
