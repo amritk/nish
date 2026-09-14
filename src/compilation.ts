@@ -49,8 +49,7 @@ import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
 import { CLI, LANGUAGE, PACKAGE_CONDITION, STD_PREFIX, packageConditionFor } from "./branding.js";
 import { nishExportTarget } from "./manifest.js";
-import { STD_DIR, stdModuleNames } from "./std-modules.js";
-import { PKG_ROOT } from "./version.js";
+import { stdModuleName, stdModuleNames, stdModulePath } from "./std-modules.js";
 
 export interface ModuleUnit {
   /** Absolute path: the module's identity. */
@@ -261,6 +260,7 @@ export class Compilation {
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {
         const found = this.resolveSpecifier(unit, imp);
+        const std = imp.specifier.startsWith(STD_PREFIX);
         // The file is read *here*, not inside `load`, because a file that will
         // not open is a fact about this import and belongs at the specifier
         // with the name the importer wrote. Reading it inside `load` made it an
@@ -272,13 +272,21 @@ export class Compilation {
         // that same read, in the same place, answering the same two sentences.
         const text = readFileOrNull(found.path);
         if (text === null) {
-          throw imp.specifier.startsWith(STD_PREFIX)
-            ? notStandardLibrary(unit, imp)
-            : missingModule(unit, imp, found.path);
+          throw std ? notStandardLibrary(unit, imp) : missingModule(unit, imp, found.path);
         }
         unit.resolved.set(
           imp.specifier,
-          this.load(found.path, importedName(unit, found.path), text, false, found.packageName)
+          this.load(
+            found.path,
+            // A `nish/` module is named by where it sits in the package, not by
+            // where the importer sits: it did not resolve against the importer,
+            // so naming it from there put the checkout path in the header
+            // whenever the entry was named absolutely (WP19 §A3).
+            std ? stdModuleName(imp.specifier.slice(STD_PREFIX.length)) : importedName(unit, found.path),
+            text,
+            false,
+            found.packageName
+          )
         );
       });
     }
@@ -436,7 +444,7 @@ export class Compilation {
    */
   private resolveStdSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
     const name = imp.specifier.slice(STD_PREFIX.length);
-    const resolved = path.join(PKG_ROOT, STD_DIR, `${name}.ts`);
+    const resolved = stdModulePath(name);
     if (name.length > 0 && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
     throw notStandardLibrary(importer, imp);
   }

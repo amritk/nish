@@ -424,6 +424,147 @@ checked and none of them caches: `ir_oracle.js`, `checked_oracle.js` and
 its own header — "a golden compared against a stale binary is a golden
 comparing itself with yesterday".
 
+#### A7. Red again, on a corpus a third larger — and then a fourth time, during this pull request
+
+```
+parity: 12225 runs over 815 programs; 37 undeclared difference(s), 2588 declared    2026-09-13, this branch, before the fix
+parity: 12225 runs over 815 programs;  0 undeclared difference(s), 2588 declared    2026-09-13, this branch, after it
+parity: 13020 runs over 868 programs; 18 undeclared difference(s), 2646 declared    2026-09-14, the same branch merged with main at 50410a5
+```
+
+Read those three lines in order, because the third one is the section.
+
+**Line 1 to line 2: the fix, and the declared count is how you know it was a
+fix.** 2588 both times. The 37 went away because the lowering changed, not
+because a difference was written down as expected — a fix and a declaration
+look identical in the "undeclared" column and are opposites everywhere else.
+36 of the 37 were `; ModuleID`, the 37th a `!DIFile` under `-g`.
+
+**Line 2 to line 3: the same thing happened again, to this document, while this
+change was in review.** The 815-program measurement was a day old when the
+branch was made mergeable, and in that day `main` grew by **53 programs** —
+WP18's generic classes and WP21's package fixtures. Re-derived on the tree that
+would actually land, the gate is **red: 18 undeclared differences**, and not one
+of them is this change's. Narrowed with `--only`, over the same 135 runs on each
+side:
+
+| `node tests/self/parity.js --only std_` | undeclared |
+| --- | ---: |
+| `origin/main` at `50410a5` | **37** |
+| this branch merged into it | **0** |
+
+and the 18 that remain are on `main` with no part of this branch in the tree,
+measured the same way:
+
+| what | rows | where it came from |
+| --- | ---: | --- |
+| `tests/cases/ffi_pointer.ts` and `docs/cookbook/decl_ffi_pointer.ts` under `-g`: stage1 **exits 70** and writes no IR where stage0 compiles | 4 | WP27's `CPtr`, `50410a5`, landed the same morning |
+| `tests/cases/reject_generic_expanding_field`: stage1 asks for a contextual `T \| null` annotation at 13:22 where stage0 says ``Unknown field `inner` on class `Nest$i32` `` at 13:12 — two different complaints about one line, not a wording | 14 | WP18's generic classes, `9000434` |
+
+An internal compiler error is the worst row this table can hold — it is not a
+wording or a span, it is stage1 refusing to compile a program stage0 compiles —
+and it reached `main` green, because `npm test` does not run this mode and the
+nightly that would have run it is the workflow *this* pull request adds.
+
+**That is four times, and the corpus is the reason all four.** 764 programs at
+§A6, 815 when this branch went red, 868 a day later. The lesson is no longer
+"re-run the mode before quoting the number"; it is that **the number has a
+shelf life of about a day on this repository**, and a row of this document that
+states one without a date is stating a guess. R1's row in §5 is worded to make
+that impossible to write.
+
+Two more corrections to the first draft of this section, both of them the same
+mistake it is about:
+
+- **Two different numbers for one measurement.** The 2588 above and a "2,625"
+  that reached `.claude/selfhost.md` in the same commit. Neither was
+  re-derived. The re-derivation says 2646 on a corpus that has since grown, so
+  both were wrong by the time anybody read them and neither was wrong in an
+  interesting way.
+- **A wall clock quoted as if it measured the change.** `3937.1 s` before the
+  fix and `2051.6 s` after, side by side, reads as though naming a module
+  differently halved the compile time. It cannot: both sides run the same
+  12,225 runs. It was load on a shared four-core machine — the run in line 3
+  took 4184.8 s on the same box with three other agents on it — so the seconds
+  measure the neighbours. They are gone from the lines above.
+
+The cause of the 37 is §A3's first class — **a path inside the IR** — recorded
+as closed and reopened on the one specifier kind the fix never covered:
+
+```
+stage1  ; ModuleID = 'std/testing.ts'
+stage0  ; ModuleID = '/home/user/nish/std/testing.ts'
+```
+
+`importedName` names an imported module by "the specifier resolved against the
+name the importer was given", which is right for `./text` and is answering a
+question nobody asked for `nish/text`: a `nish/` specifier does not resolve
+against the importer at all, it resolves against the package the compiler
+shipped in. Under a **relative** entry `path.relative` climbed out of the
+importer's directory and back down to the same string, so the two compilers
+agreed; under an **absolute** entry the join put the whole checkout path in the
+header. stage0 was the wrong side, for the third time in this family and for
+the reason §A3 gave the first time: the rule that survives is the one that needs
+no working directory, because that is also the one that makes a build
+reproducible. `stdModuleName` in `src/std-modules.ts` answers `std/<name>.ts`
+and nothing else now, and `stdModulePath` is that same string under the package
+root — one construction rather than the two in two files that let the name and
+the identity drift apart in the first place.
+
+**The comment that asserted the bug was already in the tree.**
+`self/std_modules.ts` says, of its own normalisation, "the header would read
+`./build/../std/text.ts` where *stage0 writes `std/text.ts`*". That sentence was
+true of every call in this repository and false of the one the parity harness
+makes, which is §A5's `self/debug.ts` caveat exactly — *a claim about the corpus
+quietly read as a claim about the language* — in a second file, about a second
+subject, written down and then trusted.
+
+**What stops the next one is a check, not a paragraph.** `tests/run.js`
+compiles `std_bare_specifier` **by absolute path** and pins the header, beside
+the `link/diamond` check that does the same for a relative specifier — the
+`dbg_arrow` move of §A5, applied to this family. It fails on the commit before
+this one and costs one compile, so the question is asked on every `npm test`
+rather than on the nights somebody reads the nightly. Both checks make the
+fixture's *existence* part of the assertion rather than a guard around it:
+written as `if (fs.existsSync(entry))` they would have vanished the day somebody
+renamed the directory, with no failure and no SKIP — this section's subject
+wearing the costume of a passing suite.
+
+##### What the fix changes that no gate sees
+
+All three of these move stage0 onto stage1's existing answer, so each is
+parity-positive and none of them is what the parity harness measures — it always
+passes `-o <dir>/`. They are written down here because "a naming change" sounds
+like it has no consequences and it has three.
+
+- **Where the output files land, when there is no `-o`.** The module's name is
+  what `planOutputs` writes it under, so `nish main.ts` on a program importing
+  `nish/testing` now writes `std/testing.ll` under the *user's* working
+  directory. Before, it wrote into the compiler's own installation
+  (`<prefix>/std/testing.ll`), which is `EACCES` under a root-owned global
+  install and silently modifies the compiler's own tree otherwise. Both are
+  arguably wrong and the new one is stage1's, which is what this change is for.
+- **Two different modules can now carry one `; ModuleID`.** A program importing
+  both `./std/text` and `nish/text`, compiled with a relative entry, names both
+  `std/text.ts`; before, the `nish/` one was told apart by its absolute path.
+  Under `-o <dir>/` both files are still written, because `outputStems`
+  disambiguates on the absolute path rather than on the name — but under `-g` a
+  debugger sees one `DIFile` for two files, `clashMessage` would name both
+  modules identically in a symbol-clash diagnostic, and with **no** `-o` at all
+  the name *is* the output path, so the second module's IR overwrites the
+  first's. stage1 collides on the name in every one of those cases, and in one
+  more: it keys its output stems on the name, so it writes *one* file where
+  stage0 writes two. That last one is stage1's own defect, older than this
+  change and unmeasured by anything, and it is not fixed here.
+- **stage1 is still sensitive to how the *compiler* was invoked.** stage0's
+  answer no longer depends on anything outside the package; stage1's
+  `packageRoot()` is `<dirname(argv[0])>/..`, so `./build/nish` answers
+  `std/testing.ts` and `/abs/path/build/nish` answers `/abs/path/std/testing.ts`
+  for the same program. The harness happens to invoke it in the spelling that
+  agrees, which is the *whole* reason this family reads as closed. It is the
+  other half of the rule, unchanged by this branch, and the next thing to close
+  in it.
+
 #### Should `--parity` run in CI?
 
 **Yes, and not in the `test` job — and it does now.**
@@ -680,6 +821,25 @@ on the default branch only, so a change that reopens the gate is caught the
 morning after it merges, not before. Re-run `node tests/run.js --parity`
 against a branch that touches either compiler, and quote a number with the
 date it was measured on.
+
+**And running it is not the same as somebody hearing the answer.** A nightly
+whose only record is a run summary has moved the silence rather than closed
+it: §A5's gate was reopened for weeks with a number written down that nobody
+re-derived, and a red Tuesday nobody opens Actions on is the same failure with
+a schedule attached. So a full run that is not green now opens the issue
+*WP19 G1: the parity gate is not green* — or comments on the open one, so a
+run of red nights is one thread — and a green full run closes it. An
+`only`-filtered `workflow_dispatch` is barred from touching it, because a
+green subset read as a green corpus is §A5's mistake in the shape a workflow
+input makes it easy to repeat. The two states that open it are an undeclared
+difference and a run that never reached the mode: the second is not the lesser
+one, because the record may not read green on a day nothing was measured.
+
+**Expect it to open on the first night.** The gate is red on `main` as this
+lands, on eighteen differences belonging to WP18 and WP27 — one of them an
+internal compiler error — and they are red there precisely because no nightly
+existed to say so (§A7). The first issue this workflow opens is the backlog,
+not a regression.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
@@ -1027,7 +1187,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
+| **R1** | Parity | **red when last measured, and a row that does not carry a date is not a measurement.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared. The mode has now been recorded green three times and found red on the next run **four** times — §A5 and §A7 — and the corpus is the reason every time: 764 programs, then 815, then 868 a day later. On 2026-09-14 it is **18 undeclared differences over 868 programs**, in two packages that are not this one: stage1 exits 70 under `-g` on a `CPtr` program (WP27, 4 rows) and answers a different diagnostic on `reject_generic_expanding_field` (WP18, 14 rows). An internal compiler error reached `main` green because `npm test` does not run this mode. **Do not quote this row.** Run `node tests/run.js --parity`, quote what it says with the date, and read §A7 for why a number here goes stale in about a day |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS fails five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, from Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row therefore needs two things and not one: the darwin seed (G5), and that fixed point ([wp10-ci.md](wp10-ci.md#ci-matrix)) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 338 codes provoked by `tests/wordings/` and the surviving negatives and 61 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. **What the move costs is the limit worth stating rather than discovering: a rule the checker owns is a rule the member has to parse to reach.** Eight shapes do not reach it — `m?()` with no return type, `x? = 5` with no annotation, `static x;`, `static` alone, `static x: i32 = 0` with no `;` before the `}`, `static m(): i32;`, `static m() { }` and `static { }` — and each is a stage1 syntax error about the *other* defect where stage0 names the member and its rule. Those sentences moved out of stage1's reach rather than into it, which is §A3's declared class seen from the inside, counted by `reject_oracle.js` and declared by `--parity` (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`, `reject_cls_static_field_untyped`, `reject_cls_static_block`, and `self/parser.ts`'s `parseMemberModifiers` for the rest). Putting a copy of the rule back in the parser would restore an uncoded sentence in the phase that cannot name the member, which is the duplication the change removes; the shapes are named here and there instead. **One caveat on that declaration**: the two lists are shrink-only under `--strict-refusals`, but the reject oracle's parser bucket is a count in a summary line and nothing compares it to a ceiling, so the next rule that leaves the parser's reach migrates a case into the bucket silently. Read the bucket's number across such a change. The modifiers themselves now agree in full: `readonly` on a method or a constructor is ``unsupported modifier `readonly` `` from both compilers rather than accepted by stage1 (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`, `reject_cls_method_readonly_optional`), and because stage0 reports the first modifier in *source* order the parser records which of `static` and `readonly` came first, so `static readonly m()` and `readonly static m()` get different sentences and each gets the same one from both (`reject_cls_method_static_readonly`, `reject_cls_method_readonly_static`). An *interface* field takes the same modifiers, for the reason the checker takes one function for both: `readonly x: i32` compiles on both where stage1's parser used to refuse it, and `static x: i32` is ``Field `x` of interface `I`: `static` members are not supported`` on both. What is still one-sided and older than this work is `class C { constructor: i32 = 0; }`, which stage1 compiles and the `typescript` package calls a syntax error — the direction `stage1_divergence.txt` calls serious, recorded in `parseMember` because no corpus program has the shape and nothing measures it. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **2, from 13** — one of which stage1 compiles — and what is left is not more of the same: one is WP18's (`<T, T>`) and belongs to that package rather than to this one, and the other is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
