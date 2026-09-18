@@ -12895,12 +12895,12 @@ function writesLocal(program: CheckedProgram, node: Node, v: Local): boolean -> 
   pointer node: size=40 writesThrough=false captured=false
   pointer v: size=24 writesThrough=false captured=false passedTo=writesLocal#2
   stackSites=0 stackLocals=0
-  local 1046:9 steps: boolean (const)
-  callee 1047:34 isBoundsAssignment -> @isBoundsAssignment
-  local 1048:11 target: Local | null (const)
-  callee 1048:20 localOf -> @localOf
-  local 1053:14 child: Node (const)
-  callee 1054:9 writesLocal -> @writesLocal
+  local 1051:9 steps: boolean (const)
+  callee 1052:34 isBoundsAssignment -> @isBoundsAssignment
+  local 1053:11 target: Local | null (const)
+  callee 1053:20 localOf -> @localOf
+  local 1058:14 child: Node (const)
+  callee 1059:9 writesLocal -> @writesLocal
 function proves(ctx: CheckContext, state: State, holder: Local, index: Node): boolean -> @proves
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: indexLocal knownBelow knownMinLength knownNonNegative literalValue maxIndexOf
@@ -12909,16 +12909,16 @@ function proves(ctx: CheckContext, state: State, holder: Local, index: Node): bo
   pointer holder: size=24 writesThrough=false captured=false passedTo=knownMinLength#1 knownBelow#2 knownMinLength#1
   pointer index: size=40 writesThrough=true captured=true passedTo=literalValue#0 indexLocal#1
   stackSites=0 stackLocals=0
-  local 1063:9 constant: i32 (const)
-  callee 1063:20 literalValue -> @literalValue
-  callee 1065:12 knownMinLength -> @knownMinLength
-  local 1067:9 i: Local | null (const)
-  callee 1067:13 indexLocal -> @indexLocal
-  callee 1068:22 knownNonNegative -> @knownNonNegative
-  callee 1071:7 knownBelow -> @knownBelow
-  local 1074:9 bound: i32 (const)
-  callee 1074:17 maxIndexOf -> @maxIndexOf
-  callee 1075:24 knownMinLength -> @knownMinLength
+  local 1068:9 constant: i32 (const)
+  callee 1068:20 literalValue -> @literalValue
+  callee 1070:12 knownMinLength -> @knownMinLength
+  local 1072:9 i: Local | null (const)
+  callee 1072:13 indexLocal -> @indexLocal
+  callee 1073:22 knownNonNegative -> @knownNonNegative
+  callee 1076:7 knownBelow -> @knownBelow
+  local 1079:9 bound: i32 (const)
+  callee 1079:17 maxIndexOf -> @maxIndexOf
+  callee 1080:24 knownMinLength -> @knownMinLength
 function walkExpression(walk: BoundsWalk, state: State, expr: Node): void -> @walkExpression
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: addFacts applyAssignment cloneState conditionFacts copyInto forget forgetArrayLengths intersect isCharCodeAt isSubstringCall judge judgeClampBound lengthHolder localOf nish_panic_index nish_str_eq unwrapBoundsParens walkBinary walkExpression writesLocal
@@ -12926,52 +12926,52 @@ function walkExpression(walk: BoundsWalk, state: State, expr: Node): void -> @wa
   pointer state: size=72 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 walkExpression#1 judgeClampBound#1 judge#1 forgetArrayLengths#1 walkExpression#1 forgetArrayLengths#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 applyAssignment#1 forget#0 walkExpression#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
-  local 1085:9 ctx: CheckContext (const)
-  local 1086:9 e: Node (const)
-  callee 1086:13 unwrapBoundsParens -> @unwrapBoundsParens
-  callee 1089:5 walkExpression -> @walkExpression
-  callee 1090:5 walkExpression -> @walkExpression
-  callee 1091:5 judge -> @judge
-  local 1096:11 callee: Node (const)
-  callee 1096:20 unwrapBoundsParens -> @unwrapBoundsParens
-  callee 1098:7 walkExpression -> @walkExpression
-  callee 1100:7 walkExpression -> @walkExpression
-  local 1108:11 clamped: boolean (const)
-  callee 1108:21 isSubstringCall -> @isSubstringCall
-  local 1109:9 holder: Local | null (let)
-  callee 1111:16 lengthHolder -> @lengthHolder
-  local 1113:16 arg: Node (const)
-  callee 1114:7 walkExpression -> @walkExpression
-  callee 1116:32 writesLocal -> @writesLocal
-  callee 1119:9 judgeClampBound -> @judgeClampBound
-  callee 1122:9 isCharCodeAt -> @isCharCodeAt
-  callee 1124:7 judge -> @judge
-  callee 1129:5 forgetArrayLengths -> @forgetArrayLengths
-  local 1134:16 arg: Node (const)
-  callee 1135:7 walkExpression -> @walkExpression
-  callee 1137:5 forgetArrayLengths -> @forgetArrayLengths
-  callee 1142:5 walkBinary -> @walkBinary
-  callee 1147:5 walkExpression -> @walkExpression
-  local 1148:11 facts: ConditionFacts (const)
-  callee 1148:19 conditionFacts -> @conditionFacts
-  local 1149:11 whenTrue: State (const)
-  callee 1149:22 cloneState -> @cloneState
-  callee 1150:5 addFacts -> @addFacts
-  callee 1151:5 walkExpression -> @walkExpression
-  local 1152:11 whenFalse: State (const)
-  callee 1152:23 cloneState -> @cloneState
-  callee 1153:5 addFacts -> @addFacts
-  callee 1154:5 walkExpression -> @walkExpression
-  callee 1155:5 copyInto -> @copyInto
-  callee 1155:21 intersect -> @intersect
-  local 1160:11 operand: Node (const)
-  callee 1161:5 walkExpression -> @walkExpression
-  local 1165:11 v: Local | null (const)
-  callee 1165:15 localOf -> @localOf
-  callee 1170:7 applyAssignment -> @applyAssignment
-  callee 1172:7 forget -> @forget
-  local 1181:14 child: Node (const)
-  callee 1182:5 walkExpression -> @walkExpression
+  local 1090:9 ctx: CheckContext (const)
+  local 1091:9 e: Node (const)
+  callee 1091:13 unwrapBoundsParens -> @unwrapBoundsParens
+  callee 1094:5 walkExpression -> @walkExpression
+  callee 1095:5 walkExpression -> @walkExpression
+  callee 1096:5 judge -> @judge
+  local 1101:11 callee: Node (const)
+  callee 1101:20 unwrapBoundsParens -> @unwrapBoundsParens
+  callee 1103:7 walkExpression -> @walkExpression
+  callee 1105:7 walkExpression -> @walkExpression
+  local 1113:11 clamped: boolean (const)
+  callee 1113:21 isSubstringCall -> @isSubstringCall
+  local 1114:9 holder: Local | null (let)
+  callee 1116:16 lengthHolder -> @lengthHolder
+  local 1118:16 arg: Node (const)
+  callee 1119:7 walkExpression -> @walkExpression
+  callee 1121:32 writesLocal -> @writesLocal
+  callee 1124:9 judgeClampBound -> @judgeClampBound
+  callee 1127:9 isCharCodeAt -> @isCharCodeAt
+  callee 1129:7 judge -> @judge
+  callee 1134:5 forgetArrayLengths -> @forgetArrayLengths
+  local 1139:16 arg: Node (const)
+  callee 1140:7 walkExpression -> @walkExpression
+  callee 1142:5 forgetArrayLengths -> @forgetArrayLengths
+  callee 1147:5 walkBinary -> @walkBinary
+  callee 1152:5 walkExpression -> @walkExpression
+  local 1153:11 facts: ConditionFacts (const)
+  callee 1153:19 conditionFacts -> @conditionFacts
+  local 1154:11 whenTrue: State (const)
+  callee 1154:22 cloneState -> @cloneState
+  callee 1155:5 addFacts -> @addFacts
+  callee 1156:5 walkExpression -> @walkExpression
+  local 1157:11 whenFalse: State (const)
+  callee 1157:23 cloneState -> @cloneState
+  callee 1158:5 addFacts -> @addFacts
+  callee 1159:5 walkExpression -> @walkExpression
+  callee 1160:5 copyInto -> @copyInto
+  callee 1160:21 intersect -> @intersect
+  local 1165:11 operand: Node (const)
+  callee 1166:5 walkExpression -> @walkExpression
+  local 1170:11 v: Local | null (const)
+  callee 1170:15 localOf -> @localOf
+  callee 1175:7 applyAssignment -> @applyAssignment
+  callee 1177:7 forget -> @forget
+  local 1186:14 child: Node (const)
+  callee 1187:5 walkExpression -> @walkExpression
 function applyAssignment(walk: BoundsWalk, state: State, v: Local, rhs: Node | null, increment: boolean): void -> @applyAssignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Fact.constructor addFact addFacts forget forgetUpperBounds initialiserFacts isIncrement keepsLowerBound knownNonNegative
@@ -12980,18 +12980,18 @@ function applyAssignment(walk: BoundsWalk, state: State, v: Local, rhs: Node | n
   pointer v: size=24 writesThrough=true captured=true passedTo=isIncrement#1 knownNonNegative#1 keepsLowerBound#1 forgetUpperBounds#1 Fact.constructor#2 initialiserFacts#2 forget#1
   pointer rhs: size=40 writesThrough=true captured=true passedTo=isIncrement#2 initialiserFacts#3
   stackSites=1 stackLocals=0
-  local 1188:9 ctx: CheckContext (const)
-  local 1189:9 steps: boolean (const)
-  callee 1189:47 isIncrement -> @isIncrement
-  callee 1190:16 knownNonNegative -> @knownNonNegative
-  callee 1190:46 keepsLowerBound -> @keepsLowerBound
-  callee 1191:5 forgetUpperBounds -> @forgetUpperBounds
-  callee 1192:5 addFact -> @addFact
-  callee 1192:20 new Fact -> @Fact.constructor
-  local 1197:7 facts: Fact[] (let)
-  callee 1199:13 initialiserFacts -> @initialiserFacts
-  callee 1201:3 forget -> @forget
-  callee 1202:3 addFacts -> @addFacts
+  local 1193:9 ctx: CheckContext (const)
+  local 1194:9 steps: boolean (const)
+  callee 1194:47 isIncrement -> @isIncrement
+  callee 1195:16 knownNonNegative -> @knownNonNegative
+  callee 1195:46 keepsLowerBound -> @keepsLowerBound
+  callee 1196:5 forgetUpperBounds -> @forgetUpperBounds
+  callee 1197:5 addFact -> @addFact
+  callee 1197:20 new Fact -> @Fact.constructor
+  local 1202:7 facts: Fact[] (let)
+  callee 1204:13 initialiserFacts -> @initialiserFacts
+  callee 1206:3 forget -> @forget
+  callee 1207:3 addFacts -> @addFacts
 function isBoundsAssignment(op: string): boolean -> @isBoundsAssignment
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_at nish_str_eq
@@ -13003,35 +13003,35 @@ function walkBinary(walk: BoundsWalk, state: State, expr: Node): void -> @walkBi
   pointer state: size=72 writesThrough=true captured=false passedTo=walkExpression#1 conditionFacts#1 cloneState#0 copyInto#0 intersect#0 walkExpression#1 walkExpression#1 walkExpression#1 walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 applyAssignment#1 applyAssignment#1
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1224:9 ctx: CheckContext (const)
-  local 1225:9 op: string (const)
-  local 1226:9 left: Node (const)
-  local 1227:9 right: Node (const)
-  callee 1230:5 walkExpression -> @walkExpression
-  local 1231:11 facts: ConditionFacts (const)
-  callee 1231:19 conditionFacts -> @conditionFacts
-  local 1232:11 guarded: State (const)
-  callee 1232:21 cloneState -> @cloneState
-  callee 1233:5 addFacts -> @addFacts
-  callee 1234:5 walkExpression -> @walkExpression
-  callee 1238:5 copyInto -> @copyInto
-  callee 1238:21 intersect -> @intersect
-  callee 1242:8 isBoundsAssignment -> @isBoundsAssignment
-  callee 1243:5 walkExpression -> @walkExpression
-  callee 1244:5 walkExpression -> @walkExpression
-  local 1248:9 target: Node (const)
-  callee 1248:18 unwrapBoundsParens -> @unwrapBoundsParens
-  callee 1253:5 walkExpression -> @walkExpression
-  callee 1254:5 walkExpression -> @walkExpression
-  callee 1255:5 walkExpression -> @walkExpression
-  callee 1256:5 judge -> @judge
-  callee 1260:3 walkExpression -> @walkExpression
-  callee 1262:5 walkExpression -> @walkExpression
-  local 1265:9 v: Local | null (const)
-  callee 1265:13 localOf -> @localOf
-  callee 1270:5 applyAssignment -> @applyAssignment
-  callee 1275:3 applyAssignment -> @applyAssignment
-  callee 1275:56 literalValue -> @literalValue
+  local 1229:9 ctx: CheckContext (const)
+  local 1230:9 op: string (const)
+  local 1231:9 left: Node (const)
+  local 1232:9 right: Node (const)
+  callee 1235:5 walkExpression -> @walkExpression
+  local 1236:11 facts: ConditionFacts (const)
+  callee 1236:19 conditionFacts -> @conditionFacts
+  local 1237:11 guarded: State (const)
+  callee 1237:21 cloneState -> @cloneState
+  callee 1238:5 addFacts -> @addFacts
+  callee 1239:5 walkExpression -> @walkExpression
+  callee 1243:5 copyInto -> @copyInto
+  callee 1243:21 intersect -> @intersect
+  callee 1247:8 isBoundsAssignment -> @isBoundsAssignment
+  callee 1248:5 walkExpression -> @walkExpression
+  callee 1249:5 walkExpression -> @walkExpression
+  local 1253:9 target: Node (const)
+  callee 1253:18 unwrapBoundsParens -> @unwrapBoundsParens
+  callee 1258:5 walkExpression -> @walkExpression
+  callee 1259:5 walkExpression -> @walkExpression
+  callee 1260:5 walkExpression -> @walkExpression
+  callee 1261:5 judge -> @judge
+  callee 1265:3 walkExpression -> @walkExpression
+  callee 1267:5 walkExpression -> @walkExpression
+  local 1270:9 v: Local | null (const)
+  callee 1270:13 localOf -> @localOf
+  callee 1275:5 applyAssignment -> @applyAssignment
+  callee 1280:3 applyAssignment -> @applyAssignment
+  callee 1280:56 literalValue -> @literalValue
 function forgetAcross(walk: BoundsWalk, state: State, root: Node): void -> @forgetAcross
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: collectEffects contains forget forgetArrayLengths forgetUpperBounds keepsLowerBound
@@ -13039,25 +13039,25 @@ function forgetAcross(walk: BoundsWalk, state: State, root: Node): void -> @forg
   pointer state: size=72 writesThrough=true captured=false passedTo=forget#0 forgetUpperBounds#0 forget#0 forgetArrayLengths#1
   pointer root: size=40 writesThrough=false captured=false passedTo=collectEffects#1
   stackSites=2 stackLocals=2
-  local 1292:9 ctx: CheckContext (const)
-  local 1293:9 stepped: Local[] (const)
-  local 1294:9 clobbered: Local[] (const)
-  local 1295:9 calls: boolean (const)
-  callee 1295:17 collectEffects -> @collectEffects
-  local 1296:14 v: Local (const)
-  callee 1297:5 forget -> @forget
-  local 1299:14 v: Local (const)
-  callee 1300:9 contains -> @contains
-  callee 1303:9 keepsLowerBound -> @keepsLowerBound
-  callee 1304:7 forgetUpperBounds -> @forgetUpperBounds
-  callee 1306:7 forget -> @forget
-  callee 1310:5 forgetArrayLengths -> @forgetArrayLengths
+  local 1297:9 ctx: CheckContext (const)
+  local 1298:9 stepped: Local[] (const)
+  local 1299:9 clobbered: Local[] (const)
+  local 1300:9 calls: boolean (const)
+  callee 1300:17 collectEffects -> @collectEffects
+  local 1301:14 v: Local (const)
+  callee 1302:5 forget -> @forget
+  local 1304:14 v: Local (const)
+  callee 1305:9 contains -> @contains
+  callee 1308:9 keepsLowerBound -> @keepsLowerBound
+  callee 1309:7 forgetUpperBounds -> @forgetUpperBounds
+  callee 1311:7 forget -> @forget
+  callee 1315:5 forgetArrayLengths -> @forgetArrayLengths
 function contains(list: Local[], v: Local): boolean -> @contains
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer list: size=0 writesThrough=false captured=false
   pointer v: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1315:14 x: Local (const)
+  local 1320:14 x: Local (const)
 function collectEffects(ctx: CheckContext, node: Node, stepped: Local[], clobbered: Local[]): boolean -> @collectEffects
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: collectEffects isBoundsAssignment isCharCodeAt isIncrement literalValue localOf nish_array_grow nish_panic_index nish_str_eq
@@ -13066,18 +13066,18 @@ function collectEffects(ctx: CheckContext, node: Node, stepped: Local[], clobber
   pointer stepped: size=0 writesThrough=true captured=false passedTo=collectEffects#2
   pointer clobbered: size=0 writesThrough=true captured=false passedTo=collectEffects#3
   stackSites=0 stackLocals=0
-  local 1324:7 calls: boolean (let)
-  callee 1328:32 isCharCodeAt -> @isCharCodeAt
-  callee 1331:33 isBoundsAssignment -> @isBoundsAssignment
-  local 1332:11 v: Local | null (const)
-  callee 1332:15 localOf -> @localOf
-  local 1334:13 steps: boolean (const)
-  callee 1335:31 isIncrement -> @isIncrement
-  callee 1336:32 literalValue -> @literalValue
-  local 1345:11 v: Local | null (const)
-  callee 1345:15 localOf -> @localOf
-  local 1354:14 child: Node (const)
-  callee 1355:9 collectEffects -> @collectEffects
+  local 1329:7 calls: boolean (let)
+  callee 1333:32 isCharCodeAt -> @isCharCodeAt
+  callee 1336:33 isBoundsAssignment -> @isBoundsAssignment
+  local 1337:11 v: Local | null (const)
+  callee 1337:15 localOf -> @localOf
+  local 1339:13 steps: boolean (const)
+  callee 1340:31 isIncrement -> @isIncrement
+  callee 1341:32 literalValue -> @literalValue
+  local 1350:11 v: Local | null (const)
+  callee 1350:15 localOf -> @localOf
+  local 1359:14 child: Node (const)
+  callee 1360:9 collectEffects -> @collectEffects
 function walkBoundsStatement(walk: BoundsWalk, state: State, stmt: Node): boolean -> @walkBoundsStatement
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: addFacts cloneState conditionFacts copyInto forgetAcross intersect nish_panic_index walkBoundsStatement walkDeclaration walkExpression
@@ -13085,73 +13085,73 @@ function walkBoundsStatement(walk: BoundsWalk, state: State, stmt: Node): boolea
   pointer state: size=72 writesThrough=true captured=false passedTo=walkBoundsStatement#1 walkDeclaration#1 walkExpression#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 copyInto#0 copyInto#0 forgetAcross#1 walkExpression#1 cloneState#0 conditionFacts#1 forgetAcross#1 cloneState#0 walkDeclaration#1 walkExpression#1 forgetAcross#1 walkExpression#1 cloneState#0 conditionFacts#1 walkExpression#1 forgetAcross#1 cloneState#0 walkExpression#1 walkExpression#1 walkExpression#1 forgetAcross#1 cloneState#0 forgetAcross#1 walkExpression#1
   pointer stmt: size=40 writesThrough=false captured=false passedTo=forgetAcross#2 forgetAcross#2 forgetAcross#2 forgetAcross#2 forgetAcross#2 forgetAcross#2
   stackSites=0 stackLocals=0
-  local 1371:9 ctx: CheckContext (const)
-  local 1374:16 inner: Node (const)
-  callee 1375:11 walkBoundsStatement -> @walkBoundsStatement
-  local 1383:16 decl: Node (const)
-  callee 1384:7 walkDeclaration -> @walkDeclaration
-  callee 1390:5 walkExpression -> @walkExpression
+  local 1376:9 ctx: CheckContext (const)
+  local 1379:16 inner: Node (const)
+  callee 1380:11 walkBoundsStatement -> @walkBoundsStatement
+  local 1388:16 decl: Node (const)
+  callee 1389:7 walkDeclaration -> @walkDeclaration
   callee 1395:5 walkExpression -> @walkExpression
-  local 1396:11 facts: ConditionFacts (const)
-  callee 1396:19 conditionFacts -> @conditionFacts
-  local 1397:11 thenState: State (const)
-  callee 1397:23 cloneState -> @cloneState
-  callee 1398:5 addFacts -> @addFacts
-  local 1399:11 thenExits: boolean (const)
-  callee 1399:23 walkBoundsStatement -> @walkBoundsStatement
-  local 1400:11 elseState: State (const)
-  callee 1400:23 cloneState -> @cloneState
-  callee 1401:5 addFacts -> @addFacts
-  local 1402:11 hasElse: boolean (const)
-  local 1403:11 elseExits: boolean (const)
-  callee 1403:33 walkBoundsStatement -> @walkBoundsStatement
-  callee 1408:7 copyInto -> @copyInto
-  callee 1410:7 copyInto -> @copyInto
-  callee 1412:7 copyInto -> @copyInto
-  callee 1412:23 intersect -> @intersect
-  callee 1418:5 forgetAcross -> @forgetAcross
-  callee 1420:5 walkExpression -> @walkExpression
-  local 1421:11 body: State (const)
-  callee 1421:18 cloneState -> @cloneState
-  callee 1422:5 addFacts -> @addFacts
-  callee 1422:20 conditionFacts -> @conditionFacts
-  callee 1423:5 walkBoundsStatement -> @walkBoundsStatement
-  callee 1429:5 forgetAcross -> @forgetAcross
-  local 1431:11 body: State (const)
-  callee 1431:18 cloneState -> @cloneState
-  callee 1432:5 walkBoundsStatement -> @walkBoundsStatement
-  callee 1433:5 walkExpression -> @walkExpression
-  local 1441:11 init: Node (const)
-  local 1443:18 decl: Node (const)
-  callee 1444:9 walkDeclaration -> @walkDeclaration
-  callee 1447:7 walkExpression -> @walkExpression
-  callee 1449:5 forgetAcross -> @forgetAcross
-  local 1451:11 cond: Node (const)
-  callee 1453:7 walkExpression -> @walkExpression
-  local 1455:11 body: State (const)
-  callee 1455:18 cloneState -> @cloneState
-  callee 1457:7 addFacts -> @addFacts
-  callee 1457:22 conditionFacts -> @conditionFacts
-  callee 1459:5 walkBoundsStatement -> @walkBoundsStatement
-  callee 1461:7 walkExpression -> @walkExpression
-  callee 1468:5 walkExpression -> @walkExpression
-  callee 1469:5 forgetAcross -> @forgetAcross
-  local 1471:11 body: State (const)
-  callee 1471:18 cloneState -> @cloneState
-  callee 1472:5 walkBoundsStatement -> @walkBoundsStatement
-  callee 1479:7 walkExpression -> @walkExpression
-  callee 1489:5 walkExpression -> @walkExpression
+  callee 1400:5 walkExpression -> @walkExpression
+  local 1401:11 facts: ConditionFacts (const)
+  callee 1401:19 conditionFacts -> @conditionFacts
+  local 1402:11 thenState: State (const)
+  callee 1402:23 cloneState -> @cloneState
+  callee 1403:5 addFacts -> @addFacts
+  local 1404:11 thenExits: boolean (const)
+  callee 1404:23 walkBoundsStatement -> @walkBoundsStatement
+  local 1405:11 elseState: State (const)
+  callee 1405:23 cloneState -> @cloneState
+  callee 1406:5 addFacts -> @addFacts
+  local 1407:11 hasElse: boolean (const)
+  local 1408:11 elseExits: boolean (const)
+  callee 1408:33 walkBoundsStatement -> @walkBoundsStatement
+  callee 1413:7 copyInto -> @copyInto
+  callee 1415:7 copyInto -> @copyInto
+  callee 1417:7 copyInto -> @copyInto
+  callee 1417:23 intersect -> @intersect
+  callee 1423:5 forgetAcross -> @forgetAcross
+  callee 1425:5 walkExpression -> @walkExpression
+  local 1426:11 body: State (const)
+  callee 1426:18 cloneState -> @cloneState
+  callee 1427:5 addFacts -> @addFacts
+  callee 1427:20 conditionFacts -> @conditionFacts
+  callee 1428:5 walkBoundsStatement -> @walkBoundsStatement
+  callee 1434:5 forgetAcross -> @forgetAcross
+  local 1436:11 body: State (const)
+  callee 1436:18 cloneState -> @cloneState
+  callee 1437:5 walkBoundsStatement -> @walkBoundsStatement
+  callee 1438:5 walkExpression -> @walkExpression
+  local 1446:11 init: Node (const)
+  local 1448:18 decl: Node (const)
+  callee 1449:9 walkDeclaration -> @walkDeclaration
+  callee 1452:7 walkExpression -> @walkExpression
+  callee 1454:5 forgetAcross -> @forgetAcross
+  local 1456:11 cond: Node (const)
+  callee 1458:7 walkExpression -> @walkExpression
+  local 1460:11 body: State (const)
+  callee 1460:18 cloneState -> @cloneState
+  callee 1462:7 addFacts -> @addFacts
+  callee 1462:22 conditionFacts -> @conditionFacts
+  callee 1464:5 walkBoundsStatement -> @walkBoundsStatement
+  callee 1466:7 walkExpression -> @walkExpression
+  callee 1473:5 walkExpression -> @walkExpression
+  callee 1474:5 forgetAcross -> @forgetAcross
+  local 1476:11 body: State (const)
+  callee 1476:18 cloneState -> @cloneState
+  callee 1477:5 walkBoundsStatement -> @walkBoundsStatement
+  callee 1484:7 walkExpression -> @walkExpression
   callee 1494:5 walkExpression -> @walkExpression
-  callee 1498:5 forgetAcross -> @forgetAcross
-  local 1499:16 clause: Node (const)
-  local 1500:13 clauseState: State (const)
-  callee 1500:27 cloneState -> @cloneState
-  local 1501:13 body: Node (const)
-  local 1502:18 inner: Node (const)
-  callee 1503:13 walkBoundsStatement -> @walkBoundsStatement
-  callee 1512:3 forgetAcross -> @forgetAcross
-  local 1513:14 child: Node (const)
-  callee 1514:5 walkExpression -> @walkExpression
+  callee 1499:5 walkExpression -> @walkExpression
+  callee 1503:5 forgetAcross -> @forgetAcross
+  local 1504:16 clause: Node (const)
+  local 1505:13 clauseState: State (const)
+  callee 1505:27 cloneState -> @cloneState
+  local 1506:13 body: Node (const)
+  local 1507:18 inner: Node (const)
+  callee 1508:13 walkBoundsStatement -> @walkBoundsStatement
+  callee 1517:3 forgetAcross -> @forgetAcross
+  local 1518:14 child: Node (const)
+  callee 1519:5 walkExpression -> @walkExpression
 function walkDeclaration(walk: BoundsWalk, state: State, decl: Node): void -> @walkDeclaration
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: addFacts forget initialiserFacts nish_panic_index walkExpression
@@ -13159,13 +13159,13 @@ function walkDeclaration(walk: BoundsWalk, state: State, decl: Node): void -> @w
   pointer state: size=72 writesThrough=true captured=false passedTo=walkExpression#1 initialiserFacts#1 forget#0 addFacts#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1520:9 init: Node (const)
-  callee 1522:5 walkExpression -> @walkExpression
-  local 1524:9 v: Local | null (const)
-  local 1528:7 facts: Fact[] (let)
-  callee 1530:13 initialiserFacts -> @initialiserFacts
-  callee 1532:3 forget -> @forget
-  callee 1533:3 addFacts -> @addFacts
+  local 1525:9 init: Node (const)
+  callee 1527:5 walkExpression -> @walkExpression
+  local 1529:9 v: Local | null (const)
+  local 1533:7 facts: Fact[] (let)
+  callee 1535:13 initialiserFacts -> @initialiserFacts
+  callee 1537:3 forget -> @forget
+  callee 1538:3 addFacts -> @addFacts
 function analyzeBounds(ctx: CheckContext, body: Node, uncheckedIndexing: boolean): Node[] -> @analyzeBounds [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: uncheckedIndexing
@@ -13173,12 +13173,12 @@ function analyzeBounds(ctx: CheckContext, body: Node, uncheckedIndexing: boolean
   pointer ctx: size=136 writesThrough=true captured=true passedTo=BoundsWalk.constructor#1
   pointer body: size=40 writesThrough=true captured=true passedTo=walkBoundsStatement#2 walkExpression#2
   stackSites=2 stackLocals=2
-  local 1546:9 walk: BoundsWalk (const)
-  callee 1546:16 new BoundsWalk -> @BoundsWalk.constructor
-  local 1547:9 state: State (const)
-  callee 1547:17 new State -> @State.constructor
-  callee 1549:5 walkBoundsStatement -> @walkBoundsStatement
-  callee 1551:5 walkExpression -> @walkExpression
+  local 1551:9 walk: BoundsWalk (const)
+  callee 1551:16 new BoundsWalk -> @BoundsWalk.constructor
+  local 1552:9 state: State (const)
+  callee 1552:17 new State -> @State.constructor
+  callee 1554:5 walkBoundsStatement -> @walkBoundsStatement
+  callee 1556:5 walkExpression -> @walkExpression
 module self/checker.ts
 import aliasType from "./annotations" -> function @aliasType
 import builtinTypeName from "./annotations" -> function @builtinTypeName

@@ -1014,25 +1014,30 @@ const judgeClampBound = (ctx: CheckContext, state: State, holder: Local | null, 
  * them relaxing makes a write reachable that this function does not see, and
  * nothing in the suite would fail:
  *
- *   - no arrow function and no nested `function` in a body — both are
- *     `Unsupported ... in Phase 1`, so an argument cannot call something that
- *     assigns to a local of *this* frame. This is the one to watch. The moment
- *     an arrow *expression* is legal in a body, `s.substring(n, f())` rebinds
- *     the receiver with no assignment syntax anywhere in the argument list and
- *     this answers false.
- *   - no top-level `let` — a callee has no mutable module binding to write
- *     through either.
- *   - a parameter cannot be assigned — a receiver bound to a parameter cannot
- *     be rebound at all, here or anywhere.
- *   - only a simple variable is an assignment target — `[s, n] = ...` is
- *     refused, so `localOf` on the left-hand side sees every write there is.
- *   - `+=` is numeric — so `=` is the only operator that writes a `string`,
+ *   - no arrow function and no nested `function` in a body
+ *     (`Unsupported expression in Phase 1: ArrowFunction`,
+ *     `Unsupported statement in Phase 1: FunctionDeclaration`) — so an
+ *     argument cannot call something that assigns to a local of *this* frame.
+ *     This is the one to watch. The moment an arrow *expression* is legal in
+ *     a body, `s.substring(n, f())` rebinds the receiver with no assignment
+ *     syntax anywhere in the argument list and this answers false.
+ *   - no top-level `let` (``Top-level `let` is not supported; a module has no
+ *     top-level code, so only `const` is available``) — a callee has no
+ *     mutable module binding to write through either.
+ *   - a parameter cannot be assigned (``Cannot assign to `p` because it is a
+ *     parameter``) — a receiver bound to a parameter cannot be rebound at all,
+ *     here or anywhere.
+ *   - only a simple variable is an assignment target (`Only simple variables
+ *     can be assigned`) — `[s, n] = ...` is refused, so `localOf` on the
+ *     left-hand side sees every write there is.
+ *   - `+=` is numeric (``Operator `+=` requires two operands of the same
+ *     numeric type``) — so `=` is the only operator that writes a `string`,
  *     and `isBoundsAssignment` covers it.
- *   - no comma expression — an argument is one expression, so a write cannot
- *     ride along beside a value.
- *   - no spread argument — the argument list is positionally the bound list,
- *     so argument 0 *is* bound 0 and the interleaved walk is the emitter's
- *     order.
+ *   - no comma expression (`Comma expressions are forbidden in Nish`) — an
+ *     argument is one expression, so a write cannot ride along beside a value.
+ *   - no spread argument (`Unsupported expression in Phase 1: SpreadElement`)
+ *     — the argument list is positionally the bound list, so argument 0 *is*
+ *     bound 0 and the interleaved walk is the emitter's order.
  *   - no address of a local — `CPtr` is an address a C function owns and hands
  *     back, never one of ours, so nothing outside the frame has a pointer to
  *     write through.

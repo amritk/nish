@@ -1510,17 +1510,18 @@ measurement closed says so and says why.
      `taskset -c 2` on a busy shared machine, where the spread between runs is
      wider than the effect and the minimum is the only stable statistic) —
      about 2 ns a call, which is **six** intrinsic calls rather than the four
-     the emitter left out. Exported so that neither scan is inlined away and
-     run through `opt -O3`, the two bodies come out at six calls against zero:
-     dropping the clamps is what lets LLVM prove `at <= at + 16` and fold the
-     swap pair too, which it cannot do while each end has been through an
-     `smin`/`smax`. The whole gap is still this change, and nothing else
-     differs between the two scans. Slice width is what moves it: with
-     `at + 16` changed to `at + 4` throughout, the same program measures
-     **1.20x** (55.3 ms against 46.1 ms), because the clamp is a fixed cost per
-     call and the `memcpy` is not. That is the ceiling, on a loop that does
-     nothing but slice; §4's 1.18x for `slice` over `substring` is what the
-     same instructions plus the two swap calls are worth on lexer-shaped code.
+     the emitter left out. Made external for the measurement, so that neither
+     scan is inlined away, and run through `opt -O3`, the two bodies come out
+     at six calls against zero: dropping the clamps is what lets LLVM prove
+     `at <= at + 16` and fold the swap pair too, which it cannot do while each
+     end has been through an `smin`/`smax`. The whole gap is still this change,
+     and nothing else differs between the two scans. Slice width is what moves
+     it: with `at + 16` changed to `at + 4` throughout, the same program
+     measures **1.20x** (55.3 ms against 46.1 ms), because the clamp is a fixed
+     cost per call and the `memcpy` is not. That is the ceiling, on a loop
+     that does nothing but slice; §4's 1.18x for `slice` over `substring` is
+     what the same instructions plus the two swap calls are worth on
+     lexer-shaped code.
      `tests/cases/perf_clamp`, `perf_clamp_quiet`, `perf_clamp_order`,
      `perf_clamp_rebind`.
    - **not inlinable** — shipped, `NL9008`, and it is smaller than the row
