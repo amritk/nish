@@ -997,20 +997,27 @@ behind it and no assets, so it is not a seed and never was — see
 **So the darwin half of G3 is short two things, and the runner is neither of
 them:**
 
-1. the **seed** — a release attaches `nish-<version>-x86_64-linux` and nothing
-   else, so there is no darwin binary to bootstrap from, which is
-   [G5](#g5--distribution-does-not-need-node); and
-2. the **ld64 fixed point** — the fourth family above. `--verify` asserts
-   `stage3 == stage2` byte for byte, and without that fixed a `bootstrap` row
-   on macOS would be red on the day its seed arrived, which is the other way a
-   gate lies about itself. That comparison now carries a note at the site
-   saying what was measured on Mach-O, so the next person to reach it does not
-   have to find it from a workflow comment.
+1. the **seed**, which is [G5](#g5--distribution-does-not-need-node). This one
+   has **landed as a workflow**: `release.yml` builds one binary per supported
+   target. It has not landed as a released *asset* for darwin, because
+   `attachedSince` for that pair is `0.4.0` — see item 2, which is why; and
+2. the **ld64 fixed point** — the `stage3 == stage2` family above. `--verify`
+   asserted it byte for byte, which does not hold on Mach-O, and a `bootstrap`
+   row on macOS would be red on the day its seed arrived: the other way a gate
+   lies about itself. That comparison is `scripts/verify-binaries.sh` now and
+   **narrowed rather than settled** — the size asserted, debug information
+   stripped where a tool can strip it, and anything left over failed as
+   *unattributed*. Which bytes ld64 actually varies has not been measured, and
+   the earlier claim that it was ld64's debug map was wrong for a
+   `--profile speed` link, which puts no DWARF in the `.o` files and strips
+   with `-Wl,-x` anyway. The script's header carries the candidate (`LC_UUID`)
+   and the remedy, and this item stays open until someone runs it on a mac.
 
-Neither is a line in `ci.yml`, and neither is claimed here. The matrix is the
-release's answer rather than a list in the workflow, so the macOS row appears
-on the day a release carries a darwin seed — which is the day the second of
-those two has to be true.
+Neither is a line in `ci.yml`, and the second is not claimed here. The matrix
+is the release's answer rather than a list in the workflow, so the macOS row
+appears on the day a release *carries* a darwin seed — which is the day the
+second of those two has to be true, and the reason the darwin `attachedSince`
+is held past the next release rather than set to it.
 
 #### What the seeded run proves, and what it does not
 
