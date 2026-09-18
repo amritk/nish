@@ -1,12 +1,33 @@
 # WP20: Threads
 
-**T0 is built; T1 to T4 are proposed, not implemented.** This is the plan of
+**T0 is built, and so is the partitioner under T4 —
+`runtime/runtime_parallel.c`, which has no language surface and costs a program
+that does not use it nothing, byte for byte (§8d). T1 to T4's *language*
+surface is proposed, not implemented, and
+[wp29-thread-surface.md](wp29-thread-surface.md) is what it is.** The payoff T4
+was waiting to be measured against is measured (§8): **3.96x** on four cores
+for a compute kernel, **3.09x** for an allocating one and **3.97x** for the
+same allocating one with its arena recycled — and arena discipline is worth
+another ~3x on top, so the two multipliers compose to **12x** against a naive
+single-threaded build. Fix the body, then add threads. §8b is the correction of
+an earlier, worse measurement taken on an ad-hoc driver, kept visible rather
+than folded in. This is the plan of
 record for the question "how does Nish do true multithreading, like Go or
 Rust", and the shape of the answer is forced by decisions the project has
 already made rather than chosen freely. The normative rules would land in
 [LANGUAGE.md](LANGUAGE.md) as each stage does — except T0, which has no rule to
 add, because it has no language surface: §4 T0 below records what landed. Where
 this note and LANGUAGE.md ever disagree, LANGUAGE.md wins.
+
+[wp29-thread-surface.md](wp29-thread-surface.md) is the companion note and
+answers the question this one leaves open — *what the surface actually is,
+given that it has to be legal TypeScript*. It proposes Rust's scoped threads
+spelled with `using`, a `Mutex<T>` that owns its data, Rayon-shaped data
+parallelism, and reversing the stage order below so that the data-parallel
+intrinsic comes first; the whole surface was run through `tsc --strict` before
+being proposed. Where it and this note differ on a stage's contents, it is the
+later document and it wins; where either differs from LANGUAGE.md, LANGUAGE.md
+wins.
 
 Read [wp6-memory.md](wp6-memory.md) first: every hard part below is a
 consequence of the zero-GC memory model, and §3 here is mostly a list of
@@ -316,6 +337,13 @@ spelled the same way in all three runtime files.
 
 ### T1 — Structured spawn and join
 
+**The surface below has been superseded by
+[wp29-thread-surface.md](wp29-thread-surface.md) §4.2**, which keeps every rule
+in this stage and changes the spelling: a scope introduced by `using` rather
+than a handle with a `join()` call, so that rule 2 is emitted by the construct
+instead of proved by an analysis. What follows is the original design and the
+three rules, which wp29 inherits unchanged.
+
 The minimum surface, and the only one that is sound under WP6 without new
 lifetime machinery:
 
@@ -376,13 +404,32 @@ is the prerequisite, and this note does not try to route around it.
 A `parallelFor`-shaped intrinsic over a `readonly` slice: the work partitioned
 by the runtime, the body a top-level function, the shareable rule of T2 doing
 the safety argument with nothing new.
+[wp29-thread-surface.md](wp29-thread-surface.md) §4.1 is the surface, and its
+§8 argues — on this section's own measurement — that this stage should be built
+**first** rather than last, because it is the smallest of the four as well as
+the only one with a number attached.
 
 This is where the measurable payoff is. Of the seven programs in
 [BENCHMARKS.md](BENCHMARKS.md), `nbody` (1.22x behind Rust) and `spectral`
 (1.12x) are exactly this shape, and a four-core machine changes those numbers
 by more than any single-thread item on the WP15 list can. That is the
-argument for the whole package, and it should be measured on a prototype
-before T1 is designed rather than after T4 is built.
+argument for the whole package, and this note asked for it to be measured on a
+prototype before T1 is designed rather than after T4 is built.
+
+**That prototype has been run, twice, and §8 is what it said.** In one line:
+**3.96x** on four cores for a compute kernel and **3.97x** for an allocating
+one whose arena is recycled, against a WP15 list whose largest remaining
+single-thread item is worth 2.48x and whose typical one is worth a few per
+cent. The payoff is real and it is the largest number left anywhere in the
+plan. The partitioner itself is built (§8d); what remains in this stage is the
+language surface, which is wp29's.
+
+What the measurement also said is that arena discipline in the body is worth
+about 3x *independently* of the cores, and three orders of magnitude of peak
+memory — so T4 wants an arena story beside its partitioning story, on memory
+rather than on scaling. §8b is the correction: an earlier draft of this section
+reported the recycled kernel at 1.86x and built a scaling argument on it, and
+the driver rather than the workload was the limiter.
 
 ## 5. Diagnostics
 
@@ -412,7 +459,13 @@ and it must name the field that disqualified the type rather than the type.
 - **Detached threads**, per §3.4, and the atomic refcounting they would need.
 - **Async/await.** `async` and `await` are forbidden constructs with their own
   Phase 0 rules and no event loop behind them (LANGUAGE.md). Threads do not
-  change that and this note does not propose to.
+  change that and this note does not propose to. What has changed since is the
+  direction the question can be asked from:
+  [wp28-compatibility-mode.md](wp28-compatibility-mode.md) §6 proposes that a
+  *ported* `await` be lowered onto this note's T1 and T2 rather than onto an
+  event loop, which makes the keyword a spelling of spawn-and-join rather than
+  a concurrency model of its own. That is downstream of T1 and T2 by decision
+  (§7), so nothing in it moves a rule here.
   [wp24-async.md](wp24-async.md) is the plan of record for the question, and it
   reaches the same answer from the other side: the I/O surface is synchronous
   and there is nothing to await, so what an asker usually wants is T0 plus an
@@ -443,8 +496,359 @@ that can be answered in a day. Nothing about the 1.0 freeze argues against
 it. **It landed on that argument** — the benchmark question is answered in §4
 T0, and the answer was "nothing, unless the program asks".
 
-The remaining order, then: **a T4-shaped prototype to measure the payoff before
-the surface is designed; T1 and T2 together after the freeze; T3 after WP15
-item 8.** Nothing in that order changed when T0 landed, and the one thing T0
-unblocks outside this note is [wp24-async.md](wp24-async.md) §5.1's A1, which is
-now buildable and still unowned.
+The remaining order, then: **T1 and T2 together after the freeze; T3 after WP15
+item 8** — except that [wp29-thread-surface.md](wp29-thread-surface.md) §8
+argues for reversing it, on the strength of §8 below: data parallelism first
+because it is where the payoff is *and* because it is the only stage needing no
+handle, no join proof and no capture rule, then the scope, then locks and
+channels. That is T4, T1, T3, with T2's shareable rule split between the first
+two. This note does not overrule its companion; the order above is what it said
+before the measurement existed. The T4-shaped prototype that used to open that sentence has been run
+(§8), so the measurement it was gating no longer gates anything: T1 is designed
+against 3.76x rather than against a prediction. Nothing else in the order
+changed when T0 landed, and the one thing T0 unblocks outside this note is
+[wp24-async.md](wp24-async.md) §5.1's A1, which is built.
+
+One thing has been *added* to the order since, from the other end. WP28's
+compatibility dialect ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)
+§6) proposes `async`/`await` as notation that a flag re-targets, and its
+`--async-model threads` lowering — `Promise.all` over non-interfering calls
+becoming a real fork and join — is this note's T1 and T2 wearing a JavaScript
+spelling. **Threads come first, and the decision is recorded here rather than
+only there**: the engine is built as `Thread.spawn` / `join` and a
+`parallelFor`, with its own surface and its own diagnostics, and only then is
+it something a ported `await` can be lowered onto. Building the notation first
+would mean designing T2's shareable-type rule through a keyword that hides it,
+which is the opposite of the order §4 T2 asks for — "the stage that decides how
+much real work is expressible, so it is the one to prototype against a real
+program before committing to the surface".
+
+## 8. The T4 payoff, measured
+
+§4 T4 and §7 both asked for this before T1's surface was designed. It has been
+measured twice: first on an ad-hoc pthreads driver, and then again through
+`runtime/runtime_parallel.c`, the runtime entry point that landed as the stage
+under [wp29-thread-surface.md](wp29-thread-surface.md)'s surface. **The second
+measurement corrected the first**, and §8c is that correction written out
+rather than quietly folded in, because the first is what this note said for a
+while and a reader deserves to know which number was wrong.
+
+Nothing in the language spawns a thread, so the programs are what T0 and the
+partitioner make possible and no more: three kernels compiled to the C ABI by
+the ordinary compiler, and a C driver that calls `nish_parallel_range` over one
+**fixed** amount of work, asking for a given number of chunks, so the chunk
+count is the only variable and every row below comes from one binary. The
+programs are in §9; the machine is four physical cores of an Intel Xeon at
+2.80 GHz with 16 GB, no SMT and no cgroup CPU quota, in a container — which
+puts a hard ceiling of 4x on every row and leaves what a larger machine does
+unmeasured. Best of five per cell. The absolute numbers are this box's and are
+not [BENCHMARKS.md](BENCHMARKS.md)'s; only the ratios mean anything.
+
+| Kernel | 1 chunk | 2 | 4 | at 4 |
+| --- | ---: | ---: | ---: | ---: |
+| arithmetic — a hash chain over a range, no allocation | 977 ms | 489 ms | 247 ms | **3.96x** |
+| allocating — one 8-byte object per iteration, arena left to grow | 1,323 ms | 744 ms | 428 ms | **3.09x** |
+| the same, with `Arena.reset()` every 4,096 objects | 437 ms | 216 ms | 110 ms | **3.97x** |
+
+Two kernels at essentially the ceiling and one at three quarters of it. And the
+other half of the question, because a thread-local arena is not free and T0
+measured 1.48x for it on a pure-bump microbenchmark — the same kernels built
+*without* `--threads` and run on one chunk, interleaved against the `--threads`
+build:
+
+| Kernel, one chunk | without `--threads` | with | cost |
+| --- | ---: | ---: | ---: |
+| arithmetic | 983 ms | 979 ms | none (noise) |
+| allocating, arena grows | 1,289 ms | 1,422 ms | **1.10x** |
+| allocating, arena recycled | 305 ms | 372 ms | **1.22x** |
+
+### 8a. The two multipliers compose, and that is the useful result
+
+Arena discipline and cores are independent, and a program gets the product:
+
+| | arena grows | arena recycled | discipline is worth |
+| --- | ---: | ---: | ---: |
+| 1 chunk | 1,323 ms | 437 ms | **3.03x** |
+| 4 chunks | 428 ms | 110 ms | **3.89x** |
+| **cores are worth** | **3.09x** | **3.97x** | |
+
+So the best configuration measured beats the naive one — arena left to grow, one
+chunk — by **12.0x**, of which about 3x is the body and about 4x is the cores.
+The practical advice is unchanged from when this section had worse numbers,
+though its reason is now different and better: **fix the body's allocation
+first, then add threads**, not because threads stop working on an allocating
+body but because three of those twelve times are free and do not need four
+cores to collect.
+
+The cause of the 3x is measured rather than supposed — peak resident set at
+four chunks, by `bench/rss.c`:
+
+| | allocated | peak RSS |
+| --- | ---: | ---: |
+| arena left to grow | 1.6 GB | **1,432,228 KB** (1.37 GiB) |
+| arena recycled every 4,096 objects | 1.6 GB | **1,828 KB** |
+
+Three orders of magnitude of peak memory between a program that resets its
+arena and one that does not, for the same source and the same output. That
+table is this language's central memory trade in two rows, and it belongs in
+whatever T4 documents about `parallelFor` bodies.
+
+### 8b. The correction: what the ad-hoc driver got wrong
+
+The first version of this section reported the recycled kernel at **1.86x** on
+four threads and built an argument on it — that an allocating body's scaling
+collapses, that arena chunk churn was part of the cause (an interval sweep
+moving 1.87x to 1.57x as the reset interval grew), and that a residual beyond
+that was unexplained. **Re-measured through `nish_parallel_range`, none of that
+holds.** The recycled kernel scales 3.97x, the interval sweep is flat, and
+there is no residual to explain:
+
+| reset interval | bytes per batch | 1 chunk | 4 chunks | at 4 | ad-hoc driver said |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,024 objects | 8 KB — never leaves one chunk | 432 ms | 113 ms | **3.82x** | 1.87x |
+| 4,096 | 32 KB — still one chunk | 437 ms | 110 ms | **3.97x** | 1.86x |
+| 65,536 | 512 KB — eight chunks freed per reset | 376 ms | 97 ms | **3.88x** | 1.57x |
+
+The limiter was the driver, not the workload. Three things say so. The old
+curve was **non-monotonic** — 243 ms at two threads and 246 at three — which is
+not what a saturating workload looks like and was a signal that should have
+been read as one at the time. The new binary's *sequential* path is **slower**
+than the old one's (437 ms against 371), so this is not the new driver being
+better optimised; only the parallel path moved. And `-pthread`, which
+`scripts/build.sh --threads` now passes and the prototype did not, accounts for
+about 8% of the gap (112 ms against 121) and so for almost none of it.
+
+What exactly the old driver cost is not established, and this note is not going
+to spend more measurements on a program that has been replaced. The lesson
+worth keeping is procedural: a prototype's scaffolding is part of what it
+measures, and "unexplained residual" was the right label to put on it — the
+residual was real, and it was in the scaffolding.
+
+Two things the first measurement got right and that survive: the arithmetic
+kernel's near-linear scaling, and the memory table above, which is a
+measurement of allocation rather than of timing and was never the driver's to
+distort.
+
+### 8c. Design inputs the measurement turned up
+
+Four, and none of them is a number:
+
+1. **The arena's per-thread teardown already exists.** A worker frees *its own*
+   arena before returning and leaves the parent's untouched — the thread-local
+   storage class does that for free — so the partitioner needed no new runtime
+   entry point for cleanup, which removes the thing §3.5's 69-byte budget was
+   most likely to be spent on. `runtime_parallel.c` does exactly this and the
+   unit test asserts the parent comes through the join byte for byte.
+2. **A `parallelFor` still wants an arena story, on memory rather than on
+   speed.** §8b retires the scaling argument for this, but §8a's RSS table
+   replaces it with a better one: an undisciplined body costs three orders of
+   magnitude of peak memory and about 3x of wall clock, both of which the
+   compiler can see coming ([wp29-thread-surface.md](wp29-thread-surface.md)
+   §8a is the warning).
+3. **`--threads` is the wrong default.** The 1.10x to 1.22x at one chunk is the
+   price of being *able* to spawn, and a program that never spawns should not
+   pay it. T1 should imply the flag from the language surface rather than ask
+   for it beside it: a program that names a parallel construct gets the
+   thread-local arena, one that does not gets today's binary, byte for byte.
+4. **The scaling is measured on kernels, not on `BENCHMARKS.md`.** `nbody` and
+   `spectral` are the shapes §4 T4 names, and neither has been partitioned,
+   because nothing in the language can partition one. What a `parallelFor` over
+   `nbody` returns is T4's own acceptance test and is still unmeasured.
+
+### 8d. The partitioner, as built
+
+`runtime/runtime_parallel.c` is the third translation unit and the stage every
+row above now runs through:
+
+```c
+typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+int64_t nish_cpu_count(void);
+void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
+```
+
+It partitions `[0, len)` into contiguous chunks, at most one element apart in
+size so that no worker is the one everybody waits for, at most
+`nish_cpu_count()` of them and never more than `len / grain`. Chunk 0 runs on
+the calling thread, so N-way parallelism costs N-1 spawns. A chunk whose thread
+could not be created runs on the calling thread too, so running short of
+threads costs speed and never correctness. A body that itself calls
+`nish_parallel_range` runs its range on one thread, because the nesting guard
+is thread-local and there is no scheduler here.
+
+It compiles in **both** configurations: without `-DNISH_THREADS`, and on WASI
+where there are no threads, the same entry point runs the whole range on the
+calling thread, so the flag decides whether the work is divided and never
+whether the function exists. Its own `.text*` budget is in `tests/run.js` —
+**49 bytes** without the macro and **482** with it, against ceilings of 256 and
+512 — and it is a third file rather than a third of `runtime_os.c` precisely
+because 482 bytes of partitioner does not fit in the 29 bytes that file had
+left, and borrowing the room would have moved the number a reader sees for "the
+operating-system surface" for a reason that has nothing to do with the
+operating system.
+
+### 8e. What a region costs, and why it is not a goroutine
+
+The threads are the machine's, one per core, created and joined **per region**:
+there is no pool, and `nish_cpu_count()` is the only thing that decides how many
+there are. So the cost of dividing has to be paid against the work inside, and
+here it is, measured on an empty body so that the number is the division and
+nothing else:
+
+| | cost |
+| --- | ---: |
+| a region asking for one chunk — the undivided path, no spawn | **3 ns** |
+| an empty region divided four ways — three `pthread_create` plus three joins | **~125 µs** |
+
+That second number is the whole answer to "is this like Go". A goroutine costs
+a couple of microseconds to create and a Go program may hold hundreds of
+thousands of them; an OS thread here costs about forty times that and the
+design holds at most `nish_cpu_count()` of them, by decision (§1). **This is a
+mechanism for dividing one loop across the cores, not for having many tasks.**
+A region needs on the order of a millisecond of work inside it before the
+spawn is under a tenth of its cost, which is the number the compiler's default
+`grain` should be picked from when
+[wp29-thread-surface.md](wp29-thread-surface.md)'s P1 chooses one — and it is
+also why `parallelMapInto` over a short array has to come out as an ordinary
+loop rather than as four threads.
+
+The 3 ns row is worth its own line because it was 3,734 ns until this was
+measured. `nish_cpu_count()` called `sysconf(_SC_NPROCESSORS_ONLN)` on every
+region, which glibc answers from `sched_getaffinity` or by parsing
+/sys/devices/system/cpu/online, and on a region too small to divide that lookup
+*was* the entire cost. It is cached now, in a word read and written with relaxed
+atomic builtins, and the undivided path is a bounds test and a call.
+
+What it costs a program that does not use it: **nothing, byte for byte.**
+`examples/hello.ts` at the `size` profile is 4,680 bytes with the file linked
+and 4,680 without, and the two binaries are identical — `--gc-sections` drops
+every function no program calls, whichever translation unit defined it. There
+is no language surface, so no rule of [LANGUAGE.md](LANGUAGE.md) moves and
+nothing in either compiler changed.
+
+## 9. Appendix: the kernels and the driver, in full
+
+§8's measurements are the facts this note rests on, so the programs are here
+rather than only reported, by the convention
+[wp24-async.md](wp24-async.md) §11 follows. Nothing below is a test case — the
+partitioner's own tests are in `tests/runtime_test.c` — and nothing here uses a
+language feature that does not exist.
+
+The kernels, compiled with `--no-stack-alloc` so that the two allocating ones
+actually reach the arena rather than being turned into registers by WP6, which
+is what they would otherwise be and is a finding of its own:
+[wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 prices that
+transformation at 8.76x.
+
+```ts
+// T4 payoff prototype. Two kernels over a half-open range, each exported with
+// the C ABI so a pthreads driver can run T of them over disjoint ranges: the
+// arithmetic one to measure scaling where nothing touches the arena, and the
+// allocating one to measure it where everything does.
+class P {
+  x: i32;
+  y: i32;
+  constructor(x: i32, y: i32) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+export function sumRange(lo: i32, hi: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = lo; i < hi; i++) {
+    const m: i32 = acc ^ (i * 1103515245);
+    acc = ((m >> 13) ^ m) + 1;
+  }
+  return acc;
+}
+
+export function allocRange(lo: i32, hi: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = lo; i < hi; i++) {
+    const p = new P(i, acc);
+    acc = ((p.x * 3) ^ (p.y + 1)) + 1;
+  }
+  return acc;
+}
+
+export function allocRangeScoped(lo: i32, hi: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = lo; i < hi; i++) {
+    const p = new P(i, acc);
+    acc = ((p.x * 3) ^ (p.y + 1)) + 1;
+    if ((i & 4095) === 4095) {
+      Arena.reset();
+    }
+  }
+  return acc;
+}
+```
+
+The driver, which is the only part that knows there is more than one thread —
+and it knows it only by naming `nish_parallel_range`:
+
+```c
+/* The wp20 §8 kernels again, driven by the real runtime entry point instead of
+   an ad-hoc pthreads loop: if runtime_parallel.c is the thing the prototype
+   predicted, these numbers are the prototype's. */
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+extern int sumRange(int lo, int hi);
+extern int allocRange(int lo, int hi);
+extern int allocRangeScoped(int lo, int hi);
+
+typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+int64_t nish_cpu_count(void);
+void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
+void nish_free_arena(void);
+
+static int mode;
+static int acc_out;
+
+static void body(int64_t lo, int64_t hi, void *ctx) {
+  (void)ctx;
+  int r = mode == 2 ? allocRangeScoped((int)lo, (int)hi)
+        : mode == 1 ? allocRange((int)lo, (int)hi)
+                    : sumRange((int)lo, (int)hi);
+  __atomic_fetch_xor(&acc_out, r, __ATOMIC_RELAXED);
+}
+
+int main(int argc, char **argv) {
+  int64_t total = atoll(argv[1]);
+  mode = argc > 2 ? (strcmp(argv[2], "scoped") == 0 ? 2 : strcmp(argv[2], "alloc") == 0) : 0;
+  /* grain: ask for at most cpu_count chunks, so the partition matches the
+     prototype's one-chunk-per-thread split exactly. */
+  int64_t chunks = argc > 3 ? atoll(argv[3]) : nish_cpu_count();
+  int64_t grain = (total + chunks - 1) / chunks;
+  struct timespec a, b;
+  clock_gettime(CLOCK_MONOTONIC, &a);
+  nish_parallel_range(body, NULL, total, grain);
+  clock_gettime(CLOCK_MONOTONIC, &b);
+  double ms = (b.tv_sec - a.tv_sec) * 1000.0 + (b.tv_nsec - a.tv_nsec) / 1e6;
+  printf("%s c=%lld %.0f ms acc=%d\n", mode == 2 ? "scoped" : mode ? "alloc" : "arith", (long long)chunks, ms, acc_out);
+  return 0;
+}
+```
+
+Built and run — `rss` is `bench/rss.c`, which is how §8a's peak-memory table
+was taken:
+
+```bash
+nish kernel.ts --no-stack-alloc -o kernel.ll
+scripts/build.sh kernel.ll driver.c runtime/runtime.c -o par --profile speed --threads
+./par 800000000 arith  <chunks>      # the arithmetic kernel
+./par 200000000 alloc  <chunks>      # the arena left to grow
+./par 200000000 scoped <chunks>      # the arena recycled every 4,096 objects
+rss ./par 200000000 alloc 4
+# and the same three from a build without --threads, for §8's cost table.
+# §8b's interval table is the `scoped` kernel with 4095 replaced by 1023 and
+# by 65535.
+```
+
+`scripts/build.sh` pairs `runtime_os.c` and `runtime_parallel.c` with the
+`runtime.c` the command line names, which is why the driver links against a
+partitioner it never mentions compiling.

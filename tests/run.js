@@ -56,7 +56,7 @@ fs.mkdirSync(buildDir, { recursive: true });
  * line this suite gets wrong should fail as a link error rather than be quietly
  * repaired on the way past.
  */
-const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c"];
+const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c", "runtime/runtime_parallel.c"];
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
 const DRIVER_C = path.join(root, "tests", "driver.c");
@@ -2325,7 +2325,7 @@ if (!only && HAS_CLANG) {
     { cwd: root }
   );
   check(
-    "runtime.c and runtime_os.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime_os.c and runtime_parallel.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   );
@@ -2358,7 +2358,7 @@ if (!only && HAS_CLANG) {
   );
   const rtThreadsRun = rtThreads.status === 0 ? spawnSync(path.join(buildDir, "runtime_test_threads")) : null;
   check(
-    "runtime.c -DNISH_THREADS: every thread gets its own arena and RNG seed",
+    "runtime.c -DNISH_THREADS: every thread gets its own arena and RNG seed, and a parallel range divides",
     rtThreadsRun !== null && rtThreadsRun.status === 0,
     String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
   );
@@ -2690,6 +2690,34 @@ const RUNTIME_OS_TEXT_BUDGET = 1280;
  * business having, and the point of the split was that a number should mean one thing.
  */
 const RUNTIME_THREADS_TEXT_BUDGET = 3840;
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
+ * runtime/runtime_parallel.c` -- the half that divides a range of work across
+ * threads (WP20 T1, the stage under wp29's surface).
+ *
+ * Two rows, for the same reason the two above are two: the file compiles in both
+ * configurations and they are not the same file. Without `-DNISH_THREADS` it is the
+ * sequential fallback and measured **49 bytes** on 2026-09-18 with clang 18.1.3 on
+ * linux-x64 -- one bounds test, a call, and the cached CPU count -- and the 207 bytes
+ * of slack under the 256-byte boundary are not room to spend: the point of gating the default build is
+ * that nothing but a fallback belongs in it, so a commit that needs the room has put
+ * code on the path a program which never spawns still links.
+ */
+const RUNTIME_PARALLEL_TEXT_BUDGET = 256;
+/**
+ * Ceiling on the same file with `-DNISH_THREADS=1`, which is the build `--threads`
+ * links: the partitioner, the worker trampoline, `pthread_create`/`join` and the
+ * nesting guard.
+ *
+ * Measured 482 bytes on 2026-09-18 with clang 18.1.3 on linux-x64. This is the number
+ * that made the file a third translation unit rather than a third of `runtime_os.c`,
+ * which had 29 bytes of its ceiling left: 482 bytes of partitioner does not fit in 29,
+ * and raising the syscall half's ceiling to hold it would have moved the number a
+ * reader sees for "the operating-system surface" for a reason that has nothing to do
+ * with the operating system. Section GC means a program that runs nothing in parallel
+ * pays none of it, and `examples/hello.ts` is checked to be the same size to the byte.
+ */
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 512;
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -2713,6 +2741,13 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET", []],
       ["runtime/runtime_os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
       ["runtime/runtime.c", RUNTIME_THREADS_TEXT_BUDGET, "RUNTIME_THREADS_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
+      ["runtime/runtime_parallel.c", RUNTIME_PARALLEL_TEXT_BUDGET, "RUNTIME_PARALLEL_TEXT_BUDGET", []],
+      [
+        "runtime/runtime_parallel.c",
+        RUNTIME_PARALLEL_THREADS_TEXT_BUDGET,
+        "RUNTIME_PARALLEL_THREADS_TEXT_BUDGET",
+        ["-DNISH_THREADS=1"],
+      ],
     ]) {
       const name = path.basename(src);
       // The flags are in the check's name and in the object's, so the two rows for
@@ -6091,6 +6126,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // with only the core would install a compiler that cannot link any program
       // that reads a file.
       "runtime/runtime_os.c",
+      // And the third, which `--link` also compiles: a tarball without it would
+      // install a compiler whose every link fails to find `nish_parallel_range`,
+      // because build.sh pairs all three from one named input.
+      "runtime/runtime_parallel.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

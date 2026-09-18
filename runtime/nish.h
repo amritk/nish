@@ -296,6 +296,31 @@ double nish_parse_number(const nish_str *s, int32_t mode);
 /* Checked integer division (Rust semantics): the failed-check path. */
 void nish_panic_div(bool by_zero);
 
+/* ---- Parallel work (WP20 T1 / wp29 stage P1), runtime/runtime_parallel.c ----
+ *
+ * One region of work, divided. `nish_parallel_range` calls `body(lo, hi, ctx)`
+ * once per chunk of a partition of `[0, len)`: contiguous chunks, at most one
+ * element apart in size, at most `nish_cpu_count()` of them and never more than
+ * `len / grain`, with chunk 0 running on the calling thread. It returns when
+ * every chunk has run.
+ *
+ * Under `-DNISH_THREADS` the other chunks run on their own threads, each with
+ * its own arena, which it frees before exiting. Without the macro -- and on
+ * WASI, which has no threads -- the whole range runs on the calling thread, so
+ * the entry point exists either way and the flag decides only whether the work
+ * is divided. A body that itself calls this runs its range on one thread: the
+ * nesting guard is thread-local and there is no scheduler here.
+ *
+ * Two preconditions the caller owns, because this file cannot check them and
+ * the language surface above it will:
+ *   - chunks run concurrently, so a body may read what the caller owns and may
+ *     write only through storage the caller lent it and no two chunks share;
+ *   - a body's result may not point into the arena, because a worker's arena is
+ *     freed when its thread exits while chunk 0's is the caller's own. */
+typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+int64_t nish_cpu_count(void);
+void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
+
 #ifdef __cplusplus
 }
 #endif

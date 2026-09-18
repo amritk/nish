@@ -144,7 +144,7 @@ alias (a generic *function* is monomorphised, WP18), `symbol`,
 
 | Question | Options | Recommendation |
 | --- | --- | --- |
-| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. |
+| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. |
 | Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
@@ -781,6 +781,73 @@ measured in [wp20-threads.md](wp20-threads.md) §4 T0. The four stages that add
 rules to LANGUAGE.md cannot land before M4 without delaying the freeze, and are
 1.1 scope by default.
 
+**The payoff is no longer a prediction, and the partitioner under it is built.**
+wp20 §4 T4 and §7 both said the parallel win should be measured before T1's
+surface was designed, and it has been twice — once on an ad-hoc driver and then
+through `runtime/runtime_parallel.c`, the third translation unit that landed as
+the stage under WP29's surface ([wp20-threads.md](wp20-threads.md) §8). Three
+kernels compiled to the C ABI by the ordinary compiler, one fixed amount of
+work, four physical cores: **3.96x** for a compute kernel, **3.09x** for an
+allocating one, **3.97x** for the same allocating one with its arena recycled.
+That is the largest number left anywhere in this plan — the whole of the WP15
+list above tops out at 2.48x for its one remaining large item and runs to a few
+per cent for the typical one — so T1 and T2 are worth building on a measurement
+and not only on the soundness argument.
+
+The second finding is that **arena discipline and cores are independent
+multipliers and a program gets the product**: recycling the arena is worth
+about 3x of wall clock on its own and three orders of magnitude of peak
+resident memory (1.37 GiB against 1.8 MB for the same source), so the best
+configuration beats the naive one by **12x**, of which about 3x is the body.
+Fix the body first, then add threads — not because threads stop working on an
+allocating body, but because three of those twelve times are free. So a
+`parallelFor` wants an arena story beside its partitioning story; the
+per-thread arena teardown turns out to exist already and needed no new runtime
+entry point; and `--threads` should become implied by the language surface
+rather than requested beside it, because a program that never spawns should not
+pay the 1.10x–1.22x it costs to be able to.
+
+wp20 §8b is a correction kept visible rather than folded in: an earlier draft
+of that section reported the recycled kernel at 1.86x, argued that an
+allocating body's scaling collapses, and blamed part of it on arena chunk
+churn. Re-measured through the real entry point the kernel scales 3.97x, the
+chunk-churn sweep is flat, and the limiter was the prototype's own driver — its
+scaling curve was non-monotonic, which should have been read as a signal at the
+time. A prototype's scaffolding is part of what it measures. **Threads are also now sequenced ahead of WP28's compat
+`async`**, which is notation over this engine rather than an engine of its own;
+that decision is recorded in both notes.
+
+**What the surface is** has its own note now, because the answer is decided by
+a constraint none of the reference languages have:
+[wp29-thread-surface.md](wp29-thread-surface.md). A Nish program must be legal
+TypeScript, and TypeScript will not give us a new keyword — so `go f()`,
+`spawn { }` and `parallel for` are all unsayable, and every construct has to be
+a call. The exception is *lifetime*: `using` (TS 5.2) is the one block-scoped
+deterministic-cleanup form the language has, and a scoped thread group is
+exactly a block-scoped lifetime. So the proposal is Rust's scoped threads
+spelled `using`, a `Mutex<T>` that owns the data it protects with a guard the
+block releases, and Rayon-shaped data parallelism — with the whole surface run
+through `tsc --strict` before being proposed rather than after, which it passes
+at `"lib": ["ES2022"]` with no tsconfig change once the shipped declaration
+file carries the disposable protocol itself.
+
+Three results are worth pulling up to this page. **`using` deletes an
+analysis**: wp20 T1's "every handle is joined on every path" becomes a join the
+compiler emits at every block exit, so the rule is not proved and its
+diagnostic is not needed. **Race freedom needs no annotations and no
+detector**: Rust asks for `Send`/`Sync` bounds and Go ships a runtime detector,
+while the fixpoint in `src/codegen/attributes.ts` already proves `readnone` and
+`readonly` whole-program, so a parallel body it cannot clear is simply a
+compile error. And **the stage order should reverse**: wp20 builds spawn first
+and data parallelism last, but the data-parallel intrinsic is where the whole
+measured payoff is *and* is the only stage that needs no handle, no join proof
+and no capture analysis — because the partition belongs to the intrinsic, so
+disjointness is a property of the call rather than something to prove. The one
+thing the surface needs that does not exist is
+[wp23](wp23-language-surface.md) §6's compile-time function parameter, for a
+body written at the call site, which WP28 §7.4 measured at no run-time cost
+because the callee is statically known.
+
 Packages are not on that list either, and the question "how does one
 Nish package depend on another" turns out to have the same character:
 the answer is forced by whole-program compilation rather than chosen. A
@@ -871,6 +938,86 @@ something different under Node than it does here, in the direction
 [wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
 is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
 waiting on any of it.
+
+The question the async refusal keeps provoking is the one that follows it:
+*could there be a mode that accepts the TypeScript people have already written,
+so that a codebase is ported first and made fast afterwards, one construct at a
+time?* [wp28-compatibility-mode.md](wp28-compatibility-mode.md) is the plan of
+record, and nothing in it is built. Its useful half is the line that decides
+what may enter such a dialect, because the line is not "how hard is this to
+compile" but **can the compiler still name the layout of every value**. If it
+can, the construct costs a *proof* — an attribute the whole-program fixpoint
+was making, an allocation that goes back to the arena — and the cost is
+measurable, local, and reportable through the `performance` class WP15 item 2
+already built, which is why the migration dashboard needs no new machinery. If
+it cannot — `any`, a property nobody declared, `Proxy`, a prototype — the
+construct costs the object model: a tagged value, and a collector for the
+boxes about four minutes later. That tier is refused in every dialect
+permanently rather than staged, and saying so first is what keeps the mode from
+being read as a promise to run arbitrary TypeScript. Strict stays the default
+and does not grow, the mode may only *add* acceptance, and the whole corpus
+compiled with it on must emit byte-identical IR — 437 `reject_*` cases and
+every golden proving the flag is a no-op until it is used. The thesis is that
+the dialect is what lets strict stay small: [wp23](wp23-language-surface.md)
+declined `?.`, a string `switch` and `for...of` over a string as *language*
+decisions, correctly, and each of the three is also code somebody has already
+written, and a dialect is what stops those two facts from having to be settled
+against each other. It also forces the flag surface, which has grown to
+twenty-three options across four axes with none of them named: the note regroups
+them into **dialect / build / output**, gives the dialect one allow-list flag —
+`--compat`, bare for every built feature and `--compat=<list>` for exactly
+some, with strict being the *absence* of the flag so that no existing command
+line or golden moves — that a team ratchets down in `package.json` rather than
+twelve booleans, and records it in the emitted IR — which closes §5.1's older complaint
+that two `.ll` files from one source under different `--number-mode` settings
+are different programs and neither says so. It answers §3.4's oldest open row
+on the way: `i32` in strict, `f64` in compat, because a ported codebase whose
+arithmetic silently truncates at 2**31 is exactly the divergence
+[wp13-differential.md](wp13-differential.md) exists to catch.
+
+`async` is where that note and [wp24](wp24-async.md) meet, and it does not
+overturn the refusal — it finds the one condition under which the refusal does
+not apply, using wp24's own load-bearing finding to do it. wp24 §7 refuses
+`async` as an erased no-op because erasure makes a program mean something
+different under Node. wp24 §2 finds that there is nothing to await: no timer,
+no sleep, no poller, no socket, in either compiler or either runtime. Read the
+second against the first and the erasure is exact rather than a lie **whenever
+no two promises are simultaneously live** — because a JavaScript `await` only
+reorders a program when some other pending continuation exists to run in the
+gap the yield opens, and one live promise means the gap is empty. Two checker
+rules imply it (`await` applies directly to a call, and an `async` call is
+awaited in the expression that makes it), they are wp24 §9.3's "the promise as
+a value does not survive" stated as a rule rather than a conclusion, and every
+program they reject is one where the erasure would have diverged — so the
+rejection carries a line number and a rewrite instead of refusing the keyword.
+`Promise.all` is the case with two live promises, and it is admitted exactly
+when the fixpoint proves the callees do not interfere; that same proof is what
+lets the same expression become a real fork and join under a second engine,
+`--async-model threads`, riding WP20 T1 and T2. One analysis, two payoffs, and
+the second is parallelism the single-threaded original could not have had from
+source written for it. None of it is pre-1.0 and none of it adds a rule to
+LANGUAGE.md, so M4's freeze is not waiting on this note either.
+
+Of the two measurements that could have stopped the package before it started,
+the first has been taken and did not stop it — but it moved the headline, which
+is the useful kind of spike ([wp28](wp28-compatibility-mode.md) §7.4). One
+opaque callee in a hot loop costs **1.26x to 1.40x** for the inlining it loses;
+costs **nothing measurable** for the frontend facts it strips from every
+transitive caller, because LLVM re-derived them inside the LTO unit — which is
+not a claim the fixpoint is worthless, WP15 §1a's alias facts are worth 1.63x
+to 3.96x, only that *these* facts lost *this* way are free; and costs
+**8.76x** for the escape proof it takes away, because an object WP6 can prove
+local today becomes an entry-block `alloca` and is then removed outright, while
+an unknown callee sends 200M of them back to the arena. So the compat report
+leads with the arena and not with the attribute, and the closure stage splits
+along a line [wp23](wp23-language-surface.md) §6 had already drawn: a callback
+whose callee is *statically known* — an arrow at the call site, a function
+passed by name — is a direct call that inlines and keeps the escape proof and
+costs nothing, while a function value whose target the checker cannot name
+costs the 1.26x and the 8.76x. The cheap half is built first and is most of
+what a migrating codebase writes. The second measurement — how many `async`
+functions in a real application ever await something that can block — is still
+unrun.
 
 The one thing that has *left* the language rather than entered it is
 inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of

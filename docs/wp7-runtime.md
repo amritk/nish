@@ -594,6 +594,47 @@ different:
 That the two sum to 4,864, the single budget they replace, is a coincidence of
 where the 256-byte boundaries fall and not a constraint on either.
 
+### 2026-09-18: a third file, for the same reason as the second
+
+`runtime/runtime_parallel.c` — the half that divides a range of work across
+threads (WP20 T1, the stage under
+[wp29-thread-surface.md](wp29-thread-surface.md)'s surface) — is a third
+translation unit with a ceiling of its own, and it is a third file for exactly
+the reason the second one exists.
+
+`runtime_os.c` had **29 bytes** of its 1,280-byte ceiling left. The partitioner
+is **482**: `pthread_create` and `pthread_join`, the chunk arithmetic, the
+worker trampoline that frees its own arena, the thread-local nesting guard, and
+the cached CPU count.
+Putting it there would have meant raising the syscall half's ceiling past 1,536
+to hold something whose subject is not a system call in the sense that section
+means — and moving the number a reader sees for "the operating-system surface"
+for a reason that has nothing to do with the operating system. That is the
+mistake the 2026-09-12 split was made to stop making.
+
+Two budgets, because the file compiles in two configurations and they are not
+the same file:
+
+| `clang -Oz -c runtime/runtime_parallel.c` | measured | budget |
+| --- | ---: | ---: |
+| default — the sequential fallback, and WASI, where there are no threads | **49** | **256** |
+| `-DNISH_THREADS=1` — the build `--threads` links | **482** | **512** |
+
+Measured on 2026-09-18 with clang 18.1.3 on linux-x64. The 207 bytes of slack
+in the first row are not room to spend: gating the default build is what says
+that nothing but a fallback belongs on the path a program which never spawns
+still links, so a commit that needs that room has put code there.
+
+And what it costs a program that does not use it is the same answer this
+document has given twice before, measured the same way: **nothing, byte for
+byte.** `examples/hello.ts` at the `size` profile is 4,680 bytes with the file
+linked and 4,680 without, and `cmp` says the two binaries are identical —
+`-ffunction-sections -Wl,--gc-sections` drops every function no program calls,
+whichever translation unit defined it. `scripts/build.sh` pairs the file with
+the `runtime.c` a caller names, as it already pairs `runtime_os.c`, so there is
+no link line anywhere that has to learn about it.
+
+
 ### What FFI does and does not do to the budget
 
 WP27 lets a program declare and call a C function of its own, and

@@ -3,10 +3,11 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm]
 #
-# The C runtime is two translation units and is named as one: an input
+# The C runtime is three translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime_os.c, the half that wraps the
-# system calls (files, directories, subprocesses, the environment, the clock).
-# runtime/runtime_os.c says why they are compiled and measured apart.
+# system calls (files, directories, subprocesses, the environment, the clock),
+# and <dir>/runtime_parallel.c, the half that divides a range of work across
+# threads. Each of those files says why they are compiled and measured apart.
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
@@ -82,25 +83,28 @@ done
 [ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
 [ -n "$out" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is two translation units, and a caller names one: whoever passes
-# <dir>/runtime.c gets <dir>/runtime_os.c compiled beside it. The two were one
-# file until the operating-system half was split out for its own size budget
-# (runtime/runtime_os.c's header comment), and a link line is where that split
+# The runtime is three translation units, and a caller names one: whoever passes
+# <dir>/runtime.c gets <dir>/runtime_os.c and <dir>/runtime_parallel.c compiled
+# beside it. They were one file until the operating-system half was split out
+# for its own size budget, and the parallel half followed for the same reason
+# (each file's header comment says why), and a link line is where those splits
 # would otherwise leak: `nish --link` builds its command line in src/index.ts
 # and self/compile.ts, the published package's recipe in every document and
 # README names runtime.c, and a user's own clang line does too. Pairing them
 # here keeps every one of those correct, and keeps "the runtime" one thing to
-# name from the outside. A caller that names both itself is left alone, because
+# name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
-      os="${i%runtime.c}runtime_os.c"
-      have=0
-      for j in "${inputs[@]}"; do
-        if [ "$j" = "$os" ]; then have=1; fi
-      done
-      if [ "$have" = 0 ] && [ -f "$os" ]; then inputs+=("$os"); fi ;;
+      for half in runtime_os.c runtime_parallel.c; do
+        side="${i%runtime.c}$half"
+        have=0
+        for j in "${inputs[@]}"; do
+          if [ "$j" = "$side" ]; then have=1; fi
+        done
+        if [ "$have" = 0 ] && [ -f "$side" ]; then inputs+=("$side"); fi
+      done ;;
   esac
 done
 
@@ -137,9 +141,21 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # `tls` is the same pair again for the wasm and wasi profiles, which build their
 # own command line instead of using `common`; it is empty on every ordinary
 # build, hence the bash 3.2 expansion spelling explained below.
+#
+# -pthread is for runtime_parallel.c, the translation unit that divides a range
+# of work across threads: it is compiled in either configuration and only spawns
+# under this macro, so this is the build where the flag has to be on the command
+# line. On a current glibc the library half is already inside libc and the link
+# would succeed without it; passing it is what makes that an implementation
+# detail rather than something the build depends on.
+#
+# It is deliberately in `common` and not in `tls`: `tls` is the wasm and wasi
+# command lines, which have no threads to link against, and where
+# runtime_parallel.c compiles to its sequential fallback because it tests
+# __wasi__ and __wasm__ as well as the macro.
 tls=()
 if [ "$threads" = 1 ]; then
-  common+=(-DNISH_THREADS=1 -ftls-model=initial-exec)
+  common+=(-DNISH_THREADS=1 -ftls-model=initial-exec -pthread)
   tls=(-DNISH_THREADS=1 -ftls-model=initial-exec)
 fi
 
