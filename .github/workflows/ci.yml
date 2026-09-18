@@ -571,9 +571,9 @@ jobs:
   # and was found by a nightly four nights later, by which time the gate had
   # been red for four days with nobody reading it.
   #
-  # The full corpus cannot go here. Measured on this repository on 2026-09-18:
-  # 13,230 runs over 882 programs, 2,384 s on a four-core box, and the four
-  # nightly runs so far took 36-55 minutes on `ubuntu-latest`. It grows with
+  # The full corpus cannot go here. Measured on `ubuntu-latest` on 2026-09-18:
+  # `13260 runs over 884 programs (2100.5 s)`, in a job that took 36 minutes
+  # end to end, and the four nightlies before it took 36 to 56. It grows with
   # every program and with every flag the suite adds, so putting it on every
   # push is the trade `parity.yml`'s own header argues against -- and that
   # header is right.
