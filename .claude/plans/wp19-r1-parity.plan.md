@@ -53,6 +53,9 @@ stages:
       - id: gate-pr
         content: Add a bounded parity check to the pull-request path so a reintroduced difference is red there, with its added minutes measured — see A gate on the push path
         status: pending
+      - id: gate-coverage
+        content: Fix the registry read in tests/diagnostic_coverage.js that makes its coverage half unable to fail — see A gate that cannot fail
+        status: pending
       - id: gate-measure
         content: Re-measure the mode and rewrite the R1 row of docs/wp19-stage0-retirement.md with its date — see The measurement, with its date
         status: pending
@@ -90,7 +93,7 @@ Both second diagnostics are cascades from the refused instantiation — one comp
 
 Either way the outcome is pinned by a `tests/wordings/` case, because a wording that only a golden holds drifts.
 
-**Owns:** `src/checker/generics.ts`, `self/generics.ts`, `src/checker/nullable.ts`, `src/compilation.ts`, `self/compilation.ts`, `tests/cases/reject_generic_expanding_field*`, `tests/wordings/**`, `docs/wp18-generics.md`, `tests/self/goldens/**`
+**Owns:** `src/checker/index.ts`, `src/checker/generics.ts`, `self/generics.ts`, `src/checker/nullable.ts`, `src/compilation.ts`, `self/compilation.ts`, `tests/cases/reject_generic_expanding_field*`, `tests/wordings/**`, `docs/wp18-generics.md`, `tests/self/goldens/**`
 
 ## The alarm nobody has heard
 
@@ -105,6 +108,14 @@ Bound it by what the pull request touched: the corpus programs its diff adds or 
 This stage merges after the other two. A per-pull-request parity check introduced while the corpus is red would be red on every pull request in the repository, including its own.
 
 **Owns:** `.github/workflows/parity.yml`, `.github/workflows/ci.yml`, `tests/self/parity.js`, `tests/run.js`, `docs/wp19-stage0-retirement.md`, `docs/MASTER_PLAN.md`
+
+## A gate that cannot fail
+
+Review of the second fix stage turned up a third gate that is not doing its job, and it is this stage's rather than that one's. `tests/diagnostic_coverage.js`'s `registry()` matches a code with `^ {4}("...")`, four literal spaces, but `self/codes.ts` has been two-space indented since the arrow refactor. It therefore parses **0 of 408** codes, `--require-coverage` iterates an empty map and can never fail, and the per-case registry-fragment cross-check is silently skipped for every case. Run on the branch it reports `coverage 0/0 codes` and exits 0.
+
+It is pre-existing — the same regex and the same indentation are on `main` — and `tests/run.js:719-728` already fixed this exact trap with `^\s+` and documents it, so the fix is to read the codes the way the other tool learned to. What it is *not* is a widening of this stage: the stage exists to make a gate red where somebody will see it, and a gate that cannot go red at all is the same defect one step further along.
+
+Expect turning it on to reveal codes that nothing provokes. Those are a finding to report with their count, not a reason to leave the parser broken; if the list is long enough to be its own work package, say so with the number and pin the parser fix on its own.
 
 ## The measurement, with its date
 
