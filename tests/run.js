@@ -933,6 +933,8 @@ if (!only || "performance".includes(only)) {
       encoding: "utf8",
     });
   const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: performance: /.test(l));
+  /** The `line:col` of each summary line, comma-joined -- the shape every check below pins. */
+  const positions = (lines) => lines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",");
 
   // The order of the stream, before any rule in it. The warning list is sorted
   // by file, then by position, then by diagnostic code, and `diag_order` is the
@@ -948,8 +950,7 @@ if (!only || "performance".includes(only)) {
     "performance: the warnings of one file are reported by position and then by code, whatever order the analysis found them in",
     order.status === 0 &&
       orderLines.length === 4 &&
-      orderLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
-        "26:5,36:5,44:41,44:41" &&
+      positions(orderLines) === "26:5,36:5,44:41,44:41" &&
       orderLines[0].includes("performance: `s` is rebuilt from its own value") &&
       orderLines[1].includes("performance: `out` is rebuilt from its own value") &&
       orderLines[2].includes("performance: this `*` is computed in i32 and wraps") &&
@@ -957,34 +958,94 @@ if (!only || "performance".includes(only)) {
     order.stderr
   );
 
-  // And the same order out of stage1, because `compile` above is stage0's
-  // alone: the mirror in `self/diagnostics.ts` is otherwise pinned by nothing
-  // here, and a wrong key or a missing `warningFileOrder` registration there
-  // would leave this file green. The binary is the one section A builds for the
-  // stage1-only register, and this is a counted skip where there is no clang to
-  // link one. The whole report is compared rather than the positions: the two
+  // The key `diag_order` could pin but not falsify: a **pass-1** warning beside
+  // pass-2 ones in a file that reads in neither order. A struct's layout is
+  // known when its members are collected, so the analysis hands the sink the
+  // two padding warnings first -- `Slot` at 26 and `Frame` at 42 -- and only
+  // then the two accumulators at 20 and 36. Reported by position they come out
+  // 20, 26, 36, 42, which is the file read top to bottom; with the sort removed
+  // the padding pair leads, which is what WP15 §8 said blocked the tenth rule
+  // until the order was written down.
+  const passes = compile("diag_order_pass1", "diag_order_pass1_report.ll");
+  const passLines = summaries(passes.stderr);
+  check(
+    "performance: a pass-1 warning is reported at its place in source order, not ahead of every pass-2 warning in its file",
+    passes.status === 0 &&
+      passLines.length === 4 &&
+      positions(passLines) === "20:5,26:14,36:5,42:14" &&
+      passLines[0].includes("performance: `out` is rebuilt from its own value") &&
+      passLines[1].includes("performance: `Slot` is 24 bytes and would be 16") &&
+      passLines[2].includes("performance: `s` is rebuilt from its own value") &&
+      passLines[3].includes("performance: `Frame` is 24 bytes and would be 16"),
+    passes.stderr
+  );
+
+  // The tenth rule (NL9010). §8's hint column asks for three things -- the size
+  // the struct is, the size the same fields reach in their best order, and that
+  // order -- so the whole sentence is the check rather than the words it opens
+  // with. A `class` and an `interface` of identical shape, because a layout is a
+  // layout and the rule may not be a rule about classes; the interface's hint
+  // carries the second half of its rewrite, since reordering an interface alone
+  // is what stops an implementer compiling.
+  const pad = compile("perf_padding", "perf_padding_report.ll");
+  const padLines = summaries(pad.stderr);
+  const padSentence = (name, order) =>
+    `performance: \`${name}\` is 24 bytes and would be 16 with the same fields in a different order, so 8 bytes ` +
+    `of every value are padding the alignment rules insert and nothing reads: declare the fields widest first ` +
+    `\u2014 \`${order}\``;
+  const implementersTail =
+    " \u2014 here and in any class that `implements` it, since the interface's fields are its implementers' " +
+    "first fields";
+  check(
+    "performance: a struct a reordering would shrink warns once, naming both sizes and the order that reaches the smaller one",
+    pad.status === 0 &&
+      padLines.length === 2 &&
+      positions(padLines) === "14:14,20:18" &&
+      padLines[0].endsWith(padSentence("Mixed", "size: f64, count: i32, flag: boolean")) &&
+      padLines[1].endsWith(padSentence("Row", "weight: f64, index: i32, live: boolean") + implementersTail),
+    pad.stderr
+  );
+
+  // And the same reports out of stage1, because `compile` above is stage0's
+  // alone. Nothing else in the suite compares a `performance:` line across the
+  // two compilers: `tests/self/parity.js` filters stderr for ` error: ` and
+  // ` warning: `, which a `performance` line is neither of, and no variation of
+  // it passes `--json`. So a wrong sort key in `self/diagnostics.ts`, or a
+  // padding rule that reports from a different phase there, would leave this
+  // file green. The whole report is compared rather than the positions: the two
   // compilers print the same summary lines for an ASCII source, where stage1's
-  // byte columns and stage0's UTF-16 columns agree.
+  // byte columns and stage0's UTF-16 columns agree. `perf_padding_quiet` is in
+  // the list because its guards are the easiest half to get wrong twice over:
+  // there the report both compilers owe is no report at all, which the quiet
+  // loop below pins for stage0.
+  //
+  // The binary is the one section A builds for the stage1-only register, so
+  // this is a counted skip where there is no clang to link one.
   const stage1Compiler = stage1ForCases();
+  const stage1Report = (name) =>
+    summaries(
+      spawnSync(
+        stage1Compiler.cmd,
+        [...stage1Compiler.prefix, path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, `${name}_stage1.ll`)],
+        { cwd: root, encoding: "utf8" }
+      ).stderr
+    );
   if (stage1Compiler.error !== undefined) {
-    skip(`performance: the stage1 report order (${stage1Compiler.error})`);
+    skip(`performance: the stage1 warning reports (${stage1Compiler.error})`);
   } else {
-    const order1 = spawnSync(
-      stage1Compiler.cmd,
-      [
-        ...stage1Compiler.prefix,
-        path.join(casesDir, "diag_order.ts"),
-        "-o",
-        path.join(buildDir, "diag_order_stage1.ll"),
-      ],
-      { cwd: root, encoding: "utf8" }
-    );
-    const order1Lines = summaries(order1.stderr);
-    check(
-      "performance: stage1 reports the warnings of one file in the order stage0 reports them",
-      order1.status === 0 && order1Lines.length === 4 && order1Lines.join("\n") === orderLines.join("\n"),
-      `--- stage0\n${orderLines.join("\n")}\n--- stage1 (exit ${order1.status})\n${order1Lines.join("\n")}\n${order1.stderr}`
-    );
+    for (const [name, ourLines] of [
+      ["diag_order", orderLines],
+      ["diag_order_pass1", passLines],
+      ["perf_padding", padLines],
+      ["perf_padding_quiet", []],
+    ]) {
+      const theirLines = stage1Report(name);
+      check(
+        `performance: stage1 reports ${name} exactly as stage0 reports it`,
+        theirLines.join("\n") === ourLines.join("\n"),
+        `--- stage0\n${ourLines.join("\n")}\n--- stage1\n${theirLines.join("\n")}`
+      );
+    }
   }
 
   const str = compile("perf_str_concat_loop", "perf_str.ll");
@@ -995,8 +1056,7 @@ if (!only || "performance".includes(only)) {
     "performance: every self-accumulating string assignment in a loop warns, naming the variable and the `string[]` + `join` rewrite",
     str.status === 0 &&
       strLines.length === 4 &&
-      strLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
-        "7:5,14:5,24:7,33:5" &&
+      positions(strLines) === "7:5,14:5,24:7,33:5" &&
       strLines[0].includes("performance: `out` is rebuilt from its own value on every iteration of this loop") &&
       strLines[1].includes("performance: `tagged` is rebuilt from its own value") &&
       strLines[2].includes("performance: `row` is rebuilt from its own value") &&
@@ -1035,7 +1095,7 @@ if (!only || "performance".includes(only)) {
     "performance: an allocation assigned over an allocation warns once per dropped value, naming both rewrites",
     drop.status === 0 &&
       dropLines.length === 3 &&
-      dropLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "15:3,17:3,21:3" &&
+      positions(dropLines) === "15:3,17:3,21:3" &&
       dropLines[0].includes(
         "`p` already holds an allocation and this one drops it: nothing can reach the old value from here and " +
           "nothing frees it, and assigning a local is also what stops this function from releasing its arena " +
@@ -1075,7 +1135,7 @@ if (!only || "performance".includes(only)) {
     "performance: a constant that does not fit its i32 warns once per innermost overflow, naming the value and the range",
     consts.status === 0 &&
       constLines.length === 3 &&
-      constLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "8:15,9:19,12:18" &&
+      positions(constLines) === "8:15,9:19,12:18" &&
       constLines[0].includes(
         "this computes with overflow: the result 2147483648 does not fit in i32 (the range is -2147483648 to " +
           "2147483647), and signed overflow is undefined behaviour rather than a wrap: widen the operands with " +
@@ -1104,8 +1164,7 @@ if (!only || "performance".includes(only)) {
     "performance: a bounds check that survived the proof warns once per access, naming the guard",
     bounds.status === 0 &&
       boundsLines.length === 3 &&
-      boundsLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
-        "12:24,20:36,28:24" &&
+      positions(boundsLines) === "12:24,20:36,28:24" &&
       boundsLines[0].includes("`i` is not proven to be in range for `ys` here, so this access keeps its bounds check") &&
       boundsLines[1].includes("`j` is not proven to be in range for `zs`") &&
       boundsLines[2].includes("`k` is not proven to be in range for `ws`") &&
@@ -1124,7 +1183,7 @@ if (!only || "performance".includes(only)) {
     "performance: an unfolded `substring` clamp warns once per bound, naming the bound and the guard",
     clamp.status === 0 &&
       clampLines.length === 2 &&
-      clampLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "25:33,25:39" &&
+      positions(clampLines) === "25:33,25:39" &&
       clampLines[0].includes("`from` is not provably within `s`, so this `substring` bound keeps the clamp") &&
       clampLines[1].includes("`to` is not provably within `s`") &&
       clampLines.every((l) => l.includes("or use `slice`, which has no clamp at all")),
@@ -1252,6 +1311,10 @@ if (!only || "performance".includes(only)) {
     // Every `substring` bound either proven -- in which case the clamp is gone
     // from the IR, not merely quiet -- or with no guard anybody could write.
     "perf_clamp_quiet",
+    // Structs that are already as small as their fields make them, plus the two
+    // whose order is not the author's to permute: a class that `implements` an
+    // interface, and a generic instantiation.
+    "perf_padding_quiet",
   ]) {
     const quiet = compile(name, `${name}.ll`);
     check(

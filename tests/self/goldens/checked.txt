@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 338 programs, 5806 dump lines.
+# 341 programs, 5891 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1709,6 +1709,36 @@ function label<i32>(items: i32[]): string -> @label$i32 [instance]
   stackSites=0 stackLocals=0
   local 23:7 s: string (let)
   local 24:7 i: i32 (let)
+program tests/cases/diag_order_pass1.ts
+module tests/cases/diag_order_pass1.ts (entry)
+struct Slot (class) size=24 align=8 exported
+  field used: boolean index=0 offset=0 initialized
+  field weight: f64 index=1 offset=8 initialized
+  field id: i32 index=2 offset=16 initialized
+struct Frame (class) size=24 align=8 exported
+  field open: boolean index=0 offset=0 initialized
+  field span: f64 index=1 offset=8 initialized
+  field depth: i32 index=2 offset=16 initialized
+function banner(n: i32): string -> @banner [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 17:7 out: string (let)
+  local 18:7 i: i32 (let)
+function tag(n: i32): string -> @tag [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 33:7 s: string (let)
+  local 34:7 i: i32 (let)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: banner tag
+  stackSites=2 stackLocals=2
+  local 49:9 slot: Slot (const)
+  local 51:9 frame: Frame (const)
+  callee 53:10 banner -> @banner
+  callee 53:29 tag -> @tag
 program tests/cases/div_checked.ts
 module tests/cases/div_checked.ts (entry)
 function div(a: i32, b: i32): i32 -> @div
@@ -3802,6 +3832,64 @@ function test(): i32 -> @test [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
   local 5:9 wrapped: i32 (const)
+program tests/cases/perf_padding.ts
+module tests/cases/perf_padding.ts (entry)
+struct Mixed (class) size=24 align=8 exported
+  field flag: boolean index=0 offset=0 initialized
+  field size: f64 index=1 offset=8 initialized
+  field count: i32 index=2 offset=16 initialized
+struct Row (interface) size=24 align=8 exported
+  field live: boolean index=0 offset=0
+  field weight: f64 index=1 offset=8
+  field index: i32 index=2 offset=16
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=2 stackLocals=2
+  local 27:9 m: Mixed (const)
+  local 29:9 r: Row (const)
+program tests/cases/perf_padding_quiet.ts
+module tests/cases/perf_padding_quiet.ts (entry)
+struct Packed (class) size=16 align=8 exported
+  field size: f64 index=0 offset=0 initialized
+  field count: i32 index=1 offset=8 initialized
+  field flag: boolean index=2 offset=12 initialized
+struct Uniform (class) size=12 align=4 exported
+  field a: i32 index=0 offset=0 initialized
+  field b: i32 index=1 offset=4 initialized
+  field c: i32 index=2 offset=8 initialized
+struct Single (class) size=1 align=1 exported
+  field only: boolean index=0 offset=0 initialized
+struct Unavoidable (class) size=8 align=4 exported
+  field flag: boolean index=0 offset=0 initialized
+  field count: i32 index=1 offset=4 initialized
+struct Header (interface) size=16 align=8 exported
+  field live: boolean index=0 offset=0
+  field weight: f64 index=1 offset=8
+struct Entry (class) size=24 align=8 exported
+  implements Header
+  field live: boolean index=0 offset=0 initialized
+  field weight: f64 index=1 offset=8 initialized
+  field index: i32 index=2 offset=16 initialized
+struct Cell$f64 (class) size=24 align=8 exported
+  field used: boolean index=0 offset=0 initialized
+  field value: f64 index=1 offset=8
+  field tag: i32 index=2 offset=16 initialized
+  constructor -> @Cell$f64.constructor
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Cell$f64.constructor llvm.fptosi.sat.i32.f64
+  stackSites=6 stackLocals=6
+  local 63:9 p: Packed (const)
+  local 64:9 u: Uniform (const)
+  local 65:9 s: Single (const)
+  local 66:9 v: Unavoidable (const)
+  local 67:9 e: Entry (const)
+  local 68:9 c: Cell$f64 (const)
+function Cell$f64.constructor(this: Cell$f64, value: f64): void -> @Cell$f64.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 program tests/cases/perf_str_concat_loop.ts
 module tests/cases/perf_str_concat_loop.ts (entry)
 function test(): i32 -> @test [exported]

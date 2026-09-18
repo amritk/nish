@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 408;
+export const RULE_COUNT: i32 = 409;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -863,6 +863,8 @@ export const performanceRules = (): string[] => [
   "NL9001",
   "is rebuilt from its own value on every iteration of this loop",
   "NL9002",
+  "are padding the alignment rules insert and nothing reads",
+  "NL9010",
   "already holds an allocation and this one drops it",
   "NL9003",
   "this computes with overflow: the result",

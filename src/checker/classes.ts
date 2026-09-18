@@ -105,19 +105,131 @@ function roundUp(n: number, align: number): number {
   return Math.ceil(n / align) * align;
 }
 
-/** Assign offsets in declaration order and compute size/alignment as clang does for a C struct. */
-export function computeLayout(fields: FieldInfo[]): { size: number; align: number } {
+/**
+ * The layout of one struct: offsets assigned in declaration order, and the
+ * size and alignment clang computes for the equivalent C struct.
+ *
+ * `floor` is the smallest size *any* order of these fields could reach — the
+ * sum of their widths, rounded up to the struct's alignment — which no layout
+ * can beat, because no order removes a byte a field occupies. It comes out of
+ * this walk rather than a second one because the walk already has both numbers,
+ * and it is what the WP15 §8 padding warning tests first: a struct whose size
+ * already equals its floor cannot be improved by reordering, and almost every
+ * struct is one of those.
+ */
+export function computeLayout(fields: FieldInfo[]): { size: number; align: number; floor: number } {
   let offset = 0;
   let align = 1;
+  let used = 0;
   for (const f of fields) {
     const a = alignOf(f.type);
+    const width = sizeOf(f.type);
     offset = roundUp(offset, a);
     f.offset = offset;
-    offset += sizeOf(f.type);
+    offset += width;
+    used += width;
     if (a > align) align = a;
   }
-  return { size: roundUp(offset, align), align };
+  return { size: roundUp(offset, align), align, floor: roundUp(used, align) };
 }
+
+/** The size `fields` lay out to in the order given, rounded up to `align`. */
+const layoutSize = (fields: FieldInfo[], align: number): number => {
+  let offset = 0;
+  for (const f of fields) {
+    offset = roundUp(offset, alignOf(f.type)) + sizeOf(f.type);
+  }
+  return roundUp(offset, align);
+};
+
+/**
+ * The fields widest first, which is the order that reaches a struct's floor.
+ *
+ * A stable bucket pass rather than a sort: every alignment in the language is a
+ * power of two and `align` is the largest of them, so halving from `align` down
+ * to 1 visits every alignment a field of this struct can have, and taking the
+ * fields of each width in declaration order keeps same-width fields where the
+ * author put them. The message therefore names the smallest edit that reaches
+ * the smaller layout rather than an arbitrary permutation of the declaration.
+ *
+ * `src/` could sort instead, and this is one order two implementations have to
+ * agree on to the byte — the message quotes it — so it computes the order the
+ * way `self/` has to, where the language has no `Array.sort`.
+ *
+ * It runs only where the warning fires, so a struct that is already packed pays
+ * for none of it.
+ */
+const widestFirst = (fields: FieldInfo[], align: number): FieldInfo[] => {
+  const sorted: FieldInfo[] = [];
+  let width = align;
+  while (width >= 1) {
+    for (const f of fields) {
+      if (alignOf(f.type) === width) sorted.push(f);
+    }
+    width = width >> 1;
+  }
+  return sorted;
+};
+
+/**
+ * WP15 §8, the tenth rule: a struct whose declared field order costs it bytes
+ * of padding that a different order would not spend. The message names the
+ * current size, the achievable size and the order that reaches it, which is
+ * what §8's hint column specifies.
+ *
+ * `floor` is only the gate. The size the message names is the one the named
+ * order really lays out to, measured by `layoutSize`, so the two numbers stay
+ * true of each other whatever `sizeOf` and `alignOf` come to say about a type.
+ *
+ * It is the one §8 warning computed in **pass 1** — a layout is known the
+ * moment a struct's members are collected, long before any body is checked —
+ * which is what `DiagnosticSink.reportPerformance` orders the warning list for.
+ * Without that order this would print ahead of every warning in its file.
+ *
+ * Two shapes are deliberately silent, because §8's bar is a rewrite the message
+ * can name and neither of these has one:
+ *
+ *   - a class that `implements` an interface. The interface's fields are its
+ *     first fields, in order (`checkImplements`), so the prefix is not the
+ *     author's to permute and "declare them widest first" would be advice that
+ *     stops the program compiling. Coarse on purpose: the fields *after* the
+ *     prefix are the author's, and a narrower rule could still warn about them.
+ *   - a generic instantiation. `Box$i32` and `Box$bool` are separate structs
+ *     sharing one declaration, so the caret would land on the same `class Box`
+ *     once per instantiation, and the order that suits one type argument need
+ *     not suit another.
+ *
+ * The other side of the `implements` rule is a clause rather than a silence.
+ * An *interface* may have implementers, whose first fields it is, and whether
+ * it has any is `StructInfo.implemented` — set in `checkImplements`, a pass
+ * after the layout this is computed beside, so it cannot be read here. The
+ * message names the second half of the rewrite instead of guessing, which reads
+ * as a no-op where nothing implements the interface and is the difference
+ * between advice and a broken build where something does.
+ *
+ * The order is named in full, however many fields there are. A struct with
+ * forty of them gets forty, because a truncated order is not a rewrite anybody
+ * can apply and an un-actionable message is the failure this class cannot
+ * afford; the length is the price of the hint being complete.
+ */
+const reportWastefulPadding = (ctx: CheckContext, info: StructInfo, floor: number): void => {
+  if (floor >= info.size) return;
+  if (info.implements.length > 0 || ctx.structInstance(info.name) !== undefined) return;
+  const fields = widestFirst(info.fields, info.align);
+  const packed = layoutSize(fields, info.align);
+  if (packed >= info.size) return;
+  const order = fields.map((f) => `${f.name}: ${typeToString(f.type)}`).join(", ");
+  const alsoImplementers =
+    info.kind === "interface"
+      ? " — here and in any class that `implements` it, since the interface's fields are its implementers' first fields"
+      : "";
+  ctx.reportPerformance(
+    `\`${info.name}\` is ${info.size} bytes and would be ${packed} with the same fields in a different ` +
+      `order, so ${info.size - packed} bytes of every value are padding the alignment rules insert and nothing ` +
+      `reads: declare the fields widest first — \`${order}\`${alsoImplementers}`,
+    info.decl.name ?? info.decl
+  );
+};
 
 // ---- Registry helpers ------------------------------------------------------------------
 
@@ -506,6 +618,7 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
   info.size = layout.size;
   info.align = layout.align;
   info.collected = "done";
+  reportWastefulPadding(ctx, info, layout.floor);
 }
 
 // ---- Pass 1c: implements and definite assignment -------------------------------------------
