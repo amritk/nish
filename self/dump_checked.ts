@@ -20,7 +20,7 @@ import { Options } from "./options";
 
 const USAGE: string = "usage: dump_checked [--number-mode f64] [--wrapping] <file>";
 
-export function main(): number {
+export const main = (): number => {
   if (process.argv.length < 2) {
     console.error(USAGE);
     return 2;
@@ -76,4 +76,4 @@ export function main(): number {
 
   write(checkedText(compilation));
   return 0;
-}
+};

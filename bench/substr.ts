@@ -7,16 +7,26 @@
 // `[0, s.length]` (it proves a bare local and a decimal literal, nothing else),
 // so both ends keep the clamp JavaScript specifies -- an `llvm.smin` and an
 // `llvm.smax` apiece. `provenScan` spells the same values as the locals the
-// guard proved, so the emitter writes them straight through. After `-O3` folds
-// the `+ 0` the two bodies differ in nothing but those four calls, which is
-// what makes the ratio attributable: `node tests/run.js performance` asserts
-// the six-against-two count on `tests/cases/perf_clamp_quiet`.
+// guard proved, so the emitter writes them straight through: six intrinsic
+// calls against two, which is what `node tests/run.js performance` asserts on
+// `tests/cases/perf_clamp_quiet`.
+//
+// The gap the measurement sees is wider than the four calls the emitter left
+// out, and every bit of it is still this change. Made external for the
+// measurement -- `export` on both scans, which the timing below does not need
+// and this file does not carry -- so that neither is inlined away, and run
+// through `opt -O3`, the two bodies come out at six calls against *zero*:
+// dropping the clamps is what lets LLVM prove `at <= at + 16` and fold the
+// swap pair as well, which it cannot do while each end has been through an
+// `smin`/`smax`. So the ratio below is six intrinsic calls a slice, not four,
+// and nothing else differs between them -- the `+ 0` is gone by then, and the
+// guard is in both.
 //
 // The guard is in both, including the scan that cannot use it, so that its
 // four compares cancel instead of being charged to the fold.
 //
 // This is the ceiling, not the expectation: the loop does nothing but slice,
-// and a slice is one arena allocation and a `memcpy`, so the four intrinsics
+// and a slice is one arena allocation and a `memcpy`, so the six intrinsics
 // are a bigger share of the body here than they can be in a program that then
 // looks at the bytes. §4 measures 1.18x for `slice` over `substring` -- the
 // same instructions plus the two swap calls -- on a lexer-shaped scan.

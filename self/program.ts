@@ -973,7 +973,7 @@ export class CheckedProgram {
  * the syntax tree becoming storage — is in `src/checker/program.ts` and in
  * §2a of `docs/wp15-performance.md`.
  */
-export function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null {
+export const inlineElementStruct = (program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null => {
   if (!table.isStruct(elem)) {
     return null;
   }
@@ -982,22 +982,22 @@ export function inlineElementStruct(program: CheckedProgram, table: TypeTable, e
     return null;
   }
   return info;
-}
+};
 
 /** Bytes from one element to the next: `sizeof` for an inline class, the value's size otherwise. */
-export function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+export const elementStride = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
   const info = inlineElementStruct(program, table, elem);
   return info === null ? table.alignOf(elem) : info.size;
-}
+};
 
 /** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
-export function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+export const elementAlignOf = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
   const info = inlineElementStruct(program, table, elem);
   return info === null ? table.alignOf(elem) : info.align;
-}
+};
 
 /** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
-export function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): string {
+export const elementLLVMType = (program: CheckedProgram, table: TypeTable, elem: i32): string => {
   const info = inlineElementStruct(program, table, elem);
   return info === null ? table.llvmType(elem) : `%struct.${info.name}`;
-}
+};

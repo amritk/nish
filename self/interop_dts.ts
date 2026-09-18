@@ -34,7 +34,7 @@ import { Compilation } from "./compilation";
 import { banner, ExternalFunction, POS_PARAM, POS_RETURN, tsSignature } from "./interop_abi";
 import { wasmBridged, wasmSkipReason, wasmType } from "./interop_wasm";
 
-export function generateDts(compilation: Compilation, fns: ExternalFunction[]): string {
+export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
   const table = compilation.table;
   const bridge = wasmBridged(table, fns);
   const lines: string[] = [];
@@ -108,4 +108,4 @@ export function generateDts(compilation: Compilation, fns: ExternalFunction[]): 
   lines.push("export function load(bytes: BufferSource): Promise<Exports>;");
   lines.push("");
   return lines.join("\n");
-}
+};

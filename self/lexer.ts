@@ -191,32 +191,28 @@ const CH_HASH: i32 = 35;
 /** End of input, and the answer to every read past it. */
 const CH_EOF: i32 = -1;
 
-export function isDigit(c: i32): boolean {
-  return c >= CH_0 && c <= CH_9;
-}
+export const isDigit = (c: i32): boolean => c >= CH_0 && c <= CH_9;
 
 /**
  * The first byte of an identifier. Bytes above 127 are accepted so that a
  * UTF-8 identifier lexes as one token rather than as a run of errors; the
  * checker is where a name is judged, not here.
  */
-export function isIdentStart(c: i32): boolean {
+export const isIdentStart = (c: i32): boolean => {
   if (c >= CH_A_LOWER && c <= CH_Z_LOWER) return true;
   if (c >= CH_A_UPPER && c <= CH_Z_UPPER) return true;
   return c === CH_UNDERSCORE || c === CH_DOLLAR || c > 127;
-}
+};
 
-export function isIdentPart(c: i32): boolean {
-  return isIdentStart(c) || isDigit(c);
-}
+export const isIdentPart = (c: i32): boolean => isIdentStart(c) || isDigit(c);
 
 /** The value of a hex digit, or -1. */
-export function hexValue(c: i32): i32 {
+export const hexValue = (c: i32): i32 => {
   if (isDigit(c)) return c - CH_0;
   if (c >= CH_A_LOWER && c <= CH_F_LOWER) return c - CH_A_LOWER + 10;
   if (c >= CH_A_UPPER && c <= CH_F_UPPER) return c - CH_A_UPPER + 10;
   return -1;
-}
+};
 
 /**
  * The keyword a name denotes, or `TOK_IDENT`. A `switch` needs an integer, so
@@ -231,7 +227,7 @@ export function hexValue(c: i32): i32 {
  * and `of`, which are only special where the grammar already expects them and
  * are ordinary names anywhere else.
  */
-export function keywordKind(word: string): i32 {
+export const keywordKind = (word: string): i32 => {
   if (word === "function") return TOK_FUNCTION;
   if (word === "return") return TOK_RETURN;
   if (word === "if") return TOK_IF;
@@ -260,10 +256,10 @@ export function keywordKind(word: string): i32 {
   if (word === "extends") return TOK_EXTENDS;
   if (word === "super") return TOK_SUPER;
   return TOK_IDENT;
-}
+};
 
 /** The UTF-8 bytes of one code point, as a string. */
-export function utf8Encode(cp: i32): string {
+export const utf8Encode = (cp: i32): string => {
   if (cp < 0x80) return String.fromCharCode(cp);
   if (cp < 0x800) {
     return String.fromCharCode(0xc0 | (cp >> 6)) + String.fromCharCode(0x80 | (cp & 0x3f));
@@ -281,7 +277,7 @@ export function utf8Encode(cp: i32): string {
     String.fromCharCode(0x80 | ((cp >> 6) & 0x3f)) +
     String.fromCharCode(0x80 | (cp & 0x3f))
   );
-}
+};
 
 export class Lexer {
   source: string;
@@ -822,7 +818,7 @@ export class Lexer {
 }
 
 /** The 1-based line and column of a byte offset, counted in bytes. */
-export function lineOf(source: string, offset: i32): i32 {
+export const lineOf = (source: string, offset: i32): i32 => {
   let line = 1;
   let i = 0;
   while (i < offset && i < source.length) {
@@ -830,9 +826,9 @@ export function lineOf(source: string, offset: i32): i32 {
     i = i + 1;
   }
   return line;
-}
+};
 
-export function columnOf(source: string, offset: i32): i32 {
+export const columnOf = (source: string, offset: i32): i32 => {
   let start = 0;
   let i = 0;
   while (i < offset && i < source.length) {
@@ -840,4 +836,4 @@ export function columnOf(source: string, offset: i32): i32 {
     i = i + 1;
   }
   return offset - start + 1;
-}
+};

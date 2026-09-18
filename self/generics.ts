@@ -88,9 +88,7 @@ export class StructExpansion {
 }
 
 /** The type parameter list of an `N_FUNCTION`: its fifth child (WP18). */
-export function typeParameterList(decl: Node): Node {
-  return decl.children.length > 4 ? decl.children[4] : decl.children[0];
-}
+export const typeParameterList = (decl: Node): Node => decl.children.length > 4 ? decl.children[4] : decl.children[0];
 
 /**
  * The type parameter list of an `N_CLASS` (fifth child) or an `N_INTERFACE`
@@ -99,19 +97,19 @@ export function typeParameterList(decl: Node): Node {
  * built before the list existed answers with something harmless rather than
  * reading past its own children.
  */
-export function structTypeParameterList(decl: Node): Node {
+export const structTypeParameterList = (decl: Node): Node => {
   const at = decl.kind === N_CLASS ? 4 : 2;
   return decl.children.length > at ? decl.children[at] : decl.children[0];
-}
+};
 
 /** Whether a class or interface declaration carries `<T, ...>`. */
-export function isGenericStruct(decl: Node): boolean {
+export const isGenericStruct = (decl: Node): boolean => {
   const list = structTypeParameterList(decl);
   return list.kind === N_LIST && list.children.length > 0;
-}
+};
 
 /** A struct template's declared type parameter names, in order. */
-export function collectStructTypeParamNames(decl: Node): string[] {
+export const collectStructTypeParamNames = (decl: Node): string[] => {
   const names: string[] = [];
   for (const node of structTypeParameterList(decl).children) {
     if (node.kind === N_IDENT) {
@@ -119,13 +117,13 @@ export function collectStructTypeParamNames(decl: Node): string[] {
     }
   }
   return names;
-}
+};
 
 /** Whether a function declaration carries `<T, ...>`. */
-export function isGenericFunction(decl: Node): boolean {
+export const isGenericFunction = (decl: Node): boolean => {
   const list = typeParameterList(decl);
   return list.kind === N_LIST && list.children.length > 0;
-}
+};
 
 /**
  * The LLVM symbol for one instantiation: the template's name, then `$` and the
@@ -134,16 +132,16 @@ export function isGenericFunction(decl: Node): boolean {
  * name splits again at the first `$` — which is why `$` may not appear in a
  * declared name.
  */
-export function instanceSymbol(table: TypeTable, base: string, args: i32[]): string {
+export const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => {
   let out = base;
   for (const arg of args) {
     out = `${out}$${table.mangle(arg)}`;
   }
   return out;
-}
+};
 
 /** `identity<i32>`: the source spelling, for diagnostics and the dump. */
-export function instanceDisplayName(table: TypeTable, base: string, args: i32[]): string {
+export const instanceDisplayName = (table: TypeTable, base: string, args: i32[]): string => {
   let out = "";
   let i = 0;
   while (i < args.length) {
@@ -151,16 +149,14 @@ export function instanceDisplayName(table: TypeTable, base: string, args: i32[])
     i = i + 1;
   }
   return `${base}<${out}>`;
-}
+};
 
 /**
  * The canonical form of an inferred type argument: a `Result` narrowed to one
  * arm is the same type as the un-narrowed one, and the mangling already ignores
  * the proof, so the tuple has to as well or two ids would ask for one symbol.
  */
-export function canonicalArgument(table: TypeTable, type: i32): i32 {
-  return table.isResult(type) ? table.withState(type, R_UNKNOWN) : type;
-}
+export const canonicalArgument = (table: TypeTable, type: i32): i32 => table.isResult(type) ? table.withState(type, R_UNKNOWN) : type;
 
 /**
  * Whether `inner` occurs as a subterm of `outer`. The termination rule is
@@ -168,7 +164,7 @@ export function canonicalArgument(table: TypeTable, type: i32): i32 {
  * with an argument that *contains* its own has put that argument under a type
  * constructor, and the chain it starts has no end.
  */
-export function containsType(ctx: CheckContext, inner: i32, outer: i32): boolean {
+export const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean => {
   if (inner === outer) {
     return true;
   }
@@ -195,14 +191,14 @@ export function containsType(ctx: CheckContext, inner: i32, outer: i32): boolean
     }
   }
   return false;
-}
+};
 
 /**
  * Which type argument of `previous` this request puts under a type constructor,
  * or -1 when none of them grew. Shared by the function and the struct halves of
  * the rule, because both say the same thing about the same tuples.
  */
-export function growingArgument(ctx: CheckContext, previous: i32[], args: i32[]): i32 {
+export const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 => {
   let i = 0;
   while (i < args.length) {
     if (previous[i] !== args[i] && containsType(ctx, previous[i], args[i])) {
@@ -211,7 +207,7 @@ export function growingArgument(ctx: CheckContext, previous: i32[], args: i32[])
     i = i + 1;
   }
   return -1;
-}
+};
 
 /**
  * The ancestor instantiation of the same template whose type arguments this
@@ -221,12 +217,12 @@ export function growingArgument(ctx: CheckContext, previous: i32[], args: i32[])
  * mutual recursion: `f<T>` asking for `g<T>` asking for `f<T[]>` expands, and
  * neither of its two edges does so on its own.
  */
-export function expandingAncestor(
+export const expandingAncestor = (
   ctx: CheckContext,
   from: Instantiation | null,
   template: TemplateInfo,
   args: i32[]
-): Expansion | null {
+): Expansion | null => {
   let at = from;
   while (at !== null) {
     // A member of an instantiated class carries no function template, so the
@@ -241,7 +237,7 @@ export function expandingAncestor(
     at = at.from;
   }
   return null;
-}
+};
 
 /**
  * The struct half of the same rule (WP18 G5). A field's type is resolved while
@@ -251,12 +247,12 @@ export function expandingAncestor(
  * checked. `class Nest<T> { inner: Nest<T[]> | null }` is the shape it exists
  * for, and `reject_generic_expanding_field` is its case.
  */
-export function expandingStructAncestor(
+export const expandingStructAncestor = (
   ctx: CheckContext,
   from: StructInstantiation | null,
   template: StructTemplateInfo,
   args: i32[]
-): StructExpansion | null {
+): StructExpansion | null => {
   let at = from;
   while (at !== null) {
     if (at.template === template) {
@@ -268,7 +264,7 @@ export function expandingStructAncestor(
     at = at.from;
   }
   return null;
-}
+};
 
 /**
  * Bind the template's type parameters by matching one declared parameter
@@ -280,13 +276,13 @@ export function expandingStructAncestor(
  * the ordinary argument check against the instantiated signature reports it,
  * naming both types the way every other argument mismatch does.
  */
-export function unifyAnnotation(
+export const unifyAnnotation = (
   ctx: CheckContext,
   annotation: Node,
   arg: i32,
   names: StringSet,
   bindings: StringMap
-): void {
+): void => {
   const table = ctx.table;
   if (annotation.kind === N_TYPE_PAREN) {
     unifyAnnotation(ctx, annotation.children[0], arg, names, bindings);
@@ -355,10 +351,10 @@ export function unifyAnnotation(
       }
     }
   }
-}
+};
 
 /** Whether an annotation mentions one of `names`, i.e. whether it needs an instantiation to resolve. */
-export function mentionsTypeParam(annotation: Node, names: StringSet): boolean {
+export const mentionsTypeParam = (annotation: Node, names: StringSet): boolean => {
   if (annotation.kind === N_TYPE_REF) {
     const list = annotation.children[0];
     const argc = list.kind === N_LIST ? list.children.length : 0;
@@ -373,29 +369,29 @@ export function mentionsTypeParam(annotation: Node, names: StringSet): boolean {
     }
   }
   return false;
-}
+};
 
 /** The set of a template's type parameter names, for `unifyAnnotation` and `mentionsTypeParam`. */
-export function typeParamSet(template: TemplateInfo): StringSet {
+export const typeParamSet = (template: TemplateInfo): StringSet => {
   const names = new StringSet();
   for (const name of template.typeParams) {
     names.add(name);
   }
   return names;
-}
+};
 
 /**
  * The message for a request that would not terminate. It names the type
  * argument that grew and the two shapes the rule accepts, never a number: a
  * user who sees it has to change the call, not raise a limit.
  */
-export function nonTerminatingMessage(
+export const nonTerminatingMessage = (
   table: TypeTable,
   template: TemplateInfo,
   ancestor: Instantiation,
   args: i32[],
   index: i32
-): string {
+): string => {
   const from = instanceDisplayName(table, template.sourceName, ancestor.typeArgs);
   const to = instanceDisplayName(table, template.sourceName, args);
   const grew = table.typeName(ancestor.typeArgs[index]);
@@ -404,7 +400,7 @@ export function nonTerminatingMessage(
     `\`${grew}\` under a type constructor instead of passing it on, so the chain has no end; pass ` +
     `\`${template.typeParams[index]}\` itself, or a type that does not mention it`
   );
-}
+};
 
 /**
  * The message for a field or annotation whose instantiation would not
@@ -412,13 +408,13 @@ export function nonTerminatingMessage(
  * says "names" where the function half's says "asks for"; everything else about
  * it is the same, including that it quotes the concrete chain, never a depth.
  */
-export function nonTerminatingStructMessage(
+export const nonTerminatingStructMessage = (
   table: TypeTable,
   template: StructTemplateInfo,
   ancestor: StructInstantiation,
   args: i32[],
   index: i32
-): string {
+): string => {
   const from = instanceDisplayName(table, template.sourceName, ancestor.typeArgs);
   const to = instanceDisplayName(table, template.sourceName, args);
   const grew = table.typeName(ancestor.typeArgs[index]);
@@ -427,7 +423,7 @@ export function nonTerminatingStructMessage(
     `\`${grew}\` under a type constructor instead of passing it on, so the chain has no end; name ` +
     `\`${template.typeParams[index]}\` itself, or a type that does not mention it`
   );
-}
+};
 
 /**
  * The struct one written type-argument list names (WP18 G5). All three
@@ -438,12 +434,12 @@ export function nonTerminatingStructMessage(
  * makes `Box<T>` inside another template and `Box<Box<i32>>` work with no case
  * of their own.
  */
-export function instantiateWritten(
+export const instantiateWritten = (
   ctx: CheckContext,
   template: StructTemplateInfo,
   written: Node,
   at: Node
-): StructInfo | null {
+): StructInfo | null => {
   const count = written.kind === N_LIST ? written.children.length : 0;
   if (count !== template.typeParams.length) {
     let example = "";
@@ -466,7 +462,7 @@ export function instantiateWritten(
     i = i + 1;
   }
   return instantiateStruct(ctx, template, args, at);
-}
+};
 
 /**
  * The struct instantiation request (WP18 G5). Answers the ordinary `StructInfo`
@@ -481,12 +477,12 @@ export function instantiateWritten(
  * are ordinary signatures, and the only new thing about them is the side-table
  * overlay every specialised body already needed.
  */
-export function instantiateStruct(
+export const instantiateStruct = (
   ctx: CheckContext,
   template: StructTemplateInfo,
   args: i32[],
   at: Node
-): StructInfo | null {
+): StructInfo | null => {
   const name = instanceSymbol(ctx.table, template.sourceName, args);
   const existing = ctx.program.structInstance(name);
   if (existing !== null) {
@@ -545,14 +541,14 @@ export function instantiateStruct(
   ctx.program.addStructInstance(name, instance);
   collectInstanceMembers(ctx, instance);
   return info;
-}
+};
 
 /**
  * The fields, layout and member signatures of one instantiated struct, with its
  * type parameters bound — and one queued body per method and constructor, each
  * with side tables of its own.
  */
-export function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation): void {
+export const collectInstanceMembers = (ctx: CheckContext, instance: StructInstantiation): void => {
   const savedBindings = ctx.typeBindings;
   const savedStruct = ctx.currentStructInstance;
   const savedInstance = ctx.currentInstance;
@@ -593,7 +589,7 @@ export function collectInstanceMembers(ctx: CheckContext, instance: StructInstan
     ctx.pending.push(member);
   }
   ctx.pendingFinish.push(instance.info);
-}
+};
 
 /**
  * The instantiation request. Answers the specialised signature for one
@@ -601,12 +597,12 @@ export function collectInstanceMembers(ctx: CheckContext, instance: StructInstan
  * is asked for — so a tuple seen twice is one `define`, and the FIFO queue
  * makes the enumeration order the discovery order in both compilers.
  */
-export function instantiate(
+export const instantiate = (
   ctx: CheckContext,
   template: TemplateInfo,
   args: i32[],
   at: Node
-): FunctionSig | null {
+): FunctionSig | null => {
   // WP21 S1: inside the package that declares the template. `qualifySymbols`
   // runs at the end of pass 1 and instantiations are appended during pass 2, so
   // an instantiation never passes through it -- the prefix has to be part of the
@@ -675,7 +671,7 @@ export function instantiate(
   ctx.program.addInstantiation(symbol, info);
   ctx.pending.push(info);
   return sig;
-}
+};
 
 /**
  * A call whose callee is a generic template. The type arguments are inferred
@@ -685,12 +681,12 @@ export function instantiate(
  * then check the arguments *again* against the signature that came back — which
  * is the ordinary monomorphic check and reports the ordinary message.
  */
-export function checkGenericCall(
+export const checkGenericCall = (
   ctx: CheckContext,
   expr: Node,
   template: TemplateInfo,
   scope: Scope
-): i32 {
+): i32 => {
   const parameters = template.decl.children[1];
   const args = expr.children[1];
   if (args.children.length !== parameters.children.length) {
@@ -761,7 +757,7 @@ export function checkGenericCall(
   }
   ctx.program.nodeCallees[expr.id] = sig;
   return sig.returnType;
-}
+};
 
 /**
  * `$` separates a generic's name from its type arguments in every symbol the
@@ -770,7 +766,7 @@ export function checkGenericCall(
  * and fields keep it; only names that become symbols are restricted, which is
  * what makes the encoding injective.
  */
-export function rejectDollarInSymbolName(ctx: CheckContext, name: string, what: string, node: Node): boolean {
+export const rejectDollarInSymbolName = (ctx: CheckContext, name: string, what: string, node: Node): boolean => {
   if (name.indexOf("$") < 0) {
     return false;
   }
@@ -780,10 +776,10 @@ export function rejectDollarInSymbolName(ctx: CheckContext, name: string, what: 
       "type arguments in the symbols the compiler emits"
   );
   return true;
-}
+};
 
 /** A template's declared type parameter names, in order, from its fifth child. */
-export function collectTypeParamNames(decl: Node): string[] {
+export const collectTypeParamNames = (decl: Node): string[] => {
   const names: string[] = [];
   for (const node of typeParameterList(decl).children) {
     if (node.kind === N_IDENT) {
@@ -791,4 +787,4 @@ export function collectTypeParamNames(decl: Node): string[] {
     }
   }
   return names;
-}
+};

@@ -35,7 +35,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
-import { diagnosticWords, diffEmitted, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
+import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -650,9 +650,13 @@ if (!only || "diagnostics".includes(only)) {
 
   // One table, two compilers: the pairs must be identical, exactly as
   // `branding.ts` must name the same language on both sides.
+  // The indentation is not part of the contract: `self/codes.ts`'s tables lost a
+  // level when WP22 stage C turned them into arrows with concise bodies, and a
+  // pattern keyed on four spaces then read the registry as *empty* rather than as
+  // changed. A fragment line followed by its code line is the shape that matters.
   const pairsOf = (file) => {
     const text = fs.readFileSync(path.join(root, file), "utf8");
-    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+    return [...text.matchAll(/^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
   };
   const stage0Codes = pairsOf("src/codes.ts");
   const stage1Codes = pairsOf("self/codes.ts");
@@ -989,7 +993,7 @@ if (!only || "performance".includes(only)) {
     "performance: an unfolded `substring` clamp warns once per bound, naming the bound and the guard",
     clamp.status === 0 &&
       clampLines.length === 2 &&
-      clampLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "16:33,16:39" &&
+      clampLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "25:33,25:39" &&
       clampLines[0].includes("`from` is not provably within `s`, so this `substring` bound keeps the clamp") &&
       clampLines[1].includes("`to` is not provably within `s`") &&
       clampLines.every((l) => l.includes("or use `slice`, which has no clamp at all")),
@@ -6684,6 +6688,75 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
       cwd: root,
       encoding: "utf8",
     }).status;
+  // The sweep compiles a *copy* of the tracked tree, and a tracked symlink has to
+  // arrive in it as a symlink. `tests/link/package_symlink` is a package reached a
+  // second time through a link, and what the compiler answers there is what the link
+  // resolves to, so following it while copying would compile a tree the repository
+  // does not have. `copyFileSync` does not even get that far on a link to a
+  // directory: it throws `EISDIR`, which took the whole sweep down the first time
+  // `self/` was verified against a tree that had one.
+  const linkRoot = path.join(root, "build", "test", "wp22-symlink");
+  fs.rmSync(linkRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.join(linkRoot, "src", "pkg"), { recursive: true });
+  fs.symlinkSync("pkg", path.join(linkRoot, "src", "link"));
+  fs.symlinkSync("gone", path.join(linkRoot, "src", "broken"));
+  fs.symlinkSync("/etc", path.join(linkRoot, "src", "absolute"));
+  fs.symlinkSync("../../outside", path.join(linkRoot, "src", "climbing"));
+  const copyRoot = path.join(linkRoot, "copy");
+  fs.mkdirSync(copyRoot, { recursive: true });
+  // `copyInto` is given the copy root, because that is the boundary a link has
+  // to land inside of; the link itself sits directly in it here.
+  const copyLink = (name) => {
+    try {
+      return copyInto(path.join(linkRoot, "src", name), path.join(copyRoot, name), copyRoot);
+    } catch (error) {
+      return `threw ${error.code}`;
+    }
+  };
+  const copiedAs = copyLink("link");
+  check(
+    "WP22: the verifier copies a tracked symlink as a symlink",
+    copiedAs === "link" &&
+      fs.lstatSync(path.join(copyRoot, "link")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(copyRoot, "link")) === "pkg",
+    `copied as: ${copiedAs}`
+  );
+
+  // `git ls-files` names the index, and a tracked link whose target is gone is
+  // still a link the tree holds. `lstat` rather than `existsSync` is what keeps
+  // it from being counted as a missing file and dropped out of the copy.
+  const brokenAs = copyLink("broken");
+  check(
+    "WP22: the verifier copies a tracked symlink whose target is gone",
+    brokenAs === "link" &&
+      fs.lstatSync(path.join(copyRoot, "broken")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(copyRoot, "broken")) === "gone" &&
+      !fs.existsSync(path.join(copyRoot, "broken")),
+    `copied as: ${brokenAs}`
+  );
+
+  check(
+    "WP22: a tracked symlink whose target is gone is still in the tree, not a missing file",
+    presentInTree(path.join(linkRoot, "src", "broken")) === true &&
+      presentInTree(path.join(linkRoot, "src", "nothing-here")) === false,
+    "a broken link is present; an absent path is not"
+  );
+
+  // A link that resolves out of the copy would make a compile read the live
+  // working tree instead of the reverted copy, so the `before` side of an
+  // `--applied` sweep would compile the rewrite it is supposed to be comparing
+  // against. Both shapes of escape are refused rather than reproduced.
+  const absoluteAs = copyLink("absolute");
+  const climbingAs = copyLink("climbing");
+  check(
+    "WP22: the verifier refuses a symlink that resolves outside the copy",
+    absoluteAs === "escapes" &&
+      climbingAs === "escapes" &&
+      !fs.existsSync(path.join(copyRoot, "absolute")) &&
+      !fs.existsSync(path.join(copyRoot, "climbing")),
+    `absolute: ${absoluteAs}, climbing: ${climbingAs}`
+  );
+
   check(
     "WP22: the verifier refuses a flag it does not have, and a `--rev` without a revision",
     verify22("--debg", "tests/parser") === 2 &&
@@ -6769,6 +6842,18 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     ],
     ["compiled clean and produced nothing", side({}), side({}), "blind", 0, false],
     ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind", 0, false],
+    // The branch that needs two files to reach in a real sweep: a corpus file nobody
+    // staged is enumerated from the working tree by `programs()` and not copied by
+    // `copyTree`, which reads the index -- so it is absent on both sides, and the answer
+    // is that there was nothing to compile rather than that the two sides agreed.
+    [
+      "absent on both sides",
+      side({ absent: true, status: null }),
+      side({ absent: true, status: null }),
+      "blind",
+      0,
+      false,
+    ],
     // A file added since the revision has no `<rev>:<path>`, so `--applied` empties it
     // out of the copy for the before compile -- and reading it anyway ended the sweep in
     // a stack trace at the exact moment §8b's recipe needs a verdict, which is what

@@ -32,7 +32,7 @@ import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types";
 const ARRAY_METHODS: string = "push, pop, indexOf, join";
 
 /** `[a, b]`. An empty literal takes its type from context, since there is nothing to read. */
-export function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   if (expr.children.length === 0) {
     if (want < 0 || !ctx.table.isArray(want)) {
       return ctx.errorType(
@@ -64,10 +64,10 @@ export function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, w
     }
   }
   return elem < 0 ? T_ERROR : ctx.table.arrayOf(elem);
-}
+};
 
 /** `a[i]`, which is also the target of `a[i] = v`. */
-export function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+export const checkIndex = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const base = checkExpression(ctx, expr.children[0], scope, -1);
   if (base === T_ERROR) {
     return T_ERROR;
@@ -89,7 +89,7 @@ export function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     ctx.error(expr.children[1], `Array index must be a number, got ${ctx.table.typeName(index)}`);
   }
   return ctx.table.refOf(base);
-}
+};
 
 /**
  * The one rule a `readonly T[]` adds: it is the same array, so every read still
@@ -97,13 +97,13 @@ export function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 {
  * because the caller is almost always holding a mutable array that widened on
  * the way in — the parameter's annotation is what has to change, not the call.
  */
-function readonlyWriteMessage(ctx: CheckContext, receiver: i32, what: string): string {
+const readonlyWriteMessage = (ctx: CheckContext, receiver: i32, what: string): string => {
   const mutable = ctx.table.typeName(ctx.table.arrayOf(ctx.table.refOf(receiver)));
   return `Cannot ${what} ${ctx.table.typeName(receiver)} (declare it ${mutable} to write through it)`;
-}
+};
 
 /** `a[i] = v` and `a[i] op= v`. */
-export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (isArgvExpression(ctx, expr.children[0].children[0], scope)) {
     // At the `process.argv` itself, parentheses stepped through, where stage0
     // puts it (`checkProcessArgv` in `src/checker/io.ts`).
@@ -145,25 +145,25 @@ export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope
     );
   }
   return elem;
-}
+};
 
-export function checkArrayProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
+export const checkArrayProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   if (expr.text === "length") {
     return ctx.numberType();
   }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
   return T_ERROR;
-}
+};
 
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`. */
-export function checkArrayMethod(
+export const checkArrayMethod = (
   ctx: CheckContext,
   call: Node,
   access: Node,
   args: Node,
   receiver: i32,
   scope: Scope
-): i32 {
+): i32 => {
   const name = access.text;
   if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
     return ctx.errorType(unwrapParens(access.children[0]), "`process.argv` is read-only");
@@ -233,13 +233,13 @@ export function checkArrayMethod(
   }
   ctx.errorAtProperty(access, `Unknown method \`${name}\` on ${spelled} (supported: ${ARRAY_METHODS})`);
   return T_ERROR;
-}
+};
 
 /**
  * `new Array<T>(n)` and the typed-array aliases. Answers -1 when `name` is
  * not an array constructor, so `checkNew` can fall through to the classes.
  */
-export function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope: Scope): i32 {
+export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope: Scope): i32 => {
   const typeArgs = expr.children[1];
   const args = expr.children[2];
   let elem = -1;
@@ -289,7 +289,7 @@ export function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope
     ctx.error(args.children[0], `Array length must be a number, got ${ctx.table.typeName(length)}`);
   }
   return ctx.table.arrayOf(elem);
-}
+};
 
 // ---- WP15 §2a: element references ------------------------------------------------
 
@@ -340,7 +340,7 @@ export class ElementRef {
 }
 
 /** `xs`, `this.bodies`, `a.b.c` — how two references are told apart. */
-function referenceRoot(expr: Node): string {
+const referenceRoot = (expr: Node): string => {
   const inner = unwrapParens(expr);
   if (inner.kind === N_IDENT) {
     return inner.text;
@@ -353,7 +353,7 @@ function referenceRoot(expr: Node): string {
     return base === UNNAMED ? UNNAMED : `${base}.${inner.text}`;
   }
   return UNNAMED;
-}
+};
 
 /**
  * The class `expr`'s slots hold inline, or the empty string when `expr` is not
@@ -361,27 +361,27 @@ function referenceRoot(expr: Node): string {
  * compared by when one of them cannot be named: element types are exact here,
  * so a `FunctionSig[]` and an `ImportBinding[]` are never the same array.
  */
-function inlineArrayElement(ctx: CheckContext, expr: Node): string {
+const inlineArrayElement = (ctx: CheckContext, expr: Node): string => {
   const type = ctx.program.nodeTypes[expr.id];
   if (type < 0 || !ctx.table.isArray(type)) {
     return "";
   }
   const info = inlineElementStruct(ctx.program, ctx.table, ctx.table.refOf(type));
   return info === null ? "" : info.name;
-}
+};
 
 /** How the root is spelled in a message; an unnameable receiver borrows the type's name. */
-function rootText(ctx: CheckContext, expr: Node): string {
+const rootText = (ctx: CheckContext, expr: Node): string => {
   const root = referenceRoot(expr);
   if (root !== UNNAMED) {
     return root;
   }
   const type = ctx.program.nodeTypes[expr.id];
   return type < 0 ? "the array" : ctx.table.typeName(type);
-}
+};
 
 /** The array `expr` reads an element of (`a[i]`, `a.pop()`), or `null`. */
-function elementSource(ctx: CheckContext, expr: Node): Node | null {
+const elementSource = (ctx: CheckContext, expr: Node): Node | null => {
   const inner = unwrapParens(expr);
   if (inner.kind === N_INDEX && inlineArrayElement(ctx, inner.children[0]) !== "") {
     return inner.children[0];
@@ -393,7 +393,7 @@ function elementSource(ctx: CheckContext, expr: Node): Node | null {
     }
   }
   return null;
-}
+};
 
 /**
  * Every inline-element array this call may grow or shorten: the receiver of a
@@ -401,7 +401,7 @@ function elementSource(ctx: CheckContext, expr: Node): Node | null {
  * callee is free to push through it. A `readonly T[]` parameter is exactly the
  * promise that it does not, and is skipped.
  */
-function collectMutations(ctx: CheckContext, call: Node, out: Mutation[]): void {
+const collectMutations = (ctx: CheckContext, call: Node, out: Mutation[]): void => {
   if (call.children[0].kind === N_MEMBER) {
     const method = call.children[0].text;
     const receiver = call.children[0].children[0];
@@ -427,7 +427,7 @@ function collectMutations(ctx: CheckContext, call: Node, out: Mutation[]): void 
     }
     i = i + 1;
   }
-}
+};
 
 /** The walk's state, a class because Nish-0 has no closures (as `PerfWalk` is). */
 export class RefWalk {
@@ -594,7 +594,7 @@ export class RefWalk {
  * WP15 §2a. Reported after the body has checked, like the performance
  * warnings, so every type and binding the walk reads is already recorded.
  */
-export function checkElementReferences(ctx: CheckContext, body: Node): void {
+export const checkElementReferences = (ctx: CheckContext, body: Node): void => {
   const walk = new RefWalk(ctx);
   walk.visit(body);
-}
+};

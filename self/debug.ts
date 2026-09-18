@@ -91,7 +91,7 @@ const DEBUG_COMPILATION_DIR: string = ".";
  * so a debugger prints 4294967295 rather than -1, which is the whole point of
  * having them (WP15).
  */
-function basicType(type: i32): string {
+const basicType = (type: i32): string => {
   switch (type) {
     case T_I32:
       return '!DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)';
@@ -114,10 +114,10 @@ function basicType(type: i32): string {
     default:
       process.exit(internalError(`debug: no DWARF basic type for type id ${type}`));
   }
-}
+};
 
 /** Storage size of a field, for `DW_TAG_member`; pointers are 64-bit on every supported target. */
-function bitsOf(type: i32): i32 {
+const bitsOf = (type: i32): i32 => {
   const bits = intBits(type);
   if (bits > 0) {
     return bits;
@@ -132,22 +132,20 @@ function bitsOf(type: i32): i32 {
     return 0;
   }
   return 64;
-}
+};
 
 /**
  * `bitsOf` for a type id that may be an enum (WP23): an enum is an `i32`, and
  * `intBits` is deliberately 0 for it so that arithmetic stays refused.
  */
-function bitsOfIn(table: TypeTable, type: i32): i32 {
-  return table.isEnum(type) ? 32 : bitsOf(type);
-}
+const bitsOfIn = (table: TypeTable, type: i32): i32 => table.isEnum(type) ? 32 : bitsOf(type);
 
 /**
  * A metadata string literal: backslash and double quote escaped, as `src/`
  * does it with two `String.replace` calls. Nothing else needs escaping — the
  * only strings that reach here are file paths and source identifiers.
  */
-function quote(text: string): string {
+const quote = (text: string): string => {
   const out = new StringBuilder();
   out.addChar(34);
   let i = 0;
@@ -161,7 +159,7 @@ function quote(text: string): string {
   }
   out.addChar(34);
   return out.toText();
-}
+};
 
 export class DebugInfo {
   module: IRModule;

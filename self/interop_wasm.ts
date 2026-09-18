@@ -63,10 +63,10 @@ import {
 } from "./types";
 
 /** `x.d.ts` -> `x.mjs`. */
-export function wasmLoaderPath(dtsFile: string): string {
+export const wasmLoaderPath = (dtsFile: string): string => {
   const stem = endsWithFold(dtsFile, ".d.ts") ? dtsFile.substring(0, dtsFile.length - 5) : dtsFile;
   return `${stem}.mjs`;
-}
+};
 
 export class WasmBridge {
   /** Functions JS can call: every type is a scalar or a typed view. */
@@ -96,7 +96,7 @@ export class WasmBridge {
  * The narrowing that share implies is the loader's job, not the declaration's
  * (see `wasmUnsignedIn` / `wasmUnsignedOut`).
  */
-export function wasmType(table: TypeTable, t: i32, position: i32): string {
+export const wasmType = (table: TypeTable, t: i32, position: i32): string => {
   switch (table.kindOf(t)) {
     // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
     // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
@@ -133,11 +133,9 @@ export function wasmType(table: TypeTable, t: i32, position: i32): string {
     default:
       return "";
   }
-}
+};
 
-function wasmCrosses(table: TypeTable, t: i32, position: i32): boolean {
-  return wasmType(table, t, position).length > 0;
-}
+const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean => wasmType(table, t, position).length > 0;
 
 /**
  * Why this function is not on the bridge, or `""` when it is. Naming the
@@ -147,7 +145,7 @@ function wasmCrosses(table: TypeTable, t: i32, position: i32): boolean {
  * as a comment and the loader omits exactly the same functions, because both
  * ask this.
  */
-export function wasmSkipReason(table: TypeTable, sig: FunctionSig): string {
+export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
   if (sig.name === "main") {
     return "`main` is reserved for a process entry";
   }
@@ -165,7 +163,7 @@ export function wasmSkipReason(table: TypeTable, sig: FunctionSig): string {
     return `the result is \`${t}\`, which needs the ${LANGUAGE}${tail}`;
   }
   return "";
-}
+};
 
 /**
  * The mask a narrow unsigned *argument* needs on the way in, or `""` when the
@@ -188,7 +186,7 @@ export function wasmSkipReason(table: TypeTable, sig: FunctionSig): string {
  * bits an unsigned value of that width has, wrapping exactly as the language
  * wraps.
  */
-function wasmUnsignedIn(table: TypeTable, t: i32): string {
+const wasmUnsignedIn = (table: TypeTable, t: i32): string => {
   const kind = table.kindOf(t);
   if (kind === T_U8) {
     return "0xff";
@@ -197,7 +195,7 @@ function wasmUnsignedIn(table: TypeTable, t: i32): string {
     return "0xffff";
   }
   return "";
-}
+};
 
 /**
  * How an unsigned *result* is read back; `value` unchanged when the raw value
@@ -214,7 +212,7 @@ function wasmUnsignedIn(table: TypeTable, t: i32): string {
  * in a JavaScript one, so the wasm build, the differential rewrite and the
  * language agree on what a `u32` above 2^31 is.
  */
-function wasmUnsignedOut(table: TypeTable, t: i32, value: string): string {
+const wasmUnsignedOut = (table: TypeTable, t: i32, value: string): string => {
   const kind = table.kindOf(t);
   if (kind === T_U8) {
     return `${value} & 0xff`;
@@ -229,16 +227,16 @@ function wasmUnsignedOut(table: TypeTable, t: i32, value: string): string {
     return `BigInt.asUintN(64, ${value})`;
   }
   return value;
-}
+};
 
 /** Whether `wasmUnsignedOut` has anything to do, which decides if the export needs a wrapper at all. */
-function wasmUnsignedResult(table: TypeTable, t: i32): boolean {
+const wasmUnsignedResult = (table: TypeTable, t: i32): boolean => {
   const kind = table.kindOf(t);
   return kind === T_U8 || kind === T_U16 || kind === T_U32 || kind === T_U64;
-}
+};
 
 /** The JS type of one packed `Result` payload, or `""` when it cannot cross. */
-export function wasmPayloadType(table: TypeTable, t: i32): string {
+export const wasmPayloadType = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "number";
@@ -257,10 +255,10 @@ export function wasmPayloadType(table: TypeTable, t: i32): string {
     default:
       return "";
   }
-}
+};
 
 /** `{ ok: true; value: number } | { ok: false; error: number }`. */
-export function wasmResultType(table: TypeTable, t: i32): string {
+export const wasmResultType = (table: TypeTable, t: i32): string => {
   const error = wasmPayloadType(table, table.errOf(t));
   if (error.length === 0) {
     return "";
@@ -274,7 +272,7 @@ export function wasmResultType(table: TypeTable, t: i32): string {
     return "";
   }
   return `{ ok: true; value: ${value} } | { ok: false; error: ${error} }`;
-}
+};
 
 /**
  * How the loader reads one packed payload out of the high half of the word.
@@ -282,7 +280,7 @@ export function wasmResultType(table: TypeTable, t: i32): string {
  * give the bits their type back: a signed width sign-extends, `f32` is a
  * reinterpretation rather than a conversion, and `boolean` is the low bit.
  */
-function wasmPayloadReader(table: TypeTable, t: i32): string {
+const wasmPayloadReader = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "(p) => Number(BigInt.asIntN(32, p))";
@@ -299,20 +297,20 @@ function wasmPayloadReader(table: TypeTable, t: i32): string {
     default:
       return "";
   }
-}
+};
 
 /** `resultOut(<call>, <ok reader or null>, <err reader>)` for a by-value `Result` return. */
-function wasmResultUnpack(table: TypeTable, call: string, t: i32): string {
+const wasmResultUnpack = (table: TypeTable, call: string, t: i32): string => {
   const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadReader(table, table.okOf(t));
   return `resultOut(${call}, ${ok}, ${wasmPayloadReader(table, table.errOf(t))})`;
-}
+};
 
 /**
  * The inverse of `wasmPayloadReader`: how the loader puts one payload into the
  * high half of the word. A signed width is masked to 32 bits, `f32` goes
  * through the same bit view as on the way out, and `boolean` is one bit.
  */
-function wasmPayloadWriter(table: TypeTable, t: i32): string {
+const wasmPayloadWriter = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "(v) => BigInt.asUintN(32, BigInt(v))";
@@ -329,16 +327,16 @@ function wasmPayloadWriter(table: TypeTable, t: i32): string {
     default:
       return "";
   }
-}
+};
 
 /** `resultIn(<arg>, <ok writer or null>, <err writer>)` for a by-value `Result` argument. */
-function wasmResultPack(table: TypeTable, arg: string, t: i32): string {
+const wasmResultPack = (table: TypeTable, arg: string, t: i32): string => {
   const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadWriter(table, table.okOf(t));
   return `resultIn(${arg}, ${ok}, ${wasmPayloadWriter(table, table.errOf(t))})`;
-}
+};
 
 /** True when some bridged signature carries an f32 payload, so the loader needs the bit view. */
-function wasmNeedsF32(table: TypeTable, fns: ExternalFunction[]): boolean {
+const wasmNeedsF32 = (table: TypeTable, fns: ExternalFunction[]): boolean => {
   for (const fn of fns) {
     if (wasmCarriesF32(table, fn.sig.returnType)) {
       return true;
@@ -352,26 +350,26 @@ function wasmNeedsF32(table: TypeTable, fns: ExternalFunction[]): boolean {
     }
   }
   return false;
-}
+};
 
-function wasmCarriesF32(table: TypeTable, t: i32): boolean {
+const wasmCarriesF32 = (table: TypeTable, t: i32): boolean => {
   if (table.kindOf(t) !== K_RESULT) {
     return false;
   }
   return table.kindOf(table.okOf(t)) === T_F32 || table.kindOf(table.errOf(t)) === T_F32;
-}
+};
 
 /** True when some bridged signature takes or returns a packed `Result`. */
-function wasmHasPackedResult(table: TypeTable, fns: ExternalFunction[]): boolean {
+const wasmHasPackedResult = (table: TypeTable, fns: ExternalFunction[]): boolean => {
   for (const fn of fns) {
     if (wasmTakesPacked(table, fn.sig)) {
       return true;
     }
   }
   return false;
-}
+};
 
-function wasmTakesPacked(table: TypeTable, sig: FunctionSig): boolean {
+const wasmTakesPacked = (table: TypeTable, sig: FunctionSig): boolean => {
   if (table.resultByValue(sig.returnType)) {
     return true;
   }
@@ -383,9 +381,9 @@ function wasmTakesPacked(table: TypeTable, sig: FunctionSig): boolean {
     i = i + 1;
   }
   return false;
-}
+};
 
-export function wasmBridged(table: TypeTable, fns: ExternalFunction[]): WasmBridge {
+export const wasmBridged = (table: TypeTable, fns: ExternalFunction[]): WasmBridge => {
   const bridged: ExternalFunction[] = [];
   for (const fn of fns) {
     if (wasmSkipReason(table, fn.sig).length === 0) {
@@ -406,11 +404,10 @@ export function wasmBridged(table: TypeTable, fns: ExternalFunction[]): WasmBrid
     }
   }
   return new WasmBridge(bridged, needsRuntime);
-}
+};
 
 /** Names the loader's own locals use; a parameter spelled the same gets an underscore. */
-function wasmIsLoaderLocal(name: string): boolean {
-  return (
+const wasmIsLoaderLocal = (name: string): boolean => (
     name === "raw" ||
     name === "memory" ||
     name === "header" ||
@@ -422,24 +419,21 @@ function wasmIsLoaderLocal(name: string): boolean {
     name === "instance" ||
     name === "bytes"
   );
-}
 
-function wasmJsParam(name: string): string {
-  return wasmIsLoaderLocal(name) ? `${name}_` : name;
-}
+const wasmJsParam = (name: string): string => wasmIsLoaderLocal(name) ? `${name}_` : name;
 
 /** One non-array argument: packed, masked to its unsigned width, or as it came. */
-function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i32): string {
+const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32): string => {
   const t = sig.paramTypes[i];
   if (table.resultByValue(t)) {
     return wasmResultPack(table, params[i], t);
   }
   const mask = wasmUnsignedIn(table, t);
   return mask.length > 0 ? `${params[i]} & ${mask}` : params[i];
-}
+};
 
 /** The call's value as JS should see it. The three cases are mutually exclusive. */
-function wasmReturned(table: TypeTable, sig: FunctionSig, ret: TypedView | null, call: string): string {
+const wasmReturned = (table: TypeTable, sig: FunctionSig, ret: TypedView | null, call: string): string => {
   if (ret !== null) {
     return `arrayOut(${call}, ${ret.ctor})`;
   }
@@ -447,9 +441,9 @@ function wasmReturned(table: TypeTable, sig: FunctionSig, ret: TypedView | null,
     return wasmResultUnpack(table, call, sig.returnType);
   }
   return wasmUnsignedOut(table, sig.returnType, call);
-}
+};
 
-function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
+const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   const sig = fn.sig;
   const ret = typedView(table, sig.returnType);
   const views: (TypedView | null)[] = [];
@@ -539,7 +533,7 @@ function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
   }
   lines.push("}),");
   return lines;
-}
+};
 
 /**
  * The loader's half of WP17. A packed `Result` reaches JS as the wasm export's
@@ -547,7 +541,7 @@ function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
  * it selects. `resultOut` turns that into the object `--emit-dts` declares, so
  * a caller never sees the encoding.
  */
-function wasmResultHelpers(table: TypeTable, bridged: ExternalFunction[]): string[] {
+const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[]): string[] => {
   const lines: string[] = [];
   if (!wasmHasPackedResult(table, bridged)) {
     return lines;
@@ -580,13 +574,13 @@ function wasmResultHelpers(table: TypeTable, bridged: ExternalFunction[]): strin
     lines.push("  };");
   }
   return lines;
-}
+};
 
-export function generateWasmLoader(
+export const generateWasmLoader = (
   compilation: Compilation,
   fns: ExternalFunction[],
   dtsFile: string
-): string {
+): string => {
   const table = compilation.table;
   const bridge = wasmBridged(table, fns);
   const lines: string[] = [];
@@ -663,4 +657,4 @@ export function generateWasmLoader(
   lines.push("}");
   lines.push("");
   return lines.join("\n");
-}
+};
