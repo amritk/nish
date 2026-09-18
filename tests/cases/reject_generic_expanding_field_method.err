@@ -1,0 +1,3 @@
+:19:27: error: Monomorphising `Nest` would not terminate: `Nest<i32>` names `Nest<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; name `T` itself, or a type that does not mention it
+Cannot initialize i32 variable `w` with string
+2 errors
