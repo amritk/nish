@@ -6412,12 +6412,29 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   // general prose checker and does not pretend to be one -- a sentence phrased a new way
   // escapes it -- but it closes the shapes that have actually gone stale here, and a new
   // phrasing that wants checking can be added to the list.
+  //
+  // Rather than enumerate connectives, each pattern is the platform's name followed by
+  // up to forty characters that do not end the sentence, then the first version after
+  // it -- which is how one greps for this by hand, and is robust to "is 0.3.0", "at
+  // 0.3.0", "is held at 0.4.0" and "is **0.4.0**" alike. Enumerating them was the first
+  // attempt and it missed three of thirteen, found by grepping wider than the check and
+  // comparing the counts. Both orders, because the documents use both.
+  // No comma in the forward span: the documents enumerate these reversed and
+  // comma-separated -- "0.1.1 for `x86_64-linux`, 0.3.0 for `aarch64-linux`" -- and a
+  // span that may cross a comma reads the NEXT platform's version as this one's, which
+  // is two false positives rather than a missed claim. The reversed patterns below are
+  // what catch those, and they are unambiguous.
+  const near = "[^.|,\n]{0,40}?";
+  const ver = "(\\d+\\.\\d+\\.\\d+)";
   const versionClaims = [
-    // [description, regex with the version in group 1, the asset whose attachedSince it must equal]
-    ["`the darwin pair <version>`", /darwin pair(?:'s `?attachedSince`? is| from|:)? ?`?(\d+\.\d+\.\d+)/g, "aarch64-darwin"],
-    ["`the two macOS rows say v<version>`", /macOS rows say v(\d+\.\d+\.\d+)/g, "aarch64-darwin"],
-    ["`aarch64-linux` from <version>", /`aarch64-linux` (?:is|from) `?(\d+\.\d+\.\d+)/g, "aarch64-linux"],
-    ["`x86_64-linux` from <version>", /`x86_64-linux` (?:is|from) `?(\d+\.\d+\.\d+)/g, "x86_64-linux"],
+    // [description, regex source with the version in group 1, the asset it must equal]
+    ["the darwin pair ... <version>", `darwin pair${near}${ver}`, "aarch64-darwin"],
+    ["the macOS rows ... v<version>", `macOS rows say v?${near}${ver}`, "aarch64-darwin"],
+    ["<version> for the darwin pair", `${ver} for the darwin pair`, "aarch64-darwin"],
+    ["`aarch64-linux` ... <version>", `\`aarch64-linux\`${near}${ver}`, "aarch64-linux"],
+    ["<version> for `aarch64-linux`", `${ver} for \`aarch64-linux\``, "aarch64-linux"],
+    ["`x86_64-linux` ... <version>", `\`x86_64-linux\`${near}${ver}`, "x86_64-linux"],
+    ["<version> for `x86_64-linux`", `${ver} for \`x86_64-linux\``, "x86_64-linux"],
   ];
   const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"];
   const staleProse = [];
@@ -6426,7 +6443,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     const text = fs.readFileSync(path.join(root, "docs", doc), "utf8");
     for (const [shape, re, asset] of versionClaims) {
       const want = rows.find((t) => t.asset === asset)?.attachedSince;
-      for (const m of text.matchAll(new RegExp(re.source, "g"))) {
+      for (const m of text.matchAll(new RegExp(re, "g"))) {
         proseClaims += 1;
         if (m[1] !== want) staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`);
       }
