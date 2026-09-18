@@ -812,6 +812,37 @@ pay the 1.10x–1.22x. **Threads are also now sequenced ahead of WP28's compat
 `async`**, which is notation over this engine rather than an engine of its own;
 that decision is recorded in both notes.
 
+**What the surface is** has its own note now, because the answer is decided by
+a constraint none of the reference languages have:
+[wp29-thread-surface.md](wp29-thread-surface.md). A Nish program must be legal
+TypeScript, and TypeScript will not give us a new keyword — so `go f()`,
+`spawn { }` and `parallel for` are all unsayable, and every construct has to be
+a call. The exception is *lifetime*: `using` (TS 5.2) is the one block-scoped
+deterministic-cleanup form the language has, and a scoped thread group is
+exactly a block-scoped lifetime. So the proposal is Rust's scoped threads
+spelled `using`, a `Mutex<T>` that owns the data it protects with a guard the
+block releases, and Rayon-shaped data parallelism — with the whole surface run
+through `tsc --strict` before being proposed rather than after, which it passes
+at `"lib": ["ES2022"]` with no tsconfig change once the shipped declaration
+file carries the disposable protocol itself.
+
+Three results are worth pulling up to this page. **`using` deletes an
+analysis**: wp20 T1's "every handle is joined on every path" becomes a join the
+compiler emits at every block exit, so the rule is not proved and its
+diagnostic is not needed. **Race freedom needs no annotations and no
+detector**: Rust asks for `Send`/`Sync` bounds and Go ships a runtime detector,
+while the fixpoint in `src/codegen/attributes.ts` already proves `readnone` and
+`readonly` whole-program, so a parallel body it cannot clear is simply a
+compile error. And **the stage order should reverse**: wp20 builds spawn first
+and data parallelism last, but the data-parallel intrinsic is where the whole
+measured payoff is *and* is the only stage that needs no handle, no join proof
+and no capture analysis — because the partition belongs to the intrinsic, so
+disjointness is a property of the call rather than something to prove. The one
+thing the surface needs that does not exist is
+[wp23](wp23-language-surface.md) §6's compile-time function parameter, for a
+body written at the call site, which WP28 §7.4 measured at no run-time cost
+because the callee is statically known.
+
 Packages are not on that list either, and the question "how does one
 Nish package depend on another" turns out to have the same character:
 the answer is forced by whole-program compilation rather than chosen. A

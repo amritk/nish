@@ -13,6 +13,16 @@ already made rather than chosen freely. The normative rules would land in
 add, because it has no language surface: §4 T0 below records what landed. Where
 this note and LANGUAGE.md ever disagree, LANGUAGE.md wins.
 
+[wp29-thread-surface.md](wp29-thread-surface.md) is the companion note and
+answers the question this one leaves open — *what the surface actually is,
+given that it has to be legal TypeScript*. It proposes Rust's scoped threads
+spelled with `using`, a `Mutex<T>` that owns its data, Rayon-shaped data
+parallelism, and reversing the stage order below so that the data-parallel
+intrinsic comes first; the whole surface was run through `tsc --strict` before
+being proposed. Where it and this note differ on a stage's contents, it is the
+later document and it wins; where either differs from LANGUAGE.md, LANGUAGE.md
+wins.
+
 Read [wp6-memory.md](wp6-memory.md) first: every hard part below is a
 consequence of the zero-GC memory model, and §3 here is mostly a list of
 places where a WP6 guarantee stops holding once a second thread exists.
@@ -321,6 +331,13 @@ spelled the same way in all three runtime files.
 
 ### T1 — Structured spawn and join
 
+**The surface below has been superseded by
+[wp29-thread-surface.md](wp29-thread-surface.md) §4.2**, which keeps every rule
+in this stage and changes the spelling: a scope introduced by `using` rather
+than a handle with a `join()` call, so that rule 2 is emitted by the construct
+instead of proved by an analysis. What follows is the original design and the
+three rules, which wp29 inherits unchanged.
+
 The minimum surface, and the only one that is sound under WP6 without new
 lifetime machinery:
 
@@ -381,6 +398,10 @@ is the prerequisite, and this note does not try to route around it.
 A `parallelFor`-shaped intrinsic over a `readonly` slice: the work partitioned
 by the runtime, the body a top-level function, the shareable rule of T2 doing
 the safety argument with nothing new.
+[wp29-thread-surface.md](wp29-thread-surface.md) §4.1 is the surface, and its
+§8 argues — on this section's own measurement — that this stage should be built
+**first** rather than last, because it is the smallest of the four as well as
+the only one with a number attached.
 
 This is where the measurable payoff is. Of the seven programs in
 [BENCHMARKS.md](BENCHMARKS.md), `nbody` (1.22x behind Rust) and `spectral`
@@ -466,7 +487,13 @@ it. **It landed on that argument** — the benchmark question is answered in §4
 T0, and the answer was "nothing, unless the program asks".
 
 The remaining order, then: **T1 and T2 together after the freeze; T3 after WP15
-item 8.** The T4-shaped prototype that used to open that sentence has been run
+item 8** — except that [wp29-thread-surface.md](wp29-thread-surface.md) §8
+argues for reversing it, on the strength of §8 below: data parallelism first
+because it is where the payoff is *and* because it is the only stage needing no
+handle, no join proof and no capture rule, then the scope, then locks and
+channels. That is T4, T1, T3, with T2's shareable rule split between the first
+two. This note does not overrule its companion; the order above is what it said
+before the measurement existed. The T4-shaped prototype that used to open that sentence has been run
 (§8), so the measurement it was gating no longer gates anything: T1 is designed
 against 3.76x rather than against a prediction. Nothing else in the order
 changed when T0 landed, and the one thing T0 unblocks outside this note is
