@@ -131,6 +131,7 @@
     {
       "includes": [
         "src/**",
+        "self/**/*.ts",
         "tests/**/*.js",
         "docs/*.mjs",
         "bench/**/*.mjs",

@@ -44,7 +44,7 @@ import { Local, STORAGE_LOCAL, Scope } from "./symbols";
 import { isInteger, T_BOOL, T_ERROR, T_VOID } from "./types";
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
-function terminatorName(stmt: Node): string {
+const terminatorName = (stmt: Node): string => {
   switch (stmt.kind) {
     case N_EXPR_STMT:
       return "process.exit";
@@ -63,15 +63,13 @@ function terminatorName(stmt: Node): string {
     default:
       return "an infinite loop";
   }
-}
+};
 
 /** A statement list in its own scope; true when the list terminates the path. */
-export function checkBlock(ctx: CheckContext, block: Node, scope: Scope): boolean {
-  return checkStatements(ctx, block.children, scope.child());
-}
+export const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean => checkStatements(ctx, block.children, scope.child());
 
 /** A statement list in `scope`; the caller decides whether that is a new one. */
-export function checkStatements(ctx: CheckContext, stmts: Node[], scope: Scope): boolean {
+export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope): boolean => {
   // A list *inside* a statement that has already been refused is never reached
   // in stage0: the throw left the enclosing statement, clause bodies and all.
   // Without this the loop below would clear `errored` on the clause's first
@@ -106,9 +104,9 @@ export function checkStatements(ctx: CheckContext, stmts: Node[], scope: Scope):
   // whose condition failed) must be skipped too.
   ctx.errored = false;
   return terminator !== null;
-}
+};
 
-export function checkStatement(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+export const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // This statement has been refused already: stage0's `throw` would have left
   // it by now and reported nothing further (`context.ts`, `errored`).
   // Answering "does not fall through" would invent a terminator, so this
@@ -154,9 +152,9 @@ export function checkStatement(ctx: CheckContext, stmt: Node, scope: Scope): boo
       ctx.error(stmt, `Unsupported statement \`${ctx.textOf(stmt)}\``);
       return false;
   }
-}
+};
 
-function checkReturn(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkReturn = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const current = ctx.current;
   const want = current === null ? T_ERROR : current.returnType;
   const value = stmt.children[0];
@@ -168,14 +166,14 @@ function checkReturn(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   }
   checkReturnValue(ctx, value, scope);
   return true;
-}
+};
 
 /**
  * The value of a `return`, checked against the enclosing function's return
  * type. Shared with the concise arrow body (`=> n * 2`), which means the same
  * thing as a block with one `return` (docs/wp22-arrow-functions.md).
  */
-export function checkReturnValue(ctx: CheckContext, value: Node, scope: Scope): void {
+export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): void => {
   const current = ctx.current;
   const want = current === null ? T_ERROR : current.returnType;
   const got = checkExpression(ctx, value, scope, want);
@@ -185,10 +183,10 @@ export function checkReturnValue(ctx: CheckContext, value: Node, scope: Scope): 
       `Return type mismatch: function returns ${ctx.table.typeName(want)} but expression is ${ctx.table.typeName(got)}`
     );
   }
-}
+};
 
 /** Each `let`/`const` of a list, declared in `scope`. Shared with a `for` initializer. */
-export function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): void {
+export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0;
   for (const decl of list.children[0].children) {
     const name = decl.children[0].text;
@@ -228,25 +226,25 @@ export function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): 
     }
     declareLocal(ctx, scope, decl, name, type, mutable);
   }
-}
+};
 
-function declareLocal(
+const declareLocal = (
   ctx: CheckContext,
   scope: Scope,
   decl: Node,
   name: string,
   type: i32,
   mutable: boolean
-): void {
+): void => {
   const local = new Local(name, type, mutable, STORAGE_LOCAL);
   if (!scope.declare(local)) {
     ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``);
     return;
   }
   ctx.program.nodeLocals[decl.id] = local;
-}
+};
 
-function checkIf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   checkCondition(ctx, stmt.children[0], scope);
   const thenScope = scope.child();
   narrow(ctx, stmt.children[0], thenScope, true);
@@ -268,9 +266,9 @@ function checkIf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
     narrow(ctx, stmt.children[0], scope, true);
   }
   return thenTerminates && elseTerminates;
-}
+};
 
-function checkWhile(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   clearNarrowingsAssignedIn(ctx, stmt, scope);
   checkCondition(ctx, stmt.children[0], scope);
   const body = scope.child();
@@ -281,18 +279,18 @@ function checkWhile(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   // `while (true)` that nothing breaks out of never falls through, which is
   // what lets a function end with one and still return on every path.
   return stmt.children[0].kind === N_TRUE && !broke;
-}
+};
 
-function checkDo(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   clearNarrowingsAssignedIn(ctx, stmt, scope);
   ctx.pushLoop(LOOP_ITERATION);
   checkStatement(ctx, stmt.children[0], scope.child());
   const broke = ctx.popLoop();
   checkCondition(ctx, stmt.children[1], scope);
   return stmt.children[1].kind === N_TRUE && !broke;
-}
+};
 
-function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   clearNarrowingsAssignedIn(ctx, stmt, scope);
   // The initializer's variables live in a scope of their own, so `i` is not
   // visible after the loop and two `for` loops may both declare one.
@@ -319,9 +317,9 @@ function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   checkStatement(ctx, stmt.children[3], body);
   const broke = ctx.popLoop();
   return condition.kind === N_EMPTY && !broke;
-}
+};
 
-function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   clearNarrowingsAssignedIn(ctx, stmt, scope);
   // The head, before the iterable, in stage0's order (`src/checker/arrays.ts`).
   // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of
@@ -362,7 +360,7 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   checkStatement(ctx, stmt.children[2], outer.child());
   ctx.popLoop();
   return false;
-}
+};
 
 /**
  * `switch (e) { case k: ...; default: ... }`.
@@ -378,7 +376,7 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
  * may fall out. An *empty* clause does fall through, which is how
  * `case 1: case 2:` gives a group of labels one body.
  */
-function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const discriminant = checkExpression(ctx, stmt.children[0], scope, -1);
   // WP23: an enum is an `i32` in the jump table and a type of its own to the
   // checker, so it switches exactly as an integer does — and a `case` label of
@@ -430,7 +428,7 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   // a `default` catches it, and so does a `break` or a last clause that falls
   // out of the bottom.
   return hasDefault && !broke && lastTerminates;
-}
+};
 
 /**
  * A `case` label: the same type as the discriminant, and a value LLVM's
@@ -438,7 +436,7 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
  * constant, or an enum member (WP23), which are the three places a program's
  * token and node kinds live.
  */
-function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discriminant: i32, seen: i64[]): void {
+const checkCaseLabel = (ctx: CheckContext, clause: Node, scope: Scope, discriminant: i32, seen: i64[]): void => {
   const label = clause.children[0];
   const type = checkExpression(ctx, label, scope, discriminant);
   if (type !== T_ERROR && discriminant !== T_ERROR && type !== discriminant) {
@@ -464,18 +462,18 @@ function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discrimin
   }
   seen.push(value.value);
   ctx.program.nodeCaseValues[clause.id] = value.value;
-}
+};
 
-function checkBreak(ctx: CheckContext, stmt: Node): boolean {
+const checkBreak = (ctx: CheckContext, stmt: Node): boolean => {
   if (ctx.loopKinds.length === 0) {
     ctx.error(stmt, "`break` outside of a loop or `switch`");
     return true;
   }
   ctx.loopBreaks[ctx.loopBreaks.length - 1] = true;
   return true;
-}
+};
 
-function checkContinue(ctx: CheckContext, stmt: Node): boolean {
+const checkContinue = (ctx: CheckContext, stmt: Node): boolean => {
   // A `switch` on the stack is a `break` target only: `continue` inside one
   // belongs to the enclosing loop, as it does in JavaScript.
   let inLoop = false;
@@ -488,4 +486,4 @@ function checkContinue(ctx: CheckContext, stmt: Node): boolean {
     ctx.error(stmt, "`continue` outside of a loop");
   }
   return true;
-}
+};

@@ -72,9 +72,7 @@ export const PACKAGE_CONDITION: string = "nish";
  * of the dependency is checked. A function rather than a constant, so the
  * literal rule above still holds of everything a constant here holds.
  */
-export function packageConditionFor(numberMode: string): string {
-  return `${PACKAGE_CONDITION}-${numberMode}`;
-}
+export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CONDITION}-${numberMode}`;
 
 /**
  * The package version, baked in rather than read from `package.json`: stage1

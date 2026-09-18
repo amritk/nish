@@ -867,7 +867,7 @@ export class Compilation {
  * so its walk is driven by the module's name now too (`docs/wp21-packages.md`
  * §10a, `tests/link/package_doubled`).
  */
-function parentDirectory(dir: string): string {
+const parentDirectory = (dir: string): string => {
   if (dir.length > 0 && dir.charCodeAt(0) === SLASH) {
     const parent = dirname(dir);
     return parent === dir ? "" : parent; // `/` is the top of an absolute walk
@@ -881,17 +881,13 @@ function parentDirectory(dir: string): string {
     return `${dir}/..`;
   }
   return dirname(dir);
-}
+};
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
-function nameNode(sig: FunctionSig): Node {
-  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
-}
+const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 /** How a diagnostic names a package: the program's own has no name to give. */
-function describePackage(packageName: string): string {
-  return packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
-}
+const describePackage = (packageName: string): string => packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
 
 /**
  * The wording of a duplicate-symbol rejection (WP21 S1).
@@ -904,7 +900,7 @@ function describePackage(packageName: string): string {
  * than assembled from a shared fragment, because a diagnostic's literal run is
  * what `scripts/gen-diagnostic-codes.mjs` keys its stable `NL` code on.
  */
-function clashMessage(sig: FunctionSig, previous: FunctionSig, previousFile: string, packageName: string): string {
+const clashMessage = (sig: FunctionSig, previous: FunctionSig, previousFile: string, packageName: string): string => {
   const where = `\`${sig.sourceName}\` is also defined in ${previousFile}`;
   if (sig.exported && previous.exported) {
     if (packageName === ROOT_PACKAGE) {
@@ -916,4 +912,4 @@ function clashMessage(sig: FunctionSig, previous: FunctionSig, previousFile: str
     return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`;
   }
   return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`;
-}
+};

@@ -995,9 +995,7 @@ export class Checker {
 }
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
-function nameOf(sig: FunctionSig): Node {
-  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
-}
+const nameOf = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 // ---- WP15 §8: the `performance` diagnostic class --------------------------------
 //
@@ -1104,9 +1102,9 @@ class PerfWalk {
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void {
+export const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void => {
   walkPerformance(new PerfWalk(ctx, sig, body, unprovenIndices), body);
-}
+};
 
 /**
  * A bounds check `self/bounds.ts` could not remove, on an access inside a loop
@@ -1120,7 +1118,7 @@ export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node
  * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
  * the language already has, and half the proof comes off their declaration.
  */
-function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
+const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access;
   let index = access;
   if (access.kind === N_INDEX) {
@@ -1146,17 +1144,17 @@ function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
       `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
       `the upper one`
   );
-}
+};
 
 /** The source name of the local a bare identifier binds, or `""` for anything else. */
-function perfLocalName(ctx: CheckContext, expr: Node): string {
+const perfLocalName = (ctx: CheckContext, expr: Node): string => {
   const e = unwrapPerfParens(expr);
   if (e.kind !== N_IDENT) {
     return "";
   }
   const local = ctx.program.nodeLocals[e.id];
   return local === null ? "" : local.name;
-}
+};
 
 /**
  * Walk one function body. The loop stack is pushed around the parts of a loop
@@ -1165,7 +1163,7 @@ function perfLocalName(ctx: CheckContext, expr: Node): string {
  * loop and must warn, while `for (const x of xs) { ... }` gives `x` a fresh
  * binding every pass and must not.
  */
-function walkPerformance(walk: PerfWalk, node: Node): void {
+const walkPerformance = (walk: PerfWalk, node: Node): void => {
   if (node.kind === N_FOR) {
     walkPerformance(walk, node.children[0]);
     walk.loops.push(node);
@@ -1217,24 +1215,24 @@ function walkPerformance(walk: PerfWalk, node: Node): void {
   for (const child of node.children) {
     walkPerformance(walk, child);
   }
-}
+};
 
 /** Whether `node` is one of the accesses the bounds analysis could not prove. */
-function isUnprovenIndex(walk: PerfWalk, node: Node): boolean {
+const isUnprovenIndex = (walk: PerfWalk, node: Node): boolean => {
   for (const access of walk.unprovenIndices) {
     if (access === node) {
       return true;
     }
   }
   return false;
-}
+};
 
 /**
  * `s = <something built from s>` inside a loop that does not own `s`. Split
  * from the report below because the arena rule has to know whether this one is
  * already speaking about the same assignment: one line gets one warning.
  */
-function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean {
+const isQuadraticAccumulation = (walk: PerfWalk, expr: Node): boolean => {
   if (walk.loops.length === 0) {
     return false;
   }
@@ -1252,10 +1250,10 @@ function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean {
     return false;
   }
   return accumulates(walk.ctx, expr.children[1], target);
-}
+};
 
 /** `s = <something built from s>` inside a loop that does not own `s`. */
-function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
+const checkStringAccumulation = (walk: PerfWalk, expr: Node): void => {
   if (!isQuadraticAccumulation(walk, expr)) {
     return;
   }
@@ -1269,10 +1267,10 @@ function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
     `\`${target.name}\` is rebuilt from its own value on every iteration of this loop, so every pass copies all ` +
       `of it (quadratic in time and in arena bytes): collect the pieces in a \`string[]\` and \`join\` them after the loop`
   );
-}
+};
 
 /** A dynamically sized array allocated per iteration and dead by the end of it. */
-function checkLoopAllocation(walk: PerfWalk, decl: Node): void {
+const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
   if (walk.loops.length === 0) {
     return;
   }
@@ -1294,16 +1292,16 @@ function checkLoopAllocation(walk: PerfWalk, decl: Node): void {
       `past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, ` +
       `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
   );
-}
+};
 
 /** Strip parentheses; every shape test here is about the expression inside them. */
-function unwrapPerfParens(expr: Node): Node {
+const unwrapPerfParens = (expr: Node): Node => {
   let inner = expr;
   while (inner.kind === N_PAREN) {
     inner = inner.children[0];
   }
   return inner;
-}
+};
 
 /**
  * The value of `expr` is `target`'s own contents plus something. Only `+`
@@ -1311,7 +1309,7 @@ function unwrapPerfParens(expr: Node): Node {
  * that copy the accumulator; `s = f(s)` or `s = cond ? s : t` may do anything
  * or nothing, and guessing would break the "name a concrete rewrite" bar.
  */
-function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
+const accumulates = (ctx: CheckContext, expr: Node, target: Local): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind === N_IDENT) {
     const bound = ctx.program.nodeLocals[e.id];
@@ -1328,7 +1326,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
     }
   }
   return false;
-}
+};
 
 /**
  * `expr` allocates an array whose size is not a compile-time constant, so WP6
@@ -1341,7 +1339,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
  * decision goes the other way: a `const n = 8` is a local, not a literal, and
  * both sides agree it is dynamic.
  */
-function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean {
+const isDynamicArrayAllocation = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind !== N_NEW || !ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
     return false;
@@ -1354,10 +1352,10 @@ function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean {
   }
   const length = unwrapPerfParens(args.children[0]);
   return length.kind !== N_NUMBER || !isNonNegativeInteger(length.text);
-}
+};
 
 /** The literal is a non-negative integer as written: no sign, no dot, no exponent. */
-function isNonNegativeInteger(text: string): boolean {
+const isNonNegativeInteger = (text: string): boolean => {
   if (text.length === 0) {
     return false;
   }
@@ -1370,7 +1368,7 @@ function isNonNegativeInteger(text: string): boolean {
     i = i + 1;
   }
   return true;
-}
+};
 
 /**
  * Every reference to `local` inside `root` is consumed where it stands: an
@@ -1381,7 +1379,7 @@ function isNonNegativeInteger(text: string): boolean {
  *
  * `own` is the declaration that introduced `local`; its own name is not a use.
  */
-function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, own: Node): boolean {
+const usedOnlyWithinIteration = (ctx: CheckContext, root: Node, local: Local, own: Node): boolean => {
   if (root === own) {
     return usedOnlyWithinIteration(ctx, own.children[2], local, own);
   }
@@ -1407,17 +1405,17 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
     }
   }
   return true;
-}
+};
 
 /** `expr` is a direct reference to `local` (through parentheses only). */
-function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean {
+const isLocalRef = (ctx: CheckContext, expr: Node, local: Local): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind !== N_IDENT) {
     return false;
   }
   const bound = ctx.program.nodeLocals[e.id];
   return bound !== null && bound === local;
-}
+};
 
 
 // ---- Memory that is allocated and then never released ----------------------------
@@ -1438,9 +1436,7 @@ function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean {
 // warning nobody can act on is worse than no warning.
 
 /** The builtins that hand back freshly allocated memory by plain identifier. */
-function perfIsReadBuiltin(name: string): boolean {
-  return name === "readFileSync" || name === "readFileSyncOrNull";
-}
+const perfIsReadBuiltin = (name: string): boolean => name === "readFileSync" || name === "readFileSyncOrNull";
 
 /**
  * `expr` allocates from the arena in a way the checker can see for itself: a
@@ -1453,7 +1449,7 @@ function perfIsReadBuiltin(name: string): boolean {
  * un-actionable kind of warning. A string literal is not counted either — it
  * is constant data, not an allocation.
  */
-function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
+const perfAllocatesVisibly = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind === N_NEW || e.kind === N_OBJECT || e.kind === N_ARRAY) {
     return true;
@@ -1475,7 +1471,7 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
     return callee.kind === N_IDENT && perfIsReadBuiltin(callee.text) && !ctx.sigs.has(callee.text);
   }
   return e.kind === N_BINARY && e.text === "+" && ctx.program.nodeTypes[e.id] === T_STRING;
-}
+};
 
 /**
  * A type that is a pointer at run time, and so names memory somebody has to
@@ -1483,9 +1479,7 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
  * register: the rule uses this to decide when to stay quiet, and counting a
  * borderline type as a pointer only ever means one warning fewer.
  */
-function perfIsPointerType(ctx: CheckContext, type: i32): boolean {
-  return ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
-}
+const perfIsPointerType = (ctx: CheckContext, type: i32): boolean => ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
 
 /**
  * A use of `local` that can let the value it holds outlive the statement it
@@ -1495,7 +1489,7 @@ function perfIsPointerType(ctx: CheckContext, type: i32): boolean {
  * element read or write through it, `.length`, a `for...of` source — consumes
  * the value where it stands and cannot keep it.
  */
-function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean {
+const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean => {
   if (node.kind === N_CALL) {
     for (const arg of node.children[1].children) {
       if (isLocalRef(ctx, arg, local)) {
@@ -1519,7 +1513,7 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
     return isLocalRef(ctx, node.children[2], local);
   }
   return node.kind === N_BINARY && node.text === "=" && isLocalRef(ctx, node.children[1], local);
-}
+};
 
 /**
  * Whether the value `local` holds *when `expr` runs* may already be reachable
@@ -1537,13 +1531,13 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
  * behind it. Outside one, only a capture that finishes before the assignment
  * starts can have taken a value the assignment is about to drop.
  */
-function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean {
+const perfHeldValueMayBeReachable = (walk: PerfWalk, expr: Node, local: Local): boolean => {
   const inLoop = walk.loops.length > 0;
   const root = inLoop ? walk.loops[0] : walk.body;
   return perfScanForCapture(walk.ctx, root, local, inLoop, expr.start);
-}
+};
 
-function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean {
+const perfScanForCapture = (ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean => {
   if ((inLoop || node.end <= before) && perfCapturesLocal(ctx, node, local)) {
     return true;
   }
@@ -1553,14 +1547,14 @@ function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop:
     }
   }
   return false;
-}
+};
 
 /**
  * `s = <an allocation>` where `s` is a local that was declared holding one.
  * Reported on the target, because the assignment is the thing to change. The
  * guards are stage0's, in the same order.
  */
-function checkArenaReassignment(walk: PerfWalk, expr: Node): void {
+const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
   const left = expr.children[0];
   if (left.kind !== N_IDENT) {
     return;
@@ -1590,7 +1584,7 @@ function checkArenaReassignment(walk: PerfWalk, expr: Node): void {
       `memory at all, so both allocations live until the program exits. Give each value its own \`const\`, or ` +
       `bracket the body with \`Arena.mark()\` and \`Arena.release(m)\``
   );
-}
+};
 
 // ---- Arithmetic that provably goes wrong (the overflow rules) --------------------
 //
@@ -1642,13 +1636,9 @@ class PerfConst {
   }
 }
 
-function perfNoConst(): PerfConst {
-  return new PerfConst(false, 0);
-}
+const perfNoConst = (): PerfConst => new PerfConst(false, 0);
 
-function perfMagnitude(value: i64): i64 {
-  return value < 0 ? -value : value;
-}
+const perfMagnitude = (value: i64): i64 => value < 0 ? -value : value;
 
 /**
  * The exact value of a constant integer expression, or "not a constant". Only
@@ -1661,7 +1651,7 @@ function perfMagnitude(value: i64): i64 {
  * constants.ts` folds those eagerly and makes an overflow a hard error, so
  * what is left for a warning is the arithmetic inside a function body.
  */
-function perfConstantInt(expr: Node): PerfConst {
+const perfConstantInt = (expr: Node): PerfConst => {
   const e = unwrapPerfParens(expr);
   if (e.kind === N_NUMBER) {
     if (!isNonNegativeInteger(e.text)) {
@@ -1698,17 +1688,17 @@ function perfConstantInt(expr: Node): PerfConst {
     return new PerfConst(true, left.value - right.value);
   }
   return perfNoConst();
-}
+};
 
 /** `expr` is a constant of a signed type whose value does not fit that type. */
-function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean {
+const perfOverflowsItsType = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr);
   if (ctx.program.nodeTypes[e.id] !== T_I32) {
     return false;
   }
   const folded = perfConstantInt(e);
   return folded.ok && (folded.value < I32_MIN || folded.value > I32_MAX);
-}
+};
 
 /**
  * A constant `+`, `-` or `*` whose value does not fit the signed type it is
@@ -1721,7 +1711,7 @@ function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean {
  * undefined behaviour and the warning would be arguing with a flag the author
  * passed on purpose.
  */
-function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
+const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
   if (walk.ctx.wrapping) {
     return;
   }
@@ -1745,7 +1735,7 @@ function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
       `${I32_MAX}), and signed overflow is undefined behaviour rather than a wrap: widen the operands with ` +
       `\`toI64\` first, or use --wrapping for two's-complement arithmetic`
   );
-}
+};
 
 /**
  * `toI64(a * b)` and `toF64(a * b)` on `i32` operands: the multiplication is
@@ -1761,7 +1751,7 @@ function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
  * A user function of the same name shadows the builtin, so a program that
  * declares one is left alone: the call is not a conversion at all there.
  */
-function checkWideningConversion(walk: PerfWalk, call: Node): void {
+const checkWideningConversion = (walk: PerfWalk, call: Node): void => {
   const callee = unwrapPerfParens(call.children[0]);
   if (callee.kind !== N_IDENT || (callee.text !== "toI64" && callee.text !== "toF64")) {
     return;
@@ -1787,7 +1777,7 @@ function checkWideningConversion(walk: PerfWalk, call: Node): void {
       `conversion cannot recover an overflow that has already happened: convert the operands first, as ` +
       `\`${callee.text}(a) ${arg.text} ${callee.text}(b)\``
   );
-}
+};
 
 /**
  * A shift by a literal count at or beyond the operand's width. The count is
@@ -1795,7 +1785,7 @@ function checkWideningConversion(walk: PerfWalk, call: Node): void {
  * means `x << 32` on an `i32` shifts by nothing at all -- never what the line
  * was written to do.
  */
-function checkShiftCount(walk: PerfWalk, expr: Node): void {
+const checkShiftCount = (walk: PerfWalk, expr: Node): void => {
   if (expr.text !== "<<" && expr.text !== ">>" && expr.text !== ">>>") {
     return;
   }
@@ -1815,4 +1805,4 @@ function checkShiftCount(walk: PerfWalk, expr: Node): void {
       `${count.value % width} and this shifts by that instead: mask the count yourself if that is intended, or ` +
       `shift a wider value — \`${expr.text}\` never shifts a value out of existence here`
   );
-}
+};
