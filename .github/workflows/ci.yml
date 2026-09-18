@@ -4,7 +4,7 @@
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size table
 #       in the job summary, and the IR cookbook staleness check. The matrix is
 #       written for macOS too and that row is commented out; the comment
-#       beside it names the five checks that fail there.
+#       beside it names the checks that fail there, and which are left.
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -48,9 +48,10 @@ jobs:
       matrix:
         # macos-latest stays out of THIS job, and the reason is no longer a
         # guess. The row was run for the first time on 2026-09-13 (WP19 R2) and
-        # `npm test` fails there with **five** failures in four families, none
+        # `npm test` failed there with **five** failures in four families, none
         # of which is a compiler bug and all of which are checks that encode an
-        # ELF/Linux assumption:
+        # ELF/Linux assumption. THREE of the five are left -- 4,5 below are
+        # fixed, and they were the pair that reached past this job:
         #
         #   1,2. `llvm-dwarfdump` of the linked binary reports an empty
         #        `.debug_line`. On Mach-O `clang -g` leaves DWARF in the .o
@@ -80,12 +81,13 @@ jobs:
         #
         # The install half is already written and was exercised by that run:
         # the two "Install LLVM 18 + lld" steps below are guarded by
-        # `runner.os`, so restoring the row is this line plus the five fixes.
+        # `runner.os`, so restoring the row is this line plus the three
+        # remaining fixes.
         #
         # `fail-fast: false` above is what would keep a macOS-only failure from
         # cancelling the Linux row that says whether it is the platform or the
         # change.
-        os: [ubuntu-latest] # , macos-latest -- see the five failures above
+        os: [ubuntu-latest] # , macos-latest -- see the failures above
     steps:
       - uses: actions/checkout@v4
 

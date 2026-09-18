@@ -13,7 +13,7 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on five measured failures rather than on cost; see below |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on three remaining measured failures rather than on cost; see below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
@@ -24,9 +24,10 @@ G1's corpus half is nightly, on its own workflow, for the reasons under
 
 **The macOS `test` row was run for the first time on 2026-09-13, and it fails.**
 That is new information rather than a guess, and it replaces the cost argument
-that used to stand here: `npm test` on `macos-latest` reports **five failures in
+that used to stand here: `npm test` on `macos-latest` reported **five failures in
 four families**, none of them a compiler bug and all of them checks that encode
-an ELF/Linux assumption.
+an ELF/Linux assumption. **Three of the five remain**: the `stage3 == stage2`
+family is fixed, below, and it was the one that reached past this job.
 
 | | What fails | Why |
 | --- | --- | --- |
@@ -34,8 +35,8 @@ an ELF/Linux assumption.
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
 | 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not: Mach-O's debug map records each `.o`'s path and mtime, which differ between two links. **Fixed** — see below |
 
-The fourth family reached further than this job: `scripts/bootstrap.sh --verify`
-asserted the same `stage3 == stage2` comparison, so it stood between the
+The `stage3 == stage2` family reached further than this job:
+`scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
 release workflow and a **darwin binary**
 ([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)) as well
 as between G3 and a macOS `bootstrap` row.
@@ -49,10 +50,10 @@ where the raw byte comparison was a fact about ld64. Narrowed and not lifted on
 purpose — an arm that accepted any difference would accept a stage3 that is a
 different compiler, which is the one thing the comparison exists for — and
 `NISH_UNAME_S` lets `tests/run.js` drive both platforms' arms from one machine,
-so all five of them are checked on every run rather than on a mac.
+so every arm of it is checked on every run rather than on a mac.
 
 Restoring the `test` row therefore means porting the remaining **three** checks
-in two families against hardware that has to be iterated on, which is a package
+in the two families above it against hardware that has to be iterated on, which is a package
 of its own rather than a line in the matrix. The install half is already
 written and was exercised by that run: both "Install LLVM 18 + lld" steps in
 the `test` job are guarded by `runner.os`, so restoring the row is one
@@ -74,7 +75,7 @@ scripts had been written against:
   builtin that bash 3.2 does not have at all, so the smoke step died on the
   first line that used it. It reads the same pipeline with `while read` now.
 
-Neither stops the row now, and neither is what the five failures above are.
+Neither stops the row now, and neither is what the failures above are.
 
 ### The seeded build, and what a missing seed reports
 
