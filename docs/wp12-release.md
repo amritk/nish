@@ -374,9 +374,10 @@ cost rather than what one did.
   That was true when WP12 shipped and it is why `files` looks the way it does;
   the compiler is no longer only a Node program, and `release.yml` attaches a
   prebuilt binary for each of `x86_64`/`aarch64` × `linux`/`darwin` — from the
-  release each one's `attachedSince` names, which is 0.1.1 for `x86_64-linux`
-  and 0.3.0 for the other three, because v0.2.0 was published before this
-  landed and a release already published cannot grow an asset
+  release each one's `attachedSince` names — 0.1.1 for `x86_64-linux`, 0.3.0
+  for `aarch64-linux`, 0.4.0 for the darwin pair, which wait on the ld64 fixed
+  point ([wp10-ci.md](wp10-ci.md#ci-matrix)) rather than only on v0.2.0 having
+  been published before this landed
   ([wp19 G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
   What is still not in any work package is *delivering* one through npm: that
   is option (b) of "which compiler the package ships" above, and it waits on

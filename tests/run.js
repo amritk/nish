@@ -6399,6 +6399,45 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       .join("\n")
   );
 
+  // The prose, as far as prose can be checked. INSTALL.md's table has a shape, so the
+  // check above compares it cell by cell; the work-package documents state the same
+  // versions in sentences, and when the darwin pair moved from 0.3.0 to 0.4.0 three of
+  // those sentences went stale in silence -- two of them in the same table as a row that
+  // had been corrected, two rows apart.
+  //
+  // What is mechanical about a sentence is the claim shape. Every place a document names
+  // a version FOR a platform does it one of a few ways, and each is a version next to a
+  // platform: "the darwin pair from 0.4.0", "the darwin pair `0.4.0`", "the two macOS
+  // rows say v0.4.0". Those are matched and compared against the file. It is not a
+  // general prose checker and does not pretend to be one -- a sentence phrased a new way
+  // escapes it -- but it closes the shapes that have actually gone stale here, and a new
+  // phrasing that wants checking can be added to the list.
+  const versionClaims = [
+    // [description, regex with the version in group 1, the asset whose attachedSince it must equal]
+    ["`the darwin pair <version>`", /darwin pair(?:'s `?attachedSince`? is| from|:)? ?`?(\d+\.\d+\.\d+)/g, "aarch64-darwin"],
+    ["`the two macOS rows say v<version>`", /macOS rows say v(\d+\.\d+\.\d+)/g, "aarch64-darwin"],
+    ["`aarch64-linux` from <version>", /`aarch64-linux` (?:is|from) `?(\d+\.\d+\.\d+)/g, "aarch64-linux"],
+    ["`x86_64-linux` from <version>", /`x86_64-linux` (?:is|from) `?(\d+\.\d+\.\d+)/g, "x86_64-linux"],
+  ];
+  const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"];
+  const staleProse = [];
+  let proseClaims = 0;
+  for (const doc of proseDocs) {
+    const text = fs.readFileSync(path.join(root, "docs", doc), "utf8");
+    for (const [shape, re, asset] of versionClaims) {
+      const want = rows.find((t) => t.asset === asset)?.attachedSince;
+      for (const m of text.matchAll(new RegExp(re.source, "g"))) {
+        proseClaims += 1;
+        if (m[1] !== want) staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`);
+      }
+    }
+  }
+  check(
+    `seed targets: every per-platform version the docs state in prose is the one in the file (${proseClaims} claims)`,
+    staleProse.length === 0 && proseClaims >= proseDocs.length,
+    staleProse.join("\n") || `only ${proseClaims} claims matched; the phrasings may have changed`
+  );
+
   // `.github/seed-due.sh` is the one place a version is compared, because release.yml
   // asks it about the version being released and seed-matrix.sh asks it about the last
   // release's -- the same question about two different versions, which is the whole

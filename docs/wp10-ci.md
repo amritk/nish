@@ -180,9 +180,11 @@ each `asset` is that triple with the vendor and the ABI dropped
 other a contract, and two of them — `aarch64-darwin` and `x86_64-darwin` — were
 described as triples the compiler accepts, which it never has.
 
-G3 asks for this on **both** operating systems, and it runs on Linux alone
-until the first release at or after 0.3.0, because v0.2.0 attaches
-`x86_64-linux` and nothing else and a published release cannot grow an asset.
+G3 asks for this on **both** operating systems, and it runs on Linux alone.
+v0.2.0 attaches `x86_64-linux` and nothing else and a published release cannot
+grow an asset, so the earliest any second row could appear is the next release
+— and for **macOS** it is later than that: the darwin pair's `attachedSince` is
+0.4.0, for the reason in the second bullet below. `aarch64-linux` is 0.3.0.
 Two things had to land before the second platform. **One has; one is narrowed
 and still open**, which is why the macOS row is not imminent:
 
@@ -203,6 +205,30 @@ appears when the seed does, on the runner `seed-targets.json` names for it —
 and because it is *presence* and not `attachedSince` that builds the row, a
 platform's rows want exercising once before its version arrives. That file's
 note says so under BEFORE ADDING A PLATFORM.
+
+**`aarch64-linux` at 0.3.0 is a deliberate exception to that, and worth naming
+as one.** `ubuntu-24.04-arm` has never run in this repository either, and
+0.3.0 is the next release. Two things make it an acceptable bet where the
+darwin pair is not. The release-time half is **fail-safe**: a failing
+`binaries` row stops the release and attaches nothing, so being wrong costs a
+red release rather than a broken gate with a seed behind it. And staging the
+platforms spreads the risk instead of putting three unexercised ones on one
+release. The half that is not fail-safe is the `bootstrap` row that appears
+*after* the asset is attached — and if that lands red, the only remedy is to
+**delete the `aarch64-linux` asset from the release**, because lowering
+`attachedSince` does not clear a row that presence created. Know that before
+cutting 0.3.0.
+
+Exercising a platform's rows first is the better answer, and the two obvious
+ways of doing it are both closed: `release.yml` cannot be dispatched at a
+branch, since `targets` exits unless the ref is a tag matching
+`package.json`'s version, and a temporary matrix entry in it cannot be reached
+for the same reason. What works is a throwaway workflow on a branch —
+`on: workflow_dispatch`, one job on the label in question, the `binaries`
+steps down to the smoke test, no upload — deleted once it has been green.
+Teaching `release.yml` a dry-run input would be the principled fix and is
+deliberately not part of this: it adds a path to the publishing workflow that
+has itself never run.
 
 
 ### The parity run, nightly
