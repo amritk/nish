@@ -35,8 +35,16 @@ import { codeFor } from "./codes.js";
  *     diluted with advice about code that is about to change anyway, which is
  *     also what keeps the single-error output byte-identical to what it was.
  *
- * They need no sort: the analysis meets them in module load order and then in
- * source order, which is exactly the order `DiagnosticSink` sorts errors into.
+ * They have a report order of their own — by file, then by position, then by
+ * diagnostic code — which `reportPerformance` keeps as the list is built, for
+ * the reason written there. `--json` prints one object per warning, so that is
+ * the order of a machine-readable stream and part of what it promises.
+ * `self/diagnostics.ts` orders them the same way and has to, because the two
+ * are one compiler in two implementations and `--json` answers the same stream
+ * from either — but nothing in the suite would catch it if they drifted:
+ * `tests/self/parity.js` compares the stderr lines matching ` error: ` and
+ * ` warning: `, which a `performance` line is neither of, and no variation of
+ * it passes `--json`. This is a rule a reader keeps, not one a test catches.
  */
 
 /** A half-open character range `[start, end)` into a source file's text. */
@@ -196,11 +204,19 @@ export class DiagnosticSink {
   private readonly errors: CompileError[] = [];
   private readonly fileOrder = new Map<string, number>();
   /**
-   * Performance warnings (WP15 §8), in the order the analysis found them.
-   * They are never thrown and never cleared between phases: the driver reads
-   * them once, after the whole compilation has succeeded.
+   * Performance warnings (WP15 §8), in report order rather than in the order
+   * the analysis found them — `reportPerformance` inserts each one where
+   * `compareWarnings` puts it. They are never thrown and never cleared between
+   * phases: the driver reads them once, after the whole compilation has
+   * succeeded.
    */
   private readonly warnings: PerformanceWarning[] = [];
+  /**
+   * File path -> the order it was first *warned* about. A table of its own,
+   * because `fileOrder` is the error report's index and a warning must never
+   * be able to move one error in front of another.
+   */
+  private readonly warningFileOrder = new Map<string, number>();
 
   /** Record an error. One that already carries `additional` errors (thrown by a nested sink) is flattened. */
   report(err: CompileError): void {
@@ -211,17 +227,65 @@ export class DiagnosticSink {
     err.additional.length = 0;
   }
 
-  /** Record a performance warning. Nothing else about the compilation changes. */
+  /**
+   * Record a performance warning, at its place in the report order rather than
+   * at the end of the list. Nothing else about the compilation changes.
+   *
+   * The insertion is what makes the order an invariant of the list instead of
+   * a promise one accessor keeps, which matters because the analysis does not
+   * hand the warnings over in order: a generic instantiation's body is checked
+   * when the instantiation is finished rather than where the generic is
+   * written, and a pass-1 warning is found before pass 2 has looked at the
+   * file at all. It is an insertion rather than a sort in the getter so that
+   * `self/diagnostics.ts` can be the same code: the language has no
+   * `Array.sort` and `self/compile.ts` reads the list directly, and the two
+   * halves of a diagnostic are worth more when they read alike. It is a stable
+   * insertion sort: the stream arrives in a few nearly sorted runs, one per
+   * pass, so the scan back is short, and the list is small whatever happens —
+   * compiling all sixty modules of `self/` produces about seventy warnings.
+   */
   reportPerformance(warning: PerformanceWarning): void {
+    if (!this.warningFileOrder.has(warning.file))
+      this.warningFileOrder.set(warning.file, this.warningFileOrder.size);
     this.warnings.push(warning);
+    let i = this.warnings.length - 1;
+    while (i > 0 && this.compareWarnings(this.warnings[i - 1], warning) > 0) {
+      this.warnings[i] = this.warnings[i - 1];
+      i--;
+    }
+    this.warnings[i] = warning;
   }
 
   /**
-   * The warnings collected so far, in the order they were reported. The
-   * checker walks modules in load order and functions in source order, which
-   * is the order `throwIfErrors` sorts errors into, so there is nothing to
-   * sort here and no second file-order table to keep in step.
+   * Negative, zero or positive as warning `a` should be reported before `b`:
+   * by file — in the order files were first warned about, so a report follows
+   * the import graph the way the error report does — then by the start of the
+   * span, then by diagnostic code.
+   *
+   * The code is what breaks a tie at one position, so that two analyses
+   * reporting on the same node come out in the same order whichever of them
+   * ran first. It is the last key and never a fallback to the prose: two
+   * warnings of the same code at the same position keep the order the analysis
+   * produced them in, which is what makes a multi-warning golden reproducible.
+   * Comparing `line` and `column` rather than the raw offset is the same
+   * ordering — both are monotonic in the offset within a file — and is the
+   * comparison `self/diagnostics.ts` can make, where an offset is a byte count
+   * and this one is a UTF-16 index.
    */
+  private compareWarnings(a: PerformanceWarning, b: PerformanceWarning): number {
+    const fileA = this.warningFileOrder.get(a.file)!;
+    const fileB = this.warningFileOrder.get(b.file)!;
+    if (fileA !== fileB) return fileA - fileB;
+    if (a.line !== b.line) return a.line - b.line;
+    if (a.column !== b.column) return a.column - b.column;
+    const codeA = codeFor(a.kind, a.text);
+    const codeB = codeFor(b.kind, b.text);
+    // A code is `NL` and four digits, so a code-unit comparison is the byte
+    // comparison `compareStrings` makes on the stage1 side.
+    return codeA < codeB ? -1 : codeA > codeB ? 1 : 0;
+  }
+
+  /** The warnings collected so far, in report order (see `compareWarnings`). */
   get performanceWarnings(): PerformanceWarning[] {
     return this.warnings;
   }

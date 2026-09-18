@@ -934,6 +934,59 @@ if (!only || "performance".includes(only)) {
     });
   const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: performance: /.test(l));
 
+  // The order of the stream, before any rule in it. The warning list is sorted
+  // by file, then by position, then by diagnostic code, and `diag_order` is the
+  // case that needs the sort: a generic's body is checked when one of its
+  // instantiations is finished, so the walk *finds* the warning at line 26
+  // after the one at line 36 and reported them that way until WP15's remainder.
+  // The pair at 44:41 is the second key — two analyses at one position, ordered
+  // by their code rather than by which of them ran. `--json` is a
+  // machine-readable stream, so both are a contract, not a presentation detail.
+  const order = compile("diag_order", "diag_order.ll");
+  const orderLines = summaries(order.stderr);
+  check(
+    "performance: the warnings of one file are reported by position and then by code, whatever order the analysis found them in",
+    order.status === 0 &&
+      orderLines.length === 4 &&
+      orderLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
+        "26:5,36:5,44:41,44:41" &&
+      orderLines[0].includes("performance: `s` is rebuilt from its own value") &&
+      orderLines[1].includes("performance: `out` is rebuilt from its own value") &&
+      orderLines[2].includes("performance: this `*` is computed in i32 and wraps") &&
+      orderLines[3].includes("performance: this computes with overflow"),
+    order.stderr
+  );
+
+  // And the same order out of stage1, because `compile` above is stage0's
+  // alone: the mirror in `self/diagnostics.ts` is otherwise pinned by nothing
+  // here, and a wrong key or a missing `warningFileOrder` registration there
+  // would leave this file green. The binary is the one section A builds for the
+  // stage1-only register, and this is a counted skip where there is no clang to
+  // link one. The whole report is compared rather than the positions: the two
+  // compilers print the same summary lines for an ASCII source, where stage1's
+  // byte columns and stage0's UTF-16 columns agree.
+  const stage1Compiler = stage1ForCases();
+  if (stage1Compiler.error !== undefined) {
+    skip(`performance: the stage1 report order (${stage1Compiler.error})`);
+  } else {
+    const order1 = spawnSync(
+      stage1Compiler.cmd,
+      [
+        ...stage1Compiler.prefix,
+        path.join(casesDir, "diag_order.ts"),
+        "-o",
+        path.join(buildDir, "diag_order_stage1.ll"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    );
+    const order1Lines = summaries(order1.stderr);
+    check(
+      "performance: stage1 reports the warnings of one file in the order stage0 reports them",
+      order1.status === 0 && order1Lines.length === 4 && order1Lines.join("\n") === orderLines.join("\n"),
+      `--- stage0\n${orderLines.join("\n")}\n--- stage1 (exit ${order1.status})\n${order1Lines.join("\n")}\n${order1.stderr}`
+    );
+  }
+
   const str = compile("perf_str_concat_loop", "perf_str.ll");
   const strLines = summaries(str.stderr);
   // `for`, `while`, a nested loop whose accumulator is declared one level out,
