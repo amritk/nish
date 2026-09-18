@@ -1306,6 +1306,30 @@ for (const name of linkTests) {
   }
 }
 
+/**
+ * Compile `entry` **by absolute path** and pin the first line of the `.ll` the
+ * import produced. Compiling by absolute path is what tells a name resolved
+ * against the entry apart from one resolved against the working directory:
+ * under a relative entry the two answers are the same string.
+ *
+ * The fixture's existence is part of the assertion rather than a guard around
+ * it. Wrapped in `if (fs.existsSync(entry))` the check would vanish when
+ * somebody renamed the fixture — no failure, no SKIP, no line in the summary —
+ * which is the silence WP19 §A7 is about.
+ */
+const pinsModuleId = (title, entry, outName, imported, want) => {
+  const present = fs.existsSync(entry);
+  const absOut = path.join(buildDir, "link", outName);
+  fs.rmSync(absOut, { recursive: true, force: true });
+  fs.mkdirSync(absOut, { recursive: true });
+  const r = present
+    ? spawnSync("node", [cli, entry, "-o", `${absOut}${path.sep}`], { cwd: root, encoding: "utf8" })
+    : { status: 1, stderr: `no such fixture: ${path.relative(root, entry)}\n` };
+  const file = path.join(absOut, imported);
+  const header = r.status === 0 && fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n")[0] : "";
+  check(title, present && header === want, `--- expected\n${want}\n--- actual\n${header}\n${r.stderr}`);
+};
+
 // An imported module's name — the one in its `ModuleID`, its `source_filename`
 // and its `DIFile` — is the specifier resolved against the name the *importer*
 // was given, never against the working directory. Two things ride on that: the
@@ -1315,25 +1339,30 @@ for (const name of linkTests) {
 // is what tells the two rules apart: cwd-relative naming would answer
 // `tests/link/diamond/b.ts` where this answers the absolute path the entry
 // carried.
-const diamondEntry = path.join(linkDir, "diamond", "main.ts");
-if (fs.existsSync(diamondEntry)) {
-  const absOut = path.join(buildDir, "link", "diamond-abs");
-  fs.rmSync(absOut, { recursive: true, force: true });
-  fs.mkdirSync(absOut, { recursive: true });
-  const r = spawnSync("node", [cli, diamondEntry, "-o", `${absOut}${path.sep}`], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  const imported = path.join(absOut, "b.ll");
-  const header =
-    r.status === 0 && fs.existsSync(imported) ? fs.readFileSync(imported, "utf8").split("\n")[0] : "";
-  const want = `; ModuleID = '${path.join(linkDir, "diamond", "b.ts")}'`;
-  check(
-    "link/diamond: an imported module is named from the entry's own path, not from cwd",
-    header === want,
-    `--- expected\n${want}\n--- actual\n${header}\n${r.stderr}`
-  );
-}
+pinsModuleId(
+  "link/diamond: an imported module is named from the entry's own path, not from cwd",
+  path.join(linkDir, "diamond", "main.ts"),
+  "diamond-abs",
+  "b.ll",
+  `; ModuleID = '${path.join(linkDir, "diamond", "b.ts")}'`
+);
+
+// The same rule for a `nish/` specifier, and it is deliberately a *different*
+// rule: a standard-library module does not resolve against the importer, it
+// resolves against the package this compiler shipped in, so its name is
+// package-relative and depends on neither the importer nor the cwd. Naming it
+// from the importer was the same string under a relative entry and the whole
+// checkout path under an absolute one, which is why the corpus never saw it
+// and 37 rows of `--parity` did (WP19 §A3, and §A5 on why that gap keeps
+// happening). `self/std_modules.ts` writes the rule down for stage1 and its
+// comment asserts this one; this check is what keeps that sentence true.
+pinsModuleId(
+  "link/std_bare_specifier: a `nish/` module is named package-relative, whatever the entry was called",
+  path.join(linkDir, "std_bare_specifier", "main.ts"),
+  "std-bare-abs",
+  "testing.ll",
+  "; ModuleID = 'std/testing.ts'"
+);
 
 /** The `.ll` files an output directory holds, in name order. */
 const llFilesIn = (dir) =>

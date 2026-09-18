@@ -172,6 +172,34 @@ The job writes its summary line into the run summary with the date, because
 that number is a fact about the corpus on the day it was measured. A red
 result is a gate, not a flake.
 
+**And a run summary is still somewhere somebody has to look.** Running nightly
+fixes "nobody remembered to type the command"; it does not fix "nobody opened
+the run", which is the same silence one step further out — the gate goes red
+on a Tuesday and the record still reads green until somebody scrolls back
+through Actions. So the job carries its own verdict into the repository: a
+**full** run that is not green opens the issue *WP19 G1: the parity gate is
+not green*, or comments on the one already open so that a week of red is one
+thread rather than seven, and a full run that is green closes it. Two states
+open it, because both leave the day unproved — an undeclared difference, and a
+run that never reached the mode at all.
+
+Only a full run may touch that issue. A `workflow_dispatch` with an `only`
+filter reports into the job summary and nowhere else, because a green subset
+of the corpus read as a green corpus is exactly the mistake
+[§A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)
+records.
+
+**The writing is a second job, and that is a permission boundary rather than
+tidiness.** `issues: write` is the only authority this workflow needs beyond
+`contents: read`, and the job that would otherwise hold it runs `npm ci` and
+then thousands of compilations of whatever is in the tree — repository code and
+its dependency tree, with a token that can open, comment on and close issues.
+So the workflow is `contents: read`, the corpus job inherits that, and a
+`record` job that runs nothing but `gh` asks for `issues: write` for itself and
+reads the run's log as an artifact. It is also where "only a full run may touch
+the issue" now lives, as a job condition rather than a step condition: for a
+filtered run the job does not exist.
+
 Both `test` jobs need the plain tool names `clang`, `llc`, `llvm-as`, `opt`,
 `ld.lld` and `wasm-ld` on `PATH`, because `tests/run.js` and the scripts
 probe for exactly those:
