@@ -4,6 +4,8 @@
  *   node tests/self/parity.js                 the whole corpus, every variation
  *   node tests/self/parity.js --flags-only    the flag-set half alone (seconds)
  *   node tests/self/parity.js --only str_     just the programs whose path matches
+ *   node tests/self/parity.js --changed <f>   just the programs a diff's files belong to
+ *   node tests/self/parity.js --changed <f> --list   name those programs and build nothing
  *   node tests/self/parity.js --verbose       list every run, not only the differences
  *   node tests/run.js --parity                the same thing, as the suite runs it
  *
@@ -361,6 +363,60 @@ function corpus() {
   return out;
 }
 
+/**
+ * The corpus programs a diff touches, which is the bound CI's pull-request
+ * check runs under (the `parity-changed` job of `.github/workflows/ci.yml`).
+ *
+ * The whole corpus is minutes on a four-core box and half an hour on a hosted
+ * runner, and it grows with every program and every flag -- the trade
+ * `parity.yml`'s header argues against making every push wait for. What a pull
+ * request can be asked to pay for is the programs it wrote: a case a pull
+ * request adds or edits is compiled under every variation by both compilers
+ * before it can merge, which is exactly the shape the `CPtr` difference had
+ * when it reached `main` on a green pull request.
+ *
+ * A file selects a program when it is one of that program's own files. A
+ * `tests/link/<name>/` program owns everything under its directory; everywhere
+ * else a program owns its entry and its sidecars -- `foo.ts`, `foo.args`,
+ * `foo.err`, `foo.ll`, `foo.out` and the rest -- which is the `foo.` prefix.
+ * The trailing dot is what keeps `arr_pop.` from selecting `arr_pop_empty.ts`,
+ * where the substring match `--only` uses would take both.
+ *
+ * What this bound does **not** cover is a change to the compilers themselves.
+ * A `src/` or `self/` edit can move every program in the corpus, and this sees
+ * only the `self/` modules the diff happens to touch -- which it sees because
+ * those are corpus programs in their own right, not because of a rule about
+ * compiler sources. That gap is the nightly's on purpose: bounding by the diff
+ * is what buys a check a pull request can afford to wait for, and a bound that
+ * expanded to the whole corpus on any compiler edit would be the unbounded
+ * check under another name.
+ */
+function changedPrograms(rows, paths) {
+  const slash = (p) => p.split(path.sep).join("/");
+  const owners = rows.map((row) => ({
+    name: row.name,
+    prefix: row.name.startsWith("link/")
+      ? `${slash(path.relative(root, path.dirname(row.entry)))}/`
+      : `${slash(path.relative(root, row.entry)).replace(/\.ts$/, "")}.`,
+  }));
+  const wanted = new Set();
+  for (const raw of paths) {
+    const file = slash(raw).trim();
+    if (file.length === 0) continue;
+    for (const owner of owners) if (file.startsWith(owner.prefix)) wanted.add(owner.name);
+  }
+  return wanted;
+}
+
+/** One repository-relative path per line; `#` comments and blanks ignored. */
+function readPathList(file) {
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
 function argsFor(entry) {
   const sidecar = entry.replace(/\.ts$/, ".args");
   if (fs.existsSync(sidecar)) return fs.readFileSync(sidecar, "utf8").trim().split(/\s+/).filter(Boolean);
@@ -440,17 +496,43 @@ async function main(argv) {
   const flagsOnly = argv.includes("--flags-only");
   const onlyAt = argv.indexOf("--only");
   const only = onlyAt >= 0 ? argv[onlyAt + 1] : null;
+  const changedAt = argv.indexOf("--changed");
+  const changedFile = changedAt >= 0 ? argv[changedAt + 1] : null;
+  if (changedAt >= 0 && (changedFile === undefined || !fs.existsSync(changedFile))) {
+    process.stderr.write("parity: --changed wants a file of repository-relative paths, one per line\n");
+    return 2;
+  }
+  // Read once: `corpus()` opens every program to find its `// smoke: args`
+  // marker, so walking it twice is nine hundred file reads for nothing.
+  const rows = flagsOnly ? [] : corpus();
+  const selected = changedFile === null ? null : changedPrograms(rows, readPathList(changedFile));
+
+  const runs = [];
+  if (!flagsOnly) {
+    for (const program of rows) {
+      if (only !== null && !program.name.includes(only)) continue;
+      if (selected !== null && !selected.has(program.name)) continue;
+      for (const variation of VARIATIONS) runs.push({ program, variation });
+    }
+  }
+
+  // `--list` answers "what would this run?" without building a compiler, so a
+  // caller can decide whether the run is worth starting at all. CI's
+  // pull-request job asks exactly that: a pull request whose diff touches no
+  // corpus program gets an empty list and never installs LLVM. Names on
+  // stdout, one per line and nothing else, so `wc -l` is the answer; the
+  // summary goes to stderr where it cannot be counted with them.
+  if (argv.includes("--list")) {
+    const names = [...new Set(runs.map((r) => r.program.name))];
+    for (const name of names) process.stdout.write(`${name}\n`);
+    process.stderr.write(`parity: ${names.length} program(s) selected, ${runs.length} run(s)\n`);
+    return 0;
+  }
+
   const compiler = process.env.NISH_PARITY_COMPILER ?? (await build());
   if (compiler === null) return 1;
   fresh(workRoot);
 
-  const runs = [];
-  if (!flagsOnly) {
-    for (const program of corpus()) {
-      if (only !== null && !program.name.includes(only)) continue;
-      for (const variation of VARIATIONS) runs.push({ program, variation });
-    }
-  }
   const t0 = Date.now();
   // A full run is minutes — `self/`'s modules are whole programs and every one
   // of them is compiled under every variation — so it says where it is. On

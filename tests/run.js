@@ -277,6 +277,13 @@ function stripHeader(ir) {
 // properties — and it links a stage1 binary, so it is its own run rather than a
 // block that would make every `npm test` pay for it. `tests/self/parity.js` is
 // the driver; everything after `--parity` is passed on to it.
+//
+// Where it actually runs, because a mode nobody types is a mode that measures
+// memory (wp19 §A5): nightly over the whole corpus in `.github/workflows/
+// parity.yml`, which opens an issue on a red or unmeasured run; and on every
+// pull request in `.github/workflows/ci.yml`, bounded to the corpus programs
+// the diff touches -- `--changed <file>`, passed straight through this door.
+// The flag-set half runs in every `npm test`, in section WP19 G1 below.
 if (process.argv.includes("--parity")) {
   const at = process.argv.indexOf("--parity");
   const r = spawnSync(
