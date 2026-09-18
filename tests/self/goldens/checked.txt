@@ -1691,8 +1691,8 @@ function banner(n: i32): string -> @banner [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-  local 26:7 out: string (let)
-  local 27:7 i: i32 (let)
+  local 33:7 out: string (let)
+  local 34:7 i: i32 (let)
 function widened(): i64 -> @widened [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -1700,15 +1700,15 @@ function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: banner label$i32
   stackSites=1 stackLocals=0
-  callee 39:35 banner -> @banner
-  callee 39:54 label<i32> -> @label$i32
+  callee 46:35 banner -> @banner
+  callee 46:54 label<i32> -> @label$i32
 function label<i32>(items: i32[]): string -> @label$i32 [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat
   pointer items: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 16:7 s: string (let)
-  local 17:7 i: i32 (let)
+  local 23:7 s: string (let)
+  local 24:7 i: i32 (let)
 program tests/cases/div_checked.ts
 module tests/cases/div_checked.ts (entry)
 function div(a: i32, b: i32): i32 -> @div

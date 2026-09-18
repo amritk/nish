@@ -9,9 +9,16 @@
 // in pass 1 would print ahead of every pass-2 warning of the file for the same
 // reason, which is what the sort is really for.
 //
-// **Code.** Two analyses report at one position in `widened`, and the
-// diagnostic code is what orders them, so the pair does not depend on which of
-// the two the walk happened to run first.
+// **Code.** Two analyses report at one position in `widened`, and the code is
+// the key that separates them. This fixture pins that the tie resolves the same
+// way every run; it does not *falsify* the key, because the pair already arrives
+// in code order and the sort is stable, so dropping the key would leave the
+// golden green. None of today's nine warnings can be made to arrive at one
+// position in the reverse of code order: the two pairs that share a span are
+// each mutually exclusive, a dropped allocation by `checkArenaReassignment`'s
+// own `isQuadraticAccumulation` guard, and a surviving bounds check by needing
+// a plain identifier where a constant overflow needs a binary expression. The
+// key becomes falsifiable with the pass-1 warning it is there for.
 const label = <T>(items: T[]): string => {
   let s = "";
   let i = 0;
