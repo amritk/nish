@@ -2,8 +2,8 @@
 
 **Proposed. Nothing here is built.** [wp20-threads.md](wp20-threads.md) is the
 plan of record for *whether* and *why* — 1:1 OS threads, data races rejected at
-compile time, T0 built and the payoff measured at 3.76x on four cores (wp20
-§8). It deliberately left the surface open: "the stage that decides how much
+compile time, T0 and the partitioner built, and the payoff measured at 3.96x on
+four cores (wp20 §8). It deliberately left the surface open: "the stage that decides how much
 real work is expressible, so it is the one to prototype against a real program
 before committing to the surface". This note is that commitment, and the
 question it answers is the narrower one: **given that a Nish program must be
@@ -332,7 +332,7 @@ Its consequences, in the order they bite:
   the type, because the value would be in the wrong arena.
 - **Results come back through memory the parent owns**, which is what
   `parallelMapInto`'s `dst` is and what makes the restriction above survivable
-  rather than crippling: the numeric kernels where wp20 §8 measured 3.76x are
+  rather than crippling: the numeric kernels where wp20 §8 measured 3.96x are
   exactly this shape.
 - **Lifting the restriction is a copy at the join**, into the parent's arena,
   for a type whose size is known at the boundary. That is a later stage and it
@@ -350,14 +350,17 @@ wp20's staging puts `parallelFor` last, as the payoff that the three stages
 before it earn. Reversing that is this note's most actionable recommendation,
 and there are four arguments, of which only the first is the measurement:
 
-1. **The payoff is there and nowhere else.** wp20 §8: 3.76x at 94% efficiency
-   on four cores. Nothing in T1 to T3 produces a number at all — they produce
-   the *ability* to produce one.
+1. **The payoff is there and nowhere else.** wp20 §8: 3.96x on four cores for
+   a compute kernel and 3.97x for an allocating one that recycles its arena,
+   through the runtime partitioner that is now built. Nothing in T1 to T3
+   produces a number at all — they produce the *ability* to produce one.
 2. **It is the smallest stage, not the largest.** It needs no handle type, no
    join analysis, no `reject_thread_unjoined`, no `reject_thread_handle_escapes`,
-   and no capture rule. What it needs is the runtime partitioner, wp23 §6's
-   known callee, and the purity check the fixpoint already performs. T1 and T2
-   are strictly more machinery for strictly less measured benefit.
+   and no capture rule. What it needs is the runtime partitioner — **which has
+   landed**, as `nish_parallel_range` in `runtime/runtime_parallel.c` (wp20
+   §8d) — plus wp23 §6's known callee and the purity check the fixpoint already
+   performs. T1 and T2 are strictly more machinery for strictly less measured
+   benefit.
 3. **It answers wp20 §4 T2's own request.** That section asks for the shareable
    rule to be "prototype[d] against a real program before committing to the
    surface". A `parallelMapInto` over a benchmark kernel *is* that program, and
@@ -373,9 +376,10 @@ P1 (its narrow form, one lent buffer) and P2 (its general form).
 
 ### 8a. One thing the compiler can do that neither Rust nor Go can
 
-wp20 §8 measured that an allocating parallel body does not scale, and that the
-arena discipline in the body is worth **4.2x** while the threads over it are
-worth 1.5x. That is a fact about a program that this compiler can *see*: the
+wp20 §8 measured that arena discipline in a parallel body is worth about **3x**
+of wall clock and three orders of magnitude of peak memory — 1.37 GiB against
+1.8 MB for the same source — independently of how many cores the region gets.
+That is a fact about a program that this compiler can *see*: the
 fixpoint knows whether the body allocates, and the `performance` diagnostic
 class already exists (WP15 item 2, the `NL9xxx` band, `--json`,
 `--no-warn-performance`).
@@ -389,10 +393,9 @@ on the way there:
 ```
 warning[NL9xxx]: the body of this `parallelMapInto` allocates per element
   --> src/index.ts:212:3
-   = `scoreLine` returns i32 but allocates 1 string per call, so the region
-     will be bound by memory rather than by cores (measured: arena discipline
-     is worth 4.2x on an allocating loop and the threads over it 1.5x --
-     wp20 §8)
+   = `scoreLine` returns i32 but allocates 1 string per call: about 3x of wall
+     clock and 780x of peak resident memory against the same body with the
+     arena recycled (measured, wp20 §8a)
    = rewrite: compute over the bytes in place, or `Arena.reset()` per chunk
      inside the body
 ```
@@ -417,9 +420,10 @@ whole-program pass and the warning class were both built for other reasons.
   deferred (WP15 item 8). Channels can ship without it; `select` should wait
   for a program that needs it.
 - **A thread pool a program can configure.** A knob before a measurement. The
-  partitioner picks a thread count, and the scaling curve wp20 §8 measured —
-  which flattens at two threads for an allocating body and holds to four for a
-  compute one — is the measurement that would justify exposing one.
+  partitioner picks `nish_cpu_count()` and caps at 64, and the scaling wp20 §8
+  measured — within a few per cent of linear to four cores on all three
+  kernels — is the measurement that would have to stop holding before a knob is
+  worth its documentation.
 - **`Atomic<T>` as the first escape hatch.** wp20 §6's argument stands: an
   escape hatch should be designed after the rule it escapes has met a real
   program. `AtomicI32` is in §10's declaration file to prove it is *spellable*,

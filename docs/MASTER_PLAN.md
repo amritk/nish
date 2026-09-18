@@ -781,34 +781,39 @@ measured in [wp20-threads.md](wp20-threads.md) §4 T0. The four stages that add
 rules to LANGUAGE.md cannot land before M4 without delaying the freeze, and are
 1.1 scope by default.
 
-**What has changed is that the payoff is no longer a prediction.** wp20 §4 T4
-and §7 both said the parallel win should be measured on a prototype before
-T1's surface was designed, and it now has been
-([wp20-threads.md](wp20-threads.md) §8): three kernels compiled by the ordinary
-compiler to the C ABI and a pthreads driver splitting one fixed amount of work
-across four physical cores. A compute kernel returns **3.76x at 94%
-efficiency**, and netted against the binary a program would build today —
-`--threads` costs nothing at all when nothing touches the arena — **3.81x**.
-That is the largest number left anywhere in this plan: the whole of the WP15
+**The payoff is no longer a prediction, and the partitioner under it is built.**
+wp20 §4 T4 and §7 both said the parallel win should be measured before T1's
+surface was designed, and it has been twice — once on an ad-hoc driver and then
+through `runtime/runtime_parallel.c`, the third translation unit that landed as
+the stage under WP29's surface ([wp20-threads.md](wp20-threads.md) §8). Three
+kernels compiled to the C ABI by the ordinary compiler, one fixed amount of
+work, four physical cores: **3.96x** for a compute kernel, **3.09x** for an
+allocating one, **3.97x** for the same allocating one with its arena recycled.
+That is the largest number left anywhere in this plan — the whole of the WP15
 list above tops out at 2.48x for its one remaining large item and runs to a few
-per cent for the typical one, so T1 and T2 are worth building on a measurement
+per cent for the typical one — so T1 and T2 are worth building on a measurement
 and not only on the soundness argument.
 
-The prototype's second finding is the one the note did not expect, and it
-changes what T4 has to be. **An allocating body's scaling is decided by its
-arena discipline, not by the thread count.** The same loop returns 3.10x with
-the arena left to grow and **1.86x** once `Arena.reset()` recycles it every
-4,096 objects — and the recycling on its own is worth **4.2x**, so the best
-configuration measured beats the naive one by 6.4x of which only 1.5x is the
-threads. Part of the residual is `malloc` contention over arena chunks and that
-part is measured (the reset interval moves 1.87x to 1.57x); the rest, with the
-batch provably inside one chunk so that no `malloc` happens at all, is not
-explained by this prototype and is named as such rather than guessed. So
-`parallelFor` needs an arena story beside its partitioning story, the
-per-thread arena teardown turns out to exist already and needs no new runtime
-entry point, and `--threads` should become implied by the language surface
+The second finding is that **arena discipline and cores are independent
+multipliers and a program gets the product**: recycling the arena is worth
+about 3x of wall clock on its own and three orders of magnitude of peak
+resident memory (1.37 GiB against 1.8 MB for the same source), so the best
+configuration beats the naive one by **12x**, of which about 3x is the body.
+Fix the body first, then add threads — not because threads stop working on an
+allocating body, but because three of those twelve times are free. So a
+`parallelFor` wants an arena story beside its partitioning story; the
+per-thread arena teardown turns out to exist already and needed no new runtime
+entry point; and `--threads` should become implied by the language surface
 rather than requested beside it, because a program that never spawns should not
-pay the 1.10x–1.22x. **Threads are also now sequenced ahead of WP28's compat
+pay the 1.10x–1.22x it costs to be able to.
+
+wp20 §8b is a correction kept visible rather than folded in: an earlier draft
+of that section reported the recycled kernel at 1.86x, argued that an
+allocating body's scaling collapses, and blamed part of it on arena chunk
+churn. Re-measured through the real entry point the kernel scales 3.97x, the
+chunk-churn sweep is flat, and the limiter was the prototype's own driver — its
+scaling curve was non-monotonic, which should have been read as a signal at the
+time. A prototype's scaffolding is part of what it measures. **Threads are also now sequenced ahead of WP28's compat
 `async`**, which is notation over this engine rather than an engine of its own;
 that decision is recorded in both notes.
 

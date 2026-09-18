@@ -37,6 +37,12 @@ nish_str *nish_str_from_i64(int64_t);
 nish_str *nish_str_from_f64(double);
 int64_t nish_str_index_of(const nish_str *, const nish_str *);
 double nish_random(void);
+/* runtime_parallel.c. Declared here like every other symbol this file calls:
+   the test compiles against the same private copy of the ABI the rest of it
+   uses, so a drift between the two shows up as a link error. */
+typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+int64_t nish_cpu_count(void);
+void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
@@ -86,6 +92,110 @@ static void expect_parse(const char *input, int32_t mode, const char *want) {
  * seed word, and would make any equality assertion here a test of the clock.
  * What the thread-local seed buys is that neither thread's draw can tear the
  * other's state; the range check is what this file can honestly say about it. */
+/* The chunk table `test_parallel_common` fills, and the mutex that makes filling
+   it from several chunks at once well defined. Declared before the tests and
+   defined for both configurations so the sequential build compiles the same
+   assertions rather than a second copy of them. */
+#define NISH_PAR_TEST_MAX 64
+#ifdef NISH_THREADS
+#include <pthread.h>
+static pthread_mutex_t par_lock = PTHREAD_MUTEX_INITIALIZER;
+#define PAR_LOCK() pthread_mutex_lock(&par_lock)
+#define PAR_UNLOCK() pthread_mutex_unlock(&par_lock)
+#else
+#define PAR_LOCK() ((void)0)
+#define PAR_UNLOCK() ((void)0)
+#endif
+static void par_record_chunk(int64_t lo, int64_t hi);
+
+/* ---- Parallel ranges (runtime_parallel.c) -----------------------------------
+ *
+ * Compiled in both configurations, because the entry point exists in both: with
+ * `-DNISH_THREADS` the chunks run on their own threads and without it the whole
+ * range runs on the calling one, and everything asserted here is true either
+ * way. What only the threaded build can check is in `test_parallel_threads`.
+ *
+ * Every chunk writes only its own indices, which is the precondition the
+ * partition exists to provide, so nothing below needs a lock to be
+ * deterministic. */
+#define PAR_N 10000
+static int par_seen[PAR_N];
+static int64_t par_chunks;
+static int64_t par_lo_of_chunk[NISH_PAR_TEST_MAX];
+static int64_t par_hi_of_chunk[NISH_PAR_TEST_MAX];
+
+static void par_record_chunk(int64_t lo, int64_t hi) {
+  PAR_LOCK();
+  if (par_chunks < NISH_PAR_TEST_MAX) {
+    par_lo_of_chunk[par_chunks] = lo;
+    par_hi_of_chunk[par_chunks] = hi;
+  }
+  par_chunks++;
+  PAR_UNLOCK();
+}
+
+static void par_count_body(int64_t lo, int64_t hi, void *ctx) {
+  (void)ctx;
+  for (int64_t i = lo; i < hi; i++) par_seen[i]++;
+  /* The chunk table is the one thing here two chunks share, so it is the one
+     thing that needs the lock. Under a sequential build there is no contention
+     and the lock is still correct. */
+  par_record_chunk(lo, hi);
+}
+
+static void test_parallel_common(void) {
+  memset(par_seen, 0, sizeof par_seen);
+  par_chunks = 0;
+  nish_parallel_range(par_count_body, NULL, PAR_N, 1);
+  /* Every index exactly once: a partition, not a cover and not a sample. */
+  for (int i = 0; i < PAR_N; i++) assert(par_seen[i] == 1);
+  assert(par_chunks >= 1);
+  /* The chunks are contiguous, non-empty, and cover [0, PAR_N) with no gap and
+     no overlap -- sorted by `lo`, since they are recorded in completion order. */
+  int64_t n = par_chunks;
+  for (int64_t i = 0; i < n; i++)
+    for (int64_t j = i + 1; j < n; j++)
+      if (par_lo_of_chunk[j] < par_lo_of_chunk[i]) {
+        int64_t tl = par_lo_of_chunk[i], th = par_hi_of_chunk[i];
+        par_lo_of_chunk[i] = par_lo_of_chunk[j];
+        par_hi_of_chunk[i] = par_hi_of_chunk[j];
+        par_lo_of_chunk[j] = tl;
+        par_hi_of_chunk[j] = th;
+      }
+  assert(par_lo_of_chunk[0] == 0);
+  assert(par_hi_of_chunk[n - 1] == PAR_N);
+  int64_t longest = 0, shortest = PAR_N;
+  for (int64_t i = 0; i < n; i++) {
+    assert(par_hi_of_chunk[i] > par_lo_of_chunk[i]);
+    if (i > 0) assert(par_lo_of_chunk[i] == par_hi_of_chunk[i - 1]);
+    int64_t len = par_hi_of_chunk[i] - par_lo_of_chunk[i];
+    if (len > longest) longest = len;
+    if (len < shortest) shortest = len;
+  }
+  /* The remainder is spread one element at a time, so no chunk is more than one
+     element longer than any other -- which is what keeps the last worker from
+     being the one everybody waits for. */
+  assert(longest - shortest <= 1);
+
+  /* An empty or negative range runs the body zero times rather than once with
+     an empty range, so a caller need not special-case it. */
+  memset(par_seen, 0, sizeof par_seen);
+  par_chunks = 0;
+  nish_parallel_range(par_count_body, NULL, 0, 1);
+  nish_parallel_range(par_count_body, NULL, -5, 1);
+  assert(par_chunks == 0);
+
+  /* A grain coarser than the range asks for one chunk, whatever the machine
+     has: dividing four elements eight ways is all overhead. */
+  memset(par_seen, 0, sizeof par_seen);
+  par_chunks = 0;
+  nish_parallel_range(par_count_body, NULL, 4, 1000);
+  assert(par_chunks == 1);
+  assert(par_lo_of_chunk[0] == 0 && par_hi_of_chunk[0] == 4);
+
+  assert(nish_cpu_count() >= 1);
+}
+
 #ifdef NISH_THREADS
 #include <pthread.h>
 
@@ -120,6 +230,100 @@ static void *thread_body(void *unused) {
   /* The worker owns its chunks, so it frees them; the parent's are untouched. */
   nish_free_arena();
   return NULL;
+}
+
+/* What only the threaded build can check: that the range was actually divided,
+   that each worker allocated in its own arena, and that a nested region does
+   not multiply the thread count. */
+static pthread_t par_tid[NISH_PAR_TEST_MAX];
+static uint64_t par_used_at_entry[NISH_PAR_TEST_MAX];
+static int64_t par_inner_chunks;
+
+static void par_thread_body(int64_t lo, int64_t hi, void *ctx) {
+  (void)ctx;
+  /* Allocate before recording, so `used_at_entry` is read on a worker that has
+     already touched its arena and the parent's total is still untouched. */
+  uint64_t at_entry = nish_arena_used();
+  char *block = nish_alloc_struct(64);
+  block[0] = (char)(lo & 0x7f);
+  PAR_LOCK();
+  if (par_chunks < NISH_PAR_TEST_MAX) {
+    par_lo_of_chunk[par_chunks] = lo;
+    par_hi_of_chunk[par_chunks] = hi;
+    par_tid[par_chunks] = pthread_self();
+    par_used_at_entry[par_chunks] = at_entry;
+  }
+  par_chunks++;
+  PAR_UNLOCK();
+}
+
+static void par_inner_body(int64_t lo, int64_t hi, void *ctx) {
+  (void)lo;
+  (void)hi;
+  (void)ctx;
+  PAR_LOCK();
+  par_inner_chunks++;
+  PAR_UNLOCK();
+}
+
+static void par_outer_body(int64_t lo, int64_t hi, void *ctx) {
+  (void)ctx;
+  /* A body that divides again. The guard is thread-local, so each of the outer
+     chunks sees itself as already inside a region and the inner range comes
+     back as exactly one chunk. */
+  par_record_chunk(lo, hi);
+  nish_parallel_range(par_inner_body, NULL, 1000, 1);
+}
+
+static void test_parallel_threads(void) {
+  nish_free_arena();
+  nish_str *parent = lit("parent string");
+  char *parent_block = nish_alloc_struct(64);
+  parent_block[0] = 'p';
+  uint64_t used_before = nish_arena_used();
+
+  par_chunks = 0;
+  nish_parallel_range(par_thread_body, NULL, PAR_N, 1);
+  int64_t n = par_chunks;
+  assert(n >= 1 && n <= nish_cpu_count());
+  /* On a machine with more than one core the range is actually divided, which
+     is the whole point and the one thing a sequential build cannot assert. */
+  if (nish_cpu_count() > 1) assert(n > 1);
+
+  /* Chunk 0 runs on the calling thread, so exactly one chunk's thread id is
+     this one: N-way parallelism costs N-1 spawns. */
+  int64_t on_caller = 0;
+  for (int64_t i = 0; i < n; i++)
+    if (pthread_equal(par_tid[i], pthread_self())) on_caller++;
+  assert(on_caller == 1);
+
+  /* Every chunk but the caller's began with an empty arena, because the arena
+     is per thread (WP20 T0) -- and the caller's began with what the parent had
+     bumped, which is the asymmetry runtime_parallel.c documents rather than
+     hides. */
+  for (int64_t i = 0; i < n; i++) {
+    if (pthread_equal(par_tid[i], pthread_self())) assert(par_used_at_entry[i] == used_before);
+    else assert(par_used_at_entry[i] == 0);
+  }
+
+  /* The parent's arena came through with only its own chunk's allocation added,
+     and its contents intact: every worker freed its own and reached none of
+     the parent's. */
+  assert(nish_arena_used() == used_before + 64);
+  assert(parent_block[0] == 'p');
+  expect_str(parent, "parent string", "the parent's string survives a parallel range");
+
+  /* Nesting runs sequentially: one inner chunk per outer chunk, never
+     cpu_count() of them, so the thread count does not multiply by depth. */
+  par_chunks = 0;
+  par_inner_chunks = 0;
+  nish_parallel_range(par_outer_body, NULL, PAR_N, 1);
+  /* One inner chunk per outer chunk, rather than cpu_count() of them each, so
+     the thread count does not multiply by the nesting depth. */
+  assert(par_chunks > 0);
+  assert(par_inner_chunks == par_chunks);
+
+  nish_free_arena();
 }
 
 static void test_threads(void) {
@@ -420,8 +624,13 @@ int main(void) {
 
   nish_free_arena();
   assert(nish_arena.chunks == NULL && nish_arena.cap == 0);
+  /* The partition's contract holds in both configurations, so it is asserted in
+     both; only the threaded build can check that it actually divided. */
+  test_parallel_common();
+  nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();
+  test_parallel_threads();
   puts("runtime_test: ok (threads)");
 #else
   puts("runtime_test: ok");

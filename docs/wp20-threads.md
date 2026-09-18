@@ -1,11 +1,17 @@
 # WP20: Threads
 
-**T0 is built; T1 to T4 are proposed, not implemented — and the payoff T4 was
-waiting to be measured against is now measured (§8): 3.76x on four cores for a
-compute kernel at 94% efficiency, and, on an allocating one, an answer that
-depends on the body rather than on the thread count — 3.10x while the arena is
-left to grow, 1.86x once it is recycled, and the recycling itself worth 4.2x.
-Fix the body, then add threads.** This is the plan of
+**T0 is built, and so is the partitioner under T4 —
+`runtime/runtime_parallel.c`, which has no language surface and costs a program
+that does not use it nothing, byte for byte (§8d). T1 to T4's *language*
+surface is proposed, not implemented, and
+[wp29-thread-surface.md](wp29-thread-surface.md) is what it is.** The payoff T4
+was waiting to be measured against is measured (§8): **3.96x** on four cores
+for a compute kernel, **3.09x** for an allocating one and **3.97x** for the
+same allocating one with its arena recycled — and arena discipline is worth
+another ~3x on top, so the two multipliers compose to **12x** against a naive
+single-threaded build. Fix the body, then add threads. §8b is the correction of
+an earlier, worse measurement taken on an ad-hoc driver, kept visible rather
+than folded in. This is the plan of
 record for the question "how does Nish do true multithreading, like Go or
 Rust", and the shape of the answer is forced by decisions the project has
 already made rather than chosen freely. The normative rules would land in
@@ -410,16 +416,20 @@ by more than any single-thread item on the WP15 list can. That is the
 argument for the whole package, and this note asked for it to be measured on a
 prototype before T1 is designed rather than after T4 is built.
 
-**That prototype has now been run, and §8 is what it said.** In one line:
-3.76x on four cores for a compute kernel, against a WP15 list whose largest
-remaining single-thread item is worth 2.48x and whose typical one is worth a
-few per cent. The payoff is real and it is the largest number left anywhere in
-the plan. What the prototype also said, and what this section did not expect,
-is that an *allocating* body's scaling is decided by its arena discipline and
-not by T4: the same loop returns 3.10x with the arena left to grow and 1.86x
-once it is recycled, and the recycling is worth 4.2x on its own (§8a). So T4
-needs an arena story and not only a partitioning story, which is a design
-input this note did not know it had.
+**That prototype has been run, twice, and §8 is what it said.** In one line:
+**3.96x** on four cores for a compute kernel and **3.97x** for an allocating
+one whose arena is recycled, against a WP15 list whose largest remaining
+single-thread item is worth 2.48x and whose typical one is worth a few per
+cent. The payoff is real and it is the largest number left anywhere in the
+plan. The partitioner itself is built (§8d); what remains in this stage is the
+language surface, which is wp29's.
+
+What the measurement also said is that arena discipline in the body is worth
+about 3x *independently* of the cores, and three orders of magnitude of peak
+memory — so T4 wants an arena story beside its partitioning story, on memory
+rather than on scaling. §8b is the correction: an earlier draft of this section
+reported the recycled kernel at 1.86x and built a scaling argument on it, and
+the driver rather than the workload was the limiter.
 
 ## 5. Diagnostics
 
@@ -515,142 +525,185 @@ program before committing to the surface".
 
 ## 8. The T4 payoff, measured
 
-§4 T4 and §7 both asked for this before T1's surface was designed, so here it
-is. Nothing in the language spawns a thread, so the prototype is what T0 made
-possible and no more: three kernels compiled to the C ABI by the ordinary
-compiler, and a pthreads driver that splits one **fixed** amount of work across
-T threads, so the only variable is T. The programs are in §9; the machine is
-four physical cores of an Intel Xeon at 2.80 GHz with 16 GB, no SMT and no
-cgroup CPU quota, in a container — which puts a hard ceiling of 4x on every row
-below and leaves what a larger machine does unmeasured.
+§4 T4 and §7 both asked for this before T1's surface was designed. It has been
+measured twice: first on an ad-hoc pthreads driver, and then again through
+`runtime/runtime_parallel.c`, the runtime entry point that landed as the stage
+under [wp29-thread-surface.md](wp29-thread-surface.md)'s surface. **The second
+measurement corrected the first**, and §8c is that correction written out
+rather than quietly folded in, because the first is what this note said for a
+while and a reader deserves to know which number was wrong.
 
-Best of five to nine per row, thread counts interleaved run by run so a busy
-patch of machine hits all four. The absolute numbers are this box's and are not
-[BENCHMARKS.md](BENCHMARKS.md)'s; only the ratios in each row mean anything.
+Nothing in the language spawns a thread, so the programs are what T0 and the
+partitioner make possible and no more: three kernels compiled to the C ABI by
+the ordinary compiler, and a C driver that calls `nish_parallel_range` over one
+**fixed** amount of work, asking for a given number of chunks, so the chunk
+count is the only variable and every row below comes from one binary. The
+programs are in §9; the machine is four physical cores of an Intel Xeon at
+2.80 GHz with 16 GB, no SMT and no cgroup CPU quota, in a container — which
+puts a hard ceiling of 4x on every row and leaves what a larger machine does
+unmeasured. Best of five per cell. The absolute numbers are this box's and are
+not [BENCHMARKS.md](BENCHMARKS.md)'s; only the ratios mean anything.
 
-| Kernel | t=1 | t=2 | t=3 | t=4 | at 4 | efficiency |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| arithmetic — a hash chain over a range, no allocation | 971 ms | 489 ms | 325 ms | 258 ms | **3.76x** | 94% |
-| allocating — one 8-byte object per iteration, arena left to grow | 1,389 ms | 739 ms | 570 ms | 448 ms | **3.10x** | 78% |
-| the same, with `Arena.reset()` every 4,096 objects | 371 ms | 243 ms | 246 ms | 200 ms | **1.86x** | 46% |
+| Kernel | 1 chunk | 2 | 4 | at 4 |
+| --- | ---: | ---: | ---: | ---: |
+| arithmetic — a hash chain over a range, no allocation | 977 ms | 489 ms | 247 ms | **3.96x** |
+| allocating — one 8-byte object per iteration, arena left to grow | 1,323 ms | 744 ms | 428 ms | **3.09x** |
+| the same, with `Arena.reset()` every 4,096 objects | 437 ms | 216 ms | 110 ms | **3.97x** |
 
-And the other half of the question, because a thread-local arena is not free
-and T0 measured 1.48x for it on a pure-bump microbenchmark. The same kernels
-built *without* `--threads` and run on one thread, interleaved against the
-`--threads` build:
+Two kernels at essentially the ceiling and one at three quarters of it. And the
+other half of the question, because a thread-local arena is not free and T0
+measured 1.48x for it on a pure-bump microbenchmark — the same kernels built
+*without* `--threads` and run on one chunk, interleaved against the `--threads`
+build:
 
-| Kernel, one thread | without `--threads` | with | cost |
+| Kernel, one chunk | without `--threads` | with | cost |
 | --- | ---: | ---: | ---: |
 | arithmetic | 983 ms | 979 ms | none (noise) |
 | allocating, arena grows | 1,289 ms | 1,422 ms | **1.10x** |
 | allocating, arena recycled | 305 ms | 372 ms | **1.22x** |
 
-**The net figures** — what a program gains against the binary it would build
-today — are therefore **3.81x** for the compute kernel, **2.88x** for the
-allocating one, and **1.53x** for the allocating one that recycles.
+### 8a. The two multipliers compose, and that is the useful result
 
-### 8a. What the three rows say together, which is not what one row says
+Arena discipline and cores are independent, and a program gets the product:
 
-The compute kernel is the easy result and it is the one T4 was argued on: 94%
-of four cores, and a payoff larger than anything left on the WP15 list, whose
-one remaining big item is worth 2.48x and whose typical item is worth a few per
-cent.
+| | arena grows | arena recycled | discipline is worth |
+| --- | ---: | ---: | ---: |
+| 1 chunk | 1,323 ms | 437 ms | **3.03x** |
+| 4 chunks | 428 ms | 110 ms | **3.89x** |
+| **cores are worth** | **3.09x** | **3.97x** | |
 
-The two allocating rows are the interesting ones, because **they are the same
-program and they disagree**. Recycling the arena every 4,096 objects makes the
-single-threaded program **4.2x faster** (1,289 ms to 305) and makes it
-**scale far worse** (3.10x to 1.86x). Both are true and they are the same fact
-seen twice, and the cause is measured rather than supposed — peak resident set
-at four threads, by `bench/rss.c`:
+So the best configuration measured beats the naive one — arena left to grow, one
+chunk — by **12.0x**, of which about 3x is the body and about 4x is the cores.
+The practical advice is unchanged from when this section had worse numbers,
+though its reason is now different and better: **fix the body's allocation
+first, then add threads**, not because threads stop working on an allocating
+body but because three of those twelve times are free and do not need four
+cores to collect.
+
+The cause of the 3x is measured rather than supposed — peak resident set at
+four chunks, by `bench/rss.c`:
 
 | | allocated | peak RSS |
 | --- | ---: | ---: |
 | arena left to grow | 1.6 GB | **1,432,228 KB** (1.37 GiB) |
 | arena recycled every 4,096 objects | 1.6 GB | **1,828 KB** |
 
-The unbounded version spends most of its time touching a gigabyte and a third
-of memory it has never touched before, and page-fault work parallelises
-reasonably well, so it "scales" partly by having something slow to divide. Take
-the slow part away — the same program, 800 times less resident — and what is
-left is a very short loop, a bump and two stores and two loads, that saturates
-something shared at two threads.
+Three orders of magnitude of peak memory between a program that resets its
+arena and one that does not, for the same source and the same output. That
+table is this language's central memory trade in two rows, and it belongs in
+whatever T4 documents about `parallelFor` bodies.
 
-That table is also worth reading on its own, because it is this language's
-central memory trade in two rows: the same source, the same output, and three
-orders of magnitude of peak memory between a program that resets its arena and
-one that does not. It belongs in whatever T4 documents about `parallelFor`
-bodies.
+### 8b. The correction: what the ad-hoc driver got wrong
 
-The honest ordering for a user follows directly, and it is worth stating in
-this note because it is what a `parallelFor` will be judged on: **fix the
-body's allocation first, then add threads.** In absolute terms the best
-configuration measured (recycled arena, four threads, 200 ms) beats the naive
-one (unbounded arena, one thread, no `--threads`, 1,289 ms) by **6.4x**, and
-4.2x of that is arena discipline while 1.5x is the threads. A `parallelFor`
-that returns 1.5x over a badly written body will read as a disappointing
-feature when the 4.2x sitting next to it was never taken.
+The first version of this section reported the recycled kernel at **1.86x** on
+four threads and built an argument on it — that an allocating body's scaling
+collapses, that arena chunk churn was part of the cause (an interval sweep
+moving 1.87x to 1.57x as the reset interval grew), and that a residual beyond
+that was unexplained. **Re-measured through `nish_parallel_range`, none of that
+holds.** The recycled kernel scales 3.97x, the interval sweep is flat, and
+there is no residual to explain:
 
-### 8b. What the saturation is, and what is still unexplained
+| reset interval | bytes per batch | 1 chunk | 4 chunks | at 4 | ad-hoc driver said |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,024 objects | 8 KB — never leaves one chunk | 432 ms | 113 ms | **3.82x** | 1.87x |
+| 4,096 | 32 KB — still one chunk | 437 ms | 110 ms | **3.97x** | 1.86x |
+| 65,536 | 512 KB — eight chunks freed per reset | 376 ms | 97 ms | **3.88x** | 1.57x |
 
-Partly chunk churn, and that part is measured. `Arena.reset()` keeps the newest
-chunk and frees the rest, and chunks are `malloc`ed at 64 KB, so the reset
-interval decides how much the four threads contend inside the C library rather
-than inside anything this project wrote:
+The limiter was the driver, not the workload. Three things say so. The old
+curve was **non-monotonic** — 243 ms at two threads and 246 at three — which is
+not what a saturating workload looks like and was a signal that should have
+been read as one at the time. The new binary's *sequential* path is **slower**
+than the old one's (437 ms against 371), so this is not the new driver being
+better optimised; only the parallel path moved. And `-pthread`, which
+`scripts/build.sh --threads` now passes and the prototype did not, accounts for
+about 8% of the gap (112 ms against 121) and so for almost none of it.
 
-| reset interval | bytes per batch | t=1 | t=4 | at 4 |
-| ---: | ---: | ---: | ---: | ---: |
-| 1,024 objects | 8 KB — never leaves one chunk | 365 ms | 195 ms | 1.87x |
-| 4,096 | 32 KB — still one chunk | 371 ms | 200 ms | 1.86x |
-| 65,536 | 512 KB — eight chunks freed per reset | 403 ms | 256 ms | 1.57x |
+What exactly the old driver cost is not established, and this note is not going
+to spend more measurements on a program that has been replaced. The lesson
+worth keeping is procedural: a prototype's scaffolding is part of what it
+measures, and "unexplained residual" was the right label to put on it — the
+residual was real, and it was in the scaffolding.
 
-So chunk churn accounts for the 1.87x → 1.57x spread and **not** for the base:
-with the batch provably inside a single chunk, so that no `malloc` or `free`
-happens in the steady state at all, four threads still return only 1.87x. That
-residual is not explained by this prototype. The candidate is store throughput
-— every iteration writes 8 fresh bytes and reads them back, and four cores
-sharing one L2 and one memory controller is exactly where that stops scaling —
-and the experiment that would separate it is a kernel with the same allocation
-pattern and more arithmetic per object, which is a measurement for whoever
-builds T4 rather than one this note needs.
+Two things the first measurement got right and that survive: the arithmetic
+kernel's near-linear scaling, and the memory table above, which is a
+measurement of allocation rather than of timing and was never the driver's to
+distort.
 
-### 8c. Design inputs the prototype turned up
+### 8c. Design inputs the measurement turned up
 
 Four, and none of them is a number:
 
-1. **The arena's per-thread teardown already exists.** The worker calls
-   `nish_free_arena()` before returning and frees *its own* arena, leaving the
-   parent's untouched — the thread-local storage class does that for free. T1's
-   trampoline therefore has its cleanup path available today and needs no new
-   runtime entry point, which removes the one thing §3.5's 69-byte budget was
-   most likely to be spent on.
-2. **`parallelFor` needs an arena story, not just a partitioning story.** §8a is
-   the whole argument: the body's allocation discipline moves the result by more
-   than the thread count does. Whether T4 recycles per work item, per partition,
-   or leaves it to the body is a design decision this note previously did not
-   know it had to make.
-3. **`--threads` is the wrong default even now.** The 1.10x to 1.22x at one
-   thread is the price of being *able* to spawn, and a program that never spawns
-   should not pay it. T1 should therefore imply the flag from the language
-   surface rather than ask for it beside it: a program that names
-   `Thread.spawn` gets the thread-local arena, one that does not gets today's
-   binary, byte for byte.
+1. **The arena's per-thread teardown already exists.** A worker frees *its own*
+   arena before returning and leaves the parent's untouched — the thread-local
+   storage class does that for free — so the partitioner needed no new runtime
+   entry point for cleanup, which removes the thing §3.5's 69-byte budget was
+   most likely to be spent on. `runtime_parallel.c` does exactly this and the
+   unit test asserts the parent comes through the join byte for byte.
+2. **A `parallelFor` still wants an arena story, on memory rather than on
+   speed.** §8b retires the scaling argument for this, but §8a's RSS table
+   replaces it with a better one: an undisciplined body costs three orders of
+   magnitude of peak memory and about 3x of wall clock, both of which the
+   compiler can see coming ([wp29-thread-surface.md](wp29-thread-surface.md)
+   §8a is the warning).
+3. **`--threads` is the wrong default.** The 1.10x to 1.22x at one chunk is the
+   price of being *able* to spawn, and a program that never spawns should not
+   pay it. T1 should imply the flag from the language surface rather than ask
+   for it beside it: a program that names a parallel construct gets the
+   thread-local arena, one that does not gets today's binary, byte for byte.
 4. **The scaling is measured on kernels, not on `BENCHMARKS.md`.** `nbody` and
    `spectral` are the shapes §4 T4 names, and neither has been partitioned,
-   because nothing in the language can partition it. The 3.76x is what the
-   runtime and the codegen allow; what a `parallelFor` over `nbody` returns is
-   T4's own acceptance test and is still unmeasured.
+   because nothing in the language can partition one. What a `parallelFor` over
+   `nbody` returns is T4's own acceptance test and is still unmeasured.
 
-## 9. Appendix: the prototype, in full
+### 8d. The partitioner, as built
 
-§8's measurements are the only new facts in this note since T0 landed, so the
-programs are here rather than only reported. Nothing below is a test case: it
-is a spike, it lives in this appendix by the same convention
-[wp24-async.md](wp24-async.md) §11 follows, and it uses no language feature
-that does not exist today.
+`runtime/runtime_parallel.c` is the third translation unit and the stage every
+row above now runs through:
+
+```c
+typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+int64_t nish_cpu_count(void);
+void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
+```
+
+It partitions `[0, len)` into contiguous chunks, at most one element apart in
+size so that no worker is the one everybody waits for, at most
+`nish_cpu_count()` of them and never more than `len / grain`. Chunk 0 runs on
+the calling thread, so N-way parallelism costs N-1 spawns. A chunk whose thread
+could not be created runs on the calling thread too, so running short of
+threads costs speed and never correctness. A body that itself calls
+`nish_parallel_range` runs its range on one thread, because the nesting guard
+is thread-local and there is no scheduler here.
+
+It compiles in **both** configurations: without `-DNISH_THREADS`, and on WASI
+where there are no threads, the same entry point runs the whole range on the
+calling thread, so the flag decides whether the work is divided and never
+whether the function exists. Its own `.text*` budget is in `tests/run.js` —
+**26 bytes** without the macro and **456** with it, against ceilings of 256 and
+512 — and it is a third file rather than a third of `runtime_os.c` precisely
+because 456 bytes of partitioner does not fit in the 29 bytes that file had
+left, and borrowing the room would have moved the number a reader sees for "the
+operating-system surface" for a reason that has nothing to do with the
+operating system.
+
+What it costs a program that does not use it: **nothing, byte for byte.**
+`examples/hello.ts` at the `size` profile is 4,680 bytes with the file linked
+and 4,680 without, and the two binaries are identical — `--gc-sections` drops
+every function no program calls, whichever translation unit defined it. There
+is no language surface, so no rule of [LANGUAGE.md](LANGUAGE.md) moves and
+nothing in either compiler changed.
+
+## 9. Appendix: the kernels and the driver, in full
+
+§8's measurements are the facts this note rests on, so the programs are here
+rather than only reported, by the convention
+[wp24-async.md](wp24-async.md) §11 follows. Nothing below is a test case — the
+partitioner's own tests are in `tests/runtime_test.c` — and nothing here uses a
+language feature that does not exist.
 
 The kernels, compiled with `--no-stack-alloc` so that the two allocating ones
-actually reach the arena rather than being turned into registers by WP6 — which
-is what they would otherwise be, and is a finding of its own:
+actually reach the arena rather than being turned into registers by WP6, which
+is what they would otherwise be and is a finding of its own:
 [wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 prices that
 transformation at 8.76x.
 
@@ -699,12 +752,14 @@ export function allocRangeScoped(lo: i32, hi: i32): i32 {
 }
 ```
 
-The driver, which is the only part that knows there is more than one thread:
+The driver, which is the only part that knows there is more than one thread —
+and it knows it only by naming `nish_parallel_range`:
 
 ```c
-/* T4 prototype driver: split one fixed amount of work across T pthreads and
-   time the whole thing, so the only variable is T. */
-#include <pthread.h>
+/* The wp20 §8 kernels again, driven by the real runtime entry point instead of
+   an ad-hoc pthreads loop: if runtime_parallel.c is the thing the prototype
+   predicted, these numbers are the prototype's. */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -713,42 +768,36 @@ The driver, which is the only part that knows there is more than one thread:
 extern int sumRange(int lo, int hi);
 extern int allocRange(int lo, int hi);
 extern int allocRangeScoped(int lo, int hi);
+
+typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+int64_t nish_cpu_count(void);
+void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 void nish_free_arena(void);
 
-typedef struct { int lo, hi, out, alloc; } job;
+static int mode;
+static int acc_out;
 
-static void *worker(void *p) {
-  job *j = (job *)p;
-  j->out = j->alloc == 2 ? allocRangeScoped(j->lo, j->hi)
-                        : j->alloc ? allocRange(j->lo, j->hi)
-                                   : sumRange(j->lo, j->hi);
-  nish_free_arena(); /* this thread's arena, not the parent's */
-  return 0;
+static void body(int64_t lo, int64_t hi, void *ctx) {
+  (void)ctx;
+  int r = mode == 2 ? allocRangeScoped((int)lo, (int)hi)
+        : mode == 1 ? allocRange((int)lo, (int)hi)
+                    : sumRange((int)lo, (int)hi);
+  __atomic_fetch_xor(&acc_out, r, __ATOMIC_RELAXED);
 }
 
 int main(int argc, char **argv) {
-  int threads = atoi(argv[1]);
-  int total = atoi(argv[2]);
-  int alloc = argc > 3 ? (strcmp(argv[3], "scoped") == 0 ? 2 : strcmp(argv[3], "alloc") == 0) : 0;
-  job jobs[16];
-  pthread_t th[16];
+  int64_t total = atoll(argv[1]);
+  mode = argc > 2 ? (strcmp(argv[2], "scoped") == 0 ? 2 : strcmp(argv[2], "alloc") == 0) : 0;
+  /* grain: ask for at most cpu_count chunks, so the partition matches the
+     prototype's one-chunk-per-thread split exactly. */
+  int64_t chunks = argc > 3 ? atoll(argv[3]) : nish_cpu_count();
+  int64_t grain = (total + chunks - 1) / chunks;
   struct timespec a, b;
-  int per = total / threads;
   clock_gettime(CLOCK_MONOTONIC, &a);
-  for (int t = 0; t < threads; t++) {
-    jobs[t].lo = t * per;
-    jobs[t].hi = (t + 1) * per;
-    jobs[t].alloc = alloc;
-    pthread_create(&th[t], 0, worker, &jobs[t]);
-  }
-  int acc = 0;
-  for (int t = 0; t < threads; t++) {
-    pthread_join(th[t], 0);
-    acc ^= jobs[t].out;
-  }
+  nish_parallel_range(body, NULL, total, grain);
   clock_gettime(CLOCK_MONOTONIC, &b);
   double ms = (b.tv_sec - a.tv_sec) * 1000.0 + (b.tv_nsec - a.tv_nsec) / 1e6;
-  printf("%s t=%d %.0f ms acc=%d\n", alloc == 2 ? "scoped" : alloc ? "alloc" : "arith", threads, ms, acc);
+  printf("%s c=%lld %.0f ms acc=%d\n", mode == 2 ? "scoped" : mode ? "alloc" : "arith", (long long)chunks, ms, acc_out);
   return 0;
 }
 ```
@@ -758,11 +807,16 @@ was taken:
 
 ```bash
 nish kernel.ts --no-stack-alloc -o kernel.ll
-scripts/build.sh kernel.ll driver.c runtime/runtime.c -o t4 --profile speed --threads
-./t4 <threads> 800000000           # the arithmetic kernel
-./t4 <threads> 200000000 alloc     # the arena left to grow
-./t4 <threads> 200000000 scoped    # the arena recycled every 4,096 objects
+scripts/build.sh kernel.ll driver.c runtime/runtime.c -o par --profile speed --threads
+./par 800000000 arith  <chunks>      # the arithmetic kernel
+./par 200000000 alloc  <chunks>      # the arena left to grow
+./par 200000000 scoped <chunks>      # the arena recycled every 4,096 objects
+rss ./par 200000000 alloc 4
 # and the same three from a build without --threads, for §8's cost table.
 # §8b's interval table is the `scoped` kernel with 4095 replaced by 1023 and
 # by 65535.
 ```
+
+`scripts/build.sh` pairs `runtime_os.c` and `runtime_parallel.c` with the
+`runtime.c` the command line names, which is why the driver links against a
+partitioner it never mentions compiling.
