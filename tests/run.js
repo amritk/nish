@@ -205,8 +205,46 @@ function check(name, ok, detail) {
 const has = (tool) => spawnSync("which", [tool]).status === 0;
 const HAS_LLVM_AS = has("llvm-as");
 const HAS_CLANG = has("clang");
+
 /** `-g` end to end: the linked binary is read with the dumper when there is one. */
 const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump");
+
+/**
+ * Print the run's accounting and exit with its verdict.
+ *
+ * It is a function because there are now two places a run can end: the last
+ * check in the file, and `--batch-gate-only` below, which stops after the
+ * batched-compile gate. Both have to report the same way, because the whole
+ * value of this line is that a reader can trust it -- and a narrow run that
+ * printed a bare `N passed` would read exactly like a full one.
+ *
+ * The summary counts what did *not* run as well as what did. A skip is not a
+ * failure -- a contributor without LLVM is meant to be able to run this -- but
+ * it is also not a pass, and the difference decides how much a green run is
+ * worth. `.claude/orientation.md` and `.claude/node.md` say so in prose; this
+ * says it in the output, where it is read.
+ */
+const summarise = () => {
+  const summary = [`${passes} passed`, `${failures} failed`];
+  if (skipped.length > 0) summary.push(`${skipped.length} skipped`);
+  console.log(`\n${summary.join(", ")}.`);
+
+  if (skipped.length > 0) {
+    const TOOLCHAIN = ["clang", "llc", "llvm-as", "opt", "ld.lld", "wasm-ld"];
+    const absent = TOOLCHAIN.filter((tool) => !has(tool));
+    console.log(
+      absent.length > 0
+        ? `\nDEGRADED: ${absent.length} of the ${TOOLCHAIN.length} LLVM 18 tools are missing (${absent.join(", ")}), so ` +
+            `${skipped.length} section(s) were skipped rather than run. This result does NOT prove the toolchain-dependent\n` +
+            "checks pass: assembly, native round trips, linking, the interop addons, the self-hosting oracles and the\n" +
+            "differential suite are among them. Install LLVM 18 (docs/INSTALL.md) and run again before trusting a green run."
+        : `\nNote: ${skipped.length} section(s) were skipped for reasons other than a missing LLVM toolchain ` +
+            "(see the SKIP lines above); everything they cover is unproven by this run."
+    );
+  }
+
+  process.exit(failures === 0 ? 0 : 1);
+};
 
 /**
  * The DWARF producer, with the version replaced by a placeholder.
@@ -279,7 +317,27 @@ const only = process.argv[2] !== undefined && !process.argv[2].startsWith("-") ?
  * `gateCases`). Minutes rather than seconds, so it is asked for rather than
  * assumed; CI's `batch-parity` job is what asks on every pull request.
  */
-const VERIFY_BATCH = process.argv.includes("--verify-batch");
+const VERIFY_BATCH = process.argv.includes("--verify-batch") || process.argv.includes("--batch-gate-only");
+
+/**
+ * Stop after the batched-compile gate, and say so in the summary.
+ *
+ * `--verify-batch` changes exactly one thing about this run: the set at the
+ * gate below. Every other check in this file is byte for byte the check the
+ * `test` job already ran on the same commit -- so CI's `batch-parity` job was
+ * paying for the whole suite a second time (measured 18 m 21 s against the
+ * `test` job's 15 m 42 s) to widen one gate, and it is the longest job in the
+ * workflow, which makes it the wall clock.
+ *
+ * The narrowing is only sound because of what it does *not* touch. Section A
+ * still runs, because the gate reads `batched` out of it and compares it
+ * against the CLI; the toolchain is still installed, so the goldens still
+ * assemble and run natively rather than skipping underneath the gate. What
+ * stops is everything after the gate, and the `skip` below is what keeps that
+ * honest: this run reports as a narrow one, so nobody can read its green as the
+ * suite passing.
+ */
+const BATCH_GATE_ONLY = process.argv.includes("--batch-gate-only");
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
@@ -454,6 +512,18 @@ if (batched.size > 0) {
   for (const { name, ok, detail } of await compareWithCli(gate, batched, cli)) {
     check(`${name}: the batched compile answers what the CLI answers`, ok, detail);
   }
+}
+
+// The gate is what `--batch-gate-only` came for, so this is where such a run
+// ends. It is a `skip` and not a bare `process.exit` because the summary has to
+// name what was not run: a narrow run is not a full one, and the one thing this
+// suite will not do is report a green that claims more than it proved.
+if (BATCH_GATE_ONLY) {
+  skip(
+    "--batch-gate-only: every check after the batched-compile gate. They are the checks the `test` job runs on " +
+      "this same commit, and this run says nothing about them."
+  );
+  summarise();
 }
 
 // Every line of the register has to name a case that exists. A typo there is
@@ -7672,27 +7742,4 @@ if (HAS_CLANG && fs.existsSync(threadsLl)) {
   );
 }
 
-// The summary counts what did *not* run as well as what did. A skip is not a
-// failure -- a contributor without LLVM is meant to be able to run this -- but
-// it is also not a pass, and the difference decides how much a green run is
-// worth. `.claude/orientation.md` and `.claude/node.md` say so in prose; this
-// says it in the output, where it is read.
-const summary = [`${passes} passed`, `${failures} failed`];
-if (skipped.length > 0) summary.push(`${skipped.length} skipped`);
-console.log(`\n${summary.join(", ")}.`);
-
-if (skipped.length > 0) {
-  const TOOLCHAIN = ["clang", "llc", "llvm-as", "opt", "ld.lld", "wasm-ld"];
-  const absent = TOOLCHAIN.filter((tool) => !has(tool));
-  console.log(
-    absent.length > 0
-      ? `\nDEGRADED: ${absent.length} of the ${TOOLCHAIN.length} LLVM 18 tools are missing (${absent.join(", ")}), so ` +
-          `${skipped.length} section(s) were skipped rather than run. This result does NOT prove the toolchain-dependent\n` +
-          "checks pass: assembly, native round trips, linking, the interop addons, the self-hosting oracles and the\n" +
-          "differential suite are among them. Install LLVM 18 (docs/INSTALL.md) and run again before trusting a green run."
-      : `\nNote: ${skipped.length} section(s) were skipped for reasons other than a missing LLVM toolchain ` +
-          "(see the SKIP lines above); everything they cover is unproven by this run."
-  );
-}
-
-process.exit(failures === 0 ? 0 : 1);
+summarise();

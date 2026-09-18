@@ -16,6 +16,8 @@ comment above the `on:` block has the details.
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on three remaining measured failures rather than on cost; see below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
+| `runner` | Ubuntu, LLVM 18 | the golden corpus again, through `tests/nish/run.ts` — the harness written in Nish (`npm run test:nish`). A compiler regression fails here and in `test`; a regression in the *runner*, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
+| `batch-parity` | Ubuntu, LLVM 18 | `node tests/run.js --batch-gate-only`: every golden case compiled both through the in-process batch and through the CLI, compared byte for byte, then stopped. `npm test` gates one case per shape; this widens it to the whole corpus |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
 `.github/workflows/parity.yml` is the fourth job and does not run here: WP19
@@ -305,6 +307,124 @@ After the tests, the job compiles `examples/add.ts`, runs
 so the size of every profile (`debug`, `speed`, `size`, `wasm`) is visible on
 the run page for each OS. A `concurrency` group cancels superseded runs of
 the same branch.
+
+## Where the wall clock goes
+
+Measured on 2026-09-18, run 474 on `main` (`a89bee7`), six jobs on
+`ubuntu-latest`:
+
+| Job | Duration | The step that is nearly all of it |
+| --- | --- | --- |
+| `batch-parity` | **18 m 21 s** | the corpus compiled both ways, 18 m 05 s |
+| `test` | 15 m 42 s | `npm test`, 14 m 44 s |
+| `runner` | 6 m 08 s | the corpus through the Nish runner, 5 m 49 s |
+| `bootstrap` | 1 m 11 s | `self/` built with the seed, 51 s |
+| `lint` | 10 s | — |
+| `seeds` | 8 s | — |
+
+The jobs run in parallel, so the workflow's wall clock is the longest of them:
+**18 m 27 s**. Everything else — `npm ci` behind `setup-node`'s cache, the apt
+install of LLVM 18, `tsc` — is seconds, and none of it is worth attention.
+
+### Benchmarking each part
+
+`scripts/ci-profile.mjs` answers "which check" rather than "which job". It
+spawns a suite command, timestamps every line it prints, and attributes each
+gap to the check that closed it:
+
+```bash
+node scripts/ci-profile.mjs                    # node tests/run.js
+node scripts/ci-profile.mjs --top 60 --json    # machine-readable
+node scripts/ci-profile.mjs -- npm run test:nish
+```
+
+It profiles the **unfiltered** run on purpose. Narrowing with
+`node tests/run.js <substring>` is not a measurement of anything until
+`rm -rf build/test`, and fifteen `fs.existsSync` guards drop checks with no
+`SKIP` line to say so (`.claude/testing.md` has both traps); profiling from
+outside the process avoids each of them. Read the expensive rows and not the
+cheap ones: the suite makes 234 `spawnSync` calls, each of which blocks the
+event loop, so queued writes flush in bursts and the order *within* a burst
+carries no timing information.
+
+What it reported for `npm test` on that commit — 660.5 s locally, against the
+runner's 14 m 44 s, so this box is about 1.34x a `ubuntu-latest`:
+
+| Check | Cost |
+| --- | --- |
+| `self/emit.ts emits the IR stage0 emits` (420 programs, 1,805 modules) | 90.1 s |
+| `codes: every registry code is provoked by a program or explained` | 80.0 s |
+| `self/checker.ts agrees with stage0 on what it accepts` (396 files) | 70.5 s |
+| `differential` (4 checks, 173 programs) | 51.1 s |
+| `self/ compiles self/: the bootstrap reaches a fixed point` (61 modules) | 46.1 s |
+| `self/emit.ts` over random programs (fuzz) | 22.4 s |
+| `self/ writes the interop sidecars stage0 writes` | 21.6 s |
+| `self/ refuses what stage0 refuses` (377 fragments) | 18.4 s |
+| `self/ prints what tests/self/goldens/ records` | 17.0 s |
+| `the bootstrap script: a stage0 seed asserts IR(stage0) == IR(stage1)` | 16.3 s |
+
+The ten of them are 70% of the run, and the WP14 self-hosting block alone is
+about 330 s of it.
+
+### The one cost behind most of that list
+
+Almost none of it is compiling Nish. `tests/batch_worker.js` measured one
+`node dist/index.js <case>` at about 634 ms, of which **1.5 ms** is compiling:
+36 ms is Node starting, ~473 ms is `import ts from "typescript"`, and ~85 ms is
+loading `dist/`. Section A of `tests/run.js` already avoids paying it by driving
+the library API in process — that is the difference between six minutes and a
+handful of seconds — but the oracles and `tests/diagnostic_coverage.js` cannot:
+what they compare is what the *command line* answers, so a process per program
+is the thing under test rather than an implementation detail.
+
+Two things follow, and the workflow does both.
+
+**The import is made cheaper.** `NODE_COMPILE_CACHE` is set for every job in
+`ci.yml`, which caches V8's compilation of every module Node loads, keyed on
+content and Node version; a missing or stale key costs time and cannot change an
+answer. Measured here: 412 ms → 315 ms for one compiler spawn (−24%),
+`tests/diagnostic_coverage.js --require-coverage --strict-refusals` 77.0 s →
+65.5 s (−15%), and the whole of `npm test` 660.5 s → 627.3 s (−5.0%), with the
+run undegraded at 1,909 passed, 0 failed, 2 skipped either way — read the skip
+count, not the exit status. The suite's tail is clang and native runs rather than
+Node, which is why 24% per spawn is 5% per suite.
+
+**The duplicate is removed.** `--verify-batch` changes exactly one thing about a
+run — the set the batched-compile gate is taken over — and then makes every other
+check in `tests/run.js` a second time, on the same commit the `test` job is
+already making them on. `batch-parity` is the longest job in the workflow, so
+that duplicate was the workflow's wall clock.
+
+`--batch-gate-only` widens the same gate and stops after it. Measured on this
+box at `a89bee7`, both modes on the one commit: **105.8 s against 684.9 s**, a
+6.5x cut. It makes 1,780 of the full mode's 2,560 checks, and the 780 it leaves
+out are exactly the checks the `test` job makes on the same commit — which is the
+whole argument for leaving them out. It reports as the narrow run it is, with a
+counted skip naming what it did not check, because a green that claims more than
+it proved is the one thing this suite may not print.
+
+The counts move with the corpus and the ratio does not, so re-derive them rather
+than quoting these. The split is structural: the narrow run is section A plus the
+widened gate, and every check the suite has added since sits *after* the gate. At
+`16110e2`, one commit later, the plain run had grown to 1,937 checks and the
+narrow run was still 1,780 of them, at 116.9 s.
+
+### What is still on the table
+
+The `test` job is now the wall clock, and the WP14 self-hosting block is about
+half of it. The block is already a set of separate child processes
+(`tests/self/*_oracle.js`), so moving it to a job of its own would take the
+workflow to roughly eight minutes. What stands in the way is not the runner but
+the accounting: `tests/run.js` has no way to run one section and *say* it ran
+one section, and the substring filter is the trap described above. A `--section`
+mechanism with honest skip counting is the piece of work that unlocks it.
+
+`tests/diagnostic_coverage.js` is the other one: 80 s, ~600 CLI spawns, ~99% of
+it the import above. It pools four wide already, and pool width does not help
+(76.9 s at `--jobs 4`, 73.9 s at 8, 77.1 s at 12 on four cores) because the
+cores are saturated. Batching it the way `tests/batch_compile.js` batches
+section A would take it to seconds — but it reads `--json` off a command line by
+design, so that is a rewrite of a gate rather than a tuning knob.
 
 ## Running the same steps locally
 

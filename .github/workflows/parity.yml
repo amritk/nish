@@ -52,6 +52,21 @@ on:
 permissions:
   contents: read
 
+# Node's on-disk V8 compile cache, as in ci.yml, and this is the workflow with
+# most to gain from it: the corpus half of `--parity` is one compiler process per
+# program per variation -- 13,020 runs over 868 programs as this lands -- and
+# `tests/batch_worker.js` measured ~473 ms of each one as `import ts from
+# "typescript"`. The cache is keyed on file content and Node version and Node
+# compiles normally when the key misses, so a cold or stale cache costs time and
+# can never change what a run reports, which matters more here than in ci.yml:
+# what this workflow reports is a *difference set*, and a gate that could be
+# moved by a cache would be worthless. Measured in ci.yml's own comment: 412 ms
+# -> 315 ms for one spawn.
+#
+# The path sits outside the checkout, because the corpus walks the tree.
+env:
+  NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
+
 concurrency:
   group: parity-${{ github.ref }}
   cancel-in-progress: true

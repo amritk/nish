@@ -47,7 +47,26 @@ node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff ever
 node scripts/arrow-verify.mjs --applied self  # the same, for a rewrite the tree already carries
 node scripts/gen-diagnostic-codes.mjs        # rewrite src/codes.ts + self/codes.ts
 node scripts/gen-diagnostic-codes.mjs --check  # fail if either is stale (CI + npm test)
+node scripts/ci-profile.mjs                  # which check a CI job's wall clock went to
+node scripts/ci-profile.mjs -- npm run test:nish   # ...for any suite command
+node tests/run.js --batch-gate-only          # the batched-compile gate over the whole corpus, then stop
 ```
+
+**Profile the unfiltered run.** `node tests/run.js <substring>` is for finding a
+failure, not for measuring one: a filtered count means nothing until
+`rm -rf build/test`, and fifteen `fs.existsSync` guards drop checks with no
+`SKIP` line to say so (see `.claude/testing.md`). `scripts/ci-profile.mjs`
+measures from outside the process instead, so neither trap applies, and
+`docs/wp10-ci.md` has the table it produced for `npm test` plus the job
+durations it explains.
+
+**`NODE_COMPILE_CACHE` is set for every CI job**, and is worth exporting
+locally too. It is Node's own on-disk cache of V8's module compilation, not a
+variable this repository reads, so it cannot reach the compiler's behaviour: a
+missing or stale key costs time and never changes an answer. The suite's cost is
+dominated by `import ts from "typescript"` paid once per compiler spawn (~473 ms
+of ~634 ms — `tests/batch_worker.js` has the breakdown), and the cache takes one
+spawn from 412 ms to 315 ms.
 
 Three generated artefacts have a `--check` mode and all three are gates:
 `docs/IR_COOKBOOK.md`, and the two halves of the diagnostic-code registry.

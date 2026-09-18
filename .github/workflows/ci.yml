@@ -35,6 +35,30 @@ on:
 permissions:
   contents: read
 
+# Node's on-disk V8 compile cache, for every job in this file.
+#
+# This is a measurement rather than a habit. The suite's cost is not compiling
+# Nish; it is starting Node. `tests/batch_worker.js` has the breakdown for one
+# `node dist/index.js <case>` -- about 634 ms on the box it was written on, of
+# which 1.5 ms is compiling and ~473 ms is `import ts from "typescript"` -- and
+# section A already avoids paying it by driving the library API in process. The
+# oracles and `tests/diagnostic_coverage.js` cannot: they compare what the
+# *command line* answers, so a process per program is the thing being checked.
+#
+# So the import is made cheaper instead of avoided. `NODE_COMPILE_CACHE` caches
+# V8's compilation of every module it loads, keyed on the file's content and the
+# Node version, and Node falls back to compiling normally when the key misses --
+# a stale or absent cache costs time and can never change an answer. Measured on
+# this repository: 412 ms -> 315 ms for one compiler spawn (-24%), and
+# `tests/diagnostic_coverage.js --require-coverage --strict-refusals` 77.0 s ->
+# 65.5 s (-15%).
+#
+# The path is outside the checkout on purpose. A cache directory inside
+# `github.workspace` is a tree the repository does not track, and `npm test`,
+# `docs/check-links.mjs` and `biome` all walk the tree.
+env:
+  NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -465,8 +489,20 @@ jobs:
   # per case -- the very thing the change removed -- which is exactly the bill a
   # CI runner should pay instead of a developer's inner loop. It runs in parallel
   # with `test`, so it costs a runner rather than wall-clock time, and the
-  # toolchain is installed so that the rest of the suite is not skipped underneath
-  # the gate: this job is `npm test` with the gate widened, not a narrower run.
+  # toolchain is installed so that the goldens the gate reads still assemble and
+  # run natively rather than skipping underneath it.
+  #
+  # It *is* a narrower run, and that is a correction rather than a relaxation.
+  # This comment used to say the opposite -- "`npm test` with the gate widened,
+  # not a narrower run" -- and the cost of the difference was measured on
+  # 2026-09-18: the job took 18 m 21 s, of which 14 m 44 s was `tests/run.js`
+  # making, a second time, on the same commit, exactly the checks the `test` job
+  # makes. `--verify-batch` changes one set in one line and nothing else, so the
+  # second run of the other nineteen hundred checks proved nothing the first did
+  # not, and because this is the longest job in the workflow it was the workflow's
+  # wall clock. `--batch-gate-only` stops after the gate and carries a counted
+  # skip that names what it did not check, so the narrowing is in the output
+  # rather than only here.
   batch-parity:
     name: the batched compile against the CLI
     runs-on: ubuntu-latest
@@ -495,12 +531,22 @@ jobs:
       - name: Build
         run: npm run build
 
-      # `--verify-batch` widens the gate to the whole corpus; the section's own
-      # checks run as usual, so a difference is a FAIL line naming the case.
+      # `--batch-gate-only` widens the gate to the whole corpus and then stops;
+      # the section's own checks run as usual, so a difference is a FAIL line
+      # naming the case.
+      #
+      # It stops because `--verify-batch` alone changes exactly one thing about
+      # the run -- the gate's set -- and then runs every other check in
+      # `tests/run.js` a second time, on the same commit the `test` job is
+      # already running them on. This is the longest job in the workflow, so
+      # that duplicate was the workflow's wall clock. Measured: 105.8 s against
+      # 684.9 s, making 1,780 of the full mode's 2,560 checks, where the 780 left
+      # out are the ones the `test` job makes on this same commit. The narrow run
+      # reports as a narrow run: its summary carries a counted skip naming them.
       - name: Every golden case, compiled both ways
         run: |
           set -o pipefail
-          node tests/run.js --verify-batch | tee "$RUNNER_TEMP/batch-parity.log"
+          node tests/run.js --batch-gate-only | tee "$RUNNER_TEMP/batch-parity.log"
 
       # The summary is not the last line: a run with skips prints a note after it,
       # so the line is picked by what it says rather than by where it sits.
