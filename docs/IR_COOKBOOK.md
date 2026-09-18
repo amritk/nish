@@ -2712,18 +2712,16 @@ define internal noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias re
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
-  %2 = call i64 @llvm.smin.i64(i64 0, i64 %1)
-  %3 = call i64 @llvm.smax.i64(i64 %2, i64 0)
-  %4 = sext i32 %n to i64
-  %5 = call i64 @llvm.smin.i64(i64 %4, i64 %1)
-  %6 = call i64 @llvm.smax.i64(i64 %5, i64 0)
-  %7 = call i64 @llvm.smin.i64(i64 %3, i64 %6)
-  %8 = call i64 @llvm.smax.i64(i64 %3, i64 %6)
-  %9 = sub i64 %8, %7
-  %10 = getelementptr inbounds i8, i8* %s, i64 8
-  %11 = getelementptr inbounds i8, i8* %10, i64 %7
-  %12 = call i8* @nish_str_new(i8* %11, i64 %9)
-  ret i8* %12
+  %2 = sext i32 %n to i64
+  %3 = call i64 @llvm.smin.i64(i64 %2, i64 %1)
+  %4 = call i64 @llvm.smax.i64(i64 %3, i64 0)
+  %5 = call i64 @llvm.smin.i64(i64 0, i64 %4)
+  %6 = call i64 @llvm.smax.i64(i64 0, i64 %4)
+  %7 = sub i64 %6, %5
+  %8 = getelementptr inbounds i8, i8* %s, i64 8
+  %9 = getelementptr inbounds i8, i8* %8, i64 %5
+  %10 = call i8* @nish_str_new(i8* %9, i64 %7)
+  ret i8* %10
 }
 
 define internal noundef zeroext i1 @has(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #0 {

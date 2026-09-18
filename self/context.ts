@@ -47,6 +47,13 @@ export class CheckContext {
    * Read by that rule and by nothing else in the checker.
    */
   uncheckedIndexing: boolean;
+  /**
+   * `--strict-exports`, which is the default. Off, a non-exported function
+   * keeps external linkage, and the WP15 §8 walk says so at a call inside a
+   * loop; nothing else in the checker reads it, because linkage is the
+   * emitter's business.
+   */
+  strictExports: boolean;
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap;
   /** The program has an entry point, so `process.argv` may be read. */
@@ -116,7 +123,8 @@ export class CheckContext {
     sink: DiagnosticSink,
     numberMode: i32,
     wrapping: boolean,
-    uncheckedIndexing: boolean
+    uncheckedIndexing: boolean,
+    strictExports: boolean
   ) {
     this.table = table;
     this.program = program;
@@ -125,6 +133,7 @@ export class CheckContext {
     this.numberMode = numberMode;
     this.wrapping = wrapping;
     this.uncheckedIndexing = uncheckedIndexing;
+    this.strictExports = strictExports;
     this.sigs = new StringMap();
     this.entryHasMain = false;
     this.current = null;

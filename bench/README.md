@@ -139,4 +139,8 @@ gate.
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
   not part of this suite.
+- `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),
+  not part of this suite either. It times both shapes against each other inside
+  one process and prints the two figures, so `nish bench/substr.ts --link x &&
+  ./x` is the whole protocol: no baseline compiler and no second build.
 - `rss.c`: the peak-RSS helper the runner compiles into `build/bench/rss`.

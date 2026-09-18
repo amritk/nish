@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 406;
+export const RULE_COUNT: i32 = 408;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -869,8 +869,12 @@ export const performanceRules = (): string[] => [
   "NL9006",
   "is computed in i32 and wraps before",
   "NL9005",
+  "is called here inside a loop and",
+  "NL9008",
   "is not proven to be in range for",
   "NL9007",
+  "is not provably within",
+  "NL9009",
   "is at or beyond the",
   "NL9004",
 ];

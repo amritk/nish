@@ -121,97 +121,91 @@ if.end:
   %32 = load i8*, i8** %captured.addr, align 8
   %33 = bitcast i8* %32 to i64*
   %34 = load i64, i64* %33, align 8
-  %35 = call i64 @llvm.smin.i64(i64 0, i64 %34)
-  %36 = call i64 @llvm.smax.i64(i64 %35, i64 0)
-  %37 = load i8*, i8** %captured.addr, align 8
-  %38 = bitcast i8* %37 to i64*
-  %39 = load i64, i64* %38, align 8
-  %40 = trunc i64 %39 to i32
-  %41 = sub nsw i32 %40, 1
-  %42 = sext i32 %41 to i64
-  %43 = call i64 @llvm.smin.i64(i64 %42, i64 %34)
-  %44 = call i64 @llvm.smax.i64(i64 %43, i64 0)
-  %45 = call i64 @llvm.smin.i64(i64 %36, i64 %44)
-  %46 = call i64 @llvm.smax.i64(i64 %36, i64 %44)
-  %47 = sub i64 %46, %45
-  %48 = getelementptr inbounds i8, i8* %32, i64 8
-  %49 = getelementptr inbounds i8, i8* %48, i64 %45
-  %50 = call i8* @nish_str_new(i8* %49, i64 %47)
-  %51 = call i8* @nish_str_concat(i8* %31, i8* %50)
-  %52 = call i8* @nish_str_concat(i8* %51, i8* bitcast ({ i64, [4 x i8] }* @.str.9 to i8*))
-  %53 = load i8*, i8** %diagnostic.addr, align 8
-  %54 = bitcast i8* %53 to i64*
-  %55 = load i64, i64* %54, align 8
-  %56 = call i64 @llvm.smin.i64(i64 0, i64 %55)
-  %57 = call i64 @llvm.smax.i64(i64 %56, i64 0)
-  %58 = load i8*, i8** %diagnostic.addr, align 8
-  %59 = bitcast i8* %58 to i64*
-  %60 = load i64, i64* %59, align 8
-  %61 = trunc i64 %60 to i32
-  %62 = sub nsw i32 %61, 1
-  %63 = sext i32 %62 to i64
-  %64 = call i64 @llvm.smin.i64(i64 %63, i64 %55)
-  %65 = call i64 @llvm.smax.i64(i64 %64, i64 0)
-  %66 = call i64 @llvm.smin.i64(i64 %57, i64 %65)
-  %67 = call i64 @llvm.smax.i64(i64 %57, i64 %65)
-  %68 = sub i64 %67, %66
-  %69 = getelementptr inbounds i8, i8* %53, i64 8
-  %70 = getelementptr inbounds i8, i8* %69, i64 %66
-  %71 = call i8* @nish_str_new(i8* %70, i64 %68)
-  %72 = call i8* @nish_str_concat(i8* %52, i8* %71)
-  call void @nish_print(i8* %72)
+  %35 = load i8*, i8** %captured.addr, align 8
+  %36 = bitcast i8* %35 to i64*
+  %37 = load i64, i64* %36, align 8
+  %38 = trunc i64 %37 to i32
+  %39 = sub nsw i32 %38, 1
+  %40 = sext i32 %39 to i64
+  %41 = call i64 @llvm.smin.i64(i64 %40, i64 %34)
+  %42 = call i64 @llvm.smax.i64(i64 %41, i64 0)
+  %43 = call i64 @llvm.smin.i64(i64 0, i64 %42)
+  %44 = call i64 @llvm.smax.i64(i64 0, i64 %42)
+  %45 = sub i64 %44, %43
+  %46 = getelementptr inbounds i8, i8* %32, i64 8
+  %47 = getelementptr inbounds i8, i8* %46, i64 %43
+  %48 = call i8* @nish_str_new(i8* %47, i64 %45)
+  %49 = call i8* @nish_str_concat(i8* %31, i8* %48)
+  %50 = call i8* @nish_str_concat(i8* %49, i8* bitcast ({ i64, [4 x i8] }* @.str.9 to i8*))
+  %51 = load i8*, i8** %diagnostic.addr, align 8
+  %52 = bitcast i8* %51 to i64*
+  %53 = load i64, i64* %52, align 8
+  %54 = load i8*, i8** %diagnostic.addr, align 8
+  %55 = bitcast i8* %54 to i64*
+  %56 = load i64, i64* %55, align 8
+  %57 = trunc i64 %56 to i32
+  %58 = sub nsw i32 %57, 1
+  %59 = sext i32 %58 to i64
+  %60 = call i64 @llvm.smin.i64(i64 %59, i64 %53)
+  %61 = call i64 @llvm.smax.i64(i64 %60, i64 0)
+  %62 = call i64 @llvm.smin.i64(i64 0, i64 %61)
+  %63 = call i64 @llvm.smax.i64(i64 0, i64 %61)
+  %64 = sub i64 %63, %62
+  %65 = getelementptr inbounds i8, i8* %51, i64 8
+  %66 = getelementptr inbounds i8, i8* %65, i64 %62
+  %67 = call i8* @nish_str_new(i8* %66, i64 %64)
+  %68 = call i8* @nish_str_concat(i8* %50, i8* %67)
+  call void @nish_print(i8* %68)
+  %69 = call i8* @nish_alloc_struct(i64 24)
+  %70 = bitcast i8* %69 to %struct.nish_array*
+  %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 0
+  store i64 3, i64* %71, align 8, !alias.scope !3, !noalias !4
+  %72 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 1
+  store i64 3, i64* %72, align 8, !alias.scope !3, !noalias !4
   %73 = call i8* @nish_alloc_struct(i64 24)
-  %74 = bitcast i8* %73 to %struct.nish_array*
-  %75 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %74, i64 0, i32 0
-  store i64 3, i64* %75, align 8, !alias.scope !3, !noalias !4
-  %76 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %74, i64 0, i32 1
-  store i64 3, i64* %76, align 8, !alias.scope !3, !noalias !4
-  %77 = call i8* @nish_alloc_struct(i64 24)
-  %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %74, i64 0, i32 2
-  store i8* %77, i8** %78, align 8, !alias.scope !3, !noalias !4
-  %79 = bitcast i8* %77 to i8**
-  %80 = getelementptr inbounds i8*, i8** %79, i64 0
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %80, align 8, !alias.scope !4, !noalias !3
-  %81 = getelementptr inbounds i8*, i8** %79, i64 1
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %81, align 8, !alias.scope !4, !noalias !3
-  %82 = getelementptr inbounds i8*, i8** %79, i64 2
-  store i8* bitcast ({ i64, [12 x i8] }* @.str.10 to i8*), i8** %82, align 8, !alias.scope !4, !noalias !3
-  %83 = load i8*, i8** %out.addr, align 8
-  %84 = load i8*, i8** %err.addr, align 8
-  %85 = call i32 @nish_spawn_to(%struct.nish_array* %74, i8* %83, i8* %84)
-  %86 = load i8*, i8** %out.addr, align 8
-  %87 = call i8* @nish_read_file_or_null(i8* %86)
-  store i8* %87, i8** %again.addr, align 8
-  %88 = load i8*, i8** %again.addr, align 8
-  %89 = icmp eq i8* %88, null
-  br i1 %89, label %if.then.1, label %if.end.1
+  %74 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 2
+  store i8* %73, i8** %74, align 8, !alias.scope !3, !noalias !4
+  %75 = bitcast i8* %73 to i8**
+  %76 = getelementptr inbounds i8*, i8** %75, i64 0
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %76, align 8, !alias.scope !4, !noalias !3
+  %77 = getelementptr inbounds i8*, i8** %75, i64 1
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %77, align 8, !alias.scope !4, !noalias !3
+  %78 = getelementptr inbounds i8*, i8** %75, i64 2
+  store i8* bitcast ({ i64, [12 x i8] }* @.str.10 to i8*), i8** %78, align 8, !alias.scope !4, !noalias !3
+  %79 = load i8*, i8** %out.addr, align 8
+  %80 = load i8*, i8** %err.addr, align 8
+  %81 = call i32 @nish_spawn_to(%struct.nish_array* %70, i8* %79, i8* %80)
+  %82 = load i8*, i8** %out.addr, align 8
+  %83 = call i8* @nish_read_file_or_null(i8* %82)
+  store i8* %83, i8** %again.addr, align 8
+  %84 = load i8*, i8** %again.addr, align 8
+  %85 = icmp eq i8* %84, null
+  br i1 %85, label %if.then.1, label %if.end.1
 
 if.then.1:
   call void @nish_print(i8* bitcast ({ i64, [23 x i8] }* @.str.11 to i8*))
   ret i32 1
 
 if.end.1:
-  %90 = load i8*, i8** %again.addr, align 8
-  %91 = bitcast i8* %90 to i64*
-  %92 = load i64, i64* %91, align 8
-  %93 = call i64 @llvm.smin.i64(i64 0, i64 %92)
-  %94 = call i64 @llvm.smax.i64(i64 %93, i64 0)
-  %95 = load i8*, i8** %again.addr, align 8
-  %96 = bitcast i8* %95 to i64*
-  %97 = load i64, i64* %96, align 8
-  %98 = trunc i64 %97 to i32
-  %99 = sub nsw i32 %98, 1
-  %100 = sext i32 %99 to i64
-  %101 = call i64 @llvm.smin.i64(i64 %100, i64 %92)
-  %102 = call i64 @llvm.smax.i64(i64 %101, i64 0)
-  %103 = call i64 @llvm.smin.i64(i64 %94, i64 %102)
-  %104 = call i64 @llvm.smax.i64(i64 %94, i64 %102)
-  %105 = sub i64 %104, %103
-  %106 = getelementptr inbounds i8, i8* %90, i64 8
-  %107 = getelementptr inbounds i8, i8* %106, i64 %103
-  %108 = call i8* @nish_str_new(i8* %107, i64 %105)
-  %109 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.12 to i8*), i8* %108)
-  call void @nish_print(i8* %109)
+  %86 = load i8*, i8** %again.addr, align 8
+  %87 = bitcast i8* %86 to i64*
+  %88 = load i64, i64* %87, align 8
+  %89 = load i8*, i8** %again.addr, align 8
+  %90 = bitcast i8* %89 to i64*
+  %91 = load i64, i64* %90, align 8
+  %92 = trunc i64 %91 to i32
+  %93 = sub nsw i32 %92, 1
+  %94 = sext i32 %93 to i64
+  %95 = call i64 @llvm.smin.i64(i64 %94, i64 %88)
+  %96 = call i64 @llvm.smax.i64(i64 %95, i64 0)
+  %97 = call i64 @llvm.smin.i64(i64 0, i64 %96)
+  %98 = call i64 @llvm.smax.i64(i64 0, i64 %96)
+  %99 = sub i64 %98, %97
+  %100 = getelementptr inbounds i8, i8* %86, i64 8
+  %101 = getelementptr inbounds i8, i8* %100, i64 %97
+  %102 = call i8* @nish_str_new(i8* %101, i64 %99)
+  %103 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.12 to i8*), i8* %102)
+  call void @nish_print(i8* %103)
   ret i32 0
 }
 
