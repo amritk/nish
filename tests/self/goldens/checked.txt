@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 329 programs, 5546 dump lines.
+# 330 programs, 5561 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3584,6 +3584,22 @@ function test(): i32 -> @test [exported]
   callee 15:21 step -> @step
   callee 17:21 helper -> @helper
   callee 21:18 step -> @step
+program tests/cases/perf_inline_foreign.ts
+module tests/cases/perf_inline_foreign.ts (entry)
+function abs(n: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function step(n: i32): i32 -> @step
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: abs step
+  stackSites=0 stackLocals=0
+  local 26:7 total: i32 (let)
+  local 27:7 i: i32 (let)
+  callee 29:21 abs -> @abs
+  callee 29:34 step -> @step
 program tests/cases/perf_inline_quiet.ts
 module tests/cases/perf_inline_quiet.ts (entry)
 function exported(n: i32): i32 -> @exported [exported]

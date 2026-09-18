@@ -1180,6 +1180,25 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
  * to stop passing it. An exported function is silent because the ABI is then
  * the point, and a call outside a loop is silent because one call is not a cost
  * anybody is paying.
+ *
+ * A `declare function` is silent too, and testing `exported` is not enough to
+ * get that right. A foreign declaration is external because C defines it, not
+ * because this module withheld an `export` — and `export declare function` is
+ * refused outright, so `exported` is *always* false for one. Both rewrites the
+ * message names are therefore unavailable: exporting it is an error, and
+ * dropping the flag would not make it `internal`, because there is no body here
+ * to give linkage to. The IR says as much — the `declare` line is the same
+ * under the flag as under the default, and a program whose only functions are
+ * its entry and the declaration comes out byte for byte identical either way,
+ * so the warning would be naming a cost that is not being paid. `foreign()` is
+ * the predicate rather
+ * than a missing `body()`, because a body can be absent for other reasons
+ * (`FunctionSig.foreign`, WP27 S1), and it is exactly the failure
+ * `perf_inline_quiet`'s header warns about: a warning that fires where there is
+ * nothing to fix is what teaches people to ignore a whole diagnostic class.
+ * `tests/cases/perf_inline_foreign` pins it, with a foreign call and an
+ * ordinary non-exported one in the *same* loop, so the single diagnostic it
+ * reports is what says this guard is not too wide.
  */
 const checkNotInlinable = (walk: PerfWalk, call: Node): void => {
   const ctx = walk.ctx;
@@ -1187,7 +1206,7 @@ const checkNotInlinable = (walk: PerfWalk, call: Node): void => {
     return;
   }
   const callee = ctx.program.nodeCallees[call.id];
-  if (callee === null || callee.exported) {
+  if (callee === null || callee.exported || callee.foreign()) {
     return;
   }
   ctx.performance(
@@ -1231,6 +1250,16 @@ const checkNotInlinable = (walk: PerfWalk, call: Node): void => {
  * name a rewrite an unsigned bound can write, or the domain learns `atMost`
  * from an unsigned comparison. `slice`, the other rewrite here, does compile on
  * a `u32` today.
+ *
+ * That is the only shape here whose advice cannot be written, and it is weaker
+ * than it looks: one of the two named rewrites still compiles. The audit that
+ * says so was prompted by `NL9008`, which had the stronger version of the same
+ * defect — it fired on a `declare function`, where *both* its rewrites were
+ * impossible, and is now silent for one. This rule has no `declare function`
+ * twin, and cannot: a foreign declaration returns a scalar or `CPtr` only, so
+ * the **receiver** can never come from C, and a C-returned **bound** is an
+ * ordinary `i32` local that the named guard silences like any other. Both were
+ * provoked rather than argued.
  */
 const checkUnfoldedClamp = (walk: PerfWalk, call: Node): void => {
   if (walk.loops.length === 0) {

@@ -1059,6 +1059,44 @@ if (!only || "performance".includes(only)) {
     inlineQuiet.stderr
   );
 
+  // The foreign shape is the one the `exported` test alone got wrong, and a
+  // count of zero above cannot say the shape was still in the file. `abs` is
+  // `declare`d rather than defined, so the `declare` line is what proves this
+  // case still carries it -- a silent case that stopped containing the shape
+  // it guards is the failure mode a zero-warning assertion has.
+  // A `declare function` is external because C defines it, not because this
+  // module withheld an `export` -- and `exported` is always false for one, so
+  // testing it alone reported a C call in a loop and named two rewrites that
+  // were both impossible. `perf_inline_foreign` holds the foreign call and an
+  // ordinary non-exported call in the *same* loop, so the one surviving
+  // diagnostic is what says the `foreign` guard is not too wide.
+  const inlineForeign = compile("perf_inline_foreign", "perf_inline_foreign.ll", ["--no-strict-exports"]);
+  const foreignLines = summaries(inlineForeign.stderr);
+  check(
+    "performance: a `declare function` in a loop is silent, and the ordinary call beside it still warns",
+    inlineForeign.status === 0 &&
+      foreignLines.length === 1 &&
+      foreignLines[0].includes("`step` is called here inside a loop and `--no-strict-exports` keeps it an"),
+    inlineForeign.stderr
+  );
+
+  // And *why* it must be silent, rather than only that it is: the flag has no
+  // linkage to withdraw from a `declare`, so every `declare` line the emitter
+  // writes is the same under the flag as under the default. There is nothing
+  // for the message's two rewrites to change, which is what makes a warning
+  // here a warning about a cost nobody is paying.
+  const foreignDefault = compile("perf_inline_foreign", "perf_inline_foreign_default.ll");
+  const declaresIn = (f) =>
+    (fs.readFileSync(path.join(buildDir, f), "utf8").match(/^declare .*$/gm) ?? []).join("\n");
+  check(
+    "performance: --no-strict-exports leaves a `declare function` byte for byte as the default emits it",
+    inlineForeign.status === 0 &&
+      foreignDefault.status === 0 &&
+      declaresIn("perf_inline_foreign.ll") === declaresIn("perf_inline_foreign_default.ll") &&
+      /^declare i32 @abs\(i32\)$/m.test(declaresIn("perf_inline_foreign.ll")),
+    `flagged:\n${declaresIn("perf_inline_foreign.ll")}\ndefault:\n${declaresIn("perf_inline_foreign_default.ll")}`
+  );
+
   // The flag removes every check, so there is no surviving one to report.
   const boundsOff = compile("perf_bounds_loop", "perf_bounds_off.ll", ["--unchecked-indexing"]);
   check(

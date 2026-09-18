@@ -2707,9 +2707,12 @@ by the caller.
     missed specialisation and no speed figure. It is reported at a call in a
     loop rather than per function. Reported once per
     call site. Silent for an exported function, where the ABI is the point;
-    silent outside a loop; and silent altogether under the default, so a build
-    that did not ask for the flag never sees it
-    (`tests/cases/perf_inline_quiet`).
+    silent outside a loop; silent for a `declare function`, which is external
+    because C defines it and so has neither rewrite available — `export
+    declare function` is refused, and the flag has no linkage to withdraw from
+    a declaration with no body; and silent altogether under the default, so a
+    build that did not ask for the flag never sees it
+    (`tests/cases/perf_inline_quiet`, `perf_inline_foreign`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in

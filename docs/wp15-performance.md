@@ -1546,6 +1546,36 @@ measurement closed says so and says why.
      the module does not export, and only when the flag is given — which means
      it can never be noise for a default build.
      `tests/cases/perf_inline` / `perf_inline_quiet`.
+
+     **It shipped with one false positive, found in review and closed here: it
+     fired on a `declare function`.** `exported` is always false for a foreign
+     declaration, because the checker refuses `export declare function`
+     outright, so a C call inside a loop under the flag was reported with two
+     rewrites that were *both* unavailable — exporting it is an error, and
+     dropping the flag would not make it `internal` because there is no body to
+     give linkage to. The IR is the proof that there was no cost to name: the
+     `declare` line is the same under the flag as under the default, and a
+     program whose only functions are its entry and the declaration comes out
+     byte for byte identical either way. The guard is `FunctionSig.foreign` —
+     the predicate that already exists for exactly this distinction — rather
+     than a missing body, which can be absent for other reasons. `perf_inline`
+     still warns at the same span, and a loop containing both a foreign call
+     and a non-exported one now reports the second and not the first — which
+     is `tests/cases/perf_inline_foreign`, a case of its own rather than a
+     shape added to `perf_inline_quiet`. The parser oracle skips every
+     `declare function` case (`needs FunctionDeclaration`), so putting the
+     foreign call in `perf_inline_quiet` would have dropped that file out of
+     the parser comparison in silence — the failure mode §6 of
+     [`wp14-selfhost.md`](wp14-selfhost.md) warns about, found by reading the
+     oracle's counts rather than its exit code.
+
+     **`NL9009` was audited for the same failure and has no instance of it.** A
+     foreign declaration returns a scalar or `CPtr` only, so a `substring`
+     receiver can never come from C, and a C-returned *bound* is an ordinary
+     `i32` local that the named guard silences like any other. The only shape
+     whose advice `NL9009` cannot write is the unsigned bound recorded below,
+     and it is the weaker defect: the guard is refused, but `slice` — the other
+     rewrite the message names — compiles.
    - **wasteful struct padding** — still not shipped, and what blocks it is
      the *report* rather than the analysis. The layout is already computed
      (`computeLayout` in `checker/classes.ts`, `StructInfo.size`/`align` and
