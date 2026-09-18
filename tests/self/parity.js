@@ -511,6 +511,58 @@ function flagsOf(help) {
 }
 
 /**
+ * The detail an empty flag set reports, shared with the demonstration below so
+ * that what the guard says and what the demonstration looks for cannot drift.
+ */
+const emptyFlagSetDetail = (owner) =>
+  `${owner}'s --help parsed to no flags at all, so there is no flag set to compare`;
+
+/**
+ * A flag set that came out empty, as a difference row.
+ *
+ * `flagSetDifferences` below reports what is in one set and not the other, so
+ * two empty sets are two sets that agree: "the two compilers document the same
+ * flags" and "neither help text was parsed" printed the same green line. What
+ * empties a set is not a re-indent — the usage-line fallback matches a `-flag`
+ * token wherever it sits, so the option lines can move without the set moving
+ * — but a `--help` that answers with no flag-like text at all: the usage going
+ * to stderr, the flags moving behind a page of their own, a stdout that says
+ * only where the manual is. Each of those reads as agreement today, and each
+ * is a difference from here on.
+ *
+ * It is the guard `tests/diagnostic_coverage.js` grew over the code registry,
+ * in this file's grammar and for its reason: what let that parse fall to zero
+ * and go on printing a green line was that nothing distinguished a vacuous
+ * pass from a real one. Zero is where the line is drawn because zero is the
+ * count this comparison can judge alone — two sets that both shrank by a flag
+ * still agree, and noticing *that* needs an expectation of which flags there
+ * are, which is a different question from the one this half asks.
+ *
+ * The guard is the fix, and not a wider pattern: `^ {2}` is load-bearing
+ * above, and `^\s+` would count every flag a description mentions.
+ */
+const emptyFlagSetDifferences = (flags0, flags1) => {
+  const rows = [];
+  for (const [owner, flags] of [
+    ["stage0", flags0],
+    ["stage1", flags1],
+  ]) {
+    if (flags.size > 0) continue;
+    rows.push({
+      program: "--help",
+      variation: "flag set",
+      surface: "flag set",
+      // Never declarable, and deliberately not keyed on `DECLARED`: a
+      // declaration says a difference is decided, and nobody decides that a
+      // compiler's help text names no flags at all.
+      declared: null,
+      detail: emptyFlagSetDetail(owner),
+    });
+  }
+  return rows;
+};
+
+/**
  * The flag-set difference, as rows shaped like the corpus half's so one table
  * prints both. A flag on one side only is undeclared unless `DECLARED` names
  * it, which is how `--emit-ast` — answered by both compilers now, about their
@@ -519,6 +571,11 @@ function flagsOf(help) {
 function flagSetDifferences(help0, help1) {
   const flags0 = flagsOf(help0);
   const flags1 = flagsOf(help1);
+  // Returned instead of the per-flag rows rather than beside them: with one
+  // side empty, every flag of the other is reported as that side's alone, a
+  // row each and not one of them naming what happened.
+  const empty = emptyFlagSetDifferences(flags0, flags1);
+  if (empty.length > 0) return empty;
   const out = [];
   for (const flag of [...new Set([...flags0, ...flags1])].sort()) {
     if (flags0.has(flag) === flags1.has(flag)) continue;
@@ -534,6 +591,66 @@ function flagSetDifferences(help0, help1) {
   }
   return out;
 }
+
+/**
+ * The guard above, demonstrated on every run rather than taken on trust.
+ *
+ * The thing being guarded against is a parse that quietly stops matching, and
+ * a guard against that is worth exactly what exercises it: nothing here would
+ * notice if `emptyFlagSetDifferences` stopped firing, because the real
+ * compilers do answer `--help` and the mode would stay green either way. So
+ * the two help texts below stand in for the compilers — one that names no
+ * option, one that names one — and the comparison is asked about every pairing
+ * of them. It answers the failures it found, so the caller can report them the
+ * way it reports a compiler that would not answer `--help`.
+ *
+ * It costs microseconds, so it runs on every invocation of the mode rather
+ * than as a check of its own: `--flags-only` is this file's own entry point,
+ * and that is how `npm test` reaches the flag-set half at all.
+ */
+const emptyFlagSetGuardFailures = () => {
+  // No token anywhere in it begins with `-`, so neither the option-line
+  // pattern nor the permissive usage-line fallback finds anything: this is
+  // what a `--help` that names no option looks like to `flagsOf`.
+  const unread = "Usage: nish\n\nCompile a program. The manual lists the options.\n";
+  const read = "Usage: nish [options] <file>\n\n  -o, --output <file>\n";
+  const failures = [];
+  if (flagsOf(unread).size > 0) {
+    failures.push("the unreadable help text parses to flags, so it stands in for nothing");
+  }
+  if (flagsOf(read).size === 0) {
+    failures.push("the readable help text parses to no flags, so every pairing below is empty");
+  }
+  // Each pairing names the sides whose help text was not parsed, and the
+  // comparison has to report *those* sides. Counting undeclared rows would not
+  // do, for the reason the early return above gives: with one side empty the
+  // per-flag rows fail too, for the wrong reason, so a count would go on
+  // looking like a demonstration after the guard was gone.
+  const pairings = [
+    [["stage0", "stage1"], unread, unread],
+    [["stage0"], unread, read],
+    [["stage1"], read, unread],
+  ];
+  for (const [owners, help0, help1] of pairings) {
+    const rows = flagSetDifferences(help0, help1);
+    for (const owner of owners) {
+      const named = rows.some((d) => d.declared === null && d.detail === emptyFlagSetDetail(owner));
+      if (!named) failures.push(`${owner}'s unparsed help text did not fail the comparison`);
+    }
+  }
+  // The other half of the demonstration, and the one that keeps the guard from
+  // becoming a way to fail: two help texts that do parse still answer what they
+  // answered before. The guard returns *instead of* the per-flag rows, so the
+  // path it short-circuits is worth a line here — agreement, and a difference.
+  if (flagSetDifferences(read, read).length > 0) {
+    failures.push("two identical readable help texts were reported as a difference");
+  }
+  const oneMore = `${read}  --out-dir <dir>\n`;
+  if (!flagSetDifferences(read, oneMore).some((d) => d.detail.includes("--out-dir"))) {
+    failures.push("a flag only one readable help text names was not reported");
+  }
+  return failures;
+};
 
 async function main(argv) {
   const verbose = argv.includes("--verbose");
@@ -584,6 +701,17 @@ async function main(argv) {
     // line each, in a fixed shape, so the CI job can count them with `grep -c`.
     for (const file of removed) process.stderr.write(`parity: removed: ${file}\n`);
     return 0;
+  }
+
+  // Before a compiler is built, because a broken guard is this mode's own bug
+  // and finding it after a three-minute build teaches nothing extra. After
+  // `--list`, because that mode's stdout is the list and nothing else.
+  const guardFailures = emptyFlagSetGuardFailures();
+  if (guardFailures.length > 0) {
+    for (const failure of guardFailures) {
+      process.stdout.write(`parity: the empty flag-set guard: ${failure}\n`);
+    }
+    return 1;
   }
 
   const runs = [];
