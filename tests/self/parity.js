@@ -4,6 +4,8 @@
  *   node tests/self/parity.js                 the whole corpus, every variation
  *   node tests/self/parity.js --flags-only    the flag-set half alone (seconds)
  *   node tests/self/parity.js --only str_     just the programs whose path matches
+ *   node tests/self/parity.js --changed <f>   just the programs a diff's files belong to
+ *   node tests/self/parity.js --changed <f> --list   name those programs and build nothing
  *   node tests/self/parity.js --verbose       list every run, not only the differences
  *   node tests/run.js --parity                the same thing, as the suite runs it
  *
@@ -22,8 +24,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { linkPrograms, programs, root } from "./corpus.js";
+import { CORPUS_DIRS, linkPrograms, programs, root } from "./corpus.js";
 import { stage1Only, stage1OnlyFor } from "./stage1_only.js";
 
 const cli = path.join(root, "dist", "index.js");
@@ -361,6 +364,107 @@ function corpus() {
   return out;
 }
 
+/**
+ * The corpus programs a diff touches, which is the bound CI's pull-request
+ * check runs under (the `parity-changed` job of `.github/workflows/ci.yml`).
+ *
+ * The whole corpus is minutes on a four-core box and half an hour on a hosted
+ * runner, and it grows with every program and every flag -- the trade
+ * `parity.yml`'s header argues against making every push wait for. What a pull
+ * request can be asked to pay for is the programs it wrote: a case a pull
+ * request adds or edits is compiled under every variation by both compilers
+ * before it can merge, which is exactly the shape the `CPtr` difference had
+ * when it reached `main` on a green pull request.
+ *
+ * A file selects a program when it is one of that program's own files. A
+ * `tests/link/<name>/` program owns everything under its directory; everywhere
+ * else a program owns its entry and its sidecars -- `foo.ts`, `foo.args`,
+ * `foo.err`, `foo.ll`, `foo.out` and the rest -- which is the `foo.` prefix.
+ * The trailing dot is what keeps `arr_pop.` from selecting `arr_pop_empty.ts`,
+ * where the substring match `--only` uses would take both.
+ *
+ * `owns` in `scripts/arrow-verify.mjs` answers a narrower version of the same
+ * question -- a sidecar back to its `.ts`, for the subset of spellings that
+ * script needs. If a third caller ever wants this, the rule belongs in
+ * `tests/self/corpus.js` with the rest of the corpus layout, and both of these
+ * become one line.
+ *
+ * What this bound does **not** cover is a change to the compilers themselves.
+ * A `src/` or `self/` edit can move every program in the corpus, and this sees
+ * only the `self/` modules the diff happens to touch -- which it sees because
+ * those are corpus programs in their own right, not because of a rule about
+ * compiler sources. That gap is the nightly's on purpose: bounding by the diff
+ * is what buys a check a pull request can afford to wait for, and a bound that
+ * expanded to the whole corpus on any compiler edit would be the unbounded
+ * check under another name.
+ *
+ * It does not cover a **deletion** either, and that one is by construction:
+ * `rows` comes from `corpus()`, which walks the tree as the diff left it, so a
+ * program the diff removed has no row and none of its paths can match. That is
+ * the right answer for a *selection* — a program that is not there cannot be
+ * compiled by either compiler, so there is no comparison to run — and the
+ * wrong answer for a *report*, because a pull request that removes a case
+ * would otherwise be told it touched nothing while corpus coverage shrank.
+ * `removedPrograms` below answers the reporting half.
+ */
+function changedPrograms(rows, paths) {
+  const slash = (p) => p.split(path.sep).join("/");
+  const owners = rows.map((row) => ({
+    name: row.name,
+    prefix: row.name.startsWith("link/")
+      ? `${slash(path.relative(root, path.dirname(row.entry)))}/`
+      : `${slash(path.relative(root, row.entry)).replace(/\.ts$/, "")}.`,
+  }));
+  // `readPathList` has already trimmed and dropped the empty lines, and
+  // `git diff --name-only` spells a path with `/` on every platform, so the
+  // paths arrive in the shape the prefixes are in.
+  const wanted = new Set();
+  for (const file of paths) {
+    for (const owner of owners) if (file.startsWith(owner.prefix)) wanted.add(owner.name);
+  }
+  return wanted;
+}
+
+/**
+ * The corpus programs a diff **removed**, which are reported rather than run.
+ *
+ * Selecting a deleted program is not a thing that can be done: there is no
+ * source left for either compiler to compile, and nothing to compare if there
+ * were. Nor does a deletion hide a reintroduced difference — a program that is
+ * gone cannot differ. What a deletion does do is shrink the corpus, and a gate
+ * that answers "nothing was compared" to a pull request which just removed
+ * three cases is telling a reader something false about its own coverage. So
+ * the mode names them, and `.github/workflows/ci.yml` puts the count in the
+ * job summary next to the count it compared.
+ *
+ * A path is one of these when it is a `.ts` that is no longer in the tree and
+ * sits exactly where a program lives: directly in one of `CORPUS_DIRS`, or as
+ * the `main.ts` of a `tests/link/<name>/` directory. Those are the two rules
+ * `programs()` and `linkPrograms()` apply in `corpus.js`, read backwards and
+ * from the same constant, so the two cannot drift apart into different ideas
+ * of what a corpus program is.
+ */
+const removedPrograms = (paths) => {
+  const gone = [];
+  for (const file of paths) {
+    if (!file.endsWith(".ts")) continue;
+    if (fs.existsSync(path.join(root, file))) continue;
+    const dir = path.posix.dirname(file);
+    const isLinkMain = path.posix.basename(file) === "main.ts" && /^tests\/link\/[^/]+$/.test(dir);
+    if (CORPUS_DIRS.includes(dir) || isLinkMain) gone.push(file);
+  }
+  return gone;
+};
+
+/** One repository-relative path per line; `#` comments and blanks ignored. */
+function readPathList(file) {
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
 function argsFor(entry) {
   const sidecar = entry.replace(/\.ts$/, ".args");
   if (fs.existsSync(sidecar)) return fs.readFileSync(sidecar, "utf8").trim().split(/\s+/).filter(Boolean);
@@ -440,17 +544,57 @@ async function main(argv) {
   const flagsOnly = argv.includes("--flags-only");
   const onlyAt = argv.indexOf("--only");
   const only = onlyAt >= 0 ? argv[onlyAt + 1] : null;
+  const changedAt = argv.indexOf("--changed");
+  const changedFile = changedAt >= 0 ? argv[changedAt + 1] : null;
+  // `fs.existsSync(undefined)` is `false`, so this covers a missing argument as
+  // well as a wrong one -- and `--changed --list`, where the argument is `--list`.
+  if (changedAt >= 0 && !fs.existsSync(changedFile)) {
+    process.stderr.write("parity: --changed wants a file of repository-relative paths, one per line\n");
+    return 2;
+  }
+  // Read once: `corpus()` opens every program to find its `// smoke: args`
+  // marker, so walking it twice is nine hundred file reads for nothing.
+  const rows = flagsOnly ? [] : corpus();
+  const changed = changedFile === null ? null : readPathList(changedFile);
+  const selected = changed === null ? null : changedPrograms(rows, changed);
+  // Reported, never run: see `removedPrograms`. A deleted program has no source
+  // to compile, so it cannot be one of `chosen` -- but it is the difference
+  // between "this diff compared nothing" and "this diff compared nothing and
+  // took three programs out of the corpus", which is a claim the gate owes.
+  const removed = changed === null ? [] : removedPrograms(changed);
+
+  const chosen = rows.filter(
+    (program) =>
+      (only === null || program.name.includes(only)) &&
+      (selected === null || selected.has(program.name))
+  );
+
+  // `--list` answers "what would this run?" without building a compiler, so a
+  // caller can decide whether the run is worth starting at all. CI's
+  // pull-request job asks exactly that: a pull request whose diff touches no
+  // corpus program gets an empty list and never installs LLVM. Names on
+  // stdout, one per line and nothing else, so `wc -l` is the answer; the
+  // summary goes to stderr where it cannot be counted with them.
+  if (argv.includes("--list")) {
+    for (const program of chosen) process.stdout.write(`${program.name}\n`);
+    const runCount = chosen.length * VARIATIONS.length;
+    process.stderr.write(`parity: ${chosen.length} program(s) selected, ${runCount} run(s)\n`);
+    // On stderr with the summary, because stdout is the list `wc -l` counts and
+    // a removed program is not one of the programs that will be compared. One
+    // line each, in a fixed shape, so the CI job can count them with `grep -c`.
+    for (const file of removed) process.stderr.write(`parity: removed: ${file}\n`);
+    return 0;
+  }
+
+  const runs = [];
+  for (const program of chosen) {
+    for (const variation of VARIATIONS) runs.push({ program, variation });
+  }
+
   const compiler = process.env.NISH_PARITY_COMPILER ?? (await build());
   if (compiler === null) return 1;
   fresh(workRoot);
 
-  const runs = [];
-  if (!flagsOnly) {
-    for (const program of corpus()) {
-      if (only !== null && !program.name.includes(only)) continue;
-      for (const variation of VARIATIONS) runs.push({ program, variation });
-    }
-  }
   const t0 = Date.now();
   // A full run is minutes — `self/`'s modules are whole programs and every one
   // of them is compiled under every variation — so it says where it is. On
@@ -499,6 +643,10 @@ async function main(argv) {
       process.stdout.write(`declared: ${count} × ${where} ${reason.surface} — ${reason.why}\n`);
     }
   }
+  // Here on stdout rather than stderr: this is the log the `parity-changed`
+  // job tails into its step summary, and a diff that removed programs should
+  // say so beside the count of the ones it compared.
+  for (const file of removed) process.stdout.write(`parity: removed: ${file}\n`);
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);
   process.stdout.write(
     flagsOnly
@@ -510,4 +658,17 @@ async function main(argv) {
   return undeclared.length === 0 ? 0 : 1;
 }
 
-process.exitCode = await main(process.argv.slice(2));
+/**
+ * The mode runs when this file is the command, and not when it is imported.
+ *
+ * `tests/run.js` imports the four functions below to check the selector on
+ * every `npm test` (section "WP19 G1: the selector"), and an unguarded
+ * top-level `main` would compile the whole corpus the moment it did. Every
+ * other tool here is guarded the same way (`goldens.js`, `ir_oracle.js`,
+ * `diagnostic_coverage.js`).
+ */
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exitCode = await main(process.argv.slice(2));
+}
+
+export { changedPrograms, corpus, readPathList, removedPrograms };

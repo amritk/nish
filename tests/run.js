@@ -33,6 +33,7 @@ import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
+import { changedPrograms, corpus as parityCorpus, readPathList, removedPrograms } from "./self/parity.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
 import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
@@ -277,6 +278,13 @@ function stripHeader(ir) {
 // properties — and it links a stage1 binary, so it is its own run rather than a
 // block that would make every `npm test` pay for it. `tests/self/parity.js` is
 // the driver; everything after `--parity` is passed on to it.
+//
+// Where it actually runs, because a mode nobody types is a mode that measures
+// memory (wp19 §A5): nightly over the whole corpus in `.github/workflows/
+// parity.yml`, which opens an issue on a red or unmeasured run; and on every
+// pull request in `.github/workflows/ci.yml`, bounded to the corpus programs
+// the diff touches -- `--changed <file>`, passed straight through this door.
+// The flag-set half runs in every `npm test`, in section WP19 G1 below.
 if (process.argv.includes("--parity")) {
   const at = process.argv.indexOf("--parity");
   const r = spawnSync(
@@ -4226,6 +4234,143 @@ if (!only) {
     `validator runs in under 50 ms on ${lines.length} lines (${ms.toFixed(2)} ms)`,
     ms < 50,
     `${ms.toFixed(2)} ms`
+  );
+}
+
+// ---- WP19 G1: the selector the pull-request parity gate is bounded by ------------------
+//
+// `changedPrograms` in `tests/self/parity.js` maps the files of a diff onto the
+// corpus programs that own them, and `.github/workflows/ci.yml`'s
+// `parity-select` / `parity-changed` pair is exactly that map: what it names is
+// compiled under every variation by both compilers before the pull request can
+// merge, and what it does not name is never compared at all.
+//
+// The rule it states is **ownership, not substring**: a program owns its entry
+// and its sidecars through the `<stem>.` prefix, and a `tests/link/<name>/`
+// program owns its directory. The trailing dot and the trailing slash are the
+// whole of it, and dropping either turns the map into the substring match
+// `--only` uses -- under which a diff naming `tests/cases/add_plain.ts` selects
+// `add` as well, and a reviewer showed that `node tests/run.js` stayed green
+// (`1960 passed, 0 failed`) the entire time that was true. A gate whose own
+// bound can be broken invisibly is the failure this work package is about, one
+// file over, so the bound is checked here rather than by hand.
+//
+// It is plain JavaScript over the corpus on disk: no compiler, no toolchain, a
+// few milliseconds, so it runs in every `npm test` including a degraded one.
+if (!only || "parity".includes(only) || "selector".includes(only)) {
+  const rows = parityCorpus();
+  const selection = (...paths) => [...changedPrograms(rows, paths)].sort();
+  const same = (got, want) => got.length === want.length && got.every((name, i) => name === want[i]);
+  const shows = (got, want) => `selected [${got.join(", ")}], wanted [${want.join(", ")}]`;
+  const selects = (name, paths, want) => {
+    const got = selection(...paths);
+    check(`parity --changed: ${name}`, same(got, want), shows(got, want));
+  };
+
+  // Named first, because every check below asserts a selection *equals* a set
+  // of these: if one is renamed out of the corpus the failure should say so
+  // here rather than arrive as an empty selection that matches an empty
+  // expectation somewhere further down.
+  const fixtures = [
+    "tests/cases/add.ts",
+    "tests/cases/add_plain.ts",
+    "cases/reject_generic_expanding_field",
+    "link/std_testing",
+    "link/std_testing_fail",
+  ];
+  const known = new Set(rows.map((row) => row.name));
+  const missing = fixtures.filter((name) => !known.has(name));
+  check(
+    `parity --changed: the ${fixtures.length} corpus programs these checks name are in the corpus`,
+    missing.length === 0,
+    `not found: ${missing.join(", ")}`
+  );
+
+  // The demonstrated regression, in both directions: `add_plain` is not
+  // selected by a diff that names `add`, and `add` is not selected by one that
+  // names `add_plain`. A substring match fails the second of these.
+  selects("a diff naming the longer stem selects only it", ["tests/cases/add_plain.ts"], ["tests/cases/add_plain.ts"]);
+  selects("a diff naming the shorter stem selects only it", ["tests/cases/add.ts"], ["tests/cases/add.ts"]);
+
+  // A sidecar with no `.ts` beside it in the diff: regenerating a golden, or
+  // changing the flags a case is compiled with, is a change to that program and
+  // selects it. This is also what makes the tail the job comment describes real
+  // -- a commit that rewrites 1,337 goldens selects 1,337 programs.
+  for (const sidecar of [".args", ".ll", ".out"]) {
+    selects(
+      `a bare ${sidecar} selects the program it belongs to`,
+      [`tests/cases/add_plain${sidecar}`],
+      ["tests/cases/add_plain.ts"]
+    );
+  }
+  // A `reject_*` case is a corpus row under its own name, and its `.err` is the
+  // file such a case is most often edited through.
+  selects(
+    "a rejection's .err selects the rejection",
+    ["tests/cases/reject_generic_expanding_field.err"],
+    ["cases/reject_generic_expanding_field"]
+  );
+
+  // `tests/link/<name>/` owns its whole directory, and `std_testing` /
+  // `std_testing_fail` is the same stem-prefix trap one directory up: the
+  // trailing slash is what keeps the first from taking the second.
+  selects("a file under tests/link/<name>/ selects that program", ["tests/link/std_testing/stats.ts"], ["link/std_testing"]);
+  selects(
+    "a link program's expectation file selects it, and not its longer-named neighbour",
+    ["tests/link/std_testing/expected.out"],
+    ["link/std_testing"]
+  );
+  selects(
+    "the longer-named link program is selected only by its own directory",
+    ["tests/link/std_testing_fail/main.ts"],
+    ["link/std_testing_fail"]
+  );
+
+  // The bound is a bound: a file that is nobody's selects nothing, which is
+  // what lets the CI job not exist at all on a pull request that touches no
+  // corpus program. `src/` is deliberate -- a compiler edit can move every
+  // program in the corpus and this does not see it, which the job comment says
+  // in as many words and the nightly is what covers.
+  selects("a compiler source selects nothing", ["src/checker/index.ts", "README.md"], []);
+  selects("an empty diff selects nothing", [], []);
+  // Several files of several programs at once, which is the shape a real diff
+  // has, and each program named once however many of its files changed.
+  selects(
+    "a mixed diff selects each program it touches, once",
+    [
+      "tests/cases/add_plain.args",
+      "tests/cases/add_plain.ll",
+      "tests/link/std_testing/main.ts",
+      "src/codegen/emitter.ts",
+    ],
+    ["link/std_testing", "tests/cases/add_plain.ts"]
+  );
+
+  // A deletion is reported rather than selected, and the two halves of that
+  // sentence are checked together: the program is gone from the tree, so there
+  // is nothing to compare and `changedPrograms` cannot name it -- but the diff
+  // did shrink the corpus, and a gate that answered "nothing was compared"
+  // without saying so would be describing its own coverage wrongly.
+  const deleted = ["tests/cases/no_such_case.ts", "tests/link/no_such_program/main.ts", "self/no_such_module.ts"];
+  selects("a deleted program cannot be selected, because it is not there to compile", deleted, []);
+  const reported = removedPrograms([...deleted, "tests/cases/add.ts", "src/no_such_source.ts", "tests/cases/gone.ll"]);
+  check(
+    "parity --changed: a deleted corpus program is reported as removed",
+    same(reported.sort(), [...deleted].sort()),
+    shows(reported, deleted)
+  );
+
+  // One repository-relative path per line, the shape `git diff --name-only`
+  // writes, with the comments and blank lines a hand-written list picks up.
+  const listDir = path.join(buildDir, "parity-selector");
+  fs.mkdirSync(listDir, { recursive: true });
+  const listFile = path.join(listDir, "changed.txt");
+  fs.writeFileSync(listFile, "# a comment\n\n  tests/cases/add_plain.ts  \n\ntests/link/std_testing/main.ts\n");
+  const read = readPathList(listFile);
+  check(
+    "parity --changed: the path list drops comments and blanks and trims each line",
+    same(read, ["tests/cases/add_plain.ts", "tests/link/std_testing/main.ts"]),
+    read.join(" | ")
   );
 }
 

@@ -90,12 +90,27 @@ const CASE_NAME = /^(nl\d{4})_[a-z0-9_]+\.ts$/;
  * this tool has to keep working in a tree where stage0 has been deleted; the
  * two files are required to be identical by `tests/run.js`, so reading either
  * reads both.
+ *
+ * The indentation is not part of the contract, and reading it as though it were
+ * is what turned this tool's coverage half off. `self/codes.ts`'s tables lost a
+ * level when WP22 stage C rewrote them as arrows with concise bodies, and a
+ * pattern keyed on four literal spaces then parsed **0 of 408** codes rather
+ * than failing: `--require-coverage` iterated an empty map, the per-case
+ * registry-fragment cross-check found no fragment for any code, and the tool
+ * printed `coverage 0/0 codes` and exited 0. `tests/run.js` walked into the
+ * same trap and out of it (`^\s+`, and the comment beside `pairsOf` there);
+ * this is the same fix, plus the guard that an empty registry is a failure
+ * rather than a vacuous pass -- because what made the first one survive is that
+ * nothing distinguishes "every code is covered" from "there are no codes".
  */
 const registry = () => {
   const text = fs.readFileSync(REGISTRY, "utf8");
   const entries = new Map();
-  for (const m of text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(NL\d{4})",$/gm)) {
+  for (const m of text.matchAll(/^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm)) {
     entries.set(m[2], JSON.parse(m[1]));
+  }
+  if (entries.size === 0) {
+    throw new Error(`${path.relative(root, REGISTRY)}: no diagnostic codes parsed -- the registry's shape has moved`);
   }
   return entries;
 };
