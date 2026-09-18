@@ -781,6 +781,37 @@ measured in [wp20-threads.md](wp20-threads.md) §4 T0. The four stages that add
 rules to LANGUAGE.md cannot land before M4 without delaying the freeze, and are
 1.1 scope by default.
 
+**What has changed is that the payoff is no longer a prediction.** wp20 §4 T4
+and §7 both said the parallel win should be measured on a prototype before
+T1's surface was designed, and it now has been
+([wp20-threads.md](wp20-threads.md) §8): three kernels compiled by the ordinary
+compiler to the C ABI and a pthreads driver splitting one fixed amount of work
+across four physical cores. A compute kernel returns **3.76x at 94%
+efficiency**, and netted against the binary a program would build today —
+`--threads` costs nothing at all when nothing touches the arena — **3.81x**.
+That is the largest number left anywhere in this plan: the whole of the WP15
+list above tops out at 2.48x for its one remaining large item and runs to a few
+per cent for the typical one, so T1 and T2 are worth building on a measurement
+and not only on the soundness argument.
+
+The prototype's second finding is the one the note did not expect, and it
+changes what T4 has to be. **An allocating body's scaling is decided by its
+arena discipline, not by the thread count.** The same loop returns 3.10x with
+the arena left to grow and **1.86x** once `Arena.reset()` recycles it every
+4,096 objects — and the recycling on its own is worth **4.2x**, so the best
+configuration measured beats the naive one by 6.4x of which only 1.5x is the
+threads. Part of the residual is `malloc` contention over arena chunks and that
+part is measured (the reset interval moves 1.87x to 1.57x); the rest, with the
+batch provably inside one chunk so that no `malloc` happens at all, is not
+explained by this prototype and is named as such rather than guessed. So
+`parallelFor` needs an arena story beside its partitioning story, the
+per-thread arena teardown turns out to exist already and needs no new runtime
+entry point, and `--threads` should become implied by the language surface
+rather than requested beside it, because a program that never spawns should not
+pay the 1.10x–1.22x. **Threads are also now sequenced ahead of WP28's compat
+`async`**, which is notation over this engine rather than an engine of its own;
+that decision is recorded in both notes.
+
 Packages are not on that list either, and the question "how does one
 Nish package depend on another" turns out to have the same character:
 the answer is forced by whole-program compilation rather than chosen. A
@@ -897,9 +928,11 @@ decisions, correctly, and each of the three is also code somebody has already
 written, and a dialect is what stops those two facts from having to be settled
 against each other. It also forces the flag surface, which has grown to
 twenty-three options across four axes with none of them named: the note regroups
-them into **dialect / build / output**, gives the dialect one allow-list flag
-that a team ratchets down in `package.json` rather than twelve booleans, and
-records the dialect in the emitted IR — which closes §5.1's older complaint
+them into **dialect / build / output**, gives the dialect one allow-list flag —
+`--compat`, bare for every built feature and `--compat=<list>` for exactly
+some, with strict being the *absence* of the flag so that no existing command
+line or golden moves — that a team ratchets down in `package.json` rather than
+twelve booleans, and records it in the emitted IR — which closes §5.1's older complaint
 that two `.ll` files from one source under different `--number-mode` settings
 are different programs and neither says so. It answers §3.4's oldest open row
 on the way: `i32` in strict, `f64` in compat, because a ported codebase whose
@@ -927,11 +960,28 @@ lets the same expression become a real fork and join under a second engine,
 `--async-model threads`, riding WP20 T1 and T2. One analysis, two payoffs, and
 the second is parallelism the single-threaded original could not have had from
 source written for it. None of it is pre-1.0 and none of it adds a rule to
-LANGUAGE.md, so M4's freeze is not waiting on this note either; the two
-measurements that could stop the package before it starts — what one indirect
-call costs the fixpoint whole-program, and how many `async` functions in a real
-application ever await something that can block — are named in its §7.1 and
-neither takes more than a day.
+LANGUAGE.md, so M4's freeze is not waiting on this note either.
+
+Of the two measurements that could have stopped the package before it started,
+the first has been taken and did not stop it — but it moved the headline, which
+is the useful kind of spike ([wp28](wp28-compatibility-mode.md) §7.4). One
+opaque callee in a hot loop costs **1.26x to 1.40x** for the inlining it loses;
+costs **nothing measurable** for the frontend facts it strips from every
+transitive caller, because LLVM re-derived them inside the LTO unit — which is
+not a claim the fixpoint is worthless, WP15 §1a's alias facts are worth 1.63x
+to 3.96x, only that *these* facts lost *this* way are free; and costs
+**8.76x** for the escape proof it takes away, because an object WP6 can prove
+local today becomes an entry-block `alloca` and is then removed outright, while
+an unknown callee sends 200M of them back to the arena. So the compat report
+leads with the arena and not with the attribute, and the closure stage splits
+along a line [wp23](wp23-language-surface.md) §6 had already drawn: a callback
+whose callee is *statically known* — an arrow at the call site, a function
+passed by name — is a direct call that inlines and keeps the escape proof and
+costs nothing, while a function value whose target the checker cannot name
+costs the 1.26x and the 8.76x. The cheap half is built first and is most of
+what a migrating codebase writes. The second measurement — how many `async`
+functions in a real application ever await something that can block — is still
+unrun.
 
 The one thing that has *left* the language rather than entered it is
 inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of

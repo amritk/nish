@@ -1,7 +1,8 @@
 # WP28: Compatibility mode, and what `async` means in each dialect
 
-**Proposed. Nothing here is built.** This is the plan of record for two
-questions that arrived together and turn out to be one question:
+**Proposed. Nothing here is built, and one of its two gating measurements has
+been taken (§7.4).** This is the plan of record for two questions that arrived
+together and turn out to be one question:
 
 1. Should there be a mode that accepts most of ordinary TypeScript, so that a
    team can port a codebase first and buy the performance back afterwards, one
@@ -40,9 +41,9 @@ language.** Five rules, and every later section is one of them worked out:
    `performance`, WP15 item 2, `PerformanceWarning` in `src/diagnostics.ts`,
    the `NL9xxx` band, `--json`, `--no-warn-performance`. No new class is
    needed, and that is the single cheapest thing on this page.
-4. **The ratchet is one list, not one flag per feature.** `--dialect
-   compat=<features>` is an allow-list that a team narrows in version control
-   until it is empty and the flag is deleted. §5.
+4. **The ratchet is one list, not one flag per feature.** `--compat=<features>`
+   is an allow-list that a team narrows in version control until it is empty
+   and the flag is deleted. §5.
 5. **The erasure invariant is a test, not a promise.** Every program in the
    corpus, compiled with the mode switched on and no compatibility construct
    used, must emit **byte-identical IR** — and every one of the 437 `reject_*`
@@ -51,6 +52,18 @@ language.** Five rules, and every later section is one of them worked out:
    there, which makes the mode provably a no-op until somebody uses it, and it
    is the cheapest guard against this package's worst failure mode: a dialect
    flag that quietly changes the strict language.
+
+One sequencing decision belongs here rather than only in §7.3, because it
+changes which half of §6 gets built: **the threads come first.** WP20's T1 and
+T2 — `Thread.spawn`, `join`, the shareable-type rule — are built as a language
+surface of their own, with their own diagnostics, before any `await` is lowered
+onto them, and the payoff that justifies them is now measured rather than
+hoped: 3.76x on four cores for a compute kernel at 94% efficiency
+([wp20-threads.md](wp20-threads.md) §8). The compat `async` of
+§6 is notation over that engine, and notation is the wrong thing to design an
+engine through — T2's shareable-type rule is the stage wp20 §4 says to
+prototype against a real program, and a keyword that hides it is not a real
+program.
 
 And the thesis, because it is the argument for the whole package and it is not
 the obvious one:
@@ -154,11 +167,18 @@ silent degradation. It emits a `performance` diagnostic in the existing class:
 ```
 warning[NL9xxx]: `sort(items, compare)` passes a function value
   --> src/table.ts:88:22
-   = the call cannot be inlined and `readonly` is dropped from 3 functions
-     reachable from it (`compare`, `key`, `normalise`)
-   = 2 allocations in this function move from the stack to the arena
+   = 2 allocations reachable from this call move from the stack to the arena
+     (`Row` at table.ts:64, `Key` at table.ts:71) -- measured at up to 8.8x
+     per object on an allocating loop (wp28 §7.4)
+   = the call cannot be inlined: about 1.3x on the loop it sits in
+   = `readonly` and `willreturn` are dropped from 3 transitive callers
    = rewrite: make `compare` a top-level function and call it directly
 ```
+
+The order of those lines is the order S1 measured (§7.4) and not the order this
+note first guessed: the arena is the expensive one by a factor of six, and the
+attribute loss — which is what a compiler author reaches for first — was worth
+nothing at all on the shapes tested.
 
 `--json` over that class is the migration dashboard, and it is a dashboard the
 project already ships the plumbing for. The interesting number is not the count
@@ -204,9 +224,12 @@ Compatibility mode is slower than strict — that is the point, and it is why
 each construct is priced. What it must never become is a mode where the
 slowdown is unattributable. If the report cannot say which construct cost
 what, the migration story collapses into "it got slower somewhere", and the
-whole package was for nothing. §7's first spike exists to find out whether the
-attribution is even possible for the function-value tier, before anything is
-built on the assumption that it is.
+whole package was for nothing. §7's first spike was run to find out whether the
+attribution is even possible for the function-value tier: it is, because the
+blast radius is exactly the transitive caller set of the opaque callee and the
+checker already builds that graph (§7.4). What the spike also found is that the
+report's *order* matters more than its completeness, because the three costs it
+would list differ by a factor of six.
 
 ### 4.3 It is not a second freeze
 
@@ -252,7 +275,7 @@ rather than cosmetic:
 
 | Axis | Question it answers | Flags |
 | --- | --- | --- |
-| **Dialect** | what does this source *mean*? | `--dialect`, `--number-mode`, `--wrapping`, `--async-model` |
+| **Dialect** | what does this source *mean*? | `--compat`, `--number-mode`, `--wrapping`, `--async-model` |
 | **Build** | how is it made? | `--profile`, `--target`, `--link`, `--plain`, `--no-stack-alloc`, `--unchecked-indexing`, `--threads`, `--no-strict-exports` |
 | **Output** | what is written? | `-o`, `--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`, `--runtime-decls`, `-g`, the dumps |
 
@@ -262,9 +285,9 @@ coherent.
 **One dialect flag, with an allow-list.**
 
 ```
---dialect strict                    (default, and what every benchmark measures)
---dialect compat                    every tier-2 feature that is built
---dialect compat=closures,async     exactly these; everything else still rejected
+(no flag)                   strict: the default, and what every benchmark measures
+--compat                    every tier-2 feature that is built
+--compat=closures,async     exactly these; everything else still rejected
 ```
 
 The third form is the user-facing answer to "disable them one by one". It is
@@ -280,13 +303,14 @@ error[NL1021]: `async` functions are forbidden in Nish (no event loop or promise
 ```
 
 **The list lives in `package.json`, not only on the command line.** WP21
-already puts a `nish` export condition there; `nish.dialect` and `nish.compat`
-belong beside it. That is where a ratchet has to live to be reviewable: the
+already puts a `nish` export condition there; `nish.compat` belongs beside it,
+as `true` for every feature or an array for exactly some. That is where a ratchet has to live to be reviewable: the
 diff that removes `"async"` from the list is the migration, and CI enforces it
 for free. The CLI flag overrides for a one-off build.
 
-**The dialect is recorded in the artifact.** A `!nish.dialect` named metadata
-node in every emitted module, and a line in `--emit-checked`. It costs one
+**The dialect is recorded in the artifact.** A `!nish.compat` named metadata
+node in every emitted module, and a line in `--emit-checked` — absent, like the
+flag, for a strict build, so no existing golden moves. It costs one
 line of IR, it makes a golden pin the mode, and it means a linked binary can
 be traced back to the rules it was built under. Everything on the Dialect axis
 goes in it, `--number-mode` included — which closes the second bullet of §5.1
@@ -306,7 +330,7 @@ truncates at 2³¹ is exactly the failure [wp13-differential.md](wp13-differenti
 exists to catch, and it is a *quiet* failure — the program runs and the number
 is wrong.
 
-**So `--dialect compat` implies `--number-mode f64`**, and an explicit
+**So `--compat` implies `--number-mode f64`**, and an explicit
 `--number-mode i32` beside it is an override that the `performance` class
 reports as the divergence it is. This resolves MASTER_PLAN §3.4's oldest open
 row in the only way that is defensible once two dialects exist: **`i32` in
@@ -339,9 +363,9 @@ underneath it is chosen by a flag rather than by JavaScript's history.
 
 | | `await f()` | `Promise.all([f(), g()])` | concurrency | parallelism |
 | --- | --- | --- | --- | --- |
-| `--dialect compat --async-model sync` (default in compat) | call `f`, use the result | `f` then `g`, sequentially | none | none |
-| `--dialect compat --async-model threads` | spawn `f`, join at the `await` | spawn both, join both | yes | **yes** |
-| `--dialect strict` | rejected, as today | rejected | — | `Thread`, `parallelFor` (WP20 T1–T4) |
+| `--compat --async-model sync` (the default under `--compat`) | call `f`, use the result | `f` then `g`, sequentially | none | none |
+| `--compat --async-model threads` | spawn `f`, join at the `await` | spawn both, join both | yes | **yes** |
+| strict (no `--compat`) | rejected, as today | rejected | — | `Thread`, `parallelFor` (WP20 T1–T4) |
 
 Same source. Three engines. The ladder in §7.2 is what a team walks.
 
@@ -482,30 +506,31 @@ starting, in the order they would change the answer.
 
 | | Spike | What it decides |
 | ---: | --- | --- |
-| S1 | insert one indirect call into a hot path of `self/` or a benchmark; count the attributes lost whole-program and the wall-clock cost | prices the entire function-value tier, which is the tier everything else sits behind. If the blast radius cannot be *attributed* to the site, §4.2 says the package fails |
+| S1 | **done — §7.4.** One opaque callee in a hot loop, three ways: as a `declare`d C function (opaque to the fixpoint, visible to LTO), as a true indirect call through a pointer installed at run time, and as the escape analysis it forfeits | priced the entire function-value tier, and moved the headline: the call is worth 1.26x–1.40x and the *escape analysis* is worth 8.8x |
 | S2 | on a real TypeScript application, count `async` functions against `async` functions that await something that can block | decides whether §6.6's decolouring is the common case or a story |
-| S3 | the erasure invariant, run against the corpus with a no-feature `--dialect compat` | it is C0's acceptance test, and it is runnable the day the flag parses |
+| S3 | the erasure invariant, run against the corpus with a feature-less `--compat` | it is C0's acceptance test, and it is runnable the day the flag parses |
 | S4 | `Promise.all` over two non-interfering calls under `--async-model threads`, against WP20 T4's `parallelFor` on the same work | decides whether §6.4's second payoff is real or a rounding error |
 | S5 | the benchmark suite under `--number-mode f64` | prices §5.3, which is the one thing compat changes about an existing program |
 | S6 | `try`/`catch` by landing pads against `try`/`catch` desugared to `Result` with implicit propagation, on the same program | the two lowerings have very different costs and the choice should not be made on taste |
 
-S1 and S2 are the two that could stop the package. Neither takes more than a
-day.
+S1 and S2 were the two that could stop the package. S1 has run (§7.4) and did
+not stop it, but it did change what the mode has to report and in which order
+the stages are worth building. S2 is unrun.
 
 ### 7.2 The ladder a team walks
 
 The product, stated as the sequence a migrating team actually experiences,
 because it is what the staging has to serve:
 
-1. `--dialect compat` — it compiles. Slower than strict, with a report saying
-   exactly where and why.
+1. `--compat` — it compiles. Slower than strict, with a report saying exactly
+   where and why.
 2. Ratchet `nish.compat` down, guided by the report's blast-radius numbers.
    Highest cost first, which is the ordering the report exists to give.
 3. `--async-model threads` — the same source gets parallelism it never had
    under Node. This is the step where the migration stops being a tax and
    starts paying.
-4. A codemod erases the now-meaningless `async`/`await`, and the list is empty:
-   `--dialect strict`. The repository already has codemod machinery from the
+4. A codemod erases the now-meaningless `async`/`await`, the list is empty, and
+   the flag comes off. The repository already has codemod machinery from the
    stage C rewrite.
 
 Step 3 is the one worth designing the whole package around. Every other step
@@ -516,12 +541,13 @@ runtime could not do.
 
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
-| **C0** | the machinery, zero features | `--dialect`, the allow-list, `nish.dialect`/`nish.compat`, `!nish.dialect` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op, and every later stage becomes an entry rather than a redesign |
+| **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat` in package.json, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op, and every later stage becomes an entry rather than a redesign |
 | **C1** | the free tier | optional and default parameters, `?.`, `??`, string `switch`, `for...of` over a string, labelled break/continue, overload signatures — each a wp23 refusal reversed *in compat only*, each checker-only | M |
 | **C-lib** | the library tier | `Map`, `Set`, `Date`, `JSON`, `RegExp`, `Buffer`, on WP18's monomorphised generic classes and WP26's rules | L, and per §4.1 it outranks most of what follows for a real port |
-| **C2** | function values and closures | the indirect call, the captured-environment struct, and the fixpoint degradation S1 priced | L. The hinge: `.map`, `.filter`, callbacks, and `.then` are all downstream |
-| **C3** | `async`/`await`, `--async-model sync` | §6.3's two rules, the erasure, §6.4's non-interference admission, and the differential cases that hold it | M, after C2 only because `Promise.all` wants the same machinery |
-| **C4** | `--async-model threads` | §6.5, riding WP20 T1 and T2 | M, and gated on WP20 rather than on this note |
+| **C2a** | callbacks whose callee is statically known | wp23 §6's compile-time function parameter: an arrow at the call site or a function passed by name, monomorphised into the caller | M, and **free at run time** (§7.4). Covers most of what a migrating codebase spells with a callback: `.map`, `.filter`, `.sort(cmp)` |
+| **C2b** | function values proper | a value whose target the checker cannot name: the indirect call, the captured-environment struct, and the escape proof it forfeits | L, and the expensive one — 1.26x for the call and up to 8.76x for what it does to WP6 (§7.4). `.then` and a callback in a field are downstream of this, not of C2a |
+| **C3** | `async`/`await`, `--async-model sync` | §6.3's two rules, the erasure, §6.4's non-interference admission, and the differential cases that hold it | M. **After WP20 T1 and T2**, not just after C2b: the sequencing in §1 is a decision, and S2 may yet retire this stage in favour of C4 alone |
+| **C4** | `--async-model threads` | §6.5, riding WP20 T1 and T2 | M, and gated on WP20 rather than on this note. This is the stage the whole ladder is for (§7.2 step 3) |
 | **C5** | exceptions | whichever lowering S6 chose | L |
 | **C6** | generators as iterators | wp24 §3b's shape | M |
 | **C7** | `extends` with virtual dispatch | wp25 reversed in compat only; the vtable is an indirect call, so it costs exactly what C2 costs and lands behind it | M |
@@ -532,6 +558,89 @@ it converts every future "should we accept X" from a language argument into a
 one-line entry in a list — which is the thing this note is actually for.
 
 ---
+
+### 7.4 S1, measured — and the headline it moves
+
+Five programs, in §11, on the machine §8 of
+[wp20-threads.md](wp20-threads.md) describes; best of seven, variants
+interleaved run by run. The instrument is wp27's `declare function`, which
+gives a genuinely attribute-less callee inside the language as it is today, and
+a hand-edited call through a function pointer the C half installs at run time,
+which gives a callee LTO cannot see either — the position a closure's code
+pointer is actually in.
+
+**What one opaque callee does to the fact table**, on a four-function program
+whose every function is pure in the baseline:
+
+| | baseline | with the callee opaque |
+| --- | --- | --- |
+| the callee | `nounwind willreturn readnone` | `nounwind` (it is a `declare`) |
+| its caller, `run` | `nounwind willreturn readnone` | `nounwind` |
+| *its* caller, `nish_main` | `nounwind willreturn` | `nounwind` |
+
+So the blast radius is the **transitive caller set**, entire, and it reaches
+the program entry from one leaf. That is computable from the call graph the
+checker already builds, which answers §4.2's question — the cost is
+attributable — and it is the *only* part of S1 that came out as predicted.
+
+**What it costs, measured:**
+
+| Shape | callee known | opaque to the fixpoint, in the LTO unit | truly indirect | ratio |
+| --- | ---: | ---: | ---: | ---: |
+| a serial hash chain, 400M calls | 489 ms | 490 ms | 616 ms | **1.26x** |
+| the same call inside an array loop, 1,024 elements × 400k rounds (`xs.reduce(cb)`) | 543 ms | 542 ms | 760 ms | **1.40x** |
+
+| Shape | object proved local (today) | object not provable | ratio |
+| --- | ---: | ---: | ---: |
+| one 8-byte object per iteration, 200M iterations | 137 ms | 1,200 ms | **8.76x** |
+
+Three findings, and the third is the one that moves the plan:
+
+1. **The frontend's own attributes, in isolation, are worth nothing on these
+   shapes.** 490 ms against 489, and 542 against 543. Losing `readnone` and
+   `willreturn` on every transitive caller cost *zero*, because the callee was
+   still inside the LTO unit and LLVM re-derived what it needed. The existing
+   `tests/cases/ffi_scalar` already records the attribute loss; what it could
+   not say is that the loss alone is free. A reader should not conclude the
+   fixpoint is worthless — WP15 §1a measured 1.63x to 3.96x from alias facts on
+   array loops — only that *these* two facts, lost this way, are not what a
+   closure charges you.
+2. **The call itself is worth 1.26x to 1.40x**, and that is the honest price of
+   a `.map`/`.reduce` callback in a hot loop: real, survivable, and roughly
+   what an experienced reader would guess.
+3. **The escape analysis is worth 8.76x, and that is the whole story.** Where
+   the object is provably local today, WP6 turns it into an entry-block
+   `alloca` and LLVM then removes it entirely — 137 ms for 200M iterations is a
+   loop with no object in it at all. An unknown callee cannot be given that
+   proof, so the object goes back to the arena and 200M bump allocations
+   arrive. Nothing else in this note is within a factor of six of that number.
+
+**What that changes.** §3's sample diagnostic leads with the attribute loss and
+mentions the arena second; it is the wrong way round and has been corrected
+there. The compat report must lead with **"this object moved from the stack to
+the arena, and here is the call that took the proof away"**, because that is
+where the time goes, and it must say so for every object reachable from the
+call rather than for the call alone. It also splits C2 in two, along a line
+another note has already drawn. Where the callee is *statically known* — an
+arrow written at the call site, `xs.map(x => x * 2)`, or a named function
+passed by name — nothing above applies: the call is direct, the callee inlines,
+the escape proof survives, and the cost is zero. That case is
+[wp23-language-surface.md](wp23-language-surface.md) §6's compile-time function
+parameter, designed there and explicitly not a relaxation of function values,
+and it covers most of what a migrating codebase spells with a callback. The
+expensive case is the *other* one — a function value stored in a field, an
+element or a variable, whose target the checker cannot name — and that is where
+1.26x and 8.76x live. **So C2's first deliverable is the known callee, and
+function values in general are a separate stage behind it**, because the two
+differ by a factor of nine and a report that cannot tell a user which of the
+two they wrote is not worth printing.
+
+One caveat, stated because the number is large: `--no-stack-alloc` is the
+instrument for the third row, and it disables the analysis program-wide, while
+an opaque call disables it only for what the call can reach. In this program
+those are the same set. The 8.76x is therefore an honest per-object figure and
+not a program-wide multiplier, and how much of a real program is reachable from
+its closures is the measurement C2 has to take before it ships.
 
 ## 8. Declined, with the rule each one breaks
 
@@ -545,7 +654,7 @@ one-line entry in a list — which is the thing this note is actually for.
   [wp16-results.md](wp16-results.md): `Result` has no `map` for this reason,
   and a language that refused `Result.map` and accepted `.then` would be
   trading the attribute fixpoint for a spelling. In *compat*, where function
-  values exist at C2's stated price, it follows from C2 and needs no separate
+  values exist at C2b's stated price, it follows from C2b and needs no separate
   decision — which is precisely the separation §1's thesis is about.
 - **A third, middle dialect** (`loose`, or `compat-strict`) — two dialects plus
   a per-feature ratchet already *is* the gradient; a third would be a third
@@ -589,13 +698,18 @@ one-line entry in a list — which is the thing this note is actually for.
 
 ## 10. Open
 
-- **The flag's name.** `--dialect compat` reads correctly and groups correctly;
-  `--compat` is more discoverable and does not generalise. This note uses
-  `--dialect` and does not consider the question closed.
+- ~~**The flag's name.**~~ **Decided: `--compat`**, with the bare form meaning
+  every built feature and `--compat=<list>` meaning exactly those. Strict is
+  the *absence* of the flag rather than a value of it, which is what keeps the
+  default spelled the way it is spelled today — a strict build's command line
+  does not change, and neither does its IR.
 - **Whether `async` belongs in compat at all**, or only as `--async-model
   threads` over an explicitly threaded surface. §6.3's rule makes the sync
   lowering defensible; S2 decides whether it is *useful*, and a negative S2 is
-  an argument for dropping C3 and keeping C4.
+  an argument for dropping C3 and keeping C4. The order is no longer open —
+  §1 settles that the threads are built first either way — so this question now
+  only decides whether C3 is ever built, and it can be left until T1 and T2
+  have landed and there is a real engine to measure the notation against.
 - **Whether the compat ceiling should be per-dependency rather than global.**
   §3 takes the simple rule; a vendored dependency that legitimately needs one
   feature the application has ratcheted away is the case that would argue
@@ -610,3 +724,195 @@ one-line entry in a list — which is the thing this note is actually for.
 - **Whether `--number-mode` should be per-module.** §5.3 makes it a dialect
   setting; WP26 §"the number-mode rule" already found that a `std/` module has
   to care, and a mixed-dialect program makes that sharper.
+
+---
+
+## 11. Appendix: S1, in full
+
+§7.4's measurements are the only facts this note has that are not an argument,
+so the programs are here rather than only reported, by the convention
+[wp24-async.md](wp24-async.md) §11 sets. None of this is a test case: it is a
+spike, and every part of it uses the language and the toolchain exactly as they
+are today.
+
+### 11a. The call, direct
+
+```ts
+// S1 baseline. `transform` is a small pure function called once per iteration
+// with a serial dependency through `acc`, so the loop has no closed form and
+// the call cannot be hoisted or folded away. This is the shape `xs.map(cb)`
+// and `xs.reduce(cb)` have, which is why it is the shape worth pricing.
+function transform(x: i32, acc: i32): i32 {
+  const m: i32 = acc ^ (x * 1103515245);
+  return ((m >> 13) ^ m) + 1;
+}
+
+function run(n: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = 0; i < n; i++) {
+    acc = transform(i, acc);
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  console.log(`${run(400000000)}`);
+  return 0;
+}
+```
+
+### 11b. The same call, opaque to the fixpoint
+
+wp27's `declare function` is the instrument: the callee carries no attributes,
+which is precisely the "unknown callee" position, while still being in the LTO
+unit — which is why this variant isolates the *fact loss* from the *codegen
+loss*.
+
+```ts
+// S1 baseline. `transform` is a small pure function called once per iteration
+// with a serial dependency through `acc`, so the loop has no closed form and
+// the call cannot be hoisted or folded away. This is the shape `xs.map(cb)`
+// and `xs.reduce(cb)` have, which is why it is the shape worth pricing.
+declare function transform(x: i32, acc: i32): i32;
+
+function run(n: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = 0; i < n; i++) {
+    acc = transform(i, acc);
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  console.log(`${run(400000000)}`);
+  return 0;
+}
+```
+
+```c
+#include <stdint.h>
+int transform(int x, int acc) {
+  int32_t m = acc ^ (int32_t)((uint32_t)x * 1103515245u);
+  return ((m >> 13) ^ m) + 1;
+}
+```
+
+### 11c. The same call, truly indirect
+
+The `.ll` from 11a with the one call site rewritten, and a C half that installs
+the target at run time so that LTO cannot fold it back. This is where a
+closure's code pointer lives.
+
+```llvm
+  %fp = load i32 (i32, i32)*, i32 (i32, i32)** @transform_fp, align 8
+  %4 = call i32 %fp(i32 %3, i32 %2)
+```
+
+```c
+#include <stdint.h>
+#include <stdlib.h>
+static int t_a(int x, int acc) {
+  int32_t m = acc ^ (int32_t)((uint32_t)x * 1103515245u);
+  return ((m >> 13) ^ m) + 1;
+}
+static int t_b(int x, int acc) { return acc + x; }
+int (*transform_fp)(int, int);
+__attribute__((constructor)) static void install(void) {
+  /* The target is not knowable at compile time, which is what makes the call
+     indirect after LTO -- the same position a closure's code pointer is in. */
+  transform_fp = getenv("NISH_SPIKE_ALT") ? t_b : t_a;
+}
+```
+
+### 11d. The array shape
+
+11a to 11c again with the loop holding the array and the callee taking one
+element, which is `xs.reduce(cb)` and the shape WP15 §1a's alias domains are
+about:
+
+```ts
+// S1, the array shape: the loop holds `xs` and the per-element work is a call.
+// This is `xs.reduce(cb)`. With the callee known and pure, LLVM may hoist the
+// array header out of the loop (WP15 §1a's alias domains) and fold the bounds
+// check; with the callee unknown it may do neither, because an unknown callee
+// could store through `xs` or grow it.
+function mix(x: i32, acc: i32): i32 {
+  const m: i32 = acc ^ (x * 1103515245);
+  return ((m >> 13) ^ m) + 1;
+}
+
+function reduce(xs: i32[], rounds: i32): i32 {
+  let acc: i32 = 1;
+  for (let r: i32 = 0; r < rounds; r++) {
+    for (let i: i32 = 0; i < xs.length; i++) {
+      acc = mix(xs[i], acc);
+    }
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  const xs: i32[] = new Array<i32>(1024);
+  for (let i: i32 = 0; i < 1024; i++) {
+    xs[i] = i * 7 + 1;
+  }
+  console.log(`${reduce(xs, 400000)}`);
+  return 0;
+}
+```
+
+### 11e. The allocation shape
+
+The third row of §7.4, and the expensive one. `--no-stack-alloc` is the
+instrument: it forces every `new` to the arena, which is what an object
+reachable from an unknown callee would have to do.
+
+```ts
+// S1, the allocation shape. `p` provably does not outlive `run`, so WP6 turns
+// the `new` into one entry-block alloca reused every iteration. An object
+// reachable from an unknown callee cannot be proved that way, and goes back to
+// the arena -- which is what `--no-stack-alloc` forces here.
+class P {
+  x: i32;
+  y: i32;
+  constructor(x: i32, y: i32) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+function use(p: P): i32 {
+  return (p.x * 3) ^ (p.y + 1);
+}
+
+function run(n: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = 0; i < n; i++) {
+    const p = new P(i, acc);
+    acc = use(p) + 1;
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  console.log(`${run(200000000)}`);
+  return 0;
+}
+```
+
+### 11f. Built and run
+
+```bash
+nish direct.ts -o direct.ll
+scripts/build.sh direct.ll runtime/runtime.c -o a_direct --profile speed
+nish ffi.ts -o ffi.ll
+scripts/build.sh ffi.ll transform.c runtime/runtime.c -o b_ffi --profile speed
+# indirect.ll is direct.ll with the one call site rewritten, per 11c
+scripts/build.sh indirect.ll fp.c runtime/runtime.c -o c_indirect --profile speed
+
+nish alloc.ts -o alloc_stack.ll                    # WP6 proves it local
+nish alloc.ts --no-stack-alloc -o alloc_arena.ll   # and this forbids the proof
+```
+
+All six binaries print the same number, which is the only correctness check a
+spike of this shape needs.
