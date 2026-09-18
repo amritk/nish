@@ -54,6 +54,30 @@ Three generated artefacts have a `--check` mode and all three are gates:
 Adding a diagnostic means running the code generator; it appends a number and
 never moves one that already exists.
 
+**It appends by reading `src/codes.ts` back, and that file alone.**
+`existing()` in `gen-diagnostic-codes.mjs` parses every four-space-indented
+`"<fragment>",` / `"NL####",` pair out of `src/codes.ts` into a map, carries a
+fragment the source scan no longer finds as a retired entry so its number is
+never handed out twice, takes the highest number per band from what it parsed,
+and numbers everything left over one past that. `self/codes.ts` is written from
+the same entries and never read, so nothing in it is preserved by being there.
+
+That makes a merge conflict in `src/codes.ts` the one place where resolving by
+taking a side wholesale is wrong. The discarded side's fragments are still in
+the checker, so the scan still finds them; they are no longer in the preserved
+map, so they are appended with fresh numbers — and the per-band watermark the
+appending counts up from is taken from that same map, so it drops with them. Deleting one live pair by hand and regenerating moved
+`` "` is not generic, so `new " `` from NL2318 to NL2325, and
+`node scripts/gen-diagnostic-codes.mjs --check` then exited 0, because the file
+it compares against is the file it just wrote. What caught it was
+`tests/diagnostic_coverage.js`, exit 1 on the `tests/wordings/` case named for
+the code: `FAIL nl2318_generic_new: expected NL2318, got NL2325`. That cover is
+partial — its summary line counts the wordings cases against the registry, and
+the cases are the smaller number — and it does not reach prose:
+`tests/wordings/unreachable.txt` names a retired code's live replacement in a
+sentence (`NL2206 retired: ... is NL2318 now`), and nothing reads those
+sentences. Keep both sides' assignments and let the generator append.
+
 ## The toolchain that is not npm
 
 Most of the suite needs **LLVM 18**: `clang`, `llc`, `llvm-as`, `opt`,

@@ -97,6 +97,15 @@ the tools it could not find. Read the skip count, not just the failure count.
 In a fresh container `.claude/hooks/session-start.sh` installs the toolchain so
 this does not happen quietly.
 
+`npm run check` is `tsc --noEmit` over **`src/` and nothing else**.
+`tsconfig.json` is the only one in the repository and its `include` is
+`["src/**/*.ts"]`, so `tsc --listFiles` names no file under `self/` and a type
+error written there does not turn `npm run check` red. The only checker over
+`self/` is Nish itself: stage0 compiling every module — the `self/<module>
+compiles` checks in the WP14 section — and then the bootstrap's fixed point,
+which is why `npm run bootstrap` is what a `self/`-only change has to be
+cleared by. [`selfhost.md`](./selfhost.md) is the rest of that story.
+
 ## Definition of done
 
 `npm run check` and `npm test` green, and a new construct ships with a golden
