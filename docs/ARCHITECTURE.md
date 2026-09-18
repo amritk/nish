@@ -335,8 +335,17 @@ that end in `unreachable` need no release. Scopes nest LIFO with the call
 stack, so a mark is always released by the function that took it.
 `--no-stack-alloc` disables the stack slots but keeps the scopes; the WP6
 block of `tests/run.js` checks both modes on `mem_stack_struct` and watches
-`Arena.used()` stay flat across 100000 scoped calls. Design and measurements:
-[wp6-memory.md](wp6-memory.md).
+`Arena.used()` stay flat across 100000 scoped calls.
+
+A `return g(...)` in a scoped function releases **before** the call rather
+than after it, so that the call is the last instruction and the recursion it
+may be part of can become a loop. The move needs every argument to be a scalar
+(nothing the callee holds can point into the reclaimed memory) and needs `g`
+not to read the bump position (`readsArenaState`, the fixpoint fact beside
+`usesArenaControl`, so that `Arena.used()` answers what it always did);
+`releasesBeforeTailCall` in `escape.ts` is the proof and
+`tests/cases/mem_scope_tail_call_guards` the refusals. Design and
+measurements: [wp6-memory.md](wp6-memory.md).
 
 ### `T | null`
 

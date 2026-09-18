@@ -389,6 +389,87 @@ refusals.
 freestanding wasm profile has no strings at all (WP8), and the bracket is only
 ever emitted around a call that returns one.
 
+## 2b. The release ahead of a tail call
+
+Section 2's scope releases before every `ret`, which puts an instruction
+*after* the last call a function makes:
+
+```llvm
+  %9 = call i32 @sum(i32 %3, i32 %8)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %9
+```
+
+That order costs more than it looks. `sum` is not a tail call there — something
+happens after it — so nothing downstream can turn the recursion into a loop,
+and each level holds its own temporaries until the whole recursion unwinds. A
+`return` of a call is the one place where the release has somewhere else to go.
+
+### Rule
+
+In a function with an automatic scope, a `return g(a1, …, an)` emits
+
+```llvm
+  call void @nish_arena_release(i64 %arena.mark)
+  %9 = call i32 @g(…)
+  ret i32 %9
+```
+
+— the release after the arguments and before the call — when every `ai` is a
+scalar (a number, a `boolean` or an `enum`), `g` does not read the bump
+position, `g` does not answer a packed `Result`, and the call carries no
+call-site reclaim. The `return` then emits no release of its own; every other
+`ret` in the function keeps the one it had.
+
+### Why it is sound
+
+The release reclaims everything this function bumped after its mark. Three
+things could still name that memory once the release has run, and each is a
+clause of the rule:
+
+- **The callee.** It holds what it was passed, and every argument is a scalar,
+  so it holds no pointer at all. This is what refuses the shape that looks most
+  like it should qualify — `return step(n - 1, acc + piece)` with a `string`
+  accumulator — because that argument *is* memory above the mark.
+- **This frame.** The call is the whole of a `return`, so no local is read
+  after it; the value it answers is the callee's own, allocated above the mark
+  the release restored.
+- **A measurement.** `Arena.mark()` and `Arena.used()` report the bump
+  position, and a callee that reads one would answer a smaller number than it
+  does today. `readsArenaState` is that fact (attributes.ts), propagated over
+  the call graph exactly as `usesArenaControl` is, and it is what makes this
+  invisible to a program rather than merely harmless. It is deliberately a
+  *second* fact: reading the position invalidates nothing, so it must not cost
+  a function its scope the way `Arena.release` does.
+
+`usesArenaControl` covers the rest of §3 already, because `arenaScope` requires
+it to be false — of this function and, by the fixpoint, of everything it calls.
+
+### Interactions
+
+| With | What happens |
+| --- | --- |
+| the call-site reclaim (§2a) | Cannot co-occur. A bracketed call is handed to `nish_arena_keep` afterwards, which is work after the call, and `releasesBeforeTailCall` excludes it by name rather than by argument. |
+| a packed `Result` return (WP17) | Excluded the same way: the word is unpacked into an object after the call. |
+| a scope in the *callee* | Nested LIFO as always. The callee's mark is taken above ours, which the release has just lowered — that is the point, not a hazard. |
+| `--profile debug` | The release still moves, so the arena stays flat with depth, but nothing turns the tail call into a loop: `-O0` runs no such pass and the stack still grows. Every other profile optimises. |
+| a call that is not in tail position | Untouched. `return f(n - 1) + 1` has work after the call whatever this rule does. |
+
+### Measured
+
+`tests/link/tail_call_depth` recurses a million levels. Without the rule it
+segfaults on the default 8 MB stack; with it, it prints its answer. It lives in
+`tests/link/` rather than beside its golden because every program in
+`tests/cases/` is also run under Node (WP13), and a million levels is past
+V8's stack whatever the native build does;
+`tests/cases/mem_scope_tail_call` is the same shape a thousand levels deep and
+is what pins the instruction order.
+
+The same program taking its depth from `argv`, built `--profile speed`, has a
+peak resident set of **10,164 KB at a thousand levels and 10,152 KB at ten
+million** — flat — against **13,088 KB at a hundred thousand** before the
+change.
+
 ## 3. Explicit control
 
 | Builtin | Lowering | Notes |

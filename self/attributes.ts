@@ -224,6 +224,15 @@ export class FunctionFacts {
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
   usesArenaControl: boolean;
+  /**
+   * Reads the arena's bump position — `Arena.mark`, `Arena.used` — directly or
+   * through a callee (fixpoint). Such a function answers a number that depends
+   * on *when* the arena was last reclaimed, which is what stops
+   * `releasesBeforeTailCall` (escape.ts) from moving a scope release across a
+   * call to it. It is deliberately not folded into `usesArenaControl`: reading
+   * the position invalidates nothing, so it must not cost a function its scope.
+   */
+  readsArenaState: boolean;
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[];
 
@@ -252,6 +261,7 @@ export class FunctionFacts {
     this.allocEscapes = false;
     this.returnsAllocation = false;
     this.usesArenaControl = false;
+    this.readsArenaState = false;
     this.callSites = [];
   }
 
@@ -1189,6 +1199,13 @@ export const collectFacts = (
     collector.visit(body);
   }
 
+  // The two arena builtins that report the bump position. Read here rather
+  // than in escape.ts because the walk has already put every runtime symbol a
+  // call lowers to in `callees`, and because this has to hold in round 1:
+  // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
+  // after the fixpoint, and that one is the compiler's, not the program's.
+  facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
+
   if (facts.readsMemory) {
     facts.effect = maxEffect(facts.effect, EFFECT_READ);
   }
@@ -1423,6 +1440,10 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
     }
     if (calleeFacts.usesArenaControl && !f.usesArenaControl) {
       f.usesArenaControl = true;
+      changed = true;
+    }
+    if (calleeFacts.readsArenaState && !f.readsArenaState) {
+      f.readsArenaState = true;
       changed = true;
     }
   }

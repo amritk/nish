@@ -228,6 +228,15 @@ export interface FunctionFacts {
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee (fixpoint). */
   usesArenaControl: boolean;
+  /**
+   * Reads the arena's bump position — `Arena.mark`, `Arena.used` — directly or
+   * through a callee (fixpoint). Such a function answers a number that depends
+   * on *when* the arena was last reclaimed, which is what stops
+   * `releasesBeforeTailCall` (escape.ts) from moving a scope release across a
+   * call to it. It is deliberately not folded into `usesArenaControl`: reading
+   * the position invalidates nothing, so it must not cost a function its scope.
+   */
+  readsArenaState: boolean;
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[];
 }
@@ -351,6 +360,10 @@ function propagate(facts: Map<string, FunctionFacts>): void {
         }
         if (calleeFacts?.usesArenaControl && !f.usesArenaControl) {
           f.usesArenaControl = true;
+          changed = true;
+        }
+        if (calleeFacts?.readsArenaState && !f.readsArenaState) {
+          f.readsArenaState = true;
           changed = true;
         }
       }
@@ -647,6 +660,7 @@ function collectFacts(
     allocEscapes: memory?.allocEscapes ?? false,
     returnsAllocation: memory?.returnsAllocation ?? false,
     usesArenaControl: memory?.usesArenaControl ?? false,
+    readsArenaState: false,
     callSites: memory?.callSites ?? [],
   };
   // WP27 S1: a `declare function` has no body, and the defaults above are the
@@ -734,6 +748,13 @@ function collectFacts(
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
+
+  // The two arena builtins that report the bump position. Read here rather
+  // than in escape.ts because the walk has already put every runtime symbol a
+  // call lowers to in `callees`, and because this has to hold in round 1:
+  // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
+  // after the fixpoint, and that one is the compiler's, not the program's.
+  facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
 
   if (facts.readsMemory) facts.effect = maxEffect(facts.effect, "read");
   if (facts.hasTrap) facts.effect = "write";

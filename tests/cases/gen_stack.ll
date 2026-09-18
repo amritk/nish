@@ -68,8 +68,8 @@ entry:
   %1 = getelementptr inbounds %struct.Box$str, %struct.Box$str* %0, i32 0, i32 0
   %2 = load i8*, i8** %1, align 8, !tbaa !7
   call void @nish_print(i8* %2)
-  %3 = call i32 @sumOf(i32 7)
   call void @nish_arena_release(i64 %arena.mark)
+  %3 = call i32 @sumOf(i32 7)
   ret i32 %3
 }
 
