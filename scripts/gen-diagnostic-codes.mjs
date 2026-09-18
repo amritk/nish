@@ -46,6 +46,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readCodesRegistry } from "../tests/self/codes-registry.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STAGE0 = path.join(ROOT, "src", "codes.ts");
@@ -139,17 +140,26 @@ const collect = () => {
   return found;
 };
 
-/** Read the assignments already committed, so the numbers survive a regeneration. */
+/**
+ * Read the assignments already committed, so the numbers survive a
+ * regeneration -- the whole promise of a code is that it does not move.
+ *
+ * The parse is `tests/self/codes-registry.js`, shared with the two readers in
+ * `tests/`, and it raises rather than answering an empty registry. That raise
+ * is the point of sharing it here: an empty map loses every assignment *and*
+ * the per-band watermark taken from it, so the next generation renumbers the
+ * whole registry. `--check` would catch that in this repository -- it builds in
+ * memory and compares against disk -- but the remedy a red `--check` prints is
+ * to run the generator, and a generator run without `--check` writes the
+ * renumbering out. Reading a moved registry has to fail here, not later.
+ *
+ * A tree with no `src/codes.ts` at all is a different thing: that is a first
+ * generation, with nothing yet to preserve, so it stays an empty map.
+ */
 const existing = () => {
   const assigned = new Map();
   if (!fs.existsSync(STAGE0)) return assigned;
-  const text = fs.readFileSync(STAGE0, "utf8");
-  // The emitted shape: a fragment line, then its code line. Parsed back so a
-  // regeneration keeps every number it already handed out -- the whole promise
-  // of a code is that it does not move.
-  for (const m of text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(NL\d{4})",$/gm)) {
-    assigned.set(JSON.parse(m[1]), m[2]);
-  }
+  for (const { fragment, code } of readCodesRegistry(STAGE0)) assigned.set(fragment, code);
   return assigned;
 };
 

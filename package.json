@@ -20,6 +20,7 @@
     "runtime",
     "scripts",
     "!scripts/arrow-verify.mjs",
+    "!scripts/gen-diagnostic-codes.mjs",
     "std",
     "README.md",
     "LICENSE",

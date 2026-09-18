@@ -31,6 +31,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
+import { parseCodesRegistry } from "./self/codes-registry.js";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { changedPrograms, corpus as parityCorpus, readPathList, removedPrograms } from "./self/parity.js";
@@ -728,24 +729,58 @@ if (!only || "diagnostics".includes(only)) {
 
   // One table, two compilers: the pairs must be identical, exactly as
   // `branding.ts` must name the same language on both sides.
-  // The indentation is not part of the contract: `self/codes.ts`'s tables lost a
-  // level when WP22 stage C turned them into arrows with concise bodies, and a
-  // pattern keyed on four spaces then read the registry as *empty* rather than as
-  // changed. A fragment line followed by its code line is the shape that matters.
-  const pairsOf = (file) => {
-    const text = fs.readFileSync(path.join(root, file), "utf8");
-    return [...text.matchAll(/^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+  // The parse itself is `tests/self/codes-registry.js`, shared with the
+  // generator and with `tests/diagnostic_coverage.js` -- three copies of one
+  // regex is how the first two drifted apart (issue #96), and that module's
+  // header is where the story lives. It raises on a registry whose shape has
+  // moved, which is caught here rather than left to propagate: a harness that
+  // throws on this line proves nothing about the thousand checks after it.
+  const registryOf = (text, label) => {
+    try {
+      return { pairs: parseCodesRegistry(text, label), error: null };
+    } catch (err) {
+      return { pairs: [], error: err.message };
+    }
   };
-  const stage0Codes = pairsOf("src/codes.ts");
-  const stage1Codes = pairsOf("self/codes.ts");
+  const linesOf = (read) => read.pairs.map((p) => `${p.code} ${JSON.stringify(p.fragment)}`);
+  const stage0Text = fs.readFileSync(path.join(root, "src", "codes.ts"), "utf8");
+  const stage1Text = fs.readFileSync(path.join(root, "self", "codes.ts"), "utf8");
+  const stage0Read = registryOf(stage0Text, "src/codes.ts");
+  const stage1Read = registryOf(stage1Text, "self/codes.ts");
+  const stage0Codes = linesOf(stage0Read);
+  const stage1Codes = linesOf(stage1Read);
   check(
     `codes: stage0 and stage1 hold the same registry (${stage0Codes.length} rules)`,
     stage0Codes.length > 0 && stage0Codes.join("\n") === stage1Codes.join("\n"),
-    `stage0 ${stage0Codes.length} rules, stage1 ${stage1Codes.length} rules`
+    [`stage0 ${stage0Codes.length} rules, stage1 ${stage1Codes.length} rules`, stage0Read.error, stage1Read.error]
+      .filter((m) => m !== null)
+      .join("\n")
   );
   // A number handed out once is never handed to a different rule.
   const dupCodes = stage0Codes.map((p) => p.split(" ")[0]).filter((c, i, a) => a.indexOf(c) !== i);
   check("codes: every rule has its own number", dupCodes.length === 0, `reused: ${dupCodes.join(", ")}`);
+
+  // The reader's two promises, demonstrated rather than taken on trust, because
+  // both have already failed here: a registry read at the wrong indentation was
+  // read as *empty* rather than as changed, and an empty registry then passed
+  // for a covered one. The live table is handed to the reader twice more,
+  // reindented and then flattened, so both properties are pinned against real
+  // data rather than against a fixture that can drift from it.
+  const reindented = registryOf(stage0Text.replace(/^ {4}/gm, "  "), "src/codes.ts reindented to two spaces");
+  check(
+    "codes: the registry reader is indentation-agnostic",
+    reindented.error === null && reindented.pairs.length === stage0Codes.length,
+    reindented.error ??
+      `${stage0Codes.length} rules at four spaces, ${reindented.pairs.length} after reindenting to two`
+  );
+
+  const flattened = registryOf(stage0Text.replace(/^[ \t]+/gm, ""), "src/codes.ts with its indentation stripped");
+  check(
+    "codes: a registry the reader cannot parse raises rather than reading as empty",
+    flattened.error !== null,
+    `it answered ${flattened.pairs.length} pairs for a table the pattern cannot match; an empty ` +
+      `registry must not be able to pass for a covered one`
+  );
 
   const jsCode = JSON.parse(js.stdout.split("\n")[0]);
   check(
