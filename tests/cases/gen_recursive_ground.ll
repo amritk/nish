@@ -25,7 +25,7 @@ if.then:
 
 if.end:
   %1 = sub nsw i32 %n, 1
-  %2 = call i32 @countDown$i32(i32 1, i32 %1)
+  %2 = tail call i32 @countDown$i32(i32 1, i32 %1)
   ret i32 %2
 }
 
@@ -39,7 +39,7 @@ if.then:
 
 if.end:
   %1 = sub nsw i32 %n, 1
-  %2 = call i32 @countDown$i32(i32 1, i32 %1)
+  %2 = tail call i32 @countDown$i32(i32 1, i32 %1)
   ret i32 %2
 }
 

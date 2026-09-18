@@ -84,24 +84,31 @@ calls). `--no-stack-alloc` shows the arena-only IR for comparison.
 
 ### Does a tail-recursive function use constant stack?
 
-In an optimising build, yes, and it is LLVM that does it rather than
-anything in the language: `return f(...)` as the last thing a function does
-is a tail call, and `opt`'s own pass turns a self-recursive one into a loop
-at `-O1` and above. What the compiler owes it is the *order* — a function
-with an automatic arena scope used to release after the call, which is work
-after the call and stops it being a tail call at all, so the release now
-moves ahead of it whenever the arguments are scalars
-([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model), item 2).
-`tests/link/tail_call_depth` recurses a million levels in constant stack
-because of it.
+Yes, when its arguments are all scalars, and in every build profile —
+`--profile debug` included, where no optimiser runs at all. `return f(...)`
+as the whole of a `return` is emitted as a `tail call`, which tells LLVM the
+callee cannot reach the caller's stack frame, so the frame is reused instead
+of stacked. Measured on a recursion with one string temporary, built
+`--profile debug`: **1,840 KB of peak RSS at a million levels and 1,836 KB at
+a hundred million**, against a segfault at a million without the marker.
+`tests/link/tail_call_depth_debug` is the checked-in one: a million levels at
+`-O0` in a function with no arena scope at all, which is the shape the
+release on its own never reached.
 
-Two things do not follow from that. `--profile debug` runs no optimiser, so
-the frames are real there and a deep recursion still overflows; and nothing
-in the language *guarantees* the transformation, so a program that must
-iterate a million times should say so with a loop. A `string` accumulator
-also keeps the release where it was — that argument is arena memory the
-release would reclaim — so `step(n - 1, acc + piece)` over strings is the
-one shape that looks tail-recursive and is not treated as one.
+Two things go with it. A function with an automatic arena scope also moves
+its `nish_arena_release` ahead of the call — a release between the call and
+the `ret` is work after the call, and a call with work after it is not the
+last thing the function does
+([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model), item 2). And at `-O1`
+and above LLVM's own pass rewrites the self-recursion as a loop before the
+backend ever sees the marker; the marker is what makes `debug` behave like
+the rest.
+
+Two things do not follow. Nothing in the language *guarantees* any of this,
+so a program that must iterate a hundred million times should say so with a
+loop. And the shape that looks most like it should qualify is refused: a
+`string` accumulator is memory the frame owns, so `step(n - 1, acc + piece)`
+over strings is a plain call, one frame per level.
 
 ### What happens on integer division by zero?
 

@@ -295,10 +295,14 @@ it.
 | `nocapture` | strings: `!escaping`; pointers: `!captured` after the fixpoint | `classifyUse`: a use is harmless when consumed on the spot (operator operand, condition, `.length` receiver, template hole that concatenates, runtime builtin argument, all declared `nocapture`); it escapes when returned, stored, aliased, pushed, or passed to a capturing user function. Strings passed to a user function always escape (no fixpoint for strings). |
 | runtime `declare` attributes | from `RUNTIME_FUNCTIONS` | Written next to each symbol in `runtime.ts`; intrinsics carry a subset of what LLVM itself attaches (`nounwind willreturn readnone`). |
 | `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `nish_arena_grow` | The fast path must inline; the slow path must not. |
+| `tail` (call marker, not an attribute) | a `return g(...)` whose arguments are every one a scalar, whose callee's parameter count matches the argument list, and which nothing follows (no packed-`Result` unpack, no WP9 reclaim, no scope release left behind) | The marker claims the callee cannot access the caller's stack frame. It holds because the callee is handed no pointer at all, and because no other path reaches a caller alloca either: the only allocas a function has are its locals' slots, whose addresses are never materialised as values, and the WP6 stack sites, which exist only for allocations whose flow is `local` and so are never stored, captured or returned. The proof is `marksTailCall` in `escape.ts` rather than `attributes.ts`, because it is a fact about one call site rather than about a function, and it is the one entry in this table `--plain` keeps: it decides whether a deep recursion runs at all rather than how fast it runs. |
 | `!alias.scope` / `!noalias` (array accesses) | every load and store of an `nish_array` header field, and every load and store of element data | The header's three fields and the `cap * sizeof(T)` of element storage never overlap, in any of the four shapes the compiler produces them: two arena bumps, two entry-block allocas (WP6), the `nish_alloc_array` host entry (two bumps again), and `nish_argv_init`'s single `malloc` block whose elements begin *after* the header. So an element store cannot reach a header field, nor the reverse. Strings are excluded — one block, length and bytes contiguous. Struct fields were excluded too, for want of a measurement; they have one now and carry `!tbaa` instead, above. WP15 §2b; the argument is written out in `emit/arrays.ts`. |
 
 `--plain` turns all of this off (and the alignment hints) and produces the
-bare Phase 1 IR, which is useful when comparing against hand-written IR.
+bare Phase 1 IR, which is useful when comparing against hand-written IR. The
+`tail` marker is the exception, and stays: dropping it would turn a recursion
+that runs into one that overflows the stack, which is not what a flag about
+decoration should do.
 
 ### Escape analysis, stack allocation, and arena scopes
 
@@ -337,15 +341,18 @@ stack, so a mark is always released by the function that took it.
 block of `tests/run.js` checks both modes on `mem_stack_struct` and watches
 `Arena.used()` stay flat across 100000 scoped calls.
 
-A `return g(...)` in a scoped function releases **before** the call rather
-than after it, so that the call is the last instruction and the recursion it
-may be part of can become a loop. The move needs every argument to be a scalar
-(nothing the callee holds can point into the reclaimed memory) and needs `g`
-not to read the bump position (`readsArenaState`, the fixpoint fact beside
-`usesArenaControl`, so that `Arena.used()` answers what it always did);
-`releasesBeforeTailCall` in `escape.ts` is the proof and
-`tests/cases/mem_scope_tail_call_guards` the refusals. Design and
-measurements: [wp6-memory.md](wp6-memory.md).
+A `return g(...)` whose arguments are all scalars is emitted as a **`tail
+call`**, and in a scoped function it takes the release with it — ahead of the
+call rather than after it, so that the call really is the last instruction.
+`marksTailCall` in `escape.ts` is the proof for both and
+`tests/cases/mem_scope_tail_call_guards` holds the refusals. It needs every
+argument to be a scalar (nothing the callee holds can point into this frame),
+needs the signature's parameter count to match the argument list (a method's
+receiver is the argument that is not written down, and it is a pointer), and,
+for the release only, needs `g` not to read the bump position
+(`readsArenaState`, the fixpoint fact beside `usesArenaControl`, so that
+`Arena.used()` answers what it always did). Design and measurements:
+[wp6-memory.md](wp6-memory.md).
 
 ### `T | null`
 

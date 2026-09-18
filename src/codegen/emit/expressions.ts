@@ -241,15 +241,21 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
       return `${llvmAbiType(want, privateAbi)} ${value}`;
     })
     .join(", ");
-  // WP6: the arena scope releases here, after the arguments and before the
-  // call, when this is a tail call the proof clears — which leaves the call
-  // last (escape.ts, `releasesBeforeTailCall`). It is never both this and the
-  // reclaim below: the proof excludes a callee the reclaim would bracket.
-  if (ctx.releasesScopeBeforeCall(expr)) ctx.emitScopeExit();
+  // WP6: this call is the whole of a `return` and the proof in escape.ts
+  // (`marksTailCall`) clears, so it is the last thing the function does. Two
+  // things follow. The arena scope, if there is one, releases here — after the
+  // arguments and before the call, rather than between the call and the `ret`;
+  // `emitScopeExit` is a no-op for a function that has no scope, which is the
+  // majority of the calls marked below. And the call carries `tail`, which
+  // says the callee cannot reach this frame's stack slots, so the frame may go
+  // before the jump. It is never both this and the reclaim below: the proof
+  // excludes a callee the reclaim would bracket.
+  const tail = ctx.marksTailCall(expr);
+  if (tail) ctx.emitScopeExit();
   // WP9: the mark goes after the arguments, so only the callee's own bumps
   // are inside the bracket (emit/arena.ts, `beginReclaim`).
   const mark = beginReclaim(ctx, callee);
-  const call = `call ${llvmAbiType(callee.returnType, privateAbi)} @${callee.name}(${args})`;
+  const call = `${tail ? "tail " : ""}call ${llvmAbiType(callee.returnType, privateAbi)} @${callee.name}(${args})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";

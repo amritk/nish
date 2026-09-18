@@ -1159,7 +1159,7 @@ declare void @nish_free_arena() #2
 
 define noundef i32 @nish_main() #0 {
 entry:
-  %0 = call i32 @square(i32 7)
+  %0 = tail call i32 @square(i32 7)
   ret i32 %0
 }
 
@@ -1198,7 +1198,7 @@ declare void @nish_free_arena() #2
 
 define noundef i32 @nish_main() #0 {
 entry:
-  %0 = call i32 @cookbook_pkg.scale(i32 7)
+  %0 = tail call i32 @cookbook_pkg.scale(i32 7)
   ret i32 %0
 }
 
@@ -1759,7 +1759,7 @@ res.ok:
   %10 = load i32, i32* %9, align 4
   store i32 %10, i32* %h.addr, align 4
   %11 = load i32, i32* %h.addr, align 4
-  %12 = call %struct.nish_result.i32.str* @half(i32 %11)
+  %12 = tail call %struct.nish_result.i32.str* @half(i32 %11)
   ret %struct.nish_result.i32.str* %12
 }
 
@@ -4436,6 +4436,7 @@ entry:
   store %struct.Point* %1, %struct.Point** %p.addr, align 8
   %2 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %3 = call i32 @Point.manhattan(%struct.Point* %2)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %3
 }
 
@@ -4505,34 +4506,48 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end mem_arena_scope -->
 
-### The release ahead of a tail call
+### A tail call, and the release ahead of it
 
-A `return g(...)` would otherwise leave the release between the call and the
-`ret`, which is work *after* the call: `sum` would not be a tail call at all,
-and a million levels would cost a million frames and hold a million `item N`
-strings. When every argument is a scalar there is no pointer into the
-reclaimed memory for the callee to hold, so the release moves ahead of the
-call and `sum` ends with it. `joinTo` is the counter-example, and the one that
-looks most like it should qualify: its accumulator *is* arena memory above the
-mark, so releasing first would hand the callee bytes the next bump reuses. The
-rule and its proof are in [wp6-memory.md](wp6-memory.md) §2b
+`sum` ends with its recursive call, so the call carries `tail`: the callee is
+handed two scalars and can reach nothing of this frame, which is what lets the
+frame be popped before the jump. The release has to move for the same reason —
+left where it was, between the call and the `ret`, it would be work after the
+call, and a million levels would cost a million frames and hold a million
+`item N` strings. `joinTo` is the counter-example, and the one that looks most
+like it should qualify: its accumulator *is* arena memory above the mark, so
+releasing first would hand the callee bytes the next bump reuses, and a `tail`
+on that call would be a claim about a pointer the callee does hold. The rule
+and its proof are in [wp6-memory.md](wp6-memory.md) §2b
 (`tests/cases/mem_scope_tail_call`, `mem_scope_tail_call_guards`, and
-`tests/link/tail_call_depth` for the depth it buys).
+`tests/link/tail_call_depth` / `tail_call_depth_debug` for the depth it
+buys).
 
 <!-- cookbook:begin mem_tail_release -->
 ```ts
-// A tail call whose arguments are all scalars takes the scope release with it:
-// `@nish_arena_release` is emitted after the arguments and before the call, so
-// `sum` ends with the call and an optimising build turns the recursion into a
-// loop instead of a frame per level.
+// A tail call whose arguments are all scalars is the last thing its function
+// does, and carries `tail` to say so: the callee is handed no pointer, so it
+// can reach nothing of this frame and the frame may be popped before the jump.
+// The scope release has to move for the same reason — left between the call
+// and the `ret` it would be work after the call — so `@nish_arena_release` is
+// emitted after the arguments and before the call instead.
 const sum = (n: number, acc: number): number => {
   if (n === 0) return acc;
   const label = `item ${n}`;
   return sum(n - 1, acc + label.length);
 };
 
+// No temporaries, so no scope and nothing to move: here the marker is the
+// whole of it, and it is what makes a deep recursion fit at `--profile debug`,
+// where nothing rewrites the recursion into a loop.
+const steps = (n: number, acc: number): number => {
+  if (n === 0) return acc;
+  return steps(n - 1, acc + 1);
+};
+
 // Here the accumulator is arena memory the release would reclaim out from
-// under the callee, so this one keeps its release after the call.
+// under the callee — and a pointer into this frame is exactly what the marker
+// would be denying — so this one keeps its release after the call and carries
+// no `tail`.
 const joinTo = (n: number, text: string): number => {
   if (n === 0) return text.length;
   return joinTo(n - 1, text + `${n}`);
@@ -4569,8 +4584,23 @@ if.end:
   %7 = trunc i64 %6 to i32
   %8 = add nsw i32 %acc, %7
   call void @nish_arena_release(i64 %arena.mark)
-  %9 = call i32 @sum(i32 %3, i32 %8)
+  %9 = tail call i32 @sum(i32 %3, i32 %8)
   ret i32 %9
+}
+
+define internal noundef i32 @steps(i32 noundef %n, i32 noundef %acc) #1 {
+entry:
+  %0 = icmp eq i32 %n, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  ret i32 %acc
+
+if.end:
+  %1 = sub nsw i32 %n, 1
+  %2 = add nsw i32 %acc, 1
+  %3 = tail call i32 @steps(i32 %1, i32 %2)
+  ret i32 %3
 }
 
 define internal noundef i32 @joinTo(i32 noundef %n, i8* noundef nonnull noalias readonly align 8 nocapture %text) #0 {
@@ -4596,6 +4626,7 @@ if.end:
 }
 
 attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end mem_tail_release -->
 

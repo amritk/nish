@@ -389,7 +389,7 @@ refusals.
 freestanding wasm profile has no strings at all (WP8), and the bracket is only
 ever emitted around a call that returns one.
 
-## 2b. The release ahead of a tail call
+## 2b. The tail call: the marker, and the release ahead of it
 
 Section 2's scope releases before every `ret`, which puts an instruction
 *after* the last call a function makes:
@@ -405,32 +405,66 @@ happens after it — so nothing downstream can turn the recursion into a loop,
 and each level holds its own temporaries until the whole recursion unwinds. A
 `return` of a call is the one place where the release has somewhere else to go.
 
+Moving it is only half of what the same proof buys. Once the call is last, it
+can also carry LLVM's `tail` marker, which is a claim about the *callee*: that
+it cannot access the caller's stack frame, so the frame may be popped before
+the jump. That is the half `-O0` needs, because no pass runs there to notice
+that the call is in tail position.
+
 ### Rule
 
-In a function with an automatic scope, a `return g(a1, …, an)` emits
+In any function, a `return g(a1, …, an)` emits
 
 ```llvm
-  call void @nish_arena_release(i64 %arena.mark)
-  %9 = call i32 @g(…)
+  %9 = tail call i32 @g(…)
   ret i32 %9
 ```
 
-— the release after the arguments and before the call — when every `ai` is a
-scalar (a number, a `boolean` or an `enum`), `g` does not read the bump
-position, `g` does not answer a packed `Result`, and the call carries no
-call-site reclaim. The `return` then emits no release of its own; every other
-`ret` in the function keeps the one it had.
+when every `ai` is a scalar (a number, a `boolean` or an `enum`), `g`'s
+signature has exactly `n` parameters, `g` does not answer a packed `Result`,
+and the call carries no call-site reclaim. In a function with an automatic
+scope the release moves with it, after the arguments and before the call:
+
+```llvm
+  call void @nish_arena_release(i64 %arena.mark)
+  %9 = tail call i32 @g(…)
+  ret i32 %9
+```
+
+and that half asks for one thing more — that `g` does not read the bump
+position. The `return` then emits no release of its own; every other `ret` in
+the function keeps the one it had.
 
 ### Why it is sound
 
-The release reclaims everything this function bumped after its mark. Three
-things could still name that memory once the release has run, and each is a
-clause of the rule:
+Two claims are being made, and they rest on the same facts.
 
-- **The callee.** It holds what it was passed, and every argument is a scalar,
-  so it holds no pointer at all. This is what refuses the shape that looks most
-  like it should qualify — `return step(n - 1, acc + piece)` with a `string`
-  accumulator — because that argument *is* memory above the mark.
+**The `tail` marker.** LLVM reads it as: nothing the callee does touches this
+frame's stack slots. A function's stack slots are its locals' `alloca`s and
+the WP6 stack sites (§1), and neither can be reached from a callee:
+
+- **Nothing is handed over.** Every argument is a scalar, so the callee is
+  given no pointer at all.
+- **A signature with more parameters than arguments is one whose first
+  argument was never looked at.** That is a method: its receiver is a
+  parameter the argument list does not carry, and it is a pointer by
+  construction. Comparing the two counts refuses it — which is also what keeps
+  a method's *release* where it belongs, since `emitCall` is not the emitter a
+  method call goes through.
+- **Nothing leaks out the side.** A local's slot address is never materialised
+  as a value — the language has no address-of — and a stack site exists only
+  for an allocation whose flow is `local` (§1), so it is never stored into a
+  field, a global or an array, never captured by a callee, and never returned.
+  A callee therefore has no path to this frame's memory other than the
+  arguments it was passed.
+
+**The release ahead of the call.** It reclaims everything this function bumped
+after its mark, so what matters is who can still name that memory:
+
+- **The callee.** As above: every argument is a scalar. This is what refuses
+  the shape that looks most like it should qualify — `return step(n - 1, acc +
+  piece)` with a `string` accumulator — because that argument *is* memory above
+  the mark.
 - **This frame.** The call is the whole of a `return`, so no local is read
   after it; the value it answers is the callee's own, allocated above the mark
   the release restored.
@@ -440,7 +474,9 @@ clause of the rule:
   the call graph exactly as `usesArenaControl` is, and it is what makes this
   invisible to a program rather than merely harmless. It is deliberately a
   *second* fact: reading the position invalidates nothing, so it must not cost
-  a function its scope the way `Arena.release` does.
+  a function its scope the way `Arena.release` does. It is asked only of the
+  release: a function with no scope reclaims nothing, so there is nothing for
+  a callee's reading to disagree with, and the marker goes on regardless.
 
 `usesArenaControl` covers the rest of §3 already, because `arenaScope` requires
 it to be false — of this function and, by the fixpoint, of everything it calls.
@@ -449,26 +485,46 @@ it to be false — of this function and, by the fixpoint, of everything it calls
 
 | With | What happens |
 | --- | --- |
-| the call-site reclaim (§2a) | Cannot co-occur. A bracketed call is handed to `nish_arena_keep` afterwards, which is work after the call, and `releasesBeforeTailCall` excludes it by name rather than by argument. |
+| the call-site reclaim (§2a) | Cannot co-occur. A bracketed call is handed to `nish_arena_keep` afterwards, which is work after the call, and `marksTailCall` excludes it by name rather than by argument. |
 | a packed `Result` return (WP17) | Excluded the same way: the word is unpacked into an object after the call. |
 | a scope in the *callee* | Nested LIFO as always. The callee's mark is taken above ours, which the release has just lowered — that is the point, not a hazard. |
-| `--profile debug` | The release still moves, so the arena stays flat with depth, but nothing turns the tail call into a loop: `-O0` runs no such pass and the stack still grows. Every other profile optimises. |
+| `--profile debug` | The marker is in the IR, so the backend reuses the frame even at `-O0`: constant stack with no optimiser at all. This is what it is for. |
+| `-O1` and above | LLVM's own pass has already rewritten a self-recursion as a loop before the marker matters. The marker changes nothing there, and the release still has to move for the pass to see a tail call in the first place. |
+| a method call | Refused, both halves. The receiver is a pointer and is not in the argument list. `tests/cases/mem_scope_tail_call_guards` has it. |
 | a call that is not in tail position | Untouched. `return f(n - 1) + 1` has work after the call whatever this rule does. |
 
 ### Measured
 
-`tests/link/tail_call_depth` recurses a million levels. Without the rule it
-segfaults on the default 8 MB stack; with it, it prints its answer. It lives in
-`tests/link/` rather than beside its golden because every program in
-`tests/cases/` is also run under Node (WP13), and a million levels is past
-V8's stack whatever the native build does;
-`tests/cases/mem_scope_tail_call` is the same shape a thousand levels deep and
-is what pins the instruction order.
+`tests/link/tail_call_depth` recurses a million levels. Without the release
+moving it segfaults on the default 8 MB stack; with it, it prints its answer.
+It lives in `tests/link/` rather than beside its golden because every program
+in `tests/cases/` is also run under Node (WP13), and a million levels is past
+V8's stack whatever the native build does; `tests/cases/mem_scope_tail_call` is
+the same shape a thousand levels deep and is what pins the instruction order.
 
 The same program taking its depth from `argv`, built `--profile speed`, has a
 peak resident set of **10,164 KB at a thousand levels and 10,152 KB at ten
 million** — flat — against **13,088 KB at a hundred thousand** before the
-change.
+release moved.
+
+`--profile debug` is what the marker adds, and there the whole range is new.
+The same two programs at `-O0`, peak RSS by `wait4`'s `ru_maxrss`:
+
+| Program, `--profile debug` | 1,000 | 1,000,000 | 100,000,000 |
+| --- | --- | --- | --- |
+| scope + string temporary, `tail` | 1,816 KB | 1,840 KB | 1,836 KB |
+| the same, marker removed by hand | — | **SIGSEGV** | **SIGSEGV** |
+| plain numeric recursion, `tail` | 1,836 KB | 1,840 KB | 1,840 KB |
+| the same, marker removed by hand | — | **SIGSEGV** | **SIGSEGV** |
+
+The second pair is the reason the marker is not gated on `arenaScope`: a
+recursion with no arena temporaries has no release to move, so §2b's first half
+never applied to it, and at `-O0` it overflowed exactly as before. Both shapes
+still overflow around 170,000 levels without the marker.
+
+`tests/link/tail_call_depth_debug` is the first row, checked in: a million
+levels at `--profile debug`, which is a segfault the moment the marker comes
+off.
 
 ## 3. Explicit control
 

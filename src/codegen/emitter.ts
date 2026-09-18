@@ -36,8 +36,9 @@
  *     `@nish_arena_release(i64 %arena.mark)` before every `ret`
  *     (`emitScopeExit`, invoked by the return emitter and by the implicit
  *     `ret void`). `unreachable` paths (`process.exit`, `throw`) need none.
- *     A `return g(...)` that `releasesBeforeTailCall` clears releases *before*
- *     the call instead, so that the call is the last thing the function does.
+ *     A `return g(...)` that `marksTailCall` clears releases *before* the call
+ *     instead, and the call is marked `tail`: both say the same thing, which
+ *     is that the call is the last thing the function does.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
@@ -45,7 +46,7 @@ import { withInstance } from "../checker/generics.js";
 import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types.js";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes.js";
 import { DebugInfo } from "./debug.js";
-import { reclaimsReturnedString, releasesBeforeTailCall } from "./escape.js";
+import { marksTailCall, reclaimsReturnedString } from "./escape.js";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes.js";
 import { privateResultAbi, unpackReturnedResult } from "./emit/result.js";
 import { EmitContext, LoopTarget } from "./emit/context.js";
@@ -69,8 +70,8 @@ import { resolveTarget, targetHeader } from "./target.js";
 export class Emitter implements EmitContext {
   private readonly module: IRModule;
   private readonly facts: Map<string, FunctionFacts>;
-  /** WP6: the tail call this function's scope release was emitted ahead of; see `planTailRelease`. */
-  private tailRelease: ts.Node | undefined;
+  /** WP6: the call this function's `return` lowers as a tail call; see `planTailCall`. */
+  private tailCall: ts.Node | undefined;
   fn!: IRFunction;
   currentSig!: FunctionSig;
   readonly loops: LoopTarget[] = [];
@@ -173,7 +174,7 @@ export class Emitter implements EmitContext {
     }
     this.slots = new WeakMap();
     this.current = facts;
-    this.tailRelease = undefined;
+    this.tailCall = undefined;
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     this.debug?.beginFunction(this.fn, sig, privateAbi);
 
@@ -229,29 +230,29 @@ export class Emitter implements EmitContext {
   }
 
   /**
-   * WP6: decide whether the arena scope releases ahead of the call this
-   * `return` answers with, and record the call so that `emitCall` emits the
-   * release after its arguments. Tail position is what the return emitter
-   * knows and the call emitter does not, so it is told rather than looked up:
-   * `expression` is the whole value of a `return`, or the concise arrow body
-   * that means one (WP22 §4). Everything else is `releasesBeforeTailCall`'s
+   * WP6: decide whether the call this `return` answers with is the last thing
+   * the function does, and record it so that `emitCall` marks it `tail` and
+   * emits the scope release ahead of it. Tail position is what the return
+   * emitter knows and the call emitter does not, so it is told rather than
+   * looked up: `expression` is the whole value of a `return`, or the concise
+   * arrow body that means one (WP22 §4). Everything else is `marksTailCall`'s
    * proof in escape.ts.
    */
-  planTailRelease(expression: ts.Expression): boolean {
-    this.tailRelease = undefined;
+  planTailCall(expression: ts.Expression): boolean {
+    this.tailCall = undefined;
     let inner = expression;
     while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
     if (!ts.isCallExpression(inner)) return false;
     const callee = this.program.callees.get(inner);
     if (callee === undefined) return false;
     const argTypes = inner.arguments.map((arg) => this.typeOf(arg));
-    if (!releasesBeforeTailCall(this.current, callee, argTypes, this.facts)) return false;
-    this.tailRelease = inner;
+    if (!marksTailCall(this.current, callee, argTypes, this.facts)) return false;
+    this.tailCall = inner;
     return true;
   }
 
-  releasesScopeBeforeCall(expr: ts.CallExpression): boolean {
-    return this.tailRelease === expr;
+  marksTailCall(expr: ts.CallExpression): boolean {
+    return this.tailCall === expr;
   }
 
   emitScopeExit(): void {

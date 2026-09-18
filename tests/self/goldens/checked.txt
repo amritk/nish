@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 333 programs, 5614 dump lines.
+# 334 programs, 5656 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -857,6 +857,24 @@ function test(): i32 -> @test [exported]
   stackSites=0 stackLocals=0
   callee 30:10 countPairs -> @countPairs
   callee 30:32 search -> @search
+program tests/cases/cf_return_void_call.ts
+module tests/cases/cf_return_void_call.ts (entry)
+function emit(n: i32): void -> @emit
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function walk(n: i32): void -> @walk
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: n
+  calls: emit walk
+  stackSites=0 stackLocals=0
+  callee 11:3 emit -> @emit
+  callee 12:10 walk -> @walk
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: walk
+  stackSites=0 stackLocals=0
+  callee 16:3 walk -> @walk
 program tests/cases/cf_sum_loop.ts
 module tests/cases/cf_sum_loop.ts (entry)
 function sumTo(n: i32): i32 -> @sumTo [exported]
@@ -3038,32 +3056,51 @@ function main(): i32 -> @nish_main [exported entry]
   callee 17:18 sum -> @sum
 program tests/cases/mem_scope_tail_call_guards.ts
 module tests/cases/mem_scope_tail_call_guards.ts (entry)
+struct Depth (class) size=4 align=4
+  field base: i32 index=0 offset=0
+  constructor -> @Depth.constructor
+  method down -> @Depth.down
 function walk(n: i32, text: string): i32 -> @walk
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 walk
   stackSites=0 stackLocals=0
-  callee 18:10 walk -> @walk
+  callee 26:10 walk -> @walk
 function watch(n: i32, acc: i32): i32 -> @watch
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   escaping: acc
   calls: nish_arena_mark nish_arena_release nish_arena_used nish_str_concat nish_str_from_i32 watch
   stackSites=0 stackLocals=0
-  local 23:9 label: string (const)
-  local 24:9 bump: i64 (const)
-  callee 25:10 watch -> @watch
+  local 31:9 label: string (const)
+  local 32:9 bump: i64 (const)
+  callee 33:10 watch -> @watch
 function after(n: i32): i32 -> @after
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: after nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  local 30:9 label: string (const)
-  callee 31:10 after -> @after
+  local 38:9 label: string (const)
+  callee 39:10 after -> @after
+function Depth.constructor(this: Depth, base: i32): void -> @Depth.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: base
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Depth.down(this: Depth, n: i32, acc: i32): i32 -> @Depth.down [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: Depth.down nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
+  pointer this: size=4 writesThrough=false captured=false passedTo=Depth.down#0
+  stackSites=0 stackLocals=0
+  local 51:11 label: string (const)
+  callee 52:12 Depth.down -> @Depth.down
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
-  calls: after nish_arena_mark nish_arena_release nish_print nish_str_from_i32 walk watch
-  stackSites=0 stackLocals=0
-  callee 35:18 walk -> @walk
-  callee 36:18 watch -> @watch
-  callee 37:18 after -> @after
+  calls: Depth.constructor Depth.down after nish_arena_mark nish_arena_release nish_print nish_str_from_i32 walk watch
+  stackSites=1 stackLocals=1
+  callee 57:18 walk -> @walk
+  callee 58:18 watch -> @watch
+  callee 59:18 after -> @after
+  local 60:9 depth: Depth (const)
+  callee 60:17 new Depth -> @Depth.constructor
+  callee 61:18 Depth.down -> @Depth.down
 program tests/cases/mem_stack_array_literal.ts
 module tests/cases/mem_stack_array_literal.ts (entry)
 function weights(): i32 -> @weights
@@ -5347,13 +5384,19 @@ function sum(n: i32, acc: i32): i32 -> @sum
   escaping: acc
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 sum
   stackSites=0 stackLocals=0
-  local 7:9 label: string (const)
-  callee 8:10 sum -> @sum
+  local 9:9 label: string (const)
+  callee 10:10 sum -> @sum
+function steps(n: i32, acc: i32): i32 -> @steps
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: acc
+  calls: steps
+  stackSites=0 stackLocals=0
+  callee 18:10 steps -> @steps
 function joinTo(n: i32, text: string): i32 -> @joinTo
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: joinTo nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  callee 15:10 joinTo -> @joinTo
+  callee 27:10 joinTo -> @joinTo
 program docs/cookbook/mod_main.ts
 module docs/cookbook/mod_main.ts (entry)
 import square from "./mod_math" -> function @square

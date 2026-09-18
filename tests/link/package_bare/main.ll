@@ -16,7 +16,7 @@ entry:
   %2 = add nsw i32 %0, %1
   %3 = call i32 @scope_hash.seed()
   %4 = add nsw i32 %2, %3
-  %5 = call i32 @helper(i32 %4)
+  %5 = tail call i32 @helper(i32 %4)
   ret i32 %5
 }
 
