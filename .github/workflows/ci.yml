@@ -4,7 +4,7 @@
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size table
 #       in the job summary, and the IR cookbook staleness check. The matrix is
 #       written for macOS too and that row is commented out; the comment
-#       beside it names the five checks that fail there.
+#       beside it names the checks that fail there, and which are left.
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -48,9 +48,11 @@ jobs:
       matrix:
         # macos-latest stays out of THIS job, and the reason is no longer a
         # guess. The row was run for the first time on 2026-09-13 (WP19 R2) and
-        # `npm test` fails there with **five** failures in four families, none
+        # `npm test` failed there with **five** failures in four families, none
         # of which is a compiler bug and all of which are checks that encode an
-        # ELF/Linux assumption:
+        # ELF/Linux assumption. Three of the five are untouched; 4,5 below are
+        # narrowed rather than fixed, and they were the pair that reached past
+        # this job:
         #
         #   1,2. `llvm-dwarfdump` of the linked binary reports an empty
         #        `.debug_line`. On Mach-O `clang -g` leaves DWARF in the .o
@@ -61,31 +63,33 @@ jobs:
         #        symbol against a non-TLS definition; ld64 does not. The safety
         #        net build.sh's header describes does not exist on macOS --
         #        which is a finding about the platform, not about the check.
-        #   4,5. `stage3 == stage2` as files fails at *identical size* (597,048
-        #        bytes both). The IR equalities all pass, so the compiler is
-        #        deterministic and the linker is not: Mach-O's debug map
-        #        records each .o's path and mtime, which differ between two
-        #        links. `scripts/bootstrap.sh --verify` asserts the same
-        #        comparison, so this one also blocks a darwin *release* binary
-        #        (WP19 G5) rather than only this job.
+        #   4,5. `stage3 == stage2` as files failed at *identical size*
+        #        (597,048 bytes both). The IR equalities all pass, so the
+        #        compiler is deterministic and the linker is not -- but WHICH
+        #        bytes ld64 varies has not been measured. NARROWED, not fixed:
+        #        the comparison is scripts/verify-binaries.sh now, which on
+        #        Darwin asserts the size, strips what it can, and fails
+        #        anything left over as *unattributed* with the next step in the
+        #        message. That is better than the raw byte comparison and it is
+        #        not a pass: a darwin binary is as likely as not to trip it,
+        #        which is why seed-targets.json holds the darwin pair back.
         #
-        # Restoring the row therefore means porting four checks, on hardware
-        # that has to be iterated against, and that is a package of its own
-        # rather than a line in this matrix. So NOTHING in this file runs on
-        # macOS today: the `bootstrap` job below has one row per seed the last
-        # release attaches, and a release attaches x86_64-linux alone. The
-        # fourth family is the other half of why -- the comparison it fails is
-        # the one `--verify` makes, so a darwin row would be red on the day its
-        # seed arrived.
+        # Restoring the row therefore means porting the remaining three checks
+        # in two families, on hardware that has to be iterated against, and
+        # that is a package of its own rather than a line in this matrix. So
+        # NOTHING in this file runs on macOS until a release attaches a darwin
+        # seed: the `bootstrap` job below has one row per seed the last release
+        # attaches, and v0.2.0 attaches x86_64-linux alone.
         #
         # The install half is already written and was exercised by that run:
         # the two "Install LLVM 18 + lld" steps below are guarded by
-        # `runner.os`, so restoring the row is this line plus the five fixes.
+        # `runner.os`, so restoring the row is this line plus the three
+        # remaining fixes.
         #
         # `fail-fast: false` above is what would keep a macOS-only failure from
         # cancelling the Linux row that says whether it is the platform or the
         # change.
-        os: [ubuntu-latest] # , macos-latest -- see the five failures above
+        os: [ubuntu-latest] # , macos-latest -- see the failures above
     steps:
       - uses: actions/checkout@v4
 
@@ -240,23 +244,27 @@ jobs:
   # always knows every construct the working tree does.
   #
   # G3 asks for this on **both** operating systems and it runs on Linux alone,
-  # because a release attaches x86_64-linux and nothing else. What keeps the
-  # second one out is no longer the runner -- two things have to land first:
+  # because v0.2.0 attaches x86_64-linux and nothing else. What kept the second
+  # one out was two things. One has landed and one is narrowed but open:
   #
-  #   * the darwin **seed**, which is WP19 G5. Until it ships, macOS is the
-  #     second state above: no row, and the `seeds` summary saying so.
-  #   * the **ld64 fixed point**, which is the fourth family in the `test`
-  #     matrix comment above. `scripts/bootstrap.sh --verify` builds to stage3
-  #     and asserts stage3 == stage2 byte for byte, and Mach-O's debug map
-  #     records each .o's path and mtime, so two links of identical input
-  #     differ (the note at that comparison in scripts/bootstrap.sh says what
-  #     was measured). A macOS row that arrived before that was fixed would be
-  #     red on the day its seed did, which is the other way a gate lies about
-  #     itself.
+  #   * the darwin **seed**, which is WP19 G5, and which release.yml now
+  #     builds -- one per target, from .github/seed-targets.json. Until a
+  #     release carries it macOS is the second state above: no row, and the
+  #     `seeds` summary saying which version it is waiting for.
+  #   * the **ld64 fixed point**, which was the `stage3 == stage2` family in
+  #     the `test` matrix comment above, and which is **narrowed rather than
+  #     settled**. scripts/verify-binaries.sh asserts the size on Darwin,
+  #     strips what it can, and fails the remainder as *unattributed* -- which
+  #     no longer misreports a benign difference as a compiler difference, but
+  #     also does not yet let one through. Until someone measures which bytes
+  #     ld64 varies, a macOS row could still be red on the day its seed
+  #     arrived, which is the other way a gate lies about itself -- so the
+  #     darwin pair's attachedSince is held past the next release rather than
+  #     this being called done.
   #
   # Neither is a line in this file, and that is the point of the matrix being
-  # the release's answer: the row appears when the seed does, and the day it
-  # does is the day the second of those two has to be true.
+  # the release's answer: the row appears when the seed does, on the runner
+  # seed-targets.json names for it, with no edit here.
   seeds:
     name: which seeds the last release attaches
     runs-on: ubuntu-latest

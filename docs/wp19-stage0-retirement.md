@@ -914,7 +914,8 @@ that is one row, on Linux.
 
 The `test` row on macOS is **not** back, and for the first time the reason is a
 measurement rather than an estimate. It was run on 2026-09-13 and `npm test`
-fails there with five failures in four families, all of them checks that encode
+failed there with five failures in four families, three of them still open,
+all of them checks that encode
 an ELF/Linux assumption and none of them a compiler bug: an empty `.debug_line`
 in a Mach-O executable (DWARF lives in the `.o` files until `dsymutil` runs,
 twice), a `--threads` link that ld64 *accepts* where ELF refuses it, and
@@ -996,20 +997,27 @@ behind it and no assets, so it is not a seed and never was — see
 **So the darwin half of G3 is short two things, and the runner is neither of
 them:**
 
-1. the **seed** — a release attaches `nish-<version>-x86_64-linux` and nothing
-   else, so there is no darwin binary to bootstrap from, which is
-   [G5](#g5--distribution-does-not-need-node); and
-2. the **ld64 fixed point** — the fourth family above. `--verify` asserts
-   `stage3 == stage2` byte for byte, and without that fixed a `bootstrap` row
-   on macOS would be red on the day its seed arrived, which is the other way a
-   gate lies about itself. That comparison now carries a note at the site
-   saying what was measured on Mach-O, so the next person to reach it does not
-   have to find it from a workflow comment.
+1. the **seed**, which is [G5](#g5--distribution-does-not-need-node). This one
+   has **landed as a workflow**: `release.yml` builds one binary per supported
+   target. It has not landed as a released *asset* for darwin, because
+   `attachedSince` for that pair is `0.4.0` — see item 2, which is why; and
+2. the **ld64 fixed point** — the `stage3 == stage2` family above. `--verify`
+   asserted it byte for byte, which does not hold on Mach-O, and a `bootstrap`
+   row on macOS would be red on the day its seed arrived: the other way a gate
+   lies about itself. That comparison is `scripts/verify-binaries.sh` now and
+   **narrowed rather than settled** — the size asserted, debug information
+   stripped where a tool can strip it, and anything left over failed as
+   *unattributed*. Which bytes ld64 actually varies has not been measured, and
+   the earlier claim that it was ld64's debug map was wrong for a
+   `--profile speed` link, which puts no DWARF in the `.o` files and strips
+   with `-Wl,-x` anyway. The script's header carries the candidate (`LC_UUID`)
+   and the remedy, and this item stays open until someone runs it on a mac.
 
-Neither is a line in `ci.yml`, and neither is claimed here. The matrix is the
-release's answer rather than a list in the workflow, so the macOS row appears
-on the day a release carries a darwin seed — which is the day the second of
-those two has to be true.
+Neither is a line in `ci.yml`, and the second is not claimed here. The matrix
+is the release's answer rather than a list in the workflow, so the macOS row
+appears on the day a release *carries* a darwin seed — which is the day the
+second of those two has to be true, and the reason the darwin `attachedSince`
+is held past the next release rather than set to it.
 
 #### What the seeded run proves, and what it does not
 
@@ -1085,22 +1093,90 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 **Why it blocks.** Retiring stage0 without this does not remove Node from the
 compiler; it removes the compiler.
 
-**State: one binary of the four, the package unchanged, and no registry name
-to install it under.** The release workflow builds
-`nish-<version>-x86_64-linux` — stage2, `--verify`d, and smoke-tested before it
-ships, because it is also the seed every later release bootstraps from. The
-other three are not built: `aarch64-linux` needs an arm64 runner, and both
-darwin binaries need a `macos-latest` job in `release.yml`, which is a second
-job nobody has written — and one the test matrix would not supply anyway, since
-a release asset is built on a tag rather than on a push. The package is
-still the Node tarball rather than a thin installer, and it is published
-nowhere — the release's `.tgz` is the only way to install it — so `nish` today
-is Node-free only if you take the binary. `--version` already has a source that
-is not `package.json` — `VERSION` in `self/branding.ts`, which `tests/run.js`
-pins against `package.json` — so that bullet is met by the binary the moment it
-is the product. This gate closes when the remaining three binaries and the
-installer land, and the installer needs the name decision first; nothing here
-is a decision against any of them.
+**State: the workflow builds all four, one of them ships today, one ships
+next, two wait on a measurement — and the package is unchanged with no registry
+name to install it under.** The release workflow builds `nish-<version>-<asset>` for
+`x86_64`/`aarch64` × `linux`/`darwin` — each stage2, `--verify`d, and
+smoke-tested from an unrelated directory before it ships, because each is the
+seed its own platform's rolling-freeze check bootstraps from. Each is built on
+a runner of its own architecture rather than cross-compiled, which is forced
+rather than chosen: `bootstrap.sh` runs stage1 to build stage2 and a stage1 for
+another architecture does not run on the builder, and `scripts/build.sh` has no
+`--target` passthrough for the same reason. The upshot worth keeping is that
+"built" and "smoke-tested" mean the same thing on every row: there is no tier
+produced for a machine nobody ran it on. The release job `needs` the whole
+matrix, so a broken target stops the release instead of shipping three of four.
+
+Nothing in that workflow names a platform. The matrix, the asset list and
+`ci.yml`'s `seeds` job all read `.github/seed-targets.json`, which carries each
+platform's canonical triple, the asset name derived from it, the runner label
+that provides it, and the version from which a release attaches it;
+`tests/run.js` checks every one of those against the compiler's own target
+table, against a denylist of runner labels GitHub has retired, and against
+`release.yml`'s own text.
+
+What this **starts** to close beyond its own bullet is the darwin half of
+[G3](#g3--the-seed-protocol-exists-and-ci-uses-it), and that takes **two**
+things rather than one. The seed is this bullet, and it has landed. The other
+is the ld64 fixed point, and it has not.
+
+`--verify` asserted `stage3 == stage2` as raw bytes, which does not hold on
+Mach-O: measured at identical size with every IR equality green (WP19 R2). The
+comparison now lives in `scripts/verify-binaries.sh` and **narrows** on Darwin
+rather than lifting — the size asserted, debug information stripped where a
+tool can strip it, and anything left over failed as *unattributed* — because an
+arm that accepted any difference would accept a stage3 that is a different
+compiler, which is the one thing the comparison is for.
+
+Narrowed is not settled, and the difference matters for what this row claims.
+An earlier version of this section said the differing bytes were ld64's debug
+map; that is wrong for the binaries actually compared, because `bootstrap.sh`
+defaults to `--profile speed` and never passes `-g`, and `build.sh` links that
+profile on Darwin with `-Wl,-x` — so there is no debug map to remove. The
+leading candidate is `LC_UUID`, which no `strip` removes; the remedy if so is
+`-Wl,-no_uuid` or masking the load command. Nobody has run it on a mac, so the
+darwin pair's `attachedSince` is **0.4.0**, past the next release:
+`release.yml` builds those binaries today, and the version that attaches them
+moves after the run that measures this. `aarch64-linux` is `0.4.0` as well,
+being ELF and so waiting only on an exercising run.
+
+`ci.yml`'s `bootstrap` job grows its macOS row from `seed-targets.json` with no
+edit to the workflow, on the first release that *carries* that platform's seed
+— presence, not `attachedSince`, which is also why a platform's rows want
+exercising once before its version arrives (that file's note, under BEFORE
+ADDING A PLATFORM).
+
+The qualification that matters for reading this row: what is done is the
+*workflow*, and a release already published cannot grow an asset. v0.2.0, the
+current release, attaches `x86_64-linux` alone; `aarch64-linux` carries
+`attachedSince: 0.3.0` and the darwin pair `0.4.0`, for the reason above, and
+until each arrives G3's rows and [INSTALL.md](INSTALL.md)'s table both say so
+rather than promising a 404. That is the same distinction §A5 and §A7 are about — a claim
+about the tree read as a claim about the world — so it is written down here
+rather than left to be noticed.
+
+`attachedSince` is a version rather than a boolean for that same reason, and
+the boolean it replaced is a small §A5 of its own: `attached: true` says *the
+workflow builds this*, `seeds` reads it as *that release carried this*, and the
+two part company in exactly this commit. Flipping the flag while teaching
+`release.yml` to build the asset turns `seeds` red against v0.2.0, and
+`release.yml`'s `release` job is `needs: ci` — so the release that would carry
+the asset could not be cut, and the flag could not be cleared until it was.
+A version dates the claim, and `.github/seed-due.sh` is the one place two of
+them are compared.
+
+**What is still open is the second bullet, and it is open on a decision rather
+than on work.** The package is still the Node tarball rather than a thin
+installer, and it is published nowhere — the release's `.tgz` is the only way
+to install it — so `nish` today is Node-free only if you take the binary. The
+installer needs a registry name and `nish` is somebody else's since 2014; the
+options and what each costs are in
+[wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken) and the
+choice is not one this package makes. `--version` already has a source that is
+not `package.json` — `VERSION` in `self/branding.ts`, which `tests/run.js` pins
+against `package.json` — so that bullet is met by the binary the moment it is
+the product. This gate closes when the installer lands, and the installer
+waits on the name.
 
 ### G6 — The provenance is recorded before it is lost
 
@@ -1188,9 +1264,9 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **red when last measured, and a row that does not carry a date is not a measurement.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared. The mode has now been recorded green three times and found red on the next run **four** times — §A5 and §A7 — and the corpus is the reason every time: 764 programs, then 815, then 868 a day later. On 2026-09-14 it is **18 undeclared differences over 868 programs**, in two packages that are not this one: stage1 exits 70 under `-g` on a `CPtr` program (WP27, 4 rows) and answers a different diagnostic on `reject_generic_expanding_field` (WP18, 14 rows). An internal compiler error reached `main` green because `npm test` does not run this mode. **Do not quote this row.** Run `node tests/run.js --parity`, quote what it says with the date, and read §A7 for why a number here goes stale in about a day |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS fails five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, from Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row therefore needs two things and not one: the darwin seed (G5), and that fixed point ([wp10-ci.md](wp10-ci.md#ci-matrix)) |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS failed five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, attributed at the time to Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row needs two things and not one. The darwin **seed** has landed: `release.yml` builds one per target (G5). The **fixed point** has not — `scripts/verify-binaries.sh` narrows it rather than lifting it, asserting the size and stripping what it can, but which bytes ld64 varies is unmeasured and the earlier claim that it was the debug map was wrong for a `--profile speed` link ([wp10-ci.md](wp10-ci.md#ci-matrix)). So the darwin pair's `attachedSince` is held at 0.4.0 rather than 0.3.0, the macOS `bootstrap` row waits for the release after the one that measures it, and the three other failures in the `test` row keep `macos-latest` out of the test matrix regardless |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 338 codes provoked by `tests/wordings/` and the surviving negatives and 61 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. **What the move costs is the limit worth stating rather than discovering: a rule the checker owns is a rule the member has to parse to reach.** Eight shapes do not reach it — `m?()` with no return type, `x? = 5` with no annotation, `static x;`, `static` alone, `static x: i32 = 0` with no `;` before the `}`, `static m(): i32;`, `static m() { }` and `static { }` — and each is a stage1 syntax error about the *other* defect where stage0 names the member and its rule. Those sentences moved out of stage1's reach rather than into it, which is §A3's declared class seen from the inside, counted by `reject_oracle.js` and declared by `--parity` (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`, `reject_cls_static_field_untyped`, `reject_cls_static_block`, and `self/parser.ts`'s `parseMemberModifiers` for the rest). Putting a copy of the rule back in the parser would restore an uncoded sentence in the phase that cannot name the member, which is the duplication the change removes; the shapes are named here and there instead. **One caveat on that declaration**: the two lists are shrink-only under `--strict-refusals`, but the reject oracle's parser bucket is a count in a summary line and nothing compares it to a ceiling, so the next rule that leaves the parser's reach migrates a case into the bucket silently. Read the bucket's number across such a change. The modifiers themselves now agree in full: `readonly` on a method or a constructor is ``unsupported modifier `readonly` `` from both compilers rather than accepted by stage1 (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`, `reject_cls_method_readonly_optional`), and because stage0 reports the first modifier in *source* order the parser records which of `static` and `readonly` came first, so `static readonly m()` and `readonly static m()` get different sentences and each gets the same one from both (`reject_cls_method_static_readonly`, `reject_cls_method_readonly_static`). An *interface* field takes the same modifiers, for the reason the checker takes one function for both: `readonly x: i32` compiles on both where stage1's parser used to refuse it, and `static x: i32` is ``Field `x` of interface `I`: `static` members are not supported`` on both. What is still one-sided and older than this work is `class C { constructor: i32 = 0; }`, which stage1 compiles and the `typescript` package calls a syntax error — the direction `stage1_divergence.txt` calls serious, recorded in `parseMember` because no corpus program has the shape and nothing measures it. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **2, from 13** — one of which stage1 compiles — and what is left is not more of the same: one is WP18's (`<T, T>`) and belongs to that package rather than to this one, and the other is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
-| **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
+| **R4** | Distribution | **the workflow is done; two of the four binaries are not, and the installer is not started.** One native compiler per supported target is built and smoke-tested by `release.yml` — each on a runner of its own architecture, so nothing is cross-compiled and "built" and "smoke-tested" mean the same thing on every row — and `INSTALL.md` and `wp12-release.md` are rewritten around them; `--version` already has a source that is not `package.json`. Which targets a given release carries is `attachedSince` in `.github/seed-targets.json`, compared against that release's version by `.github/seed-due.sh`: `x86_64-linux` from 0.1.1 and the other three from 0.4.0 — v0.2.0 was published before this landed and a release already published cannot grow an asset, and none of the three new rows has ever run, so each waits on a run that exercises it rather than on the next release (R2 above, and `scripts/verify-binaries.sh`, which is the darwin pair's second blocker). So G3's macOS row gets its seed on the first release at or after 0.4.0, not the next one. Outstanding, and outstanding on a **decision with a human in it** rather than on work: the package becoming an installer, which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
 

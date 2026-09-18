@@ -6201,22 +6201,54 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 
 // ---- WP19: the seed-target contract --------------------------------------------------
 // `.github/seed-targets.json` is the one place a seed asset is spelled. release.yml
-// attaches `nish-<version>-<asset>.tar.gz`, and ci.yml's `seeds` job looks for exactly
-// that name before it gives a platform a `bootstrap` row, so both read the file instead
-// of each writing the spelling out: a contract written down twice is two strings that
-// agree until one of them is edited.
+// attaches `nish-<version>-<asset>.tar.gz` and builds its `binaries` matrix from that
+// file; ci.yml's `seeds` job looks for exactly that name before it gives a platform a
+// `bootstrap` row. Neither workflow states a platform, because a contract written down
+// twice is two strings that agree until one of them is edited.
 //
-// Two things can rot in that file without breaking a build -- a `triple` the compiler
-// cannot target, and an `asset` that has stopped being that triple's short spelling --
-// and one thing can rot in the job it feeds, which is worse: reporting success for a
-// freeze it did not check, or red for a state in which nothing is wrong. §A5 of
-// wp19-stage0-retirement.md is what the first of those costs, and both have now happened
-// here, which is why `.github/seed-matrix.sh` is *run* below rather than read.
+// Four things can rot in that file without breaking a build -- a `triple` the compiler
+// cannot target, an `asset` that has stopped being that triple's short spelling, a
+// `host` that is not the machine the triple names, and a `runner` label GitHub has
+// retired -- and one thing can rot in the jobs it feeds, which is worse: reporting
+// success for a freeze it did not check, or red for a state in which nothing is wrong.
+// §A5 of wp19-stage0-retirement.md is what the first of those costs, and all of them
+// have now happened here, which is why `.github/seed-matrix.sh` and
+// `.github/seed-due.sh` are *run* below rather than read.
 if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   const seedTargets = JSON.parse(fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8"));
   const { resolveTarget } = await import(pathToFileURL(path.join(root, "dist", "codegen", "target.js")).href);
   const rows = seedTargets.targets;
-  const attached = rows.filter((t) => t.attached);
+  const pkgVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  const semver = (v) => v.split(".").map(Number);
+  const notAfter = (a, b) => {
+    const [x, y] = [semver(a), semver(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+    }
+    return true;
+  };
+  const dueAt = (v) => rows.filter((t) => notAfter(t.attachedSince, v));
+  const due = dueAt(pkgVersion);
+
+  // Two versions to drive the scripts with, read out of the file rather than typed,
+  // and each used BOTH as the tag and as the expected row count. Both halves matter:
+  // a tag hardcoded as "v0.2.0" while the expectation counted `due` -- the targets due
+  // at *package.json*'s version -- passed only while those two happened to agree, and
+  // went red on the next version bump, which is the release this branch exists to
+  // enable. The coupling is structural now: one version, used for the tag and for the
+  // count, so bumping package.json cannot re-break it.
+  //
+  // `early` is the oldest attachedSince in the file, so exactly the targets sharing it
+  // are due; `late` is past every attachedSince, so all of them are.
+  const early = rows.map((t) => t.attachedSince).reduce((a, b) => (notAfter(a, b) ? a : b));
+  const late = "9999.0.0";
+  const dueEarly = dueAt(early);
+  const dueLate = dueAt(late);
+  const later = rows.find((t) => !notAfter(t.attachedSince, early));
+  check(
+    `seed targets: the file has a version where some but not all targets are due (${early}: ${dueEarly.map((t) => t.asset).join(", ")})`,
+    dueEarly.length > 0 && dueEarly.length < rows.length && dueLate.length === rows.length && later !== undefined
+  );
   check("seed targets: the file lists targets", Array.isArray(rows) && rows.length > 0);
 
   // The canonical spelling, `x86_64-unknown-linux-gnu` rather than one of its aliases:
@@ -6246,34 +6278,283 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     misnamed.map((t) => `${t.asset} != ${derive(t.triple)} (from ${t.triple})`).join("\n")
   );
 
+  // `host` is what `uname -s`-`uname -m` prints on that platform, and release.yml's
+  // `binaries` job refuses to stamp the asset name into a tarball built on a machine
+  // that prints something else. That guard is the last one standing between a mislabelled
+  // asset and a user, so the row it compares against had better be derivable from the
+  // triple rather than typed: `aarch64-apple-darwin` is `Darwin-arm64` and nothing else.
+  const uname = (triple) => {
+    const [arch, , os] = triple.split("-");
+    const sys = { linux: "Linux", darwin: "Darwin" }[os];
+    const machine = os === "darwin" && arch === "aarch64" ? "arm64" : arch;
+    return sys ? `${sys}-${machine}` : undefined;
+  };
+  const mishosted = rows.filter((t) => t.host !== uname(t.triple));
   check(
-    `seed targets: at least one target is attached, or nothing checks the rolling freeze at all (${attached.map((t) => t.asset).join(", ") || "none"})`,
-    attached.length > 0
+    "seed targets: every host is the `uname -s`-`uname -m` its triple names",
+    mishosted.length === 0,
+    mishosted.map((t) => `${t.asset}: ${t.host} != ${uname(t.triple)} (from ${t.triple})`).join("\n")
+  );
+
+  // A runner label GitHub has retired is a row that never runs: release.yml's matrix is
+  // `runs-on: ${{ matrix.target.runner }}` and so is ci.yml's `bootstrap`, so the label
+  // is executable configuration rather than documentation. This is a denylist and not a
+  // whitelist because there is no authoritative list of live labels in this repository
+  // and inventing one would fail on the day GitHub adds an image -- but a label known to
+  // be gone is exactly the defect that shipped here: `macos-13` stood in this file after
+  // GitHub retired the last Intel macOS image, so the day a release attached
+  // `x86_64-darwin` its bootstrap row would have had nowhere to run.
+  const retired = {
+    "macos-11": "retired 2024; use macos-15-intel for x86_64 darwin",
+    "macos-12": "retired 2024-12; use macos-15-intel for x86_64 darwin",
+    "macos-13": "retired 2025-12, the last Intel image under that name; use macos-15-intel",
+    "ubuntu-18.04": "retired 2023",
+    "ubuntu-20.04": "retired 2025-04",
+  };
+  const dead = rows.filter((t) => retired[t.runner]);
+  check(
+    `seed targets: no row names a retired runner label (${rows.map((t) => t.runner).join(", ")})`,
+    dead.length === 0,
+    dead.map((t) => `${t.asset}: ${t.runner} -- ${retired[t.runner]}`).join("\n")
+  );
+
+  // `attachedSince` is a version and not a boolean, and that is load-bearing rather than
+  // cosmetic. A boolean says "release.yml builds this today", which is a statement about
+  // the workflow; `seeds` reads it as "the last release carried this", which is a
+  // statement about a past event. The two part company in exactly the commit that adds a
+  // platform: flipping a boolean to true while teaching release.yml to build the asset
+  // turns `seeds` red against the release that came before, and release.yml's `release`
+  // job is `needs: ci` -- so the release that would carry the asset cannot be cut, and
+  // the flag cannot be flipped until it is. A version dates the claim instead.
+  const badSince = rows.filter((t) => typeof t.attachedSince !== "string" || !/^\d+(\.\d+)*$/.test(t.attachedSince));
+  check(
+    "seed targets: every attachedSince is a dotted-integer version, not a boolean",
+    badSince.length === 0,
+    badSince.map((t) => `${t.asset}: ${JSON.stringify(t.attachedSince)}`).join("\n")
+  );
+  check(
+    `seed targets: at least one target is due at ${pkgVersion}, or nothing checks the rolling freeze at all (${due.map((t) => t.asset).join(", ") || "none"})`,
+    due.length > 0
+  );
+  check(
+    "seed targets: the file says why attachedSince is a version rather than a boolean",
+    seedTargets.note.some((n) => n.includes("attachedSince")) &&
+      seedTargets.note.some((n) => n.includes("deadlock"))
   );
 
   // release.yml reads the spelling; it must not also state it. The failure this guards
   // against is the ordinary one -- a name edited on one side of the contract -- and it
-  // looks exactly like the line that used to be there.
+  // looks exactly like the lines that used to be there: a `case "$(uname -s)"` mapping
+  // hosts to assets, a matrix listing four triples, and four paths on the `gh release
+  // create` line. An asset name anywhere in that file is one of them coming back.
+  //
+  // Checked for every row and not only the due ones, because a release.yml that spells a
+  // platform it does not yet build is the same defect one release early.
+  //
+  // Runner labels are deliberately NOT part of this: `ubuntu-latest` is what the
+  // `targets` and `release` jobs themselves run on, so the label legitimately appears
+  // and forbidding it would be wrong. What must not be hardcoded is the `binaries`
+  // matrix, and that is asserted directly -- its rows and its runner both come from the
+  // file, by way of the `targets` job. A retired label is the retired-label check above,
+  // which is where that defect belongs.
   const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
-  const spelled = rows.filter((t) => releaseYml.includes(`nish-$version-${t.asset}`));
+  const spelled = rows.filter((t) => releaseYml.includes(t.asset));
   check(
-    "seed targets: release.yml names its asset from the file rather than spelling one",
-    releaseYml.includes("seed-targets.json") && spelled.length === 0,
+    "seed targets: release.yml names no asset, because it reads them from the file",
+    releaseYml.includes("seed-targets.json") && releaseYml.includes("seed-due.sh") && spelled.length === 0,
     spelled.map((t) => t.asset).join(", ")
   );
+  // Two references, not a shape. There is no YAML parser in this repository's
+  // dependencies, so this reads the text -- but it reads it for the two things that
+  // carry the meaning rather than for a layout: the matrix comes from the `targets`
+  // job's output, and the runner comes from a matrix row. An earlier version matched
+  // `matrix:\n    target: ${{ fromJSON(...) }}` as one adjacent pattern, which would
+  // have gone red on a reformat or on the `fromJson` spelling, both of which are
+  // correct code. Whitespace-insensitive, and case-insensitive where Actions is.
+  const derivesMatrix = /\bfromjson\s*\(\s*needs\.targets\.outputs\.rows\s*\)/i.test(releaseYml);
+  const derivesRunner = /runs-on:\s*\$\{\{\s*matrix\.target\.runner\s*\}\}/.test(releaseYml);
+  check(
+    "seed targets: release.yml's binaries matrix and its runner are both the file's answer",
+    derivesMatrix && derivesRunner,
+    `matrix from the targets job: ${derivesMatrix}; runner from the matrix row: ${derivesRunner}`
+  );
+
+  // docs/INSTALL.md's table tells a reader which release first carries the binary for
+  // their platform, and it says in so many words that the versions in it are
+  // `attachedSince` rather than prose. That sentence is a claim about this repository,
+  // so it is checked here: a row added to the JSON, or an attachedSince moved, has to
+  // reach the table a user actually reads. The alternative is the failure this whole
+  // file exists to prevent, one document further out.
+  const install = fs.readFileSync(path.join(root, "docs", "INSTALL.md"), "utf8");
+  const tabled = rows.filter((t) => {
+    const row = install.split("\n").find((l) => l.includes(`nish-<version>-${t.asset}.tar.gz`));
+    return row && row.trim().endsWith(`| v${t.attachedSince} |`);
+  });
+  check(
+    `seed targets: docs/INSTALL.md's table names every asset with the version it is attached from (${rows.length})`,
+    tabled.length === rows.length,
+    rows
+      .filter((t) => !tabled.includes(t))
+      .map((t) => `${t.asset}: expected a table row ending "| v${t.attachedSince} |"`)
+      .join("\n")
+  );
+
+  // The prose, as far as prose can be checked. INSTALL.md's table has a shape, so the
+  // check above compares it cell by cell; the work-package documents state the same
+  // versions in sentences, and when the darwin pair moved from 0.3.0 to 0.4.0 three of
+  // those sentences went stale in silence -- two of them in the same table as a row that
+  // had been corrected, two rows apart.
+  //
+  // What is mechanical about a sentence is the claim shape. Every place a document names
+  // a version FOR a platform does it one of a few ways, and each is a version next to a
+  // platform: "the darwin pair from 0.4.0", "the darwin pair `0.4.0`", "the two macOS
+  // rows say v0.4.0". Those are matched and compared against the file. It is not a
+  // general prose checker and does not pretend to be one -- a sentence phrased a new way
+  // escapes it -- but it closes the shapes that have actually gone stale here, and a new
+  // phrasing that wants checking can be added to the list.
+  //
+  // Rather than enumerate connectives, each pattern is the platform's name followed by
+  // up to forty characters that do not end the sentence, then the first version after
+  // it -- which is how one greps for this by hand, and is robust to "is 0.3.0", "at
+  // 0.3.0", "is held at 0.4.0" and "is **0.4.0**" alike. Enumerating them was the first
+  // attempt and it missed three of thirteen, found by grepping wider than the check and
+  // comparing the counts. Both orders, because the documents use both.
+  // No comma in the forward span: the documents enumerate these reversed and
+  // comma-separated -- "0.1.1 for `x86_64-linux`, 0.3.0 for `aarch64-linux`" -- and a
+  // span that may cross a comma reads the NEXT platform's version as this one's, which
+  // is two false positives rather than a missed claim. The reversed patterns below are
+  // what catch those, and they are unambiguous.
+  // Every one of these documents is hard-wrapped at 80 columns, so a phrase written with
+  // literal spaces cannot match a claim that lands on a wrap point, and a span that
+  // excludes `\n` cannot reach a version on the next line. Both of `wp10-ci.md`'s darwin
+  // claims wrap -- one between "darwin" and "pair", one between "is" and the version --
+  // so `sed -i 's/0\.4\.0/0.3.0/g' docs/wp10-ci.md` used to leave this check green, on
+  // one of the three documents that had actually gone stale. Every word boundary inside
+  // an anchor is therefore `[ \t\n]+`, and `near` allows newlines.
+  //
+  // `:` is excluded from `near` to pay for that reach. Without it the wider span picks up
+  // "the commit that taught release.yml to build the darwin pair could not also mark them
+  // attached: v0.2.0" in `wp12-release.md` -- a sentence about a past release, not a claim
+  // about `attachedSince`. A colon ends a claim for the same reason a period and a comma
+  // do, and excluding it costs no true claim in the tree.
+  const s = "[ \\t\\n]+";
+  const near = "[^.|,:]{0,40}?";
+  const ver = "(\\d+\\.\\d+\\.\\d+)";
+  const versionClaims = [
+    // [description, regex source with the version in group 1, the asset it must equal]
+    // The two darwin patterns are compared against `aarch64-darwin`'s version, because
+    // the documents talk about "the darwin pair" and "the two macOS rows" jointly and
+    // never name either asset with a version of its own (INSTALL.md's table does name
+    // them separately, and the check above compares that cell by cell). A joint claim is
+    // only well-defined while the pair shares a version, so that is asserted below
+    // rather than assumed: if the two ever diverge, this list needs one pattern per
+    // asset and the check says so instead of being right by luck.
+    ["the darwin pair ... <version>", `darwin${s}pair${near}${ver}`, "aarch64-darwin"],
+    ["the macOS rows ... v<version>", `macOS${s}rows${s}say${s}v?${near}${ver}`, "aarch64-darwin"],
+    ["<version> for the darwin pair", `${ver}${s}for${s}the${s}darwin${s}pair`, "aarch64-darwin"],
+    ["`aarch64-linux` ... <version>", `\`aarch64-linux\`${near}${ver}`, "aarch64-linux"],
+    ["<version> for `aarch64-linux`", `${ver}${s}for${s}\`aarch64-linux\``, "aarch64-linux"],
+    ["`x86_64-linux` ... <version>", `\`x86_64-linux\`${near}${ver}`, "x86_64-linux"],
+    ["<version> for `x86_64-linux`", `${ver}${s}for${s}\`x86_64-linux\``, "x86_64-linux"],
+    // "the other three" is the documents' joint name for everything but the first
+    // target, and it appeared when `aarch64-linux` joined the darwin pair at one
+    // version. Like the pair patterns it is only well-defined while those three share a
+    // version, which is asserted below. Without this pattern `wp12-release.md` states
+    // its versions in no other way and the mutation test missed that document, which is
+    // how the pattern came to be added.
+    ["<version> for the other three", `${ver}${s}for${s}the${s}other${s}three`, "aarch64-linux"],
+    ["the other three from <version>", `the${s}other${s}three${s}from${s}${ver}`, "aarch64-linux"],
+  ];
+  // "the other three" -- everything but the first target -- is only a claim with one
+  // answer while those three share a version, exactly as "the darwin pair" is. Asserted
+  // rather than assumed for the same reason: when they diverge the documents have to
+  // stop using the phrase, and this says so instead of comparing a joint sentence to
+  // whichever of the three the pattern happens to name.
+  const otherThree = rows.slice(1);
+  check(
+    `seed targets: the three targets after the first share one attachedSince, which is what lets the docs say "the other three" (${otherThree.map((t) => `${t.asset} ${t.attachedSince}`).join(", ")})`,
+    otherThree.length === 3 && new Set(otherThree.map((t) => t.attachedSince)).size === 1,
+    'those three no longer share an attachedSince, so a claim about "the other three" has no single answer: reword the documents and drop that pattern from versionClaims'
+  );
+
+  const darwinPair = rows.filter((t) => t.triple.endsWith("-apple-darwin"));
+  check(
+    `seed targets: the darwin pair shares one attachedSince, which is what lets the docs speak of it as a pair (${darwinPair.map((t) => `${t.asset} ${t.attachedSince}`).join(", ")})`,
+    darwinPair.length === 2 && darwinPair[0].attachedSince === darwinPair[1].attachedSince,
+    "the two darwin rows have different attachedSince values, so a claim about `the darwin pair` no longer has one answer: give each asset its own pattern in versionClaims above"
+  );
+
+  const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"];
+  const staleProse = [];
+  let proseClaims = 0;
+  for (const doc of proseDocs) {
+    const text = fs.readFileSync(path.join(root, "docs", doc), "utf8");
+    for (const [shape, re, asset] of versionClaims) {
+      const want = rows.find((t) => t.asset === asset)?.attachedSince;
+      for (const m of text.matchAll(new RegExp(re, "g"))) {
+        proseClaims += 1;
+        if (m[1] !== want) staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`);
+      }
+    }
+  }
+  check(
+    `seed targets: every per-platform version the docs state in prose is the one in the file (${proseClaims} claims)`,
+    staleProse.length === 0 && proseClaims >= proseDocs.length,
+    staleProse.join("\n") || `only ${proseClaims} claims matched; the phrasings may have changed`
+  );
+
+  // `.github/seed-due.sh` is the one place a version is compared, because release.yml
+  // asks it about the version being released and seed-matrix.sh asks it about the last
+  // release's -- the same question about two different versions, which is the whole
+  // distinction the boolean could not draw. Answered in two places it would be the same
+  // two-strings defect one level down.
+  const dueSh = (version) =>
+    spawnSync("bash", [path.join(root, ".github", "seed-due.sh"), version], { cwd: root, encoding: "utf8" });
+  if (!has("jq")) {
+    skip("seed matrix: jq is not installed, so .github/seed-due.sh and seed-matrix.sh were not run (their states are unchecked here)");
+  } else {
+    const dueNow = dueSh(pkgVersion);
+    check(
+      `seed-due: ${pkgVersion} is due exactly the targets whose attachedSince it has reached (${due.map((t) => t.asset).join(", ")})`,
+      dueNow.status === 0 &&
+        JSON.stringify(JSON.parse(dueNow.stdout).map((t) => t.asset)) === JSON.stringify(due.map((t) => t.asset)),
+      dueNow.stdout + dueNow.stderr
+    );
+    const dueAll = dueSh(late);
+    check(
+      "seed-due: a far-future version is due every target in the file",
+      dueAll.status === 0 && JSON.parse(dueAll.stdout).length === rows.length,
+      dueAll.stdout + dueAll.stderr
+    );
+    const dueNone = dueSh("0.0.1");
+    check(
+      "seed-due: a version before the first attachedSince is due nothing",
+      dueNone.status === 0 && JSON.parse(dueNone.stdout).length === 0,
+      dueNone.stdout + dueNone.stderr
+    );
+    // A version this cannot order must stop the run rather than sort oddly: every caller
+    // is deciding whether a missing release asset is a failure, and finding out that the
+    // scheme changed by mis-ordering a prerelease is the wrong way round.
+    const dueJunk = dueSh("0.3.0-rc1");
+    check(
+      "seed-due: a version it cannot order is refused rather than guessed at",
+      dueJunk.status === 2 && dueJunk.stderr.includes("dotted-integer"),
+      `exit ${dueJunk.status}\n${dueJunk.stdout}${dueJunk.stderr}`
+    );
+  }
 
   // `.github/seed-matrix.sh` decides which platforms get a bootstrap row, driven by a
-  // stand-in for the GitHub CLI so all four of its states can be asked for here. The
-  // states are not interchangeable: a seed that should exist and does not is a broken
-  // gate, a seed that cannot exist yet is a platform with no row, and no release at all
-  // is every platform in that second state at once -- which may not be red, because
-  // release.yml's release job is `needs: ci` and the first release is what would supply
-  // the seed.
+  // stand-in for the GitHub CLI so all of its states can be asked for here. The states
+  // are not interchangeable: a seed a release was DUE to carry and did not is a broken
+  // gate, a seed not yet due is a platform with no row, and no release at all is every
+  // platform in that second state at once -- which may not be red, because release.yml's
+  // release job is `needs: ci` and the first release is what would supply the seed.
   //
-  // The script reads the JSON with `jq`, which the runner images ship and a
-  // workstation may not, so the five runs below skip rather than fail without
-  // it -- the same rule the rest of this suite follows for a tool it cannot
-  // install. The checks above are Node's own and always run.
+  // The tags below are chosen to separate those states rather than to be realistic,
+  // and they are read out of the file: `early` is a version only the oldest targets are
+  // due at, `late` is one every target is due at. With a boolean there was no way to
+  // write the second pair of cases at all, which is how the deadlock got as far as this
+  // file.
   const seedDir = path.join(buildDir, "wp19-seed-matrix");
   fs.rmSync(seedDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(seedDir, "bin"), { recursive: true });
@@ -6306,42 +6587,73 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     return { ...r, rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined };
   };
 
-  const seedAsset = attached[0].asset;
-  const unattached = rows.find((t) => !t.attached && t.triple.includes("darwin"));
+  const first = rows[0];
   if (!has("jq")) {
-    skip("seed matrix: jq is not installed, so .github/seed-matrix.sh was not run (its states are unchecked here)");
+    // The skip above covers this block too; one SKIP line for one missing tool.
   } else {
-    const carried = seedMatrix("v9.9.9", `nish-9.9.9.tgz nish-9.9.9-${seedAsset}.tar.gz`);
+    const carried = seedMatrix(`v${early}`, `nish-${early}.tgz nish-${early}-${first.asset}.tar.gz`);
     check(
-      `seed matrix: a release carrying ${seedAsset} gives that platform a bootstrap row`,
+      `seed matrix: a release carrying ${first.asset} gives that platform a bootstrap row`,
       carried.status === 0 &&
         carried.rows?.length === 1 &&
-        carried.rows[0].asset === seedAsset &&
-        carried.rows[0].tag === "v9.9.9" &&
-        carried.rows[0].tarball === `nish-9.9.9-${seedAsset}.tar.gz` &&
-        carried.rows[0].runner === attached[0].runner,
+        carried.rows[0].asset === first.asset &&
+        carried.rows[0].tag === `v${early}` &&
+        carried.rows[0].tarball === `nish-${early}-${first.asset}.tar.gz` &&
+        carried.rows[0].runner === first.runner,
       carried.stdout + carried.stderr
     );
 
-    // The negative, and half the reason this block exists: the seed a release is supposed
-    // to attach is missing. That is a platform that COULD have checked the freeze and did
+    // The negative, and half the reason this block exists: a seed the release was DUE to
+    // attach is missing. That is a platform that COULD have checked the freeze and did
     // not, so it is red -- red here, and red for the release workflow that runs this one
     // through `needs: ci`. A warning here would be a green check standing for a gate
     // nobody ran.
-    const dropped = seedMatrix("v9.9.9", "nish-9.9.9.tgz");
+    const dropped = seedMatrix(`v${early}`, `nish-${early}.tgz`);
     check(
-      `seed matrix: a release that attaches no ${seedAsset} seed FAILS rather than warns`,
+      `seed matrix: a release that attaches no ${first.asset} seed FAILS rather than warns`,
       dropped.status === 1 && dropped.stdout.includes("::error::"),
       `exit ${dropped.status}\n${dropped.stdout}${dropped.stderr}`
     );
 
-    // A release that carries no seed for a platform nothing builds one for is the other
-    // absence, and it is not that one: it is expected, it gets no row, and it is green.
-    const notYet = seedMatrix("v9.9.9", `nish-9.9.9-${seedAsset}.tar.gz`);
+    // A release that carries no seed for a platform not yet due one is the other absence,
+    // and it is not that one: it is expected, it gets no row, and it is green. This is
+    // the arm that says the release which first attaches those binaries can actually be
+    // cut -- v0.2.0 does not carry them, and if this were red it could not be.
+    const notYet = seedMatrix(`v${early}`, `nish-${early}-${first.asset}.tar.gz`);
     check(
-      `seed matrix: no ${unattached.asset} seed is a platform with no row rather than a failure`,
-      notYet.status === 0 && notYet.rows?.length === 1 && !notYet.rows.some((r) => r.asset === unattached.asset),
+      `seed matrix: no ${later.asset} seed at v${early} is a platform with no row rather than a failure`,
+      notYet.status === 0 &&
+        notYet.rows?.length === dueEarly.length &&
+        !notYet.rows.some((r) => r.asset === later.asset),
       `exit ${notYet.status}\n${notYet.stdout}${notYet.stderr}`
+    );
+
+    // The same absence one release later, when it has become the first kind. This is the
+    // pair the boolean could not express: `attached: false` made the row above green
+    // forever, so a release.yml that silently stopped attaching a darwin binary would
+    // have reported a platform with no row instead of a broken gate.
+    const overdue = seedMatrix(`v${late}`, `nish-${late}-${first.asset}.tar.gz`);
+    check(
+      `seed matrix: once ${later.asset} is due, a release without it FAILS rather than going quiet`,
+      overdue.status === 1 && overdue.stdout.includes("::error::") && overdue.stdout.includes(later.asset),
+      `exit ${overdue.status}\n${overdue.stdout}${overdue.stderr}`
+    );
+
+    // A tag nothing can order. `gh release list --limit 1` returns the newest release
+    // whatever its shape, prereleases included, so this is reachable without anyone
+    // doing anything odd: cut an `-rc1` and the next push turns `seeds` red. It has to
+    // be red -- guessing an order is how a missing seed gets excused -- but it has to
+    // say so in an annotation, because this job is `needs: ci` for the release workflow
+    // and a red check whose only output is on stderr is a release with no visible
+    // reason. The first version of this exited 2 with nothing but stderr.
+    const unorderable = seedMatrix("v0.3.0-rc1", "");
+    check(
+      "seed matrix: a release tag seed-due.sh cannot order fails with an ::error:: and a recovery, not silently",
+      unorderable.status === 1 &&
+        unorderable.stdout.includes("::error::") &&
+        unorderable.stdout.includes("dotted integers") &&
+        unorderable.stdout.includes("needs: ci"),
+      `exit ${unorderable.status}\n${unorderable.stdout}${unorderable.stderr}`
     );
 
     // And no release at all: nothing could have been checked anywhere, so there is no row,
@@ -6355,18 +6667,253 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     );
 
     // And the claim ci.yml makes about the day WP19 G5 attaches a darwin binary: the row
-    // appears with no edit to the workflow. It is checked rather than asserted in a
-    // comment, because the last comment that said this was not true.
-    const future = seedMatrix("v9.9.9", `nish-9.9.9-${seedAsset}.tar.gz nish-9.9.9-${unattached.asset}.tar.gz`);
+    // appears with no edit to the workflow, on the runner the file names. It is checked
+    // rather than asserted in a comment, because the last comment that said this was not
+    // true.
+    const all = rows.map((t) => `nish-${late}-${t.asset}.tar.gz`).join(" ");
+    const future = seedMatrix(`v${late}`, all);
     check(
-      `seed matrix: a seed for ${unattached.asset} gives it a row with no edit to ci.yml`,
+      `seed matrix: a seed for every target gives each a row on its own runner with no edit to ci.yml`,
       future.status === 0 &&
-        future.rows?.length === 2 &&
-        future.rows[1].asset === unattached.asset &&
-        future.rows[1].runner === unattached.runner,
+        future.rows?.length === rows.length &&
+        future.rows.every((r, i) => r.asset === rows[i].asset && r.runner === rows[i].runner),
       future.stdout + future.stderr
     );
   }
+}
+
+// ---- WP19: stage3 == stage2, on both platforms ---------------------------------------
+// `scripts/verify-binaries.sh` is the last equality `scripts/bootstrap.sh --verify`
+// asserts, and it is a script of its own so that this block can ask it for the branch
+// the machine running the suite does not take. On ELF two links of one input are
+// byte-identical and that is asserted; on Mach-O they are not, and there the comparison
+// narrows to the size plus equality once debug information is stripped, with anything
+// left over failing as UNATTRIBUTED.
+//
+// Narrows, not lifts: an arm that printed a line and carried on would accept a stage3
+// that is a different compiler from stage2, which is the one thing this comparison is
+// for. The pairs below are fabricated rather than bootstrapped, because the point is to
+// present each branch with a difference it must catch and one it must forgive -- a real
+// bootstrap only ever produces the identical case on this platform, which is how the
+// Darwin branch came to be written without a test at all.
+//
+// WHAT THESE PROVE, precisely, because the first version of this block over-claimed.
+// `NISH_UNAME_S=Darwin` changes which branch of the script runs; it does not change
+// what format the files are. The ELF pairs below therefore establish the script's
+// CONTROL FLOW on the Darwin branch and nothing about Mach-O: an appended `.debug_str`
+// really is removed by `objcopy --strip-debug` on ELF, so that pair is bound to pass.
+// The Mach-O pair that follows them is the real format and the real field -- two
+// minimal Mach-O images differing only in LC_UUID -- and it is what says the
+// unattributed arm is reachable by a pair that is probably benign. It is asserted as a
+// known limitation, not as a pass, because no part of this has run on a mac.
+if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
+  const vb = path.join(root, "scripts", "verify-binaries.sh");
+  const dir = path.join(buildDir, "wp19-verify-binaries");
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const run = (a, b, os) =>
+    spawnSync("bash", [vb, a, b], {
+      cwd: root,
+      encoding: "utf8",
+      env: os === undefined ? process.env : { ...process.env, NISH_UNAME_S: os },
+    });
+
+  const same1 = path.join(dir, "same1");
+  const same2 = path.join(dir, "same2");
+  fs.writeFileSync(same1, "the same twenty-eight bytes!");
+  fs.writeFileSync(same2, "the same twenty-eight bytes!");
+  for (const os of ["Linux", "Darwin"]) {
+    const r = run(same1, same2, os);
+    check(
+      `verify-binaries: byte-identical binaries pass on ${os}`,
+      r.status === 0 && r.stdout.includes("byte-identical"),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    );
+  }
+
+  // The ELF arm, which nothing else in the suite reaches: a differing stage3 is a
+  // failure there whatever the difference is.
+  const other = path.join(dir, "other");
+  fs.writeFileSync(other, "the same twenty-eight byteS!");
+  const elf = run(same1, other, "Linux");
+  check(
+    "verify-binaries: on ELF any difference between stage3 and stage2 fails",
+    elf.status === 1 && elf.stderr.includes("not byte-identical"),
+    `exit ${elf.status}\n${elf.stdout}${elf.stderr}`
+  );
+
+  // And the assertion doing the real work on the Darwin branch: whatever is not
+  // reproducible about ld64 is small and fixed-width, so a size difference is not it.
+  // This is the assertion the blanket exemption did not make.
+  const longer = path.join(dir, "longer");
+  fs.writeFileSync(longer, "the same twenty-eight bytes! and more");
+  const sized = run(same1, longer, "Darwin");
+  check(
+    "verify-binaries: on the Darwin branch a size difference fails, because the size is not what ld64 varies",
+    sized.status === 1 && sized.stderr.includes("not even the same size"),
+    `exit ${sized.status}\n${sized.stderr}${sized.stdout}`
+  );
+
+  // The second half needs two real object files that differ only in a debug section, so
+  // that stripping makes them equal -- fabricated with objcopy, which is also what does
+  // the stripping. Without a C toolchain and an objcopy this is unprovable here and says
+  // so rather than passing.
+  const objcopy = ["llvm-objcopy", "objcopy"].find((t) => has(t));
+  if (!objcopy || !has("clang")) {
+    skip(
+      "verify-binaries: the Mach-O debug-map arms need clang and llvm-objcopy/objcopy, so the pair that differs only in debug info was not built (that arm is unchecked here)"
+    );
+  } else {
+    const src = path.join(dir, "s.c");
+    const base = path.join(dir, "base");
+    fs.writeFileSync(src, "int main(void){return 7;}\n");
+    const built = spawnSync("clang", ["-O1", "-o", base, src], { encoding: "utf8" });
+    const mk = (name, fill) => {
+      const sec = path.join(dir, `${name}.bin`);
+      const out = path.join(dir, name);
+      fs.writeFileSync(sec, fill.repeat(64));
+      const r = spawnSync(
+        objcopy,
+        [`--add-section=.debug_str=${sec}`, "--set-section-flags=.debug_str=readonly,debug", base, out],
+        { encoding: "utf8" }
+      );
+      return r.status === 0 ? out : undefined;
+    };
+    const dbgA = built.status === 0 ? mk("dbgA", "A") : undefined;
+    const dbgB = built.status === 0 ? mk("dbgB", "B") : undefined;
+    const ready =
+      dbgA &&
+      dbgB &&
+      fs.statSync(dbgA).size === fs.statSync(dbgB).size &&
+      !fs.readFileSync(dbgA).equals(fs.readFileSync(dbgB));
+    if (!ready) {
+      skip(
+        "verify-binaries: this toolchain would not produce two binaries of one size differing only in a debug section, so the Mach-O debug-map arms are unchecked here"
+      );
+    } else {
+      // Same size, raw bytes differ, and the difference is entirely debug information:
+      // forgiven on the Darwin branch. On ELF, which is what these files are, this
+      // establishes that the strip-and-compare path runs and can forgive -- not that
+      // Mach-O behaves this way. See the header.
+      const forgiven = run(dbgA, dbgB, "Darwin");
+      check(
+        "verify-binaries: on the Darwin branch a difference that stripping removes passes, with the size asserted (ELF pair: control flow only)",
+        forgiven.status === 0 &&
+          forgiven.stdout.includes("identical once debug information") &&
+          forgiven.stdout.includes(String(fs.statSync(dbgA).size)),
+        `exit ${forgiven.status}\n${forgiven.stdout}${forgiven.stderr}`
+      );
+
+      // The same pair on ELF, where it is still a failure: the narrowing is Darwin's and
+      // it did not leak.
+      const strict = run(dbgA, dbgB, "Linux");
+      check(
+        "verify-binaries: the Mach-O narrowing does not apply on ELF",
+        strict.status === 1,
+        `exit ${strict.status}\n${strict.stdout}${strict.stderr}`
+      );
+
+      // And the case the exemption must NOT forgive: same size, and the difference
+      // survives stripping, so it is the code. This is what an arm that only printed a
+      // line would have shipped as a seed.
+      const codeA = path.join(dir, "codeA");
+      const codeB = path.join(dir, "codeB");
+      fs.writeFileSync(codeA, fs.readFileSync(dbgA));
+      const bytes = fs.readFileSync(dbgA);
+      // Flip a byte inside the ELF header's padding-free entry point area rather than in
+      // the appended debug section, so stripping cannot remove the difference.
+      bytes[0x18] = bytes[0x18] ^ 0xff;
+      fs.writeFileSync(codeB, bytes);
+      const caught = run(codeA, codeB, "Darwin");
+      check(
+        "verify-binaries: on the Darwin branch a same-size difference that survives stripping FAILS as unattributed",
+        caught.status === 1 && caught.stderr.includes("UNATTRIBUTED"),
+        `exit ${caught.status}\n${caught.stdout}${caught.stderr}`
+      );
+    }
+  }
+
+  // The real format, and the field the header names as its leading candidate. Two
+  // minimal Mach-O images -- a mach_header_64 and one LC_UUID load command -- identical
+  // but for the UUID's sixteen bytes. This is fabricated rather than linked because
+  // there is no macOS here and no Mach-O linker; what it costs is that these are not
+  // *compilers*, and what it buys is that the format and the field are real.
+  //
+  // Measured here, on Linux, with LLVM 18's objcopy: `--strip-debug` leaves an
+  // LC_UUID-only difference in place, and GNU strip refuses Mach-O outright
+  // ("file format not recognized"). So a benign LC_UUID difference reaches the
+  // unattributed arm and fails. That is a KNOWN LIMITATION and this check pins it as
+  // one: if someone makes the script mask LC_UUID, or links with -Wl,-no_uuid, this is
+  // the check that should be rewritten to expect a pass, and the measurement recorded.
+  const machoDir = path.join(dir, "macho");
+  fs.mkdirSync(machoDir, { recursive: true });
+  const macho = (fill) => {
+    // mach_header_64: magic, cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags,
+    // reserved -- then LC_UUID (cmd 0x1b, size 24) and sixteen bytes of UUID.
+    const lc = Buffer.alloc(24);
+    lc.writeUInt32LE(0x1b, 0);
+    lc.writeUInt32LE(24, 4);
+    lc.fill(fill, 8, 24);
+    const hdr = Buffer.alloc(32);
+    hdr.writeUInt32LE(0xfeedfacf, 0); // MH_MAGIC_64
+    hdr.writeInt32LE(0x01000007, 4); // CPU_TYPE_X86_64
+    hdr.writeInt32LE(3, 8);
+    hdr.writeUInt32LE(2, 12); // MH_EXECUTE
+    hdr.writeUInt32LE(1, 16); // ncmds
+    hdr.writeUInt32LE(lc.length, 20);
+    return Buffer.concat([hdr, lc]);
+  };
+  const uuidA = path.join(machoDir, "uuidA");
+  const uuidB = path.join(machoDir, "uuidB");
+  fs.writeFileSync(uuidA, macho(0xaa));
+  fs.writeFileSync(uuidB, macho(0xbb));
+  const machoReady =
+    fs.statSync(uuidA).size === fs.statSync(uuidB).size && !fs.readFileSync(uuidA).equals(fs.readFileSync(uuidB));
+  check(
+    "verify-binaries: the fabricated Mach-O pair is the same size and differs only in LC_UUID",
+    machoReady,
+    `${fs.statSync(uuidA).size} vs ${fs.statSync(uuidB).size}`
+  );
+  const uuidRun = run(uuidA, uuidB, "Darwin");
+  check(
+    "verify-binaries: KNOWN LIMITATION -- a real Mach-O pair differing only in LC_UUID is reported unattributed, not forgiven",
+    uuidRun.status === 1 && uuidRun.stderr.includes("UNATTRIBUTED") && uuidRun.stderr.includes("LC_UUID"),
+    `exit ${uuidRun.status}\n${uuidRun.stdout}${uuidRun.stderr}`
+  );
+  // And the failure names the size rather than claiming the code differs, which is the
+  // sentence the first version of this script got wrong.
+  check(
+    "verify-binaries: the unattributed failure does not claim the code differs",
+    !uuidRun.stderr.includes("this is the code itself") && !uuidRun.stderr.includes("fixed point does not hold"),
+    uuidRun.stderr
+  );
+
+  // The test hook announces itself, so a release build with NISH_UNAME_S set leaves a
+  // trace rather than silently asserting a different equality.
+  const announced = run(same1, other, "Darwin");
+  check(
+    "verify-binaries: NISH_UNAME_S says on stderr that it overrode the platform",
+    announced.stderr.includes("NISH_UNAME_S") && announced.stderr.includes("test hook"),
+    announced.stderr
+  );
+
+  // The platform test is the only thing NISH_UNAME_S overrides, and it defaults to the
+  // real `uname -s`: the override is a test hook and must not change what a release
+  // asserts when nobody sets it. Both sides of this are real assertions -- the first
+  // version let macOS through on "not exit 2", which is vacuous on the one platform the
+  // branch is about. `same1`/`other` are the same size, so on Darwin the expected
+  // outcome is the unattributed failure and on ELF the byte failure; either way it must
+  // fail, with the platform's own wording and without the hook's announcement.
+  const real = run(same1, other, undefined);
+  check(
+    `verify-binaries: with NISH_UNAME_S unset the host's own platform decides the branch (${process.platform})`,
+    real.status === 1 &&
+      !real.stderr.includes("NISH_UNAME_S") &&
+      (process.platform === "darwin"
+        ? real.stderr.includes("UNATTRIBUTED")
+        : real.stderr.includes("not byte-identical")),
+    `exit ${real.status}\n${real.stdout}${real.stderr}`
+  );
 }
 
 // ---- WP12: changelog ----------------------------------------------------------------

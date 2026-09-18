@@ -13,7 +13,7 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on five measured failures rather than on cost; see below |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on three remaining measured failures rather than on cost; see below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
@@ -24,26 +24,68 @@ G1's corpus half is nightly, on its own workflow, for the reasons under
 
 **The macOS `test` row was run for the first time on 2026-09-13, and it fails.**
 That is new information rather than a guess, and it replaces the cost argument
-that used to stand here: `npm test` on `macos-latest` reports **five failures in
+that used to stand here: `npm test` on `macos-latest` reported **five failures in
 four families**, none of them a compiler bug and all of them checks that encode
-an ELF/Linux assumption.
+an ELF/Linux assumption. Three of the five are untouched; the `stage3 ==
+stage2` family is **narrowed** below, and it was the one that reached past this
+job.
 
 | | What fails | Why |
 | --- | --- | --- |
 | 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
-| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not: Mach-O's debug map records each `.o`'s path and mtime, which differ between two links |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Narrowed, not fixed** — and which bytes ld64 varies is still unmeasured; see below |
 
-The fourth family reaches further than this job: `scripts/bootstrap.sh --verify`
-asserts the same `stage3 == stage2` comparison, so it also stands between the
+The `stage3 == stage2` family reached further than this job:
+`scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
 release workflow and a **darwin binary**
-([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
+([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)) as well
+as between G3 and a macOS `bootstrap` row.
 
-Restoring the row therefore means porting four checks against hardware that has
-to be iterated on, which is a package of its own rather than a line in the
-matrix. The install half is already written and was exercised by that run: both
-"Install LLVM 18 + lld" steps in the `test` job are guarded by `runner.os`, so
-restoring the row is one uncommented line plus the five fixes.
+That one is **narrowed, and still open.** The comparison moved into
+`scripts/verify-binaries.sh`, where on Darwin it asserts the size, strips what
+a tool on `PATH` can strip, and fails anything left over as *unattributed*
+rather than as a compiler difference.
+
+The narrowing is an improvement on two counts and a settlement on neither. It
+no longer accepts any difference at all, which a blanket exemption would, and
+it no longer **misreports** a benign difference as a broken fixed point, which
+the first version of it did. What it does not do is let a real darwin
+bootstrap through, because *which* bytes differ has not been measured:
+
+- An earlier version of this section, and of the script, said the difference
+  was ld64's debug map — the table naming each `.o` by path and mtime. That is
+  wrong for the binaries being compared. `scripts/bootstrap.sh` defaults to
+  `--profile speed` and never passes `-g`, so there is no DWARF in the `.o`
+  files and no debug map is emitted; and `scripts/build.sh` links the speed and
+  size profiles on Darwin with `-Wl,-x`, so the local-symbol table is gone at
+  link time anyway. Stripping debug information off those two removes nothing.
+- The leading candidate is **`LC_UUID`**: ld64 writes one by default, it is a
+  fixed-width content hash in a load command, and no `strip` removes or
+  recomputes it — deliberately, so a dSYM keeps matching its binary. It fits
+  the measurement, which is a small fixed-width difference at identical size in
+  a binary with no symbols and no debug info. Measured on Linux against a
+  fabricated minimal Mach-O pair: `llvm-objcopy --strip-debug` leaves an
+  LC_UUID-only difference in place, and GNU `strip` will not read Mach-O at
+  all.
+- If that is what it is, the remedy is one line — link with `-Wl,-no_uuid`, or
+  mask the load command before comparing — and it belongs in the commit that
+  measures it.
+
+So the darwin pair's `attachedSince` in `.github/seed-targets.json` is held
+past the next release rather than this being called done, and `tests/run.js`
+pins the LC_UUID case as a **known limitation** rather than as a pass.
+`NISH_UNAME_S` lets it drive both platforms' branches from one machine, which
+establishes the script's control flow everywhere and the Mach-O behaviour only
+for that one fabricated pair.
+
+Restoring the `test` row means porting the other **three** checks in the two
+families above against hardware that has to be iterated on, which is a package
+of its own rather than a line in the matrix. The install half is already
+written and was exercised by that run: both "Install LLVM 18 + lld" steps in
+the `test` job are guarded by `runner.os`, so restoring the row is one
+uncommented line plus those three fixes — and whatever the `stage3 == stage2`
+family turns out to need.
 
 The two defects the row was waiting for before this are both bash 3.2,
 which macOS ships as
@@ -61,7 +103,7 @@ scripts had been written against:
   builtin that bash 3.2 does not have at all, so the smoke step died on the
   first line that used it. It reads the same pipeline with `while read` now.
 
-Neither stops the row now, and neither is what the five failures above are.
+Neither stops the row now, and neither is what the failures above are.
 
 ### The seeded build, and what a missing seed reports
 
@@ -138,16 +180,61 @@ each `asset` is that triple with the vendor and the ABI dropped
 other a contract, and two of them — `aarch64-darwin` and `x86_64-darwin` — were
 described as triples the compiler accepts, which it never has.
 
-G3 asks for this on **both** operating systems and it runs on Linux alone,
-because a release attaches `x86_64-linux` and nothing else. Two things have to
-land before the second platform: the darwin **seed**, which is
-[G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and the
-**ld64 fixed point** — the fourth family in the table above, which is the
-comparison `scripts/bootstrap.sh --verify` makes, and which now carries a note
-at the comparison itself saying what was measured. A macOS row that arrived
-before that was fixed would be red on the day its seed did, which is the other
-way a gate lies about itself. Neither is a line in `ci.yml`: the matrix is the
-release's answer, so the row appears when the seed does.
+G3 asks for this on **both** operating systems, and it runs on Linux alone.
+v0.2.0 attaches `x86_64-linux` and nothing else and a published release cannot
+grow an asset, so the earliest any second row could appear is the next release
+— and for **macOS** it is later than that: the darwin pair's `attachedSince` is
+0.4.0, for the reason in the second bullet below — and so is
+`aarch64-linux`, for the first.
+Two things had to land before the second platform. **One has; one is narrowed
+and still open**, which is why the macOS row is not imminent:
+
+- the darwin **seed**, which is
+  [G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and
+  which `release.yml` now builds — one per target, from
+  `.github/seed-targets.json`.
+- the **ld64 fixed point** — the `stage3 == stage2` family in the table above.
+  `scripts/verify-binaries.sh` narrows it rather than settling it, as that
+  section explains, so a darwin `binaries` row is as likely as not to fail as
+  *unattributed* and take the release with it. `attachedSince` for the darwin
+  pair is therefore `0.4.0`, past the next release: the version moves after
+  the run that measures which bytes ld64 varies. `aarch64-linux` is `0.4.0`
+  too, but only for want of an exercising run: it is ELF, so none of the ld64
+  problem applies to it, which makes it the natural first row to attach.
+
+Neither is a line in `ci.yml`: the matrix is the release's answer, so the row
+appears when the seed does, on the runner `seed-targets.json` names for it —
+and because it is *presence* and not `attachedSince` that builds the row, a
+platform's rows want exercising once before its version arrives. That file's
+note says so under BEFORE ADDING A PLATFORM.
+
+**`aarch64-linux` was briefly set one release earlier, at 0.3.0, on an
+argument worth recording because it was sound about the wrong hazard.** It is ELF, so the `ld64` comparison does
+not apply to it; and the release-time half looks fail-safe, since a failing
+`binaries` row attaches nothing. Both true. But the half that is *not*
+fail-safe triggers on the row **succeeding**: once the asset is attached,
+`ci.yml` grows an ARM `bootstrap` row on every push and pull request, a red row
+there is red CI repo-wide, `release` is `needs: ci`, and lowering
+`attachedSince` does not clear a row that presence created — only deleting a
+published asset does. So "bounded at release time" covered the unlikely outcome
+and left the likely one uncovered. And the release it would have landed on
+publishes to npm and is merged by a person, who should not be handed a debug
+cycle at that moment.
+
+It is `0.4.0` with the others, and the rule below has no exceptions. A rule
+the file states and the row beneath it breaks is weaker than no rule, because
+the next person cites the exception.
+
+Exercising a platform's rows first is the better answer, and the two obvious
+ways of doing it are both closed: `release.yml` cannot be dispatched at a
+branch, since `targets` exits unless the ref is a tag matching
+`package.json`'s version, and a temporary matrix entry in it cannot be reached
+for the same reason. What works is a throwaway workflow on a branch —
+`on: workflow_dispatch`, one job on the label in question, the `binaries`
+steps down to the smoke test, no upload — deleted once it has been green.
+Teaching `release.yml` a dry-run input would be the principled fix and is
+deliberately not part of this: it adds a path to the publishing workflow that
+has itself never run.
 
 
 ### The parity run, nightly

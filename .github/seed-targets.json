@@ -1,10 +1,15 @@
 {
   "note": [
     "The seeds WP19 G3's rolling freeze is checked with, and the one place their names are spelled.",
-    "release.yml attaches an asset called nish-<version>-<asset>.tar.gz and ci.yml's `seeds` job looks for exactly that name, so the spelling is a contract between the two workflows. Both read it from here rather than stating it, because a contract each side writes out separately is two strings that agree until one of them is edited.",
+    "release.yml attaches an asset called nish-<version>-<asset>.tar.gz, builds its `binaries` matrix from this file, and ci.yml's `seeds` job looks for exactly that name. Every one of those reads it from here rather than stating it, because a contract each side writes out separately is two strings that agree until one of them is edited.",
     "`triple` is the canonical target triple src/codegen/target.ts accepts, and `asset` is that triple with the vendor and the ABI dropped: x86_64-unknown-linux-gnu -> x86_64-linux, aarch64-apple-darwin -> aarch64-darwin. That derivation is the whole rule, and tests/run.js checks both halves against the compiler's own table, so a row that invents a platform the compiler cannot target fails there rather than on a release day.",
-    "`attached` is whether release.yml builds and attaches this seed today, and it is what tells the two kinds of missing seed apart. A release that carries no seed for an `attached` target FAILS the `seeds` job: a host that could have checked the rolling freeze and did not is a broken gate. A target that is not `attached` yet gets no bootstrap row at all until a release carries one (WP19 G5) -- an absent row says the freeze was not checked there, where a green row with a warning inside it would say it was.",
-    "`host` is `uname -s`-`uname -m` on that platform and `runner` is the GitHub-hosted label that provides it."
+    "`attachedSince` is the first version whose release attaches this seed, and it is a VERSION rather than a boolean because the boolean could not be flipped. A release that carries no seed for a target already due FAILS the `seeds` job: a host that could have checked the rolling freeze and did not is a broken gate. A target not yet due gets no bootstrap row at all -- an absent row says the freeze was not checked there, where a green row with a warning inside it would say it was. .github/seed-due.sh is the one place the comparison is made.",
+    "The boolean this replaced deadlocked the release it was waiting for. `attached: true` means \"release.yml builds this today\", which is a statement about the workflow; `seeds` reads it as a statement about the last *release*, which is a past event that cannot grow an asset. So the commit that taught release.yml to build the darwin pair could not also mark them attached: v0.2.0 does not carry them, `seeds` would go red, and release.yml's `release` job is `needs: ci` -- the release that would attach them could not be cut, and the flag could not be cleared until it was. A version says which releases the claim is about, so the two land together.",
+    "`host` is `uname -s`-`uname -m` on that platform, and release.yml's `binaries` job refuses to stamp the asset name into a tarball built on a machine that prints something else -- the last guard between a mislabelled asset and a user. `runner` is the GitHub-hosted label that provides that host, and it is executable configuration: release.yml's matrix and ci.yml's `bootstrap` both `runs-on` it. tests/run.js derives `host` from `triple` and checks `runner` against a denylist of labels GitHub has retired, because `macos-13` stood in this file after the last Intel image under that name was retired, and the day a release attached x86_64-darwin its bootstrap row would have had nowhere to run.",
+    "WHY ALL THREE NEW TARGETS ARE 0.4.0, AND WHAT EACH WAITS ON. None of the three has ever run here, and the rule two notes down says to exercise a platform's rows before its version arrives. They all obey it. What they are waiting FOR differs, and the difference is worth knowing because it decides which to attach first. `aarch64-linux` waits on the exercising and nothing else: it is ELF, so the Mach-O comparison below does not apply to it, and one green throwaway run is the whole of what it needs -- which makes it the natural first row to attach. The darwin pair waits on the exercising AND on the ld64 measurement, so it is the slower of the two and may need a code change before a row can pass at all.",
+    "WHY THE DARWIN PAIR ALSO WAITS ON A MEASUREMENT. `attachedSince` decides whether a target is BUILT, not only whether it is carried: release.yml's `targets` job runs .github/seed-due.sh for the version being released and its `binaries` matrix is that answer, so a target not yet due gets no matrix row at all. `scripts/bootstrap.sh --verify` asserts `stage3 == stage2`, which does not hold on Mach-O; scripts/verify-binaries.sh narrows that rather than lifting it, but WHICH bytes differ has not been measured, so a darwin row is as likely as not to fail as UNATTRIBUTED -- and `release` is `needs: binaries`, deliberately, so that would stop the release. Exercising a darwin row may therefore turn up work rather than a green tick; scripts/verify-binaries.sh's header says what that run has to establish and what the remedy looks like if LC_UUID is the answer.",
+    "BEFORE ADDING A PLATFORM, EXERCISE ITS ROWS ONCE. ci.yml's `bootstrap` job takes its matrix from the seeds a release ATTACHES, not from attachedSince (seed-matrix.sh checks presence first), so the release that first carries a seed gives that platform a bootstrap row on every push and every pull request from then on -- npm ci, an LLVM install, bootstrap.sh --verify and the CLI contract, on hardware none of it has run on. If that row is red, `ci` is red repo-wide and `release` is `needs: ci`. Rolling attachedSince back does NOT clear it, because the asset is already attached and presence is what makes the row: the only remedies are to fix the row or to delete the asset from the release. This rule has no exceptions in this file, deliberately: a rule the file states and the rows beneath it break is weaker than no rule, because the next person cites the exception rather than the rule. `aarch64-linux` was briefly 0.3.0 on the ELF argument -- sound about the Mach-O hazard, and about the wrong hazard: the half that is not fail-safe triggers on the row SUCCEEDING and being attached, not on it failing, and the release it would have landed on publishes to npm and is merged by a person who cannot be handed a debug cycle at that moment.",
+    "HOW TO EXERCISE A PLATFORM'S ROWS, given that the two obvious ways are closed. release.yml cannot be dispatched at a branch -- `targets` exits 1 unless GITHUB_REF_TYPE is a tag and the tag equals package.json's version -- so a dispatch can only ever be aimed at the exact version being released, and a temporary matrix entry in release.yml cannot be reached either. What does work is a throwaway workflow on a branch: `on: workflow_dispatch`, one job `runs-on:` the label in question, and the steps of release.yml's `binaries` job down to the smoke test, with no upload. It is deleted once it has been green, and it leaves nothing permanent in a workflow whose failures are expensive. Making release.yml itself capable of a dry run -- a version input on workflow_dispatch that builds without attaching -- would be the principled fix and is deliberately not done here: it adds a path to the publishing workflow that has itself never run, which is the thing this note is about."
   ],
   "targets": [
     {
@@ -12,28 +17,28 @@
       "triple": "x86_64-unknown-linux-gnu",
       "host": "Linux-x86_64",
       "runner": "ubuntu-latest",
-      "attached": true
+      "attachedSince": "0.1.1"
     },
     {
       "asset": "aarch64-linux",
       "triple": "aarch64-unknown-linux-gnu",
       "host": "Linux-aarch64",
       "runner": "ubuntu-24.04-arm",
-      "attached": false
+      "attachedSince": "0.4.0"
     },
     {
       "asset": "aarch64-darwin",
       "triple": "aarch64-apple-darwin",
       "host": "Darwin-arm64",
       "runner": "macos-latest",
-      "attached": false
+      "attachedSince": "0.4.0"
     },
     {
       "asset": "x86_64-darwin",
       "triple": "x86_64-apple-darwin",
       "host": "Darwin-x86_64",
-      "runner": "macos-13",
-      "attached": false
+      "runner": "macos-15-intel",
+      "attachedSince": "0.4.0"
     }
   ]
 }

@@ -163,30 +163,58 @@ step below is done by hand.
    - `npm ci && npm run build && npm pack`, and checks the tarball contains
      `dist/index.js`, `runtime/runtime.c`, `runtime/nish.h` and
      `scripts/build.sh`;
-   - bootstraps the native compiler to
-     `build/release/nish-0.2.0-x86_64-linux` with `--verify`, then smoke-tests
-     it: `--version`, and linking and running `examples/hello.ts`;
-   - `gh release create v0.2.0 nish-0.2.0.tgz nish-0.2.0-x86_64-linux.tar.gz`
-     with the notes rendered from `changelog/0.2.0.json` — the file the
-     release pull request was reviewed with, not a fresh walk of the log, so
-     what is published is what somebody approved. A body over 120,000
-     characters is cut at a paragraph and points at the JSON; an empty one
-     fails the job rather than shipping a blank release.
+   - runs the `binaries` matrix — one job per supported target, each on a
+     runner of that architecture (`ubuntu-latest`, `ubuntu-24.04-arm`,
+     `macos-15-intel`, `macos-latest`) — which bootstraps the native compiler
+     to `build/release/nish-0.2.0-<triple>` with `--verify` and then
+     smoke-tests it: `--version`, and linking and running `examples/hello.ts`
+     from a directory unrelated to both the checkout and the unpack. Each job
+     checks its runner's own `uname` against the triple it was asked for, so
+     an asset cannot be labelled for an architecture it was not built on;
+   - `gh release create v0.2.0 nish-0.2.0.tgz` plus the four
+     `nish-0.2.0-<triple>.tar.gz`, with the notes rendered from
+     `changelog/0.2.0.json` — the file the release pull request was reviewed
+     with, not a fresh walk of the log, so what is published is what somebody
+     approved. A body over 120,000 characters is cut at a paragraph and points
+     at the JSON; an empty one fails the job rather than shipping a blank
+     release.
 
-   The binary is not only a convenience for people without Node: it is the
-   **seed** the next release is built from, which is why it is verified and
-   smoke-tested before it ships and why its name is fixed. That name is not
-   written here or in the workflow: both this step and `ci.yml`'s `seeds` job
-   read it from `.github/seed-targets.json`, where each platform carries the
-   canonical triple it is and the asset name derived from that triple by
-   dropping the vendor and the ABI. A release that does not attach a seed the
-   file marks `attached` turns `seeds` **red**, because a release that exists
-   and carries no seed for a platform it is supposed to carry one for is a
-   regression rather than a state of the world
+   Nothing is cross-compiled, because the chain is a chain: `bootstrap.sh`
+   runs stage1 to build stage2, and a stage1 for another architecture does not
+   run on the builder. So "built" and "smoke-tested" mean the same thing on
+   every row — there is no tier that was produced for a machine nobody ran it
+   on. The release job `needs` the whole matrix, so one broken target stops the
+   release rather than publishing three binaries of four: the missing one is
+   the seed some later `bootstrap` run will look for.
+
+   The binaries are not only a convenience for people without Node: each is
+   the **seed** its own platform's rolling-freeze check bootstraps from, which
+   is why each is verified and smoke-tested before it ships and why the names
+   are fixed. Those names are not written here, and not in either workflow:
+   `release.yml`'s matrix, its asset list and `ci.yml`'s `seeds` job all read
+   `.github/seed-targets.json`, where each platform carries the canonical
+   triple it is, the asset name derived from that triple by dropping the vendor
+   and the ABI, the runner label that provides it, and the version from which
+   a release attaches it. A release that does not attach a seed already **due**
+   turns `seeds` red, because a release that exists and carries no seed for a
+   platform it was supposed to carry one for is a regression rather than a
+   state of the world
    ([wp10-ci.md](wp10-ci.md#the-seeded-build-and-what-a-missing-seed-reports)).
    A repository with no release at all is the other case, and there the check
    has no rows rather than failing: red would be a release train that can never
    leave, since `release.yml`'s `release` job is `needs: ci`.
+
+   "Due" is a version comparison — `attachedSince` in that file, against the
+   release being asked about, in `.github/seed-due.sh` — and not a boolean,
+   for a reason worth writing down because the boolean shipped first and was
+   wrong. `attached: true` says *the workflow builds this today*; `seeds` needs
+   *that release carried this*, and a release is a past event which cannot grow
+   an asset. So the commit that taught `release.yml` to build the darwin pair
+   could not also mark them attached: v0.2.0 does not carry them, `seeds` would
+   go red, and the `release` job is `needs: ci` — the release that would carry
+   them could not be cut, and the flag could not be cleared until it was. A
+   version dates the claim, so the workflow change and the file change land
+   together and each release is judged against what it was due to attach.
 
 4. **npm publish is manual, and is blocked on the name.** `nish` on the
    public registry is somebody else's package — see "Open decision: the npm
@@ -342,10 +370,19 @@ cost rather than what one did.
 
 - Windows native support (`build.sh` is bash; WSL is documented instead).
 - Prebuilt binaries of the compiler itself: it is a Node program, and the
-  tarball is the release artefact. **Superseded** by the decision above: that
-  was true when WP12 shipped and it is why `files` looks the way it does, but
-  the compiler is no longer only a Node program. The bullet stays because it is
-  the position the package was built under.
+  tarball is the release artefact. **Superseded, and now in fact reversed.**
+  That was true when WP12 shipped and it is why `files` looks the way it does;
+  the compiler is no longer only a Node program, and `release.yml` attaches a
+  prebuilt binary for each of `x86_64`/`aarch64` × `linux`/`darwin` — from the
+  release each one's `attachedSince` names — 0.1.1 for `x86_64-linux`, and
+  0.4.0 for the other three, which wait on a run that exercises their rows,
+  the darwin pair additionally on the ld64 fixed point
+  ([wp10-ci.md](wp10-ci.md#ci-matrix))
+  ([wp19 G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
+  What is still not in any work package is *delivering* one through npm: that
+  is option (b) of "which compiler the package ships" above, and it waits on
+  the name. The bullet stays because it is the position the package was built
+  under, and because the `files` whitelist still reflects it.
 
 Multi-error reporting and `--json` diagnostics were listed here as a WP10
 follow-up and have since landed in WP10 itself: every phase that can recover
