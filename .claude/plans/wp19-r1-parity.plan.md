@@ -77,7 +77,7 @@ stage1 exits 70 — the internal-compiler-error status — compiling a `CPtr` pr
 
 Reproduce it first, with the exact command the mode runs, and read the ICE object rather than guessing from the exit status. The fix belongs in the debug-info path in both compilers if both are wrong and in `self/` alone if stage0 is right; whichever it is, `-g` over a `CPtr` program has no golden today, which is why nothing caught this.
 
-**Owns:** `self/debug.ts`, `src/codegen/debug.ts`, `self/ice.ts`, `self/types.ts`, `tests/cases/ffi_pointer*`, `tests/cases/dbg_*`, `docs/cookbook/decl_ffi_pointer*`, `docs/wp27-ffi.md`
+**Owns:** `self/debug.ts`, `src/codegen/debug.ts`, `self/ice.ts`, `self/types.ts`, `tests/cases/ffi_pointer*`, `tests/cases/dbg_*`, `docs/cookbook/decl_ffi_pointer*`, `docs/wp27-ffi.md`, `tests/self/goldens/**`
 
 ## The cascading diagnostic
 
@@ -90,7 +90,7 @@ Both second diagnostics are cascades from the refused instantiation — one comp
 
 Either way the outcome is pinned by a `tests/wordings/` case, because a wording that only a golden holds drifts.
 
-**Owns:** `src/checker/generics.ts`, `self/generics.ts`, `src/checker/nullable.ts`, `src/compilation.ts`, `self/compilation.ts`, `tests/cases/reject_generic_expanding_field*`, `tests/wordings/**`, `docs/wp18-generics.md`
+**Owns:** `src/checker/generics.ts`, `self/generics.ts`, `src/checker/nullable.ts`, `src/compilation.ts`, `self/compilation.ts`, `tests/cases/reject_generic_expanding_field*`, `tests/wordings/**`, `docs/wp18-generics.md`, `tests/self/goldens/**`
 
 ## The alarm nobody has heard
 
@@ -109,6 +109,12 @@ This stage merges after the other two. A per-pull-request parity check introduce
 ## The measurement, with its date
 
 wp19 §A7 is explicit that a parity number goes stale in about a day and that a row without a date is not a measurement. So the R1 row is rewritten from a run this work performed, quoting the mode's own summary line and the day it was taken, and the sentence in `docs/MASTER_PLAN.md` §9 that repeats it is brought into agreement in the same pull request.
+
+## The goldens both fix stages move
+
+`tests/self/goldens/` records what stage1 prints — `checked.txt` for every positive corpus program, `checked_self.txt` for the modules of `self/` — so any change to a `self/` module, and any new corpus program, moves them. Both fix stages do both, and `npm test` fails until the goldens are regenerated: `node tests/self/goldens.js --update`, never by hand.
+
+That makes it the one file set two concurrent stages share, which the slicing rules otherwise forbid. It is admissible here for one reason and only this one: it is **generated**, so a conflict between the two branches is resolved by regenerating on the later one rather than by choosing lines. The rule each stage follows is the same — regenerate, then read the diff and confirm every moved line is explained by its own change, because a golden that moved for a reason the stage cannot name is the failure this file set exists to catch.
 
 ## Out of scope
 
