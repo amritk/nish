@@ -179,6 +179,13 @@ Why this is the right first stage, and it is not only the measurement:
   costs Go a garbage collector — does not arise.
 - **No handle means no join proof.** There is nothing to store, nothing to
   leak, and no path on which a join can be forgotten.
+- **A short array must come out as an ordinary loop.** Dividing costs about
+  125 µs for the spawns and joins and 3 ns when it declines to divide
+  ([wp20-threads.md](wp20-threads.md) §8e), so the intrinsic's `grain` has to be
+  chosen such that a region carries on the order of a millisecond of work before
+  it is worth four threads. That is a default the compiler picks, not a knob,
+  and it is the reason `parallelMapInto` over eight elements is not slower than
+  the loop it replaced.
 - **The purity rule is already computed, and it is the only rule.** The body
   must be one the fixpoint clears as `readnone` or `readonly` — it may read
   what the parent owns and may write nothing — and

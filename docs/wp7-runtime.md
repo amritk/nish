@@ -603,8 +603,9 @@ translation unit with a ceiling of its own, and it is a third file for exactly
 the reason the second one exists.
 
 `runtime_os.c` had **29 bytes** of its 1,280-byte ceiling left. The partitioner
-is **456**: `pthread_create` and `pthread_join`, the chunk arithmetic, the
-worker trampoline that frees its own arena, and the thread-local nesting guard.
+is **482**: `pthread_create` and `pthread_join`, the chunk arithmetic, the
+worker trampoline that frees its own arena, the thread-local nesting guard, and
+the cached CPU count.
 Putting it there would have meant raising the syscall half's ceiling past 1,536
 to hold something whose subject is not a system call in the sense that section
 means — and moving the number a reader sees for "the operating-system surface"
@@ -616,10 +617,10 @@ the same file:
 
 | `clang -Oz -c runtime/runtime_parallel.c` | measured | budget |
 | --- | ---: | ---: |
-| default — the sequential fallback, and WASI, where there are no threads | **26** | **256** |
-| `-DNISH_THREADS=1` — the build `--threads` links | **456** | **512** |
+| default — the sequential fallback, and WASI, where there are no threads | **49** | **256** |
+| `-DNISH_THREADS=1` — the build `--threads` links | **482** | **512** |
 
-Measured on 2026-09-18 with clang 18.1.3 on linux-x64. The 230 bytes of slack
+Measured on 2026-09-18 with clang 18.1.3 on linux-x64. The 207 bytes of slack
 in the first row are not room to spend: gating the default build is what says
 that nothing but a fallback belongs on the path a program which never spawns
 still links, so a commit that needs that room has put code there.

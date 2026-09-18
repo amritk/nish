@@ -38,13 +38,33 @@
  * the arena it would allocate from is the very thing being made per-thread. */
 #define NISH_PAR_MAX 64
 
+/* Cached, because `sysconf(_SC_NPROCESSORS_ONLN)` is not a cheap read: glibc
+ * answers it from `sched_getaffinity` or by parsing
+ * /sys/devices/system/cpu/online, and measured here it is 3.7 us -- which
+ * `nish_parallel_range` would otherwise pay on every region, including the ones
+ * too small to divide, where it was the entire cost. The race between two
+ * threads filling it is benign (both compute the same number) but it is still a
+ * race, so the word is read and written with relaxed atomic builtins (a plain
+ * `int64_t`, since `__atomic_*` does not take an `_Atomic`-qualified pointer):
+ * on x86-64 that is
+ * a plain load and store and costs nothing, and it is defined behaviour.
+ *
+ * A machine whose online CPU count changes under a running process therefore
+ * keeps the count it started with, which is the right trade for a number that
+ * decides how many threads a loop is divided into. */
+static int64_t nish_cpu_cached = 0;
+
 int64_t nish_cpu_count(void) {
+  int64_t n = __atomic_load_n(&nish_cpu_cached, __ATOMIC_RELAXED);
+  if (n != 0) return n;
 #ifdef NISH_PAR_REAL
-  long n = sysconf(_SC_NPROCESSORS_ONLN);
-  return n > 0 ? (int64_t)n : 1;
+  long got = sysconf(_SC_NPROCESSORS_ONLN);
+  n = got > 0 ? (int64_t)got : 1;
 #else
-  return 1;
+  n = 1;
 #endif
+  __atomic_store_n(&nish_cpu_cached, n, __ATOMIC_RELAXED);
+  return n;
 }
 
 #ifdef NISH_PAR_REAL

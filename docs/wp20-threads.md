@@ -679,12 +679,44 @@ It compiles in **both** configurations: without `-DNISH_THREADS`, and on WASI
 where there are no threads, the same entry point runs the whole range on the
 calling thread, so the flag decides whether the work is divided and never
 whether the function exists. Its own `.text*` budget is in `tests/run.js` —
-**26 bytes** without the macro and **456** with it, against ceilings of 256 and
+**49 bytes** without the macro and **482** with it, against ceilings of 256 and
 512 — and it is a third file rather than a third of `runtime_os.c` precisely
-because 456 bytes of partitioner does not fit in the 29 bytes that file had
+because 482 bytes of partitioner does not fit in the 29 bytes that file had
 left, and borrowing the room would have moved the number a reader sees for "the
 operating-system surface" for a reason that has nothing to do with the
 operating system.
+
+### 8e. What a region costs, and why it is not a goroutine
+
+The threads are the machine's, one per core, created and joined **per region**:
+there is no pool, and `nish_cpu_count()` is the only thing that decides how many
+there are. So the cost of dividing has to be paid against the work inside, and
+here it is, measured on an empty body so that the number is the division and
+nothing else:
+
+| | cost |
+| --- | ---: |
+| a region asking for one chunk — the undivided path, no spawn | **3 ns** |
+| an empty region divided four ways — three `pthread_create` plus three joins | **~125 µs** |
+
+That second number is the whole answer to "is this like Go". A goroutine costs
+a couple of microseconds to create and a Go program may hold hundreds of
+thousands of them; an OS thread here costs about forty times that and the
+design holds at most `nish_cpu_count()` of them, by decision (§1). **This is a
+mechanism for dividing one loop across the cores, not for having many tasks.**
+A region needs on the order of a millisecond of work inside it before the
+spawn is under a tenth of its cost, which is the number the compiler's default
+`grain` should be picked from when
+[wp29-thread-surface.md](wp29-thread-surface.md)'s P1 chooses one — and it is
+also why `parallelMapInto` over a short array has to come out as an ordinary
+loop rather than as four threads.
+
+The 3 ns row is worth its own line because it was 3,734 ns until this was
+measured. `nish_cpu_count()` called `sysconf(_SC_NPROCESSORS_ONLN)` on every
+region, which glibc answers from `sched_getaffinity` or by parsing
+/sys/devices/system/cpu/online, and on a region too small to divide that lookup
+*was* the entire cost. It is cached now, in a word read and written with relaxed
+atomic builtins, and the undivided path is a bounds test and a call.
 
 What it costs a program that does not use it: **nothing, byte for byte.**
 `examples/hello.ts` at the `size` profile is 4,680 bytes with the file linked

@@ -2478,9 +2478,9 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840;
  *
  * Two rows, for the same reason the two above are two: the file compiles in both
  * configurations and they are not the same file. Without `-DNISH_THREADS` it is the
- * sequential fallback and measured **26 bytes** on 2026-09-18 with clang 18.1.3 on
- * linux-x64 -- one bounds test and a call -- and the 230 bytes of slack under the
- * 256-byte boundary are not room to spend: the point of gating the default build is
+ * sequential fallback and measured **49 bytes** on 2026-09-18 with clang 18.1.3 on
+ * linux-x64 -- one bounds test, a call, and the cached CPU count -- and the 207 bytes
+ * of slack under the 256-byte boundary are not room to spend: the point of gating the default build is
  * that nothing but a fallback belongs in it, so a commit that needs the room has put
  * code on the path a program which never spawns still links.
  */
@@ -2490,9 +2490,9 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 256;
  * links: the partitioner, the worker trampoline, `pthread_create`/`join` and the
  * nesting guard.
  *
- * Measured 456 bytes on 2026-09-18 with clang 18.1.3 on linux-x64. This is the number
+ * Measured 482 bytes on 2026-09-18 with clang 18.1.3 on linux-x64. This is the number
  * that made the file a third translation unit rather than a third of `runtime_os.c`,
- * which had 29 bytes of its ceiling left: 456 bytes of partitioner does not fit in 29,
+ * which had 29 bytes of its ceiling left: 482 bytes of partitioner does not fit in 29,
  * and raising the syscall half's ceiling to hold it would have moved the number a
  * reader sees for "the operating-system surface" for a reason that has nothing to do
  * with the operating system. Section GC means a program that runs nothing in parallel
