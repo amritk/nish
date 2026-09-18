@@ -32,6 +32,11 @@
 name: Parity
 
 on:
+  # TEMPORARY, removed before this branch merges: the only way to prove the
+  # `record` job below fires is to make a real full run happen, and this
+  # session cannot reach the workflow-dispatch API.
+  push:
+    branches: [feature/wp19-r1-parity/gate-visible]
   schedule:
     # 06:17 UTC. Off the hour because GitHub's scheduler queues everything
     # written at :00, and the run is long enough to care about starting.
