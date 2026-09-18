@@ -69,6 +69,7 @@ import { Local } from "./symbols";
 import {
   intBits,
   T_BOOL,
+  T_CPTR,
   T_F32,
   T_F64,
   T_I32,
@@ -279,6 +280,12 @@ export class DebugInfo {
       } else {
         ref = this.enumeration(declared);
       }
+    } else if (type === T_CPTR) {
+      // WP27 S2: an address a C function handed back, and nothing else. There
+      // is no pointee type this compiler can honestly name, and DWARF spells
+      // that `baseType: null` — `void *`, as clang writes it. `src/` carries
+      // the reasoning.
+      ref = this.pointerTo("null");
     } else if (this.table.isResult(type)) {
       // A `Result` has no `StructInfo` — its layout is derived from the type —
       // but `resultLayout` knows everything a `DW_TAG_structure_type` needs, so

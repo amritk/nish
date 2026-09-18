@@ -26,7 +26,8 @@
  * pointer to a composite built from `resultLayout` — `ok`, `value`, `error`
  * at their computed offsets — except at a call boundary the ABI packs into a
  * register, where it is the packed `{ int32_t ok; union { T; E; }; }` the C
- * header declares (`docs/wp17-result-abi.md` §3).
+ * header declares (`docs/wp17-result-abi.md` §3). A `CPtr` (WP27 §7a) is the
+ * one type with no structure to describe, and is `void *`.
  *
  * Without `-g` nothing here runs and the IR is byte-for-byte what it was.
  */
@@ -139,6 +140,16 @@ export class DebugInfo {
       // rather than `2`, and the distinctness the checker enforces survives
       // into the debugger.
       ref = this.enumeration(this.program.enums.get(t.name)!);
+    } else if (t.kind === "cptr") {
+      // WP27 S2: an address a C function handed back, and nothing else. This
+      // compiler laid out nothing behind it, so there is no pointee type it
+      // can honestly name — and DWARF spells "pointer to something I am not
+      // describing" as `baseType: null`, which is what clang writes for
+      // `void *`. Naming `char` instead, on the strength of the `i8*` a `CPtr`
+      // shares with a string, would have a debugger print a foreign address as
+      // text. Debug info is the one path that must say something about a type
+      // it has no structure for; what it says is the width and no more.
+      ref = this.pointerTo("null");
     } else if (t.kind === "result") {
       // WP17: a `Result` has no `StructInfo` — its layout is derived from the
       // type — but `resultLayout` knows everything a `DW_TAG_structure_type`
