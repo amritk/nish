@@ -47,6 +47,17 @@
 #
 # The whole matrix is the release's answer rather than a list in ci.yml, so a
 # platform's row appears the day a release carries its seed and not before.
+#
+# Which is worth reading twice, because it is presence and not `attachedSince`
+# that builds a row: the check below looks for the tarball first. So the release
+# that first carries a seed gives that platform a `bootstrap` row on every push
+# and every pull request afterwards -- an LLVM install, bootstrap.sh --verify
+# and the CLI contract, on hardware that may never have run any of it. If that
+# row is red, `ci` is red and release.yml's `release` job is `needs: ci`, and
+# rolling `attachedSince` back does not help: the asset is already attached.
+# Fixing the row or deleting the asset are the only two ways out. Exercise a
+# platform's rows before its attachedSince arrives -- .github/seed-targets.json
+# says so at more length, under BEFORE ADDING A PLATFORM.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -76,6 +87,19 @@ EOF
 fi
 
 version="${tag#v}"
+
+# `gh release list --limit 1` returns the newest release whatever its shape,
+# prereleases included, so the newest tag may be one seed-due.sh cannot order --
+# `v0.3.0-rc1`. That has to fail, because guessing an order is how a missing
+# seed gets excused; but it has to fail EXPLAINING ITSELF, because this job is
+# `needs: ci` for the release workflow and a red check whose only output is on
+# stderr is a release nobody can see the reason for. The `missing` branch below
+# sets that standard and this matches it.
+if ! bash .github/seed-due.sh "$version" >/dev/null 2>&1; then
+  echo "::error::The newest release is $tag, and .github/seed-due.sh cannot order '$version' against the attachedSince versions in .github/seed-targets.json -- it takes dotted integers, and a prerelease or a tag of another shape is not one. This job reads the NEWEST release (\`gh release list --limit 1\`), so a prerelease at the head of the list stops it. Either teach seed-due.sh the new scheme, or do not leave a tag of that shape as the newest release: this check is red until one of those happens, and release.yml's release job is needs: ci."
+  exit 1
+fi
+
 # One question to the release, answered as a list of names, so that "the
 # release does not carry this" is read from what it carries rather than from a
 # download that failed for some other reason.
@@ -114,7 +138,7 @@ while [ "$i" -lt "$count" ]; do
 done
 
 if [ -n "$missing" ]; then
-  echo "::error::$tag attaches no$missing, and release.yml builds that seed at this version (.github/seed-targets.json gives it an attachedSince of $tag or older). Nothing can check the rolling freeze on that platform without it, so this fails rather than warns: see docs/wp19-stage0-retirement.md G3. To get unstuck, attach the asset to $tag or delete the release, before cutting another -- this check is red until one of those happens, and release.yml's release job is needs: ci."
+  echo "::error::$tag attaches no$missing, and release.yml builds that seed at this version (.github/seed-targets.json gives it an attachedSince of $tag or older). Nothing can check the rolling freeze on that platform without it, so this fails rather than warns: see docs/wp19-stage0-retirement.md G3. To get unstuck, attach the asset to $tag or delete the release, before cutting another -- this check is red until one of those happens, and release.yml's release job is needs: ci. Note that lowering that target's attachedSince does NOT clear this, and neither does raising it: the row below is built from what the release CARRIES, so once an asset is attached its bootstrap row exists regardless of the version, and once it is missing this branch fires regardless of the version. The asset and the release are the two things to change."
   exit 1
 fi
 

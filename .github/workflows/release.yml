@@ -55,10 +55,18 @@ on:
   workflow_dispatch:
 
 # `contents: write` is what `gh release create` needs, and only the `release`
-# job needs it. Every other job narrows to `contents: read` at the job level:
-# `binaries` runs `npm ci` and `brew install`, which is third-party install
-# code on four machines, and a token that can push to the repository and
-# publish a release is not something to hand it for the sake of one checkout.
+# job needs it. Every other job narrows to `contents: read` at the job level,
+# which takes the write token away from the jobs that do not publish -- and
+# `binaries` is the one worth taking it from, being `npm ci` and `brew install`
+# on as many machines as there are targets.
+#
+# What this does NOT do is keep third-party install code away from the write
+# token, because `release` still runs `npm ci` and `npm run build` under it:
+# `npm pack` ships `dist/`, so the tarball has to be built where it is
+# published. Narrowing the other jobs shrinks that surface from every runner in
+# the matrix to one; it does not remove it. Removing it would mean building the
+# package in a job with `contents: read` and passing it here as an artifact,
+# which is a change worth making on its own terms rather than as a footnote.
 permissions:
   contents: write
 
@@ -245,9 +253,17 @@ jobs:
       # a narrower copy, or a stage layout edited on one line, would publish a
       # compiler that links `hello.ts` and fails on any program that reads a
       # file, lists a directory, spawns a child or asks the clock. That is the
-      # half of the runtime no smoke test of one program can see, which is why
-      # the npm side has this list and why the seed should not be the artifact
-      # that goes without it.
+      # half of the runtime no smoke test of one program can see -- `build.sh`
+      # pairs runtime_os.c with runtime.c only `if [ -f "$os" ]`, silently, so
+      # its absence is not an error anywhere -- which is why the npm side has
+      # this list and why the seed should not go without it.
+      #
+      # It is a presence check and that is its limit, shared with `Pack`'s: a
+      # runtime_os.c that is present and EMPTY passes here, compiles as an
+      # empty translation unit, and links both smoke programs. A corrupt one is
+      # caught, because clang then fails. Checking content would mean naming a
+      # symbol the file must define, which is a second copy of the runtime's
+      # ABI to keep in step; the hole is named here instead.
       - name: The tarball carries a whole compiler
         run: |
           tar -tzf "${{ steps.binary.outputs.asset }}" |

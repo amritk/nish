@@ -26,14 +26,15 @@ G1's corpus half is nightly, on its own workflow, for the reasons under
 That is new information rather than a guess, and it replaces the cost argument
 that used to stand here: `npm test` on `macos-latest` reported **five failures in
 four families**, none of them a compiler bug and all of them checks that encode
-an ELF/Linux assumption. **Three of the five remain**: the `stage3 == stage2`
-family is fixed, below, and it was the one that reached past this job.
+an ELF/Linux assumption. Three of the five are untouched; the `stage3 ==
+stage2` family is **narrowed** below, and it was the one that reached past this
+job.
 
 | | What fails | Why |
 | --- | --- | --- |
 | 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
-| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not: Mach-O's debug map records each `.o`'s path and mtime, which differ between two links. **Fixed** — see below |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Narrowed, not fixed** — and which bytes ld64 varies is still unmeasured; see below |
 
 The `stage3 == stage2` family reached further than this job:
 `scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
@@ -41,23 +42,50 @@ release workflow and a **darwin binary**
 ([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)) as well
 as between G3 and a macOS `bootstrap` row.
 
-That one is **closed**. The comparison moved into
-`scripts/verify-binaries.sh`, where on Darwin it *narrows* rather than lifting:
-the two binaries must be the same size, and must be identical once the debug
-information is stripped out (`llvm-objcopy --strip-debug`, or `strip -x`, whose
-`-x` is the ld64 spelling). Both are facts about the code the compiler emitted,
-where the raw byte comparison was a fact about ld64. Narrowed and not lifted on
-purpose — an arm that accepted any difference would accept a stage3 that is a
-different compiler, which is the one thing the comparison exists for — and
-`NISH_UNAME_S` lets `tests/run.js` drive both platforms' arms from one machine,
-so every arm of it is checked on every run rather than on a mac.
+That one is **narrowed, and still open.** The comparison moved into
+`scripts/verify-binaries.sh`, where on Darwin it asserts the size, strips what
+a tool on `PATH` can strip, and fails anything left over as *unattributed*
+rather than as a compiler difference.
 
-Restoring the `test` row therefore means porting the remaining **three** checks
-in the two families above it against hardware that has to be iterated on, which is a package
+The narrowing is an improvement on two counts and a settlement on neither. It
+no longer accepts any difference at all, which a blanket exemption would, and
+it no longer **misreports** a benign difference as a broken fixed point, which
+the first version of it did. What it does not do is let a real darwin
+bootstrap through, because *which* bytes differ has not been measured:
+
+- An earlier version of this section, and of the script, said the difference
+  was ld64's debug map — the table naming each `.o` by path and mtime. That is
+  wrong for the binaries being compared. `scripts/bootstrap.sh` defaults to
+  `--profile speed` and never passes `-g`, so there is no DWARF in the `.o`
+  files and no debug map is emitted; and `scripts/build.sh` links the speed and
+  size profiles on Darwin with `-Wl,-x`, so the local-symbol table is gone at
+  link time anyway. Stripping debug information off those two removes nothing.
+- The leading candidate is **`LC_UUID`**: ld64 writes one by default, it is a
+  fixed-width content hash in a load command, and no `strip` removes or
+  recomputes it — deliberately, so a dSYM keeps matching its binary. It fits
+  the measurement, which is a small fixed-width difference at identical size in
+  a binary with no symbols and no debug info. Measured on Linux against a
+  fabricated minimal Mach-O pair: `llvm-objcopy --strip-debug` leaves an
+  LC_UUID-only difference in place, and GNU `strip` will not read Mach-O at
+  all.
+- If that is what it is, the remedy is one line — link with `-Wl,-no_uuid`, or
+  mask the load command before comparing — and it belongs in the commit that
+  measures it.
+
+So the darwin pair's `attachedSince` in `.github/seed-targets.json` is held
+past the next release rather than this being called done, and `tests/run.js`
+pins the LC_UUID case as a **known limitation** rather than as a pass.
+`NISH_UNAME_S` lets it drive both platforms' branches from one machine, which
+establishes the script's control flow everywhere and the Mach-O behaviour only
+for that one fabricated pair.
+
+Restoring the `test` row means porting the other **three** checks in the two
+families above against hardware that has to be iterated on, which is a package
 of its own rather than a line in the matrix. The install half is already
 written and was exercised by that run: both "Install LLVM 18 + lld" steps in
 the `test` job are guarded by `runner.os`, so restoring the row is one
-uncommented line plus those three fixes.
+uncommented line plus those three fixes — and whatever the `stage3 == stage2`
+family turns out to need.
 
 The two defects the row was waiting for before this are both bash 3.2,
 which macOS ships as
@@ -155,21 +183,26 @@ described as triples the compiler accepts, which it never has.
 G3 asks for this on **both** operating systems, and it runs on Linux alone
 until the first release at or after 0.3.0, because v0.2.0 attaches
 `x86_64-linux` and nothing else and a published release cannot grow an asset.
-Two things had to land before the second platform and **both now have**:
+Two things had to land before the second platform. **One has; one is narrowed
+and still open**, which is why the macOS row is not imminent:
 
 - the darwin **seed**, which is
-  [G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node).
-  `release.yml` builds one per target from `.github/seed-targets.json`, and
-  `attachedSince` there is `0.3.0` for the darwin pair and for
-  `aarch64-linux`.
-- the **ld64 fixed point** — the fourth family in the table above. It is
-  `scripts/verify-binaries.sh` now, asserting the size and the
-  debug-stripped equality on Darwin instead of the raw bytes. A macOS row that
-  had arrived before that was fixed would have been red on the day its seed
-  did, which is the other way a gate lies about itself.
+  [G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and
+  which `release.yml` now builds — one per target, from
+  `.github/seed-targets.json`.
+- the **ld64 fixed point** — the `stage3 == stage2` family in the table above.
+  `scripts/verify-binaries.sh` narrows it rather than settling it, as that
+  section explains, so a darwin `binaries` row is as likely as not to fail as
+  *unattributed* and take the release with it. `attachedSince` for the darwin
+  pair is therefore `0.4.0`, past the next release: the version moves after
+  the run that measures which bytes ld64 varies. `aarch64-linux` is `0.3.0`,
+  because it is ELF and none of this applies to it.
 
 Neither is a line in `ci.yml`: the matrix is the release's answer, so the row
-appears when the seed does, on the runner `seed-targets.json` names for it.
+appears when the seed does, on the runner `seed-targets.json` names for it —
+and because it is *presence* and not `attachedSince` that builds the row, a
+platform's rows want exercising once before its version arrives. That file's
+note says so under BEFORE ADDING A PLATFORM.
 
 
 ### The parity run, nightly

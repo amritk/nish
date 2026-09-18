@@ -40,23 +40,24 @@
 #
 #   IR(seed, self/)   == IR(stage1, self/)     asserted for a stage0 seed only
 #   IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
-#   stage3 == stage2                           as files on ELF; as code and
-#                                              size on Mach-O
+#   stage3 == stage2                           as files on ELF; as size, and
+#                                              as bytes modulo what can be
+#                                              stripped, on Mach-O
 #
 # The last two are properties of the working tree and of nothing else: whatever
 # built stage1, the compiler `self/` describes has to agree with itself and
 # then reproduce itself. Both are asserted whatever the seed is.
 #
 # The third is a raw byte comparison, and on Mach-O two links of the same input
-# do not produce the same bytes: ld64 writes a debug map naming each .o by path
-# and mtime. That is a fact about the linker, not about `nish`. It is not a
-# reason to assert nothing there -- an exemption that accepts any difference
-# would accept a different compiler -- so on Darwin the comparison narrows
-# rather than lifting: the two binaries must still be the same size and must
-# still be identical once the debug information is stripped out, both of which
-# are facts about the code `nish` emitted. That comparison and the reasoning
-# for it live in `scripts/verify-binaries.sh`, which is a script rather than a
-# block in here so that `tests/run.js` can drive both platforms' arms.
+# do not produce the same bytes -- measured, at identical size, with every IR
+# equality green (WP19 R2). WHICH bytes has not been measured, and the comparison
+# does not pretend otherwise: on Darwin it asserts the size, strips what it can,
+# and reports anything left over as *unattributed* rather than as a compiler
+# difference. That is narrower than raw bytes and wider than an exemption, which
+# would accept a stage3 that is a different compiler. The comparison and the
+# reasoning live in `scripts/verify-binaries.sh` -- a script rather than a block
+# in here so that `tests/run.js` can drive both platforms' branches -- and its
+# header names the leading candidate (LC_UUID) and the remedy if it is right.
 #
 # The first one is asserted only when the seed is stage0. The reason is not
 # that it is a weaker claim with another seed — it is a different claim with
@@ -338,11 +339,12 @@ if [ "$build_to" -ge 3 ]; then
   "$work/stage2" self/compile.ts --link "$work/stage3" --profile "$profile" >/dev/null
   [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
   # `stage3 == stage2`, in scripts/verify-binaries.sh: byte-identical on ELF,
-  # and on Mach-O the same size and identical with ld64's debug map stripped,
-  # which is the narrowed form that arrives with WP19 G5's darwin binary. The
+  # and on Mach-O the size asserted, debug information stripped where a tool
+  # can strip it, and anything left over failed as *unattributed*. The
   # comparison lives in a script of its own so that tests/run.js can drive
-  # every arm of it from one machine -- its header is where the reasoning is,
-  # and NISH_UNAME_S is how the suite asks for the other platform's arm.
+  # every branch of it from one machine -- its header is where the reasoning
+  # is, including what has and has not been measured about Mach-O, and
+  # NISH_UNAME_S is how the suite asks for the other platform's branch.
   if [ "$verify" -eq 1 ]; then
     if verdict="$(bash scripts/verify-binaries.sh "$work/stage2" "$work/stage3" 2>&1)"; then
       printf '%s\n' "$verdict" | while IFS= read -r line; do say "  $line"; done

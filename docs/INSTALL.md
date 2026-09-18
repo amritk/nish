@@ -118,8 +118,8 @@ per supported platform, from the version named in the last column:
 | --- | --- | --- |
 | `nish-<version>-x86_64-linux.tar.gz` | Linux on Intel or AMD | v0.1.1 |
 | `nish-<version>-aarch64-linux.tar.gz` | Linux on ARM | v0.3.0 |
-| `nish-<version>-x86_64-darwin.tar.gz` | macOS on Intel | v0.3.0 |
-| `nish-<version>-aarch64-darwin.tar.gz` | macOS on Apple Silicon | v0.3.0 |
+| `nish-<version>-x86_64-darwin.tar.gz` | macOS on Intel | v0.4.0 |
+| `nish-<version>-aarch64-darwin.tar.gz` | macOS on Apple Silicon | v0.4.0 |
 
 Each is built and smoke-tested on a machine of its own architecture rather than
 cross-compiled, so the one you take has compiled and run two programs before it
@@ -128,15 +128,23 @@ to the machine that built it.
 
 The last column is there because a release is a past event and a workflow is
 not. `release.yml` builds all four, but a release already published cannot grow
-an asset: **v0.2.0, the current release, attaches `x86_64-linux` only**, and
-the other three first appear on v0.3.0. Those versions are not prose — they are
-`attachedSince` in
+an asset: **v0.2.0, the current release, attaches `x86_64-linux` only**. Those
+versions are not prose — they are `attachedSince` in
 [`.github/seed-targets.json`](https://github.com/amritk/nish/blob/main/.github/seed-targets.json),
-which is the same file the release workflow builds its matrix from, so this
-table and the assets cannot drift apart without a test failing. Check
-[the releases page](https://github.com/amritk/nish/releases/latest) for what a
-given version actually carries; on a platform whose row has not shipped yet,
-take the npm package above, or build from source below.
+the same file the release workflow builds its matrix from, so this table and
+the assets cannot drift apart without a test failing.
+
+**The two macOS rows say v0.4.0 rather than v0.3.0 on purpose.** The workflow
+builds them now, but nothing in this repository has ever run on macOS, and the
+bootstrap's `stage3 == stage2` check does not hold as a raw byte comparison
+under `ld64`. It is narrowed rather than lifted there, and which bytes actually
+differ has not been measured on real hardware — so those rows wait for the
+release after the one that measures it, rather than betting a release on a path
+nobody has executed. `scripts/verify-binaries.sh`'s header is the long version.
+
+Check [the releases page](https://github.com/amritk/nish/releases/latest) for
+what a given version actually carries; on a platform whose row has not shipped
+yet, take the npm package above, or build from source below.
 
 ```bash
 # pick the row above that matches `uname -s` and `uname -m`

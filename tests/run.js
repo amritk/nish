@@ -6111,7 +6111,28 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     }
     return true;
   };
-  const due = rows.filter((t) => notAfter(t.attachedSince, pkgVersion));
+  const dueAt = (v) => rows.filter((t) => notAfter(t.attachedSince, v));
+  const due = dueAt(pkgVersion);
+
+  // Two versions to drive the scripts with, read out of the file rather than typed,
+  // and each used BOTH as the tag and as the expected row count. Both halves matter:
+  // a tag hardcoded as "v0.2.0" while the expectation counted `due` -- the targets due
+  // at *package.json*'s version -- passed only while those two happened to agree, and
+  // went red on the next version bump, which is the release this branch exists to
+  // enable. The coupling is structural now: one version, used for the tag and for the
+  // count, so bumping package.json cannot re-break it.
+  //
+  // `early` is the oldest attachedSince in the file, so exactly the targets sharing it
+  // are due; `late` is past every attachedSince, so all of them are.
+  const early = rows.map((t) => t.attachedSince).reduce((a, b) => (notAfter(a, b) ? a : b));
+  const late = "9999.0.0";
+  const dueEarly = dueAt(early);
+  const dueLate = dueAt(late);
+  const later = rows.find((t) => !notAfter(t.attachedSince, early));
+  check(
+    `seed targets: the file has a version where some but not all targets are due (${early}: ${dueEarly.map((t) => t.asset).join(", ")})`,
+    dueEarly.length > 0 && dueEarly.length < rows.length && dueLate.length === rows.length && later !== undefined
+  );
   check("seed targets: the file lists targets", Array.isArray(rows) && rows.length > 0);
 
   // The canonical spelling, `x86_64-unknown-linux-gnu` rather than one of its aliases:
@@ -6227,12 +6248,19 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     releaseYml.includes("seed-targets.json") && releaseYml.includes("seed-due.sh") && spelled.length === 0,
     spelled.map((t) => t.asset).join(", ")
   );
+  // Two references, not a shape. There is no YAML parser in this repository's
+  // dependencies, so this reads the text -- but it reads it for the two things that
+  // carry the meaning rather than for a layout: the matrix comes from the `targets`
+  // job's output, and the runner comes from a matrix row. An earlier version matched
+  // `matrix:\n    target: ${{ fromJSON(...) }}` as one adjacent pattern, which would
+  // have gone red on a reformat or on the `fromJson` spelling, both of which are
+  // correct code. Whitespace-insensitive, and case-insensitive where Actions is.
+  const derivesMatrix = /\bfromjson\s*\(\s*needs\.targets\.outputs\.rows\s*\)/i.test(releaseYml);
+  const derivesRunner = /runs-on:\s*\$\{\{\s*matrix\.target\.runner\s*\}\}/.test(releaseYml);
   check(
     "seed targets: release.yml's binaries matrix and its runner are both the file's answer",
-    /matrix:\s*\n\s*target: \$\{\{ fromJSON\(needs\.targets\.outputs\.rows\) \}\}/.test(releaseYml) &&
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, which is the string being looked for
-      releaseYml.includes("runs-on: ${{ matrix.target.runner }}"),
-    releaseYml.split("\n").filter((l) => l.includes("runs-on") || l.includes("matrix")).join("\n")
+    derivesMatrix && derivesRunner,
+    `matrix from the targets job: ${derivesMatrix}; runner from the matrix row: ${derivesRunner}`
   );
 
   // docs/INSTALL.md's table tells a reader which release first carries the binary for
@@ -6272,7 +6300,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         JSON.stringify(JSON.parse(dueNow.stdout).map((t) => t.asset)) === JSON.stringify(due.map((t) => t.asset)),
       dueNow.stdout + dueNow.stderr
     );
-    const dueAll = dueSh("9.9.9");
+    const dueAll = dueSh(late);
     check(
       "seed-due: a far-future version is due every target in the file",
       dueAll.status === 0 && JSON.parse(dueAll.stdout).length === rows.length,
@@ -6302,10 +6330,11 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   // platform in that second state at once -- which may not be red, because release.yml's
   // release job is `needs: ci` and the first release is what would supply the seed.
   //
-  // The tags below are chosen to separate those states rather than to be realistic:
-  // `v0.2.0` is a version only the first target is due at, and `v9.9.9` is one every
-  // target is due at. With a boolean there was no way to write the second pair of cases
-  // at all, which is how the deadlock got as far as this file.
+  // The tags below are chosen to separate those states rather than to be realistic,
+  // and they are read out of the file: `early` is a version only the oldest targets are
+  // due at, `late` is one every target is due at. With a boolean there was no way to
+  // write the second pair of cases at all, which is how the deadlock got as far as this
+  // file.
   const seedDir = path.join(buildDir, "wp19-seed-matrix");
   fs.rmSync(seedDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(seedDir, "bin"), { recursive: true });
@@ -6339,18 +6368,17 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   };
 
   const first = rows[0];
-  const later = rows.find((t) => !notAfter(t.attachedSince, "0.2.0"));
   if (!has("jq")) {
     // The skip above covers this block too; one SKIP line for one missing tool.
   } else {
-    const carried = seedMatrix("v0.2.0", `nish-0.2.0.tgz nish-0.2.0-${first.asset}.tar.gz`);
+    const carried = seedMatrix(`v${early}`, `nish-${early}.tgz nish-${early}-${first.asset}.tar.gz`);
     check(
       `seed matrix: a release carrying ${first.asset} gives that platform a bootstrap row`,
       carried.status === 0 &&
         carried.rows?.length === 1 &&
         carried.rows[0].asset === first.asset &&
-        carried.rows[0].tag === "v0.2.0" &&
-        carried.rows[0].tarball === `nish-0.2.0-${first.asset}.tar.gz` &&
+        carried.rows[0].tag === `v${early}` &&
+        carried.rows[0].tarball === `nish-${early}-${first.asset}.tar.gz` &&
         carried.rows[0].runner === first.runner,
       carried.stdout + carried.stderr
     );
@@ -6360,7 +6388,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // not, so it is red -- red here, and red for the release workflow that runs this one
     // through `needs: ci`. A warning here would be a green check standing for a gate
     // nobody ran.
-    const dropped = seedMatrix("v0.2.0", "nish-0.2.0.tgz");
+    const dropped = seedMatrix(`v${early}`, `nish-${early}.tgz`);
     check(
       `seed matrix: a release that attaches no ${first.asset} seed FAILS rather than warns`,
       dropped.status === 1 && dropped.stdout.includes("::error::"),
@@ -6371,10 +6399,12 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // and it is not that one: it is expected, it gets no row, and it is green. This is
     // the arm that says the release which first attaches those binaries can actually be
     // cut -- v0.2.0 does not carry them, and if this were red it could not be.
-    const notYet = seedMatrix("v0.2.0", `nish-0.2.0-${first.asset}.tar.gz`);
+    const notYet = seedMatrix(`v${early}`, `nish-${early}-${first.asset}.tar.gz`);
     check(
-      `seed matrix: no ${later.asset} seed at v0.2.0 is a platform with no row rather than a failure`,
-      notYet.status === 0 && notYet.rows?.length === due.length && !notYet.rows.some((r) => r.asset === later.asset),
+      `seed matrix: no ${later.asset} seed at v${early} is a platform with no row rather than a failure`,
+      notYet.status === 0 &&
+        notYet.rows?.length === dueEarly.length &&
+        !notYet.rows.some((r) => r.asset === later.asset),
       `exit ${notYet.status}\n${notYet.stdout}${notYet.stderr}`
     );
 
@@ -6382,11 +6412,28 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // pair the boolean could not express: `attached: false` made the row above green
     // forever, so a release.yml that silently stopped attaching a darwin binary would
     // have reported a platform with no row instead of a broken gate.
-    const overdue = seedMatrix("v9.9.9", `nish-9.9.9-${first.asset}.tar.gz`);
+    const overdue = seedMatrix(`v${late}`, `nish-${late}-${first.asset}.tar.gz`);
     check(
       `seed matrix: once ${later.asset} is due, a release without it FAILS rather than going quiet`,
       overdue.status === 1 && overdue.stdout.includes("::error::") && overdue.stdout.includes(later.asset),
       `exit ${overdue.status}\n${overdue.stdout}${overdue.stderr}`
+    );
+
+    // A tag nothing can order. `gh release list --limit 1` returns the newest release
+    // whatever its shape, prereleases included, so this is reachable without anyone
+    // doing anything odd: cut an `-rc1` and the next push turns `seeds` red. It has to
+    // be red -- guessing an order is how a missing seed gets excused -- but it has to
+    // say so in an annotation, because this job is `needs: ci` for the release workflow
+    // and a red check whose only output is on stderr is a release with no visible
+    // reason. The first version of this exited 2 with nothing but stderr.
+    const unorderable = seedMatrix("v0.3.0-rc1", "");
+    check(
+      "seed matrix: a release tag seed-due.sh cannot order fails with an ::error:: and a recovery, not silently",
+      unorderable.status === 1 &&
+        unorderable.stdout.includes("::error::") &&
+        unorderable.stdout.includes("dotted integers") &&
+        unorderable.stdout.includes("needs: ci"),
+      `exit ${unorderable.status}\n${unorderable.stdout}${unorderable.stderr}`
     );
 
     // And no release at all: nothing could have been checked anywhere, so there is no row,
@@ -6403,8 +6450,8 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // appears with no edit to the workflow, on the runner the file names. It is checked
     // rather than asserted in a comment, because the last comment that said this was not
     // true.
-    const all = rows.map((t) => `nish-9.9.9-${t.asset}.tar.gz`).join(" ");
-    const future = seedMatrix("v9.9.9", all);
+    const all = rows.map((t) => `nish-${late}-${t.asset}.tar.gz`).join(" ");
+    const future = seedMatrix(`v${late}`, all);
     check(
       `seed matrix: a seed for every target gives each a row on its own runner with no edit to ci.yml`,
       future.status === 0 &&
@@ -6417,18 +6464,28 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
 
 // ---- WP19: stage3 == stage2, on both platforms ---------------------------------------
 // `scripts/verify-binaries.sh` is the last equality `scripts/bootstrap.sh --verify`
-// asserts, and it is a script of its own so that this block can ask it for the arm the
-// machine running the suite does not have. On ELF two links of one input are
-// byte-identical and that is asserted; on Mach-O they are not, because ld64 writes a
-// debug map naming each .o by path and mtime, so there the comparison narrows to the
-// size and to equality with the debug information stripped out.
+// asserts, and it is a script of its own so that this block can ask it for the branch
+// the machine running the suite does not take. On ELF two links of one input are
+// byte-identical and that is asserted; on Mach-O they are not, and there the comparison
+// narrows to the size plus equality once debug information is stripped, with anything
+// left over failing as UNATTRIBUTED.
 //
 // Narrows, not lifts: an arm that printed a line and carried on would accept a stage3
 // that is a different compiler from stage2, which is the one thing this comparison is
 // for. The pairs below are fabricated rather than bootstrapped, because the point is to
-// present each arm with a difference it must catch and one it must forgive -- a real
+// present each branch with a difference it must catch and one it must forgive -- a real
 // bootstrap only ever produces the identical case on this platform, which is how the
-// Darwin arm came to be written without a test.
+// Darwin branch came to be written without a test at all.
+//
+// WHAT THESE PROVE, precisely, because the first version of this block over-claimed.
+// `NISH_UNAME_S=Darwin` changes which branch of the script runs; it does not change
+// what format the files are. The ELF pairs below therefore establish the script's
+// CONTROL FLOW on the Darwin branch and nothing about Mach-O: an appended `.debug_str`
+// really is removed by `objcopy --strip-debug` on ELF, so that pair is bound to pass.
+// The Mach-O pair that follows them is the real format and the real field -- two
+// minimal Mach-O images differing only in LC_UUID -- and it is what says the
+// unattributed arm is reachable by a pair that is probably benign. It is asserted as a
+// known limitation, not as a pass, because no part of this has run on a mac.
 if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
   const vb = path.join(root, "scripts", "verify-binaries.sh");
   const dir = path.join(buildDir, "wp19-verify-binaries");
@@ -6465,13 +6522,14 @@ if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
     `exit ${elf.status}\n${elf.stdout}${elf.stderr}`
   );
 
-  // And the first half of the Darwin arm: a size difference is not the debug map, so it
-  // fails there too. This is the assertion the blanket exemption did not make.
+  // And the assertion doing the real work on the Darwin branch: whatever is not
+  // reproducible about ld64 is small and fixed-width, so a size difference is not it.
+  // This is the assertion the blanket exemption did not make.
   const longer = path.join(dir, "longer");
   fs.writeFileSync(longer, "the same twenty-eight bytes! and more");
   const sized = run(same1, longer, "Darwin");
   check(
-    "verify-binaries: on Mach-O a size difference fails, because the size is not the debug map",
+    "verify-binaries: on the Darwin branch a size difference fails, because the size is not what ld64 varies",
     sized.status === 1 && sized.stderr.includes("not even the same size"),
     `exit ${sized.status}\n${sized.stderr}${sized.stdout}`
   );
@@ -6513,13 +6571,15 @@ if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
         "verify-binaries: this toolchain would not produce two binaries of one size differing only in a debug section, so the Mach-O debug-map arms are unchecked here"
       );
     } else {
-      // The case the whole exemption exists for: same size, raw bytes differ, and the
-      // difference is entirely debug information. Forgiven on Mach-O.
+      // Same size, raw bytes differ, and the difference is entirely debug information:
+      // forgiven on the Darwin branch. On ELF, which is what these files are, this
+      // establishes that the strip-and-compare path runs and can forgive -- not that
+      // Mach-O behaves this way. See the header.
       const forgiven = run(dbgA, dbgB, "Darwin");
       check(
-        "verify-binaries: on Mach-O a difference that is only the debug map passes, with the size asserted",
+        "verify-binaries: on the Darwin branch a difference that stripping removes passes, with the size asserted (ELF pair: control flow only)",
         forgiven.status === 0 &&
-          forgiven.stdout.includes("identical with the debug map") &&
+          forgiven.stdout.includes("identical once debug information") &&
           forgiven.stdout.includes(String(fs.statSync(dbgA).size)),
         `exit ${forgiven.status}\n${forgiven.stdout}${forgiven.stderr}`
       );
@@ -6546,20 +6606,92 @@ if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
       fs.writeFileSync(codeB, bytes);
       const caught = run(codeA, codeB, "Darwin");
       check(
-        "verify-binaries: on Mach-O a same-size difference that survives stripping FAILS",
-        caught.status === 1,
+        "verify-binaries: on the Darwin branch a same-size difference that survives stripping FAILS as unattributed",
+        caught.status === 1 && caught.stderr.includes("UNATTRIBUTED"),
         `exit ${caught.status}\n${caught.stdout}${caught.stderr}`
       );
     }
   }
 
+  // The real format, and the field the header names as its leading candidate. Two
+  // minimal Mach-O images -- a mach_header_64 and one LC_UUID load command -- identical
+  // but for the UUID's sixteen bytes. This is fabricated rather than linked because
+  // there is no macOS here and no Mach-O linker; what it costs is that these are not
+  // *compilers*, and what it buys is that the format and the field are real.
+  //
+  // Measured here, on Linux, with LLVM 18's objcopy: `--strip-debug` leaves an
+  // LC_UUID-only difference in place, and GNU strip refuses Mach-O outright
+  // ("file format not recognized"). So a benign LC_UUID difference reaches the
+  // unattributed arm and fails. That is a KNOWN LIMITATION and this check pins it as
+  // one: if someone makes the script mask LC_UUID, or links with -Wl,-no_uuid, this is
+  // the check that should be rewritten to expect a pass, and the measurement recorded.
+  const machoDir = path.join(dir, "macho");
+  fs.mkdirSync(machoDir, { recursive: true });
+  const macho = (fill) => {
+    // mach_header_64: magic, cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags,
+    // reserved -- then LC_UUID (cmd 0x1b, size 24) and sixteen bytes of UUID.
+    const lc = Buffer.alloc(24);
+    lc.writeUInt32LE(0x1b, 0);
+    lc.writeUInt32LE(24, 4);
+    lc.fill(fill, 8, 24);
+    const hdr = Buffer.alloc(32);
+    hdr.writeUInt32LE(0xfeedfacf, 0); // MH_MAGIC_64
+    hdr.writeInt32LE(0x01000007, 4); // CPU_TYPE_X86_64
+    hdr.writeInt32LE(3, 8);
+    hdr.writeUInt32LE(2, 12); // MH_EXECUTE
+    hdr.writeUInt32LE(1, 16); // ncmds
+    hdr.writeUInt32LE(lc.length, 20);
+    return Buffer.concat([hdr, lc]);
+  };
+  const uuidA = path.join(machoDir, "uuidA");
+  const uuidB = path.join(machoDir, "uuidB");
+  fs.writeFileSync(uuidA, macho(0xaa));
+  fs.writeFileSync(uuidB, macho(0xbb));
+  const machoReady =
+    fs.statSync(uuidA).size === fs.statSync(uuidB).size && !fs.readFileSync(uuidA).equals(fs.readFileSync(uuidB));
+  check(
+    "verify-binaries: the fabricated Mach-O pair is the same size and differs only in LC_UUID",
+    machoReady,
+    `${fs.statSync(uuidA).size} vs ${fs.statSync(uuidB).size}`
+  );
+  const uuidRun = run(uuidA, uuidB, "Darwin");
+  check(
+    "verify-binaries: KNOWN LIMITATION -- a real Mach-O pair differing only in LC_UUID is reported unattributed, not forgiven",
+    uuidRun.status === 1 && uuidRun.stderr.includes("UNATTRIBUTED") && uuidRun.stderr.includes("LC_UUID"),
+    `exit ${uuidRun.status}\n${uuidRun.stdout}${uuidRun.stderr}`
+  );
+  // And the failure names the size rather than claiming the code differs, which is the
+  // sentence the first version of this script got wrong.
+  check(
+    "verify-binaries: the unattributed failure does not claim the code differs",
+    !uuidRun.stderr.includes("this is the code itself") && !uuidRun.stderr.includes("fixed point does not hold"),
+    uuidRun.stderr
+  );
+
+  // The test hook announces itself, so a release build with NISH_UNAME_S set leaves a
+  // trace rather than silently asserting a different equality.
+  const announced = run(same1, other, "Darwin");
+  check(
+    "verify-binaries: NISH_UNAME_S says on stderr that it overrode the platform",
+    announced.stderr.includes("NISH_UNAME_S") && announced.stderr.includes("test hook"),
+    announced.stderr
+  );
+
   // The platform test is the only thing NISH_UNAME_S overrides, and it defaults to the
   // real `uname -s`: the override is a test hook and must not change what a release
-  // asserts when nobody sets it.
+  // asserts when nobody sets it. Both sides of this are real assertions -- the first
+  // version let macOS through on "not exit 2", which is vacuous on the one platform the
+  // branch is about. `same1`/`other` are the same size, so on Darwin the expected
+  // outcome is the unattributed failure and on ELF the byte failure; either way it must
+  // fail, with the platform's own wording and without the hook's announcement.
   const real = run(same1, other, undefined);
   check(
-    "verify-binaries: with NISH_UNAME_S unset the host's own platform decides the arm",
-    process.platform === "darwin" ? real.status === 1 || real.status === 0 : real.status === 1,
+    `verify-binaries: with NISH_UNAME_S unset the host's own platform decides the branch (${process.platform})`,
+    real.status === 1 &&
+      !real.stderr.includes("NISH_UNAME_S") &&
+      (process.platform === "darwin"
+        ? real.stderr.includes("UNATTRIBUTED")
+        : real.stderr.includes("not byte-identical")),
     `exit ${real.status}\n${real.stdout}${real.stderr}`
   );
 }

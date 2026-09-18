@@ -5,7 +5,10 @@
     "`triple` is the canonical target triple src/codegen/target.ts accepts, and `asset` is that triple with the vendor and the ABI dropped: x86_64-unknown-linux-gnu -> x86_64-linux, aarch64-apple-darwin -> aarch64-darwin. That derivation is the whole rule, and tests/run.js checks both halves against the compiler's own table, so a row that invents a platform the compiler cannot target fails there rather than on a release day.",
     "`attachedSince` is the first version whose release attaches this seed, and it is a VERSION rather than a boolean because the boolean could not be flipped. A release that carries no seed for a target already due FAILS the `seeds` job: a host that could have checked the rolling freeze and did not is a broken gate. A target not yet due gets no bootstrap row at all -- an absent row says the freeze was not checked there, where a green row with a warning inside it would say it was. .github/seed-due.sh is the one place the comparison is made.",
     "The boolean this replaced deadlocked the release it was waiting for. `attached: true` means \"release.yml builds this today\", which is a statement about the workflow; `seeds` reads it as a statement about the last *release*, which is a past event that cannot grow an asset. So the commit that taught release.yml to build the darwin pair could not also mark them attached: v0.2.0 does not carry them, `seeds` would go red, and release.yml's `release` job is `needs: ci` -- the release that would attach them could not be cut, and the flag could not be cleared until it was. A version says which releases the claim is about, so the two land together.",
-    "`host` is `uname -s`-`uname -m` on that platform, and release.yml's `binaries` job refuses to stamp the asset name into a tarball built on a machine that prints something else -- the last guard between a mislabelled asset and a user. `runner` is the GitHub-hosted label that provides that host, and it is executable configuration: release.yml's matrix and ci.yml's `bootstrap` both `runs-on` it. tests/run.js derives `host` from `triple` and checks `runner` against a denylist of labels GitHub has retired, because `macos-13` stood in this file after the last Intel image under that name was retired, and the day a release attached x86_64-darwin its bootstrap row would have had nowhere to run."
+    "`host` is `uname -s`-`uname -m` on that platform, and release.yml's `binaries` job refuses to stamp the asset name into a tarball built on a machine that prints something else -- the last guard between a mislabelled asset and a user. `runner` is the GitHub-hosted label that provides that host, and it is executable configuration: release.yml's matrix and ci.yml's `bootstrap` both `runs-on` it. tests/run.js derives `host` from `triple` and checks `runner` against a denylist of labels GitHub has retired, because `macos-13` stood in this file after the last Intel image under that name was retired, and the day a release attached x86_64-darwin its bootstrap row would have had nowhere to run.",
+    "WHY THE DARWIN PAIR IS 0.4.0 AND NOT 0.3.0. release.yml builds all four today, so the only thing an attachedSince decides is which release *carries* one -- and nothing here has ever run on macOS. `scripts/bootstrap.sh --verify` asserts `stage3 == stage2`, which does not hold on Mach-O; scripts/verify-binaries.sh narrows that rather than lifting it, but WHICH bytes differ has not been measured, so a darwin `binaries` row would as likely as not fail as UNATTRIBUTED and take the release with it (`release` is `needs: binaries`, deliberately). Setting these to 0.3.0 would bet the next release on a path nobody has executed. They move to the version that follows the run which measures it -- see scripts/verify-binaries.sh's header for what that run has to establish.",
+    "WHY aarch64-linux IS 0.3.0. It is ELF, so the comparison above holds there and the reason the darwin pair waits does not apply. Its risk is the ordinary one: `ubuntu-24.04-arm` has never run in this repository either. That risk is bounded at release time, because a failing `binaries` row stops the release and attaches nothing -- there is no half-attached state to recover from. What is NOT bounded is the row ci.yml grows afterwards; read the next note.",
+    "BEFORE ADDING A PLATFORM, EXERCISE ITS ROWS ONCE. ci.yml's `bootstrap` job takes its matrix from the seeds a release ATTACHES, not from attachedSince (seed-matrix.sh checks presence first), so the release that first carries a seed gives that platform a bootstrap row on every push and every pull request from then on -- `npm ci`, an LLVM install, bootstrap.sh --verify and the CLI contract, on hardware none of it has run on. If that row is red, `ci` is red repo-wide and `release` is `needs: ci`. Rolling attachedSince back does NOT clear it, because the asset is already attached and presence is what makes the row: the only remedies are to fix the row or to delete the asset from the release. So exercise a platform's rows before its attachedSince arrives -- a temporary matrix entry in release.yml, or a workflow_dispatch -- rather than finding out on release day."
   ],
   "targets": [
     {
@@ -27,14 +30,14 @@
       "triple": "aarch64-apple-darwin",
       "host": "Darwin-arm64",
       "runner": "macos-latest",
-      "attachedSince": "0.3.0"
+      "attachedSince": "0.4.0"
     },
     {
       "asset": "x86_64-darwin",
       "triple": "x86_64-apple-darwin",
       "host": "Darwin-x86_64",
       "runner": "macos-15-intel",
-      "attachedSince": "0.3.0"
+      "attachedSince": "0.4.0"
     }
   ]
 }
