@@ -6456,7 +6456,27 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     ["<version> for `aarch64-linux`", `${ver}${s}for${s}\`aarch64-linux\``, "aarch64-linux"],
     ["`x86_64-linux` ... <version>", `\`x86_64-linux\`${near}${ver}`, "x86_64-linux"],
     ["<version> for `x86_64-linux`", `${ver}${s}for${s}\`x86_64-linux\``, "x86_64-linux"],
+    // "the other three" is the documents' joint name for everything but the first
+    // target, and it appeared when `aarch64-linux` joined the darwin pair at one
+    // version. Like the pair patterns it is only well-defined while those three share a
+    // version, which is asserted below. Without this pattern `wp12-release.md` states
+    // its versions in no other way and the mutation test missed that document, which is
+    // how the pattern came to be added.
+    ["<version> for the other three", `${ver}${s}for${s}the${s}other${s}three`, "aarch64-linux"],
+    ["the other three from <version>", `the${s}other${s}three${s}from${s}${ver}`, "aarch64-linux"],
   ];
+  // "the other three" -- everything but the first target -- is only a claim with one
+  // answer while those three share a version, exactly as "the darwin pair" is. Asserted
+  // rather than assumed for the same reason: when they diverge the documents have to
+  // stop using the phrase, and this says so instead of comparing a joint sentence to
+  // whichever of the three the pattern happens to name.
+  const otherThree = rows.slice(1);
+  check(
+    `seed targets: the three targets after the first share one attachedSince, which is what lets the docs say "the other three" (${otherThree.map((t) => `${t.asset} ${t.attachedSince}`).join(", ")})`,
+    otherThree.length === 3 && new Set(otherThree.map((t) => t.attachedSince)).size === 1,
+    'those three no longer share an attachedSince, so a claim about "the other three" has no single answer: reword the documents and drop that pattern from versionClaims'
+  );
+
   const darwinPair = rows.filter((t) => t.triple.endsWith("-apple-darwin"));
   check(
     `seed targets: the darwin pair shares one attachedSince, which is what lets the docs speak of it as a pair (${darwinPair.map((t) => `${t.asset} ${t.attachedSince}`).join(", ")})`,

@@ -117,7 +117,7 @@ per supported platform, from the version named in the last column:
 | Asset | For | Attached from |
 | --- | --- | --- |
 | `nish-<version>-x86_64-linux.tar.gz` | Linux on Intel or AMD | v0.1.1 |
-| `nish-<version>-aarch64-linux.tar.gz` | Linux on ARM | v0.3.0 |
+| `nish-<version>-aarch64-linux.tar.gz` | Linux on ARM | v0.4.0 |
 | `nish-<version>-x86_64-darwin.tar.gz` | macOS on Intel | v0.4.0 |
 | `nish-<version>-aarch64-darwin.tar.gz` | macOS on Apple Silicon | v0.4.0 |
 
@@ -134,13 +134,15 @@ versions are not prose — they are `attachedSince` in
 the same file the release workflow builds its matrix from, so this table and
 the assets cannot drift apart without a test failing.
 
-**The two macOS rows say v0.4.0 rather than v0.3.0 on purpose.** The workflow
-builds them now, but nothing in this repository has ever run on macOS, and the
-bootstrap's `stage3 == stage2` check does not hold as a raw byte comparison
-under `ld64`. It is narrowed rather than lifted there, and which bytes actually
-differ has not been measured on real hardware — so those rows wait for the
-release after the one that measures it, rather than betting a release on a path
-nobody has executed. `scripts/verify-binaries.sh`'s header is the long version.
+**The three new rows say v0.4.0 rather than v0.3.0 on purpose.** The workflow
+builds all four now, but nothing in this repository has ever run on macOS or on
+ARM Linux, and a row that has never run is not something to put in front of a
+release: `release` needs the whole matrix, so one red row blocks the publish.
+They wait for a release after the run that exercises them. The two macOS rows
+wait on a second thing as well — the bootstrap's `stage3 == stage2` check does
+not hold as a raw byte comparison under `ld64`, and which bytes actually differ
+has not been measured on real hardware, so a darwin row may turn up work rather
+than a green tick. `scripts/verify-binaries.sh`'s header is the long version.
 
 Check [the releases page](https://github.com/amritk/nish/releases/latest) for
 what a given version actually carries; on a platform whose row has not shipped

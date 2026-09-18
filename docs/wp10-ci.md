@@ -184,7 +184,8 @@ G3 asks for this on **both** operating systems, and it runs on Linux alone.
 v0.2.0 attaches `x86_64-linux` and nothing else and a published release cannot
 grow an asset, so the earliest any second row could appear is the next release
 — and for **macOS** it is later than that: the darwin pair's `attachedSince` is
-0.4.0, for the reason in the second bullet below. `aarch64-linux` is 0.3.0.
+0.4.0, for the reason in the second bullet below — and so is
+`aarch64-linux`, for the first.
 Two things had to land before the second platform. **One has; one is narrowed
 and still open**, which is why the macOS row is not imminent:
 
@@ -197,8 +198,9 @@ and still open**, which is why the macOS row is not imminent:
   section explains, so a darwin `binaries` row is as likely as not to fail as
   *unattributed* and take the release with it. `attachedSince` for the darwin
   pair is therefore `0.4.0`, past the next release: the version moves after
-  the run that measures which bytes ld64 varies. `aarch64-linux` is `0.3.0`,
-  because it is ELF and none of this applies to it.
+  the run that measures which bytes ld64 varies. `aarch64-linux` is `0.4.0`
+  too, but only for want of an exercising run: it is ELF, so none of the ld64
+  problem applies to it, which makes it the natural first row to attach.
 
 Neither is a line in `ci.yml`: the matrix is the release's answer, so the row
 appears when the seed does, on the runner `seed-targets.json` names for it —
@@ -206,18 +208,22 @@ and because it is *presence* and not `attachedSince` that builds the row, a
 platform's rows want exercising once before its version arrives. That file's
 note says so under BEFORE ADDING A PLATFORM.
 
-**`aarch64-linux` at 0.3.0 is a deliberate exception to that, and worth naming
-as one.** `ubuntu-24.04-arm` has never run in this repository either, and
-0.3.0 is the next release. Two things make it an acceptable bet where the
-darwin pair is not. The release-time half is **fail-safe**: a failing
-`binaries` row stops the release and attaches nothing, so being wrong costs a
-red release rather than a broken gate with a seed behind it. And staging the
-platforms spreads the risk instead of putting three unexercised ones on one
-release. The half that is not fail-safe is the `bootstrap` row that appears
-*after* the asset is attached — and if that lands red, the only remedy is to
-**delete the `aarch64-linux` asset from the release**, because lowering
-`attachedSince` does not clear a row that presence created. Know that before
-cutting 0.3.0.
+**`aarch64-linux` was briefly set one release earlier, at 0.3.0, on an
+argument worth recording because it was sound about the wrong hazard.** It is ELF, so the `ld64` comparison does
+not apply to it; and the release-time half looks fail-safe, since a failing
+`binaries` row attaches nothing. Both true. But the half that is *not*
+fail-safe triggers on the row **succeeding**: once the asset is attached,
+`ci.yml` grows an ARM `bootstrap` row on every push and pull request, a red row
+there is red CI repo-wide, `release` is `needs: ci`, and lowering
+`attachedSince` does not clear a row that presence created — only deleting a
+published asset does. So "bounded at release time" covered the unlikely outcome
+and left the likely one uncovered. And the release it would have landed on
+publishes to npm and is merged by a person, who should not be handed a debug
+cycle at that moment.
+
+It is `0.4.0` with the others, and the rule below has no exceptions. A rule
+the file states and the row beneath it breaks is weaker than no rule, because
+the next person cites the exception.
 
 Exercising a platform's rows first is the better answer, and the two obvious
 ways of doing it are both closed: `release.yml` cannot be dispatched at a
