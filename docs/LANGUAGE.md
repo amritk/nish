@@ -2625,7 +2625,15 @@ by the caller.
   that *failed* prints its errors and none of its warnings; a report of more
   than one warning is capped at 20, like the error report, with
   `...and N more performance warnings` and an `N performance warnings` line.
-  Nine warnings exist today, and each names the rewrite:
+  They print in the order a reader reads a file — by file, in the order files
+  are first warned about, then by position in that file, then by diagnostic code
+  where two rules report at one position — which is also the order of the
+  `--json` stream and is a contract rather than a presentation detail. Within a
+  file it is **not** the order the analysis finds them in: a generic's body is
+  checked when one of its instantiations is finished, and the padding rule below
+  is decided a whole pass earlier than the other nine
+  (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
+  Ten warnings exist today, and each names the rewrite:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -2746,6 +2754,29 @@ by the caller.
     a declaration with no body; and silent altogether under the default, so a
     build that did not ask for the flag never sees it
     (`tests/cases/perf_inline_quiet`, `perf_inline_foreign`).
+  - **wasteful struct padding** — a `class` or `interface` whose declared field
+    order costs it bytes of padding that a different order would not spend.
+    Fields are laid out in declaration order at natural alignment, exactly as
+    clang lays out the equivalent C struct ([Classes](#classes)), so a
+    `boolean` in front of an `f64` throws seven bytes of every value away. The
+    message names the current size, the size the same fields reach in their best
+    order, and that order — the fields widest first, same-width fields left
+    where they were written (`tests/cases/perf_padding`). On an `interface` it
+    names the second half of the rewrite as well, because the interface's fields
+    are the first fields of every class that `implements` it and reordering it
+    alone is what stops those classes compiling. It is the rule the report order
+    above was written for, being the only one of the ten decided in pass 1
+    (`tests/cases/diag_order_pass1`). Silent wherever the
+    two sizes are equal — fields already widest first, one alignment
+    throughout, a single field, or trailing padding that belongs to the
+    alignment rather than to the order; silent for a class that `implements` an
+    interface, whose first fields are the interface's own and in its order, so
+    the prefix is not the author's to permute and the order the message would
+    name is one the compiler would then refuse; and silent for a generic
+    instantiation, which shares one declaration with every other instantiation
+    of the same class, so the caret would land on that declaration once per type
+    argument and the order that suits one need not suit another
+    (`tests/cases/perf_padding_quiet`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in

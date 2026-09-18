@@ -61,11 +61,18 @@ const bandOf = (file) => {
 };
 
 /**
- * The WP15 section 8 rules. `src/checker/performance.ts` is skipped by the
- * scan below, so this list is the whole of the class: a message there opens
- * with the interpolated name of the variable it is about as often as not, and
- * `codeFor` matches these with `indexOf` rather than `startsWith`. Keep each
- * fragment distinctive and inside one literal run of its message.
+ * The WP15 section 8 rules, and the whole of the class: the scan below passes
+ * over every literal handed to `reportPerformance`, wherever it is written, so
+ * a wording reaches the registry through this list or not at all. That is
+ * deliberate -- a message there opens with the interpolated name of the thing
+ * it is about as often as not, and `codeFor` matches these with `indexOf`
+ * rather than `startsWith`. Keep each fragment distinctive and inside one
+ * literal run of its message.
+ *
+ * Nine of the ten live in `src/checker/performance.ts`; the tenth, wasteful
+ * struct padding, is decided in pass 1 beside the layout it is about and so
+ * lives in `src/checker/classes.ts`, among that file's NL2xxx checker rules.
+ * The sink is what bands it, not the path.
  */
 const PERFORMANCE = [
   "is rebuilt from its own value on every iteration of this loop",
@@ -77,6 +84,7 @@ const PERFORMANCE = [
   "is not proven to be in range for",
   "is not provably within",
   "is called here inside a loop and",
+  "are padding the alignment rules insert and nothing reads",
 ];
 
 /** Every `.ts` under a directory, in a stable order. */
@@ -101,7 +109,7 @@ const sources = (dir) => {
  */
 const collect = () => {
   const found = new Map();
-  const call = /(?:\bfail|\berror|ctx\.error|\.error|reportPerformance|new CompileError|new StaticSyntaxError)\(\s*(`(?:[^`\\]|\\.)*?`|"(?:[^"\\]|\\.)*?")/gs;
+  const call = /(\bfail|\berror|ctx\.error|\.error|reportPerformance|new CompileError|new StaticSyntaxError)\(\s*(`(?:[^`\\]|\\.)*?`|"(?:[^"\\]|\\.)*?")/gs;
   // Some messages never appear at a call: the validator keeps tables of them
   // keyed by the name it refuses (`Reflect`, `globalThis`, `Function`). Any
   // template mentioning the language name is one of ours, wherever it sits.
@@ -111,14 +119,21 @@ const collect = () => {
     // Not its own output: the generated header quotes the very patterns this
     // scans for, and a generator that reads what it wrote grows a rule per run.
     if (file === "src/codes.ts") continue;
-    // Every message in this file is a WP15 section 8 warning, and `codeFor`
-    // looks those up in their own table; extracting them here would put a
-    // second, unreachable entry for each in the error table. The hand-written
-    // list above is where they are registered.
+    // Every message in this file is a WP15 section 8 warning, so neither scan
+    // has anything to find here that the hand-written list above does not
+    // already hold -- including the `${LANGUAGE}` templates, which the `table`
+    // pattern would otherwise pick up as error rules.
     if (file === "src/checker/performance.ts") continue;
     const text = fs.readFileSync(abs, "utf8");
     for (const m of [...text.matchAll(call), ...text.matchAll(table)]) {
-      let lit = m[1];
+      // `call` captures the sink in group 1 and the literal in group 2; `table`
+      // has only the literal. A message handed to `reportPerformance` is a WP15
+      // section 8 wording, which is band 9 wherever it is written, so it is
+      // registered above by hand rather than banded by the path of the file it
+      // sits in -- otherwise the padding rule in `src/checker/classes.ts` would
+      // pick up a second, unreachable NL2xxx code beside its NL9010.
+      if (m[1] === "reportPerformance") continue;
+      let lit = m[2] ?? m[1];
       const template = lit[0] === "`";
       lit = lit.slice(1, -1);
       // The *longest* literal run of the template, not the first: many messages
