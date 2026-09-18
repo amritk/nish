@@ -25,12 +25,18 @@
 // an error. They ride on the same `Diagnostic` with `kind` set to
 // `performance`, live in a second list the sink never throws or clears, and
 // are dropped whenever the compilation failed — an error report is never
-// diluted with advice about code that is about to change. They need no sort:
-// the analysis meets them in module load order and then in source order, which
-// is the order `sorted()` puts errors into anyway.
+// diluted with advice about code that is about to change. They have a report
+// order of their own — by file, then by position, then by diagnostic code —
+// which `reportPerformance` keeps as the list is built, for the reason written
+// there. `src/diagnostics.ts` orders them the same way and has to, because the
+// two are one compiler in two implementations and `--json` promises the same
+// stream from either — but nothing in the suite would catch it if they drifted:
+// `tests/self/parity.js` compares the stderr lines matching ` error: ` and
+// ` warning: `, which a `performance` line is neither of, and no variation of
+// it passes `--json`. This is a rule a reader keeps, not one a test catches.
 
 import { codeFor } from "./codes";
-import { jsonQuote, StringBuilder } from "./strings";
+import { compareStrings, jsonQuote, StringBuilder } from "./strings";
 import { StringMap } from "./map";
 
 const CH_LF: i32 = 10;
@@ -215,18 +221,27 @@ export class Diagnostic {
 export class DiagnosticSink {
   items: Diagnostic[];
   /**
-   * The WP15 §8 performance warnings, in the order the analysis found them.
-   * Kept apart from `items` so `hasErrors` stays a statement about errors and
-   * nothing here can ever stop a compilation.
+   * The WP15 §8 performance warnings, in report order rather than in the order
+   * the analysis found them — `reportPerformance` inserts each one where
+   * `compareWarnings` puts it. Kept apart from `items` so `hasErrors` stays a
+   * statement about errors and nothing here can ever stop a compilation.
    */
   warnings: Diagnostic[];
   /** File path -> the order it was first mentioned in. */
   fileOrder: StringMap;
+  /**
+   * File path -> the order it was first *warned* about. A table of its own for
+   * the reason `reportPerformance` does not touch `fileOrder`: that one is the
+   * error report's index, and a warning may not move one error in front of
+   * another.
+   */
+  warningFileOrder: StringMap;
 
   constructor() {
     this.items = [];
     this.warnings = [];
     this.fileOrder = new StringMap();
+    this.warningFileOrder = new StringMap();
   }
 
   report(source: SourceFile, start: i32, end: i32, text: string): void {
@@ -241,12 +256,62 @@ export class DiagnosticSink {
   }
 
   /**
-   * Record a performance warning (WP15 §8). The file order is deliberately
-   * not touched: it is the error report's index, and a warning must not be
-   * able to move one error in front of another.
+   * Record a performance warning (WP15 §8), at its place in the report order
+   * rather than at the end of the list.
+   *
+   * Inserting is what makes the order an invariant of `warnings` instead of a
+   * promise one accessor keeps, and the list is read directly — `--json`
+   * prints it warning by warning and `formatWarnings` prints the first `max`
+   * of it. It has to be an order rather than the arrival sequence because the
+   * analysis does not hand them over sorted: a generic instantiation's body is
+   * checked when the instantiation is finished rather than where the generic
+   * is written, and a pass-1 warning is found before pass 2 has looked at the
+   * file at all. It is a stable insertion sort: the stream arrives in a few
+   * nearly sorted runs, one per pass, so the scan back is short, and the list
+   * is small whatever happens — compiling all sixty modules of `self/` produces
+   * about seventy warnings. `sorted()` needs a merge sort instead because one
+   * bad declaration can cascade into thousands of errors, and nothing cascades
+   * into a warning.
    */
   reportPerformance(source: SourceFile, start: i32, end: i32, text: string): void {
-    this.warnings.push(new Diagnostic(source, start, end, PERFORMANCE, text));
+    if (!this.warningFileOrder.has(source.path)) {
+      this.warningFileOrder.set(source.path, this.warningFileOrder.size());
+    }
+    const warning = new Diagnostic(source, start, end, PERFORMANCE, text);
+    this.warnings.push(warning);
+    let i = this.warnings.length - 1;
+    while (i > 0 && this.compareWarnings(this.warnings[i - 1], warning) > 0) {
+      this.warnings[i] = this.warnings[i - 1];
+      i = i - 1;
+    }
+    this.warnings[i] = warning;
+  }
+
+  /**
+   * Negative, zero or positive as warning `a` should be reported before `b`:
+   * by file — in the order files were first warned about, so a warning report
+   * follows the import graph the way `compare` makes the error report follow
+   * it — then by the start of the span, then by diagnostic code.
+   *
+   * The code is what breaks a tie at one position, so that two analyses
+   * reporting on the same node come out in the same order whichever of them
+   * ran first. It is the last key and never a fallback to the prose: two
+   * warnings of one code at one position keep the order the analysis produced
+   * them in, which is what makes a multi-warning golden reproducible.
+   */
+  compareWarnings(a: Diagnostic, b: Diagnostic): i32 {
+    const fileA = this.warningFileOrder.get(a.source.path, 0);
+    const fileB = this.warningFileOrder.get(b.source.path, 0);
+    if (fileA !== fileB) {
+      return fileA - fileB;
+    }
+    if (a.line !== b.line) {
+      return a.line - b.line;
+    }
+    if (a.column !== b.column) {
+      return a.column - b.column;
+    }
+    return compareStrings(codeFor(a.kind, a.text), codeFor(b.kind, b.text));
   }
 
   hasErrors(): boolean {

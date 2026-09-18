@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 336 programs, 5695 dump lines.
+# 337 programs, 5718 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1685,6 +1685,30 @@ function main(): i32 -> @nish_main [exported entry]
   callee 28:15 hasOwnProperty -> @hasOwnProperty
   callee 29:15 isPrototypeOf -> @isPrototypeOf
   callee 30:15 new toString -> @toString.constructor
+program tests/cases/diag_order.ts
+module tests/cases/diag_order.ts (entry)
+function banner(n: i32): string -> @banner [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 26:7 out: string (let)
+  local 27:7 i: i32 (let)
+function widened(): i64 -> @widened [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: banner label$i32
+  stackSites=1 stackLocals=0
+  callee 39:35 banner -> @banner
+  callee 39:54 label<i32> -> @label$i32
+function label<i32>(items: i32[]): string -> @label$i32 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  pointer items: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 16:7 s: string (let)
+  local 17:7 i: i32 (let)
 program tests/cases/div_checked.ts
 module tests/cases/div_checked.ts (entry)
 function div(a: i32, b: i32): i32 -> @div

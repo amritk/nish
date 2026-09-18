@@ -934,6 +934,29 @@ if (!only || "performance".includes(only)) {
     });
   const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: performance: /.test(l));
 
+  // The order of the stream, before any rule in it. The warning list is sorted
+  // by file, then by position, then by diagnostic code, and `diag_order` is the
+  // case that needs the sort: a generic's body is checked when one of its
+  // instantiations is finished, so the walk *finds* the warning at line 19
+  // after the one at line 29 and reported them that way until WP15's remainder.
+  // The pair at 37:41 is the second key — two analyses at one position, ordered
+  // by their code rather than by which of them ran. `--json` is a
+  // machine-readable stream, so both are a contract, not a presentation detail.
+  const order = compile("diag_order", "diag_order.ll");
+  const orderLines = summaries(order.stderr);
+  check(
+    "performance: the warnings of one file are reported by position and then by code, whatever order the analysis found them in",
+    order.status === 0 &&
+      orderLines.length === 4 &&
+      orderLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
+        "19:5,29:5,37:41,37:41" &&
+      orderLines[0].includes("performance: `s` is rebuilt from its own value") &&
+      orderLines[1].includes("performance: `out` is rebuilt from its own value") &&
+      orderLines[2].includes("performance: this `*` is computed in i32 and wraps") &&
+      orderLines[3].includes("performance: this computes with overflow"),
+    order.stderr
+  );
+
   const str = compile("perf_str_concat_loop", "perf_str.ll");
   const strLines = summaries(str.stderr);
   // `for`, `while`, a nested loop whose accumulator is declared one level out,
