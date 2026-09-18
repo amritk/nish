@@ -143,4 +143,46 @@ gate.
   not part of this suite either. It times both shapes against each other inside
   one process and prints the two figures, so `nish bench/substr.ts --link x &&
   ./x` is the whole protocol: no baseline compiler and no second build.
+- `hoist_field.ts`: what hoisting an array header out of a loop is worth
+  (WP15 §2c candidate 2), not part of this suite either. Three scans do the same
+  arithmetic over the same 8192 doubles and differ only in where the source
+  array is *kept* — a parameter, a class field, and a class field read once into
+  a `const` before the loop — timed against each other in alternating rounds
+  inside one process, so there is no baseline compiler and no second build:
+
+  ```bash
+  npm run build
+  node dist/index.js bench/hoist_field.ts -o build/hoistir/ --link build/hoist --profile speed
+  taskset -c 2 build/hoist
+  ```
+
+  `--link` alone would run it; `-o` keeps the module, which is where `opt -O2`
+  shows the `umin` the file header tells you to look for.
+
+  The field shape is `knownAtMost` in [self/bounds.ts](../self/bounds.ts) — the
+  file header says why — so the distance between it and the other two is what
+  candidate 2 of [docs/wp15-performance.md](../docs/wp15-performance.md) §2c has
+  to recover.
+
+  **The baseline, measured at `7f6e833`, before the hoist exists.** x86-64,
+  four-core Intel Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3
+  (LLVM 18), the box otherwise idle. Flags: `--profile speed` and nothing else —
+  `f64` is spelled in the source, so there is no `--number-mode` to set. The
+  statistic is the program's own minimum over its seven alternating rounds,
+  taken again as the minimum over five runs of the binary, each pinned with
+  `taskset -c 2`:
+
+  | scan | where the array is kept | min | |
+  | --- | --- | ---: | --- |
+  | `param` | a parameter | 242 ms | one trip count, and it vectorises |
+  | `field` | a class field | 576 ms | **2.38x behind**, and it does not |
+  | `hoisted` | a class field, read into a `const` first | 240 ms | vectorises |
+
+  §2c measured the same pair at 756 ms against 305 ms — **2.48x** — on a
+  four-core box carrying several test suites at once, which is why it reported
+  CPU time rather than wall time. This program has no CPU clock to read
+  (`monotonicNanos` is elapsed time and the language has no `getrusage`), so it
+  reports wall time and leans on the alternation instead: all three scans share
+  every round, so a machine drifting under the run drifts under all three. On a
+  busy box, pin it and read the ratio rather than the milliseconds.
 - `rss.c`: the peak-RSS helper the runner compiles into `build/bench/rss`.
