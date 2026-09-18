@@ -706,6 +706,22 @@ export class CheckedProgram {
    * than in a decision the emitter makes.
    */
   nodeProvenIndex: boolean[];
+  /**
+   * A `substring` bound node id -> the same analysis placed it in
+   * `[0, s.length]`. Keyed by the bound rather than by the call, because one
+   * end of an `s.substring(0, n)` is usually proven and the other is not.
+   *
+   * This is not a bounds *check*. JavaScript's `substring` clamps each end into
+   * `[0, len]`, which `self/emit_strings.ts` writes as an `llvm.smin` /
+   * `llvm.smax` pair, and that clamp is the semantics rather than a safety net
+   * — `--unchecked-indexing` does not remove it and must not. What the proof
+   * buys is that a bound the clamp cannot move needs no clamp, so the emitter
+   * writes the value straight through. A literal `0` is in here for every
+   * string, because no string has a negative length, which is why the
+   * commonest spelling there is — `s.substring(0, n)` — loses two of its six
+   * intrinsic calls without a guard being written anywhere.
+   */
+  nodeProvenClamp: boolean[];
 
   constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
     this.source = source;
@@ -755,6 +771,7 @@ export class CheckedProgram {
     this.nodeCaseValues = new Array<i64>(nodeCount);
     this.nodeEnumValues = new Array<i32>(nodeCount);
     this.nodeProvenIndex = new Array<boolean>(nodeCount);
+    this.nodeProvenClamp = new Array<boolean>(nodeCount);
     let i = 0;
     while (i < nodeCount) {
       this.nodeTypes[i] = -1;

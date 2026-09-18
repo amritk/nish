@@ -234,14 +234,40 @@ function emitCharCodeAt(ctx: EmitContext, expr: ts.CallExpression, str: string):
 }
 
 /**
+ * One end of a `substring`: the clamp, or the value itself where the WP15 §2
+ * analysis proved `0 <= bound <= len` (`checker/bounds.ts`, `provenClamps`).
+ *
+ * The clamp cannot move a bound that is already inside the range, so dropping
+ * it changes no answer — the checker recorded the verdict and the emitter
+ * reads it, exactly as it does for a bounds check it may omit. LLVM does this
+ * itself only where it can hoist the receiver's length: with a string literal
+ * in a local it folds all six calls unaided, but where the receiver is a
+ * parameter the guard compares `i32`s, the clamp runs on their `sext`, and the
+ * length is re-read across an allocating call, so the clamp on the guarded
+ * bound survives whether the guard is there or not. "All six" is exact only
+ * when both bounds are guarded locals; `s.substring(0, i)` goes six to two,
+ * and the two that live are `i`'s own pair (WP15 §9).
+ *
+ * `first` is emitted and clamped before `second` is evaluated at all, which is
+ * the order `bounds.ts` takes its verdicts in: a fact argument 1 establishes
+ * may not reach argument 0.
+ */
+const clampBound = (ctx: EmitContext, bound: ts.Expression, len: string): string => {
+  const value = emitIndex(ctx, bound);
+  return ctx.program.provenClamps.has(bound) ? value : clampToLength(ctx, value, len);
+};
+
+/**
  * `s.substring(a, b)`: both ends clamped into `[0, len]` and then swapped
  * into order, as JavaScript specifies, so the length is never negative and
- * the copy never leaves the string.
+ * the copy never leaves the string. A bound the checker proved in range is
+ * written through instead (`clampBound`); the swap stays either way, because
+ * nothing here proves `a <= b`.
  */
 function emitSubstring(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
   const len = loadStringLength(ctx, str);
-  const first = clampToLength(ctx, emitIndex(ctx, expr.arguments[0]), len);
-  const second = expr.arguments.length > 1 ? clampToLength(ctx, emitIndex(ctx, expr.arguments[1]), len) : len;
+  const first = clampBound(ctx, expr.arguments[0], len);
+  const second = expr.arguments.length > 1 ? clampBound(ctx, expr.arguments[1], len) : len;
   const from = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smin.i64")}(i64 ${first}, i64 ${second})`);
   const to = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smax.i64")}(i64 ${first}, i64 ${second})`);
   const n = ctx.fn.emitValue(`sub i64 ${to}, ${from}`);

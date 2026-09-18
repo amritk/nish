@@ -313,6 +313,79 @@ node tests/self/goldens.js          # the stage1 goldens alone, ~13 s
 npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
+**A filtered run's count is a measurement only after `rm -rf build/test`.**
+`run.js` is one process and section A compiles the goldens before anything else
+reads them, so a later check can be handed an artifact it did not write itself.
+Fifteen `fs.existsSync` guards stand in front of a check whose `build/test/`
+input another section compiled, over seventeen goldens between them:
+`cf_sum_loop.ll` for the vectoriser, `dbg_locals.ll` for the `-g` verifier, the
+`arr_`, `str_`, `mem_`, `div_` and `opt_` goldens a later check re-reads, links
+or runs, and `mem_threads_arena.ll`, whose check is the one that proves the
+runtime-object cache key is load-bearing. A filter that does not name the
+golden leaves the guard false, and a guard is not a `skip(reason)`: the check
+does not run and the summary does not say so. Run the same filter over a tree
+an earlier run filled and the file is there and the check is back, so the count
+depends on what ran before it. On 97f0f4e:
+
+```bash
+rm -rf build/test && node tests/run.js division     # 10 passed
+node tests/run.js div                               # 35 passed
+node tests/run.js division                          # 14 passed, same filter
+
+rm -rf build/test && node tests/run.js performance  # 29 passed
+node tests/run.js mem                               # 103 passed
+node tests/run.js performance                       # 30 passed, same filter
+```
+
+The check that comes back in that second `performance` run is `runtime objects:
+a --threads module refuses to link against the default runtime`. It is one of
+the two guards that sit outside every `if (!only || ...)` gate — the other is
+the `cf_sum_loop` vectorisation check — so those two arrive in a filtered run
+whatever the filter was, which is the version of this with no clue in it at all:
+
+```bash
+rm -rf build/test && node tests/run.js layout       # 15 passed
+node tests/run.js cf_sum_loop                       # writes cf_sum_loop.ll
+node tests/run.js mem_threads_arena                 # writes mem_threads_arena.ll
+node tests/run.js layout                            # 17 passed, same filter
+```
+
+Three contradictory measurements of one pair of numbers, and two wrong
+explanations of them, came out of not knowing this. Delete the directory before
+the run you intend to quote.
+
+**Count from the machine-readable form, or count the thing itself; never a line
+that mentions it.** The human-readable diagnostic report is capped:
+`formatErrorReport` and `formatWarningReport` in `src/diagnostics.ts` print at
+most `MAX_REPORTED_ERRORS`, which is 20, then `...and N more performance
+warnings`, then the total, and `DiagnosticSink.format` / `formatWarnings` in
+`self/diagnostics.ts` are the same shape with the same 20 passed in by
+`self/compile.ts`. The cap is the class's rule rather than an accident of the
+printer — `docs/LANGUAGE.md` states it for the warnings and `docs/wp10-ci.md`
+for the errors — and what follows from it is that a `grep -c` over the report
+answers 20 and keeps answering 20. Over the 60 modules of `self/` that do not
+declare `main`:
+
+```bash
+mods=$(for f in self/*.ts; do grep -qE '^export (function main\b|const main\s*=)' "$f" || echo "$f"; done)
+node dist/index.js $mods -o build/probe/ 2>&1 | grep -c "performance:"    # 20, the cap
+node dist/index.js $mods -o build/probe/ --json |
+  grep -c '"severity":"performance"'                                      # 67, the answer
+```
+
+The report's last line says `67 performance warnings`, and `--json` breaks those
+67 down as NL9007 62, NL9002 3, NL9003 2. A count taken from the report is a
+count of the 20 lines it printed, and those 20 hold one of NL9002's three: a
+finding that the string-concatenation rule had stopped firing over `self/` came
+out of reading the 20 as the total, and was withdrawn.
+
+The same mistake in other clothes is counting IR intrinsics by the lines that
+name them. Over those modules' IR, `grep -c "llvm.sm"` answers 238 while the
+call sites are 206: 28 of the lines are `declare`s and 4 are string constants —
+the self-hosted compiler carries those intrinsic names as data, so its own IR
+spells them whether or not it calls them. Count the calls
+(`grep -cE "= call .*@llvm\.sm"`), or read `--json`; never the mention.
+
 `tests/self/goldens/` is the other family of checked-in golden here: the
 `--emit-checked` dump of the whole corpus, and the stdout of the three driver
 programs, as **stage1** prints them (WP19 gate G2.4). They exist because the

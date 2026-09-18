@@ -709,6 +709,139 @@ const checkSurvivingBoundsCheck = (walk: Walk, access: ts.Node): void => {
   );
 };
 
+/**
+ * A call, inside a loop, to a function this module does not export, while
+ * `--no-strict-exports` is keeping it an external symbol.
+ *
+ * The default gives a non-exported function `internal` linkage, which is what
+ * lets LLVM treat the call sites it can see as all of them: specialise the
+ * body to their arguments, and drop the out-of-line copy once they are
+ * inlined. The flag withdraws that for every function in the module at once,
+ * and the loop is what makes it worth saying.
+ *
+ * **What that is worth is a size, not a time.** On `bench/sieve`, whose hot
+ * `sieve` is exactly this shape, the flag is 240 bytes — 6,576 against 6,816 —
+ * because `opt -O3` inlines and deletes `@sieve` under the default and keeps
+ * the out-of-line copy under the flag. The wall clock does not move: five
+ * interleaved protocols put the two within 2.4% of each other with the sign
+ * flipping between them, and a paired run of 40 rounds had the flagged build
+ * ahead 22 times. `bench/spectral` is 64 bytes *smaller* with the flag and the
+ * same time either way. So the message names the missed specialisation and no
+ * speed figure, and WP15 §8 records the measurement.
+ *
+ * It cannot be noise for anybody who did not ask for it: the flag is opt-in,
+ * so a default build reports none of these, and the rewrite the message names
+ * is to stop passing it. An exported function is silent because the ABI is
+ * then the point, and a call outside a loop is silent because one indirect
+ * call is not a cost anybody is paying.
+ *
+ * **A `declare function` is silent too, and testing `exported` is not enough to
+ * get that right.** A foreign declaration is external because C defines it, not
+ * because this module withheld an `export` — and the checker refuses
+ * `export declare function` outright (`declarations.ts`), so `exported` is
+ * *always* false for one. Both rewrites the message names are therefore
+ * unavailable: exporting it is an error, and dropping the flag would not make
+ * it `internal`, because there is no body here to give linkage to. The IR says
+ * as much — the `declare` line is the same under the flag as under the default,
+ * and a program whose only functions are its entry and the declaration comes
+ * out byte for byte identical either way, so the warning would be naming a cost
+ * that is not being paid. `foreign` is the predicate rather than a missing
+ * `body`, because a body
+ * can be absent for other reasons (`FunctionSig.foreign`, WP27 S1), and it is
+ * exactly the failure `perf_inline_quiet`'s header warns about: a warning that
+ * fires where there is nothing to fix is what teaches people to ignore a whole
+ * diagnostic class. `tests/cases/perf_inline_foreign` pins it, with a foreign
+ * call and an ordinary non-exported one in the *same* loop, so the single
+ * diagnostic it reports is what says this guard is not too wide.
+ */
+const checkNotInlinable = (walk: Walk, call: ts.CallExpression): void => {
+  if (walk.ctx.opts.strictExports) return;
+  if (walk.loops.length === 0) return;
+  const callee = walk.ctx.program.callees.get(call);
+  if (callee === undefined || callee.exported) return;
+  // A `declare function` is external because C defines it, not because this
+  // module withheld an `export`: the rewrite named below cannot be taken (the
+  // checker refuses `export declare function`) and dropping
+  // `--no-strict-exports` would not make it `internal` either. WP27 S1.
+  if (callee.foreign === true) return;
+  walk.ctx.reportPerformance(
+    `\`${callee.sourceName}\` is called here inside a loop and \`--no-strict-exports\` keeps it an external ` +
+      `symbol, so the whole-program passes must assume there are callers they cannot see: the function is not ` +
+      `specialised to these arguments and its out-of-line copy survives even where every call was inlined — ` +
+      `drop \`--no-strict-exports\`, and a function this module does not export is \`internal\` instead`,
+    call.expression
+  );
+};
+
+/**
+ * A `substring` bound the WP15 §2 analysis could not place in `[0, s.length]`,
+ * on a call inside a loop.
+ *
+ * JavaScript's `substring` clamps each end, which is an `llvm.smin` /
+ * `llvm.smax` pair per bound, and the compiler writes a bound straight through
+ * wherever it can prove the clamp cannot move it (`bounds.ts`,
+ * `CheckedProgram.provenClamps`). So a bound it could not prove is two
+ * intrinsic calls every pass that a guard would take away — which is the one
+ * thing this class is for, a slow path with a named rewrite.
+ *
+ * Two rewrites are named because they are not the same trade. The guard keeps
+ * the semantics exactly: a clamped bound that was already in range clamps to
+ * itself. `slice` changes them — it panics where `substring` would have
+ * clamped — and it is the faster call whichever way the proof goes, measured
+ * 1.18x over `substring` on a lexer-shaped scan (WP15 §4).
+ *
+ * Not reported outside a loop, where the clamp runs once; not reported unless
+ * the receiver and the bound are both plain locals, which is the shape the
+ * analysis can prove and therefore the shape a guard would help — the same bar
+ * `checkSurvivingBoundsCheck` holds itself to. Unlike that one it ignores
+ * `--unchecked-indexing`, because the clamp is not a check: the flag does not
+ * remove it and neither rewrite depends on it.
+ *
+ * TODO(wp15): the named guard does not compile for an unsigned bound. On a
+ * `u32` the message still says to write `if (k >= 0 && k <= s.length)`, and
+ * the checker refuses the second half — ``Operator `<=` requires two numeric
+ * operands, got u32 and i32``. `NL9007` has the identical defect and had it
+ * before this rule existed, so the fix belongs to both: either the two
+ * messages name a rewrite an unsigned bound can write, or the domain learns
+ * `atMost` from an unsigned comparison. `slice`, the other rewrite here, does
+ * compile on a `u32` today.
+ *
+ * **That is the only shape here whose advice cannot be written, and it is
+ * weaker than it looks: one of the two named rewrites still compiles.** The
+ * audit that says so was prompted by `NL9008`, which had the stronger version
+ * of the same defect — it fired on a `declare function`, where *both* its
+ * rewrites were impossible, and is now silent for one. This rule has no
+ * `declare function` twin, and cannot: a foreign declaration returns a scalar
+ * or `CPtr` only (``a declared C function returns a scalar or `CPtr` only``),
+ * so the **receiver** can never come from C, and a C-returned **bound** is an
+ * ordinary `i32` local that the named guard silences like any other. Both were
+ * provoked rather than argued.
+ */
+const checkUnfoldedClamp = (walk: Walk, call: ts.CallExpression): void => {
+  if (walk.loops.length === 0) return;
+  const program = walk.ctx.program;
+  const callee = unwrapParens(call.expression);
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "substring") return;
+  if (call.arguments.length === 0 || call.arguments.length > 2) return;
+  if (program.types.get(callee.expression)?.kind !== "string") return;
+  const holder = nameOfLocal(program, callee.expression);
+  if (holder === undefined) return;
+  for (const bound of call.arguments) {
+    if (program.provenClamps.has(bound)) continue;
+    const name = nameOfLocal(program, bound);
+    if (name === undefined) continue;
+    walk.ctx.reportPerformance(
+      `\`${name}\` is not provably within \`${holder}\`, so this \`substring\` bound keeps the clamp ` +
+        `JavaScript specifies — an \`llvm.smin\` and an \`llvm.smax\` on every pass, which the optimiser folds ` +
+        `away only where it can hoist the receiver's length, and never where the receiver is a parameter, ` +
+        `because the guard compares i32 and the clamp runs on its sext: prove it with a test that reaches the ` +
+        `call, as \`if (${name} >= 0 && ${name} <= ${holder}.length)\`, or use \`slice\`, which has no clamp ` +
+        `at all and panics where this would have clamped`,
+      bound
+    );
+  }
+};
+
 /** The receiver and index of `a[i]` or `s.charCodeAt(i)`; the two shapes that bounds-check. */
 const accessParts = (node: ts.Node): { receiver: ts.Expression; index: ts.Expression } | undefined => {
   if (ts.isElementAccessExpression(node)) {
@@ -789,6 +922,8 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
     checkShiftCount(walk, node);
   } else if (ts.isCallExpression(node)) {
     checkWideningConversion(walk, node);
+    checkUnfoldedClamp(walk, node);
+    checkNotInlinable(walk, node);
   }
   if (walk.unprovenIndices.includes(node)) checkSurvivingBoundsCheck(walk, node);
   ts.forEachChild(node, (child) => walkNode(walk, child));

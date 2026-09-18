@@ -10,6 +10,34 @@
 // no check; where it is not, the runtime check stays and the WP15 §8 warning
 // in `self/checker.ts` names the guard that would have proved it.
 //
+// The same facts answer a second question, and it is not about a check.
+// `s.substring(a, b)` clamps each end into `[0, len]` the way JavaScript
+// specifies — an `llvm.smin` / `llvm.smax` pair per bound, six intrinsic calls
+// once the two are swapped into order — and that clamp is the semantics rather
+// than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
+// analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
+// clamp is dead code: `program.nodeProvenClamp` says which bounds those are
+// and `self/emit_strings.ts` writes them through.
+//
+// Where LLVM finds this by itself, and where it does not. It needs the
+// receiver's length to be one value it can reason about: give it a string
+// literal bound to a local and a hoisted `const n = s.length`, and `opt -O3`
+// folds all six calls out of the unfolded IR unaided. Where the receiver is a
+// *parameter* it does not: the guard a program writes compares `i32`s and the
+// clamp runs on their `sext`, the length is re-read on every pass, and
+// `nish_str_new` — which every `substring` calls — is not `readnone`, so
+// nothing proves the second read equals the first. All six survive there
+// whether or not a dominating guard proves both ends, which is the shape §8's
+// warning is written against.
+//
+// A bound is judged where the emitter evaluates it, not where the call ends.
+// `emitSubstring` clamps argument 0 before argument 1 runs, so `walkExpression`
+// interleaves the verdicts with the argument walk and drops the receiver's
+// holder as soon as an argument rebinds it. Judging both ends against the
+// state the whole argument list left behind folded the clamp on a negative `k`
+// in `s.substring(k, (k = s.length))` and read three bytes before the string
+// body.
+//
 // The five families of fact, all keyed by *variable* and never by a property
 // path — a local cannot be written through an alias, so no store and no call
 // can invalidate a fact behind the checker's back:
@@ -895,6 +923,146 @@ const judge = (walk: BoundsWalk, state: State, node: Node, receiver: Node, index
   walk.unproven.push(node);
 };
 
+/**
+ * `s.substring(a)` / `s.substring(a, b)` on a string receiver: the shape whose
+ * bounds are clamped rather than checked. Two arguments at most, because that
+ * is the arity the checker accepts; a third is already an error and is never
+ * judged here.
+ */
+const isSubstringCall = (ctx: CheckContext, call: Node): boolean => {
+  const callee = unwrapBoundsParens(call.children[0]);
+  if (callee.kind !== N_MEMBER || callee.text !== "substring") {
+    return false;
+  }
+  const count = call.children[1].children.length;
+  if (count < 1 || count > 2) {
+    return false;
+  }
+  return ctx.program.nodeTypes[callee.children[0].id] === T_STRING;
+};
+
+/**
+ * `0 <= bound <= holder.length`, which is what makes the clamp a no-op.
+ *
+ * It is one fact weaker than `proves`, and deliberately so: an *index* has to
+ * be below the length to name an element, while a substring bound may equal it
+ * — `s.substring(i, s.length)` is an ordinary thing to write. That is exactly
+ * what the `atMost` family records, and what `const n = s.length` gives a
+ * program for free.
+ *
+ * A literal `0` is proven with no facts at all, because no string the runtime
+ * builds has a negative length. That is not a special case for its own sake: it
+ * is the lower bound of `s.substring(0, n)`, the commonest spelling of the call
+ * there is, and it means the fold reaches code nobody rewrote.
+ */
+const provesClamp = (ctx: CheckContext, state: State, holder: Local | null, bound: Node): boolean => {
+  const constant = literalValue(bound);
+  if (constant >= 0) {
+    return constant === 0 || (holder !== null && knownMinLength(state, holder, constant));
+  }
+  if (holder === null) {
+    return false;
+  }
+  const i = indexLocal(ctx.program, bound);
+  if (i === null || !knownNonNegative(state, i)) {
+    return false;
+  }
+  // `knownAtMost` answers `knownBelow` too, and `i < len` implies `i <= len`.
+  return knownAtMost(state, i, holder);
+};
+
+/**
+ * Record whether the clamp on **one** `substring` bound can be dropped.
+ *
+ * The unit is the bound rather than the call, and that is the whole of the
+ * soundness argument. `emitSubstring` clamps argument 0 and only then
+ * evaluates argument 1, so the verdict on a bound has to be taken in the state
+ * that reaches *that* bound: `walkExpression` calls this from inside the
+ * argument loop. Judging both ends against the state the whole argument list
+ * left behind proved `k` in range in `s.substring(k, (k = s.length))` — on a
+ * negative `k`, whose clamp the emitter had already dropped — and read three
+ * bytes before the string body.
+ *
+ * Judging after the bound's own walk rather than before it is not a third
+ * order: the only shapes `provesClamp` can prove are a bare identifier and a
+ * decimal literal, and walking either changes nothing.
+ *
+ * Nothing is pushed on to the unproven list here: the warning for the bounds
+ * that stay clamped is reported by `checkPerformance`, which re-derives the
+ * shape from the syntax and reads this table for the verdict, so that all of
+ * WP15 §8's warnings still come out of one source-order walk.
+ */
+const judgeClampBound = (ctx: CheckContext, state: State, holder: Local | null, bound: Node): void => {
+  if (provesClamp(ctx, state, holder, bound)) {
+    ctx.program.nodeProvenClamp[bound.id] = true;
+  }
+};
+
+/**
+ * Whether evaluating `node` can rebind the local `v`.
+ *
+ * An assignment or a step written inside it is the only thing that can. It is
+ * asked of a `substring` receiver, because `emitSubstring` loads the length of
+ * the receiver *value* before either bound runs — so once an argument has
+ * rebound the variable, a fact stated against that variable is a fact about a
+ * different string, and the length it bounds is not the length the clamp would
+ * have used.
+ *
+ * "A callee cannot reach a caller's local" is the conclusion, not the
+ * mechanism, and the mechanism is eight separate refusals. A syntactic scan of
+ * the argument list is complete only while every one of these holds; any of
+ * them relaxing makes a write reachable that this function does not see, and
+ * nothing in the suite would fail:
+ *
+ *   - no arrow function and no nested `function` in a body
+ *     (`Unsupported expression in Phase 1: ArrowFunction`,
+ *     `Unsupported statement in Phase 1: FunctionDeclaration`) — so an
+ *     argument cannot call something that assigns to a local of *this* frame.
+ *     This is the one to watch. The moment an arrow *expression* is legal in
+ *     a body, `s.substring(n, f())` rebinds the receiver with no assignment
+ *     syntax anywhere in the argument list and this answers false.
+ *   - no top-level `let` (``Top-level `let` is not supported; a module has no
+ *     top-level code, so only `const` is available``) — a callee has no
+ *     mutable module binding to write through either.
+ *   - a parameter cannot be assigned (``Cannot assign to `p` because it is a
+ *     parameter``) — a receiver bound to a parameter cannot be rebound at all,
+ *     here or anywhere.
+ *   - only a simple variable is an assignment target (`Only simple variables
+ *     can be assigned`) — `[s, n] = ...` is refused, so `localOf` on the
+ *     left-hand side sees every write there is.
+ *   - `+=` is numeric (``Operator `+=` requires two operands of the same
+ *     numeric type``) — so `=` is the only operator that writes a `string`,
+ *     and `isBoundsAssignment` covers it.
+ *   - no comma expression (`Comma expressions are forbidden in Nish`) — an
+ *     argument is one expression, so a write cannot ride along beside a value.
+ *   - no spread argument (`Unsupported expression in Phase 1: SpreadElement`)
+ *     — the argument list is positionally the bound list, so argument 0 *is*
+ *     bound 0 and the interleaved walk is the emitter's order.
+ *   - no address of a local — `CPtr` is an address a C function owns and hands
+ *     back, never one of ours, so nothing outside the frame has a pointer to
+ *     write through.
+ *
+ * If one of those goes, the scan stops being a proof and the conservative
+ * answer is to drop the holder at *any* call inside an argument instead. That
+ * is sound without this list, and costs fold reach that today's language does
+ * not make anyone pay for.
+ */
+const writesLocal = (program: CheckedProgram, node: Node, v: Local): boolean => {
+  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--");
+  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || steps) {
+    const target = localOf(program, node.children[0]);
+    if (target !== null && target === v) {
+      return true;
+    }
+  }
+  for (const child of node.children) {
+    if (writesLocal(program, child, v)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /** The proof itself: `0 <= i` and `i < holder.length`, by whichever route the state has. */
 const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): boolean => {
   const constant = literalValue(index);
@@ -936,14 +1104,33 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     } else if (callee.kind !== N_IDENT) {
       walkExpression(walk, state, callee);
     }
+    // A `substring`'s clamps are decided one bound at a time, interleaved with
+    // the arguments, because that is the order `emitSubstring` writes them in:
+    // bound 0 is clamped before bound 1 is evaluated, so nothing bound 1 does
+    // may reach back. The receiver's length is read before either, so the
+    // holder is dropped the moment an argument rebinds it — a literal `0`
+    // still folds after that, because no string has a negative length.
+    const clamped = isSubstringCall(ctx, e);
+    let holder: Local | null = null;
+    if (clamped) {
+      holder = lengthHolder(ctx, callee.children[0]);
+    }
     for (const arg of e.children[1].children) {
       walkExpression(walk, state, arg);
+      if (clamped) {
+        if (holder !== null && writesLocal(ctx.program, arg, holder)) {
+          holder = null;
+        }
+        judgeClampBound(ctx, state, holder, arg);
+      }
     }
     if (isCharCodeAt(ctx, e)) {
       // `charCodeAt` is inlined to a load; it calls nothing and mutates nothing.
       judge(walk, state, e, callee.children[0], e.children[1].children[0]);
       return;
     }
+    // `nish_str_new` is a callee like any other, so the array lengths go here
+    // whether or not this call was a `substring`.
     forgetArrayLengths(ctx, state);
     return;
   }
