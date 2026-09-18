@@ -144,7 +144,7 @@ alias (a generic *function* is monomorphised, WP18), `symbol`,
 
 | Question | Options | Recommendation |
 | --- | --- | --- |
-| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. |
+| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. |
 | Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
@@ -871,6 +871,67 @@ something different under Node than it does here, in the direction
 [wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
 is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
 waiting on any of it.
+
+The question the async refusal keeps provoking is the one that follows it:
+*could there be a mode that accepts the TypeScript people have already written,
+so that a codebase is ported first and made fast afterwards, one construct at a
+time?* [wp28-compatibility-mode.md](wp28-compatibility-mode.md) is the plan of
+record, and nothing in it is built. Its useful half is the line that decides
+what may enter such a dialect, because the line is not "how hard is this to
+compile" but **can the compiler still name the layout of every value**. If it
+can, the construct costs a *proof* — an attribute the whole-program fixpoint
+was making, an allocation that goes back to the arena — and the cost is
+measurable, local, and reportable through the `performance` class WP15 item 2
+already built, which is why the migration dashboard needs no new machinery. If
+it cannot — `any`, a property nobody declared, `Proxy`, a prototype — the
+construct costs the object model: a tagged value, and a collector for the
+boxes about four minutes later. That tier is refused in every dialect
+permanently rather than staged, and saying so first is what keeps the mode from
+being read as a promise to run arbitrary TypeScript. Strict stays the default
+and does not grow, the mode may only *add* acceptance, and the whole corpus
+compiled with it on must emit byte-identical IR — 437 `reject_*` cases and
+every golden proving the flag is a no-op until it is used. The thesis is that
+the dialect is what lets strict stay small: [wp23](wp23-language-surface.md)
+declined `?.`, a string `switch` and `for...of` over a string as *language*
+decisions, correctly, and each of the three is also code somebody has already
+written, and a dialect is what stops those two facts from having to be settled
+against each other. It also forces the flag surface, which has grown to
+twenty-three options across four axes with none of them named: the note regroups
+them into **dialect / build / output**, gives the dialect one allow-list flag
+that a team ratchets down in `package.json` rather than twelve booleans, and
+records the dialect in the emitted IR — which closes §5.1's older complaint
+that two `.ll` files from one source under different `--number-mode` settings
+are different programs and neither says so. It answers §3.4's oldest open row
+on the way: `i32` in strict, `f64` in compat, because a ported codebase whose
+arithmetic silently truncates at 2**31 is exactly the divergence
+[wp13-differential.md](wp13-differential.md) exists to catch.
+
+`async` is where that note and [wp24](wp24-async.md) meet, and it does not
+overturn the refusal — it finds the one condition under which the refusal does
+not apply, using wp24's own load-bearing finding to do it. wp24 §7 refuses
+`async` as an erased no-op because erasure makes a program mean something
+different under Node. wp24 §2 finds that there is nothing to await: no timer,
+no sleep, no poller, no socket, in either compiler or either runtime. Read the
+second against the first and the erasure is exact rather than a lie **whenever
+no two promises are simultaneously live** — because a JavaScript `await` only
+reorders a program when some other pending continuation exists to run in the
+gap the yield opens, and one live promise means the gap is empty. Two checker
+rules imply it (`await` applies directly to a call, and an `async` call is
+awaited in the expression that makes it), they are wp24 §9.3's "the promise as
+a value does not survive" stated as a rule rather than a conclusion, and every
+program they reject is one where the erasure would have diverged — so the
+rejection carries a line number and a rewrite instead of refusing the keyword.
+`Promise.all` is the case with two live promises, and it is admitted exactly
+when the fixpoint proves the callees do not interfere; that same proof is what
+lets the same expression become a real fork and join under a second engine,
+`--async-model threads`, riding WP20 T1 and T2. One analysis, two payoffs, and
+the second is parallelism the single-threaded original could not have had from
+source written for it. None of it is pre-1.0 and none of it adds a rule to
+LANGUAGE.md, so M4's freeze is not waiting on this note either; the two
+measurements that could stop the package before it starts — what one indirect
+call costs the fixpoint whole-program, and how many `async` functions in a real
+application ever await something that can block — are named in its §7.1 and
+neither takes more than a day.
 
 The one thing that has *left* the language rather than entered it is
 inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of
