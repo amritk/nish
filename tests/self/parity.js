@@ -382,6 +382,12 @@ function corpus() {
  * The trailing dot is what keeps `arr_pop.` from selecting `arr_pop_empty.ts`,
  * where the substring match `--only` uses would take both.
  *
+ * `owns` in `scripts/arrow-verify.mjs` answers a narrower version of the same
+ * question -- a sidecar back to its `.ts`, for the subset of spellings that
+ * script needs. If a third caller ever wants this, the rule belongs in
+ * `tests/self/corpus.js` with the rest of the corpus layout, and both of these
+ * become one line.
+ *
  * What this bound does **not** cover is a change to the compilers themselves.
  * A `src/` or `self/` edit can move every program in the corpus, and this sees
  * only the `self/` modules the diff happens to touch -- which it sees because
@@ -399,10 +405,11 @@ function changedPrograms(rows, paths) {
       ? `${slash(path.relative(root, path.dirname(row.entry)))}/`
       : `${slash(path.relative(root, row.entry)).replace(/\.ts$/, "")}.`,
   }));
+  // `readPathList` has already trimmed and dropped the empty lines, and
+  // `git diff --name-only` spells a path with `/` on every platform, so the
+  // paths arrive in the shape the prefixes are in.
   const wanted = new Set();
-  for (const raw of paths) {
-    const file = slash(raw).trim();
-    if (file.length === 0) continue;
+  for (const file of paths) {
     for (const owner of owners) if (file.startsWith(owner.prefix)) wanted.add(owner.name);
   }
   return wanted;
@@ -498,7 +505,9 @@ async function main(argv) {
   const only = onlyAt >= 0 ? argv[onlyAt + 1] : null;
   const changedAt = argv.indexOf("--changed");
   const changedFile = changedAt >= 0 ? argv[changedAt + 1] : null;
-  if (changedAt >= 0 && (changedFile === undefined || !fs.existsSync(changedFile))) {
+  // `fs.existsSync(undefined)` is `false`, so this covers a missing argument as
+  // well as a wrong one -- and `--changed --list`, where the argument is `--list`.
+  if (changedAt >= 0 && !fs.existsSync(changedFile)) {
     process.stderr.write("parity: --changed wants a file of repository-relative paths, one per line\n");
     return 2;
   }
@@ -507,14 +516,11 @@ async function main(argv) {
   const rows = flagsOnly ? [] : corpus();
   const selected = changedFile === null ? null : changedPrograms(rows, readPathList(changedFile));
 
-  const runs = [];
-  if (!flagsOnly) {
-    for (const program of rows) {
-      if (only !== null && !program.name.includes(only)) continue;
-      if (selected !== null && !selected.has(program.name)) continue;
-      for (const variation of VARIATIONS) runs.push({ program, variation });
-    }
-  }
+  const chosen = rows.filter(
+    (program) =>
+      (only === null || program.name.includes(only)) &&
+      (selected === null || selected.has(program.name))
+  );
 
   // `--list` answers "what would this run?" without building a compiler, so a
   // caller can decide whether the run is worth starting at all. CI's
@@ -523,10 +529,15 @@ async function main(argv) {
   // stdout, one per line and nothing else, so `wc -l` is the answer; the
   // summary goes to stderr where it cannot be counted with them.
   if (argv.includes("--list")) {
-    const names = [...new Set(runs.map((r) => r.program.name))];
-    for (const name of names) process.stdout.write(`${name}\n`);
-    process.stderr.write(`parity: ${names.length} program(s) selected, ${runs.length} run(s)\n`);
+    for (const program of chosen) process.stdout.write(`${program.name}\n`);
+    const runCount = chosen.length * VARIATIONS.length;
+    process.stderr.write(`parity: ${chosen.length} program(s) selected, ${runCount} run(s)\n`);
     return 0;
+  }
+
+  const runs = [];
+  for (const program of chosen) {
+    for (const variation of VARIATIONS) runs.push({ program, variation });
   }
 
   const compiler = process.env.NISH_PARITY_COMPILER ?? (await build());

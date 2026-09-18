@@ -11,11 +11,14 @@
 #       which seed binaries it attaches; `bootstrap` is one row per seed that
 #       exists, so a platform with no seed has no row rather than a green one.
 #       The table above the pair says which conclusion means which.
-# parity-changed: WP19 G1 on the push path, bounded by the diff -- the corpus
-#       programs this pull request touched, through both compilers under every
-#       flag variation. A pull request that touches none pays nothing; the
-#       nightly `parity.yml` is what covers the rest, and the flag-set half of
-#       the mode already runs inside `npm test` above.
+# parity-select + parity-changed: WP19 G1 on the push path, bounded by the
+#       diff, as a pair of jobs for the reason seeds/bootstrap is a pair --
+#       `parity-select` maps the diff onto corpus programs in seconds and with
+#       no toolchain, and `parity-changed` exists at all only when that answer
+#       is not none, so "a pull request that touches no corpus program pays
+#       nothing" is a job conclusion rather than a step that skipped. The
+#       nightly `parity.yml` covers the corpus the diff did not touch, and the
+#       flag-set half of the mode already runs inside `npm test` above.
 # lint: `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
 #
@@ -561,7 +564,11 @@ jobs:
           summary="$(grep -E '^[0-9]+ passed, ' "$RUNNER_TEMP/batch-parity.log" 2>/dev/null | tail -n 1)"
           echo "::notice::the batched compile against the CLI, over tests/cases: ${summary:-the run produced no summary}"
 
-  # WP19 G1 on the push path, bounded by the diff.
+  # WP19 G1 on the push path, bounded by the diff. Two jobs, for the reason the
+  # `seeds` / `bootstrap` pair above is two: answer cheaply first, then decide
+  # whether to pay for a toolchain -- and make that decision a *job* conclusion,
+  # because a step that skips inside a green job leaves the job green and a
+  # reader cannot tell "nothing to compare" from "compared and agreed".
   #
   # `parity.yml` runs `node tests/run.js --parity` -- the whole corpus through
   # both compilers under every flag variation -- nightly on `main`. That fixes
@@ -590,8 +597,8 @@ jobs:
   # golden is one of a program's own files, so a pull request that regenerates
   # them selects the programs it regenerated, and the tree has commits that
   # touched 1,337 corpus files (`bf65e79`) and 237 (`07c5935`). Such a pull
-  # request makes this job the nightly -- 36 minutes, measured below -- and
-  # that is the rule applied evenly rather than an escape from it: the job
+  # request makes the second job the nightly -- 36 minutes, measured above --
+  # and that is the rule applied evenly rather than an escape from it: the job
   # costs what the diff changed, and a diff that rewrites the whole corpus
   # costs the whole corpus. It cannot cost more than the nightly does, which
   # is what `timeout-minutes` below is set from. If that tail ever becomes the
@@ -602,15 +609,97 @@ jobs:
   # WHAT THIS DOES NOT COVER, and it is worth saying plainly because a bounded
   # gate read as an unbounded one is the failure this whole work package is
   # about. A `src/` or `self/` edit can move every program in the corpus, and
-  # this job sees only the `self/` modules the diff happens to touch. The
-  # nightly is what covers the rest, and the flag-set half of the mode --
-  # the half that found `--no-warn-performance` and `--out-dir` -- already runs
-  # on every `npm test` inside the `test` job above. Between the three, a
-  # reintroduced difference is red somewhere a human is looking: on the pull
-  # request when the pull request wrote the program, in the issue tracker the
-  # next morning otherwise.
+  # this sees only the `self/` modules the diff happens to touch. The nightly
+  # covers the rest, and the flag-set half of the mode -- the half that found
+  # `--no-warn-performance` and `--out-dir` -- already runs on every `npm test`
+  # inside the `test` job above. Between the three, a reintroduced difference
+  # is red somewhere a human is looking: on the pull request when the pull
+  # request wrote the program, in the issue tracker the next morning otherwise.
+  parity-select:
+    name: which corpus programs this pull request touches
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.select.outputs.count }}
+    steps:
+      # Two commits deep, because the diff is taken from git rather than from
+      # the API. On a `pull_request` event the checkout is the merge commit, so
+      # its first parent is the base branch and `git diff HEAD^ HEAD` is the
+      # pull request's net change against it -- no second fetch and no base-ref
+      # guessing. On a push the first parent is the commit before this one,
+      # which after a squash merge is the merged pull request's own diff. One
+      # spelling covers both because first-parent is what each of them wants.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # No `cache: npm`: nothing in this job runs npm, and restoring and saving
+      # a cache for a dependency set that is never installed is the one cost
+      # that would stand between "pays nothing" and nothing.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # `--list` builds nothing and needs no `node_modules`: `tests/self/
+      # parity.js` and the two modules it imports are node builtins only, so
+      # this reads the corpus off disk, maps the changed files onto programs
+      # and names them. That is what lets the job below not exist at all when
+      # the answer is none.
+      - name: Select
+        id: select
+        run: |
+          # `bash -e` is the default shell and does not carry pipefail, so
+          # without this the `| wc -l` below would swallow a parity.js that
+          # exited 1 and hand the gate a count of 0 -- which is the shape of
+          # failure this whole job exists to stop.
+          set -o pipefail
+          if git rev-parse --verify --quiet 'HEAD^{commit}' > /dev/null; then
+            git diff --name-only HEAD^ HEAD > "$RUNNER_TEMP/changed.txt"
+          else
+            # A repository with one commit in it, and nothing to compare against.
+            : > "$RUNNER_TEMP/changed.txt"
+          fi
+          changed=$(wc -l < "$RUNNER_TEMP/changed.txt")
+          # GNU `wc` reading stdin prints a bare number, which matters because
+          # `count` is compared against the string '0' in a job-level `if:`.
+          count=$(node tests/self/parity.js --changed "$RUNNER_TEMP/changed.txt" --list \
+            | tee "$RUNNER_TEMP/selected.txt" | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "selected $count corpus program(s) out of $changed changed file(s)"
+          cat "$RUNNER_TEMP/selected.txt"
+
+      # Handed on rather than recomputed, so the job below cannot disagree with
+      # this one about what the diff was -- the same reason `parity.yml` passes
+      # its log between its two jobs this way.
+      - name: Hand the selection to the job that compares it
+        if: steps.select.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-selection
+          path: |
+            ${{ runner.temp }}/changed.txt
+            ${{ runner.temp }}/selected.txt
+          retention-days: 3
+
+      # A green tick on this job means "nothing to compare", and that is a
+      # different claim from the one the job below makes. It says which.
+      - name: Say what this proved
+        if: steps.select.outputs.count == '0'
+        run: |
+          {
+            echo "### Parity, bounded by this diff ($(date -u +%Y-%m-%d))"
+            echo
+            echo "No corpus program is touched by this diff, so nothing was compared."
+            echo "The nightly \`Parity\` workflow is what covers the corpus this did not."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   parity-changed:
     name: parity (the programs this pull request touched)
+    needs: parity-select
+    # One condition, at the level it belongs to. A step added to this job
+    # therefore cannot quietly start running on a pull request that touches no
+    # corpus program, which is how the claim above would stop being true with
+    # nobody noticing.
+    if: needs.parity-select.outputs.count != '0'
     runs-on: ubuntu-latest
     # An hour, where GitHub's default is six. The work here can never exceed
     # the nightly's, which took 36 minutes over the whole corpus on this same
@@ -621,45 +710,20 @@ jobs:
     # human waiting to merge.
     timeout-minutes: 60
     steps:
-      # Two commits deep, because the diff is taken from git rather than from
-      # the API. On a `pull_request` event the checkout is the merge commit, so
-      # `HEAD^1` is the base branch and `git diff HEAD^1 HEAD` is the pull
-      # request's net change against it -- no second fetch and no base-ref
-      # guessing. On a push it is the commit before this one, which after a
-      # squash merge is the merged pull request's own diff.
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      # `--list` builds nothing: it reads the corpus off disk, maps the changed
-      # files onto programs and names them. That is what makes "a pull request
-      # that changes no corpus program pays nothing" true rather than nearly
-      # true -- every step below this one is skipped, toolchain included.
-      - name: Which corpus programs this diff touches
-        id: select
-        run: |
-          base=HEAD^
-          if [ "${{ github.event_name }}" = "pull_request" ]; then base=HEAD^1; fi
-          if git rev-parse --verify --quiet "$base^{commit}" > /dev/null; then
-            git diff --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"
-          else
-            # A repository with one commit in it, and nothing to compare against.
-            : > "$RUNNER_TEMP/changed.txt"
-          fi
-          node tests/self/parity.js --changed "$RUNNER_TEMP/changed.txt" --list \
-            > "$RUNNER_TEMP/selected.txt"
-          count=$(wc -l < "$RUNNER_TEMP/selected.txt" | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "selected $count corpus program(s) out of $(wc -l < "$RUNNER_TEMP/changed.txt") changed file(s)"
-          cat "$RUNNER_TEMP/selected.txt"
+      - name: Take the selection
+        uses: actions/download-artifact@v4
+        with:
+          name: parity-selection
+          path: ${{ runner.temp }}
 
       - name: Install LLVM 18 + lld
-        if: steps.select.outputs.count != '0'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
@@ -671,54 +735,39 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        if: steps.select.outputs.count != '0'
         run: npm ci
 
       # The mode spawns `dist/index.js` for stage0 and links its own stage1
       # binary out of `self/`, so stage0 has to exist first.
       - name: Build stage0
-        if: steps.select.outputs.count != '0'
         run: npm run build
 
       # `set -o pipefail`, because the default shell for a `run:` step is
       # `bash -e` without it and the pipeline's status would be `tee`'s: a mode
       # that answered 1 would be a green step, which is this job's whole subject.
       - name: Parity over those programs
-        if: steps.select.outputs.count != '0'
         run: |
           set -o pipefail
           node tests/run.js --parity --changed "$RUNNER_TEMP/changed.txt" \
             | tee "$RUNNER_TEMP/parity-changed.log"
 
-      # What the job proved, in each of its three states -- because "no corpus
-      # program changed", "every changed program agrees" and "the selection
-      # never ran" are three different claims and one green tick says none of
-      # them by itself. `COUNT` is empty rather than `0` in the third, which is
-      # what keeps it apart from the first.
       - name: Say what this proved
         if: always()
         env:
-          COUNT: ${{ steps.select.outputs.count }}
+          COUNT: ${{ needs.parity-select.outputs.count }}
         run: |
           {
             echo "### Parity, bounded by this diff ($(date -u +%Y-%m-%d), ubuntu-latest)"
             echo
-            if [ -z "$COUNT" ]; then
-              echo "The selection step did not finish, so this diff was not compared at all."
-            elif [ "$COUNT" = "0" ]; then
-              echo "No corpus program is touched by this diff, so nothing was compared."
-              echo "The nightly \`Parity\` workflow is what covers the corpus this did not."
-            else
-              echo "$COUNT corpus program(s), every flag variation, both compilers:"
-              echo
-              echo '```'
-              cat "$RUNNER_TEMP/selected.txt" 2>/dev/null || true
-              echo '```'
-              echo
-              echo '```'
-              tail -n 20 "$RUNNER_TEMP/parity-changed.log" 2>/dev/null || echo "(the mode produced no output)"
-              echo '```'
-            fi
+            echo "$COUNT corpus program(s), every flag variation, both compilers:"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/selected.txt" 2>/dev/null || true
+            echo '```'
+            echo
+            echo '```'
+            tail -n 20 "$RUNNER_TEMP/parity-changed.log" 2>/dev/null || echo "(the mode produced no output)"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
   lint:
