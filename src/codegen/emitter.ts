@@ -36,6 +36,8 @@
  *     `@nish_arena_release(i64 %arena.mark)` before every `ret`
  *     (`emitScopeExit`, invoked by the return emitter and by the implicit
  *     `ret void`). `unreachable` paths (`process.exit`, `throw`) need none.
+ *     A `return g(...)` that `releasesBeforeTailCall` clears releases *before*
+ *     the call instead, so that the call is the last thing the function does.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
@@ -43,7 +45,7 @@ import { withInstance } from "../checker/generics.js";
 import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types.js";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes.js";
 import { DebugInfo } from "./debug.js";
-import { reclaimsReturnedString } from "./escape.js";
+import { reclaimsReturnedString, releasesBeforeTailCall } from "./escape.js";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes.js";
 import { privateResultAbi, unpackReturnedResult } from "./emit/result.js";
 import { EmitContext, LoopTarget } from "./emit/context.js";
@@ -67,6 +69,8 @@ import { resolveTarget, targetHeader } from "./target.js";
 export class Emitter implements EmitContext {
   private readonly module: IRModule;
   private readonly facts: Map<string, FunctionFacts>;
+  /** WP6: the tail call this function's scope release was emitted ahead of; see `planTailRelease`. */
+  private tailRelease: ts.Node | undefined;
   fn!: IRFunction;
   currentSig!: FunctionSig;
   readonly loops: LoopTarget[] = [];
@@ -169,6 +173,7 @@ export class Emitter implements EmitContext {
     }
     this.slots = new WeakMap();
     this.current = facts;
+    this.tailRelease = undefined;
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     this.debug?.beginFunction(this.fn, sig, privateAbi);
 
@@ -221,6 +226,32 @@ export class Emitter implements EmitContext {
   /** WP9: the call-site reclaim needs the callee's *program-wide* facts, which only the emitter holds. */
   reclaimsCall(callee: FunctionSig): boolean {
     return reclaimsReturnedString(callee, this.facts);
+  }
+
+  /**
+   * WP6: decide whether the arena scope releases ahead of the call this
+   * `return` answers with, and record the call so that `emitCall` emits the
+   * release after its arguments. Tail position is what the return emitter
+   * knows and the call emitter does not, so it is told rather than looked up:
+   * `expression` is the whole value of a `return`, or the concise arrow body
+   * that means one (WP22 §4). Everything else is `releasesBeforeTailCall`'s
+   * proof in escape.ts.
+   */
+  planTailRelease(expression: ts.Expression): boolean {
+    this.tailRelease = undefined;
+    let inner = expression;
+    while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+    if (!ts.isCallExpression(inner)) return false;
+    const callee = this.program.callees.get(inner);
+    if (callee === undefined) return false;
+    const argTypes = inner.arguments.map((arg) => this.typeOf(arg));
+    if (!releasesBeforeTailCall(this.current, callee, argTypes, this.facts)) return false;
+    this.tailRelease = inner;
+    return true;
+  }
+
+  releasesScopeBeforeCall(expr: ts.CallExpression): boolean {
+    return this.tailRelease === expr;
   }
 
   emitScopeExit(): void {

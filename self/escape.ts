@@ -30,6 +30,7 @@ import {
   AnalysisUnit,
   CallSite,
   FactsTable,
+  FunctionFacts,
   USE_ARGUMENT,
   USE_NONE,
   USE_READ,
@@ -68,7 +69,7 @@ import { StringSet } from "./map";
 import { Options } from "./options";
 import { CheckedProgram, elementStride, FunctionSig } from "./program";
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
-import { isNumeric, T_STRING, TypeTable } from "./types";
+import { isNumeric, K_ENUM, T_BOOL, T_STRING, TypeTable } from "./types";
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
 export const STACK_ARRAY_BYTES: i32 = 4096;
@@ -795,6 +796,70 @@ export const reclaimsReturnedString = (callee: FunctionSig, facts: FactsTable): 
   const g = facts.get(callee.name);
   return g !== null && g.allocates && !g.allocEscapes && !g.usesArenaControl;
 };
+
+/**
+ * WP6: may the arena scope's release move *before* this call, instead of after it?
+ *
+ * A function with an automatic scope releases before every `ret`, so a
+ * `return g(...)` leaves `@nish_arena_release` sitting between the call and
+ * the `ret` — which is work after the call, so the call is not in tail
+ * position and neither LLVM nor anything else can turn the recursion it may
+ * be part of into a loop. Moving the release ahead of the call puts the call
+ * last; what it costs is a proof that nothing the release reclaims is still
+ * named once it has run:
+ *
+ *  - **The callee holds no pointer into the reclaimed memory.** Every argument
+ *    is a scalar — a number, a `bool` or an `enum` — so there is nothing for
+ *    the call to dereference. This is what refuses the shape that looks most
+ *    like it should qualify, `return step(n - 1, acc + piece)` with a `string`
+ *    accumulator: that argument *is* memory above the mark.
+ *  - **The caller holds none either.** The call is the whole of a `return`, so
+ *    no local of this frame is read after it; the value it answers is the
+ *    callee's own, allocated above the mark the release restored.
+ *  - **Nothing observes the bump position in between.** `arenaScope` already
+ *    requires that neither this function nor anything it calls uses
+ *    `Arena.release` / `Arena.reset` (`usesArenaControl`), so what is left is
+ *    a callee that *reads* the position — `Arena.mark`, `Arena.used` — and
+ *    would answer a smaller number than it does today. `readsArenaState` is
+ *    that fact, propagated over the call graph like the other one, and it is
+ *    what keeps this invisible to a program rather than merely harmless.
+ *
+ * The two brackets that also emit work after a call are excluded here rather
+ * than relied upon to be absent: a packed `Result` is unpacked into an object
+ * afterwards (WP17), and a reclaimed string is handed to `nish_arena_keep`
+ * (WP9, `reclaimsReturnedString`). Neither can co-occur with a scope that
+ * reaches this far, and saying so costs two lines.
+ */
+export const releasesBeforeTailCall = (
+  table: TypeTable,
+  caller: FunctionFacts,
+  callee: FunctionSig,
+  argTypes: i32[],
+  facts: FactsTable
+): boolean => {
+  if (!caller.arenaScope) {
+    return false;
+  }
+  if (table.resultByValue(callee.returnType) || reclaimsReturnedString(callee, facts)) {
+    return false;
+  }
+  for (const type of argTypes) {
+    if (!isScalarArgument(table, type)) {
+      return false;
+    }
+  }
+  const g = facts.get(callee.name);
+  return g !== null && !g.readsArenaState;
+};
+
+/**
+ * A value that cannot name arena memory, so a release below it reclaims
+ * nothing it points at. The list names what is allowed rather than what is
+ * not, for the reason `isPointerParam` in attributes.ts does: the next
+ * pointer-shaped type has to be admitted by someone on purpose.
+ */
+const isScalarArgument = (table: TypeTable, type: i32): boolean =>
+  isNumeric(type) || type === T_BOOL || table.kindOf(type) === K_ENUM;
 
 export const analyzeEscapes = (
   unit: AnalysisUnit,

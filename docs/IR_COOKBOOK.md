@@ -4436,7 +4436,6 @@ entry:
   store %struct.Point* %1, %struct.Point** %p.addr, align 8
   %2 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %3 = call i32 @Point.manhattan(%struct.Point* %2)
-  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %3
 }
 
@@ -4505,6 +4504,100 @@ entry:
 attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end mem_arena_scope -->
+
+### The release ahead of a tail call
+
+A `return g(...)` would otherwise leave the release between the call and the
+`ret`, which is work *after* the call: `sum` would not be a tail call at all,
+and a million levels would cost a million frames and hold a million `item N`
+strings. When every argument is a scalar there is no pointer into the
+reclaimed memory for the callee to hold, so the release moves ahead of the
+call and `sum` ends with it. `joinTo` is the counter-example, and the one that
+looks most like it should qualify: its accumulator *is* arena memory above the
+mark, so releasing first would hand the callee bytes the next bump reuses. The
+rule and its proof are in [wp6-memory.md](wp6-memory.md) §2b
+(`tests/cases/mem_scope_tail_call`, `mem_scope_tail_call_guards`, and
+`tests/link/tail_call_depth` for the depth it buys).
+
+<!-- cookbook:begin mem_tail_release -->
+```ts
+// A tail call whose arguments are all scalars takes the scope release with it:
+// `@nish_arena_release` is emitted after the arguments and before the call, so
+// `sum` ends with the call and an optimising build turns the recursion into a
+// loop instead of a frame per level.
+const sum = (n: number, acc: number): number => {
+  if (n === 0) return acc;
+  const label = `item ${n}`;
+  return sum(n - 1, acc + label.length);
+};
+
+// Here the accumulator is arena memory the release would reclaim out from
+// under the callee, so this one keeps its release after the call.
+const joinTo = (n: number, text: string): number => {
+  if (n === 0) return text.length;
+  return joinTo(n - 1, text + `${n}`);
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"item \00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+
+define internal noundef i32 @sum(i32 noundef %n, i32 noundef %acc) #0 {
+entry:
+  %label.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = icmp eq i32 %n, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %acc
+
+if.end:
+  %1 = call i8* @nish_str_from_i32(i32 %n)
+  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %1)
+  store i8* %2, i8** %label.addr, align 8
+  %3 = sub nsw i32 %n, 1
+  %4 = load i8*, i8** %label.addr, align 8
+  %5 = bitcast i8* %4 to i64*
+  %6 = load i64, i64* %5, align 8
+  %7 = trunc i64 %6 to i32
+  %8 = add nsw i32 %acc, %7
+  call void @nish_arena_release(i64 %arena.mark)
+  %9 = call i32 @sum(i32 %3, i32 %8)
+  ret i32 %9
+}
+
+define internal noundef i32 @joinTo(i32 noundef %n, i8* noundef nonnull noalias readonly align 8 nocapture %text) #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = icmp eq i32 %n, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = bitcast i8* %text to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = trunc i64 %2 to i32
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %3
+
+if.end:
+  %4 = sub nsw i32 %n, 1
+  %5 = call i8* @nish_str_from_i32(i32 %n)
+  %6 = call i8* @nish_str_concat(i8* %text, i8* %5)
+  %7 = call i32 @joinTo(i32 %4, i8* %6)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end mem_tail_release -->
 
 ### Reclaiming a returned temporary at the call site
 

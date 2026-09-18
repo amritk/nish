@@ -2329,7 +2329,10 @@ batches itself. All four are available in both number modes.
 | `Arena.used(): i64` | bytes bumped in the current chunk (`nish_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
 
 `mark` and `used` only read the arena, but they are recorded as writes so
-that a caller is never hoisted across an allocation. **Safety rule**:
+that a caller is never hoisted across an allocation, and a function that calls
+either — itself or through a callee — is never the callee of a tail call whose
+scope release moved ahead of it, so the position it reports is the one it would
+have reported before ([Memory model](#memory-model), item 2). **Safety rule**:
 releasing or resetting while any object, array, or string allocated after
 the mark is still referenced is undefined behaviour (the memory is reused by
 the next allocation). A function that calls `Arena.release` or `Arena.reset`
@@ -2519,6 +2522,26 @@ where its memory lives and when it is reused.
    before every `ret` (`tests/cases/mem_scope_dynamic_array`,
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
    Scopes are per function, not per loop iteration.
+
+   **The release moves ahead of a tail call.** A `return g(...)` would
+   otherwise leave `nish_arena_release` between the call and the `ret`, which
+   is work after the call: it is not a tail call, so the recursion it may be
+   part of costs a frame per level and holds every level's temporaries. When
+   every argument is a scalar — a number, a `boolean` or an `enum` — the
+   release is emitted after the arguments and *before* the call instead, and
+   the call is the last thing the function does
+   (`tests/cases/mem_scope_tail_call` pins the order, and
+   `tests/link/tail_call_depth` runs a million levels of it, which segfaults
+   without the move). Refused when an argument is a `string`, an array, an object or
+   a `Result`, because that argument is memory the release reclaims; when the
+   callee reads the bump position (`Arena.mark`, `Arena.used`), which would
+   then answer a smaller number; and when the call is not the whole of the
+   `return` (`tests/cases/mem_scope_tail_call_guards`). Like the reclaim below
+   it is invisible to a program: it changes when memory is reused and how much
+   stack a recursion costs, never what a value holds. Turning the tail call
+   into a loop is then the optimiser's job, which every build profile but
+   `debug` runs ([wp6-memory.md](wp6-memory.md) §2b).
+
 3. **A reclaim at the call site.** A function that *returns* a string can have
    no scope of its own — the string has to outlive it — so its caller takes the
    mark instead: `nish_arena_mark` after the arguments, then

@@ -39,7 +39,7 @@ import {
   FunctionFacts,
 } from "./attributes";
 import { DebugInfo } from "./debug";
-import { reclaimsReturnedString } from "./escape";
+import { reclaimsReturnedString, releasesBeforeTailCall } from "./escape";
 import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit_arrays";
 import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit_builtins";
 import {
@@ -167,6 +167,11 @@ export class Emitter {
   current: FunctionFacts;
   /** Its signature, which is how the prologue finds the class `this` belongs to. */
   currentSig: FunctionSig | null;
+  /**
+   * WP6: node id of the tail call this function's scope release was emitted
+   * ahead of, or `-1` for none. See `planTailRelease`.
+   */
+  tailReleaseId: i32;
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[];
   /** Alloca slots of the locals of the function being emitted, by identity. */
@@ -195,6 +200,7 @@ export class Emitter {
     this.fn = new IRFunction("", noParams, "void");
     this.current = new FunctionFacts(noNames, 0);
     this.currentSig = null;
+    this.tailReleaseId = -1;
     this.loops = [];
     this.slotLocals = [];
     this.slotNames = [];
@@ -313,6 +319,7 @@ export class Emitter {
     this.loops = [];
     this.current = facts;
     this.currentSig = sig;
+    this.tailReleaseId = -1;
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     const debug = this.debug;
     if (debug !== null) {
@@ -394,6 +401,44 @@ export class Emitter {
       return value;
     }
     return this.fn.emitValue(`call i8* ${this.useRuntime("nish_arena_keep")}(i64 ${mark}, i8* ${value})`);
+  }
+
+  /**
+   * WP6: decide whether the arena scope releases ahead of the call this
+   * `return` answers with, and record the call so that `emitCall` emits the
+   * release after its arguments. Tail position is what the return emitter
+   * knows and the call emitter does not, so it is told rather than looked up:
+   * `value` is the whole value of a `return`, or the concise arrow body that
+   * means one (docs/wp22-arrow-functions.md). Everything else is
+   * `releasesBeforeTailCall`'s proof in escape.ts.
+   */
+  planTailRelease(value: Node): boolean {
+    this.tailReleaseId = -1;
+    let inner = value;
+    while (inner.kind === N_PAREN) {
+      inner = inner.children[0];
+    }
+    if (inner.kind !== N_CALL) {
+      return false;
+    }
+    const callee = this.program.nodeCallees[inner.id];
+    if (callee === null) {
+      return false;
+    }
+    const argTypes: i32[] = [];
+    for (const arg of inner.children[1].children) {
+      argTypes.push(this.typeOf(arg));
+    }
+    if (!releasesBeforeTailCall(this.table, this.current, callee, argTypes, this.facts)) {
+      return false;
+    }
+    this.tailReleaseId = inner.id;
+    return true;
+  }
+
+  /** WP6: whether `planTailRelease` chose this call, asked once its arguments are lowered. */
+  releasesScopeBeforeCall(expr: Node): boolean {
+    return expr.id === this.tailReleaseId;
   }
 
   emitScopeExit(): void {
@@ -717,8 +762,14 @@ export class Emitter {
       return;
     }
     const type = this.typeOf(value);
+    // WP6: a tail call takes the scope release with it, ahead of the call, and
+    // this `return` then emits none of its own. Decided before the expression
+    // is lowered, because that is when `emitCall` needs the answer.
+    const sunk = this.planTailRelease(value);
     const result = this.emitExpression(value);
-    this.emitScopeExit();
+    if (!sunk) {
+      this.emitScopeExit();
+    }
     this.fn.emit(`ret ${this.llvm(type)} ${result}`);
   }
 
@@ -919,6 +970,13 @@ export class Emitter {
         : this.emitExpression(args.children[i]);
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`);
       i = i + 1;
+    }
+    // WP6: the arena scope releases here, after the arguments and before the
+    // call, when this is a tail call the proof clears — which leaves the call
+    // last (escape.ts, `releasesBeforeTailCall`). It is never both this and the
+    // reclaim below: the proof excludes a callee the reclaim would bracket.
+    if (this.releasesScopeBeforeCall(expr)) {
+      this.emitScopeExit();
     }
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).

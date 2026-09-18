@@ -241,6 +241,11 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
       return `${llvmAbiType(want, privateAbi)} ${value}`;
     })
     .join(", ");
+  // WP6: the arena scope releases here, after the arguments and before the
+  // call, when this is a tail call the proof clears — which leaves the call
+  // last (escape.ts, `releasesBeforeTailCall`). It is never both this and the
+  // reclaim below: the proof excludes a callee the reclaim would bracket.
+  if (ctx.releasesScopeBeforeCall(expr)) ctx.emitScopeExit();
   // WP9: the mark goes after the arguments, so only the callee's own bumps
   // are inside the bracket (emit/arena.ts, `beginReclaim`).
   const mark = beginReclaim(ctx, callee);

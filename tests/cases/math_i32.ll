@@ -41,8 +41,8 @@ entry:
   %14 = load double, double* %tau.addr, align 8
   %15 = call i8* @nish_str_from_f64(double %14)
   call void @nish_print(i8* %15)
-  %16 = call i32 @clamp(i32 5, i32 0, i32 10)
   call void @nish_arena_release(i64 %arena.mark)
+  %16 = call i32 @clamp(i32 5, i32 0, i32 10)
   ret i32 %16
 }
 

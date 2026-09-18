@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 330 programs, 5561 dump lines.
+# 333 programs, 5614 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3022,6 +3022,48 @@ function main(): i32 -> @nish_main [exported entry]
   callee 17:3 greet -> @greet
   local 18:9 before: i64 (const)
   callee 19:3 greet -> @greet
+program tests/cases/mem_scope_tail_call.ts
+module tests/cases/mem_scope_tail_call.ts (entry)
+function sum(n: i32, acc: i32): i32 -> @sum
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  escaping: acc
+  calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 sum
+  stackSites=0 stackLocals=0
+  local 12:9 label: string (const)
+  callee 13:10 sum -> @sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 sum
+  stackSites=0 stackLocals=0
+  callee 17:18 sum -> @sum
+program tests/cases/mem_scope_tail_call_guards.ts
+module tests/cases/mem_scope_tail_call_guards.ts (entry)
+function walk(n: i32, text: string): i32 -> @walk
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 walk
+  stackSites=0 stackLocals=0
+  callee 18:10 walk -> @walk
+function watch(n: i32, acc: i32): i32 -> @watch
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  escaping: acc
+  calls: nish_arena_mark nish_arena_release nish_arena_used nish_str_concat nish_str_from_i32 watch
+  stackSites=0 stackLocals=0
+  local 23:9 label: string (const)
+  local 24:9 bump: i64 (const)
+  callee 25:10 watch -> @watch
+function after(n: i32): i32 -> @after
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: after nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 30:9 label: string (const)
+  callee 31:10 after -> @after
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: after nish_arena_mark nish_arena_release nish_print nish_str_from_i32 walk watch
+  stackSites=0 stackLocals=0
+  callee 35:18 walk -> @walk
+  callee 36:18 watch -> @watch
+  callee 37:18 after -> @after
 program tests/cases/mem_stack_array_literal.ts
 module tests/cases/mem_stack_array_literal.ts (entry)
 function weights(): i32 -> @weights
@@ -5298,6 +5340,20 @@ function nearest(x: i32): i32 -> @nearest
   local 28:9 p: Point (const)
   callee 28:13 new Point -> @Point.constructor
   callee 29:10 Point.manhattan -> @Point.manhattan
+program docs/cookbook/mem_tail_release.ts
+module docs/cookbook/mem_tail_release.ts (entry)
+function sum(n: i32, acc: i32): i32 -> @sum
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  escaping: acc
+  calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 sum
+  stackSites=0 stackLocals=0
+  local 7:9 label: string (const)
+  callee 8:10 sum -> @sum
+function joinTo(n: i32, text: string): i32 -> @joinTo
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: joinTo nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 15:10 joinTo -> @joinTo
 program docs/cookbook/mod_main.ts
 module docs/cookbook/mod_main.ts (entry)
 import square from "./mod_math" -> function @square

@@ -82,6 +82,27 @@ is undefined behaviour. `Arena.used()` tells you whether it worked
 (`tests/cases/mem_scope_dynamic_array` prints it before and after 100000
 calls). `--no-stack-alloc` shows the arena-only IR for comparison.
 
+### Does a tail-recursive function use constant stack?
+
+In an optimising build, yes, and it is LLVM that does it rather than
+anything in the language: `return f(...)` as the last thing a function does
+is a tail call, and `opt`'s own pass turns a self-recursive one into a loop
+at `-O1` and above. What the compiler owes it is the *order* — a function
+with an automatic arena scope used to release after the call, which is work
+after the call and stops it being a tail call at all, so the release now
+moves ahead of it whenever the arguments are scalars
+([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model), item 2).
+`tests/link/tail_call_depth` recurses a million levels in constant stack
+because of it.
+
+Two things do not follow from that. `--profile debug` runs no optimiser, so
+the frames are real there and a deep recursion still overflows; and nothing
+in the language *guarantees* the transformation, so a program that must
+iterate a million times should say so with a loop. A `string` accumulator
+also keeps the release where it was — that argument is arena memory the
+release would reclaim — so `step(n - 1, acc + piece)` over strings is the
+one shape that looks tail-recursive and is not treated as one.
+
 ### What happens on integer division by zero?
 
 The program panics: `attempt to divide by zero` on stderr and exit status

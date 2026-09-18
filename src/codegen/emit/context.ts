@@ -95,6 +95,16 @@ export interface EmitContext {
    */
   reclaimsCall(callee: FunctionSig): boolean;
   /**
+   * WP6: decide whether the automatic arena scope releases *before* the call
+   * this `return` answers with, which leaves the call in tail position, and
+   * record it for `releasesScopeBeforeCall`. Answers whether it did, so the
+   * return emitter knows not to release a second time.
+   * `releasesBeforeTailCall` in escape.ts carries the proof.
+   */
+  planTailRelease(expression: ts.Expression): boolean;
+  /** WP6: whether `planTailRelease` chose this call, asked once its arguments are lowered. */
+  releasesScopeBeforeCall(expr: ts.CallExpression): boolean;
+  /**
    * WP6: emit the arena release of the function's automatic scope, if it has
    * one. Called right before every `ret`, after the return value is computed.
    */
