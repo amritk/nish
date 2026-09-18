@@ -8,13 +8,16 @@
 # 1,161 checks had not.
 #
 # Why here rather than in ci.yml's `test` job: it is one compilation by each
-# compiler for every program of the corpus under every flag variation -- 13,020
-# runs over 868 programs as this lands, against 9,345 over 623 when this
-# paragraph was first written -- plus linking a stage1 binary first. Tens of
-# minutes against three for `npm test`, and it grows with every program and
-# every flag the suite adds. Making every push wait on that is the trade wp19
-# §A5 argues against; the flag-set half, which takes seconds and is what found
-# `--no-warn-performance` and `--out-dir`, already runs inside `npm test`.
+# compiler for every program of the corpus under every flag variation --
+# 13,260 runs over 884 programs on 2026-09-18, against 9,345 over 623 when this
+# paragraph was first written -- plus linking a stage1 binary first. Measured on
+# `ubuntu-latest`: 2,100.5 s in the mode and 36 minutes for the job, against
+# three minutes for `npm test`, and it grows with every program and every flag
+# the suite adds. Making every push wait on that is the trade wp19 §A5 argues
+# against; the flag-set half, which takes seconds and is what found
+# `--no-warn-performance` and `--out-dir`, already runs inside `npm test`, and
+# ci.yml's `parity-changed` job runs the corpus half over the programs a pull
+# request touched, which is the part of it a pull request can afford.
 #
 # Those two counts are `programs x variations`, so they are re-derivable from
 # the tree rather than remembered -- but they are still a fact about a corpus on
@@ -77,11 +80,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       status: ${{ steps.parity.outputs.status }}
-    # No hosted-runner measurement exists yet -- this workflow has never run --
-    # and the local ones are on a shared four-core box, so they measure the
-    # neighbours as much as the compilers (wp19 §A7). Two hours is room for a
-    # corpus a third larger than the one the estimate came from, and short
-    # enough that a hang is reported the same morning rather than after six.
+    # Five hosted runs exist now and the ceiling is no longer a guess: the four
+    # nightlies took 36 to 56 minutes, and the 2026-09-18 run that proved the
+    # `record` job below took 36 (2,100.5 s in the mode, 884 programs). Two
+    # hours is therefore about double the longest run on a corpus a third
+    # larger than the one it measured, and short enough that a hang is reported
+    # the same morning rather than after six. A local measurement would not do
+    # for this: the boxes wp19 §A7 quotes are shared four-core ones, so their
+    # seconds measure the neighbours as much as the compilers.
     # A timeout is not silence any more: the `record` job below reads a run
     # that never reached the mode as **unmeasured** and opens the issue for it.
     timeout-minutes: 120
@@ -196,6 +202,22 @@ jobs:
   # Two states are not green and both open the issue, because both leave the
   # gate unproved for the day: an undeclared difference, and a run that never
   # got as far as the mode.
+  #
+  # THIS JOB HAS NOW RUN, which is worth writing down because for its first
+  # four nights it had not, and nobody could have told the difference from
+  # reading the file. Every red nightly so far happened at a SHA whose
+  # `parity.yml` predates the job, so the gate was red for four days and said
+  # so only inside a run log -- which is §A5's failure exactly, one level up.
+  # Proved on 2026-09-18 by a full run on a branch with the corpus still red:
+  # `STATUS` arrived as `1` from a job that had *failed*, the artifact came
+  # back, and the job opened amritk/nish#93 with the difference table in it.
+  # Two conditions were the ones worth proving rather than reading. `inputs`
+  # is null on any event that is not a `workflow_dispatch`, and GitHub casts
+  # both null and `""` to 0, so `inputs.only == ''` is true on a `schedule`
+  # run and this job is reached -- and the artifact step above, which carries
+  # the same condition, uploads. Neither is obvious from the YAML and both are
+  # load-bearing: if either read the other way, the gate would go on being
+  # visible only to somebody who opened the run.
   record:
     name: a gate that is not green says so where it will be seen
     needs: parity
