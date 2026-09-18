@@ -298,7 +298,7 @@ const stage1Source = (entries) => {
   const perf = entries.filter((e) => e.perf);
   const rules = entries.filter((e) => !e.perf);
   const rows = (list) =>
-    list.map((e) => `    ${JSON.stringify(e.fragment)},\n    "${e.code}",`).join("\n");
+    list.map((e) => `  ${JSON.stringify(e.fragment)},\n  "${e.code}",`).join("\n");
   // Nish has no module-level array constant (a constant's initialiser
   // must be a literal or arithmetic over one), so each table is a function
   // returning its literal, the idiom `self/target.ts` already uses.
@@ -324,28 +324,27 @@ export const RULE_COUNT: i32 = ${rules.length + perf.length};
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
  * a function rather than a module constant because a constant's initialiser
- * must be a literal (\`self/target.ts\` holds its table the same way). Longest
- * fragment first, so a specific rule wins over a general one it contains.
+ * must be a literal (\`self/target.ts\` holds its table the same way). The
+ * function is an arrow bound to a \`const\`, which is how \`self/\` declares one
+ * since WP22 stage C; a concise body is exactly what a table-returning function
+ * wants. Longest fragment first, so a specific rule wins over a general one it
+ * contains.
  */
-export function diagnosticRules(): string[] {
-  return [
+export const diagnosticRules = (): string[] => [
 ${rows(rules)}
-  ];
-}
+];
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
-export function performanceRules(): string[] {
-  return [
+export const performanceRules = (): string[] => [
 ${rows(perf)}
-  ];
-}
+];
 
 /**
  * The code for one diagnostic. \`kind\` is the word in the summary line
  * (\`error\`, \`syntax error\`, \`performance\`) and \`text\` the message without
  * its location prefix.
  */
-export function codeFor(kind: string, text: string): string {
+export const codeFor = (kind: string, text: string): string => {
   if (kind === "syntax error") {
     return SYNTAX;
   }
@@ -369,7 +368,7 @@ export function codeFor(kind: string, text: string): string {
     j = j + 2;
   }
   return UNCODED;
-}
+};
 `;
 };
 

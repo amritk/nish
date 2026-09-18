@@ -26,7 +26,7 @@ import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } fro
  * Add `@.str.<index>` for `text` to the module and answer the `i8*` constant
  * expression that points at its header (what every `nish_str_*` expects).
  */
-export function addStringConstant(module: IRModule, index: i32, text: string): string {
+export const addStringConstant = (module: IRModule, index: i32, text: string): string => {
   // A string is bytes, so `length` is already the byte length the
   // header needs; `src/` gets the same number from `Buffer.byteLength`.
   const array = `[${text.length + 1} x i8]`;
@@ -35,7 +35,7 @@ export function addStringConstant(module: IRModule, index: i32, text: string): s
     `@.str.${index} = private unnamed_addr constant ${type} { i64 ${text.length}, ${array} c"${irEscape(text)}\\00" }, align 8`
   );
   return `bitcast (${type}* @.str.${index} to i8*)`;
-}
+};
 
 // ---- Conversion to string -----------------------------------------------------------
 
@@ -46,7 +46,7 @@ export function addStringConstant(module: IRModule, index: i32, text: string): s
  * usually folds away and much cheaper than four formatters in a runtime with
  * a size budget.
  */
-export function stringifyCallee(type: i32): string {
+export const stringifyCallee = (type: i32): string => {
   if (isUnsigned(type)) {
     return "nish_str_from_u64";
   }
@@ -60,10 +60,10 @@ export function stringifyCallee(type: i32): string {
     return "nish_str_from_f64";
   }
   return ""; // string: identity; bool: a select between two literals
-}
+};
 
 /** Lower `expr` (string, number or boolean) and answer an `i8*` string value. */
-export function emitToString(emitter: Emitter, expr: Node): string {
+export const emitToString = (emitter: Emitter, expr: Node): string => {
   const type = emitter.typeOf(expr);
   let value = emitter.emitExpression(expr);
   if (type === T_BOOL) {
@@ -89,11 +89,9 @@ export function emitToString(emitter: Emitter, expr: Node): string {
     ty = "double";
   }
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime(callee)}(${ty} ${value})`);
-}
+};
 
-export function emitConcat(emitter: Emitter, lhs: string, rhs: string): string {
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
-}
+export const emitConcat = (emitter: Emitter, lhs: string, rhs: string): string => emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
 
 // ---- Template literals ----------------------------------------------------------------
 
@@ -102,7 +100,7 @@ export function emitConcat(emitter: Emitter, lhs: string, rhs: string): string {
  * left to right with `nish_str_concat`. A template with no parts at all
  * (`` `` ``) is the empty string.
  */
-export function emitTemplate(emitter: Emitter, expr: Node): string {
+export const emitTemplate = (emitter: Emitter, expr: Node): string => {
   const parts = templateParts(expr);
   let acc = "";
   let first = true;
@@ -113,43 +111,39 @@ export function emitTemplate(emitter: Emitter, expr: Node): string {
     first = false;
   }
   return first ? emitter.stringConstant("") : acc;
-}
+};
 
 // ---- `.length` --------------------------------------------------------------------------
 
 /** `s.length`: the header load, then the width the checker recorded for the expression. */
-export function emitStringLength(emitter: Emitter, expr: Node): string {
+export const emitStringLength = (emitter: Emitter, expr: Node): string => {
   const str = emitter.emitExpression(expr.children[0]);
   const len = loadStringLength(emitter, str);
   if (emitter.typeOf(expr) === T_F64) {
     return emitter.fn.emitValue(`sitofp i64 ${len} to double`);
   }
   return emitter.fn.emitValue(`trunc i64 ${len} to i32`);
-}
+};
 
 /** Byte length, from the header the string pointer points at. */
-function loadStringLength(emitter: Emitter, str: string): string {
+const loadStringLength = (emitter: Emitter, str: string): string => {
   const header = emitter.fn.emitValue(`bitcast i8* ${str} to i64*`);
   return emitter.fn.emitValue(`load i64, i64* ${header}${emitter.alignSuffix(T_STRING)}`);
-}
+};
 
 /** The bytes themselves: past the 8-byte length header. */
-function stringData(emitter: Emitter, str: string): string {
-  return emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`);
-}
+const stringData = (emitter: Emitter, str: string): string => emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`);
 
 /** `llvm.smax(0, llvm.smin(value, len))`: JavaScript's `substring` clamp. */
-function clampToLength(emitter: Emitter, value: string, len: string): string {
+const clampToLength = (emitter: Emitter, value: string, len: string): string => {
   const low = emitter.fn.emitValue(
     `call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${value}, i64 ${len})`
   );
   return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smax.i64")}(i64 ${low}, i64 0)`);
-}
+};
 
 /** A fresh arena string holding `n` bytes copied from `bytes`. */
-function newString(emitter: Emitter, bytes: string, n: string): string {
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`);
-}
+const newString = (emitter: Emitter, bytes: string, n: string): string => emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`);
 
 /**
  * The range check of `s.slice(from, to)`: `0 <= from <= to <= len`, or a cold
@@ -164,7 +158,7 @@ function newString(emitter: Emitter, bytes: string, n: string): string {
  *
  * `--unchecked-indexing` drops it, exactly as it drops `a[i]`'s.
  */
-function emitSliceCheck(emitter: Emitter, from: string, to: string, len: string, hasEnd: boolean): void {
+const emitSliceCheck = (emitter: Emitter, from: string, to: string, len: string, hasEnd: boolean): void => {
   if (emitter.opts.uncheckedIndexing) {
     return;
   }
@@ -181,14 +175,14 @@ function emitSliceCheck(emitter: Emitter, from: string, to: string, len: string,
   fn.emit(`call void ${emitter.useRuntime("nish_panic_slice")}(i64 ${from}, i64 ${to}, i64 ${len})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
-}
+};
 
 /**
  * `s.slice(a, b)`: the bytes of `[a, b)` with no clamp, `b` defaulting to
  * `s.length` (WP15 section 4). This is `substring` minus the six `llvm.smin` /
  * `llvm.smax` calls that put JavaScript's arguments in range.
  */
-function emitSlice(emitter: Emitter, expr: Node, str: string): string {
+const emitSlice = (emitter: Emitter, expr: Node, str: string): string => {
   const args = expr.children[1];
   const len = loadStringLength(emitter, str);
   const from = emitIndex(emitter, args.children[0]);
@@ -203,14 +197,12 @@ function emitSlice(emitter: Emitter, expr: Node, str: string): string {
     `getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${from}`
   );
   return newString(emitter, at, n);
-}
+};
 
 /** `nish_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
-function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): string {
-  return emitter.fn.emitValue(
+const emitOccursAt = (emitter: Emitter, str: string, at: string, sub: string): string => emitter.fn.emitValue(
     `call zeroext i1 ${emitter.useRuntime("nish_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
   );
-}
 
 /**
  * `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is —
@@ -220,7 +212,7 @@ function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): s
  * proves most often: a scanner's cursor stays proven across the calls in its
  * own loop body.
  */
-function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string {
+const emitCharCodeAt = (emitter: Emitter, expr: Node, str: string): string => {
   const args = expr.children[1];
   const index = emitIndex(emitter, args.children[0]);
   if (!emitter.program.nodeProvenIndex[expr.id]) {
@@ -234,7 +226,7 @@ function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string {
     return emitter.fn.emitValue(`uitofp i8 ${byte} to double`);
   }
   return emitter.fn.emitValue(`zext i8 ${byte} to i32`);
-}
+};
 
 /**
  * One end of a `substring`: the clamp, or the value itself where the WP15 §2
@@ -255,13 +247,13 @@ function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string {
  * the order `self/bounds.ts` takes its verdicts in: a fact argument 1
  * establishes may not reach argument 0.
  */
-function clampBound(emitter: Emitter, bound: Node, len: string): string {
+const clampBound = (emitter: Emitter, bound: Node, len: string): string => {
   const value = emitIndex(emitter, bound);
   if (emitter.program.nodeProvenClamp[bound.id]) {
     return value;
   }
   return clampToLength(emitter, value, len);
-}
+};
 
 /**
  * `s.substring(a, b)`: both ends clamped into `[0, len]` and then swapped into
@@ -270,7 +262,7 @@ function clampBound(emitter: Emitter, bound: Node, len: string): string {
  * through instead (`clampBound`); the swap stays either way, because nothing
  * here proves `a <= b`.
  */
-function emitSubstring(emitter: Emitter, expr: Node, str: string): string {
+const emitSubstring = (emitter: Emitter, expr: Node, str: string): string => {
   const args = expr.children[1];
   const len = loadStringLength(emitter, str);
   const first = clampBound(emitter, args.children[0], len);
@@ -286,7 +278,7 @@ function emitSubstring(emitter: Emitter, expr: Node, str: string): string {
     `getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${from}`
   );
   return newString(emitter, at, n);
-}
+};
 
 /**
  * `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1.
@@ -297,16 +289,16 @@ function emitSubstring(emitter: Emitter, expr: Node, str: string): string {
  * into the runtime where the libc's vectorised routines can do it
  * (`src/codegen/emit/strings.ts` has the measurement).
  */
-function emitStringIndexOf(emitter: Emitter, expr: Node, str: string): string {
+const emitStringIndexOf = (emitter: Emitter, expr: Node, str: string): string => {
   const sub = emitter.emitExpression(expr.children[1].children[0]);
   const found = emitter.fn.emitValue(
     `call i64 ${emitter.useRuntime("nish_str_index_of")}(i8* ${str}, i8* ${sub})`
   );
   return emitNumberFromI64(emitter, found, expr);
-}
+};
 
 /** The byte methods on a string receiver. */
-export function emitStringMethodCall(emitter: Emitter, expr: Node): string {
+export const emitStringMethodCall = (emitter: Emitter, expr: Node): string => {
   const access = expr.children[0];
   const str = emitter.emitExpression(access.children[0]);
   const name = access.text;
@@ -332,16 +324,16 @@ export function emitStringMethodCall(emitter: Emitter, expr: Node): string {
     `sub i64 ${loadStringLength(emitter, str)}, ${loadStringLength(emitter, sub)}`
   );
   return emitOccursAt(emitter, str, at, sub);
-}
+};
 
 /** `String.fromCharCode(c)`: one byte on the stack, copied into an arena string. */
-export function emitFromCharCode(emitter: Emitter, expr: Node): string {
+export const emitFromCharCode = (emitter: Emitter, expr: Node): string => {
   const code = emitIndex(emitter, expr.children[1].children[0]);
   const byte = emitter.fn.emitValue(`trunc i64 ${code} to i8`);
   const slot = emitter.fn.emitAlloca("chr", "i8", 1);
   emitter.fn.emit(`store i8 ${byte}, i8* ${slot}, align 1`);
   return newString(emitter, slot, "1");
-}
+};
 
 /**
  * The runtime symbols a string byte method calls, for the attribute fixpoint.
@@ -350,7 +342,7 @@ export function emitFromCharCode(emitter: Emitter, expr: Node): string {
  * keeps `willreturn` only when the check is not emitted at all — the same rule
  * `a[i]` follows with `nish_panic_index`.
  */
-export function stringConstructCallees(name: string, uncheckedIndexing: boolean): string[] {
+export const stringConstructCallees = (name: string, uncheckedIndexing: boolean): string[] => {
   const out: string[] = [];
   if (name === "substring") {
     out.push("nish_str_new");
@@ -363,12 +355,12 @@ export function stringConstructCallees(name: string, uncheckedIndexing: boolean)
     out.push("nish_str_at");
   }
   return out;
-}
+};
 
 // ---- Operators ----------------------------------------------------------------------
 
 /** `a === b` / `a !== b`, string-aware; the numeric lowering is unchanged. */
-export function emitStrictEquality(emitter: Emitter, expr: Node): string {
+export const emitStrictEquality = (emitter: Emitter, expr: Node): string => {
   const type = emitter.typeOf(expr.children[0]);
   const negate = expr.text === "!==";
   const lhs = emitter.emitExpression(expr.children[0]);
@@ -386,20 +378,20 @@ export function emitStrictEquality(emitter: Emitter, expr: Node): string {
     opcode = negate ? "fcmp une" : "fcmp oeq";
   }
   return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${lhs}, ${rhs}`);
-}
+};
 
 // ---- console ------------------------------------------------------------------------
 
 /** `console.log(x)`: convert, then `nish_print`, its own one-argument entry point. */
-export function emitConsoleLog(emitter: Emitter, expr: Node): string {
+export const emitConsoleLog = (emitter: Emitter, expr: Node): string => {
   const text = emitToString(emitter, expr.children[1].children[0]);
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_print")}(i8* ${text})`);
   return "void";
-}
+};
 
 /** `console.error(x)`: the general `nish_write(s, fd, newline)` on fd 2. */
-export function emitConsoleError(emitter: Emitter, expr: Node): string {
+export const emitConsoleError = (emitter: Emitter, expr: Node): string => {
   const text = emitToString(emitter, expr.children[1].children[0]);
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${text}, i32 2, i1 true)`);
   return "void";
-}
+};

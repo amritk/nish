@@ -49,7 +49,7 @@ import { K_ARRAY, TypeTable } from "./types";
  * element `i` and needs no marshalling. Every other element type is one
  * pointer per slot and keeps the pointer spelling it always had.
  */
-function elementNotes(table: TypeTable, fn: ExternalFunction): string {
+const elementNotes = (table: TypeTable, fn: ExternalFunction): string => {
   const notes: string[] = [];
   const program = fn.unit.checker.program;
   let i = 0;
@@ -65,10 +65,10 @@ function elementNotes(table: TypeTable, fn: ExternalFunction): string {
     notes.push(`returns ${returned}`);
   }
   return notes.length > 0 ? ` -- ${notes.join(", ")}` : "";
-}
+};
 
 /** What an array's elements are, or `""` when the type is not an array. */
-function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string {
+const elementNote = (program: CheckedProgram, table: TypeTable, t: i32): string => {
   if (table.kindOf(t) !== K_ARRAY) {
     return "";
   }
@@ -79,7 +79,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   }
   const c = cType(table, elem, POS_RETURN, false);
   return c.length > 0 ? `${c} elements` : "nish_array * elements";
-}
+};
 
 /**
  * `struct <Name> { ... };` for every class and interface of every module:
@@ -92,7 +92,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
  * padding. A class without fields
  * stays an incomplete type (C has no empty structs); pointers to it still work.
  */
-function structDefinitions(compilation: Compilation): string[] {
+const structDefinitions = (compilation: Compilation): string[] => {
   const table = compilation.table;
   const structs: StructInfo[] = [];
   const files: string[] = [];
@@ -142,10 +142,10 @@ function structDefinitions(compilation: Compilation): string[] {
     i = i + 1;
   }
   return lines;
-}
+};
 
 /** Every field type of every class and interface, for the `Result` definitions above. */
-function structFieldTypes(compilation: Compilation): i32[] {
+const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = [];
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
@@ -155,9 +155,9 @@ function structFieldTypes(compilation: Compilation): i32[] {
     }
   }
   return out;
-}
+};
 
-export function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFile: string): string {
+export const generateHeader = (compilation: Compilation, fns: ExternalFunction[], outFile: string): string => {
   const table = compilation.table;
   const guard = `${HEADER_GUARD_PREFIX}_${guardStem(outFile)}_H`;
   const lines: string[] = [];
@@ -237,4 +237,4 @@ export function generateHeader(compilation: Compilation, fns: ExternalFunction[]
   lines.push(`#endif /* ${guard} */`);
   lines.push("");
   return lines.join("\n");
-}
+};

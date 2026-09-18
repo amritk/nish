@@ -111,9 +111,13 @@ own tree and is held to a golden rather than to stage0
    It may enter `self/` *alone* — one line in `tests/self/stage1_only.txt`,
    and the tests are stage1's — and it may not be used inside `self/`'s own
    source until the seed compiles it, one release later.
-2. **`self/` is an Nish program.** `function` declarations, `interface` for
-   structs, no arrow functions, no `type` aliases — the opposite of the house
-   rules for `src/`, because the language has neither. `biome.json` exempts it.
+2. **`self/` is an Nish program**, and since WP22 stage C it declares a
+   function the way `src/` does: a `const` bound to an arrow, with a concise
+   body where there is one `return`. `interface` for structs and no `type`
+   aliases still hold, because an Nish struct is a `class` or an `interface`.
+   `biome.json` no longer exempts `self/` from the arrow rule — the plugin
+   reads it, so a new `function` declaration there is a lint warning rather
+   than a convention somebody has to remember.
 3. **stage0 is the oracle** for everything it can compile. Every phase is
    tested by comparing it with the corresponding stage0 output over the
    corpus, never by a hand-written golden — except for a case in the
@@ -126,9 +130,12 @@ own tree and is held to a golden rather than to stage0
 
 ## Nish-0, the subset `self/` is written in
 
-No generics, arrow functions, closures, nested functions or function values; no
-`type` aliases, `enum`, `namespace`, `static` members, getters or setters; no
-`try`/`catch`; no inheritance and no downcasts. What that forces:
+No generics, closures, nested functions or function values; no `type` aliases,
+`enum`, `namespace`, `static` members, getters or setters; no `try`/`catch`; no
+inheritance and no downcasts. **Arrow functions came off that list in WP22**:
+a top-level `const` bound to an arrow is a *declaration*, not a value, and the
+prohibition that matters — a function is never a value — is untouched by it.
+What the rest forces:
 
 - **One `Node` class** with a `kind: i32` discriminant and the union of the
   fields any node needs (`self/nodes.ts`). No hierarchy, no downcast; the child

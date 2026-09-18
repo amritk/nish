@@ -909,8 +909,9 @@ const judgeClampBound = (
  *     moment an arrow *expression* is legal in a body, `s.substring(n, f())`
  *     rebinds the receiver with no assignment syntax anywhere in the argument
  *     list and this answers false.
- *   - **no top-level `let`** (`a module has no top-level code, so only `const`
- *     is available`) — a callee has no mutable module binding to write either.
+ *   - **no top-level `let`** (``Top-level `let` is not supported; a module has
+ *     no top-level code, so only `const` is available``) — a callee has no
+ *     mutable module binding to write through either.
  *   - **a parameter cannot be assigned** (``Cannot assign to `p` because it is
  *     a parameter``) — a receiver bound to a parameter cannot be rebound at
  *     all, here or anywhere.

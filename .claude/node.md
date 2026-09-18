@@ -111,10 +111,10 @@ else is noise in the diff. So:
   language had neither arrow functions nor `type` aliases, so `function` and
   `interface` were the only spellings available there; it has both now
   (`docs/wp22-arrow-functions.md`), and what the exemption buys today is only
-  that the `function` declarations still in `bench/` and `self/` do not shout
-  until their file is opened. New code in them is an arrow like everywhere
-  else, and the exemption comes off surface by surface as stage C migrates each
-  one. The test fixtures (`tests/cases`, `tests/link`,
+  that the 22 `function` declarations still in `bench/` do not shout until
+  their file is opened. New code in them is an arrow like everywhere else, and
+  the exemption comes off surface by surface as stage C migrates each one:
+  `self/` is the first to lose it, and is under the plugin with `src/` now. The test fixtures (`tests/cases`, `tests/link`,
   `tests/differential/corpus`) are not linted at all, because a `reject_*` case
   exists to contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and
