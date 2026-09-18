@@ -69,7 +69,7 @@ entry:
   %2 = load i8*, i8** %1, align 8, !tbaa !7
   call void @nish_print(i8* %2)
   call void @nish_arena_release(i64 %arena.mark)
-  %3 = call i32 @sumOf(i32 7)
+  %3 = tail call i32 @sumOf(i32 7)
   ret i32 %3
 }
 

@@ -2523,24 +2523,34 @@ where its memory lives and when it is reused.
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
    Scopes are per function, not per loop iteration.
 
-   **The release moves ahead of a tail call.** A `return g(...)` would
-   otherwise leave `nish_arena_release` between the call and the `ret`, which
-   is work after the call: it is not a tail call, so the recursion it may be
-   part of costs a frame per level and holds every level's temporaries. When
-   every argument is a scalar — a number, a `boolean` or an `enum` — the
-   release is emitted after the arguments and *before* the call instead, and
-   the call is the last thing the function does
-   (`tests/cases/mem_scope_tail_call` pins the order, and
-   `tests/link/tail_call_depth` runs a million levels of it, which segfaults
-   without the move). Refused when an argument is a `string`, an array, an object or
-   a `Result`, because that argument is memory the release reclaims; when the
-   callee reads the bump position (`Arena.mark`, `Arena.used`), which would
-   then answer a smaller number; and when the call is not the whole of the
-   `return` (`tests/cases/mem_scope_tail_call_guards`). Like the reclaim below
-   it is invisible to a program: it changes when memory is reused and how much
-   stack a recursion costs, never what a value holds. Turning the tail call
-   into a loop is then the optimiser's job, which every build profile but
-   `debug` runs ([wp6-memory.md](wp6-memory.md) §2b).
+   **A tail call is marked `tail`, and the release moves ahead of it.** A
+   `return g(...)` whose arguments are every one a scalar — a number, a
+   `boolean` or an `enum` — is the last thing its function does, and is
+   emitted as `tail call`. The marker says the callee cannot reach this
+   frame's stack slots, so the frame may be popped before the jump: the
+   recursion it may be part of then costs one frame however deep it goes, in
+   *every* build profile, `--profile debug` included, where no optimiser runs
+   at all (`tests/link/tail_call_depth_debug` recurses a million levels at
+   `-O0` and segfaults without the marker, and `tests/cases/cf_gcd` is a
+   golden small enough to read the marker out of). In a function with an
+   automatic scope the same proof also moves `nish_arena_release` ahead of the call, because
+   a release between the call and the `ret` is work after the call and would
+   leave it not last after all (`tests/cases/mem_scope_tail_call` pins that
+   order, and `tests/link/tail_call_depth` runs a million levels of it, which
+   segfaults without the move).
+
+   Refused when an argument is a `string`, an array, an object or a `Result`,
+   because that argument may be memory this frame owns; when the callee is a
+   method, whose receiver is an argument the argument list does not carry and
+   is a pointer by construction; when the callee reads the bump position
+   (`Arena.mark`, `Arena.used`), which a release moved ahead of it would make
+   answer a smaller number; and when the call is not the whole of the `return`
+   (`tests/cases/mem_scope_tail_call_guards`). Like the reclaim below it is
+   invisible to a program: it changes how much stack a recursion costs and
+   when memory is reused, never what a value holds. Turning the recursion into
+   an actual loop, rather than a jump back to the top of the frame, is then
+   the optimiser's job, which every build profile but `debug` runs
+   ([wp6-memory.md](wp6-memory.md) §2b).
 
 3. **A reclaim at the call site.** A function that *returns* a string can have
    no scope of its own — the string has to outlive it — so its caller takes the

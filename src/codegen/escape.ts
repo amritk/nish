@@ -219,57 +219,77 @@ export function reclaimsReturnedString(callee: FunctionSig, facts: Map<string, F
 }
 
 /**
- * WP6: may the arena scope's release move *before* this call, instead of after it?
+ * WP6: is this call the last thing its function does?
  *
- * A function with an automatic scope releases before every `ret`, so a
- * `return g(...)` leaves `@nish_arena_release` sitting between the call and
- * the `ret` — which is work after the call, so the call is not in tail
- * position and neither LLVM nor anything else can turn the recursion it may
- * be part of into a loop. Moving the release ahead of the call puts the call
- * last; what it costs is a proof that nothing the release reclaims is still
- * named once it has run:
+ * Two lowerings read the answer, and both need the same proof:
  *
- *  - **The callee holds no pointer into the reclaimed memory.** Every argument
- *    is a scalar — a number, a `bool` or an `enum` — so there is nothing for
- *    the call to dereference. This is what refuses the shape that looks most
- *    like it should qualify, `return step(n - 1, acc + piece)` with a `string`
- *    accumulator: that argument *is* memory above the mark.
- *  - **The caller holds none either.** The call is the whole of a `return`, so
- *    no local of this frame is read after it; the value it answers is the
- *    callee's own, allocated above the mark the release restored.
- *  - **Nothing observes the bump position in between.** `arenaScope` already
- *    requires that neither this function nor anything it calls uses
- *    `Arena.release` / `Arena.reset` (`usesArenaControl`), so what is left is
- *    a callee that *reads* the position — `Arena.mark`, `Arena.used` — and
- *    would answer a smaller number than it does today. `readsArenaState` is
- *    that fact, propagated over the call graph like the other one, and it is
- *    what keeps this invisible to a program rather than merely harmless.
+ *  - the call is marked `tail`, which tells LLVM the callee cannot reach this
+ *    frame's stack slots, so the frame may be popped before the jump — that is
+ *    what gives a tail recursion constant stack in *every* profile, including
+ *    `--profile debug`, where no optimiser runs at all;
+ *  - a function with an automatic arena scope releases *before* the call
+ *    rather than after it, so that `@nish_arena_release` does not sit between
+ *    the call and the `ret` (`emitScopeExit` in the return emitter is what
+ *    would otherwise put it there, and work after a call is what stops the
+ *    call being last).
  *
- * The two brackets that also emit work after a call are excluded here rather
- * than relied upon to be absent: a packed `Result` is unpacked into an object
- * afterwards (WP17), and a reclaimed string is handed to `nish_arena_keep`
- * (WP9, `reclaimsReturnedString`). Neither can co-occur with a scope that
- * reaches this far, and saying so costs two lines.
+ * The proof:
+ *
+ *  - **The callee holds no pointer into this frame.** Every argument is a
+ *    scalar — a number, a `bool` or an `enum` — so there is nothing for the
+ *    call to dereference: not a stack slot the `tail` marker promises the
+ *    callee cannot see, and not arena memory above the mark the release
+ *    reclaims. This is what refuses the shape that looks most like it should
+ *    qualify, `return step(n - 1, acc + piece)` with a `string` accumulator:
+ *    that argument *is* memory above the mark.
+ *  - **Every argument is written down.** A method's receiver is a parameter
+ *    that the argument list does not carry, and it is a pointer by
+ *    construction, so a signature with more parameters than arguments is one
+ *    whose first argument was never looked at. Comparing the two counts is how
+ *    that is refused rather than assumed.
+ *  - **The caller holds nothing either.** The call is the whole of a `return`,
+ *    which is the return emitter's to know and is why it is told rather than
+ *    looked up: no local of this frame is read after it, and the value it
+ *    answers is the callee's own, allocated above the mark a release restored.
+ *  - **Nothing observes the bump position in between.** This one is the
+ *    scope's alone. `arenaScope` already requires that neither this function
+ *    nor anything it calls uses `Arena.release` / `Arena.reset`
+ *    (`usesArenaControl`), so what is left is a callee that *reads* the
+ *    position — `Arena.mark`, `Arena.used` — and would answer a smaller number
+ *    than it does today. `readsArenaState` is that fact, propagated over the
+ *    call graph like the other one, and it is what keeps the sink invisible to
+ *    a program rather than merely harmless. A function with no scope releases
+ *    nothing, so it asks nothing of its callee here.
+ *
+ * The two brackets that emit work *after* a call are excluded by name: a
+ * packed `Result` is unpacked into an object afterwards (WP17), and a
+ * reclaimed string is handed to `nish_arena_keep` (WP9,
+ * `reclaimsReturnedString`). Neither can co-occur with a scope that reaches
+ * this far, so for the release they are belt and braces — but the marker has
+ * no scope behind it and needs them on their own, because a call with an
+ * unpack after it is not the last instruction whatever its arguments were.
  */
-export function releasesBeforeTailCall(
+export function marksTailCall(
   caller: FunctionFacts,
   callee: FunctionSig,
   argTypes: readonly StaticType[],
   facts: Map<string, FunctionFacts>
 ): boolean {
-  if (!caller.arenaScope) return false;
   if (resultByValue(callee.returnType)) return false;
   if (reclaimsReturnedString(callee, facts)) return false;
+  if (callee.params.length !== argTypes.length) return false;
   for (const t of argTypes) if (!isScalar(t)) return false;
   const g = facts.get(callee.name);
-  return g !== undefined && !g.readsArenaState;
+  if (g === undefined) return false;
+  return !caller.arenaScope || !g.readsArenaState;
 }
 
 /**
- * A value that cannot name arena memory, so a release below it reclaims
- * nothing it points at. The list names what is allowed rather than what is
- * not, for the reason `isPointerParam` in attributes.ts does: the next
- * pointer-shaped type has to be admitted by someone on purpose.
+ * A value that cannot name this frame's memory, so neither a release below it
+ * nor a popped frame leaves the callee holding anything. The list names what
+ * is allowed rather than what is not, for the reason `isPointerParam` in
+ * attributes.ts does: the next pointer-shaped type has to be admitted by
+ * someone on purpose.
  */
 function isScalar(t: StaticType): boolean {
   return isNumeric(t) || t.kind === "bool" || t.kind === "enum";

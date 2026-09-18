@@ -49,7 +49,7 @@ for.end:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = call i32 @sumTo(i32 1000)
+  %0 = tail call i32 @sumTo(i32 1000)
   ret i32 %0
 }
 

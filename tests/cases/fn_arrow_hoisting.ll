@@ -39,7 +39,7 @@ if.then:
 
 if.end:
   %1 = sub nsw i32 %n, 1
-  %2 = call i1 @isOdd(i32 %1)
+  %2 = tail call i1 @isOdd(i32 %1)
   ret i1 %2
 }
 
@@ -53,7 +53,7 @@ if.then:
 
 if.end:
   %1 = sub nsw i32 %n, 1
-  %2 = call i1 @isEven(i32 %1)
+  %2 = tail call i1 @isEven(i32 %1)
   ret i1 %2
 }
 

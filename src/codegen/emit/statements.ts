@@ -8,8 +8,9 @@ import { controlFlowStatementEmitters } from "./control-flow.js";
 
 /**
  * `return e`: the value first (it may allocate), then the arena scope release
- * (WP6), then `ret` — unless the value is a tail call that took the release
- * with it, in which case the call is the last instruction before the `ret`.
+ * (WP6), then `ret` — unless the value is a tail call, which is marked `tail`
+ * and takes the release with it, ahead of the call, so that the call is the
+ * last instruction before the `ret`.
  */
 const emitReturn: StatementEmitter = (ctx, node) => {
   const stmt = node as ts.ReturnStatement;
@@ -38,13 +39,19 @@ export const emitReturnValue = (ctx: EmitContext, expression: ts.Expression): vo
     return;
   }
   const type = ctx.typeOf(expression);
-  // WP6: a tail call takes the scope release with it, ahead of the call, and
-  // this `return` then emits none of its own. Decided before the expression is
-  // lowered, because that is when `emitCall` needs the answer.
-  const sunk = ctx.planTailRelease(expression);
+  // WP6: a tail call is marked `tail`, and in a scoped function it takes the
+  // release with it, ahead of the call — so this `return` emits none of its
+  // own either way (there is none to emit when the function has no scope).
+  // Decided before the expression is lowered, because that is when `emitCall`
+  // needs the answer.
+  const sunk = ctx.planTailCall(expression);
   const value = ctx.emitExpression(expression);
   if (!sunk) ctx.emitScopeExit();
-  ctx.fn.emit(`ret ${llvmType(type)} ${value}`);
+  // `return g()` where `g` answers nothing is a `ret` with no operand: the
+  // call is the whole of the statement, and `emitExpression` answers the
+  // marker string `"void"` for it rather than a value. Writing that marker
+  // after `ret void` is what made this one shape assemble to nothing at all.
+  ctx.fn.emit(type.kind === "void" ? "ret void" : `ret ${llvmType(type)} ${value}`);
 };
 
 /**

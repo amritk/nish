@@ -29,7 +29,7 @@ if.end:
   %7 = trunc i64 %6 to i32
   %8 = add nsw i32 %acc, %7
   call void @nish_arena_release(i64 %arena.mark)
-  %9 = call i32 @sum(i32 %3, i32 %8)
+  %9 = tail call i32 @sum(i32 %3, i32 %8)
   ret i32 %9
 }
 

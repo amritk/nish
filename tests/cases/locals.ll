@@ -24,7 +24,7 @@ entry:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = call i32 @polynomial(i32 4, i32 5)
+  %0 = tail call i32 @polynomial(i32 4, i32 5)
   ret i32 %0
 }
 

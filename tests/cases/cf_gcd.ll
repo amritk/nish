@@ -44,7 +44,7 @@ while.end:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = call i32 @gcd(i32 48, i32 18)
+  %0 = tail call i32 @gcd(i32 48, i32 18)
   ret i32 %0
 }
 

@@ -69,7 +69,7 @@ while.end:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = call i32 @collatzSteps(i32 27)
+  %0 = tail call i32 @collatzSteps(i32 27)
   ret i32 %0
 }
 

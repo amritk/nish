@@ -111,7 +111,7 @@ res.ok:
   %10 = load i32, i32* %9, align 4
   store i32 %10, i32* %h.addr, align 4
   %11 = load i32, i32* %h.addr, align 4
-  %12 = call %struct.nish_result.i32.str* @half(i32 %11)
+  %12 = tail call %struct.nish_result.i32.str* @half(i32 %11)
   ret %struct.nish_result.i32.str* %12
 }
 

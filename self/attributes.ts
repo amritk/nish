@@ -228,8 +228,8 @@ export class FunctionFacts {
    * Reads the arena's bump position — `Arena.mark`, `Arena.used` — directly or
    * through a callee (fixpoint). Such a function answers a number that depends
    * on *when* the arena was last reclaimed, which is what stops
-   * `releasesBeforeTailCall` (escape.ts) from moving a scope release across a
-   * call to it. It is deliberately not folded into `usesArenaControl`: reading
+   * `marksTailCall` (escape.ts) from moving a scope release across a call to
+   * it. It is deliberately not folded into `usesArenaControl`: reading
    * the position invalidates nothing, so it must not cost a function its scope.
    */
   readsArenaState: boolean;

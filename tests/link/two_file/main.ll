@@ -3,7 +3,7 @@ declare void @nish_free_arena() #2
 
 define noundef i32 @nish_main() #0 {
 entry:
-  %0 = call i32 @square(i32 7)
+  %0 = tail call i32 @square(i32 7)
   ret i32 %0
 }
 

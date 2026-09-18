@@ -25,7 +25,7 @@ sw.default:
 
 define noundef i32 @test() #0 !dbg !28 {
 entry:
-  %0 = call i32 @weight(i32 2), !dbg !31
+  %0 = tail call i32 @weight(i32 2), !dbg !31
   ret i32 %0, !dbg !30
 }
 
