@@ -584,6 +584,14 @@ export class Checker implements CheckContext {
     // Termination (§4). A request that puts one of its own type arguments
     // under a constructor is the shape whose chain has no end, and it is
     // refused by name rather than by a depth count.
+    //
+    // This half keeps the throw that §4a took off the struct half, and on
+    // purpose: `grow<i32[]>` is asked for from inside `grow<i32>`'s own body,
+    // so handing the caller `grow<i32>`'s signature would check `[x]` against
+    // `x: i32` and produce exactly the second diagnostic about a mistake
+    // nobody made that §4a exists to stop. A field's type has a well-typed
+    // substitute nearby; a call's does not, and neither do the caps below --
+    // a cap refusal has no ancestor to hand back.
     const growing = expandingAncestor(this.currentInstance, template, args, (n) => this.structInstance(n));
     if (growing) {
       // Written here rather than returned from a helper, for the reason the
@@ -783,11 +791,19 @@ export class Checker implements CheckContext {
       // diagnostic call, so a sentence assembled behind a function call carries
       // NL0000 however many words of its own it has.
       const parts = nonTerminatingStructParts(template, growing.ancestor, args, growing.index);
-      this.error(
-        `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` names \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; name \`${parts.param}\` itself, or a type that does not mention it`,
-        at
+      // WP18 §4a: reported without throwing, and answered with the ancestor
+      // the request grew from, so the class the programmer did write keeps its
+      // field and the members after this one are still collected and refused.
+      this.report(
+        new CompileError(
+          `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` names \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; name \`${parts.param}\` itself, or a type that does not mention it`,
+          at,
+          this.sf
+        )
       );
+      return growing.ancestor.info;
     }
+    // The caps keep the throw, for the reason the function half above does.
     if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
       this.error(
         `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +

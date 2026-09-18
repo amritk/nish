@@ -512,6 +512,68 @@ reason to prefer a rule over a limit: a user is told which type argument is
 under a constructor, and that the fix is to pass the parameter itself or a type
 that does not mention it.
 
+### 4a. The recovery: what a refused request answers with
+
+The rule above says which requests are refused. It leaves a second question,
+and it is a decision about the language rather than about the implementation:
+**how many diagnostics does one non-terminating monomorphisation produce?**
+
+A refused request is still a request for a *type*. `Nest<i32>`'s `inner` field
+has to resolve to something, or the class the programmer did write is left
+without it, and every later mention of that class is refused a second time for
+a mistake nobody made. That is what both compilers used to do, and they did not
+even do it the same way: stage0 carried on with a `Nest$i32` that had no
+`inner` and said "Unknown field `inner` on class `Nest$i32`" at the use; stage1
+carried on with an `inner` whose type had never been made and said "`null`
+needs a contextual `T | null` type" at the comparison, which is advice about
+an annotation that is not the fix. Fourteen rows of
+`node tests/run.js --parity` were that disagreement.
+
+**The answer is one diagnostic per mistake, and the request is answered with
+the instantiation it grew from.** `Nest<i32[]>` is refused and the requester is
+handed `Nest<i32>` — which is exactly the program the sentence tells the reader
+to write, "name `T` itself". Three things follow, and they are the argument for
+this shape over the two the code had:
+
+- **The class keeps its field and its layout**, so nothing downstream has to
+  invent a second mistake to describe a type that is missing. "One diagnostic"
+  is per offending *annotation*, not per program: a class with two fields that
+  both name `Nest<T[]>` has two of them to fix and is told about both, where
+  before it was told about the first and then about a consequence.
+- **Multi-error reporting is untouched.** Nothing is thrown away and no
+  recovery point is removed: an *unrelated* mistake below the refusal is still
+  reported, which is what `tests/cases/reject_generic_expanding_field_recovered`
+  pins — that case's second fragment also holds the recovered type to the
+  ancestor, since it is the only thing the sentence about `Nest<i32>` could
+  otherwise be. A rule that stopped the compilation at the refusal would have
+  bought the same single diagnostic by giving up the rest of the file.
+- **Nothing is emitted either way**, because the program is refused. The
+  recovery decides only how much the reader is told about one mistake, never
+  what the compiler produces.
+
+Both compilers recover at the same point — `instantiateStruct`, immediately
+after `expandingStructAncestor` finds the ancestor whose arguments grew — and
+stage0 reports it without throwing so that the members after the refused one
+are still collected and refused too. `reject_generic_expanding_field` is the
+case, `tests/wordings/nl2319_generic_expanding_field` pins the sentence byte
+for byte, and `node tests/run.js --parity --only reject_generic_expanding_field`
+is what holds the two compilers to the same answer.
+
+**The function half keeps the old answer**, and that is not an oversight.
+`grow<T[]>` is asked for from inside `grow<T>`'s own body, so handing the
+caller `grow<i32>`'s signature back would check `[x]` against `x: i32` and
+produce exactly the second diagnostic about a mistake nobody made that this
+section exists to stop. A field's type has a well-typed substitute a step up
+its own chain; a call's does not. The same goes for the two caps below: a
+program that asked for 4,097 instantiations has no ancestor that is the right
+answer either. `reject_generic_polymorphic_recursion` is the function half's
+case, and the two compilers already agree on it.
+
+The recovered case's second diagnostic shows the same type spelled two ways in
+one report — `Nest<i32>` in the refusal, `Nest$i32 | null` below it — and its
+`.err` pins that, because it is what both compilers do today. That is the
+display-name gap §16's G8 entry already records, not a fact about this rule.
+
 ### The backstop: a cap
 
 The rule is about type-level recursion. A program can still ask for an absurd

@@ -304,6 +304,11 @@ export function expandingAncestor(
  * whose members are being collected, or the struct whose method body is being
  * checked. `class Nest<T> { inner: Nest<T[]> | null }` is the shape it exists
  * for, and `reject_generic_expanding_field` is its case.
+ *
+ * The ancestor is also the answer: a refused request is handed
+ * `ancestor.info` rather than nothing, so the class the programmer did write
+ * keeps its field and its layout. §4a of `docs/wp18-generics.md` is the
+ * argument for that and what it costs.
  */
 export const expandingStructAncestor = (
   from: StructInstantiation | undefined,

@@ -246,6 +246,11 @@ export const expandingAncestor = (
  * members are being collected, or the struct whose method body is being
  * checked. `class Nest<T> { inner: Nest<T[]> | null }` is the shape it exists
  * for, and `reject_generic_expanding_field` is its case.
+ *
+ * The ancestor is also the answer: a refused request is handed
+ * `ancestor.info` rather than nothing, so the class the programmer did write
+ * keeps its field and its layout. §4a of `docs/wp18-generics.md` is the
+ * argument for that and what it costs.
  */
 export const expandingStructAncestor = (
   ctx: CheckContext,
@@ -503,9 +508,20 @@ export const instantiateStruct = (
   // is refused by name rather than by a depth count.
   const growing = expandingStructAncestor(ctx, ctx.currentStructInstance, template, args);
   if (growing !== null) {
+    // WP18 §4a: refused, and answered with the ancestor. `ctx.error` does two
+    // things — report, and set `errored` so the rest of the statement is
+    // silent — and only the first is wanted. stage0 reports this one through
+    // `report` rather than `error`, which does not throw, so the members after
+    // this one are still collected and still refused; silencing them here is a
+    // difference `--parity` finds. The gate on the way *in* is kept, because a
+    // statement that has already reported is one stage0 has thrown out of, so
+    // it never reaches this call at all.
+    const wasErrored = ctx.errored;
     ctx.error(at, nonTerminatingStructMessage(ctx.table, template, growing.ancestor, args, growing.index));
-    return null;
+    ctx.errored = wasErrored;
+    return growing.ancestor.info;
   }
+  // The caps answer with nothing, for the reason `instantiate` below says.
   if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
     ctx.error(
       at,
@@ -626,6 +642,14 @@ export const instantiate = (
   // Termination: a request that puts one of its own type arguments under a
   // constructor is the shape whose chain has no end, refused by name rather
   // than by a depth count.
+  //
+  // This half answers with nothing, where §4a has the struct half answer with
+  // the ancestor, and on purpose: `grow<i32[]>` is asked for from inside
+  // `grow<i32>`'s own body, so handing the caller `grow<i32>`'s signature
+  // would check `[x]` against `x: i32` and produce exactly the second
+  // diagnostic about a mistake nobody made that §4a exists to stop. A field's
+  // type has a well-typed substitute nearby; a call's does not, and neither do
+  // the caps below — a cap refusal has no ancestor to hand back.
   const growing = expandingAncestor(ctx, ctx.currentInstance, template, args);
   if (growing !== null) {
     ctx.error(at, nonTerminatingMessage(ctx.table, template, growing.ancestor, args, growing.index));
