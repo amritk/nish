@@ -26,7 +26,7 @@
  * pointer to a composite built from `resultLayout` — `ok`, `value`, `error`
  * at their computed offsets — except at a call boundary the ABI packs into a
  * register, where it is the packed `{ int32_t ok; union { T; E; }; }` the C
- * header declares (`docs/wp17-result-abi.md` §3). A `CPtr` (WP27 §7a) is the
+ * header declares (`docs/wp17-result-abi.md` §3). A `CPtr` (WP27 §7e) is the
  * one type with no structure to describe, and is `void *`.
  *
  * Without `-g` nothing here runs and the IR is byte-for-byte what it was.
