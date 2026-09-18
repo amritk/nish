@@ -360,8 +360,11 @@ that mentions it.** The human-readable diagnostic report is capped:
 most `MAX_REPORTED_ERRORS`, which is 20, then `...and N more performance
 warnings`, then the total, and `DiagnosticSink.format` / `formatWarnings` in
 `self/diagnostics.ts` are the same shape with the same 20 passed in by
-`self/compile.ts`. A `grep -c` over the report therefore answers 20 and keeps
-answering 20. Over the 60 modules of `self/` that do not declare `main`:
+`self/compile.ts`. The cap is the class's rule rather than an accident of the
+printer — `docs/LANGUAGE.md` states it for the warnings and `docs/wp10-ci.md`
+for the errors — and what follows from it is that a `grep -c` over the report
+answers 20 and keeps answering 20. Over the 60 modules of `self/` that do not
+declare `main`:
 
 ```bash
 mods=$(for f in self/*.ts; do grep -qE '^export (function main\b|const main\s*=)' "$f" || echo "$f"; done)
