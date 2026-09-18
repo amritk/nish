@@ -586,6 +586,19 @@ jobs:
   # `tests/self/parity.js` owns the file-to-program mapping and its comment
   # states the rule.
   #
+  # WHAT THE BOUND IS, AT THE TAIL. "Bounded by the diff" is not "short": a
+  # golden is one of a program's own files, so a pull request that regenerates
+  # them selects the programs it regenerated, and the tree has commits that
+  # touched 1,337 corpus files (`bf65e79`) and 237 (`07c5935`). Such a pull
+  # request makes this job the nightly -- 36 minutes, measured below -- and
+  # that is the rule applied evenly rather than an escape from it: the job
+  # costs what the diff changed, and a diff that rewrites the whole corpus
+  # costs the whole corpus. It cannot cost more than the nightly does, which
+  # is what `timeout-minutes` below is set from. If that tail ever becomes the
+  # common case, the answer is to cap the selection and say in the summary
+  # that the nightly has the rest -- not to silently compare fewer programs
+  # than the count claims.
+  #
   # WHAT THIS DOES NOT COVER, and it is worth saying plainly because a bounded
   # gate read as an unbounded one is the failure this whole work package is
   # about. A `src/` or `self/` edit can move every program in the corpus, and
@@ -599,6 +612,14 @@ jobs:
   parity-changed:
     name: parity (the programs this pull request touched)
     runs-on: ubuntu-latest
+    # An hour, where GitHub's default is six. The work here can never exceed
+    # the nightly's, which took 36 minutes over the whole corpus on this same
+    # runner, so an hour is headroom on the widest legitimate selection and a
+    # hang is a red check within the hour instead of a pull request held all
+    # afternoon. `parity.yml` caps the same mode at 120 for a corpus that has
+    # room to grow; this one is capped tighter because it sits in front of a
+    # human waiting to merge.
+    timeout-minutes: 60
     steps:
       # Two commits deep, because the diff is taken from git rather than from
       # the API. On a `pull_request` event the checkout is the merge commit, so
