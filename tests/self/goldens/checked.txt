@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 337 programs, 5718 dump lines.
+# 338 programs, 5806 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -5718,6 +5718,95 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 11:9 N: i32 (const)
   callee 12:15 fib -> @fib
+program bench/hoist_field.ts
+module bench/hoist_field.ts (entry)
+struct Holder (class) size=8 align=8
+  field xs: f64[] index=0 offset=0
+  constructor -> @Holder.constructor
+function Holder.constructor(this: Holder, xs: f64[]): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: xs
+  pointer this: size=8 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function paramScan(dst: f64[], src: f64[]): void -> @paramScan [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 68:7 i: i32 (let)
+function fieldScan(dst: f64[], h: Holder): void -> @fieldScan [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 76:7 i: i32 (let)
+function hoistedScan(dst: f64[], h: Holder): void -> @hoistedScan [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 84:9 xs: f64[] (const)
+  local 85:7 i: i32 (let)
+function paramPasses(dst: f64[], src: f64[], passes: i32): f64 -> @paramPasses
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index paramScan
+  pointer dst: size=0 writesThrough=true captured=false passedTo=paramScan#0
+  pointer src: size=0 writesThrough=true captured=false passedTo=paramScan#1
+  stackSites=0 stackLocals=0
+  local 99:7 acc: f64 (let)
+  local 100:7 pass: i32 (let)
+  callee 102:5 paramScan -> @paramScan
+function fieldPasses(dst: f64[], src: f64[], h: Holder, passes: i32): f64 -> @fieldPasses
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: fieldScan nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false passedTo=fieldScan#0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false passedTo=fieldScan#1
+  stackSites=0 stackLocals=0
+  local 111:7 acc: f64 (let)
+  local 112:7 pass: i32 (let)
+  callee 114:5 fieldScan -> @fieldScan
+function hoistedPasses(dst: f64[], src: f64[], h: Holder, passes: i32): f64 -> @hoistedPasses
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: hoistedScan nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false passedTo=hoistedScan#0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false passedTo=hoistedScan#1
+  stackSites=0 stackLocals=0
+  local 123:7 acc: f64 (let)
+  local 124:7 pass: i32 (let)
+  callee 126:5 hoistedScan -> @hoistedScan
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Holder.constructor fieldPasses hoistedPasses nish_monotonic_nanos nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_f64 nish_str_from_i64 paramPasses
+  stackSites=1 stackLocals=1
+  local 135:9 N: i32 (const)
+  local 136:9 PASSES: i32 (const)
+  local 137:9 REPS: i32 (const)
+  local 139:9 src: f64[] (const)
+  local 140:9 dst: f64[] (const)
+  local 141:7 i: i32 (let)
+  local 148:9 h: Holder (const)
+  callee 148:13 new Holder -> @Holder.constructor
+  local 150:7 paramUs: i64 (let)
+  local 151:7 fieldUs: i64 (let)
+  local 152:7 hoistedUs: i64 (let)
+  local 153:7 checksum: f64 (let)
+  local 154:7 rep: i32 (let)
+  local 156:11 a: i64 (const)
+  callee 157:27 paramPasses -> @paramPasses
+  local 158:11 b: i64 (const)
+  callee 159:27 fieldPasses -> @fieldPasses
+  local 160:11 c: i64 (const)
+  callee 161:27 hoistedPasses -> @hoistedPasses
+  local 162:11 d: i64 (const)
+  local 163:11 param: i64 (const)
+  local 164:11 field: i64 (const)
+  local 165:11 hoisted: i64 (const)
 program bench/nbody.ts --number-mode f64
 module bench/nbody.ts (entry)
 struct Body (class) size=56 align=8
