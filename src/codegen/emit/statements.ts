@@ -6,7 +6,11 @@ import { arrayStatementEmitters } from "./arrays.js";
 import { EmitContext, EmitterTable, StatementEmitter } from "./context.js";
 import { controlFlowStatementEmitters } from "./control-flow.js";
 
-/** `return e`: the value first (it may allocate), then the arena scope release (WP6), then `ret`. */
+/**
+ * `return e`: the value first (it may allocate), then the arena scope release
+ * (WP6), then `ret` — unless the value is a tail call that took the release
+ * with it, in which case the call is the last instruction before the `ret`.
+ */
 const emitReturn: StatementEmitter = (ctx, node) => {
   const stmt = node as ts.ReturnStatement;
   if (!stmt.expression) {
@@ -34,8 +38,12 @@ export const emitReturnValue = (ctx: EmitContext, expression: ts.Expression): vo
     return;
   }
   const type = ctx.typeOf(expression);
+  // WP6: a tail call takes the scope release with it, ahead of the call, and
+  // this `return` then emits none of its own. Decided before the expression is
+  // lowered, because that is when `emitCall` needs the answer.
+  const sunk = ctx.planTailRelease(expression);
   const value = ctx.emitExpression(expression);
-  ctx.emitScopeExit();
+  if (!sunk) ctx.emitScopeExit();
   ctx.fn.emit(`ret ${llvmType(type)} ${value}`);
 };
 
