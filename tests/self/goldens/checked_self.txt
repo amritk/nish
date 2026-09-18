@@ -13825,33 +13825,33 @@ function checkNotInlinable(walk: PerfWalk, call: Node): void -> @checkNotInlinab
   stackSites=0 stackLocals=0
   local 1204:9 ctx: CheckContext (const)
   local 1208:9 callee: FunctionSig | null (const)
-  callee 1209:45 FunctionSig.foreign -> @FunctionSig.foreign
-  callee 1212:3 CheckContext.performance -> @CheckContext.performance
+  callee 1216:7 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 1219:3 CheckContext.performance -> @CheckContext.performance
 function checkUnfoldedClamp(walk: PerfWalk, call: Node): void -> @checkUnfoldedClamp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance nish_panic_index nish_str_concat nish_str_eq perfLocalName unwrapPerfParens
   pointer walk: size=64 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1268:9 ctx: CheckContext (const)
-  local 1269:9 callee: Node (const)
-  callee 1269:18 unwrapPerfParens -> @unwrapPerfParens
-  local 1273:9 count: i32 (const)
-  local 1280:9 holder: string (const)
-  callee 1280:18 perfLocalName -> @perfLocalName
-  local 1284:14 bound: Node (const)
-  local 1288:11 name: string (const)
-  callee 1288:18 perfLocalName -> @perfLocalName
-  callee 1292:5 CheckContext.performance -> @CheckContext.performance
+  local 1275:9 ctx: CheckContext (const)
+  local 1276:9 callee: Node (const)
+  callee 1276:18 unwrapPerfParens -> @unwrapPerfParens
+  local 1280:9 count: i32 (const)
+  local 1287:9 holder: string (const)
+  callee 1287:18 perfLocalName -> @perfLocalName
+  local 1291:14 bound: Node (const)
+  local 1295:11 name: string (const)
+  callee 1295:18 perfLocalName -> @perfLocalName
+  callee 1299:5 CheckContext.performance -> @CheckContext.performance
 function perfLocalName(ctx: CheckContext, expr: Node): string -> @perfLocalName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index unwrapPerfParens
   pointer ctx: size=136 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1306:9 e: Node (const)
-  callee 1306:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1310:9 local: Local | null (const)
+  local 1313:9 e: Node (const)
+  callee 1313:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1317:9 local: Local | null (const)
 function walkPerformance(walk: PerfWalk, node: Node): void -> @walkPerformance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: node
@@ -13859,74 +13859,74 @@ function walkPerformance(walk: PerfWalk, node: Node): void -> @walkPerformance
   pointer walk: size=64 writesThrough=false captured=false passedTo=walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 checkLoopAllocation#0 checkStringAccumulation#0 checkArenaReassignment#0 checkConstantOverflow#0 checkShiftCount#0 checkWideningConversion#0 checkUnfoldedClamp#0 checkNotInlinable#0 isUnprovenIndex#0 checkSurvivingBoundsCheck#0 walkPerformance#0
   pointer node: size=40 writesThrough=true captured=true passedTo=checkLoopAllocation#1 checkStringAccumulation#1 checkArenaReassignment#1 checkConstantOverflow#1 checkShiftCount#1 checkWideningConversion#1 checkUnfoldedClamp#1 checkNotInlinable#1 isUnprovenIndex#1 checkSurvivingBoundsCheck#1
   stackSites=0 stackLocals=0
-  callee 1323:5 walkPerformance -> @walkPerformance
-  callee 1325:5 walkPerformance -> @walkPerformance
-  callee 1326:5 walkPerformance -> @walkPerformance
-  callee 1327:5 walkPerformance -> @walkPerformance
+  callee 1330:5 walkPerformance -> @walkPerformance
   callee 1332:5 walkPerformance -> @walkPerformance
+  callee 1333:5 walkPerformance -> @walkPerformance
   callee 1334:5 walkPerformance -> @walkPerformance
-  callee 1335:5 walkPerformance -> @walkPerformance
-  callee 1344:5 walkPerformance -> @walkPerformance
-  callee 1345:5 walkPerformance -> @walkPerformance
-  local 1350:11 local: Local | null (const)
-  callee 1354:35 perfAllocatesVisibly -> @perfAllocatesVisibly
-  callee 1356:5 checkLoopAllocation -> @checkLoopAllocation
-  callee 1359:7 checkStringAccumulation -> @checkStringAccumulation
-  callee 1360:7 checkArenaReassignment -> @checkArenaReassignment
-  callee 1362:5 checkConstantOverflow -> @checkConstantOverflow
-  callee 1363:5 checkShiftCount -> @checkShiftCount
-  callee 1365:5 checkWideningConversion -> @checkWideningConversion
-  callee 1366:5 checkUnfoldedClamp -> @checkUnfoldedClamp
-  callee 1367:5 checkNotInlinable -> @checkNotInlinable
-  callee 1369:7 isUnprovenIndex -> @isUnprovenIndex
-  callee 1370:5 checkSurvivingBoundsCheck -> @checkSurvivingBoundsCheck
-  local 1372:14 child: Node (const)
-  callee 1373:5 walkPerformance -> @walkPerformance
+  callee 1339:5 walkPerformance -> @walkPerformance
+  callee 1341:5 walkPerformance -> @walkPerformance
+  callee 1342:5 walkPerformance -> @walkPerformance
+  callee 1351:5 walkPerformance -> @walkPerformance
+  callee 1352:5 walkPerformance -> @walkPerformance
+  local 1357:11 local: Local | null (const)
+  callee 1361:35 perfAllocatesVisibly -> @perfAllocatesVisibly
+  callee 1363:5 checkLoopAllocation -> @checkLoopAllocation
+  callee 1366:7 checkStringAccumulation -> @checkStringAccumulation
+  callee 1367:7 checkArenaReassignment -> @checkArenaReassignment
+  callee 1369:5 checkConstantOverflow -> @checkConstantOverflow
+  callee 1370:5 checkShiftCount -> @checkShiftCount
+  callee 1372:5 checkWideningConversion -> @checkWideningConversion
+  callee 1373:5 checkUnfoldedClamp -> @checkUnfoldedClamp
+  callee 1374:5 checkNotInlinable -> @checkNotInlinable
+  callee 1376:7 isUnprovenIndex -> @isUnprovenIndex
+  callee 1377:5 checkSurvivingBoundsCheck -> @checkSurvivingBoundsCheck
+  local 1379:14 child: Node (const)
+  callee 1380:5 walkPerformance -> @walkPerformance
 function isUnprovenIndex(walk: PerfWalk, node: Node): boolean -> @isUnprovenIndex
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer walk: size=64 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1379:14 access: Node (const)
+  local 1386:14 access: Node (const)
 function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean -> @isQuadraticAccumulation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: PerfWalk.depthOf accumulates nish_panic_index
   pointer walk: size=64 writesThrough=false captured=false passedTo=PerfWalk.depthOf#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1396:9 left: Node (const)
-  local 1400:9 target: Local | null (const)
-  callee 1406:7 PerfWalk.depthOf -> @PerfWalk.depthOf
-  callee 1409:10 accumulates -> @accumulates
+  local 1403:9 left: Node (const)
+  local 1407:9 target: Local | null (const)
+  callee 1413:7 PerfWalk.depthOf -> @PerfWalk.depthOf
+  callee 1416:10 accumulates -> @accumulates
 function checkStringAccumulation(walk: PerfWalk, expr: Node): void -> @checkStringAccumulation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance isQuadraticAccumulation nish_panic_index nish_str_concat
   pointer walk: size=64 writesThrough=false captured=false passedTo=isQuadraticAccumulation#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=isQuadraticAccumulation#1
   stackSites=0 stackLocals=0
-  callee 1414:8 isQuadraticAccumulation -> @isQuadraticAccumulation
-  local 1417:9 left: Node (const)
-  local 1418:9 target: Local | null (const)
-  callee 1422:3 CheckContext.performance -> @CheckContext.performance
+  callee 1421:8 isQuadraticAccumulation -> @isQuadraticAccumulation
+  local 1424:9 left: Node (const)
+  local 1425:9 target: Local | null (const)
+  callee 1429:3 CheckContext.performance -> @CheckContext.performance
 function checkLoopAllocation(walk: PerfWalk, decl: Node): void -> @checkLoopAllocation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance isDynamicArrayAllocation nish_panic_index nish_str_concat usedOnlyWithinIteration
   pointer walk: size=64 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3
   stackSites=0 stackLocals=0
-  local 1434:9 local: Local | null (const)
-  local 1435:9 name: Node (const)
-  callee 1439:8 isDynamicArrayAllocation -> @isDynamicArrayAllocation
-  local 1442:9 loop: Node (const)
-  callee 1443:8 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1446:3 CheckContext.performance -> @CheckContext.performance
+  local 1441:9 local: Local | null (const)
+  local 1442:9 name: Node (const)
+  callee 1446:8 isDynamicArrayAllocation -> @isDynamicArrayAllocation
+  local 1449:9 loop: Node (const)
+  callee 1450:8 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1453:3 CheckContext.performance -> @CheckContext.performance
 function unwrapPerfParens(expr: Node): Node -> @unwrapPerfParens
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=40
   escaping: expr
   calls: nish_panic_index
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1456:7 inner: Node (let)
+  local 1463:7 inner: Node (let)
 function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @accumulates
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: accumulates nish_panic_index nish_str_eq unwrapPerfParens
@@ -13934,31 +13934,31 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer target: size=24 writesThrough=false captured=false passedTo=accumulates#2 accumulates#2 accumulates#2
   stackSites=0 stackLocals=0
-  local 1470:9 e: Node (const)
-  callee 1470:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1472:11 bound: Local | null (const)
-  callee 1476:12 accumulates -> @accumulates
-  callee 1476:55 accumulates -> @accumulates
-  local 1479:16 part: Node (const)
-  callee 1480:44 accumulates -> @accumulates
+  local 1477:9 e: Node (const)
+  callee 1477:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1479:11 bound: Local | null (const)
+  callee 1483:12 accumulates -> @accumulates
+  callee 1483:55 accumulates -> @accumulates
+  local 1486:16 part: Node (const)
+  callee 1487:44 accumulates -> @accumulates
 function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean -> @isDynamicArrayAllocation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: TypeTable.isArray isNonNegativeInteger nish_panic_index unwrapPerfParens
   pointer ctx: size=136 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1500:9 e: Node (const)
-  callee 1500:13 unwrapPerfParens -> @unwrapPerfParens
-  callee 1501:28 TypeTable.isArray -> @TypeTable.isArray
-  local 1504:9 args: Node (const)
-  local 1510:9 length: Node (const)
-  callee 1510:18 unwrapPerfParens -> @unwrapPerfParens
-  callee 1511:39 isNonNegativeInteger -> @isNonNegativeInteger
+  local 1507:9 e: Node (const)
+  callee 1507:13 unwrapPerfParens -> @unwrapPerfParens
+  callee 1508:28 TypeTable.isArray -> @TypeTable.isArray
+  local 1511:9 args: Node (const)
+  local 1517:9 length: Node (const)
+  callee 1517:18 unwrapPerfParens -> @unwrapPerfParens
+  callee 1518:39 isNonNegativeInteger -> @isNonNegativeInteger
 function isNonNegativeInteger(text: string): boolean -> @isNonNegativeInteger
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
-  local 1519:7 i: i32 (let)
-  local 1521:11 c: i32 (const)
+  local 1526:7 i: i32 (let)
+  local 1528:11 c: i32 (const)
 function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, own: Node): boolean -> @usedOnlyWithinIteration
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: isLocalRef nish_panic_index nish_str_eq usedOnlyWithinIteration
@@ -13967,16 +13967,16 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
   pointer local: size=24 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#2 isLocalRef#2 usedOnlyWithinIteration#2 isLocalRef#2 isLocalRef#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2
   pointer own: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3
   stackSites=0 stackLocals=0
-  callee 1541:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1543:32 isLocalRef -> @isLocalRef
-  callee 1544:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1546:59 isLocalRef -> @isLocalRef
-  callee 1549:33 isLocalRef -> @isLocalRef
-  callee 1551:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1552:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  local 1556:11 bound: Local | null (const)
-  local 1559:14 child: Node (const)
-  callee 1560:10 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1548:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1550:32 isLocalRef -> @isLocalRef
+  callee 1551:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1553:59 isLocalRef -> @isLocalRef
+  callee 1556:33 isLocalRef -> @isLocalRef
+  callee 1558:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1559:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  local 1563:11 bound: Local | null (const)
+  local 1566:14 child: Node (const)
+  callee 1567:10 usedOnlyWithinIteration -> @usedOnlyWithinIteration
 function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean -> @isLocalRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index unwrapPerfParens
@@ -13984,9 +13984,9 @@ function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean -> @is
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1569:9 e: Node (const)
-  callee 1569:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1573:9 bound: Local | null (const)
+  local 1576:9 e: Node (const)
+  callee 1576:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1580:9 bound: Local | null (const)
 function perfIsReadBuiltin(name: string): boolean -> @perfIsReadBuiltin
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -13997,22 +13997,22 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean -> @perfAl
   pointer ctx: size=136 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1610:9 e: Node (const)
-  callee 1610:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1619:16 part: Node (const)
-  local 1627:11 callee: Node (const)
-  callee 1627:20 unwrapPerfParens -> @unwrapPerfParens
-  callee 1628:39 perfIsReadBuiltin -> @perfIsReadBuiltin
-  callee 1628:74 StringMap.has -> @StringMap.has
+  local 1617:9 e: Node (const)
+  callee 1617:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1626:16 part: Node (const)
+  local 1634:11 callee: Node (const)
+  callee 1634:20 unwrapPerfParens -> @unwrapPerfParens
+  callee 1635:39 perfIsReadBuiltin -> @perfIsReadBuiltin
+  callee 1635:74 StringMap.has -> @StringMap.has
 function perfIsPointerType(ctx: CheckContext, type: i32): boolean -> @perfIsPointerType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.isNullable TypeTable.isPointer TypeTable.isResult
   pointer ctx: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1639:70 TypeTable.isPointer -> @TypeTable.isPointer
-  callee 1639:99 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 1639:129 TypeTable.isResult -> @TypeTable.isResult
+  callee 1646:70 TypeTable.isPointer -> @TypeTable.isPointer
+  callee 1646:99 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 1646:129 TypeTable.isResult -> @TypeTable.isResult
 function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean -> @perfCapturesLocal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: isLocalRef nish_panic_index nish_str_eq
@@ -14020,13 +14020,13 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
   pointer node: size=40 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false passedTo=isLocalRef#2 isLocalRef#2 isLocalRef#2 isLocalRef#2 isLocalRef#2
   stackSites=0 stackLocals=0
-  local 1651:16 arg: Node (const)
-  callee 1652:11 isLocalRef -> @isLocalRef
-  local 1659:16 element: Node (const)
-  callee 1660:11 isLocalRef -> @isLocalRef
-  callee 1667:12 isLocalRef -> @isLocalRef
-  callee 1670:12 isLocalRef -> @isLocalRef
-  callee 1672:57 isLocalRef -> @isLocalRef
+  local 1658:16 arg: Node (const)
+  callee 1659:11 isLocalRef -> @isLocalRef
+  local 1666:16 element: Node (const)
+  callee 1667:11 isLocalRef -> @isLocalRef
+  callee 1674:12 isLocalRef -> @isLocalRef
+  callee 1677:12 isLocalRef -> @isLocalRef
+  callee 1679:57 isLocalRef -> @isLocalRef
 function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean -> @perfHeldValueMayBeReachable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index perfScanForCapture
@@ -14034,9 +14034,9 @@ function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): 
   pointer expr: size=40 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false passedTo=perfScanForCapture#2
   stackSites=0 stackLocals=0
-  local 1692:9 inLoop: boolean (const)
-  local 1693:9 root: Node (const)
-  callee 1694:10 perfScanForCapture -> @perfScanForCapture
+  local 1699:9 inLoop: boolean (const)
+  local 1700:9 root: Node (const)
+  callee 1701:10 perfScanForCapture -> @perfScanForCapture
 function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean -> @perfScanForCapture
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: before inLoop
@@ -14045,26 +14045,26 @@ function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop:
   pointer node: size=40 writesThrough=false captured=false passedTo=perfCapturesLocal#1
   pointer local: size=24 writesThrough=false captured=false passedTo=perfCapturesLocal#2 perfScanForCapture#2
   stackSites=0 stackLocals=0
-  callee 1698:41 perfCapturesLocal -> @perfCapturesLocal
-  local 1701:14 child: Node (const)
-  callee 1702:9 perfScanForCapture -> @perfScanForCapture
+  callee 1705:41 perfCapturesLocal -> @perfCapturesLocal
+  local 1708:14 child: Node (const)
+  callee 1709:9 perfScanForCapture -> @perfScanForCapture
 function checkArenaReassignment(walk: PerfWalk, expr: Node): void -> @checkArenaReassignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance PerfWalk.declaredHoldingAllocation isQuadraticAccumulation nish_panic_index nish_str_concat perfAllocatesVisibly perfHeldValueMayBeReachable perfIsPointerType
   pointer walk: size=64 writesThrough=false captured=false passedTo=isQuadraticAccumulation#0 PerfWalk.declaredHoldingAllocation#0 perfHeldValueMayBeReachable#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=isQuadraticAccumulation#1 perfHeldValueMayBeReachable#1
   stackSites=0 stackLocals=0
-  local 1715:9 left: Node (const)
-  local 1719:9 ctx: CheckContext (const)
-  local 1720:9 target: Local | null (const)
-  callee 1721:63 perfIsPointerType -> @perfIsPointerType
-  local 1724:9 sig: FunctionSig (const)
-  callee 1725:7 perfIsPointerType -> @perfIsPointerType
-  callee 1728:7 isQuadraticAccumulation -> @isQuadraticAccumulation
-  callee 1731:8 PerfWalk.declaredHoldingAllocation -> @PerfWalk.declaredHoldingAllocation
-  callee 1731:51 perfAllocatesVisibly -> @perfAllocatesVisibly
-  callee 1734:7 perfHeldValueMayBeReachable -> @perfHeldValueMayBeReachable
-  callee 1737:3 CheckContext.performance -> @CheckContext.performance
+  local 1722:9 left: Node (const)
+  local 1726:9 ctx: CheckContext (const)
+  local 1727:9 target: Local | null (const)
+  callee 1728:63 perfIsPointerType -> @perfIsPointerType
+  local 1731:9 sig: FunctionSig (const)
+  callee 1732:7 perfIsPointerType -> @perfIsPointerType
+  callee 1735:7 isQuadraticAccumulation -> @isQuadraticAccumulation
+  callee 1738:8 PerfWalk.declaredHoldingAllocation -> @PerfWalk.declaredHoldingAllocation
+  callee 1738:51 perfAllocatesVisibly -> @perfAllocatesVisibly
+  callee 1741:7 perfHeldValueMayBeReachable -> @perfHeldValueMayBeReachable
+  callee 1744:3 CheckContext.performance -> @CheckContext.performance
 function PerfConst.constructor(this: PerfConst, ok: boolean, value: i64): void -> @PerfConst.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: ok value
@@ -14074,7 +14074,7 @@ function perfNoConst(): PerfConst -> @perfNoConst
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
   calls: PerfConst.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
-  callee 1796:38 new PerfConst -> @PerfConst.constructor
+  callee 1803:38 new PerfConst -> @PerfConst.constructor
 function perfMagnitude(value: i64): i64 -> @perfMagnitude
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: value
@@ -14084,83 +14084,83 @@ function perfConstantInt(expr: Node): PerfConst -> @perfConstantInt
   calls: PerfConst.constructor isNonNegativeInteger nish_alloc_struct nish_panic_index nish_str_eq parseIntegerLiteral perfConstantInt perfMagnitude perfNoConst unwrapPerfParens
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1812:9 e: Node (const)
-  callee 1812:13 unwrapPerfParens -> @unwrapPerfParens
-  callee 1814:10 isNonNegativeInteger -> @isNonNegativeInteger
-  callee 1815:14 perfNoConst -> @perfNoConst
-  local 1817:11 value: i64 (const)
-  callee 1817:19 parseIntegerLiteral -> @parseIntegerLiteral
-  callee 1818:33 perfNoConst -> @perfNoConst
-  callee 1818:49 new PerfConst -> @PerfConst.constructor
-  local 1821:11 operand: PerfConst (const)
-  callee 1821:21 perfConstantInt -> @perfConstantInt
-  callee 1822:25 new PerfConst -> @PerfConst.constructor
-  callee 1822:63 perfNoConst -> @perfNoConst
-  callee 1825:12 perfNoConst -> @perfNoConst
-  local 1827:9 left: PerfConst (const)
-  callee 1827:16 perfConstantInt -> @perfConstantInt
-  local 1828:9 right: PerfConst (const)
-  callee 1828:17 perfConstantInt -> @perfConstantInt
-  callee 1830:12 perfNoConst -> @perfNoConst
-  callee 1833:9 perfMagnitude -> @perfMagnitude
-  callee 1833:51 perfMagnitude -> @perfMagnitude
-  callee 1834:14 perfNoConst -> @perfNoConst
-  callee 1836:12 new PerfConst -> @PerfConst.constructor
-  callee 1838:7 perfMagnitude -> @perfMagnitude
-  callee 1838:53 perfMagnitude -> @perfMagnitude
-  callee 1839:12 perfNoConst -> @perfNoConst
-  callee 1842:12 new PerfConst -> @PerfConst.constructor
-  callee 1845:12 new PerfConst -> @PerfConst.constructor
-  callee 1847:10 perfNoConst -> @perfNoConst
+  local 1819:9 e: Node (const)
+  callee 1819:13 unwrapPerfParens -> @unwrapPerfParens
+  callee 1821:10 isNonNegativeInteger -> @isNonNegativeInteger
+  callee 1822:14 perfNoConst -> @perfNoConst
+  local 1824:11 value: i64 (const)
+  callee 1824:19 parseIntegerLiteral -> @parseIntegerLiteral
+  callee 1825:33 perfNoConst -> @perfNoConst
+  callee 1825:49 new PerfConst -> @PerfConst.constructor
+  local 1828:11 operand: PerfConst (const)
+  callee 1828:21 perfConstantInt -> @perfConstantInt
+  callee 1829:25 new PerfConst -> @PerfConst.constructor
+  callee 1829:63 perfNoConst -> @perfNoConst
+  callee 1832:12 perfNoConst -> @perfNoConst
+  local 1834:9 left: PerfConst (const)
+  callee 1834:16 perfConstantInt -> @perfConstantInt
+  local 1835:9 right: PerfConst (const)
+  callee 1835:17 perfConstantInt -> @perfConstantInt
+  callee 1837:12 perfNoConst -> @perfNoConst
+  callee 1840:9 perfMagnitude -> @perfMagnitude
+  callee 1840:51 perfMagnitude -> @perfMagnitude
+  callee 1841:14 perfNoConst -> @perfNoConst
+  callee 1843:12 new PerfConst -> @PerfConst.constructor
+  callee 1845:7 perfMagnitude -> @perfMagnitude
+  callee 1845:53 perfMagnitude -> @perfMagnitude
+  callee 1846:12 perfNoConst -> @perfNoConst
+  callee 1849:12 new PerfConst -> @PerfConst.constructor
+  callee 1852:12 new PerfConst -> @PerfConst.constructor
+  callee 1854:10 perfNoConst -> @perfNoConst
 function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean -> @perfOverflowsItsType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_panic_index perfConstantInt unwrapPerfParens
   pointer ctx: size=136 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1852:9 e: Node (const)
-  callee 1852:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1856:9 folded: PerfConst (const)
-  callee 1856:18 perfConstantInt -> @perfConstantInt
+  local 1859:9 e: Node (const)
+  callee 1859:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1863:9 folded: PerfConst (const)
+  callee 1863:18 perfConstantInt -> @perfConstantInt
 function checkConstantOverflow(walk: PerfWalk, expr: Node): void -> @checkConstantOverflow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance nish_panic_index nish_str_concat nish_str_eq nish_str_from_i64 perfConstantInt perfOverflowsItsType
   pointer walk: size=64 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=perfConstantInt#0 CheckContext.performance#1
   stackSites=0 stackLocals=0
-  local 1878:9 ctx: CheckContext (const)
-  local 1882:9 folded: PerfConst (const)
-  callee 1882:18 perfConstantInt -> @perfConstantInt
-  callee 1886:7 perfOverflowsItsType -> @perfOverflowsItsType
-  callee 1886:54 perfOverflowsItsType -> @perfOverflowsItsType
-  callee 1889:3 CheckContext.performance -> @CheckContext.performance
+  local 1885:9 ctx: CheckContext (const)
+  local 1889:9 folded: PerfConst (const)
+  callee 1889:18 perfConstantInt -> @perfConstantInt
+  callee 1893:7 perfOverflowsItsType -> @perfOverflowsItsType
+  callee 1893:54 perfOverflowsItsType -> @perfOverflowsItsType
+  callee 1896:3 CheckContext.performance -> @CheckContext.performance
 function checkWideningConversion(walk: PerfWalk, call: Node): void -> @checkWideningConversion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance StringMap.has nish_panic_index nish_str_concat nish_str_eq unwrapPerfParens
   pointer walk: size=64 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1912:9 callee: Node (const)
-  callee 1912:18 unwrapPerfParens -> @unwrapPerfParens
-  local 1916:9 args: Node (const)
-  local 1920:9 ctx: CheckContext (const)
-  callee 1921:7 StringMap.has -> @StringMap.has
-  local 1924:9 arg: Node (const)
-  callee 1924:15 unwrapPerfParens -> @unwrapPerfParens
-  callee 1931:3 CheckContext.performance -> @CheckContext.performance
+  local 1919:9 callee: Node (const)
+  callee 1919:18 unwrapPerfParens -> @unwrapPerfParens
+  local 1923:9 args: Node (const)
+  local 1927:9 ctx: CheckContext (const)
+  callee 1928:7 StringMap.has -> @StringMap.has
+  local 1931:9 arg: Node (const)
+  callee 1931:15 unwrapPerfParens -> @unwrapPerfParens
+  callee 1938:3 CheckContext.performance -> @CheckContext.performance
 function checkShiftCount(walk: PerfWalk, expr: Node): void -> @checkShiftCount
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance intBits nish_panic_div nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 perfConstantInt
   pointer walk: size=64 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1949:9 ctx: CheckContext (const)
-  local 1950:9 bits: i32 (const)
-  callee 1950:16 intBits -> @intBits
-  local 1954:9 count: PerfConst (const)
-  callee 1954:17 perfConstantInt -> @perfConstantInt
-  local 1955:9 width: i64 (const)
-  callee 1959:3 CheckContext.performance -> @CheckContext.performance
+  local 1956:9 ctx: CheckContext (const)
+  local 1957:9 bits: i32 (const)
+  callee 1957:16 intBits -> @intBits
+  local 1961:9 count: PerfConst (const)
+  callee 1961:17 perfConstantInt -> @perfConstantInt
+  local 1962:9 width: i64 (const)
+  callee 1966:3 CheckContext.performance -> @CheckContext.performance
 module self/statements.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import checkCondition from "./expressions" -> function @checkCondition

@@ -759,6 +759,10 @@ const checkNotInlinable = (walk: Walk, call: ts.CallExpression): void => {
   if (walk.loops.length === 0) return;
   const callee = walk.ctx.program.callees.get(call);
   if (callee === undefined || callee.exported) return;
+  // A `declare function` is external because C defines it, not because this
+  // module withheld an `export`: the rewrite named below cannot be taken (the
+  // checker refuses `export declare function`) and dropping
+  // `--no-strict-exports` would not make it `internal` either. WP27 S1.
   if (callee.foreign === true) return;
   walk.ctx.reportPerformance(
     `\`${callee.sourceName}\` is called here inside a loop and \`--no-strict-exports\` keeps it an external ` +
