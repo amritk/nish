@@ -6424,18 +6424,46 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   // span that may cross a comma reads the NEXT platform's version as this one's, which
   // is two false positives rather than a missed claim. The reversed patterns below are
   // what catch those, and they are unambiguous.
-  const near = "[^.|,\n]{0,40}?";
+  // Every one of these documents is hard-wrapped at 80 columns, so a phrase written with
+  // literal spaces cannot match a claim that lands on a wrap point, and a span that
+  // excludes `\n` cannot reach a version on the next line. Both of `wp10-ci.md`'s darwin
+  // claims wrap -- one between "darwin" and "pair", one between "is" and the version --
+  // so `sed -i 's/0\.4\.0/0.3.0/g' docs/wp10-ci.md` used to leave this check green, on
+  // one of the three documents that had actually gone stale. Every word boundary inside
+  // an anchor is therefore `[ \t\n]+`, and `near` allows newlines.
+  //
+  // `:` is excluded from `near` to pay for that reach. Without it the wider span picks up
+  // "the commit that taught release.yml to build the darwin pair could not also mark them
+  // attached: v0.2.0" in `wp12-release.md` -- a sentence about a past release, not a claim
+  // about `attachedSince`. A colon ends a claim for the same reason a period and a comma
+  // do, and excluding it costs no true claim in the tree.
+  const s = "[ \\t\\n]+";
+  const near = "[^.|,:]{0,40}?";
   const ver = "(\\d+\\.\\d+\\.\\d+)";
   const versionClaims = [
     // [description, regex source with the version in group 1, the asset it must equal]
-    ["the darwin pair ... <version>", `darwin pair${near}${ver}`, "aarch64-darwin"],
-    ["the macOS rows ... v<version>", `macOS rows say v?${near}${ver}`, "aarch64-darwin"],
-    ["<version> for the darwin pair", `${ver} for the darwin pair`, "aarch64-darwin"],
+    // The two darwin patterns are compared against `aarch64-darwin`'s version, because
+    // the documents talk about "the darwin pair" and "the two macOS rows" jointly and
+    // never name either asset with a version of its own (INSTALL.md's table does name
+    // them separately, and the check above compares that cell by cell). A joint claim is
+    // only well-defined while the pair shares a version, so that is asserted below
+    // rather than assumed: if the two ever diverge, this list needs one pattern per
+    // asset and the check says so instead of being right by luck.
+    ["the darwin pair ... <version>", `darwin${s}pair${near}${ver}`, "aarch64-darwin"],
+    ["the macOS rows ... v<version>", `macOS${s}rows${s}say${s}v?${near}${ver}`, "aarch64-darwin"],
+    ["<version> for the darwin pair", `${ver}${s}for${s}the${s}darwin${s}pair`, "aarch64-darwin"],
     ["`aarch64-linux` ... <version>", `\`aarch64-linux\`${near}${ver}`, "aarch64-linux"],
-    ["<version> for `aarch64-linux`", `${ver} for \`aarch64-linux\``, "aarch64-linux"],
+    ["<version> for `aarch64-linux`", `${ver}${s}for${s}\`aarch64-linux\``, "aarch64-linux"],
     ["`x86_64-linux` ... <version>", `\`x86_64-linux\`${near}${ver}`, "x86_64-linux"],
-    ["<version> for `x86_64-linux`", `${ver} for \`x86_64-linux\``, "x86_64-linux"],
+    ["<version> for `x86_64-linux`", `${ver}${s}for${s}\`x86_64-linux\``, "x86_64-linux"],
   ];
+  const darwinPair = rows.filter((t) => t.triple.endsWith("-apple-darwin"));
+  check(
+    `seed targets: the darwin pair shares one attachedSince, which is what lets the docs speak of it as a pair (${darwinPair.map((t) => `${t.asset} ${t.attachedSince}`).join(", ")})`,
+    darwinPair.length === 2 && darwinPair[0].attachedSince === darwinPair[1].attachedSince,
+    "the two darwin rows have different attachedSince values, so a claim about `the darwin pair` no longer has one answer: give each asset its own pattern in versionClaims above"
+  );
+
   const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"];
   const staleProse = [];
   let proseClaims = 0;
