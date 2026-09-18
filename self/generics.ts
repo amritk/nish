@@ -247,10 +247,12 @@ export const expandingAncestor = (
  * checked. `class Nest<T> { inner: Nest<T[]> | null }` is the shape it exists
  * for, and `reject_generic_expanding_field` is its case.
  *
- * The ancestor is also the answer: a refused request is handed
- * `ancestor.info` rather than nothing, so the class the programmer did write
- * keeps its field and its layout. §4a of `docs/wp18-generics.md` is the
- * argument for that and what it costs.
+ * The ancestor is also the answer, in the half of that chain where the request
+ * is a declaration's: a field or a member signature refused while the struct
+ * is being collected is handed `ancestor.info` rather than nothing, so the
+ * class the programmer did write keeps its field and its layout. A request
+ * from a method *body* is an expression's and keeps the refusal's throw. §4a
+ * of `docs/wp18-generics.md` is the argument for that and what it costs.
  */
 export const expandingStructAncestor = (
   ctx: CheckContext,
@@ -508,18 +510,29 @@ export const instantiateStruct = (
   // is refused by name rather than by a depth count.
   const growing = expandingStructAncestor(ctx, ctx.currentStructInstance, template, args);
   if (growing !== null) {
-    // WP18 §4a: refused, and answered with the ancestor. `ctx.error` does two
-    // things — report, and set `errored` so the rest of the statement is
-    // silent — and only the first is wanted. stage0 reports this one through
-    // `report` rather than `error`, which does not throw, so the members after
-    // this one are still collected and still refused; silencing them here is a
-    // difference `--parity` finds. The gate on the way *in* is kept, because a
-    // statement that has already reported is one stage0 has thrown out of, so
-    // it never reaches this call at all.
     const wasErrored = ctx.errored;
     ctx.error(at, nonTerminatingStructMessage(ctx.table, template, growing.ancestor, args, growing.index));
-    ctx.errored = wasErrored;
-    return growing.ancestor.info;
+    // WP18 §4a: the recovery is a *declaration's*, and this is where that is
+    // decided. `collectInstanceMembers` is the one caller that clears
+    // `ctx.currentInstance` while `ctx.currentStructInstance` is set, so a
+    // null one here means the struct's own members are being laid out: the
+    // field has to resolve to something or the class the programmer did write
+    // loses it, and the ancestor is the something. `ctx.error` does two things
+    // — report, and set `errored` so the rest of the statement is silent — and
+    // only the first is wanted here, because stage0 reports this one through
+    // `report` rather than `error` and carries on collecting the members after
+    // it. Silencing them would be a difference `--parity` finds.
+    if (ctx.currentInstance === null) {
+      ctx.errored = wasErrored;
+      return growing.ancestor.info;
+    }
+    // Anywhere else the request came from an expression in a body, where the
+    // answer is a value's type rather than a layout, and a substitute would be
+    // consumed by the statement around it — `const z: string = new Nest<T[]>()`
+    // would report the refusal and then a mismatch against `Nest$i32`, a symbol
+    // nobody wrote. So `errored` stays set, which is this compiler's mirror of
+    // the throw stage0 keeps there, and the statement ends with one diagnostic.
+    return null;
   }
   // The caps answer with nothing, for the reason `instantiate` below says.
   if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
@@ -643,13 +656,14 @@ export const instantiate = (
   // constructor is the shape whose chain has no end, refused by name rather
   // than by a depth count.
   //
-  // This half answers with nothing, where §4a has the struct half answer with
-  // the ancestor, and on purpose: `grow<i32[]>` is asked for from inside
+  // This half always answers with nothing, and on purpose: a request for a
+  // generic *function* is only ever made from an expression, and §4a's
+  // recovery is a declaration's. `grow<i32[]>` is asked for from inside
   // `grow<i32>`'s own body, so handing the caller `grow<i32>`'s signature
   // would check `[x]` against `x: i32` and produce exactly the second
-  // diagnostic about a mistake nobody made that §4a exists to stop. A field's
-  // type has a well-typed substitute nearby; a call's does not, and neither do
-  // the caps below — a cap refusal has no ancestor to hand back.
+  // diagnostic about a mistake nobody made that §4a exists to stop. The struct
+  // half spans both and chooses there; the caps below have nothing to choose,
+  // because a cap refusal has no ancestor to hand back.
   const growing = expandingAncestor(ctx, ctx.currentInstance, template, args);
   if (growing !== null) {
     ctx.error(at, nonTerminatingMessage(ctx.table, template, growing.ancestor, args, growing.index));

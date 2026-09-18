@@ -2463,10 +2463,10 @@ function expandingStructAncestor(ctx: CheckContext, from: StructInstantiation | 
   pointer template: size=48 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=growingArgument#2
   stackSites=0 stackLocals=0
-  local 261:7 at: StructInstantiation | null (let)
-  local 264:13 index: i32 (const)
-  callee 264:21 growingArgument -> @growingArgument
-  callee 266:16 new StructExpansion -> @StructExpansion.constructor
+  local 263:7 at: StructInstantiation | null (let)
+  local 266:13 index: i32 (const)
+  callee 266:21 growingArgument -> @growingArgument
+  callee 268:16 new StructExpansion -> @StructExpansion.constructor
 function unifyAnnotation(ctx: CheckContext, annotation: Node, arg: i32, names: StringSet, bindings: StringMap): void -> @unifyAnnotation [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: arg
@@ -2476,58 +2476,58 @@ function unifyAnnotation(ctx: CheckContext, annotation: Node, arg: i32, names: S
   pointer names: size=8 writesThrough=false captured=false passedTo=unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 StringSet.has#0 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3
   pointer bindings: size=32 writesThrough=true captured=false passedTo=unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 StringMap.get#0 StringMap.set#0 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4
   stackSites=0 stackLocals=0
-  local 291:9 table: TypeTable (const)
-  callee 293:5 unifyAnnotation -> @unifyAnnotation
-  callee 297:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 298:7 unifyAnnotation -> @unifyAnnotation
-  callee 298:52 TypeTable.refOf -> @TypeTable.refOf
-  callee 304:5 unifyAnnotation -> @unifyAnnotation
-  local 311:9 member: Node | null (let)
-  local 312:9 count: i32 (let)
-  local 313:16 part: Node (const)
-  callee 320:7 unifyAnnotation -> @unifyAnnotation
-  callee 320:36 TypeTable.stripNull -> @TypeTable.stripNull
-  local 327:9 name: string (const)
-  local 328:9 list: Node (const)
-  local 329:9 argc: i32 (const)
-  callee 331:9 StringSet.has -> @StringSet.has
-  callee 331:28 StringMap.get -> @StringMap.get
-  callee 332:7 StringMap.set -> @StringMap.set
-  callee 332:26 canonicalArgument -> @canonicalArgument
-  callee 336:71 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 337:5 unifyAnnotation -> @unifyAnnotation
-  callee 337:44 TypeTable.refOf -> @TypeTable.refOf
-  callee 340:42 TypeTable.isResult -> @TypeTable.isResult
-  callee 341:5 unifyAnnotation -> @unifyAnnotation
-  callee 341:44 TypeTable.okOf -> @TypeTable.okOf
-  callee 342:5 unifyAnnotation -> @unifyAnnotation
-  callee 342:44 TypeTable.errOf -> @TypeTable.errOf
-  callee 349:7 TypeTable.kindOf -> @TypeTable.kindOf
-  local 350:11 instance: StructInstantiation | null (const)
-  callee 350:22 CheckedProgram.structInstance -> @CheckedProgram.structInstance
-  callee 350:49 TypeTable.nameOf -> @TypeTable.nameOf
-  local 352:11 i: i32 (let)
-  callee 354:9 unifyAnnotation -> @unifyAnnotation
+  local 293:9 table: TypeTable (const)
+  callee 295:5 unifyAnnotation -> @unifyAnnotation
+  callee 299:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 300:7 unifyAnnotation -> @unifyAnnotation
+  callee 300:52 TypeTable.refOf -> @TypeTable.refOf
+  callee 306:5 unifyAnnotation -> @unifyAnnotation
+  local 313:9 member: Node | null (let)
+  local 314:9 count: i32 (let)
+  local 315:16 part: Node (const)
+  callee 322:7 unifyAnnotation -> @unifyAnnotation
+  callee 322:36 TypeTable.stripNull -> @TypeTable.stripNull
+  local 329:9 name: string (const)
+  local 330:9 list: Node (const)
+  local 331:9 argc: i32 (const)
+  callee 333:9 StringSet.has -> @StringSet.has
+  callee 333:28 StringMap.get -> @StringMap.get
+  callee 334:7 StringMap.set -> @StringMap.set
+  callee 334:26 canonicalArgument -> @canonicalArgument
+  callee 338:71 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 339:5 unifyAnnotation -> @unifyAnnotation
+  callee 339:44 TypeTable.refOf -> @TypeTable.refOf
+  callee 342:42 TypeTable.isResult -> @TypeTable.isResult
+  callee 343:5 unifyAnnotation -> @unifyAnnotation
+  callee 343:44 TypeTable.okOf -> @TypeTable.okOf
+  callee 344:5 unifyAnnotation -> @unifyAnnotation
+  callee 344:44 TypeTable.errOf -> @TypeTable.errOf
+  callee 351:7 TypeTable.kindOf -> @TypeTable.kindOf
+  local 352:11 instance: StructInstantiation | null (const)
+  callee 352:22 CheckedProgram.structInstance -> @CheckedProgram.structInstance
+  callee 352:49 TypeTable.nameOf -> @TypeTable.nameOf
+  local 354:11 i: i32 (let)
+  callee 356:9 unifyAnnotation -> @unifyAnnotation
 function mentionsTypeParam(annotation: Node, names: StringSet): boolean -> @mentionsTypeParam [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: StringSet.has mentionsTypeParam nish_panic_index
   pointer annotation: size=40 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 mentionsTypeParam#1
   stackSites=0 stackLocals=0
-  local 364:11 list: Node (const)
-  local 365:11 argc: i32 (const)
-  callee 367:23 StringSet.has -> @StringSet.has
-  local 371:14 child: Node (const)
-  callee 372:9 mentionsTypeParam -> @mentionsTypeParam
+  local 366:11 list: Node (const)
+  local 367:11 argc: i32 (const)
+  callee 369:23 StringSet.has -> @StringSet.has
+  local 373:14 child: Node (const)
+  callee 374:9 mentionsTypeParam -> @mentionsTypeParam
 function typeParamSet(template: TemplateInfo): StringSet -> @typeParamSet [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=8
   calls: StringSet.add StringSet.constructor nish_alloc_struct
   pointer template: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 381:9 names: StringSet (const)
-  callee 381:17 new StringSet -> @StringSet.constructor
-  local 382:14 name: string (const)
-  callee 383:5 StringSet.add -> @StringSet.add
+  local 383:9 names: StringSet (const)
+  callee 383:17 new StringSet -> @StringSet.constructor
+  local 384:14 name: string (const)
+  callee 385:5 StringSet.add -> @StringSet.add
 function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancestor: Instantiation, args: i32[], index: i32): string -> @nonTerminatingMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index
@@ -2537,12 +2537,12 @@ function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancesto
   pointer ancestor: size=96 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
-  local 400:9 from: string (const)
-  callee 400:16 instanceDisplayName -> @instanceDisplayName
-  local 401:9 to: string (const)
-  callee 401:14 instanceDisplayName -> @instanceDisplayName
-  local 402:9 grew: string (const)
-  callee 402:16 TypeTable.typeName -> @TypeTable.typeName
+  local 402:9 from: string (const)
+  callee 402:16 instanceDisplayName -> @instanceDisplayName
+  local 403:9 to: string (const)
+  callee 403:14 instanceDisplayName -> @instanceDisplayName
+  local 404:9 grew: string (const)
+  callee 404:16 TypeTable.typeName -> @TypeTable.typeName
 function nonTerminatingStructMessage(table: TypeTable, template: StructTemplateInfo, ancestor: StructInstantiation, args: i32[], index: i32): string -> @nonTerminatingStructMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index
@@ -2552,12 +2552,12 @@ function nonTerminatingStructMessage(table: TypeTable, template: StructTemplateI
   pointer ancestor: size=40 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
-  local 423:9 from: string (const)
-  callee 423:16 instanceDisplayName -> @instanceDisplayName
-  local 424:9 to: string (const)
-  callee 424:14 instanceDisplayName -> @instanceDisplayName
-  local 425:9 grew: string (const)
-  callee 425:16 TypeTable.typeName -> @TypeTable.typeName
+  local 425:9 from: string (const)
+  callee 425:16 instanceDisplayName -> @instanceDisplayName
+  local 426:9 to: string (const)
+  callee 426:14 instanceDisplayName -> @instanceDisplayName
+  local 427:9 grew: string (const)
+  callee 427:16 TypeTable.typeName -> @TypeTable.typeName
 function instantiateWritten(ctx: CheckContext, template: StructTemplateInfo, written: Node, at: Node): StructInfo | null -> @instantiateWritten [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error instantiateStruct nish_array_grow nish_panic_index nish_str_concat resolveType
@@ -2566,14 +2566,14 @@ function instantiateWritten(ctx: CheckContext, template: StructTemplateInfo, wri
   pointer written: size=40 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 instantiateStruct#3
   stackSites=0 stackLocals=0
-  local 448:9 count: i32 (const)
-  local 450:9 example: string (let)
-  local 451:9 i: i32 (let)
-  callee 456:5 CheckContext.error -> @CheckContext.error
-  local 463:9 args: i32[] (const)
-  local 464:7 i: i32 (let)
-  callee 466:15 resolveType -> @resolveType
-  callee 469:10 instantiateStruct -> @instantiateStruct
+  local 450:9 count: i32 (const)
+  local 452:9 example: string (let)
+  local 453:9 i: i32 (let)
+  callee 458:5 CheckContext.error -> @CheckContext.error
+  local 465:9 args: i32[] (const)
+  local 466:7 i: i32 (let)
+  callee 468:15 resolveType -> @resolveType
+  callee 471:10 instantiateStruct -> @instantiateStruct
 function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args: i32[], at: Node): StructInfo | null -> @instantiateStruct [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor TypeTable.structOf collectInstanceMembers expandingStructAncestor instanceSymbol nish_alloc_struct nish_panic_index nish_str_concat nish_str_from_i32 nonTerminatingStructMessage
@@ -2582,29 +2582,29 @@ function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args
   pointer args: size=0 writesThrough=true captured=true passedTo=instanceSymbol#2 expandingStructAncestor#3 nonTerminatingStructMessage#3 StructInstantiation.constructor#2
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 491:9 name: string (const)
-  callee 491:16 instanceSymbol -> @instanceSymbol
-  local 492:9 existing: StructInstantiation | null (const)
-  callee 492:20 CheckedProgram.structInstance -> @CheckedProgram.structInstance
-  local 509:9 growing: StructExpansion | null (const)
-  callee 509:19 expandingStructAncestor -> @expandingStructAncestor
-  local 519:11 wasErrored: boolean (const)
-  callee 520:5 CheckContext.error -> @CheckContext.error
-  callee 520:19 nonTerminatingStructMessage -> @nonTerminatingStructMessage
-  callee 526:5 CheckContext.error -> @CheckContext.error
-  callee 534:5 CheckContext.error -> @CheckContext.error
-  local 542:9 bindings: StringMap (const)
-  callee 542:20 new StringMap -> @StringMap.constructor
-  local 543:7 i: i32 (let)
-  callee 545:5 StringMap.set -> @StringMap.set
-  local 548:9 info: StructInfo (const)
-  callee 548:16 new StructInfo -> @StructInfo.constructor
-  callee 548:52 TypeTable.structOf -> @TypeTable.structOf
-  local 550:9 instance: StructInstantiation (const)
-  callee 550:20 new StructInstantiation -> @StructInstantiation.constructor
-  callee 556:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
-  callee 557:3 CheckedProgram.addStructInstance -> @CheckedProgram.addStructInstance
-  callee 558:3 collectInstanceMembers -> @collectInstanceMembers
+  local 493:9 name: string (const)
+  callee 493:16 instanceSymbol -> @instanceSymbol
+  local 494:9 existing: StructInstantiation | null (const)
+  callee 494:20 CheckedProgram.structInstance -> @CheckedProgram.structInstance
+  local 511:9 growing: StructExpansion | null (const)
+  callee 511:19 expandingStructAncestor -> @expandingStructAncestor
+  local 513:11 wasErrored: boolean (const)
+  callee 514:5 CheckContext.error -> @CheckContext.error
+  callee 514:19 nonTerminatingStructMessage -> @nonTerminatingStructMessage
+  callee 539:5 CheckContext.error -> @CheckContext.error
+  callee 547:5 CheckContext.error -> @CheckContext.error
+  local 555:9 bindings: StringMap (const)
+  callee 555:20 new StringMap -> @StringMap.constructor
+  local 556:7 i: i32 (let)
+  callee 558:5 StringMap.set -> @StringMap.set
+  local 561:9 info: StructInfo (const)
+  callee 561:16 new StructInfo -> @StructInfo.constructor
+  callee 561:52 TypeTable.structOf -> @TypeTable.structOf
+  local 563:9 instance: StructInstantiation (const)
+  callee 563:20 new StructInstantiation -> @StructInstantiation.constructor
+  callee 569:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee 570:3 CheckedProgram.addStructInstance -> @CheckedProgram.addStructInstance
+  callee 571:3 collectInstanceMembers -> @collectInstanceMembers
 function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation): void -> @collectInstanceMembers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: instance
@@ -2612,17 +2612,17 @@ function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation
   pointer ctx: size=136 writesThrough=true captured=false passedTo=collectStructMembers#0
   pointer instance: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 568:9 savedBindings: StringMap (const)
-  local 569:9 savedStruct: StructInstantiation | null (const)
-  local 570:9 savedInstance: Instantiation | null (const)
-  local 571:9 savedErrored: boolean (const)
-  local 577:9 before: i32 (const)
-  callee 578:3 collectStructMembers -> @collectStructMembers
-  local 583:9 prefix: string (const)
-  local 584:7 i: i32 (let)
-  local 586:11 sig: FunctionSig (const)
-  local 601:11 member: Instantiation (const)
-  callee 601:20 new Instantiation -> @Instantiation.constructor
+  local 581:9 savedBindings: StringMap (const)
+  local 582:9 savedStruct: StructInstantiation | null (const)
+  local 583:9 savedInstance: Instantiation | null (const)
+  local 584:9 savedErrored: boolean (const)
+  local 590:9 before: i32 (const)
+  callee 591:3 collectStructMembers -> @collectStructMembers
+  local 596:9 prefix: string (const)
+  local 597:7 i: i32 (let)
+  local 599:11 sig: FunctionSig (const)
+  local 614:11 member: Instantiation (const)
+  callee 614:20 new Instantiation -> @Instantiation.constructor
 function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], at: Node): FunctionSig | null -> @instantiate [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set collectFunctionSignature expandingAncestor instanceDisplayName instanceSymbol nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nonTerminatingMessage rejectForeignPointer
@@ -2631,29 +2631,29 @@ function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], at:
   pointer args: size=0 writesThrough=true captured=true passedTo=instanceSymbol#2 expandingAncestor#3 nonTerminatingMessage#3 instanceDisplayName#2 Instantiation.constructor#2
   pointer at: size=40 writesThrough=false captured=false passedTo=rejectForeignPointer#3 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 627:9 symbol: string (const)
-  callee 627:18 instanceSymbol -> @instanceSymbol
-  local 628:9 existing: Instantiation | null (const)
-  callee 628:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
-  local 637:14 arg: i32 (const)
-  callee 638:9 rejectForeignPointer -> @rejectForeignPointer
-  local 653:9 growing: Expansion | null (const)
-  callee 653:19 expandingAncestor -> @expandingAncestor
-  callee 655:5 CheckContext.error -> @CheckContext.error
-  callee 655:19 nonTerminatingMessage -> @nonTerminatingMessage
-  callee 659:5 CheckContext.error -> @CheckContext.error
-  callee 667:5 CheckContext.error -> @CheckContext.error
-  local 675:9 bindings: StringMap (const)
-  callee 675:20 new StringMap -> @StringMap.constructor
-  local 676:7 i: i32 (let)
-  callee 678:5 StringMap.set -> @StringMap.set
-  local 684:9 saved: StringMap (const)
-  local 686:9 sig: FunctionSig (const)
-  callee 686:15 collectFunctionSignature -> @collectFunctionSignature
-  callee 689:20 instanceDisplayName -> @instanceDisplayName
-  local 691:9 info: Instantiation (const)
-  callee 691:16 new Instantiation -> @Instantiation.constructor
-  callee 695:3 CheckedProgram.addInstantiation -> @CheckedProgram.addInstantiation
+  local 640:9 symbol: string (const)
+  callee 640:18 instanceSymbol -> @instanceSymbol
+  local 641:9 existing: Instantiation | null (const)
+  callee 641:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
+  local 650:14 arg: i32 (const)
+  callee 651:9 rejectForeignPointer -> @rejectForeignPointer
+  local 667:9 growing: Expansion | null (const)
+  callee 667:19 expandingAncestor -> @expandingAncestor
+  callee 669:5 CheckContext.error -> @CheckContext.error
+  callee 669:19 nonTerminatingMessage -> @nonTerminatingMessage
+  callee 673:5 CheckContext.error -> @CheckContext.error
+  callee 681:5 CheckContext.error -> @CheckContext.error
+  local 689:9 bindings: StringMap (const)
+  callee 689:20 new StringMap -> @StringMap.constructor
+  local 690:7 i: i32 (let)
+  callee 692:5 StringMap.set -> @StringMap.set
+  local 698:9 saved: StringMap (const)
+  local 700:9 sig: FunctionSig (const)
+  callee 700:15 collectFunctionSignature -> @collectFunctionSignature
+  callee 703:20 instanceDisplayName -> @instanceDisplayName
+  local 705:9 info: Instantiation (const)
+  callee 705:16 new Instantiation -> @Instantiation.constructor
+  callee 709:3 CheckedProgram.addInstantiation -> @CheckedProgram.addInstantiation
 function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo, scope: Scope): i32 -> @checkGenericCall [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: expr
@@ -2663,55 +2663,55 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   pointer template: size=40 writesThrough=true captured=true passedTo=typeParamSet#0 instantiate#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=2 stackLocals=2
-  local 714:9 parameters: Node (const)
-  local 715:9 args: Node (const)
-  callee 717:12 CheckContext.errorType -> @CheckContext.errorType
-  local 722:9 names: StringSet (const)
-  callee 722:17 typeParamSet -> @typeParamSet
-  local 723:9 bindings: StringMap (const)
-  callee 723:20 new StringMap -> @StringMap.constructor
-  local 724:9 argTypes: i32[] (const)
-  local 725:7 i: i32 (let)
-  callee 727:19 checkExpression -> @checkExpression
-  local 732:11 annotation: Node (const)
-  callee 734:7 unifyAnnotation -> @unifyAnnotation
-  local 738:9 tuple: i32[] (const)
-  local 739:14 name: string (const)
-  local 740:11 bound: i32 (const)
-  callee 740:19 StringMap.get -> @StringMap.get
-  local 745:11 at: i32 (let)
-  local 746:11 k: i32 (let)
-  local 748:15 annotation: Node (const)
-  callee 749:54 mentionsTypeParam -> @mentionsTypeParam
-  local 754:13 named: i32 (const)
-  local 755:13 shown: string (const)
-  callee 755:36 CheckContext.textOf -> @CheckContext.textOf
-  local 756:13 got: string (const)
-  callee 756:19 TypeTable.typeName -> @TypeTable.typeName
-  local 757:13 where: Node (const)
-  callee 758:14 CheckContext.errorType -> @CheckContext.errorType
-  local 766:9 sig: FunctionSig | null (const)
-  callee 766:15 instantiate -> @instantiate
-  callee 772:37 TypeTable.assignable -> @TypeTable.assignable
-  local 773:13 want: string (const)
-  callee 773:20 TypeTable.typeName -> @TypeTable.typeName
-  callee 774:7 CheckContext.error -> @CheckContext.error
-  callee 776:78 TypeTable.typeName -> @TypeTable.typeName
+  local 728:9 parameters: Node (const)
+  local 729:9 args: Node (const)
+  callee 731:12 CheckContext.errorType -> @CheckContext.errorType
+  local 736:9 names: StringSet (const)
+  callee 736:17 typeParamSet -> @typeParamSet
+  local 737:9 bindings: StringMap (const)
+  callee 737:20 new StringMap -> @StringMap.constructor
+  local 738:9 argTypes: i32[] (const)
+  local 739:7 i: i32 (let)
+  callee 741:19 checkExpression -> @checkExpression
+  local 746:11 annotation: Node (const)
+  callee 748:7 unifyAnnotation -> @unifyAnnotation
+  local 752:9 tuple: i32[] (const)
+  local 753:14 name: string (const)
+  local 754:11 bound: i32 (const)
+  callee 754:19 StringMap.get -> @StringMap.get
+  local 759:11 at: i32 (let)
+  local 760:11 k: i32 (let)
+  local 762:15 annotation: Node (const)
+  callee 763:54 mentionsTypeParam -> @mentionsTypeParam
+  local 768:13 named: i32 (const)
+  local 769:13 shown: string (const)
+  callee 769:36 CheckContext.textOf -> @CheckContext.textOf
+  local 770:13 got: string (const)
+  callee 770:19 TypeTable.typeName -> @TypeTable.typeName
+  local 771:13 where: Node (const)
+  callee 772:14 CheckContext.errorType -> @CheckContext.errorType
+  local 780:9 sig: FunctionSig | null (const)
+  callee 780:15 instantiate -> @instantiate
+  callee 786:37 TypeTable.assignable -> @TypeTable.assignable
+  local 787:13 want: string (const)
+  callee 787:20 TypeTable.typeName -> @TypeTable.typeName
+  callee 788:7 CheckContext.error -> @CheckContext.error
+  callee 790:78 TypeTable.typeName -> @TypeTable.typeName
 function rejectDollarInSymbolName(ctx: CheckContext, name: string, what: string, node: Node): boolean -> @rejectDollarInSymbolName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error nish_str_at nish_str_concat
   pointer ctx: size=136 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 797:3 CheckContext.error -> @CheckContext.error
+  callee 811:3 CheckContext.error -> @CheckContext.error
 function collectTypeParamNames(decl: Node): string[] -> @collectTypeParamNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow typeParameterList
   pointer decl: size=40 writesThrough=false captured=false passedTo=typeParameterList#0
   stackSites=0 stackLocals=0
-  local 807:9 names: string[] (const)
-  local 808:14 node: Node (const)
-  callee 808:22 typeParameterList -> @typeParameterList
+  local 821:9 names: string[] (const)
+  local 822:14 node: Node (const)
+  callee 822:22 typeParameterList -> @typeParameterList
 module self/declarations.ts
 import CheckContext from "./context" -> struct CheckContext
 import isNishSpecifier from "./nish_modules" -> function @isNishSpecifier

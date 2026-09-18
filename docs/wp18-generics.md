@@ -505,7 +505,12 @@ than over the syntax the user typed.
 The same rule covers classes and functions because it is stated over
 "templates", and a class's *fields* are edges exactly as a function's *calls*
 are. That is why the graph is built once, in one place, and why the struct half
-of it lands with generic classes rather than as a second mechanism.
+of it lands with generic classes rather than as a second mechanism. The walk is
+over the whole ancestry rather than the parent, so a cycle that goes through
+two other classes before it comes back is refused with the same sentence, and
+the sentence names the two ends of the cycle rather than whichever struct held
+the annotation — `tests/cases/reject_generic_expanding_field_chain` is the
+three-deep case.
 
 The diagnostic names the chain, not a number (§8, message 5). That is the whole
 reason to prefer a rule over a limit: a user is told which type argument is
@@ -540,6 +545,7 @@ this shape over the two the code had:
   is per offending *annotation*, not per program: a class with two fields that
   both name `Nest<T[]>` has two of them to fix and is told about both, where
   before it was told about the first and then about a consequence.
+  `tests/cases/reject_generic_expanding_field_twice` pins both spans.
 - **Multi-error reporting is untouched.** Nothing is thrown away and no
   recovery point is removed: an *unrelated* mistake below the refusal is still
   reported, which is what `tests/cases/reject_generic_expanding_field_recovered`
@@ -559,15 +565,48 @@ case, `tests/wordings/nl2319_generic_expanding_field` pins the sentence byte
 for byte, and `node tests/run.js --parity --only reject_generic_expanding_field`
 is what holds the two compilers to the same answer.
 
-**The function half keeps the old answer**, and that is not an oversight.
-`grow<T[]>` is asked for from inside `grow<T>`'s own body, so handing the
-caller `grow<i32>`'s signature back would check `[x]` against `x: i32` and
-produce exactly the second diagnostic about a mistake nobody made that this
-section exists to stop. A field's type has a well-typed substitute a step up
-its own chain; a call's does not. The same goes for the two caps below: a
-program that asked for 4,097 instantiations has no ancestor that is the right
-answer either. `reject_generic_polymorphic_recursion` is the function half's
-case, and the two compilers already agree on it.
+**The recovery is a declaration's, and that is the line it is drawn on.** The
+first shape of this rule drew it between the struct half and the function half,
+which was the wrong place: `expandingStructAncestor` walks the chain
+`currentStructInstance` maintains, and that chain is set both while a struct's
+members are collected *and* while one of its methods is checked, so the struct
+half is reachable from an expression too.
+
+```ts
+class Nest<T> {
+  inner: Nest<T> | null;            // fine: `T` is passed on
+  grow(): void {
+    const z: string = new Nest<T[]>();   // refused, from a *body*
+  }
+}
+```
+
+A field's type is a layout: it has to be *something* or the class loses it, and
+the ancestor is the well-typed something a step up its own chain. The value of
+a `new` expression is not a layout — it flows into the statement around it — so
+a substitute there buys nothing and costs a second sentence about a mistake
+nobody made, naming `Nest$i32`, a symbol nobody wrote. That is the very defect
+this section exists to remove, so the expression keeps the refusal's throw and
+the per-statement recovery ends the statement with one diagnostic, exactly as
+every other checker error does.
+`tests/cases/reject_generic_expanding_field_method` is that case, and its
+`2 errors` fragment is the assertion: the unrelated mistake on the line below
+is still reported, and the cascade is not.
+
+Both compilers read the same thing to tell the two apart, because both
+maintain it the same way: `collectInstanceMembers` is the one caller that
+clears `currentInstance` while `currentStructInstance` is set, so an empty
+`currentInstance` at the refusal means the struct's own members are being laid
+out and anything else means a body is running.
+
+**The function half keeps the old answer** for the same reason rather than for
+one of its own: a request for a generic *function* is only ever made from an
+expression. `grow<T[]>` is asked for from inside `grow<T>`'s own body, so
+handing the caller `grow<i32>`'s signature back would check `[x]` against
+`x: i32` and produce exactly that second diagnostic. The same goes for the two
+caps below: a program that asked for 4,097 instantiations has no ancestor that
+is the right answer either. `reject_generic_polymorphic_recursion` is the
+function half's case, and the two compilers already agree on it.
 
 The recovered case's second diagnostic shows the same type spelled two ways in
 one report — `Nest<i32>` in the refusal, `Nest$i32 | null` below it — and its

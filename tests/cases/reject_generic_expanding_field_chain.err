@@ -1,0 +1,1 @@
+:21:6: error: Monomorphising `A` would not terminate: `A<i32>` names `A<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; name `T` itself, or a type that does not mention it
