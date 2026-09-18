@@ -584,6 +584,15 @@ export class Checker implements CheckContext {
     // Termination (§4). A request that puts one of its own type arguments
     // under a constructor is the shape whose chain has no end, and it is
     // refused by name rather than by a depth count.
+    //
+    // This half always keeps the throw, and on purpose: a request for a
+    // generic *function* is only ever made from an expression, and §4a's
+    // recovery is a declaration's. `grow<i32[]>` is asked for from inside
+    // `grow<i32>`'s own body, so handing the caller `grow<i32>`'s signature
+    // would check `[x]` against `x: i32` and produce exactly the second
+    // diagnostic about a mistake nobody made that §4a exists to stop. The
+    // struct half spans both and chooses there; the caps below have nothing to
+    // choose, because a cap refusal has no ancestor to hand back.
     const growing = expandingAncestor(this.currentInstance, template, args, (n) => this.structInstance(n));
     if (growing) {
       // Written here rather than returned from a helper, for the reason the
@@ -783,11 +792,33 @@ export class Checker implements CheckContext {
       // diagnostic call, so a sentence assembled behind a function call carries
       // NL0000 however many words of its own it has.
       const parts = nonTerminatingStructParts(template, growing.ancestor, args, growing.index);
-      this.error(
+      const refusal = new CompileError(
         `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` names \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; name \`${parts.param}\` itself, or a type that does not mention it`,
-        at
+        at,
+        this.sf
       );
+      // WP18 §4a: the recovery is a *declaration's*, and this is where that is
+      // decided. `collectInstanceMembers` is the one caller that clears
+      // `currentInstance` while `currentStructInstance` is set, so an
+      // undefined one here means the struct's own members are being laid out:
+      // the field has to resolve to something or the class the programmer did
+      // write loses it, and the ancestor is the something. Reported without
+      // throwing so the members after this one are still collected and refused
+      // too.
+      if (this.currentInstance === undefined) {
+        this.report(refusal);
+        return growing.ancestor.info;
+      }
+      // Anywhere else the request came from an expression in a body, where the
+      // answer is a value's type rather than a layout, and a substitute would
+      // be consumed by the statement around it -- `const z: string = new
+      // Nest<T[]>()` would report the refusal and then a mismatch against
+      // `Nest$i32`, a symbol nobody wrote. So the throw stays, and the
+      // per-statement recovery in `checkStatements` ends the statement with
+      // one diagnostic, exactly as every other checker error does.
+      throw refusal;
     }
+    // The caps keep the throw, for the reason the function half above does.
     if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
       this.error(
         `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
