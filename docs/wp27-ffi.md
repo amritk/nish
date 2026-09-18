@@ -314,8 +314,9 @@ and then `free`, and a neighbour that calls no C keeps `willreturn readnone`
 while `main` keeps only `nounwind`. It is a link test against real libc, so a
 pointer that did not round-trip would abort rather than merely differ.
 
-Nine `reject_ffi_pointer_*` cases pin the refusals, and
-`docs/cookbook/decl_ffi_pointer.ts` pins the lowering. Both compilers implement
+Nine `reject_ffi_pointer_*` cases pin the refusals,
+`docs/cookbook/decl_ffi_pointer.ts` pins the lowering, and
+`tests/cases/dbg_cptr` pins what `-g` says about it (§7e). Both compilers implement
 it: `tests/self/ir_oracle.js` compares the emitted IR byte for byte and
 `tests/self/reject_oracle.js` compares every refusal's wording, which is the
 strongest thing this repository can say about a lowering.
@@ -341,3 +342,36 @@ neither of them changed the oracle:
 
 The differential oracle is still out of the picture, for §5's reason and not a
 new one.
+
+### 7e. What `-g` says about a type with no structure
+
+§7b's argument is that a `CPtr` is kept out of every pass that would have to
+know something about it. Debug info is the one place that rule does not reach:
+`-g` has to name the type of every local, and a local may hold a `CPtr`. The
+rule it follows is the same one §7a states — **the compiler says the width and
+nothing more**:
+
+```
+!12 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)
+```
+
+A `baseType` of `null` is DWARF for a pointer whose pointee is not described,
+and it is what `clang -g` writes for `void *`. The tempting alternative is a
+pointer to `char`, because that is the shape a `CPtr` and a string share in the
+IR — and it is wrong for exactly §7a's reason: the pointee is the one thing this
+compiler has no claim to make, and a debugger told `char *` would print an
+arbitrary foreign address as text. A `DW_TAG_member` never asks the question,
+because §7a's placement rule keeps a `CPtr` out of every field, element and
+`Result` arm.
+
+Neither compiler said that before `tests/cases/dbg_cptr`, and each was wrong in
+its own way, which is the thing to take from it. `src/codegen/debug.ts` looked
+the type up in an allow-list table and wrote the miss out as `!N = undefined`,
+invalid IR that `llvm-as` rejects; `self/debug.ts` ran the same lookup through a
+`switch` whose `default` is an internal error, so it exited 70. Both are the
+allow-list shape §7b argues for and both are right to refuse a type they were
+not taught — the defect was that nobody taught this one, and nothing looked:
+`ffi_pointer` is not compiled with `-g` by the suite and no `dbg_*` case named a
+`CPtr`, so the gap was visible only to `node tests/run.js --parity`, which
+compiles the whole corpus under every flag variation and saw stage1 exit 70
+where stage0 exited 0. `tests/cases/dbg_cptr` is the case that asks it directly.
