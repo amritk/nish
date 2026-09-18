@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 334 programs, 5656 dump lines.
+# 336 programs, 5695 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1531,6 +1531,47 @@ function main(): i32 -> @nish_main [exported entry]
   callee 30:18 add -> @add
   callee 31:18 span -> @span
   callee 32:18 scaled -> @scaled
+program tests/cases/dbg_cptr.ts
+module tests/cases/dbg_cptr.ts (entry)
+function malloc(size: u64): CPtr | null -> @malloc
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function free(block: CPtr): void -> @free
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: free malloc
+  stackSites=0 stackLocals=0
+  local 17:9 block: CPtr | null (const)
+  callee 17:17 malloc -> @malloc
+  local 24:9 held: CPtr (const)
+  callee 25:3 free -> @free
+program tests/cases/dbg_cptr_shadow.ts
+module tests/cases/dbg_cptr_shadow.ts (entry)
+struct CPtr (class) size=4 align=4
+  field n: i32 index=0 offset=0
+  constructor -> @CPtr.constructor
+function CPtr.constructor(this: CPtr, n: i32): void -> @CPtr.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: n
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function malloc(size: u64): CPtr | null -> @malloc
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function free(block: CPtr): void -> @free
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: CPtr.constructor free malloc
+  stackSites=1 stackLocals=1
+  local 25:9 count: CPtr (const)
+  callee 25:17 new CPtr -> @CPtr.constructor
+  local 26:9 raw: CPtr | null (const)
+  callee 26:15 malloc -> @malloc
+  callee 30:3 free -> @free
 program tests/cases/dbg_enum.ts
 module tests/cases/dbg_enum.ts (entry)
 function weight(k: Kind): i32 -> @weight

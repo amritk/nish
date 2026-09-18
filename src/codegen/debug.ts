@@ -68,6 +68,8 @@ export class DebugInfo {
   private readonly files = new Map<string, string>();
   /** `typeToString` -> metadata reference; composites are reserved before their members so self-references resolve. */
   private readonly types = new Map<string, string>();
+  /** The foreign pointer's `void *`, memoised apart from `types`; see `foreignPointer`. */
+  private cptr = "";
   /** The `DISubprogram` of the function being emitted; the scope of every location and variable. */
   private subprogram = "";
   private readonly sourceFile: ts.SourceFile;
@@ -123,6 +125,7 @@ export class DebugInfo {
   typeRef(t: StaticType): string {
     if (t.kind === "void") return "null";
     if (t.kind === "nullable") return this.typeRef(t.inner);
+    if (t.kind === "cptr") return this.foreignPointer();
     const key = typeToString(t);
     const known = this.types.get(key);
     if (known) return known;
@@ -140,16 +143,6 @@ export class DebugInfo {
       // rather than `2`, and the distinctness the checker enforces survives
       // into the debugger.
       ref = this.enumeration(this.program.enums.get(t.name)!);
-    } else if (t.kind === "cptr") {
-      // WP27 S2: an address a C function handed back, and nothing else. This
-      // compiler laid out nothing behind it, so there is no pointee type it
-      // can honestly name — and DWARF spells "pointer to something I am not
-      // describing" as `baseType: null`, which is what clang writes for
-      // `void *`. Naming `char` instead, on the strength of the `i8*` a `CPtr`
-      // shares with a string, would have a debugger print a foreign address as
-      // text. Debug info is the one path that must say something about a type
-      // it has no structure for; what it says is the width and no more.
-      ref = this.pointerTo("null");
     } else if (t.kind === "result") {
       // WP17: a `Result` has no `StructInfo` — its layout is derived from the
       // type — but `resultLayout` knows everything a `DW_TAG_structure_type`
@@ -162,6 +155,24 @@ export class DebugInfo {
     }
     this.types.set(key, ref);
     return ref;
+  }
+
+  /**
+   * `CPtr` (WP27 §7e): an address a C function handed back, and nothing else.
+   * This compiler laid out nothing behind it, so there is no pointee type it
+   * can honestly name — and DWARF spells that `baseType: null`, which is what
+   * clang writes for `void *`. Naming `char` instead, on the strength of the
+   * `i8*` a `CPtr` shares with a string, would have a debugger print a foreign
+   * address as text.
+   *
+   * It is memoised here rather than in `types`, whose keys are
+   * `typeToString`: that spells the foreign pointer `CPtr`, and a `class CPtr`
+   * — legal, though unreachable by that name (`CPTR_NAME` in `src/types.ts`) —
+   * would share the entry and be described with the other's DWARF.
+   */
+  private foreignPointer(): string {
+    if (this.cptr === "") this.cptr = this.pointerTo("null");
+    return this.cptr;
   }
 
   private pointerTo(base: string): string {

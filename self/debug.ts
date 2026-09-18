@@ -167,6 +167,8 @@ export class DebugInfo {
   program: CheckedProgram;
   table: TypeTable;
   source: SourceFile;
+  /** The foreign pointer's `void *`, memoised apart from `typeKeys`; see `foreignPointer`. */
+  cptr: string;
   /** `!N` of the `DICompileUnit` every `DISubprogram` names as its `unit`. */
   cu: string;
   /** `!N` of this module's own `DIFile`. */
@@ -200,6 +202,7 @@ export class DebugInfo {
     this.fileKeys = new StringMap();
     this.fileRefs = [];
     this.subprogram = "";
+    this.cptr = "";
     // Every field carries a value before a method is called on `this`, which is
     // what the language asks of a constructor; the two that matter are filled
     // in immediately below.
@@ -251,6 +254,9 @@ export class DebugInfo {
     if (this.table.isNullable(type)) {
       return this.typeRef(this.table.refOf(type));
     }
+    if (type === T_CPTR) {
+      return this.foreignPointer();
+    }
     const key = this.table.typeName(type);
     const known = this.typeKeys.get(key, -1);
     if (known >= 0) {
@@ -280,12 +286,6 @@ export class DebugInfo {
       } else {
         ref = this.enumeration(declared);
       }
-    } else if (type === T_CPTR) {
-      // WP27 S2: an address a C function handed back, and nothing else. There
-      // is no pointee type this compiler can honestly name, and DWARF spells
-      // that `baseType: null` — `void *`, as clang writes it. `src/` carries
-      // the reasoning.
-      ref = this.pointerTo("null");
     } else if (this.table.isResult(type)) {
       // A `Result` has no `StructInfo` — its layout is derived from the type —
       // but `resultLayout` knows everything a `DW_TAG_structure_type` needs, so
@@ -309,6 +309,23 @@ export class DebugInfo {
     }
     this.typeKeys.set(key, this.typeRefs.length);
     this.typeRefs.push(ref);
+  }
+
+  /**
+   * `CPtr` (WP27 §7e): an address a C function handed back, and nothing else.
+   * There is no pointee type this compiler can honestly name, and DWARF spells
+   * that `baseType: null` — `void *`, as clang writes it.
+   *
+   * It is memoised here rather than in `typeKeys`, whose keys are
+   * `TypeTable.typeName`: that spells the foreign pointer `CPtr`, and a
+   * `class CPtr` — legal, though unreachable by that name — would share the
+   * entry and be described with the other's DWARF.
+   */
+  foreignPointer(): string {
+    if (this.cptr === "") {
+      this.cptr = this.pointerTo("null");
+    }
+    return this.cptr;
   }
 
   pointerTo(base: string): string {

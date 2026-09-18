@@ -7,9 +7,9 @@
 //
 // No `-g` case named a `CPtr` before this one, and each compiler was wrong in
 // its own way: stage0 wrote `!N = undefined`, which `llvm-as` rejects, and
-// stage1 exited 70 on the missing basic type — four rows of
-// `node tests/run.js --parity`, because the corpus compiles every program
-// under `-g` and neither the golden nor the parity run had a `CPtr` to hand it.
+// stage1 exited 70 on the missing basic type. Only `node tests/run.js --parity`
+// could see it, because that mode compiles the whole corpus under `-g` whether
+// or not a case asked to be; this case asks.
 declare function malloc(size: u64): CPtr | null;
 declare function free(block: CPtr): void;
 
@@ -18,8 +18,9 @@ export const test = (): number => {
   if (block === null) {
     return 1;
   }
-  // A second local of the same type: the metadata is interned by type name, so
-  // both `DILocalVariable`s point at the one `DW_TAG_pointer_type`.
+  // `block` is `CPtr | null` and `held` is `CPtr`, and both `DILocalVariable`s
+  // name the one `DW_TAG_pointer_type`: `typeRef` strips the nullability first
+  // and the foreign pointer is emitted once per module.
   const held = block;
   free(held);
   return 0;
