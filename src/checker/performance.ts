@@ -315,6 +315,30 @@ const allocatesVisibly = (program: CheckedProgram, expr: ts.Expression): boolean
  * own. `result` is counted with them even though WP17 passes a small one in a
  * register: the rule uses this to decide when to stay quiet, and counting a
  * borderline type as a pointer only ever means one warning fewer.
+ *
+ * This is deliberately narrower than stage1's `TypeTable.isPointer`, which WP27
+ * S2 widened to answer true for `cptr` as well — `CPtr | null` is the only way a
+ * foreign call can report failure, so the null rules there have to see one as a
+ * pointer. The two predicates are allowed to differ because no program can reach
+ * a diagnostic that tells them apart:
+ *
+ *   - stage1's other two callers are shadowed on this side by rules the
+ *     compilers already agree on. `new Array<CPtr>(n)` is refused as an array
+ *     element by `rejectForeignPointer` before the zero-fill rule is consulted,
+ *     and the `null`-in-a-pointer-slot message is answered here by the checker's
+ *     own type test, not by this predicate (`reject_ffi_pointer_array`, and
+ *     `` `null` is not a CPtr `` from both compilers).
+ *   - this predicate's only caller is the arena-reassignment warning below,
+ *     which also requires `allocatesVisibly` of the right-hand side. A `CPtr`
+ *     only ever comes out of a `declare function` call, which is not a `new`, a
+ *     literal, or a read builtin, so the warning cannot fire on one however this
+ *     answers. The `isPointerType(walk.sig.returnType)` guard is unreachable for
+ *     the same reason twice over: a function this program defines may not return
+ *     a `CPtr` at all.
+ *
+ * Widening it would therefore change no output. Leaving it narrow keeps the
+ * predicate saying what it means here — memory this compiler laid out — which a
+ * `CPtr` is not.
  */
 const isPointerType = (t: StaticType | undefined): boolean =>
   t !== undefined &&

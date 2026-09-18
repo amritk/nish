@@ -11,9 +11,10 @@
  * Both compilers are given the same entry path and the same sidecar paths, so
  * there is nothing to normalise: the banner names the entry, the include guard
  * and the loader comment are derived from the sidecar's basename, and
- * everything else is the generators' own text. Four files are compared per
- * program — `<stem>.h`, `<stem>.d.ts`, its companion `<stem>.mjs`, and
- * `<stem>.napi.c` — because `--emit-dts` writes two.
+ * everything else is the generators' own text. Five files are compared per
+ * program — `<stem>.h`, `<stem>.d.ts`, its companion `<stem>.mjs`,
+ * `<stem>.napi.c` and the asynchronous `<stem>.async.napi.c` — because
+ * `--emit-dts` writes two and `--emit-napi-async` is its own generator run.
  *
  * A skip is a fact about the port, never a file that is allowed to disagree:
  *
@@ -76,6 +77,9 @@ const CORPUS = [
   // loader's masks live; the WP8 section of tests/run.js builds this one to
   // wasm and calls it.
   { file: "tests/self/interop_unsigned.ts" },
+  // WP24 A1: the shapes that get an asynchronous export and the string and
+  // borrowed-array ones that are named with a reason instead.
+  { file: "tests/self/interop_async.ts" },
   { file: "tests/layout/structs.ts", stem: "layout_structs" },
 ];
 
@@ -113,9 +117,11 @@ const argsFor = (file) => {
 
 /** The sidecar names of one program, in the order the drivers write them. */
 const sidecars = (dir, stem) =>
-  [`${stem}.h`, `${stem}.d.ts`, `${stem}.mjs`, `${stem}.napi.c`].map((n) => path.join(dir, n));
+  [`${stem}.h`, `${stem}.d.ts`, `${stem}.mjs`, `${stem}.napi.c`, `${stem}.async.napi.c`].map((n) =>
+    path.join(dir, n)
+  );
 
-/** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four files. */
+/** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all five files. */
 const emitFlags = (dir, stem) => [
   "--emit-header",
   path.join(dir, `${stem}.h`),
@@ -123,6 +129,19 @@ const emitFlags = (dir, stem) => [
   path.join(dir, `${stem}.d.ts`),
   "--emit-napi",
   path.join(dir, `${stem}.napi.c`),
+  // WP24 A1: the asynchronous shim is the same generator with the promise
+  // wrappers added, so it is compared here rather than trusted to follow from
+  // the synchronous one -- the fail mode differs (`src/` passes a closure,
+  // `self/` a mode), which is exactly the kind of seam that drifts.
+  //
+  // `--threads` rides along because `--emit-napi-async` requires it: its
+  // exports allocate on a worker, so the module has to carry the thread-local
+  // arena too. It costs this comparison nothing -- no sidecar's text depends on
+  // the flag, only the IR's storage class for `@nish_arena` does -- so the four
+  // synchronous files are still compared in exactly the bytes they had before.
+  "--threads",
+  "--emit-napi-async",
+  path.join(dir, `${stem}.async.napi.c`),
 ];
 
 const fresh = (dir) => {

@@ -105,35 +105,38 @@ carried by the release instead of the registry. The `Release` workflow attaches
 `nish-<version>.tgz` to the release it builds for a `v*` tag:
 
 ```bash
-curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
-npm install -g ./nish-0.1.1.tgz
+curl -LO https://github.com/amritk/nish/releases/download/v0.2.0/nish-0.2.0.tgz
+npm install -g ./nish-0.2.0.tgz
 nish --version
 ```
 
-As a native compiler, which needs no Node at all. Every release also attaches
-the self-hosted compiler — the binary `self/` produces by compiling itself —
-one per supported platform:
+As a native compiler, which needs no Node at all. A release also attaches the
+self-hosted compiler — the binary `self/` produces by compiling itself — one
+per supported platform, from the version named in the last column:
 
-| Asset | For | Attached to |
+| Asset | For | Attached from |
 | --- | --- | --- |
-| `nish-<version>-x86_64-linux.tar.gz` | Linux on Intel or AMD | v0.1.1 onwards |
-| `nish-<version>-aarch64-linux.tar.gz` | Linux on ARM | the next release |
-| `nish-<version>-x86_64-darwin.tar.gz` | macOS on Intel | the next release |
-| `nish-<version>-aarch64-darwin.tar.gz` | macOS on Apple Silicon | the next release |
+| `nish-<version>-x86_64-linux.tar.gz` | Linux on Intel or AMD | v0.1.1 |
+| `nish-<version>-aarch64-linux.tar.gz` | Linux on ARM | v0.3.0 |
+| `nish-<version>-x86_64-darwin.tar.gz` | macOS on Intel | v0.3.0 |
+| `nish-<version>-aarch64-darwin.tar.gz` | macOS on Apple Silicon | v0.3.0 |
 
 Each is built and smoke-tested on a machine of its own architecture rather than
-cross-compiled, so the one you take has run at least one program before it
-reached you.
+cross-compiled, so the one you take has compiled and run two programs before it
+reached you — a one-module one and a two-module one, from a directory unrelated
+to the machine that built it.
 
-The third column is there because a release is a past event and a workflow is
-not. `release.yml` builds all four as of this change, but a release already
-published cannot grow an asset: **v0.2.0, the current release, attaches
-`x86_64-linux` only**, and the other three rows first appear on whatever is
-released next. Check
+The last column is there because a release is a past event and a workflow is
+not. `release.yml` builds all four, but a release already published cannot grow
+an asset: **v0.2.0, the current release, attaches `x86_64-linux` only**, and
+the other three first appear on v0.3.0. Those versions are not prose — they are
+`attachedSince` in
+[`.github/seed-targets.json`](https://github.com/amritk/nish/blob/main/.github/seed-targets.json),
+which is the same file the release workflow builds its matrix from, so this
+table and the assets cannot drift apart without a test failing. Check
 [the releases page](https://github.com/amritk/nish/releases/latest) for what a
-given version actually carries rather than assuming the table; on a platform
-whose row has not shipped yet, take the npm package above, or build from source
-below.
+given version actually carries; on a platform whose row has not shipped yet,
+take the npm package above, or build from source below.
 
 ```bash
 # pick the row above that matches `uname -s` and `uname -m`

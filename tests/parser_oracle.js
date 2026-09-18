@@ -456,7 +456,7 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.ClassDeclaration: {
-        if (node.typeParameters !== undefined || node.name === undefined) unsupported(node);
+        if (node.name === undefined) unsupported(node);
         emit(depth, `CLASS${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         const heritage = node.heritageClauses ?? [];
@@ -468,27 +468,39 @@ function printTypeScriptTree(source, sf) {
           if (!ts.isIdentifier(base)) unsupported(node);
           identifier(base, depth + 1);
         }
-        const implemented = (implementsClause?.types ?? []).map((t) => {
+        // WP18 G5: an implemented interface may be an instantiation, so stage1
+        // reads each entry with `parseType` and the node is a TYPE_REF whose
+        // child is the type-argument list — empty for the ungeneric spelling.
+        const implemented = implementsClause?.types ?? [];
+        list(depth + 1, implemented, (t, d) => {
           if (!ts.isIdentifier(t.expression)) unsupported(node);
-          return t.expression;
+          const [ts_, te] = span(t);
+          emit(d, "TYPE_REF", ts_, te, t.expression.text);
+          list(d + 1, t.typeArguments ?? [], type);
         });
-        list(depth + 1, implemented, identifier);
         list(depth + 1, node.members, member);
+        // The type parameters are the fifth child, after the members, because
+        // `self/nodes.ts` appends rather than renumbers (WP18 G5).
+        typeParameters(node.typeParameters, depth + 1);
         return;
       }
       case ts.SyntaxKind.InterfaceDeclaration: {
-        if (node.typeParameters !== undefined || node.heritageClauses !== undefined) unsupported(node);
+        if (node.heritageClauses !== undefined) unsupported(node);
         emit(depth, `INTERFACE${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.members, (m, d) => {
           if (!ts.isPropertySignature(m) || !ts.isIdentifier(m.name) || m.type === undefined) unsupported(m);
-          if (m.questionToken !== undefined) unsupported(m);
+          // An interface field takes the same modifiers and the same `?` a
+          // class field does, and stage1's parser reads them with the same two
+          // functions, so the same two suffixes are compared here. `!` is not a
+          // spelling a property signature has at all.
           const [ms, me] = span(m);
-          emit(d, "FIELD", ms, me);
+          emit(d, `FIELD${memberFlags(m)}${memberMarker(m)}`, ms, me);
           identifier(m.name, d + 1);
           type(m.type, d + 1);
           empty(d + 1);
         });
+        typeParameters(node.typeParameters, depth + 1);
         return;
       }
       // `type X = T;` (WP23). An alias is a declaration in stage1's tree and a
@@ -559,15 +571,26 @@ function printTypeScriptTree(source, sf) {
   };
 
   /**
-   * `readonly` is recorded; `public`, `private` and `protected` are accepted
-   * and ignored, as Nish does (docs/LANGUAGE.md, Classes). Anything else
-   * — `static`, `abstract`, `async`, `declare` — is a construct the language
-   * does not have, so the file is skipped and counted.
+   * `static` and `readonly` are recorded and `public` / `private` /
+   * `protected` are ignored, exactly as Nish does (docs/LANGUAGE.md, Classes):
+   * both are flags the checker refuses on rather than syntax the parser turns
+   * down, so `self/ast_text.ts` prints them and this has to print the same
+   * words in the same order. Anything else — `abstract`, `async`, `declare` —
+   * is a construct the language does not have, so the file is skipped and
+   * counted.
+   *
+   * `static` used to be skipped here, and that was the whole coverage of every
+   * `static` member: the parse a stage0 oracle never compared
+   * (docs/wp19-stage0-retirement.md §A5 — a parse no oracle compares is where a
+   * column divergence hides). Accepting it while printing nothing for it was
+   * half of that hole, because the *flag* then went uncompared.
    */
   const memberFlags = (node) => {
     let readonly = false;
+    let isStatic = false;
     for (const modifier of node.modifiers ?? []) {
       if (modifier.kind === ts.SyntaxKind.ReadonlyKeyword) readonly = true;
+      else if (modifier.kind === ts.SyntaxKind.StaticKeyword) isStatic = true;
       else if (
         modifier.kind !== ts.SyntaxKind.PublicKeyword &&
         modifier.kind !== ts.SyntaxKind.PrivateKeyword &&
@@ -576,15 +599,23 @@ function printTypeScriptTree(source, sf) {
         unsupported(modifier);
       }
     }
-    return readonly ? "+readonly" : "";
+    return `${isStatic ? "+static" : ""}${readonly ? "+readonly" : ""}`;
   };
+
+  /** `?` and `!` after a member's name, in `kindWithFlags`'s order. */
+  const memberMarker = (node) =>
+    `${node.questionToken === undefined ? "" : "+optional"}${
+      node.exclamationToken === undefined ? "" : "+definite"
+    }`;
 
   const member = (node, depth) => {
     const [s, e] = span(node);
     if (ts.isPropertyDeclaration(node)) {
       if (!ts.isIdentifier(node.name) || node.type === undefined) unsupported(node);
-      if (node.questionToken !== undefined) unsupported(node);
-      emit(depth, `FIELD${memberFlags(node)}`, s, e);
+      // `x?: T` and `x!: T` are parsed on both sides and refused by the
+      // checker, so the marker changes no node and no span — but it does change
+      // a flag, and the flag is compared.
+      emit(depth, `FIELD${memberFlags(node)}${memberMarker(node)}`, s, e);
       identifier(node.name, depth + 1);
       type(node.type, depth + 1);
       optional(depth + 1, node.initializer, expression);
@@ -594,8 +625,7 @@ function printTypeScriptTree(source, sf) {
       if (!ts.isIdentifier(node.name) || node.body === undefined || node.type === undefined)
         unsupported(node);
       if (node.typeParameters !== undefined) unsupported(node);
-      memberFlags(node);
-      emit(depth, "METHOD", s, e);
+      emit(depth, `METHOD${memberFlags(node)}${memberMarker(node)}`, s, e);
       identifier(node.name, depth + 1);
       list(depth + 1, node.parameters, parameter);
       type(node.type, depth + 1);
@@ -604,8 +634,7 @@ function printTypeScriptTree(source, sf) {
     }
     if (ts.isConstructorDeclaration(node)) {
       if (node.body === undefined) unsupported(node);
-      memberFlags(node);
-      emit(depth, "CONSTRUCTOR", s, e);
+      emit(depth, `CONSTRUCTOR${memberFlags(node)}`, s, e);
       list(depth + 1, node.parameters, parameter);
       block(node.body, depth + 1);
       return;

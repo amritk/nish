@@ -1000,13 +1000,13 @@ export class Emitter {
 }
 
 /** Emit one module of a checked program. */
-export function emitProgram(
+export const emitProgram = (
   unit: AnalysisUnit,
   table: TypeTable,
   opts: Options,
   runtime: RuntimeTable,
   facts: FactsTable
-): string {
+): string => {
   const emitter = new Emitter(unit, table, opts, runtime, facts);
   return emitter.emitModule();
-}
+};

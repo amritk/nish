@@ -153,6 +153,70 @@ export class TemplateInfo {
 }
 
 /**
+ * A generic class or interface declaration (WP18 G5). It is `TemplateInfo` one
+ * level up: nothing below the name is resolved, because the field, method and
+ * heritage annotations mention the type parameters and mean nothing until an
+ * instantiation binds them.
+ */
+export class StructTemplateInfo {
+  /** The identifier as written; what every diagnostic about the template names. */
+  sourceName: string;
+  /** `STRUCT_CLASS` or `STRUCT_INTERFACE`; an instantiation inherits it. */
+  kind: i32;
+  /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
+  typeParams: string[];
+  /** The `N_CLASS` or `N_INTERFACE` node. */
+  decl: Node;
+  origin: SourceFile;
+  exported: boolean;
+  /** How many instantiations it has produced, for the per-template cap. */
+  count: i32;
+
+  constructor(sourceName: string, kind: i32, decl: Node, origin: SourceFile) {
+    this.sourceName = sourceName;
+    this.kind = kind;
+    this.typeParams = [];
+    this.decl = decl;
+    this.origin = origin;
+    this.exported = false;
+    this.count = 0;
+  }
+}
+
+/**
+ * One (struct template, type-argument tuple): the ordinary struct it names.
+ *
+ * `docs/wp18-generics.md` §3c is what makes this affordable — `info` is an
+ * ordinary `StructInfo` called `Box$i32`, so the layout computation, the
+ * `implements` check, the struct type declarations, the debug info and the C
+ * header all work on it with no change at all. What this record adds is the
+ * memory of which *arguments* produced it, which the termination rule and
+ * inference read back because the struct type itself carries none.
+ */
+export class StructInstantiation {
+  template: StructTemplateInfo;
+  /** One concrete type id per entry of `template.typeParams`, in that order. */
+  typeArgs: i32[];
+  info: StructInfo;
+  /** Type parameter name -> the type id it stands for. */
+  bindings: StringMap;
+  /**
+   * The struct instantiation whose members or whose method body asked for this
+   * one, or `null` for one named by ordinary code. The chain is what the
+   * termination rule walks and what its diagnostic quotes.
+   */
+  from: StructInstantiation | null;
+
+  constructor(template: StructTemplateInfo, typeArgs: i32[], info: StructInfo, bindings: StringMap) {
+    this.template = template;
+    this.typeArgs = typeArgs;
+    this.info = info;
+    this.bindings = bindings;
+    this.from = null;
+  }
+}
+
+/**
  * One (template, type-argument tuple): the specialised function it names, and
  * the side tables its body is checked into.
  *
@@ -162,7 +226,15 @@ export class TemplateInfo {
  * needs no invariant about how the parser hands out ids.
  */
 export class Instantiation {
-  template: TemplateInfo;
+  /**
+   * The generic function this specialises, or `null` when it is a method or
+   * constructor of an instantiated generic class — which needs the overlay and
+   * the type bindings for exactly the same reason and has no template of its
+   * own, because the class is the template (WP18 G5).
+   */
+  template: TemplateInfo | null;
+  /** The instantiated class this is a member of, or `null` for a free function. */
+  owner: StructInstantiation | null;
   /** One concrete type id per entry of `template.typeParams`, in that order. */
   typeArgs: i32[];
   sig: FunctionSig;
@@ -181,8 +253,9 @@ export class Instantiation {
    */
   from: Instantiation | null;
 
-  constructor(template: TemplateInfo, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
+  constructor(template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
     this.template = template;
+    this.owner = null;
     this.typeArgs = typeArgs;
     this.sig = sig;
     this.bindings = bindings;
@@ -562,6 +635,16 @@ export class CheckedProgram {
   templateList: TemplateInfo[];
   instantiations: StringMap;
   instantiationList: Instantiation[];
+  /**
+   * Generic classes and interfaces this module declares, by source name, and
+   * the ones it has instantiated, by mangled name (WP18 G5). A struct template
+   * is not in `structs` for the reason a function template is not in
+   * `functions`: it has no layout until an instantiation binds its parameters.
+   */
+  structTemplates: StringMap;
+  structTemplateList: StructTemplateInfo[];
+  structInstantiations: StringMap;
+  structInstantiationList: StructInstantiation[];
   /** Non-null while an instantiation's side tables are installed. */
   activeInstance: Instantiation | null;
   /** The module's own tables, held aside while `activeInstance` is installed. */
@@ -646,6 +729,10 @@ export class CheckedProgram {
     this.templateList = [];
     this.instantiations = new StringMap();
     this.instantiationList = [];
+    this.structTemplates = new StringMap();
+    this.structTemplateList = [];
+    this.structInstantiations = new StringMap();
+    this.structInstantiationList = [];
     this.activeInstance = null;
     this.savedNodeTypes = [];
     this.savedNodeLocals = [];
@@ -751,6 +838,33 @@ export class CheckedProgram {
     this.instantiationList.push(info);
   }
 
+  /** The generic class or interface called `name` in this module, or `null` (WP18 G5). */
+  structTemplate(name: string): StructTemplateInfo | null {
+    const at = this.structTemplates.get(name, -1);
+    return at < 0 ? null : this.structTemplateList[at];
+  }
+
+  addStructTemplate(info: StructTemplateInfo): void {
+    this.structTemplates.set(info.sourceName, this.structTemplateList.length);
+    this.structTemplateList.push(info);
+  }
+
+  /**
+   * The instantiation a mangled struct name belongs to, or `null` when the name
+   * is a struct somebody declared. An instantiated class is an ordinary struct
+   * and its type carries no arguments, so this is where the termination rule
+   * and inference read them back.
+   */
+  structInstance(name: string): StructInstantiation | null {
+    const at = this.structInstantiations.get(name, -1);
+    return at < 0 ? null : this.structInstantiationList[at];
+  }
+
+  addStructInstance(name: string, info: StructInstantiation): void {
+    this.structInstantiations.set(name, this.structInstantiationList.length);
+    this.structInstantiationList.push(info);
+  }
+
   /**
    * Install one instantiation's side tables (WP18 §3d). Every pass that walks a
    * function body brackets that walk with this and `leaveInstance`, so a read
@@ -832,10 +946,17 @@ export class CheckedProgram {
  * An interface some class `implements` stays a pointer too, because that array
  * is the language's only polymorphic container and every implementer is longer
  * than the interface; so does a `C | null`, because a null element has no bytes
- * to be. The full argument, and the `self/` evidence behind it, is in
- * `src/checker/program.ts`.
+ * to be.
+ *
+ * A class element staying a pointer is a **decision and not deferred work**:
+ * the migration was costed against this compiler, which is the program it
+ * would cost the most, and the answer was no. The full argument, and the
+ * `self/` evidence behind it — the aliased `FunctionSig`, the identity
+ * comparisons in `bounds.ts` that a value slot would make a miscompile, and
+ * the syntax tree becoming storage — is in `src/checker/program.ts` and in
+ * §2a of `docs/wp15-performance.md`.
  */
-export function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null {
+export const inlineElementStruct = (program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null => {
   if (!table.isStruct(elem)) {
     return null;
   }
@@ -844,22 +965,22 @@ export function inlineElementStruct(program: CheckedProgram, table: TypeTable, e
     return null;
   }
   return info;
-}
+};
 
 /** Bytes from one element to the next: `sizeof` for an inline class, the value's size otherwise. */
-export function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+export const elementStride = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
   const info = inlineElementStruct(program, table, elem);
   return info === null ? table.alignOf(elem) : info.size;
-}
+};
 
 /** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
-export function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+export const elementAlignOf = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
   const info = inlineElementStruct(program, table, elem);
   return info === null ? table.alignOf(elem) : info.align;
-}
+};
 
 /** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
-export function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): string {
+export const elementLLVMType = (program: CheckedProgram, table: TypeTable, elem: i32): string => {
   const info = inlineElementStruct(program, table, elem);
   return info === null ? table.llvmType(elem) : `%struct.${info.name}`;
-}
+};

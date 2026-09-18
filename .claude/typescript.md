@@ -233,13 +233,17 @@ compiler's own source, and are linted. Three things still differ:
   would scatter a table across a directory.
 - **Nish programs now follow the arrow rule too**, since the language gained
   arrows: `examples/`, `docs/cookbook/` and every snippet in `docs/` and
-  `README.md` are arrows already. `examples/`, `docs/cookbook/`, `bench/*.ts`
-  and `self/` are still exempt from the plugin in `biome.json`, and that
-  exemption is what lets the `function` declarations still in `self/`, `bench/`
-  and `tests/cases/` sit there until their file is opened
-  (`docs/wp22-arrow-functions.md` §8) — but new code in them is an arrow like
-  everywhere else. The `type`-over-`interface` rule still does not reach them,
-  for the reason at the top of this file.
+  `README.md` are arrows already, and **`self/` joined them in WP22 stage C**.
+  `self/` is therefore *under* the plugin in `biome.json` now rather than
+  exempt from it, which is what makes the rule enforced rather than remembered:
+  a `function` declaration written there is a lint finding the moment it is
+  written, and there are none left to grandfather. `examples/`,
+  `docs/cookbook/` and `bench/*.ts` are still exempt, and that exemption is
+  what lets the 22 `function` declarations still in `bench/` sit there until
+  their file is opened; `tests/cases/` keeps its 693 by not being linted at all
+  (`docs/wp22-arrow-functions.md` §8) — but new code in all of them is an arrow
+  like everywhere else. The `type`-over-`interface` rule still does not reach
+  them, for the reason at the top of this file.
 
 `satisfies` is welcome in `src/` wherever it helps — a dispatch table checked
 against its key type while keeping its literal value types is the obvious case.

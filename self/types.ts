@@ -36,8 +36,34 @@ export const T_F64: i32 = 8;
 export const T_BOOL: i32 = 9;
 export const T_STRING: i32 = 10;
 export const T_VOID: i32 = 11;
+/**
+ * `CPtr` (WP27 S2): an address a C function handed back, and nothing else.
+ *
+ * It is a scalar id rather than a kind because it has no parts — no element, no
+ * inner type, no name to intern — and it sits at the end of the fixed block
+ * because that is where a new one goes; `T_FIRST_DERIVED` and the `K_*` kinds
+ * below moved up by one with it, which is why they are named constants.
+ *
+ * The compiler knows its width and nothing else. It is not arena memory, not a
+ * `%struct`, not a `nish_str`, so nothing that reasons about memory this
+ * compiler laid out may look at it: `isPointerParam` in `self/attributes.ts` is
+ * an allow-list for exactly that reason.
+ */
+export const T_CPTR: i32 = 12;
+/**
+ * How a program spells the foreign pointer.
+ *
+ * PascalCase, unlike every other type the language has, and that is the point:
+ * `i32` and `string` are this language's types and `CPtr` is not — it is C's,
+ * borrowed for the length of a call. The `C` is the reminder that its lifetime
+ * belongs to whoever allocated it.
+ *
+ * The name is answered before any declared name is consulted, exactly as `i32`
+ * and `Int32Array` are, so `builtinTypeName` refuses `type CPtr = ...` outright.
+ */
+export const CPTR_NAME: string = "CPtr";
 /** The first id a `TypeTable` hands out; everything below is fixed. */
-export const T_FIRST_DERIVED: i32 = 12;
+export const T_FIRST_DERIVED: i32 = 13;
 
 /**
  * A type that crosses the C boundary as exactly one machine value (WP27 S1) —
@@ -49,8 +75,19 @@ export const T_FIRST_DERIVED: i32 = 12;
  * the C ABI spells both (`int64_t`, `uint64_t`), so excluding them would refuse
  * a signature the compiler can already write into a header.
  */
-export function isForeignScalar(t: i32): boolean {
-  return (
+/**
+ * A type a `declare function` may name (WP27 S2): a scalar, or the foreign
+ * pointer in either the plain or the nullable spelling.
+ *
+ * `isForeignScalar` stays its own predicate rather than being folded in here.
+ * It answers "does this cross as one machine value with nothing for the escape
+ * analysis to be wrong about", which is the question S1 was sound by, and it is
+ * still the question the parameter rule asks after this one lets `CPtr`
+ * through: a nullable `CPtr` is a legal return type and not a legal parameter.
+ */
+export const isForeignType = (table: TypeTable, t: i32): boolean => isForeignScalar(t) || table.stripNull(t) === T_CPTR;
+
+export const isForeignScalar = (t: i32): boolean => (
     t === T_ERROR ||
     t === T_I32 ||
     t === T_I64 ||
@@ -63,22 +100,21 @@ export function isForeignScalar(t: i32): boolean {
     t === T_BOOL ||
     t === T_VOID
   );
-}
 
 // The kinds of the types that are not scalars. `kindOf` answers one of these
 // or the scalar id itself, so a `switch` over a kind is exhaustive.
-export const K_ARRAY: i32 = 12;
-export const K_STRUCT: i32 = 13;
-export const K_NULLABLE: i32 = 14;
+export const K_ARRAY: i32 = 13;
+export const K_STRUCT: i32 = 14;
+export const K_NULLABLE: i32 = 15;
 /** `Result<T, E>` (WP16): a pointer to a monomorphised two-arm struct. */
-export const K_RESULT: i32 = 15;
+export const K_RESULT: i32 = 16;
 /**
  * A numeric `enum` (WP23): a distinct type whose representation is `i32`.
  * `names[type]` is the declared name, which is its identity, exactly as a
  * struct's is — and `isInteger` is deliberately false for it, so arithmetic on
  * a discriminant is refused where arithmetic on an `i32` is not.
  */
-export const K_ENUM: i32 = 16;
+export const K_ENUM: i32 = 17;
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -106,17 +142,13 @@ export const ARRAY_STRUCT: string = "%struct.nish_array";
  * IEEE-754 types. Every float lowering is the same instruction at both
  * widths; only the LLVM type name and the constant encoding differ.
  */
-export function isFloat(type: i32): boolean {
-  return type === T_F32 || type === T_F64;
-}
+export const isFloat = (type: i32): boolean => type === T_F32 || type === T_F64;
 
 /** Unsigned integers: the predicate that picks `udiv`, `icmp ult`, `lshr`, `zext`, `uitofp`. */
-export function isUnsigned(type: i32): boolean {
-  return type === T_U8 || type === T_U16 || type === T_U32 || type === T_U64;
-}
+export const isUnsigned = (type: i32): boolean => type === T_U8 || type === T_U16 || type === T_U32 || type === T_U64;
 
 /** Width in bits of an integer type; 0 for everything else, which is also the membership test. */
-export function intBits(type: i32): i32 {
+export const intBits = (type: i32): i32 => {
   switch (type) {
     case T_U8:
       return 8;
@@ -133,15 +165,11 @@ export function intBits(type: i32): i32 {
     default:
       return 0;
   }
-}
+};
 
-export function isInteger(type: i32): boolean {
-  return intBits(type) > 0;
-}
+export const isInteger = (type: i32): boolean => intBits(type) > 0;
 
-export function isNumeric(type: i32): boolean {
-  return isInteger(type) || isFloat(type);
-}
+export const isNumeric = (type: i32): boolean => isInteger(type) || isFloat(type);
 
 /**
  * Every type in one program, interned.
@@ -368,7 +396,10 @@ export class TypeTable {
   /** The types that may be nullable: every value that is an LLVM pointer. */
   isPointer(type: i32): boolean {
     const kind = this.kinds[type];
-    return kind === K_STRUCT || kind === K_ARRAY || type === T_STRING;
+    // `T_CPTR` is here because `CPtr | null` is the *only* way a foreign call
+    // can report failure: C says "no" with a null pointer and has no second
+    // channel to say it through (WP27 S2).
+    return kind === K_STRUCT || kind === K_ARRAY || type === T_STRING || type === T_CPTR;
   }
 
   isNullable(type: i32): boolean {
@@ -466,6 +497,11 @@ export class TypeTable {
         return "i8*";
       case T_VOID:
         return "void";
+      // The foreign pointer is `i8*` and deliberately nothing more specific:
+      // this compiler laid out nothing behind it, so there is no pointee type
+      // it could honestly name (WP27 S2).
+      case T_CPTR:
+        return "i8*";
       case K_ARRAY:
         return `${ARRAY_STRUCT}*`;
       case K_STRUCT:
@@ -550,6 +586,10 @@ export class TypeTable {
         return "f32";
       case T_F64:
         return "f64";
+      // Spelled as the source spells it: `cptr` is the tag and `CPtr` is the
+      // name a program writes (WP27 S2).
+      case T_CPTR:
+        return CPTR_NAME;
       case T_STRING:
         return "string";
       case T_VOID:

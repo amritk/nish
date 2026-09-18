@@ -16,10 +16,15 @@
 // interface it names.
 
 import { CheckContext } from "./context";
-import { resolveType } from "./annotations";
+import { rejectForeignPointer, resolveType } from "./annotations";
+import { instantiateWritten } from "./generics";
 import { isExported, collectParams } from "./declarations";
 import {
+  FLAG_DEFINITE,
+  FLAG_OPTIONAL,
   FLAG_READONLY,
+  FLAG_STATIC,
+  FLAG_STATIC_FIRST,
   N_CONSTRUCTOR,
   N_EMPTY,
   N_FALSE,
@@ -30,6 +35,7 @@ import {
   N_STRING,
   N_TEMPLATE,
   N_TRUE,
+  N_TYPE_REF,
   N_UNARY,
   Node,
 } from "./nodes";
@@ -51,18 +57,16 @@ import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
  * every other type is its own alignment, which is right for every scalar
  * and every pointer.
  */
-export function sizeOfField(ctx: CheckContext, type: i32): i32 {
-  return ctx.table.alignOf(type);
-}
+export const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type);
 
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
-export function roundUpTo(value: i32, align: i32): i32 {
+export const roundUpTo = (value: i32, align: i32): i32 => {
   const remainder = value % align;
   return remainder === 0 ? value : value + align - remainder;
-}
+};
 
 /** Offsets in declaration order, and the size and alignment clang would compute. */
-export function computeLayout(ctx: CheckContext, info: StructInfo): void {
+export const computeLayout = (ctx: CheckContext, info: StructInfo): void => {
   let offset = 0;
   let align = 1;
   for (const field of info.fields) {
@@ -76,19 +80,17 @@ export function computeLayout(ctx: CheckContext, info: StructInfo): void {
   }
   info.size = roundUpTo(offset, align);
   info.align = align;
-}
+};
 
 /** The word a message uses for this struct's kind. */
-function kindWord(info: StructInfo): string {
-  return info.kind === STRUCT_CLASS ? "class" : "interface";
-}
+const kindWord = (info: StructInfo): string => info.kind === STRUCT_CLASS ? "class" : "interface";
 
 /**
  * Register a name so an annotation anywhere in the module resolves it. The
  * members wait for `collectStructMembers`, because a field may be typed with
  * a class declared further down the file.
  */
-export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructInfo | null {
+export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructInfo | null => {
   const name = decl.children[0].text;
   const what = kind === STRUCT_CLASS ? "Classes" : "Interfaces";
   if (name.length === 0) {
@@ -99,7 +101,12 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], "Names starting with `nish_` are reserved for the runtime");
     return null;
   }
-  if (ctx.program.structs.has(name)) {
+  // A generic class counts as a declaration of the name, exactly as a declared
+  // one counts against a template in `registerStructTemplate`: `class Box<T>`
+  // followed by `class Box` is one name declared twice, and the declared class
+  // would be unreachable because `Box` in an annotation resolves to the
+  // template.
+  if (ctx.program.structs.has(name) || ctx.program.structTemplates.has(name)) {
     ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``);
     return null;
   }
@@ -116,14 +123,14 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
   ctx.program.addStruct(name, info);
   ctx.program.typeNames.add(name);
   return info;
-}
+};
 
 /**
  * Literal initializers only (`x: number = 0`, `next: Node | null = null`):
  * the value is stored before the constructor body runs, so it has to be one
  * the emitter can write without evaluating anything.
  */
-function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 {
+const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 => {
   switch (expr.kind) {
     case N_NUMBER:
       return want;
@@ -143,19 +150,51 @@ function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 {
     default:
       return -1;
   }
-}
+};
 
 /** One field of a class or interface, appended to `owner`. */
-function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
+const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const what = `Field \`${name}\` of ${kindWord(owner)} \`${owner.name}\``;
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${owner.name}\``);
     return;
   }
+  // The three member headers the parser flags rather than refuses
+  // (`self/nodes.ts`). Each is a rule about the *member*, so the sentence
+  // names it and its class, which is what the parser could not do and why
+  // these were stage0's wordings alone.
+  //
+  // The order is stage0's and is load-bearing: a field carries the name's
+  // marker and its modifiers at once, and `static x?: i32` has to get the same
+  // one of the three sentences from both compilers. stage0 reads the marker
+  // first for a field (`src/checker/classes.ts`, collectField) and the
+  // modifiers first for a method (rejectMethodModifiers), so the two lists
+  // below are deliberately not in the same order as each other.
+  //
+  // A field is the member `readonly` is *legal* on, which is why there is no
+  // call to `rejectMemberModifiers` here: `static` is the only modifier a field
+  // cannot carry, and it is read after the marker.
+  if ((decl.flags & FLAG_OPTIONAL) !== 0) {
+    ctx.error(decl, `${what} cannot be optional (every field has a fixed slot)`);
+    return;
+  }
+  if ((decl.flags & FLAG_DEFINITE) !== 0) {
+    ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`);
+    return;
+  }
+  if ((decl.flags & FLAG_STATIC) !== 0) {
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function or const)`);
+    return;
+  }
   const type = resolveType(decl.children[1], ctx);
   if (type === T_VOID) {
     ctx.error(decl.children[1], `${what} cannot have type void`);
+    return;
+  }
+  // WP27 S2: a field would put a foreign address inside a value the arena owns
+  // and the escape analysis walks. `self/annotations.ts` has the reasoning.
+  if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return;
   }
 
@@ -185,13 +224,50 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   }
   owner.fieldIndex.set(name, owner.fields.length);
   owner.fields.push(field);
-}
+};
 
-function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
+/**
+ * The modifiers a method or a constructor may not carry, in stage0's order.
+ *
+ * stage0 walks the modifier list in source order and reports the first one the
+ * member cannot have (`rejectMethodModifiers` in `src/checker/classes.ts`);
+ * both `static` and `readonly` are, so which of the two was written first
+ * decides the sentence. The parser hands that over as `FLAG_STATIC_FIRST`
+ * rather than as a list, because it is the only ordering anything asks about.
+ * `public` / `private` / `protected` are accepted and ignored on both sides,
+ * and every other modifier is a word stage1's parser never reads as one.
+ *
+ * Answers whether it reported, so a caller that must stop can.
+ */
+const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boolean => {
+  const isStatic = (decl.flags & FLAG_STATIC) !== 0;
+  const isReadonly = (decl.flags & FLAG_READONLY) !== 0;
+  const staticFirst = (decl.flags & FLAG_STATIC_FIRST) !== 0;
+  if (isStatic && (!isReadonly || staticFirst)) {
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function)`);
+    return true;
+  }
+  if (isReadonly) {
+    ctx.error(decl, `${what}: unsupported modifier \`readonly\``);
+    return true;
+  }
+  return false;
+};
+
+const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${owner.name}\``);
+    return;
+  }
+  // As in `collectField` above, and worth the repetition rather than a shared
+  // helper: the two sentences differ, and so does the order — stage0 reads a
+  // method's modifiers before its `?` (`rejectMethodModifiers`), so
+  // `readonly m?()` is about the modifier and not about the marker.
+  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${owner.name}\``)) return;
+  if ((decl.flags & FLAG_OPTIONAL) !== 0) {
+    ctx.error(decl, `${what} of class \`${owner.name}\` cannot be optional`);
     return;
   }
   const symbol = `${owner.name}.${name}`;
@@ -200,7 +276,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   sig.exported = owner.exported;
   sig.owner = owner;
   sig.role = ROLE_METHOD;
-  collectParams(ctx, sig, decl.children[1], owner.type);
+  collectParams(ctx, sig, decl.children[1], owner.type, false);
   const returnAnnotation = decl.children[2];
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(
@@ -210,17 +286,34 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
     sig.returnType = T_ERROR;
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
+    rejectForeignPointer(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation);
   }
   owner.methodIndex.set(name, owner.methodSigs.length);
   owner.methodSigs.push(sig);
   ctx.program.functions.push(sig);
-}
+};
 
-function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): void {
+const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   if (owner.ctor !== null) {
     ctx.error(decl, `Class \`${owner.name}\` has more than one constructor (no overloads)`);
     return;
   }
+  // stage0 reads a constructor's modifiers with the same function it reads a
+  // method's (`rejectMethodModifiers`), so the sentence is the method's with
+  // `Constructor` in front of it, and the order is the same: after the
+  // duplicate check, before anything about the body. Without this a `static`
+  // constructor is not merely accepted, it *runs* — as the instance
+  // constructor, which is the one thing `static` says it is not
+  // (`tests/cases/reject_cls_ctor_static`).
+  //
+  // Reported and then collected anyway, rather than returned from: a class
+  // whose only constructor is dropped has no constructor at all, and the
+  // definite-assignment pass would open the report with `Field \`x\` ... has no
+  // initializer and no constructor assigns it` — advice about a constructor
+  // that is right there. stage0 says one thing here because it throws out of
+  // the class, and this is that, without the throw.
+  const modifiers = `Constructor of class \`${owner.name}\``;
+  rejectMemberModifiers(ctx, decl, modifiers);
   const symbol = `${owner.name}.constructor`;
   const sig = new FunctionSig(symbol, symbol, decl);
   sig.origin = ctx.source;
@@ -228,13 +321,13 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
   sig.owner = owner;
   sig.role = ROLE_CONSTRUCTOR;
   sig.returnType = T_VOID;
-  collectParams(ctx, sig, decl.children[0], owner.type);
+  collectParams(ctx, sig, decl.children[0], owner.type, false);
   owner.ctor = sig;
   ctx.program.functions.push(sig);
-}
+};
 
 /** The fields, layout, methods and constructor of a declared struct. */
-export function collectStructMembers(ctx: CheckContext, info: StructInfo): void {
+export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {
     return;
   }
@@ -256,7 +349,32 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
       return;
     }
     for (const iface of decl.children[2].children) {
-      const target = ctx.program.struct(iface.text);
+      // WP18 G5: `class Box<T> implements Container<T>` names an instantiated
+      // interface. It is resolved here, while `T` is bound to *this*
+      // instantiation's argument, so the check is the ordinary field-prefix one
+      // against `Container$i32` rather than a comparison between two
+      // uninstantiated field lists — which would need a type variable, and a
+      // type parameter is never a type in this implementation.
+      if (iface.kind !== N_TYPE_REF) {
+        // `implements number[]`: stage0 sees a heritage expression that is not
+        // an identifier and says this, so stage1 says it where its own grammar
+        // puts the same mistake.
+        ctx.error(iface, "`implements` must name a declared interface");
+        continue;
+      }
+      const template = ctx.program.structTemplate(iface.text);
+      let target: StructInfo | null = null;
+      if (template !== null) {
+        target = instantiateWritten(ctx, template, iface.children[0], iface);
+        if (target === null) {
+          continue;
+        }
+      } else if (iface.children[0].children.length > 0) {
+        ctx.error(iface, "`implements` must name a declared interface");
+        continue;
+      } else {
+        target = ctx.program.struct(iface.text);
+      }
       if (target === null || target.kind !== STRUCT_INTERFACE) {
         ctx.error(iface, `\`${iface.text}\` is not a declared interface`);
         continue;
@@ -281,7 +399,7 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
   }
   computeLayout(ctx, info);
   info.collected = true;
-}
+};
 
 /**
  * `class C implements I` is a layout check, not a subtype relation: `I`'s
@@ -290,7 +408,7 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
  * declare more fields after them (WP25) — that prefix is what replaced
  * inheritance as the way a wider struct is used as a narrower one.
  */
-export function checkImplements(ctx: CheckContext, cls: StructInfo): void {
+export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
   for (const name of cls.implementsNames) {
     const iface = ctx.program.struct(name);
     if (iface === null) {
@@ -324,18 +442,16 @@ export function checkImplements(ctx: CheckContext, cls: StructInfo): void {
       return;
     }
   }
-}
+};
 
-function describeField(ctx: CheckContext, field: FieldInfo): string {
-  return `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
-}
+const describeField = (ctx: CheckContext, field: FieldInfo): string => `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
 
 /**
  * The struct names a type mentions, following `T[]` and `T | null` inwards.
  * A name reached this way is a *layout* this module needs even though it
  * never wrote the name.
  */
-export function noteStructNames(table: TypeTable, type: i32, out: StringSet): void {
+export const noteStructNames = (table: TypeTable, type: i32, out: StringSet): void => {
   if (table.isStruct(type)) {
     out.add(table.nameOf(type));
     return;
@@ -351,7 +467,7 @@ export function noteStructNames(table: TypeTable, type: i32, out: StringSet): vo
   if (inner >= 0) {
     noteStructNames(table, inner, out);
   }
-}
+};
 
 /**
  * The struct names a signature mentions. `this` is skipped: it is the owner or
@@ -359,20 +475,20 @@ export function noteStructNames(table: TypeTable, type: i32, out: StringSet): vo
  * name, and noting it would pull an inherited constructor's `%struct.Base` in
  * behind a derived class.
  */
-export function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet): void {
+export const signatureStructNames = (table: TypeTable, sig: FunctionSig, out: StringSet): void => {
   let i = sig.owner === null ? 0 : 1;
   while (i < sig.paramTypes.length) {
     noteStructNames(table, sig.paramTypes[i], out);
     i = i + 1;
   }
   noteStructNames(table, sig.returnType, out);
-}
+};
 
 /**
  * The struct names `info` mentions through its fields and its members, its
  * inherited ones included. Its own name is not one of them.
  */
-export function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSet): void {
+export const referencedStructNames = (table: TypeTable, info: StructInfo, out: StringSet): void => {
   for (const field of info.fields) {
     noteStructNames(table, field.type, out);
   }
@@ -383,7 +499,7 @@ export function referencedStructNames(table: TypeTable, info: StructInfo, out: S
   if (ctor !== null) {
     signatureStructNames(table, ctor, out);
   }
-}
+};
 
 /**
  * Whether a class value may stand where `want` is expected without a
@@ -391,7 +507,7 @@ export function referencedStructNames(table: TypeTable, info: StructInfo, out: S
  * That is one pointer `bitcast` — the interface's fields are the class's first
  * fields — so nothing is checked at run time and nothing converts back.
  */
-export function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean {
+export const coercesTo = (ctx: CheckContext, from: i32, want: i32): boolean => {
   if (want < 0 || !ctx.table.isStruct(from)) {
     return false;
   }
@@ -413,4 +529,4 @@ export function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean {
     }
   }
   return false;
-}
+};

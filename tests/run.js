@@ -16,7 +16,10 @@
  *     The compiles run in process (tests/batch_worker.js), many cases to a
  *     worker, rather than one `node dist/index.js` per case; the two paths are
  *     compared against each other below, and `--verify-batch` widens that
- *     comparison to the whole corpus.
+ *     comparison to the whole corpus. The link is against the runtime and the
+ *     driver as object files, built once per run (`runtimeObjects`) rather than
+ *     recompiled per case; the `runtime objects:` checks at the end of the run
+ *     are what say that is the same link.
  *
  *  B. Pipeline checks: the runtime unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
@@ -31,6 +34,8 @@ import { createRequire } from "node:module";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
+import { rewrite as arrowify } from "../scripts/arrowify.mjs";
+import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -52,6 +57,106 @@ fs.mkdirSync(buildDir, { recursive: true });
  * repaired on the way past.
  */
 const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c"];
+
+/** The driver every case without its own `.c` and without an `export main` is linked with. */
+const DRIVER_C = path.join(root, "tests", "driver.c");
+
+/**
+ * The C a case is linked against -- `runtime.c`, `runtime_os.c` and the shared
+ * driver -- compiled to object files once per run instead of once per case.
+ *
+ * The measurement, on a four-core Linux box: naming the three sources in a
+ * case's link costs 470 ms, linking the same module against prebuilt objects
+ * costs 91 ms, and building the objects costs 362 ms once. Over the 183 cases
+ * that carry a `.out` that is the difference between 86 s of clang and 17 s.
+ *
+ * **`defines` is the cache key, and it is the whole of what can make one case
+ * need a differently built runtime.** Today that is `-DNISH_THREADS=1` alone,
+ * which moves `nish_arena` into thread-local storage. A wrong-but-fast link
+ * would be worse than a slow one, so the key is checked rather than trusted,
+ * in the two `runtime objects:` checks after section A: one relinks a case from
+ * the sources and requires the same bytes out, and one requires a `--threads`
+ * module linked against the *default* objects to **fail**. It does — `ld`
+ * refuses a TLS reference against a non-TLS definition — so a case handed the
+ * wrong objects is a red line rather than a program with two arenas.
+ *
+ * Nothing here survives a run. The objects are built on their first use in each
+ * process, so a `runtime.c` edited between runs can never be linked against the
+ * object a previous run left behind.
+ */
+const runtimeObjectCache = new Map();
+const runtimeObjects = (defines) => {
+  const key = defines.join(" ");
+  const cached = runtimeObjectCache.get(key);
+  if (cached !== undefined) return cached;
+  const dir = path.join(buildDir, "runtime-obj", key.replace(/[^A-Za-z0-9]+/g, "_") || "default");
+  fs.mkdirSync(dir, { recursive: true });
+  const built = { objects: [], driver: null, error: null };
+  for (const src of [...RUNTIME_C, DRIVER_C]) {
+    const obj = path.join(dir, path.basename(src).replace(/\.c$/, ".o"));
+    const cc = spawnSync("clang", ["-O2", ...defines, "-c", src, "-o", obj], { cwd: root });
+    if (cc.status !== 0) {
+      built.error = `could not compile ${src}${key.length > 0 ? ` with ${key}` : ""}:\n${cc.stderr}`;
+      break;
+    }
+    if (src === DRIVER_C) built.driver = obj;
+    else built.objects.push(obj);
+  }
+  runtimeObjectCache.set(key, built);
+  return built;
+};
+
+/**
+ * The first case linked under each object key, kept so the equivalence check
+ * can replay it from the sources. `fromSource` is the command line this suite
+ * used before the objects existed, argument for argument.
+ */
+const linkSpecimens = new Map();
+
+/**
+ * Link one compiled case into a runnable binary, against the prebuilt runtime.
+ *
+ * `driver` is `DRIVER_C` for the shared driver, a path for a case that brings
+ * its own `.c`, and null when the module carries its own `main`. `defines` says
+ * how the runtime has to have been built, and is what selects the objects.
+ *
+ * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
+ * way it always did; a runtime that would not compile is reported as a link
+ * failure against the case, because that is what it is from here.
+ */
+const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {}) => {
+  const rt = runtimeObjects(defines);
+  if (rt.error !== null) return { status: 1, stdout: "", stderr: rt.error };
+  const tail = libm ? ["-lm"] : [];
+  const driverObject = driver === DRIVER_C ? rt.driver : driver;
+  const args = [
+    "-Wno-override-module",
+    "-O2",
+    ll,
+    ...(driverObject === null ? [] : [driverObject]),
+    ...rt.objects,
+    ...tail,
+  ];
+  if (!linkSpecimens.has(defines.join(" "))) {
+    linkSpecimens.set(defines.join(" "), {
+      ll,
+      fromObjects: args,
+      // `-D` sits on the from-source line because it is compiling the runtime
+      // there; on the object line it is already baked in, which is precisely
+      // what the byte comparison of the two is asserting.
+      fromSource: [
+        "-Wno-override-module",
+        "-O2",
+        ...defines,
+        ll,
+        ...(driver === null ? [] : [driver]),
+        ...RUNTIME_C,
+        ...tail,
+      ],
+    });
+  }
+  return spawnSync("clang", [...args, "-o", exe], { cwd: root });
+};
 
 /**
  * The seed every stage1 binary in this suite is built with (WP19 G2.3):
@@ -296,33 +401,25 @@ for (const name of cases) {
   }
 
   if (fs.existsSync(side("out")) && HAS_CLANG) {
-    const driver = fs.existsSync(side("c")) ? side("c") : path.join(root, "tests", "driver.c");
+    const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C;
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
     // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
     const hasEntry = /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"));
     const exe = path.join(buildDir, name);
     // WP20 T0: a case compiled with `--threads` references `@nish_arena` as a
     // thread-local global, so runtime.c has to define it as one. The macro is
-    // what `scripts/build.sh --threads` passes, and the link is the check: ELF
-    // refuses a non-TLS reference to a TLS definition, so a case that got this
-    // wrong fails here rather than running with two arenas.
+    // what `scripts/build.sh --threads` passes, and the link is still the check:
+    // ELF refuses a non-TLS reference to a TLS definition, so a case that got
+    // this wrong fails here rather than running with two arenas. Since the
+    // runtime is now a prebuilt object, the macro is also what picks *which*
+    // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : [];
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
-    const cc = spawnSync(
-      "clang",
-      [
-        "-Wno-override-module",
-        "-O2",
-        ...threads,
-        outLl,
-        ...(hasEntry ? [] : [driver]),
-        ...RUNTIME_C,
-        "-lm",
-        "-o",
-        exe,
-      ],
-      { cwd: root }
-    );
+    const cc = linkNative(exe, outLl, {
+      driver: hasEntry ? null : driver,
+      defines: threads,
+      libm: true,
+    });
     if (cc.status !== 0) {
       check(`${name}: links natively`, false, String(cc.stderr));
       continue;
@@ -553,9 +650,13 @@ if (!only || "diagnostics".includes(only)) {
 
   // One table, two compilers: the pairs must be identical, exactly as
   // `branding.ts` must name the same language on both sides.
+  // The indentation is not part of the contract: `self/codes.ts`'s tables lost a
+  // level when WP22 stage C turned them into arrows with concise bodies, and a
+  // pattern keyed on four spaces then read the registry as *empty* rather than as
+  // changed. A fragment line followed by its code line is the shape that matters.
   const pairsOf = (file) => {
     const text = fs.readFileSync(path.join(root, file), "utf8");
-    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+    return [...text.matchAll(/^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
   };
   const stage0Codes = pairsOf("src/codes.ts");
   const stage1Codes = pairsOf("self/codes.ts");
@@ -1156,6 +1257,150 @@ if (fs.existsSync(diamondEntry)) {
   );
 }
 
+/** The `.ll` files an output directory holds, in name order. */
+const llFilesIn = (dir) =>
+  fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).sort() : [];
+
+// WP21 S2: `node_modules` above the working directory. `tests/link/package_above`
+// is the ordinary npm layout — the manifest beside `src/`, not inside it — compiled
+// the ordinary way, `nish main.ts` from `src/`, so the entry is relative and the
+// package is two directories up. stage0 resolves an absolute path and climbs to
+// `/`; stage1 has no `process.cwd()` to build one from (WP19 §A3) and has to climb
+// past `.` by spelling `..`. This is the case that tells a walk that stops at `.`
+// from one that does not, and the WP14 section below runs the same fixture through
+// the self-hosted compiler and diffs the IR byte for byte.
+const aboveDir = path.join(linkDir, "package_above");
+if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
+  const outDir = path.join(buildDir, "link", "package_above") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const exe = path.join(buildDir, "link", "package_above-app");
+  const r = spawnSync(
+    "node",
+    [cli, "main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    { cwd: path.join(aboveDir, "src"), encoding: "utf8" }
+  );
+  const ir =
+    r.status === 0
+      ? llFilesIn(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"))
+          .join("\n")
+      : "";
+  const missing = fs
+    .readFileSync(path.join(aboveDir, "expected.ir"), "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !ir.includes(l));
+  check(
+    "link/package_above: a package above the working directory resolves, with its package prefix",
+    r.status === 0 && missing.length === 0,
+    r.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${r.stdout}${r.stderr}`
+  );
+  if (HAS_CLANG && r.status === 0) {
+    const run = spawnSync(exe);
+    const want = Number(fs.readFileSync(path.join(aboveDir, "expected.code"), "utf8").trim());
+    check(
+      `link/package_above: exits with ${want}`,
+      run.status === want,
+      `exit ${run.status}: ${run.stdout}${run.stderr}`
+    );
+  }
+}
+
+// WP21 S2: a `node_modules` *ancestor*, which is the one directory the walk
+// cannot always name. Node steps over a directory already called `node_modules`
+// rather than searching it, so `node_modules/node_modules/zed` is a package Node
+// never finds — and neither compiler finds it either wherever the importing
+// module's own name spells that ancestor, which is the second run below, from
+// the fixture root. The first run is the same tree compiled from inside
+// `node_modules/app`, where the name is `.` and the ancestor is `..`: a
+// directory named without being named, which stage1 has no `process.cwd()`
+// (WP19 §A3) and no `statSync` to resolve. Both compilers therefore search it
+// and both find the package — the same answer from both, which is the property
+// the oracles protect, in a tree npm does not produce
+// (`docs/wp21-packages.md` §10a). The WP14 section below runs the same fixture
+// through the self-hosted compiler and diffs the IR.
+//
+// The fixture has no `main.ts` at its top, so the loop above never picks it up:
+// `expected.code` and `expected.ir` belong to the run from inside and
+// `expected.err` to the run from the root.
+const doubledDir = path.join(linkDir, "package_doubled");
+const doubledApp = path.join(doubledDir, "node_modules", "app");
+if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
+  const outDir = path.join(buildDir, "link", "package_doubled") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const exe = path.join(buildDir, "link", "package_doubled-app");
+  const inside = spawnSync(
+    "node",
+    [cli, "main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    { cwd: doubledApp, encoding: "utf8" }
+  );
+  const ir =
+    inside.status === 0
+      ? llFilesIn(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"))
+          .join("\n")
+      : "";
+  const missing = fs
+    .readFileSync(path.join(doubledDir, "expected.ir"), "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !ir.includes(l));
+  check(
+    "link/package_doubled: an ancestor the name cannot spell is searched, so the package resolves",
+    inside.status === 0 && missing.length === 0,
+    inside.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${inside.stdout}${inside.stderr}`
+  );
+  if (HAS_CLANG && inside.status === 0) {
+    const run = spawnSync(exe);
+    const want = Number(fs.readFileSync(path.join(doubledDir, "expected.code"), "utf8").trim());
+    check(
+      `link/package_doubled: exits with ${want}`,
+      run.status === want,
+      `exit ${run.status}: ${run.stdout}${run.stderr}`
+    );
+  }
+  const needle = fs.readFileSync(path.join(doubledDir, "expected.err"), "utf8").trim();
+  const named = spawnSync("node", [cli, path.join("node_modules", "app", "main.ts"), "-o", outDir], {
+    cwd: doubledDir,
+    encoding: "utf8",
+  });
+  check(
+    `link/package_doubled: named from the root, the ancestor is stepped over: "${needle}"`,
+    named.status === 1 && named.stderr.includes(needle),
+    named.stderr || "(compiled successfully)"
+  );
+}
+
+// WP21 S2, the declared limitation: one package reached through a symlink is two
+// packages (`docs/wp21-packages.md` §10d). `tests/link/package_symlink` is
+// pnpm's layout — `node_modules/shared`, and `node_modules/app2/node_modules/
+// shared` a link to it — which Node resolves to one module because its resolver
+// realpaths and this compiler resolves to two because a module's identity is its
+// path. The S1 clash check then refuses the program, and that refusal is what is
+// pinned here: not because it is wanted, but so that the day a `realpath` makes
+// it compile is a failing check rather than a surprise. The entry is under
+// `app/` so the loop above does not adopt the fixture as an ordinary case; the
+// WP14 section asks the self-hosted compiler for the same refusal, because a
+// limitation only one compiler has is the divergence, not the limitation.
+const symlinkDir = path.join(linkDir, "package_symlink");
+const symlinkApp = path.join(symlinkDir, "app");
+if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
+  const needle = fs.readFileSync(path.join(symlinkDir, "expected.err"), "utf8").trim();
+  const outDir = path.join(buildDir, "link", "package_symlink") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const r = spawnSync("node", [cli, "main.ts", "-o", outDir], {
+    cwd: symlinkApp,
+    encoding: "utf8",
+  });
+  check(
+    `link/package_symlink: a symlinked copy is a second package, refused with "${needle}"`,
+    r.status === 1 && r.stderr.includes(needle),
+    r.stderr || "(compiled successfully)"
+  );
+}
+
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
@@ -1266,9 +1511,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
   if (HAS_CLANG && fs.existsSync(panicLl)) {
     const exe = path.join(buildDir, "arr_bounds_panic");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, ...RUNTIME_C, "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, panicLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "arr_bounds_panic: exits 1 with `index out of range: 5 >= 3` on stderr (stdout keeps the earlier line)",
@@ -1319,6 +1562,23 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       "arr_alias_domains: opt -O2 hoists every array header load out of the loop",
       o.status === 0 && body !== "" && loop !== "" && reloads === "",
       o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
+    );
+    // WP15 §2b: the hoist above is not the whole of what the domains bought. The loop
+    // vectorises as well -- which §2c had read as something only an invariant header
+    // could buy ("3.23x, and it vectorises"), and which main reaches without one on
+    // this shape, a loop over two array *parameters*. Be clear about what this pins and
+    // what it does not: it pins §2b's banked win against going quiet -- the way that
+    // would happen is a header load creeping back into the loop and taking LICM, and
+    // the vectoriser, with it -- and it says nothing about WP15 item 1b, which is open
+    // for candidate 2 on a shape this case does not have. That shape is the same loop
+    // with the array in a class field, it is 2.48x short of this one, and its
+    // acceptance program is written out in wp15-performance.md §2c rather than living
+    // here, because a corpus case is compiled by both compilers and diffed against a
+    // golden, which is a poor place to keep a number nobody has earned yet.
+    check(
+      "arr_alias_domains: opt -O2 vectorises the element loop (<4 x i32> or <8 x i32>)",
+      o.status === 0 && /<(4|8) x i32>/.test(body),
+      o.status === 0 ? body : String(o.stderr)
     );
   }
   if (has("opt")) {
@@ -1453,9 +1713,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   );
   if (HAS_CLANG && ns.status === 0) {
     const exe = path.join(buildDir, "mem_stack_struct_nostack");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", noStackLl, ...RUNTIME_C, "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, noStackLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "mem_stack_struct with --no-stack-alloc prints the same output",
@@ -1707,11 +1965,17 @@ if (!only || "layout".includes(only)) {
       fromC.set(m[1], Number(m[2]));
     }
     const diffs = [];
-    for (const [name, size] of fromC)
-      if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
+    // The fixture names its maker after the *LLVM* struct (`makeQ_i32` for
+    // `Q$i32`), and the C twin after the C one, which for an instantiated
+    // generic carries the reserved `nish_gen_` prefix `cStructName` gives it so
+    // that `Q<i32>` cannot collide with a class called `Q_i32`.
+    for (const [name, size] of fromC) {
+      const inIr = fromIr.get(name.replace(/^nish_gen_/, ""));
+      if (inIr !== size) diffs.push(`${name}: C ${size}, IR ${inIr}`);
+    }
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 16 && fromIr.size === 16 && diffs.length === 0,
+      fromC.size === 18 && fromIr.size === 18 && diffs.length === 0,
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
@@ -1750,6 +2014,11 @@ if (!only || "layout".includes(only)) {
     }
     if (HAS_CLANG) {
       const exe = path.join(buildDir, "layout_structs");
+      // Named as sources rather than linked against the prebuilt objects, and
+      // that is the point: `-Wall -Wextra -Werror` on this line covers the two
+      // runtime translation units as well as `structs.c`. Swapping them for
+      // objects to save a third of a second would take the warning flags off
+      // the runtime, which is a check, not an overhead.
       const cc = spawnSync(
         "clang",
         [
@@ -1806,9 +2075,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;
     const exe = path.join(buildDir, name);
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ll, ...RUNTIME_C, "-lm", "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, ll, { libm: true });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       `${name}: exits 1 with "${needle}" on stderr`,
@@ -1822,6 +2089,10 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
 }
 
 // ---- B. Pipeline checks -----------------------------------------------------------
+// The two runtime unit tests below name the runtime's sources rather than the
+// prebuilt objects, deliberately: what they assert *is* that the two
+// translation units "compile warning-free together", so compiling them is the
+// check and a cached object would skip it. Two links is what that costs.
 if (!only && HAS_CLANG) {
   const rt = spawnSync(
     "clang",
@@ -2173,13 +2444,16 @@ const RUNTIME_TEXT_BUDGET = 3584;
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime_os.c`.
  *
- * Measured 1,190 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 1,155 plus
+ * Measured 1,251 bytes on 2026-09-14 with clang 18.1.3 on linux-x64 (`.text` 1,216 plus
  * `.text.unlikely.` 35, which is `nish_io_fail`), for the file I/O, the directory and
- * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. The
- * budget is the next 256-byte boundary above it, 90 bytes of headroom, which is less than
- * one syscall wrapper on purpose: `nish_readdir` alone is 294 bytes, so the next builtin
- * that reaches into the operating system has to raise this number in the commit that adds
- * it, with the measurement, and cannot borrow room from the arena to hide in.
+ * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. It
+ * was 1,190 until WP21 S2 put the `fstat`/`S_ISDIR` guard in `nish_read_file_or_null`,
+ * which is 61 of those bytes and is what makes reading a directory answer null rather
+ * than ask the arena for `LONG_MAX`. The budget is the next 256-byte boundary above the
+ * original measurement, so what is left is now **29 bytes** — less than a tenth of one
+ * syscall wrapper, since `nish_readdir` alone is 294, so the next builtin that reaches
+ * into the operating system raises this number in the commit that adds it, with the
+ * measurement, and cannot borrow room from the arena to hide in.
  *
  * The two together are 4,864 -- exactly the single budget they replace, which is a
  * coincidence and not a constraint.
@@ -2744,6 +3018,233 @@ if (!only || "interop".includes(only)) {
           String(w.stderr) + (cmp ? String(cmp.stdout) + String(cmp.stderr) : "")
         );
       }
+    }
+  }
+
+  // ---- WP18 G5: an instantiated generic in the generated header --------------------
+  // `Box<i32>` is `%struct.Box$i32`, and `-pedantic` refuses a `$` in a C identifier,
+  // so the header has to spell it another way. If that way were the bare `$`-to-`_`
+  // collapse it would not be injective — `class Box_i32` declared in the same module
+  // collapses to the same thing — and the generator's one promise is to describe the
+  // ABI the module really defines. `cStructName` gives the instantiation the reserved
+  // `nish_gen_` prefix, which a declared name can never carry, so the fixture declares
+  // both and the header has to compile with both in it.
+  const genHeader = emit("tests/cases/gen_export_header.ts", ["--emit-header", sidecar("gen_export_header", "h")]);
+  const genHeaderText =
+    genHeader.status === 0 ? fs.readFileSync(sidecar("gen_export_header", "h"), "utf8") : "";
+  check(
+    "gen_export_header.h spells `Box<i32>` and a declared `Box_i32` as two different C structs",
+    genHeaderText.includes("struct nish_gen_Box_i32 {") &&
+      genHeaderText.includes("struct Box_i32 {") &&
+      genHeaderText.includes("struct nish_gen_Box_i32 *makeGeneric(int32_t v);") &&
+      genHeaderText.includes("struct Box_i32 *makeDeclared(int32_t v);"),
+    genHeaderText
+  );
+  if (HAS_CLANG && genHeader.status === 0) {
+    const syn = spawnSync("clang", [
+      ...strictC,
+      "-pedantic",
+      "-fsyntax-only",
+      "-x",
+      "c",
+      sidecar("gen_export_header", "h"),
+    ]);
+    check(
+      "gen_export_header.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    );
+  }
+
+  // ---- WP24 A1: asynchronous N-API exports (--emit-napi-async) --------------------
+  // The shim runs the Nish function on whatever thread N-API handed it, which for a
+  // `require()`d addon is Node's main thread, so a 200 ms call blocked Node's event
+  // loop for 200 ms (wp24-async.md 5.1). `--emit-napi-async` adds a promise-returning
+  // `<name>Async` beside every export whose arguments and result are plain scalars and
+  // runs it on libuv's thread pool. The compiled function does not change, so what is
+  // under test is the generated C: that the flag is additive and inert when absent,
+  // that a build without the thread-local arena is refused rather than raced, and that
+  // the two call shapes agree on every answer.
+  const asyncSrc = "tests/self/interop_async.ts";
+  const asyncSync = emit(asyncSrc, ["--emit-napi", sidecar("interop_async_sync", "napi.c")], "interop_async_sync");
+  // `--emit-napi-async` requires `--threads`: its exports allocate on a libuv
+  // worker, so the module has to reference the thread-local arena as well. No
+  // sidecar's text depends on the flag -- only the IR's storage class does.
+  const asyncShim = emit(
+    asyncSrc,
+    ["--threads", "--emit-napi-async", sidecar("interop_async", "napi.c")],
+    "interop_async"
+  );
+  const asyncNoThreads = spawnSync(
+    "node",
+    [cli, asyncSrc, "-o", sidecar("interop_async_bad", "ll"), "--emit-napi-async", sidecar("interop_async_bad", "napi.c")],
+    { cwd: root }
+  );
+  check(
+    "--emit-napi-async without --threads is a usage error, not a silently non-thread-local arena",
+    asyncNoThreads.status === 2 &&
+      String(asyncNoThreads.stderr).includes("--emit-napi-async requires --threads") &&
+      !fs.existsSync(sidecar("interop_async_bad", "napi.c")),
+    String(asyncNoThreads.stderr)
+  );
+  check(
+    "--emit-napi-async writes its shim",
+    asyncShim.status === 0 && fs.existsSync(sidecar("interop_async", "napi.c")),
+    asyncShim.stderr
+  );
+  const shimAsync = fs.existsSync(sidecar("interop_async", "napi.c"))
+    ? fs.readFileSync(sidecar("interop_async", "napi.c"), "utf8")
+    : "";
+  const shimPlain = fs.existsSync(sidecar("interop_async_sync", "napi.c"))
+    ? fs.readFileSync(sidecar("interop_async_sync", "napi.c"), "utf8")
+    : "";
+  check(
+    "interop_async.napi.c registers spinAsync/digestAsync beside the synchronous exports and queues them on libuv",
+    shimAsync.includes('{"spin", nish_napi_spin},') &&
+      shimAsync.includes('{"spinAsync", nish_napi_async_spin},') &&
+      shimAsync.includes('{"digestAsync", nish_napi_async_digest},') &&
+      // A `void` result is the shape whose work item has no `result` field and
+      // whose completion callback boxes `undefined` without reading one.
+      shimAsync.includes('{"touchAsync", nish_napi_async_touch},') &&
+      shimAsync.includes("napi_get_undefined(env, &out) != napi_ok)") &&
+      shimAsync.includes("napi_create_promise(env, &nish_deferred, &nish_promise)") &&
+      shimAsync.includes("napi_create_async_work(env, NULL, nish_name, nish_napi_exec_spin, nish_napi_done_spin,") &&
+      shimAsync.includes("napi_queue_async_work(env, nish_w->work)") &&
+      shimAsync.includes("napi_resolve_deferred(env, nish_w->deferred, out)"),
+    shimAsync
+  );
+  check(
+    "the exec callback brackets the call with the worker's own arena mark/release and never touches env",
+    shimAsync.includes("static void nish_napi_exec_spin(napi_env env, void *data) {") &&
+      shimAsync.includes("(void)env; /* N-API forbids reaching the JS engine here") &&
+      shimAsync.includes("uint64_t nish_mark = nish_arena_mark();") &&
+      shimAsync.includes("nish_arena_release(nish_mark);"),
+    shimAsync
+  );
+  check(
+    "a bad argument to an asynchronous export rejects the promise instead of throwing",
+    shimAsync.includes(
+      'return nish_napi_reject(env, nish_deferred, nish_promise, "spinAsync: argument 1 (rounds) must be a number");'
+    ) && shimAsync.includes("static napi_value nish_napi_reject(napi_env env, napi_deferred deferred, napi_value promise,"),
+    shimAsync
+  );
+  check(
+    "the string and borrowed-array exports stay synchronous and the shim names the reason",
+    shimAsync.includes("-- no `labelAsync`: it returns string, which lives in the worker thread's arena") &&
+      shimAsync.includes("-- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads") &&
+      !shimAsync.includes('{"labelAsync"') &&
+      !shimAsync.includes('{"totalAsync"'),
+    shimAsync
+  );
+  check(
+    "an asynchronous shim refuses to compile without the thread-local arena, rather than racing it",
+    shimAsync.includes("#if !defined(NISH_THREADS)") &&
+      shimAsync.includes(
+        '#error "--emit-napi-async needs the thread-local arena: build with scripts/build.sh --threads"'
+      ),
+    shimAsync
+  );
+  // The flag has to be inert: an addon adopts it one call site at a time, so
+  // --emit-napi keeps writing exactly the shim it wrote before A1 existed.
+  check(
+    "--emit-napi is unchanged by the flag existing: no promise, no async work, no NISH_THREADS guard",
+    asyncSync.status === 0 &&
+      shimPlain.length > 0 &&
+      !shimPlain.includes("napi_create_promise") &&
+      !shimPlain.includes("napi_create_async_work") &&
+      !shimPlain.includes("NISH_THREADS") &&
+      !shimPlain.includes("Async"),
+    shimPlain
+  );
+
+  if (!HAS_CLANG) {
+    skip("clang not found: the asynchronous N-API addon is not built or run");
+  } else if (!hasNodeHeaders) {
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the asynchronous N-API addon is skipped`);
+  } else if (shimAsync.length === 0) {
+    check("interop_async.napi.c compiles and runs", false, "--emit-napi-async wrote no file");
+  } else {
+    const withThreads = spawnSync("clang", [
+      ...strictC,
+      `-I${nodeInclude}`,
+      "-DNISH_THREADS=1",
+      "-fsyntax-only",
+      sidecar("interop_async", "napi.c"),
+    ]);
+    check(
+      "interop_async.napi.c compiles under -std=c11 -Wall -Wextra -Werror with -DNISH_THREADS",
+      withThreads.status === 0,
+      String(withThreads.stderr)
+    );
+    // The guard is the whole defence against two threads bumping one arena, so
+    // it is checked by compiling, not only by reading the `#error` out of the text.
+    const noThreads = spawnSync("clang", [
+      ...strictC,
+      `-I${nodeInclude}`,
+      "-fsyntax-only",
+      sidecar("interop_async", "napi.c"),
+    ]);
+    check(
+      "the same file is rejected without -DNISH_THREADS, naming --threads",
+      noThreads.status !== 0 && String(noThreads.stderr).includes("build with scripts/build.sh --threads"),
+      String(noThreads.stderr)
+    );
+
+    const asyncAddon = path.join(interopDir, "interop_async.node");
+    const ab = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_async", "ll"),
+        "runtime/runtime.c",
+        sidecar("interop_async", "napi.c"),
+        "-o",
+        asyncAddon,
+        "--profile",
+        "napi",
+        "--threads",
+      ],
+      { cwd: root }
+    );
+    check("napi profile builds interop_async.node with --threads", ab.status === 0, String(ab.stderr));
+    if (ab.status === 0) {
+      // 4000 rounds rather than the 20000 of the documented measurement: enough
+      // work that a blocked loop is unambiguous, little enough that the suite does
+      // not spend a second on it. The numbers in wp24-async.md 11c are the harness
+      // run by hand at the larger size.
+      const ax = spawnSync("node", ["examples/node-addon-async.mjs", asyncAddon, "20000"], { cwd: root });
+      const out = String(ax.stdout);
+      // `call <n> ms ... worst loop stall <n> ms`, for each call shape.
+      const timings = (label) => {
+        const m = out.match(
+          new RegExp(`${label}[^\\n]*call\\s+([0-9.]+) ms[^\\n]*worst loop stall\\s+([0-9.]+) ms`)
+        );
+        return m === null ? null : { call: Number(m[1]), stall: Number(m[2]) };
+      };
+      const syncRun = timings("sync spin\\(\\)");
+      const asyncRun = timings("async spinAsync\\(\\)");
+      check(
+        "node-addon-async.mjs: both call shapes agree, concurrent calls agree, and a bad argument rejects",
+        ax.status === 0 &&
+          out.includes("same answer from both: true") &&
+          out.includes("32 concurrent digestAsync calls agree with digest: true") &&
+          out.includes("touchAsync(1000) resolves to undefined") &&
+          out.includes('spinAsync("nope") rejects: spinAsync: argument 1 (rounds) must be a number'),
+        out + String(ax.stderr)
+      );
+      // The asynchronous call takes just as long; what changes is whether the loop
+      // is stalled for it. The claim is compared against each call's *own*
+      // duration rather than against a fixed number of milliseconds, so this
+      // stays a check about scheduling instead of a speed test on whatever
+      // machine it runs on: a slow box makes both numbers bigger together.
+      check(
+        "the synchronous call stalls the event loop for its whole duration and the asynchronous one does not",
+        syncRun !== null &&
+          asyncRun !== null &&
+          syncRun.stall > 0.5 * syncRun.call &&
+          asyncRun.stall < 0.25 * asyncRun.call,
+        `sync ${JSON.stringify(syncRun)}, async ${JSON.stringify(asyncRun)}\n${out}`
+      );
     }
   }
 
@@ -4143,17 +4644,191 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // same spans. A multi-error program is the case worth pinning, because
       // it is also the one that proves stage1 collected every error rather
       // than stopping at the first.
-      const jsonCase = path.join("tests", "cases", "reject_multi_error.ts");
-      const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
-      const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
-      check(
-        "the self-hosted compiler: --json diagnostics are byte-identical to stage0's",
-        ourJson.status === 1 &&
-          theirJson.status === 1 &&
-          ourJson.stdout === theirJson.stdout &&
-          ourJson.stdout.split("\n").filter(Boolean).length === 3,
-        `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
-      );
+      //
+      // The `.err` sidecars cannot see a whole span on their own -- they are
+      // matched as substrings, so the caret run they pin fixes a start column
+      // but not an end one, and both compilers printed the same sentence for
+      // `reject_ffi_pointer_array` while spanning it on `CPtr[]` and on `CPtr`
+      // respectively (WP27 S2). A case joins this list when its span is the
+      // property under test.
+      const jsonCases = [
+        ["reject_multi_error", 3],
+        ["reject_ffi_pointer_array", 1],
+        ["reject_ffi_pointer_type_argument_fn", 1],
+      ];
+      for (const [jsonName, objects] of jsonCases) {
+        const jsonCase = path.join("tests", "cases", `${jsonName}.ts`);
+        const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+        const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+        check(
+          `the self-hosted compiler: ${jsonName}'s --json diagnostics are byte-identical to stage0's`,
+          ourJson.status === 1 &&
+            theirJson.status === 1 &&
+            ourJson.stdout === theirJson.stdout &&
+            ourJson.stdout.split("\n").filter(Boolean).length === objects,
+          `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+        );
+      }
+
+      // WP21 S2: the walk up to `node_modules` has to reach the same directories
+      // in both compilers, and the working directory is what pulls them apart.
+      // `tests/link/package_above` installs the package *above* the directory the
+      // compiler is run in — `proj/node_modules` beside `proj/src/main.ts`, which
+      // is what npm produces — and is compiled the way that program is compiled,
+      // `nish main.ts` from `src/`. stage0 resolves the entry against
+      // `process.cwd()`; stage1 has no such builtin (WP19 §A3) and climbs past `.`
+      // by spelling `..`, so a stage1 that stopped where `dirname` stops answered
+      // `` Cannot find package `pkg_above` `` for a program stage0 compiles. Both
+      // compilers are run here and every byte of every module is compared, because
+      // a program one of them resolves and the other does not is the divergence
+      // this whole section exists to prevent.
+      const aboveSrc = path.join(root, "tests", "link", "package_above", "src");
+      if (fs.existsSync(path.join(aboveSrc, "main.ts"))) {
+        const ourDir = path.join(shipDir, "package_above-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_above-stage0") + path.sep;
+        fs.rmSync(ourDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourAbove = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+          cwd: aboveSrc,
+          encoding: "utf8",
+        });
+        const theirAbove = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: aboveSrc,
+          encoding: "utf8",
+        });
+        const ourModules = llFilesIn(ourDir);
+        const theirModules = llFilesIn(theirDir);
+        const differing = ourModules.filter(
+          (f) =>
+            !fs.existsSync(path.join(theirDir, f)) ||
+            fs.readFileSync(path.join(ourDir, f), "utf8") !==
+              fs.readFileSync(path.join(theirDir, f), "utf8")
+        );
+        check(
+          "the self-hosted compiler: a package above the working directory resolves, to stage0's bytes",
+          ourAbove.status === 0 &&
+            theirAbove.status === 0 &&
+            ourModules.length === 2 &&
+            ourModules.join(",") === theirModules.join(",") &&
+            differing.length === 0,
+          `stage1 ${ourAbove.status}: ${ourAbove.stdout}${ourAbove.stderr}` +
+            `stage0 ${theirAbove.status}: ${theirAbove.stderr}` +
+            `modules ours [${ourModules.join(" ")}] theirs [${theirModules.join(" ")}]` +
+            ` differing [${differing.join(" ")}]`
+        );
+      }
+
+      // WP21 S2, the other half of that walk: an ancestor the module's own name
+      // does not spell. `tests/link/package_doubled` installs the package one
+      // `node_modules` inside another and is compiled from inside
+      // `node_modules/app`, so the ancestor is `..` — a directory named without
+      // being named. Node steps over a `node_modules` ancestor and so does
+      // either compiler wherever the name spells one, but `..` spells nothing,
+      // and neither compiler has a way to learn what it is: stage1 has no
+      // `process.cwd()` (WP19 §A3) and the language has no `statSync`, which is
+      // what naming a directory from below would take. So both search it, both
+      // find the package, and this is what says they answer the same thing —
+      // the alternative was one compiler resolving a program the other refuses.
+      const doubledSrc = path.join(root, "tests", "link", "package_doubled", "node_modules", "app");
+      if (fs.existsSync(path.join(doubledSrc, "main.ts"))) {
+        const ourDir = path.join(shipDir, "package_doubled-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_doubled-stage0") + path.sep;
+        fs.rmSync(ourDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourDoubled = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+          cwd: doubledSrc,
+          encoding: "utf8",
+        });
+        const theirDoubled = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: doubledSrc,
+          encoding: "utf8",
+        });
+        const ourDoubledModules = llFilesIn(ourDir);
+        const theirDoubledModules = llFilesIn(theirDir);
+        const differingDoubled = ourDoubledModules.filter(
+          (f) =>
+            !fs.existsSync(path.join(theirDir, f)) ||
+            fs.readFileSync(path.join(ourDir, f), "utf8") !==
+              fs.readFileSync(path.join(theirDir, f), "utf8")
+        );
+        check(
+          "the self-hosted compiler: a `node_modules` ancestor no name spells is searched by both, to stage0's bytes",
+          ourDoubled.status === 0 &&
+            theirDoubled.status === 0 &&
+            ourDoubledModules.length === 2 &&
+            ourDoubledModules.join(",") === theirDoubledModules.join(",") &&
+            differingDoubled.length === 0,
+          `stage1 ${ourDoubled.status}: ${ourDoubled.stdout}${ourDoubled.stderr}` +
+            `stage0 ${theirDoubled.status}: ${theirDoubled.stderr}` +
+            `modules ours [${ourDoubledModules.join(" ")}] theirs [${theirDoubledModules.join(" ")}]` +
+            ` differing [${differingDoubled.join(" ")}]`
+        );
+
+        // The same tree named from its root, where both compilers *can* read
+        // the ancestor's name and both step over it: one refusal, one sentence,
+        // one exit status.
+        const doubledRoot = path.join(root, "tests", "link", "package_doubled");
+        const doubledEntry = path.join("node_modules", "app", "main.ts");
+        const ourNamed = spawnSync(compiler, [doubledEntry, "-o", ourDir], {
+          cwd: doubledRoot,
+          encoding: "utf8",
+        });
+        const theirNamed = spawnSync("node", [cli, doubledEntry, "-o", theirDir], {
+          cwd: doubledRoot,
+          encoding: "utf8",
+        });
+        check(
+          "the self-hosted compiler: a `node_modules` ancestor the name spells is stepped over by both",
+          ourNamed.status === 1 && theirNamed.status === 1 && ourNamed.stderr === theirNamed.stderr,
+          `stage1 ${ourNamed.status}: ${ourNamed.stderr}\nstage0 ${theirNamed.status}: ${theirNamed.stderr}`
+        );
+      }
+
+      // WP21 S2's declared limitation, asked of the compiler that survives: a
+      // package reached through a symlink is a second package, because neither
+      // compiler has a `realpath` to call — stage0 could grow one and is
+      // deliberately not allowed to (`docs/wp21-packages.md` §10d). The two
+      // answers are compared with each other rather than each to a fragment, so
+      // "both refuse it with the same sentence" is pinned rather than asserted;
+      // what is stripped first is the `file:line:column:` prefix, because
+      // `export const val` is a declaration the two point at with different
+      // columns, and that span difference is its own subject and not this
+      // fixture's.
+      const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
+      const symlinkApp = path.join(symlinkSrc, "app");
+      if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
+        const symlinkNeedle = fs
+          .readFileSync(path.join(symlinkSrc, "expected.err"), "utf8")
+          .trim();
+        const outDir = path.join(shipDir, "package_symlink-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_symlink-stage0") + path.sep;
+        fs.rmSync(outDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourSymlink = spawnSync(compiler, ["main.ts", "-o", outDir], {
+          cwd: symlinkApp,
+          encoding: "utf8",
+        });
+        const theirSymlink = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: symlinkApp,
+          encoding: "utf8",
+        });
+        /** Just the sentences of a report: no position, no echoed source line. */
+        const sentences = (text) =>
+          text
+            .split("\n")
+            .filter((line) => line.includes(": error: "))
+            .map((line) => line.slice(line.indexOf(": error: ") + ": error: ".length))
+            .join("\n");
+        check(
+          "the self-hosted compiler: a symlinked copy is a second package for it too, in stage0's words",
+          ourSymlink.status === 1 &&
+            theirSymlink.status === 1 &&
+            ourSymlink.stderr.includes(symlinkNeedle) &&
+            sentences(ourSymlink.stderr) === sentences(theirSymlink.stderr),
+          `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}` +
+            `stage0 ${theirSymlink.status}: ${theirSymlink.stderr}`
+        );
+      }
 
       // WP19 G2.4, the wording gap: the same coverage run, through the
       // compiler that survives stage0. `tests/wordings/` pins stage0's wording
@@ -4161,8 +4836,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // outcomes are declared per case rather than in general:
       // `parser_refusals.txt` for the constructs stage1's parser turns down
       // before the phase that owns the rule can word it (§A3), and
-      // `stage1_divergence.txt` for the eleven programs the two compilers do
-      // not yet answer the same way at all. `--strict-refusals` is what makes
+      // `stage1_divergence.txt` for the programs the two compilers do not yet
+      // answer the same way at all — a handful, and the count is on the summary
+      // line this check prints rather than in this comment, because it moves. `--strict-refusals` is what makes
       // both lists shrink-only: a case that starts agreeing fails until the
       // line naming it is deleted.
       const stage1Wordings = spawnSync(
@@ -4778,7 +5454,16 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   );
   // Every flag the driver accepts is listed: a wrapper that reads --help to
   // learn the surface must not be missing one.
-  const documented = ["--json", "--link", "--emit-header", "--emit-dts", "--emit-napi", "--target", "--profile"];
+  const documented = [
+    "--json",
+    "--link",
+    "--emit-header",
+    "--emit-dts",
+    "--emit-napi",
+    "--emit-napi-async",
+    "--target",
+    "--profile",
+  ];
   const undocumented = documented.filter((f) => !help.stdout.includes(f));
   check(
     `--help lists every advertised flag (${documented.length} checked)`,
@@ -5215,6 +5900,68 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       absent.length === 0,
       absent.join("\n")
     );
+    // A script that ships has to be able to load in the tarball it ships in: every
+    // relative import it makes has to be a file the tarball also carries, and every bare
+    // one has to be a runtime dependency rather than a devDependency. `scripts/` is
+    // whitelisted as a directory, so a development tool added beside `build.sh` ships
+    // without anybody deciding it should -- `scripts/arrow-verify.mjs` did, importing
+    // `../tests/self/corpus.js`, which `files` does not ship, and nothing said so because
+    // nobody runs a corpus sweep out of an install. Either it resolves or it does not
+    // ship; this is what makes that a check rather than a habit.
+    //
+    // The specifiers are read from the parse tree and not from a pattern, because the
+    // forms a pattern misses are the ones nobody looks at: `import "./x.js";` with no
+    // clause, `export { a } from "./x.js"`, a dynamic `import()`, and any of them in
+    // single quotes. A guard that only sees `import ... from "..."` is a guard the
+    // regression it was written for can walk straight past.
+    const ts = require("typescript");
+    const specifiersOf = (text, name) => {
+      const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+      const found = [];
+      const visit = (node) => {
+        const fixed =
+          (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined
+            ? node.moduleSpecifier
+            : undefined;
+        if (fixed !== undefined && ts.isStringLiteral(fixed)) found.push(fixed.text);
+        const dynamic =
+          ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+            ? node.arguments[0]
+            : undefined;
+        if (dynamic !== undefined && ts.isStringLiteral(dynamic)) found.push(dynamic.text);
+        ts.forEachChild(node, visit);
+      };
+      visit(sf);
+      return found;
+    };
+    // `@scope/name/deep` and `name/deep` are both the package plus a subpath, and it is
+    // the package that `dependencies` names.
+    const packageOf = (spec) =>
+      spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    // A tarball with no `dependencies` at all is a thing a refactor can produce, and it
+    // should fail this one check rather than throw and take the whole packaging block
+    // with it.
+    const deps = new Set(Object.keys(manifest.dependencies ?? {}));
+    const shippedScripts = files.filter((f) => f.startsWith("scripts/") && /\.(mjs|js)$/.test(f));
+    const unresolved = [];
+    for (const rel of shippedScripts) {
+      for (const spec of specifiersOf(fs.readFileSync(path.join(root, rel), "utf8"), rel)) {
+        if (spec.startsWith("node:")) continue;
+        if (!spec.startsWith(".")) {
+          const pkg = packageOf(spec);
+          if (!deps.has(pkg)) unresolved.push(`${rel} imports \`${spec}\`, and \`${pkg}\` is not a dependency`);
+          continue;
+        }
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
+        if (!files.includes(target)) unresolved.push(`${rel} imports \`${spec}\`, which the tarball does not carry`);
+      }
+    }
+    check(
+      `npm pack ships no script whose imports it cannot resolve (${shippedScripts.length} scripts)`,
+      unresolved.length === 0,
+      unresolved.join("\n")
+    );
     // Every module of the library, and not a list of them: `files` in package.json
     // names the whole directory, so a new module ships without anybody saying so —
     // and a `files` entry narrowed later would take it back out just as quietly.
@@ -5305,6 +6052,487 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       }
     }
   }
+}
+
+// ---- WP19: the seed-target contract --------------------------------------------------
+// `.github/seed-targets.json` is the one place a seed asset is spelled. release.yml
+// attaches `nish-<version>-<asset>.tar.gz` and builds its `binaries` matrix from that
+// file; ci.yml's `seeds` job looks for exactly that name before it gives a platform a
+// `bootstrap` row. Neither workflow states a platform, because a contract written down
+// twice is two strings that agree until one of them is edited.
+//
+// Four things can rot in that file without breaking a build -- a `triple` the compiler
+// cannot target, an `asset` that has stopped being that triple's short spelling, a
+// `host` that is not the machine the triple names, and a `runner` label GitHub has
+// retired -- and one thing can rot in the jobs it feeds, which is worse: reporting
+// success for a freeze it did not check, or red for a state in which nothing is wrong.
+// §A5 of wp19-stage0-retirement.md is what the first of those costs, and all of them
+// have now happened here, which is why `.github/seed-matrix.sh` and
+// `.github/seed-due.sh` are *run* below rather than read.
+if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
+  const seedTargets = JSON.parse(fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8"));
+  const { resolveTarget } = await import(pathToFileURL(path.join(root, "dist", "codegen", "target.js")).href);
+  const rows = seedTargets.targets;
+  const pkgVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  const semver = (v) => v.split(".").map(Number);
+  const notAfter = (a, b) => {
+    const [x, y] = [semver(a), semver(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+    }
+    return true;
+  };
+  const due = rows.filter((t) => notAfter(t.attachedSince, pkgVersion));
+  check("seed targets: the file lists targets", Array.isArray(rows) && rows.length > 0);
+
+  // The canonical spelling, `x86_64-unknown-linux-gnu` rather than one of its aliases:
+  // the asset name is derived from it below, and two spellings of one triple would
+  // derive two names for one binary.
+  const uncanonical = rows.filter((t) => resolveTarget(t.triple)?.triple !== t.triple);
+  check(
+    `seed targets: every triple is one src/codegen/target.ts calls canonical (${rows.length}: ${rows.map((t) => t.asset).join(", ")})`,
+    uncanonical.length === 0,
+    uncanonical.map((t) => `${t.asset}: ${t.triple}`).join("\n")
+  );
+
+  // The asset name is the triple with the vendor and the ABI dropped, and that is the
+  // whole of the rule: x86_64-unknown-linux-gnu -> x86_64-linux, aarch64-apple-darwin ->
+  // aarch64-darwin. A derivation rather than a second list is what keeps the tarball
+  // names and the compiler's targets one set of platforms instead of two -- two of the
+  // four asset names were once written down as triples the compiler accepts, and
+  // `aarch64-darwin` and `x86_64-darwin` are not spellings it has ever accepted.
+  const derive = (triple) => {
+    const part = triple.split("-");
+    return `${part[0]}-${part[2]}`;
+  };
+  const misnamed = rows.filter((t) => t.asset !== derive(t.triple));
+  check(
+    "seed targets: every asset name is its triple without the vendor or the ABI",
+    misnamed.length === 0,
+    misnamed.map((t) => `${t.asset} != ${derive(t.triple)} (from ${t.triple})`).join("\n")
+  );
+
+  // `host` is what `uname -s`-`uname -m` prints on that platform, and release.yml's
+  // `binaries` job refuses to stamp the asset name into a tarball built on a machine
+  // that prints something else. That guard is the last one standing between a mislabelled
+  // asset and a user, so the row it compares against had better be derivable from the
+  // triple rather than typed: `aarch64-apple-darwin` is `Darwin-arm64` and nothing else.
+  const uname = (triple) => {
+    const [arch, , os] = triple.split("-");
+    const sys = { linux: "Linux", darwin: "Darwin" }[os];
+    const machine = os === "darwin" && arch === "aarch64" ? "arm64" : arch;
+    return sys ? `${sys}-${machine}` : undefined;
+  };
+  const mishosted = rows.filter((t) => t.host !== uname(t.triple));
+  check(
+    "seed targets: every host is the `uname -s`-`uname -m` its triple names",
+    mishosted.length === 0,
+    mishosted.map((t) => `${t.asset}: ${t.host} != ${uname(t.triple)} (from ${t.triple})`).join("\n")
+  );
+
+  // A runner label GitHub has retired is a row that never runs: release.yml's matrix is
+  // `runs-on: ${{ matrix.target.runner }}` and so is ci.yml's `bootstrap`, so the label
+  // is executable configuration rather than documentation. This is a denylist and not a
+  // whitelist because there is no authoritative list of live labels in this repository
+  // and inventing one would fail on the day GitHub adds an image -- but a label known to
+  // be gone is exactly the defect that shipped here: `macos-13` stood in this file after
+  // GitHub retired the last Intel macOS image, so the day a release attached
+  // `x86_64-darwin` its bootstrap row would have had nowhere to run.
+  const retired = {
+    "macos-11": "retired 2024; use macos-15-intel for x86_64 darwin",
+    "macos-12": "retired 2024-12; use macos-15-intel for x86_64 darwin",
+    "macos-13": "retired 2025-12, the last Intel image under that name; use macos-15-intel",
+    "ubuntu-18.04": "retired 2023",
+    "ubuntu-20.04": "retired 2025-04",
+  };
+  const dead = rows.filter((t) => retired[t.runner]);
+  check(
+    `seed targets: no row names a retired runner label (${rows.map((t) => t.runner).join(", ")})`,
+    dead.length === 0,
+    dead.map((t) => `${t.asset}: ${t.runner} -- ${retired[t.runner]}`).join("\n")
+  );
+
+  // `attachedSince` is a version and not a boolean, and that is load-bearing rather than
+  // cosmetic. A boolean says "release.yml builds this today", which is a statement about
+  // the workflow; `seeds` reads it as "the last release carried this", which is a
+  // statement about a past event. The two part company in exactly the commit that adds a
+  // platform: flipping a boolean to true while teaching release.yml to build the asset
+  // turns `seeds` red against the release that came before, and release.yml's `release`
+  // job is `needs: ci` -- so the release that would carry the asset cannot be cut, and
+  // the flag cannot be flipped until it is. A version dates the claim instead.
+  const badSince = rows.filter((t) => typeof t.attachedSince !== "string" || !/^\d+(\.\d+)*$/.test(t.attachedSince));
+  check(
+    "seed targets: every attachedSince is a dotted-integer version, not a boolean",
+    badSince.length === 0,
+    badSince.map((t) => `${t.asset}: ${JSON.stringify(t.attachedSince)}`).join("\n")
+  );
+  check(
+    `seed targets: at least one target is due at ${pkgVersion}, or nothing checks the rolling freeze at all (${due.map((t) => t.asset).join(", ") || "none"})`,
+    due.length > 0
+  );
+  check(
+    "seed targets: the file says why attachedSince is a version rather than a boolean",
+    seedTargets.note.some((n) => n.includes("attachedSince")) &&
+      seedTargets.note.some((n) => n.includes("deadlock"))
+  );
+
+  // release.yml reads the spelling; it must not also state it. The failure this guards
+  // against is the ordinary one -- a name edited on one side of the contract -- and it
+  // looks exactly like the lines that used to be there: a `case "$(uname -s)"` mapping
+  // hosts to assets, a matrix listing four triples, and four paths on the `gh release
+  // create` line. An asset name anywhere in that file is one of them coming back.
+  //
+  // Checked for every row and not only the due ones, because a release.yml that spells a
+  // platform it does not yet build is the same defect one release early.
+  //
+  // Runner labels are deliberately NOT part of this: `ubuntu-latest` is what the
+  // `targets` and `release` jobs themselves run on, so the label legitimately appears
+  // and forbidding it would be wrong. What must not be hardcoded is the `binaries`
+  // matrix, and that is asserted directly -- its rows and its runner both come from the
+  // file, by way of the `targets` job. A retired label is the retired-label check above,
+  // which is where that defect belongs.
+  const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
+  const spelled = rows.filter((t) => releaseYml.includes(t.asset));
+  check(
+    "seed targets: release.yml names no asset, because it reads them from the file",
+    releaseYml.includes("seed-targets.json") && releaseYml.includes("seed-due.sh") && spelled.length === 0,
+    spelled.map((t) => t.asset).join(", ")
+  );
+  check(
+    "seed targets: release.yml's binaries matrix and its runner are both the file's answer",
+    /matrix:\s*\n\s*target: \$\{\{ fromJSON\(needs\.targets\.outputs\.rows\) \}\}/.test(releaseYml) &&
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, which is the string being looked for
+      releaseYml.includes("runs-on: ${{ matrix.target.runner }}"),
+    releaseYml.split("\n").filter((l) => l.includes("runs-on") || l.includes("matrix")).join("\n")
+  );
+
+  // docs/INSTALL.md's table tells a reader which release first carries the binary for
+  // their platform, and it says in so many words that the versions in it are
+  // `attachedSince` rather than prose. That sentence is a claim about this repository,
+  // so it is checked here: a row added to the JSON, or an attachedSince moved, has to
+  // reach the table a user actually reads. The alternative is the failure this whole
+  // file exists to prevent, one document further out.
+  const install = fs.readFileSync(path.join(root, "docs", "INSTALL.md"), "utf8");
+  const tabled = rows.filter((t) => {
+    const row = install.split("\n").find((l) => l.includes(`nish-<version>-${t.asset}.tar.gz`));
+    return row && row.trim().endsWith(`| v${t.attachedSince} |`);
+  });
+  check(
+    `seed targets: docs/INSTALL.md's table names every asset with the version it is attached from (${rows.length})`,
+    tabled.length === rows.length,
+    rows
+      .filter((t) => !tabled.includes(t))
+      .map((t) => `${t.asset}: expected a table row ending "| v${t.attachedSince} |"`)
+      .join("\n")
+  );
+
+  // `.github/seed-due.sh` is the one place a version is compared, because release.yml
+  // asks it about the version being released and seed-matrix.sh asks it about the last
+  // release's -- the same question about two different versions, which is the whole
+  // distinction the boolean could not draw. Answered in two places it would be the same
+  // two-strings defect one level down.
+  const dueSh = (version) =>
+    spawnSync("bash", [path.join(root, ".github", "seed-due.sh"), version], { cwd: root, encoding: "utf8" });
+  if (!has("jq")) {
+    skip("seed matrix: jq is not installed, so .github/seed-due.sh and seed-matrix.sh were not run (their states are unchecked here)");
+  } else {
+    const dueNow = dueSh(pkgVersion);
+    check(
+      `seed-due: ${pkgVersion} is due exactly the targets whose attachedSince it has reached (${due.map((t) => t.asset).join(", ")})`,
+      dueNow.status === 0 &&
+        JSON.stringify(JSON.parse(dueNow.stdout).map((t) => t.asset)) === JSON.stringify(due.map((t) => t.asset)),
+      dueNow.stdout + dueNow.stderr
+    );
+    const dueAll = dueSh("9.9.9");
+    check(
+      "seed-due: a far-future version is due every target in the file",
+      dueAll.status === 0 && JSON.parse(dueAll.stdout).length === rows.length,
+      dueAll.stdout + dueAll.stderr
+    );
+    const dueNone = dueSh("0.0.1");
+    check(
+      "seed-due: a version before the first attachedSince is due nothing",
+      dueNone.status === 0 && JSON.parse(dueNone.stdout).length === 0,
+      dueNone.stdout + dueNone.stderr
+    );
+    // A version this cannot order must stop the run rather than sort oddly: every caller
+    // is deciding whether a missing release asset is a failure, and finding out that the
+    // scheme changed by mis-ordering a prerelease is the wrong way round.
+    const dueJunk = dueSh("0.3.0-rc1");
+    check(
+      "seed-due: a version it cannot order is refused rather than guessed at",
+      dueJunk.status === 2 && dueJunk.stderr.includes("dotted-integer"),
+      `exit ${dueJunk.status}\n${dueJunk.stdout}${dueJunk.stderr}`
+    );
+  }
+
+  // `.github/seed-matrix.sh` decides which platforms get a bootstrap row, driven by a
+  // stand-in for the GitHub CLI so all of its states can be asked for here. The states
+  // are not interchangeable: a seed a release was DUE to carry and did not is a broken
+  // gate, a seed not yet due is a platform with no row, and no release at all is every
+  // platform in that second state at once -- which may not be red, because release.yml's
+  // release job is `needs: ci` and the first release is what would supply the seed.
+  //
+  // The tags below are chosen to separate those states rather than to be realistic:
+  // `v0.2.0` is a version only the first target is due at, and `v9.9.9` is one every
+  // target is due at. With a boolean there was no way to write the second pair of cases
+  // at all, which is how the deadlock got as far as this file.
+  const seedDir = path.join(buildDir, "wp19-seed-matrix");
+  fs.rmSync(seedDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(seedDir, "bin"), { recursive: true });
+  const ghStub = path.join(seedDir, "bin", "gh");
+  fs.writeFileSync(
+    ghStub,
+    '#!/usr/bin/env bash\n# Stand-in for `gh`, answering from FAKE_TAG / FAKE_ASSETS.\ncase "$2" in\n' +
+      "  list) printf '%s\\n' \"$FAKE_TAG\" ;;\n" +
+      "  view) [ -n \"$FAKE_ASSETS\" ] && printf '%s\\n' $FAKE_ASSETS ;;\n" +
+      "esac\nexit 0\n"
+  );
+  fs.chmodSync(ghStub, 0o755);
+  const seedMatrix = (tag, assets) => {
+    const outFile = path.join(seedDir, "output");
+    fs.writeFileSync(outFile, "");
+    const r = spawnSync("bash", [path.join(root, ".github", "seed-matrix.sh")], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${path.join(seedDir, "bin")}${path.delimiter}${process.env.PATH}`,
+        FAKE_TAG: tag,
+        FAKE_ASSETS: assets,
+        GITHUB_OUTPUT: outFile,
+        GITHUB_STEP_SUMMARY: "",
+      },
+    });
+    const written = fs.readFileSync(outFile, "utf8");
+    const rowsLine = /^rows=(.*)$/m.exec(written);
+    return { ...r, rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined };
+  };
+
+  const first = rows[0];
+  const later = rows.find((t) => !notAfter(t.attachedSince, "0.2.0"));
+  if (!has("jq")) {
+    // The skip above covers this block too; one SKIP line for one missing tool.
+  } else {
+    const carried = seedMatrix("v0.2.0", `nish-0.2.0.tgz nish-0.2.0-${first.asset}.tar.gz`);
+    check(
+      `seed matrix: a release carrying ${first.asset} gives that platform a bootstrap row`,
+      carried.status === 0 &&
+        carried.rows?.length === 1 &&
+        carried.rows[0].asset === first.asset &&
+        carried.rows[0].tag === "v0.2.0" &&
+        carried.rows[0].tarball === `nish-0.2.0-${first.asset}.tar.gz` &&
+        carried.rows[0].runner === first.runner,
+      carried.stdout + carried.stderr
+    );
+
+    // The negative, and half the reason this block exists: a seed the release was DUE to
+    // attach is missing. That is a platform that COULD have checked the freeze and did
+    // not, so it is red -- red here, and red for the release workflow that runs this one
+    // through `needs: ci`. A warning here would be a green check standing for a gate
+    // nobody ran.
+    const dropped = seedMatrix("v0.2.0", "nish-0.2.0.tgz");
+    check(
+      `seed matrix: a release that attaches no ${first.asset} seed FAILS rather than warns`,
+      dropped.status === 1 && dropped.stdout.includes("::error::"),
+      `exit ${dropped.status}\n${dropped.stdout}${dropped.stderr}`
+    );
+
+    // A release that carries no seed for a platform not yet due one is the other absence,
+    // and it is not that one: it is expected, it gets no row, and it is green. This is
+    // the arm that says the release which first attaches those binaries can actually be
+    // cut -- v0.2.0 does not carry them, and if this were red it could not be.
+    const notYet = seedMatrix("v0.2.0", `nish-0.2.0-${first.asset}.tar.gz`);
+    check(
+      `seed matrix: no ${later.asset} seed at v0.2.0 is a platform with no row rather than a failure`,
+      notYet.status === 0 && notYet.rows?.length === due.length && !notYet.rows.some((r) => r.asset === later.asset),
+      `exit ${notYet.status}\n${notYet.stdout}${notYet.stderr}`
+    );
+
+    // The same absence one release later, when it has become the first kind. This is the
+    // pair the boolean could not express: `attached: false` made the row above green
+    // forever, so a release.yml that silently stopped attaching a darwin binary would
+    // have reported a platform with no row instead of a broken gate.
+    const overdue = seedMatrix("v9.9.9", `nish-9.9.9-${first.asset}.tar.gz`);
+    check(
+      `seed matrix: once ${later.asset} is due, a release without it FAILS rather than going quiet`,
+      overdue.status === 1 && overdue.stdout.includes("::error::") && overdue.stdout.includes(later.asset),
+      `exit ${overdue.status}\n${overdue.stdout}${overdue.stderr}`
+    );
+
+    // And no release at all: nothing could have been checked anywhere, so there is no row,
+    // no failure, and no green check claiming otherwise. This is the state before 0.1.0
+    // and in every fork, and making it red is how a release train deadlocks.
+    const none = seedMatrix("", "");
+    check(
+      "seed matrix: before the first release there is no seed, no row and no failure",
+      none.status === 0 && none.rows?.length === 0 && none.stdout.includes("::notice::"),
+      `exit ${none.status}\n${none.stdout}${none.stderr}`
+    );
+
+    // And the claim ci.yml makes about the day WP19 G5 attaches a darwin binary: the row
+    // appears with no edit to the workflow, on the runner the file names. It is checked
+    // rather than asserted in a comment, because the last comment that said this was not
+    // true.
+    const all = rows.map((t) => `nish-9.9.9-${t.asset}.tar.gz`).join(" ");
+    const future = seedMatrix("v9.9.9", all);
+    check(
+      `seed matrix: a seed for every target gives each a row on its own runner with no edit to ci.yml`,
+      future.status === 0 &&
+        future.rows?.length === rows.length &&
+        future.rows.every((r, i) => r.asset === rows[i].asset && r.runner === rows[i].runner),
+      future.stdout + future.stderr
+    );
+  }
+}
+
+// ---- WP19: stage3 == stage2, on both platforms ---------------------------------------
+// `scripts/verify-binaries.sh` is the last equality `scripts/bootstrap.sh --verify`
+// asserts, and it is a script of its own so that this block can ask it for the arm the
+// machine running the suite does not have. On ELF two links of one input are
+// byte-identical and that is asserted; on Mach-O they are not, because ld64 writes a
+// debug map naming each .o by path and mtime, so there the comparison narrows to the
+// size and to equality with the debug information stripped out.
+//
+// Narrows, not lifts: an arm that printed a line and carried on would accept a stage3
+// that is a different compiler from stage2, which is the one thing this comparison is
+// for. The pairs below are fabricated rather than bootstrapped, because the point is to
+// present each arm with a difference it must catch and one it must forgive -- a real
+// bootstrap only ever produces the identical case on this platform, which is how the
+// Darwin arm came to be written without a test.
+if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
+  const vb = path.join(root, "scripts", "verify-binaries.sh");
+  const dir = path.join(buildDir, "wp19-verify-binaries");
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const run = (a, b, os) =>
+    spawnSync("bash", [vb, a, b], {
+      cwd: root,
+      encoding: "utf8",
+      env: os === undefined ? process.env : { ...process.env, NISH_UNAME_S: os },
+    });
+
+  const same1 = path.join(dir, "same1");
+  const same2 = path.join(dir, "same2");
+  fs.writeFileSync(same1, "the same twenty-eight bytes!");
+  fs.writeFileSync(same2, "the same twenty-eight bytes!");
+  for (const os of ["Linux", "Darwin"]) {
+    const r = run(same1, same2, os);
+    check(
+      `verify-binaries: byte-identical binaries pass on ${os}`,
+      r.status === 0 && r.stdout.includes("byte-identical"),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    );
+  }
+
+  // The ELF arm, which nothing else in the suite reaches: a differing stage3 is a
+  // failure there whatever the difference is.
+  const other = path.join(dir, "other");
+  fs.writeFileSync(other, "the same twenty-eight byteS!");
+  const elf = run(same1, other, "Linux");
+  check(
+    "verify-binaries: on ELF any difference between stage3 and stage2 fails",
+    elf.status === 1 && elf.stderr.includes("not byte-identical"),
+    `exit ${elf.status}\n${elf.stdout}${elf.stderr}`
+  );
+
+  // And the first half of the Darwin arm: a size difference is not the debug map, so it
+  // fails there too. This is the assertion the blanket exemption did not make.
+  const longer = path.join(dir, "longer");
+  fs.writeFileSync(longer, "the same twenty-eight bytes! and more");
+  const sized = run(same1, longer, "Darwin");
+  check(
+    "verify-binaries: on Mach-O a size difference fails, because the size is not the debug map",
+    sized.status === 1 && sized.stderr.includes("not even the same size"),
+    `exit ${sized.status}\n${sized.stderr}${sized.stdout}`
+  );
+
+  // The second half needs two real object files that differ only in a debug section, so
+  // that stripping makes them equal -- fabricated with objcopy, which is also what does
+  // the stripping. Without a C toolchain and an objcopy this is unprovable here and says
+  // so rather than passing.
+  const objcopy = ["llvm-objcopy", "objcopy"].find((t) => has(t));
+  if (!objcopy || !has("clang")) {
+    skip(
+      "verify-binaries: the Mach-O debug-map arms need clang and llvm-objcopy/objcopy, so the pair that differs only in debug info was not built (that arm is unchecked here)"
+    );
+  } else {
+    const src = path.join(dir, "s.c");
+    const base = path.join(dir, "base");
+    fs.writeFileSync(src, "int main(void){return 7;}\n");
+    const built = spawnSync("clang", ["-O1", "-o", base, src], { encoding: "utf8" });
+    const mk = (name, fill) => {
+      const sec = path.join(dir, `${name}.bin`);
+      const out = path.join(dir, name);
+      fs.writeFileSync(sec, fill.repeat(64));
+      const r = spawnSync(
+        objcopy,
+        [`--add-section=.debug_str=${sec}`, "--set-section-flags=.debug_str=readonly,debug", base, out],
+        { encoding: "utf8" }
+      );
+      return r.status === 0 ? out : undefined;
+    };
+    const dbgA = built.status === 0 ? mk("dbgA", "A") : undefined;
+    const dbgB = built.status === 0 ? mk("dbgB", "B") : undefined;
+    const ready =
+      dbgA &&
+      dbgB &&
+      fs.statSync(dbgA).size === fs.statSync(dbgB).size &&
+      !fs.readFileSync(dbgA).equals(fs.readFileSync(dbgB));
+    if (!ready) {
+      skip(
+        "verify-binaries: this toolchain would not produce two binaries of one size differing only in a debug section, so the Mach-O debug-map arms are unchecked here"
+      );
+    } else {
+      // The case the whole exemption exists for: same size, raw bytes differ, and the
+      // difference is entirely debug information. Forgiven on Mach-O.
+      const forgiven = run(dbgA, dbgB, "Darwin");
+      check(
+        "verify-binaries: on Mach-O a difference that is only the debug map passes, with the size asserted",
+        forgiven.status === 0 &&
+          forgiven.stdout.includes("identical with the debug map") &&
+          forgiven.stdout.includes(String(fs.statSync(dbgA).size)),
+        `exit ${forgiven.status}\n${forgiven.stdout}${forgiven.stderr}`
+      );
+
+      // The same pair on ELF, where it is still a failure: the narrowing is Darwin's and
+      // it did not leak.
+      const strict = run(dbgA, dbgB, "Linux");
+      check(
+        "verify-binaries: the Mach-O narrowing does not apply on ELF",
+        strict.status === 1,
+        `exit ${strict.status}\n${strict.stdout}${strict.stderr}`
+      );
+
+      // And the case the exemption must NOT forgive: same size, and the difference
+      // survives stripping, so it is the code. This is what an arm that only printed a
+      // line would have shipped as a seed.
+      const codeA = path.join(dir, "codeA");
+      const codeB = path.join(dir, "codeB");
+      fs.writeFileSync(codeA, fs.readFileSync(dbgA));
+      const bytes = fs.readFileSync(dbgA);
+      // Flip a byte inside the ELF header's padding-free entry point area rather than in
+      // the appended debug section, so stripping cannot remove the difference.
+      bytes[0x18] = bytes[0x18] ^ 0xff;
+      fs.writeFileSync(codeB, bytes);
+      const caught = run(codeA, codeB, "Darwin");
+      check(
+        "verify-binaries: on Mach-O a same-size difference that survives stripping FAILS",
+        caught.status === 1,
+        `exit ${caught.status}\n${caught.stdout}${caught.stderr}`
+      );
+    }
+  }
+
+  // The platform test is the only thing NISH_UNAME_S overrides, and it defaults to the
+  // real `uname -s`: the override is a test hook and must not change what a release
+  // asserts when nobody sets it.
+  const real = run(same1, other, undefined);
+  check(
+    "verify-binaries: with NISH_UNAME_S unset the host's own platform decides the arm",
+    process.platform === "darwin" ? real.status === 1 || real.status === 0 : real.status === 1,
+    `exit ${real.status}\n${real.stdout}${real.stderr}`
+  );
 }
 
 // ---- WP12: changelog ----------------------------------------------------------------
@@ -5504,6 +6732,440 @@ if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
   );
 }
 
+// ---- WP22 §2: the two spellings, and the codemod that rewrites one into the other ----
+// Stage A was declared done on "the two spellings of one program emit byte-identical IR",
+// and until now nothing in `npm test` asked. The claim is structural rather than lucky --
+// the emitter iterates checked `FunctionSig`s and there is no `isFunctionDeclaration`
+// anywhere in `src/codegen/` -- which is exactly why it is worth a check: a pass that
+// started reading the declaration's syntax kind would break it silently, and the goldens
+// would not notice, because every golden is written in one spelling or the other and each
+// would go on matching itself.
+//
+// The same pair pins `scripts/arrowify.mjs`, the codemod stage C's `self/` rewrite runs.
+// `arrow.ts` is `declared.ts` written out by hand, so the codemod owes the two fixtures
+// the same relationship a reader sees between them: everything below the header comment,
+// character for character. That is a stronger statement about the tool than any IR
+// comparison, because it is checked against a file somebody wrote rather than against the
+// tool's own output. Nothing here is assembled or run, so it needs no toolchain.
+if (!only || "arrow".includes(only) || "spelling".includes(only)) {
+  const ts = require("typescript");
+  const fixtures = path.join(root, "tests", "differential", "arrow-parity");
+  const out = path.join(buildDir, "arrow-spelling");
+  const emit = (name) => {
+    const dir = path.join(out, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const run = spawnSync("node", [cli, path.join(fixtures, `${name}.ts`), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const ll = path.join(dir, `${name}.ll`);
+    return run.status === 0 && fs.existsSync(ll) ? stripHeader(fs.readFileSync(ll, "utf8")) : null;
+  };
+  const declared = emit("declared");
+  const arrow = emit("arrow");
+  check(
+    "WP22: the `function` and arrow spellings of one program emit identical IR",
+    declared !== null && declared === arrow,
+    declared === null || arrow === null ? "a fixture did not compile" : "the two modules differ"
+  );
+
+  // Each fixture explains itself in its own header comment, so the two are required to
+  // agree from the first declaration onwards and not before it. The sentinel that finds
+  // that point has to be *found*: `indexOf` answers -1 for a fixture that was renamed or
+  // truncated, `slice(-1)` is then the last byte of each file, and the check would go on
+  // passing while comparing one newline with another.
+  const SENTINEL = "const label";
+  const program = (text) => text.slice(text.indexOf(SENTINEL));
+  const rewritten = arrowify(fs.readFileSync(path.join(fixtures, "declared.ts"), "utf8"), "declared.ts");
+  const byHand = fs.readFileSync(path.join(fixtures, "arrow.ts"), "utf8");
+  const anchored = rewritten.text.includes(SENTINEL) && byHand.includes(SENTINEL);
+  check(
+    "WP22: `scripts/arrowify.mjs` rewrites the `function` fixture into its hand-written arrow twin",
+    anchored && program(rewritten.text) === program(byHand),
+    anchored
+      ? `rewrote ${rewritten.changed} declaration(s)`
+      : `neither fixture may lose \`${SENTINEL}\`: the rewrite ${
+          rewritten.text.includes(SENTINEL) ? "kept" : "lost"
+        } it, arrow.ts ${byHand.includes(SENTINEL) ? "kept" : "lost"} it`
+  );
+
+  // WP22 §9: `declare function` defines nothing, so it is not a competing spelling and
+  // the codemod may not reach for it -- the arrow form would need a function type, which
+  // Phase 0 forbids. `ffi_scalar` is the case that has both in one file, and every
+  // number here is counted off that file rather than written down, including how many
+  // definitions it has: stage C converts `tests/cases/` next, so a check that required
+  // this case to still contain a `function` would go red on the migration it exists to
+  // enable. What must hold either way is that the ambient lines survive verbatim, that
+  // exactly the definitions present were rewritten, and that none is left behind.
+  const ffiSource = fs.readFileSync(path.join(casesDir, "ffi_scalar.ts"), "utf8");
+  const ambient = ffiSource.split("\n").filter((l) => l.startsWith("declare function "));
+  const before22 = ffiSource.split("\n").filter((l) => /^(export )?function /.test(l));
+  const ffi = arrowify(ffiSource, "ffi_scalar.ts");
+  const kept = ambient.every((line) => ffi.text.includes(line));
+  const definitions = ffi.text.split("\n").filter((l) => /^(export )?function /.test(l));
+  check(
+    "WP22 §9: the codemod leaves `declare function` alone and rewrites the definitions beside it",
+    ambient.length > 0 && kept && ffi.changed === before22.length && definitions.length === 0,
+    `${ambient.length} ambient (${kept ? "kept" : "LOST"}), ${ffi.changed} rewritten of ` +
+      `${before22.length} definition(s), ${definitions.length} left`
+  );
+
+  // The three forms with no arrow spelling at all. Each is a `reject_*` case, and each
+  // was rewritten by an earlier draft of the codemod into something that *compiled* --
+  // `declare const h = () => {...}`, an ordinary function where `function* g` had been,
+  // and `export default const f`, which is not a sentence. A codemod that turns a
+  // refused program into a compiling one is the worst thing one of these can do, because
+  // every gate downstream reads the program it was handed and not the program somebody
+  // wrote. These three cases are the shapes that say so, and none of them is in `self/`,
+  // which is why the rewrite that matters would never have found them.
+  // The claim is about the one declaration, not about the whole file -- `reject_ffi_body`
+  // also has an ordinary `main` the codemod is right to convert -- so each row names the
+  // shape and the line carrying it has to survive the rewrite verbatim.
+  for (const [name, shape, why] of [
+    ["reject_ffi_body", /^declare function /m, "a `declare function` that wrongly carries a body is still ambient"],
+    ["reject_generator", /^function\* /m, "`function*` keeps its asterisk"],
+    ["reject_export_default", /^export default function /m, "`export default function` has no arrow spelling"],
+  ]) {
+    const before = fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8");
+    const line = (before.split("\n").find((l) => shape.test(l)) ?? "").trim();
+    const after = arrowify(before, `${name}.ts`);
+    check(
+      `WP22: the codemod leaves \`${name}\` alone -- ${why}`,
+      line.length > 0 && after.text.includes(line),
+      line.length > 0 ? `\`${line}\` did not survive the rewrite` : `no line in ${name}.ts matches ${shape}`
+    );
+  }
+
+  // `--concise` drops the braces, and the grammar then decides what has to be put back:
+  // `ConciseBody` is `[lookahead != {] ExpressionBody`, so a body whose *first token* is
+  // `{` re-parses as a block. Asking instead whether the returned node is an object
+  // literal answers that only for the expression that is one to its last byte, and turns
+  // `return { a: 1 } as Pair;` into `=> { a: 1 } as Pair`, which is two parse errors and
+  // a corrupted source file. That is the same mistake as the `declare` rule above, one
+  // node deeper, so each row is parsed back rather than string-matched: a rewrite whose
+  // output does not re-parse is the failure this is watching for.
+  for (const [what, source] of [
+    ["an object literal", "function mk(): Pair {\n  return { first: 1, second: 2 };\n}\n"],
+    ["an object literal in a cast", "function mk(): Pair {\n  return { first: 1, second: 2 } as Pair;\n}\n"],
+    ["a field read off one", "function first(): i32 {\n  return { first: 1, second: 2 }.first;\n}\n"],
+    [
+      "an arrow that was already an arrow",
+      "const mk = (): Pair => {\n  return { first: 1, second: 2 } as Pair;\n};\n",
+    ],
+  ]) {
+    const collapsed = arrowify(source, "concise.ts", { concise: true });
+    const reparsed = ts.createSourceFile("concise.ts", collapsed.text, ts.ScriptTarget.Latest, true);
+    check(
+      `WP22: \`--concise\` parenthesises a body that begins with \`{\` -- ${what}`,
+      reparsed.parseDiagnostics.length === 0 && collapsed.text.includes("=> ({"),
+      collapsed.text.trim()
+    );
+  }
+
+  // Every position the splice cuts at comes from the tree, because a comment can contain
+  // the syntax a search would find first: the word `function` in a leading comment, a
+  // parenthesis in a comment after the name or inside the parameter list. Locating an
+  // edit by `indexOf` put the splice inside the comment and wrote back a file that no
+  // longer parses, with exit 0 -- the worst thing a codemod can do to a file nobody is
+  // reading line by line. Where the comment sits in the one region the rewrite discards
+  // -- between `function` and the parameter list, which becomes `const NAME = ` -- there
+  // is nowhere to put it, so the declaration is refused instead of quietly losing it.
+  for (const [what, source, expected] of [
+    ["the keyword inside a leading comment", "export /* the function below */ function f(): i32 {\n  return 1;\n}\n", "rewritten"],
+    ["a `)` inside a parameter comment", "function h(a: i32 /* ) */ ) {\n  use(a);\n}\n", "rewritten"],
+    ["a comment between `function` and the name", "function /* named */ k(): i32 {\n  return 1;\n}\n", "refused"],
+    ["a comment between the name and the `(`", "function g /* ( a ) */ (): i32 {\n  return 1;\n}\n", "refused"],
+  ]) {
+    const spliced = arrowify(source, "splice.ts");
+    const reparsed = ts.createSourceFile("splice.ts", spliced.text, ts.ScriptTarget.Latest, true);
+    const rewritten = spliced.changed === 1 && spliced.skipped.length === 0;
+    const refused = spliced.changed === 0 && spliced.skipped.length === 1 && spliced.text === source;
+    check(
+      `WP22: the codemod splices from the tree, not from a text search -- ${what}`,
+      reparsed.parseDiagnostics.length === 0 && (expected === "rewritten" ? rewritten : refused),
+      `${spliced.changed} rewritten, ${spliced.skipped.length} left alone, ` +
+        `${reparsed.parseDiagnostics.length} parse error(s): ${JSON.stringify(spliced.text)}`
+    );
+  }
+
+  // The CLI's own refusals. `--check` answers with an exit code and `--stdout` with a
+  // file, so asking for both used to answer 0 with the rewrites still pending; and a
+  // misspelled `--concise` was ignored, which is a collapse pass that did not happen in
+  // a recipe whose whole point is which pass ran.
+  const cli22 = (...args) =>
+    spawnSync("node", [path.join(root, "scripts", "arrowify.mjs"), ...args], { cwd: root, encoding: "utf8" }).status;
+  // The fixture is written here rather than copied from `tests/cases/`, for two
+  // reasons. The flag these ask about is one an unfixed codemod *ignores*, and an
+  // ignored flag means the run rewrites whatever it was handed, so pointing it at a
+  // golden case would overwrite one on the way to failing. And `--check` answers 1
+  // only while something is left to rewrite: stage C converts `tests/cases/` next, so
+  // a corpus file as the subject would take this check red exactly when the migration
+  // succeeds.
+  const oneFunction = path.join(buildDir, "arrow-flags.ts");
+  fs.writeFileSync(oneFunction, "export function twice(n: i32): i32 {\n  return n * 2;\n}\n");
+  check(
+    "WP22: the codemod refuses a flag it does not have, and a pair of flags it cannot answer both of",
+    cli22("--consise", oneFunction) === 2 &&
+      cli22("--check", "--stdout", oneFunction) === 2 &&
+      cli22("--stdout", oneFunction, oneFunction) === 2 &&
+      cli22("--check", oneFunction) === 1,
+    "expected 2, 2, 2 and 1"
+  );
+
+  // The verifier answers for its own flags the same way, and for the same reason: a
+  // `--debg` that silently drops `-g`, or a `--rev=HEAD~1` that silently compares
+  // against HEAD, is a sweep reporting on something other than what it was asked about.
+  // These stop before any compiling, so they cost three process starts.
+  const verify22 = (...args) =>
+    spawnSync("node", [path.join(root, "scripts", "arrow-verify.mjs"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+    }).status;
+  // The sweep compiles a *copy* of the tracked tree, and a tracked symlink has to
+  // arrive in it as a symlink. `tests/link/package_symlink` is a package reached a
+  // second time through a link, and what the compiler answers there is what the link
+  // resolves to, so following it while copying would compile a tree the repository
+  // does not have. `copyFileSync` does not even get that far on a link to a
+  // directory: it throws `EISDIR`, which took the whole sweep down the first time
+  // `self/` was verified against a tree that had one.
+  const linkRoot = path.join(root, "build", "test", "wp22-symlink");
+  fs.rmSync(linkRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.join(linkRoot, "src", "pkg"), { recursive: true });
+  fs.symlinkSync("pkg", path.join(linkRoot, "src", "link"));
+  fs.symlinkSync("gone", path.join(linkRoot, "src", "broken"));
+  fs.symlinkSync("/etc", path.join(linkRoot, "src", "absolute"));
+  fs.symlinkSync("../../outside", path.join(linkRoot, "src", "climbing"));
+  const copyRoot = path.join(linkRoot, "copy");
+  fs.mkdirSync(copyRoot, { recursive: true });
+  // `copyInto` is given the copy root, because that is the boundary a link has
+  // to land inside of; the link itself sits directly in it here.
+  const copyLink = (name) => {
+    try {
+      return copyInto(path.join(linkRoot, "src", name), path.join(copyRoot, name), copyRoot);
+    } catch (error) {
+      return `threw ${error.code}`;
+    }
+  };
+  const copiedAs = copyLink("link");
+  check(
+    "WP22: the verifier copies a tracked symlink as a symlink",
+    copiedAs === "link" &&
+      fs.lstatSync(path.join(copyRoot, "link")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(copyRoot, "link")) === "pkg",
+    `copied as: ${copiedAs}`
+  );
+
+  // `git ls-files` names the index, and a tracked link whose target is gone is
+  // still a link the tree holds. `lstat` rather than `existsSync` is what keeps
+  // it from being counted as a missing file and dropped out of the copy.
+  const brokenAs = copyLink("broken");
+  check(
+    "WP22: the verifier copies a tracked symlink whose target is gone",
+    brokenAs === "link" &&
+      fs.lstatSync(path.join(copyRoot, "broken")).isSymbolicLink() &&
+      fs.readlinkSync(path.join(copyRoot, "broken")) === "gone" &&
+      !fs.existsSync(path.join(copyRoot, "broken")),
+    `copied as: ${brokenAs}`
+  );
+
+  check(
+    "WP22: a tracked symlink whose target is gone is still in the tree, not a missing file",
+    presentInTree(path.join(linkRoot, "src", "broken")) === true &&
+      presentInTree(path.join(linkRoot, "src", "nothing-here")) === false,
+    "a broken link is present; an absent path is not"
+  );
+
+  // A link that resolves out of the copy would make a compile read the live
+  // working tree instead of the reverted copy, so the `before` side of an
+  // `--applied` sweep would compile the rewrite it is supposed to be comparing
+  // against. Both shapes of escape are refused rather than reproduced.
+  const absoluteAs = copyLink("absolute");
+  const climbingAs = copyLink("climbing");
+  check(
+    "WP22: the verifier refuses a symlink that resolves outside the copy",
+    absoluteAs === "escapes" &&
+      climbingAs === "escapes" &&
+      !fs.existsSync(path.join(copyRoot, "absolute")) &&
+      !fs.existsSync(path.join(copyRoot, "climbing")),
+    `absolute: ${absoluteAs}, climbing: ${climbingAs}`
+  );
+
+  check(
+    "WP22: the verifier refuses a flag it does not have, and a `--rev` without a revision",
+    verify22("--debg", "tests/parser") === 2 &&
+      verify22("--applied", "--rev", "--verbose", "tests/parser") === 2 &&
+      verify22("--help") === 0,
+    "expected 2, 2 and 0"
+  );
+
+  // WP22 §9 keeps `declare function` legal because it defines nothing. A body-less
+  // declaration *without* `declare` is not that: it is an overload signature, which the
+  // language does not have, and the checker refuses the line
+  // (`tests/wordings/nl2204_function_without_body.ts`). The codemod leaves both alone, so
+  // the only thing it can get wrong is what it tells the migrator -- and reporting the
+  // second under the first's reason says the line is legal syntax when it is about to be
+  // rejected.
+  const overload = arrowify(
+    fs.readFileSync(path.join(root, "tests", "wordings", "nl2204_function_without_body.ts"), "utf8"),
+    "nl2204_function_without_body.ts"
+  );
+  const ambientReason = arrowify("declare function h(): i32;\n", "ambient.ts").skipped[0]?.reason ?? "";
+  check(
+    "WP22: the codemod does not report a body-less declaration as legal ambient syntax",
+    overload.skipped.length === 1 &&
+      overload.skipped[0].reason !== ambientReason &&
+      !overload.skipped[0].reason.includes("stays legal"),
+    `reported as: ${overload.skipped[0]?.reason ?? "nothing at all"}`
+  );
+
+  // `scripts/arrow-verify.mjs` is what the 721-declaration rewrite of `self/` will be
+  // done on the say-so of, so the two places it could report success over ground it did
+  // not check are pinned here rather than left to the sweep that takes half an hour.
+  //
+  // The first: the module comparison walks the *union* of the two sides. Iterating the
+  // before side alone makes a module that only exists after the rewrite invisible, and
+  // that is the difference most worth seeing -- it means the rewrite changed what the
+  // program is, not how it is spelled.
+  const sameBytes = Buffer.from("; ModuleID = 'a.ts'\n");
+  const onlyAfter = diffEmitted(
+    new Map([["main.ll", sameBytes]]),
+    new Map([
+      ["main.ll", sameBytes],
+      ["extra.ll", Buffer.from("; ModuleID = 'extra.ts'\n")],
+    ])
+  );
+  const onlyBefore = diffEmitted(new Map([["main.ll", sameBytes]]), new Map());
+  check(
+    "WP22: the verifier notices a module that exists only after the rewrite",
+    onlyAfter.length === 1 && onlyAfter[0].name === "extra.ll" && onlyBefore.length === 1,
+    `${onlyAfter.length} found after, ${onlyBefore.length} found before`
+  );
+
+  // And the exit path both halves of the sweep now go through, because five review
+  // rounds found the same defect five times in it: a subject counted as covered and
+  // then never compared. Four of those were in the loop over programs and the fifth in
+  // the loop over rejections -- a "rejection" that is not refused under the flags the
+  // sweep passes compared empty with empty and continued -- so there is one loop and
+  // one verdict now, and this is the table of what it may answer. A subject that
+  // produced nothing at all is `blind`, which fails the run; nothing else may quietly
+  // mean "no difference".
+  const side = (over) => ({ status: 0, stdout: "", said: "", emitted: new Map(), ...over });
+  const bytes = (text) => new Map([["main.ll", Buffer.from(text)]]);
+  const warn = (line) => `{"severity":"performance","code":"NL9001","message":"m","line":${line}}`;
+  for (const [what, a, b, expected, differences, moved] of [
+    ["identical modules", side({ emitted: bytes("x") }), side({ emitted: bytes("x") }), "emitted", 0, false],
+    ["a module that differs", side({ emitted: bytes("x") }), side({ emitted: bytes("y") }), "emitted", 1, false],
+    ["a dump on stdout", side({ stdout: "tree" }), side({ stdout: "tree" }), "dump", 0, false],
+    ["refused on one side only", side({ status: 1, said: "{}" }), side({}), "status", 0, false],
+    [
+      "refused on both, same words",
+      side({ status: 1, said: '{"code":"NL2204","message":"m","line":3}' }),
+      side({ status: 1, said: '{"code":"NL2204","message":"m","line":9}' }),
+      "refusal",
+      0,
+      true,
+    ],
+    [
+      "refused on both, different words",
+      side({ status: 1, said: '{"code":"NL2204","message":"m"}' }),
+      side({ status: 1, said: "" }),
+      "reworded",
+      0,
+      false,
+    ],
+    ["compiled clean and produced nothing", side({}), side({}), "blind", 0, false],
+    ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind", 0, false],
+    // The branch that needs two files to reach in a real sweep: a corpus file nobody
+    // staged is enumerated from the working tree by `programs()` and not copied by
+    // `copyTree`, which reads the index -- so it is absent on both sides, and the answer
+    // is that there was nothing to compile rather than that the two sides agreed.
+    [
+      "absent on both sides",
+      side({ absent: true, status: null }),
+      side({ absent: true, status: null }),
+      "blind",
+      0,
+      false,
+    ],
+    // A file added since the revision has no `<rev>:<path>`, so `--applied` empties it
+    // out of the copy for the before compile -- and reading it anyway ended the sweep in
+    // a stack trace at the exact moment §8b's recipe needs a verdict, which is what
+    // Phase 2 splitting or adding a `self/` module looks like.
+    [
+      "a subject added since the revision",
+      side({ absent: true, status: null }),
+      side({ emitted: bytes("x") }),
+      "absent",
+      0,
+      false,
+    ],
+    [
+      "a subject deleted since the revision",
+      side({ emitted: bytes("x") }),
+      side({ absent: true, status: null }),
+      "absent",
+      0,
+      false,
+    ],
+    // A compile that succeeded still has a diagnostic surface, and it was read on
+    // neither side: a `performance:` warning could move, change or disappear under a
+    // rewrite and the sweep reported `0 difference(s)`. 76 corpus programs warn, most of
+    // `self/` among them, and `--concise` moves every warning below a collapsed
+    // declaration -- so the silence was pointed straight at the migration.
+    [
+      "a warning that only moved",
+      side({ emitted: bytes("x"), said: warn(9) }),
+      side({ emitted: bytes("x"), said: warn(7) }),
+      "emitted",
+      0,
+      true,
+    ],
+    [
+      "a warning that disappeared",
+      side({ emitted: bytes("x"), said: warn(9) }),
+      side({ emitted: bytes("x") }),
+      "emitted",
+      1,
+      false,
+    ],
+  ]) {
+    const answer = verdict(a, b);
+    const found = (answer.differences ?? []).length;
+    check(
+      `WP22: the verifier gives every subject one verdict -- ${what} is \`${expected}\``,
+      answer.kind === expected && found === differences && (answer.moved ?? false) === moved,
+      `answered \`${answer.kind}\` with ${found} difference(s), moved=${answer.moved ?? false}`
+    );
+  }
+
+  // A subject is only evidence about a rewrite if the rewrite reached the
+  // modules it compiles. Counting one that did not is how a sweep over a slice that is
+  // already migrated reports `0 difference(s)` for compiling the same source twice.
+  check(
+    "WP22: the verifier counts a program as evidence only when the change reached it",
+    sitsOnChange("tests/link/std_testing/main.ts", new Set(["std/testing.ts"])) &&
+      sitsOnChange("tests/link/std_testing/main.ts", new Set(["tests/link/std_testing/main.ts"])) &&
+      !sitsOnChange("tests/link/std_testing/main.ts", new Set(["self/lexer.ts"])),
+    "an imported module counts, an unrelated file does not"
+  );
+
+  // The third: a rejection is compared by its words with every position stripped, so a
+  // `reject_*` case that starts compiling, or is refused under a different rule, differs
+  // and fails the run -- while a caret that moved is only reported, because under
+  // `--concise` the lines move by construction (WP22 §8c).
+  const said = (line, code, message) =>
+    JSON.stringify({ file: "x.ts", line, column: 3, severity: "error", code, message });
+  check(
+    "WP22: the verifier fails a rejection whose words changed and tolerates one that only moved",
+    diagnosticWords(said(4, "NL2204", "Functions must have a body")) ===
+      diagnosticWords(said(9, "NL2204", "Functions must have a body")) &&
+      diagnosticWords(said(4, "NL2204", "Functions must have a body")) !== diagnosticWords("") &&
+      diagnosticWords(said(4, "NL2204", "Functions must have a body")) !==
+        diagnosticWords(said(4, "NL1002", "`function*` is not supported")),
+    "positions must normalise away and codes must not"
+  );
+}
+
 // ---- WP13: differential -------------------------------------------------------------
 // Every whole program in tests/cases and tests/differential/corpus is compiled, linked,
 // and run natively, then rewritten to JavaScript (tests/differential/rewrite.js, types
@@ -5562,6 +7224,71 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
   );
 } else if (!HAS_CLANG) {
   skip("clang not installed: differential tests skipped");
+}
+
+// ---- The gate on the prebuilt runtime objects ------------------------------------
+//
+// The links above are fast because `runtime.c`, `runtime_os.c` and the driver
+// are compiled once per run rather than once per case, and a fast link that
+// quietly used the wrong runtime would be worse than the slow one it replaced.
+// Two checks, and between them they cover both ways that could happen. They sit
+// at the end of the run rather than beside section A because they replay what
+// this run actually linked: every section that links a case has gone past by
+// here, so a set of defines that only some later block asks for is covered too.
+//
+// One: for every set of defines a case asked for, the first case linked with it
+// is linked *again* from the sources -- the command line this suite used before
+// the objects existed, argument for argument -- and the two binaries have to be
+// byte-identical. That is the whole claim stated directly: the object is what
+// clang would have produced inline. It is a fact about the linker's own
+// pipeline rather than about the runtime, and it is asserted rather than
+// assumed on every platform; if it ever turns out to be platform-specific the
+// honest narrowing is a counted skip, the way the `.text` budgets have one, and
+// not a weaker comparison.
+if (HAS_CLANG && linkSpecimens.size > 0) {
+  for (const [key, spec] of linkSpecimens) {
+    const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`;
+    const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`);
+    const bySource = spawnSync("clang", [...spec.fromSource, "-o", `${stem}.src`], { cwd: root });
+    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", `${stem}.obj`], { cwd: root });
+    const linked = bySource.status === 0 && byObjects.status === 0;
+    const same = linked && fs.readFileSync(`${stem}.src`).equals(fs.readFileSync(`${stem}.obj`));
+    check(
+      `runtime objects: linking ${path.basename(spec.ll)} against ${label} gives the bytes the sources do`,
+      same,
+      linked
+        ? `${fs.statSync(`${stem}.src`).size} bytes from the sources, ` +
+          `${fs.statSync(`${stem}.obj`).size} from the objects; the two links were\n` +
+          `  clang ${spec.fromSource.join(" ")}\n  clang ${spec.fromObjects.join(" ")}`
+        : String(bySource.stderr) + String(byObjects.stderr)
+    );
+  }
+}
+
+// Two: the cache key has to be load-bearing. A `--threads` module wants
+// `@nish_arena` in thread-local storage and the default objects define it as an
+// ordinary global, so handing a case the wrong objects has to be a link error
+// rather than a program with two arenas. `ld` does refuse it -- "TLS reference
+// ... mismatches non-TLS definition" -- and this is where that is written down,
+// because it is the property the whole cache rests on.
+const threadsLl = path.join(buildDir, "mem_threads_arena.ll");
+if (HAS_CLANG && fs.existsSync(threadsLl)) {
+  const rt = runtimeObjects([]);
+  const exe = path.join(buildDir, "runtime-obj", "threads_against_default");
+  const cc =
+    rt.error === null
+      ? spawnSync("clang", ["-Wno-override-module", "-O2", threadsLl, ...rt.objects, "-lm", "-o", exe], {
+          cwd: root,
+        })
+      : null;
+  check(
+    "runtime objects: a --threads module refuses to link against the default runtime",
+    cc !== null && cc.status !== 0,
+    cc === null
+      ? rt.error
+      : "it linked. The object cache's key is then not load-bearing, and a case could be\n" +
+        "handed a runtime built for another one and run with two arenas instead of failing."
+  );
 }
 
 // The summary counts what did *not* run as well as what did. A skip is not a

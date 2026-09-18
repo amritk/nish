@@ -144,9 +144,13 @@ declare function writeError(s: string): void;
  * — the guard-then-panic shape `self/` uses everywhere in place of an assert.
  */
 declare function panic(message: string): never;
-/** The whole file as a string; a missing file prints a message and exits 1. */
+/**
+ * The whole file as a string; a path that cannot be read as one — missing, a
+ * directory, a parent that cannot be searched — prints `nish: cannot read
+ * <path>` and exits 1.
+ */
 declare function readFileSync(path: string): string;
-/** The same read, answering `null` where the other exits. */
+/** The same read, answering `null` for every path the other exits over. */
 declare function readFileSyncOrNull(path: string): string | null;
 declare function writeFileSync(path: string, data: string): void;
 declare function appendFileSync(path: string, data: string): void;
@@ -246,6 +250,22 @@ declare const Arena: {
   /** Bytes bumped in the current chunk. */
   used(): i64;
 };
+
+/**
+ * `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and
+ * eight bytes wide. `docs/LANGUAGE.md` has the rules — it may be written in a
+ * `declare function` signature and on a local, compared with `null` or with
+ * another `CPtr`, and passed back to C, and that is all.
+ *
+ * An empty interface with a private brand rather than `unknown` or a type
+ * alias: `tsc` has to refuse the arithmetic and the dereference `nish` refuses,
+ * and it has to refuse assigning any other value to one. The brand is what makes
+ * it nominal, so a `{}` does not satisfy it; the name is never written, so the
+ * declaration costs a reader nothing.
+ */
+declare interface CPtr {
+  readonly __nishForeignPointer: unique symbol;
+}
 
 // ---- What this file cannot say ----------------------------------------------
 //

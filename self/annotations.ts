@@ -17,6 +17,7 @@
 import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
 import { AliasInfo } from "./program";
+import { instantiateWritten } from "./generics";
 import {
   N_LIST,
   N_TYPE_ARRAY,
@@ -28,8 +29,10 @@ import {
   Node,
 } from "./nodes";
 import {
+  CPTR_NAME,
   K_ARRAY,
   T_BOOL,
+  T_CPTR,
   T_ERROR,
   T_F32,
   T_F64,
@@ -50,7 +53,7 @@ const SUPPORTED_TYPES: string =
   "(Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)";
 
 /** The element type of a typed-array alias, or -1 when `name` is not one. */
-export function typedArrayElement(name: string): i32 {
+export const typedArrayElement = (name: string): i32 => {
   if (name === "Int32Array") {
     return T_I32;
   }
@@ -64,7 +67,7 @@ export function typedArrayElement(name: string): i32 {
     return T_I64;
   }
   return -1;
-}
+};
 
 /**
  * The scalar type a bare name spells, or -1 when it is not a scalar keyword.
@@ -72,7 +75,7 @@ export function typedArrayElement(name: string): i32 {
  * integer-only by design (docs/wp14-selfhost.md §5) and string equality
  * compares the lengths first anyway.
  */
-function scalarNamed(name: string, numberMode: i32): i32 {
+const scalarNamed = (name: string, numberMode: i32): i32 => {
   if (name === "number") {
     return numberMode === NUMBER_MODE_I32 ? T_I32 : T_F64;
   }
@@ -109,15 +112,63 @@ function scalarNamed(name: string, numberMode: i32): i32 {
   if (name === "f64") {
     return T_F64;
   }
+  // WP27 S2. Answered here rather than from a declared name because it is not
+  // declared anywhere: there is no `class CPtr` for a module to import, and the
+  // name means the same thing in every file.
+  if (name === CPTR_NAME) {
+    return T_CPTR;
+  }
   return -1;
-}
+};
+
+/** An array's element type, refused when it is a foreign pointer (WP27 S2). */
+const elementType = (node: Node, ctx: CheckContext): i32 => {
+  const elem = resolveType(node, ctx);
+  if (rejectForeignPointer(ctx, elem, "an array element", node)) {
+    return T_ERROR;
+  }
+  return elem;
+};
+
+/**
+ * Where a `CPtr` may be written, and the one diagnostic for everywhere else
+ * (WP27 S2, `docs/wp27-ffi.md` §7). Answers true when it refused.
+ *
+ * The allowed positions are a `declare function`'s parameters and return type,
+ * and a local that holds what such a call answered. Everything else is refused,
+ * and the refusals are not timidity — each one is a place where the compiler
+ * would have to make a claim about the pointer that it cannot support:
+ *
+ *   - A field, an array element or a `Result` arm would put a foreign address
+ *     inside a value this compiler lays out and the arena owns, and the escape
+ *     analysis walks those. A `CPtr` is not arena memory and must never be
+ *     treated as though it were, which is the bug class WP26 fixed in `getenv`
+ *     and §2 says FFI re-opens in user code.
+ *   - A parameter or return type of a function this program defines would put
+ *     one across a boundary the C header, the `.d.ts` and the N-API shim all
+ *     describe, and none of the three has a spelling for an address whose
+ *     provenance and lifetime are unknown.
+ *
+ * What is left is a pointer that comes out of C, sits in a local and goes back
+ * into C, which needs no claim about it at all beyond its width.
+ */
+export const rejectForeignPointer = (ctx: CheckContext, type: i32, position: string, node: Node): boolean => {
+  if (ctx.table.stripNull(type) !== T_CPTR) {
+    return false;
+  }
+  ctx.error(
+    node,
+    `\`${CPTR_NAME}\` cannot be ${position}: a foreign pointer may only appear in a \`declare function\` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives`
+  );
+  return true;
+};
 
 /**
  * Resolve one annotation into a type id. Anything outside the rigid set is a
  * rejection: the language has no `any`, no `unknown`, no union but `T | null`, no
  * generics beyond `Array<T>`, and no structural object types.
  */
-export function resolveType(node: Node, ctx: CheckContext): i32 {
+export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
     case N_TYPE_PAREN:
       // Transparent, as `ParenthesizedType` is in `src/types.ts`: the
@@ -125,7 +176,7 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
       // them, because `T | null[]` groups the other way.
       return resolveType(node.children[0], ctx);
     case N_TYPE_ARRAY:
-      return ctx.table.arrayOf(resolveType(node.children[0], ctx));
+      return ctx.table.arrayOf(elementType(node.children[0], ctx));
     case N_TYPE_READONLY:
       return resolveReadonly(node, ctx);
     case N_TYPE_UNION:
@@ -135,7 +186,7 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
     default:
       return ctx.errorType(node, `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`);
   }
-}
+};
 
 /**
  * `readonly T[]`. TypeScript allows the modifier on nothing else (TS1354,
@@ -143,7 +194,7 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
  * a scalar or a class is not a construct this compiler has yet to support — it
  * is not TypeScript either, and the message says which rule it broke.
  */
-function resolveReadonly(node: Node, ctx: CheckContext): i32 {
+const resolveReadonly = (node: Node, ctx: CheckContext): i32 => {
   const inner = resolveType(node.children[0], ctx);
   if (inner === T_ERROR) {
     return T_ERROR; // D1: the inner annotation already reported; do not report twice
@@ -155,10 +206,10 @@ function resolveReadonly(node: Node, ctx: CheckContext): i32 {
     );
   }
   return ctx.table.readonlyArrayOf(ctx.table.refOf(inner));
-}
+};
 
 /** A named type, with or without type arguments. */
-function resolveReference(node: Node, ctx: CheckContext): i32 {
+const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   const name = node.text;
   const args = node.children[0];
   const argc = args.kind === N_LIST ? args.children.length : 0;
@@ -171,7 +222,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     if (argc !== 1) {
       return ctx.errorType(node, "`Array` needs exactly one type argument, e.g. `Array<number>`");
     }
-    return ctx.table.arrayOf(resolveType(args.children[0], ctx));
+    return ctx.table.arrayOf(elementType(args.children[0], ctx));
   }
 
   // `ReadonlyArray<T>` is `readonly T[]`, the way `Array<T>` is `T[]`.
@@ -179,7 +230,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     if (argc !== 1) {
       return ctx.errorType(node, "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`");
     }
-    return ctx.table.readonlyArrayOf(resolveType(args.children[0], ctx));
+    return ctx.table.readonlyArrayOf(elementType(args.children[0], ctx));
   }
 
   const alias = typedArrayElement(name);
@@ -188,7 +239,17 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     return ctx.errorType(node, `\`${name}\` takes no type argument (it is an alias of \`${spelled}\`)`);
   }
 
+  // WP18 G5: a user generic with its arguments written. Answered after the
+  // built-in constructors above — so nothing that was already a type argument
+  // list changes meaning — and before the refusal below, so a template written
+  // with the wrong number of arguments is refused by the rule that names it
+  // rather than by "unsupported type reference".
   if (argc > 0) {
+    const written = ctx.program.structTemplate(name);
+    if (written !== null) {
+      const instantiated = instantiateWritten(ctx, written, args, node);
+      return instantiated === null ? T_ERROR : instantiated.type;
+    }
     return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`);
   }
 
@@ -205,6 +266,16 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   }
   if (alias >= 0) {
     return ctx.table.arrayOf(alias);
+  }
+
+  // WP18 G5: a generic class or interface named without its type arguments.
+  // Here rather than in the branch above, and after the scalars, because that
+  // is where stage0's named-type resolver answers a reference with no argument
+  // list: `Box` on its own is not a type, and the message says how to write it.
+  const bare = ctx.program.structTemplate(name);
+  if (bare !== null) {
+    instantiateWritten(ctx, bare, args, node);
+    return T_ERROR;
   }
 
   // WP18: a type parameter, while an instantiation is being resolved or
@@ -243,7 +314,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   }
 
   return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`);
-}
+};
 
 /**
  * `Result<T, E>` (WP16). Written like a generic, but there are no user
@@ -254,13 +325,19 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
  * nothing to hand back, and it carries no `value` field at all. `E` may not
  * be, because a failure that says nothing is what `panic` is for.
  */
-function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i32 {
+const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i32 => {
   if (argc !== 2) {
     return ctx.errorType(node, "`Result` needs exactly two type arguments, e.g. `Result<number, string>`");
   }
   const ok = resolveType(args.children[0], ctx);
   const err = resolveType(args.children[1], ctx);
   if (ok === T_ERROR || err === T_ERROR) {
+    return T_ERROR;
+  }
+  if (rejectForeignPointer(ctx, ok, "a `Result` arm", args.children[0])) {
+    return T_ERROR;
+  }
+  if (rejectForeignPointer(ctx, err, "a `Result` arm", args.children[1])) {
     return T_ERROR;
   }
   if (err === T_VOID) {
@@ -270,14 +347,14 @@ function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     );
   }
   return ctx.table.resultOf(ok, err, R_UNKNOWN);
-}
+};
 
 /**
  * `T | null`. The validator already refuses every other union, so this only
  * has to find the non-null member and require it to be a pointer type — a
  * scalar has no null value to add.
  */
-function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
+const resolveNullableUnion = (node: Node, ctx: CheckContext): i32 => {
   let inner = -1;
   let nulls = 0;
   for (const member of node.children) {
@@ -312,7 +389,7 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
     );
   }
   return ctx.table.nullableOf(inner);
-}
+};
 
 /**
  * Whether `name` is a type the language already spells for itself, and so may
@@ -321,7 +398,7 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
  * alias under one of these names would simply never be looked at -- silently,
  * which is the part worth refusing.
  */
-export function builtinTypeName(name: string): boolean {
+export const builtinTypeName = (name: string): boolean => {
   if (scalarNamed(name, NUMBER_MODE_I32) >= 0) {
     return true;
   }
@@ -337,7 +414,7 @@ export function builtinTypeName(name: string): boolean {
     name === "ReadonlyArray" ||
     name === "Result"
   );
-}
+};
 
 /**
  * The type `info` names, resolved once. A second reference gets the memo, and
@@ -348,7 +425,7 @@ export function builtinTypeName(name: string): boolean {
  * A failed resolution clears the mark instead of memoising `T_ERROR`, so a
  * second use reports the same real error rather than a spurious cycle.
  */
-export function aliasType(info: AliasInfo, ctx: CheckContext): i32 {
+export const aliasType = (info: AliasInfo, ctx: CheckContext): i32 => {
   if (info.resolving) {
     ctx.error(info.decl, `Type alias \`${info.name}\` is defined in terms of itself`);
     return T_ERROR;
@@ -364,4 +441,4 @@ export function aliasType(info: AliasInfo, ctx: CheckContext): i32 {
   }
   info.type = resolved;
   return resolved;
-}
+};

@@ -90,7 +90,7 @@ import {
  * does from the checker core, and it is why no individual checker has to
  * know about upcasts.
  */
-export function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   // Refused already: stage0 unwound out of this statement at the first
   // diagnostic and never checked the rest of the expression either
   // (`context.ts`, `errored`). `T_ERROR` is what every caller here already
@@ -107,9 +107,9 @@ export function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, wan
   }
   ctx.program.nodeTypes[expr.id] = type;
   return type;
-}
+};
 
-function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   switch (expr.kind) {
     case N_PAREN:
       return checkExpression(ctx, expr.children[0], scope, want);
@@ -160,20 +160,20 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     default:
       return ctx.errorType(expr, `Unsupported expression \`${ctx.textOf(expr)}\``);
   }
-}
+};
 
 /**
  * A numeric literal takes its type from context: `let x: i64 = 5` is an `i64`
  * five and `Math.sqrt(2)` an `f64` two. Without a context it is `number`,
  * which is `i32` unless `--number-mode f64`.
  */
-export function checkNumericLiteral(
+export const checkNumericLiteral = (
   ctx: CheckContext,
   expr: Node,
   want: i32,
   negated: boolean,
   at: Node
-): i32 {
+): i32 => {
   const type = want >= 0 && isNumeric(want) ? want : ctx.numberType();
   if (isFloat(type)) {
     return type;
@@ -223,13 +223,13 @@ export function checkNumericLiteral(
     );
   }
   return type;
-}
+};
 
 /** 2^53: above it not every integer has a double, so a bigger literal is already rounded. */
 const TWO_53: f64 = 9007199254740992.0;
 
 /** Whether a literal as written has a fraction or an exponent. */
-function hasFraction(text: string): boolean {
+const hasFraction = (text: string): boolean => {
   if (text.startsWith("0x") || text.startsWith("0X") || text.startsWith("0b") || text.startsWith("0o")) {
     return false;
   }
@@ -242,15 +242,15 @@ function hasFraction(text: string): boolean {
     i = i + 1;
   }
   return Number(text) !== Math.floor(Number(text));
-}
+};
 
 /** `-2147483648` parses as minus applied to 2147483648; that exact form is allowed. */
-function fitsInI32(text: string, negated: boolean): boolean {
+const fitsInI32 = (text: string, negated: boolean): boolean => {
   const limit: f64 = negated ? 2147483648.0 : 2147483647.0;
   return Number(text) <= limit;
-}
+};
 
-function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   for (const part of expr.children) {
     if (part.kind === N_TEMPLATE_TEXT) {
       continue;
@@ -265,9 +265,9 @@ function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     }
   }
   return T_STRING;
-}
+};
 
-function checkNull(ctx: CheckContext, expr: Node, want: i32): i32 {
+const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
   if (want < 0) {
     return ctx.errorType(
       expr,
@@ -287,9 +287,9 @@ function checkNull(ctx: CheckContext, expr: Node, want: i32): i32 {
     expr,
     "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)"
   );
-}
+};
 
-function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text);
   if (local !== null) {
     ctx.program.nodeLocals[expr.id] = local;
@@ -314,20 +314,20 @@ function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return checkNamespaceProperty(ctx, expr, imported.namespace, imported.member);
   }
   return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``);
-}
+};
 
-function checkThis(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const self = scope.lookup("this");
   if (self === null) {
     return ctx.errorType(expr, "`this` is only valid inside a method or constructor");
   }
   ctx.program.nodeLocals[expr.id] = self;
   return self.type;
-}
+};
 
 // ---- Operators ---------------------------------------------------------------------
 
-function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+const checkUnary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   const op = expr.text;
   const operand = expr.children[0];
   if (op === "++" || op === "--") {
@@ -378,10 +378,10 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
     );
   }
   return ctx.errorType(expr, `Unsupported unary operator \`${op}\``);
-}
+};
 
 /** `++x`, `x--`: an assignment in disguise, so the target's rules apply. */
-function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0];
   // The target is resolved before the operand is checked, as stage0's
   // `resolveMutableTarget` does, so `p.f++` is refused for being a field
@@ -414,16 +414,14 @@ function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     scope.clearNarrowing(local);
   }
   return type;
-}
+};
 
 /**
  * Whether an operator writes to its left operand. The parser has its own
  * `isAssignment` over *token kinds*; this one reads the operator text a
  * `N_BINARY` node carries, which is what the checker has.
  */
-function writesLeft(op: string): boolean {
-  return op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op));
-}
+const writesLeft = (op: string): boolean => op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op));
 
 /**
  * Operators that answer a boolean whatever their operands are. Their result
@@ -431,8 +429,7 @@ function writesLeft(op: string): boolean {
  * width from the other rather than from the context: `kind === 3` folds with
  * `kind` an `i64`, and `x < 1.0` makes `1.0` an `f64`.
  */
-function yieldsBool(op: string): boolean {
-  return (
+const yieldsBool = (op: string): boolean => (
     op === "===" ||
     op === "!==" ||
     op === "==" ||
@@ -442,12 +439,9 @@ function yieldsBool(op: string): boolean {
     op === ">" ||
     op === ">="
   );
-}
 
 /** The compound assignments whose operator is bitwise rather than arithmetic. */
-export function isBitwiseCompound(op: string): boolean {
-  return op === "&=" || op === "|=" || op === "^=" || op === "<<=" || op === ">>=" || op === ">>>=";
-}
+export const isBitwiseCompound = (op: string): boolean => op === "&=" || op === "|=" || op === "^=" || op === "<<=" || op === ">>=" || op === ">>>=";
 
 /**
  * `x &= e`, `p.f |= e`, `a[i] ^= e`: the operand rule of `&` applied to
@@ -456,7 +450,7 @@ export function isBitwiseCompound(op: string): boolean {
  * call this with the type of the local, the field or the element, so they are
  * accepted and refused in exactly the same words.
  */
-export function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target: i32, rhs: i32): i32 {
+export const checkBitwiseAssignOperands = (ctx: CheckContext, expr: Node, target: i32, rhs: i32): i32 => {
   const op = expr.text;
   if (target === T_ERROR || rhs === T_ERROR) {
     return T_ERROR;
@@ -473,9 +467,9 @@ export function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target
     );
   }
   return target;
-}
+};
 
-function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   const op = expr.text;
   if (op === "==" || op === "!=") {
     return ctx.errorType(expr, "Loose equality is forbidden; use === / !==");
@@ -503,7 +497,7 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
-}
+};
 
 /**
  * The type a bare numeric literal takes inside `a op b`: the *other operand's*,
@@ -517,9 +511,7 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * stays integer arithmetic, where taking the `f64` the call wants would make
  * every `+` in it mix widths (bench/spectral.ts).
  */
-function literalHint(other: i32, fallback: i32): i32 {
-  return isNumeric(other) ? other : fallback;
-}
+const literalHint = (other: i32, fallback: i32): i32 => isNumeric(other) ? other : fallback;
 
 /**
  * Whether stage0's `peekType` would answer for this node — which is what
@@ -534,7 +526,7 @@ function literalHint(other: i32, fallback: i32): i32 {
  * `--number-mode f64`, WP19 §A3). Reading the sibling's *computed* type
  * instead is more useful and is not what the language says.
  */
-function peekable(node: Node): boolean {
+const peekable = (node: Node): boolean => {
   if (node.kind === N_PAREN) {
     return peekable(node.children[0]);
   }
@@ -547,17 +539,17 @@ function peekable(node: Node): boolean {
     return node.children[0].kind === N_IDENT;
   }
   return node.kind === N_IDENT || node.kind === N_MEMBER || node.kind === N_INDEX;
-}
+};
 
 /** `a op b` for every operator that reads both sides and writes neither. */
-function checkOperator(
+const checkOperator = (
   ctx: CheckContext,
   expr: Node,
   op: string,
   leftNode: Node,
   rightNode: Node,
   scope: Scope
-): i32 {
+): i32 => {
   // A bare literal takes its width from the other side, which is what makes
   // `kind === 3` work when `kind` is an `i64` — and from the other side
   // *only*. The context around the operator does not reach an operand:
@@ -641,10 +633,10 @@ function checkOperator(
     return left;
   }
   return ctx.errorType(expr, `Unsupported binary operator \`${op}\``);
-}
+};
 
 /** The operator that *is* defined on booleans, named in the refusal. */
-function booleanAlternative(op: string): string {
+const booleanAlternative = (op: string): string => {
   if (op === "&" || op === "&=") {
     return " (use `&&`)";
   }
@@ -655,28 +647,26 @@ function booleanAlternative(op: string): string {
     return " (use `!==`)";
   }
   return "";
-}
+};
 
 /**
  * An `f64` reaching a bit operator is usually plain `number` under
  * `--number-mode f64` rather than a deliberate annotation, so say so: the fix
  * is `toI32(x)`, not a different operator.
  */
-function f64Hint(ctx: CheckContext, left: i32, right: i32): string {
+const f64Hint = (ctx: CheckContext, left: i32, right: i32): string => {
   const fromMode = ctx.numberType() === T_F64 && (left === T_F64 || right === T_F64);
   return fromMode ? " (`number` is f64 under --number-mode f64; convert with toI32/toI64)" : "";
-}
+};
 
-function isShift(op: string): boolean {
-  return op === "<<" || op === ">>" || op === ">>>";
-}
+const isShift = (op: string): boolean => op === "<<" || op === ">>" || op === ">>>";
 
 /**
  * `===` and `!==`: numbers and booleans by value, strings by content, classes,
  * interfaces and arrays by identity. A nullable may only be compared with
  * `null`, which the narrowing rules depend on.
  */
-function checkEquality(
+const checkEquality = (
   ctx: CheckContext,
   expr: Node,
   op: string,
@@ -684,7 +674,7 @@ function checkEquality(
   right: i32,
   leftNode: Node,
   rightNode: Node
-): i32 {
+): i32 => {
   const a = ctx.table.typeName(left);
   const b = ctx.table.typeName(right);
   if (left !== right || left === T_VOID) {
@@ -708,9 +698,9 @@ function checkEquality(
     );
   }
   return T_BOOL;
-}
+};
 
-function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+const checkLogical = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const left = checkExpression(ctx, expr.children[0], scope, T_BOOL);
   // The right operand is checked where the left one has already decided: in
   // `p !== null && p.value`, `p` is narrowed for the right-hand side.
@@ -726,9 +716,9 @@ function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return ctx.errorType(expr, `Operator \`${expr.text}\` requires boolean operands, got ${a} and ${b}`);
   }
   return T_BOOL;
-}
+};
 
-function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   checkCondition(ctx, expr.children[0], scope);
   const thenScope = scope.child();
   narrow(ctx, expr.children[0], thenScope, true);
@@ -752,7 +742,7 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
   const a = ctx.table.typeName(whenTrue);
   const b = ctx.table.typeName(whenFalse);
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`);
-}
+};
 
 /**
  * The ternary's type, refused when it is `void`. A ternary is an expression and
@@ -761,20 +751,20 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
  * this at the same point and stage1 said nothing, so the two reported different
  * first diagnostics for one program (`tests/cases/reject_cf_ternary_void`).
  */
-function ternaryResult(ctx: CheckContext, expr: Node, type: i32): i32 {
+const ternaryResult = (ctx: CheckContext, expr: Node, type: i32): i32 => {
   if (type === T_VOID) {
     return ctx.errorType(expr, "Ternary branches cannot be void");
   }
   return type;
-}
+};
 
 /** A condition is a boolean: the language has no truthiness. */
-export function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void {
+export const checkCondition = (ctx: CheckContext, expr: Node, scope: Scope): void => {
   const type = checkExpression(ctx, expr, scope, T_BOOL);
   if (type !== T_BOOL && type !== T_ERROR) {
     ctx.error(expr, `Condition must be boolean, got ${ctx.table.typeName(type)} (${LANGUAGE} has no truthiness)`);
   }
-}
+};
 
 // ---- Narrowing ---------------------------------------------------------------------
 
@@ -787,7 +777,7 @@ export function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): voi
  * the effect facts that could prove a callee harmless. The idiom
  * `const next = n.next; if (next !== null)` is one line and one load.
  */
-export function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void {
+export const narrow = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
   switch (cond.kind) {
     case N_PAREN:
       narrow(ctx, cond.children[0], scope, whenTrue);
@@ -806,9 +796,9 @@ export function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: bo
       narrowResultTest(cond, scope, ctx.table, whenTrue);
       return;
   }
-}
+};
 
-function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void {
+const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
   const op = cond.text;
   if (op === "&&" && whenTrue) {
     narrow(ctx, cond.children[0], scope, true);
@@ -842,11 +832,11 @@ function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   if (narrows) {
     scope.narrow(local, ctx.table.stripNull(declared));
   }
-}
+};
 
 // ---- Assignment ---------------------------------------------------------------------
 
-function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0];
   if (target.kind === N_MEMBER) {
     return checkMemberAssignment(ctx, expr, scope);
@@ -870,14 +860,14 @@ function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   }
   ctx.program.nodeLocals[target.id] = local;
   return assignInto(ctx, expr, scope, local, local.type, local.name, "variable");
-}
+};
 
 /**
  * The right-hand side of `x = v` or `x op= v`, checked against `slot`. The
  * value is read *before* the narrowing is dropped, so `cur = cur.next` sees
  * the narrowed `cur` on the right and the declared type afterwards.
  */
-export function assignInto(
+export const assignInto = (
   ctx: CheckContext,
   expr: Node,
   scope: Scope,
@@ -885,7 +875,7 @@ export function assignInto(
   slot: i32,
   name: string,
   what: string
-): i32 {
+): i32 => {
   const op = expr.text;
   const value = expr.children[1];
   if (op === "=") {
@@ -943,7 +933,7 @@ export function assignInto(
     );
   }
   return slot;
-}
+};
 
 // ---- Calls ---------------------------------------------------------------------
 
@@ -957,7 +947,7 @@ export function assignInto(
  * The canonical name is recorded because the emitter dispatches builtins on
  * the identifier's own text, and under an import that text is the local name.
  */
-function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 {
+const checkImportedBuiltin = (ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 => {
   const callee = expr.children[0];
   if (imported.isProperty) {
     return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`);
@@ -966,9 +956,9 @@ function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, impor
   return imported.namespace.length > 0
     ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
     : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member);
-}
+};
 
-function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   const callee = expr.children[0];
   if (callee.kind === N_SUPER) {
     return checkExpression(ctx, callee, scope, -1); // WP25: reports on the `super` token
@@ -1025,14 +1015,14 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   }
   ctx.program.nodeCallees[expr.id] = sig;
   return sig.returnType;
-}
+};
 
 /** Check every argument of a call against one expected type, for the builtins. */
-export function checkArguments(ctx: CheckContext, args: Node, scope: Scope, want: i32): void {
+export const checkArguments = (ctx: CheckContext, args: Node, scope: Scope, want: i32): void => {
   for (const arg of args.children) {
     checkExpression(ctx, arg, scope, want);
   }
-}
+};
 
 /**
  * Drop the narrowing of every variable a loop assigns, before its body is
@@ -1041,7 +1031,7 @@ export function checkArguments(ctx: CheckContext, args: Node, scope: Scope, want
  * narrowing cannot hold inside the loop — the rule `docs/LANGUAGE.md` states
  * as "before a loop whose body, condition, or update assigns the variable".
  */
-export function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope): void {
+export const clearNarrowingsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope): void => {
   if (node.kind === N_BINARY && writesLeft(node.text)) {
     clearTarget(node.children[0], scope);
   } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
@@ -1050,9 +1040,9 @@ export function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: 
   for (const child of node.children) {
     clearNarrowingsAssignedIn(ctx, child, scope);
   }
-}
+};
 
-function clearTarget(target: Node, scope: Scope): void {
+const clearTarget = (target: Node, scope: Scope): void => {
   if (target.kind !== N_IDENT) {
     return;
   }
@@ -1060,4 +1050,4 @@ function clearTarget(target: Node, scope: Scope): void {
   if (local !== null) {
     scope.clearNarrowing(local);
   }
-}
+};

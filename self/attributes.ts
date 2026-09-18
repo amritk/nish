@@ -354,19 +354,17 @@ export class ParamUse {
   }
 }
 
-function use(kind: i32): ParamUse {
-  return new ParamUse(kind);
-}
+const use = (kind: i32): ParamUse => new ParamUse(kind);
 
-function argumentUse(callee: FunctionSig, index: i32): ParamUse {
+const argumentUse = (callee: FunctionSig, index: i32): ParamUse => {
   const result = new ParamUse(USE_ARGUMENT);
   result.callee = callee;
   result.index = index;
   return result;
-}
+};
 
 /** The position of `node` in its `N_LIST` parent, which is the argument index. */
-function indexInList(list: Node, node: Node): i32 {
+const indexInList = (list: Node, node: Node): i32 => {
   let i = 0;
   while (i < list.children.length) {
     if (list.children[i] === node) {
@@ -375,14 +373,14 @@ function indexInList(list: Node, node: Node): i32 {
     i = i + 1;
   }
   return -1;
-}
+};
 
 /**
  * Classify a reference to a parameter by walking up through the transparent
  * wrappers (parentheses, ternary arms, single-hole templates) to the construct
  * that consumes the value. Anything not explicitly harmless escapes.
  */
-export function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse {
+export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse => {
   const program = unit.program;
   let node = ref;
   for (;;) {
@@ -463,10 +461,10 @@ export function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     }
     return use(USE_ESCAPE); // return, variable initializer, array/object literal element, ...
   }
-}
+};
 
 /** `p.f`, `p.f = v`, `p.m(...)`, `p.length`: the member access is the consumer. */
-function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse {
+const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse => {
   const program = unit.program;
   const above = unit.parents.parentOf(access);
   if (above !== null && above.kind === N_CALL && above.children[0] === access) {
@@ -493,10 +491,10 @@ function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): 
     return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE);
   }
   return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ);
-}
+};
 
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */
-function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse {
+const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse => {
   const program = unit.program;
   const owner = unit.parents.parentOf(list);
   if (owner === null) {
@@ -543,7 +541,7 @@ function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, n
     return argumentUse(ctor, index + 1);
   }
   return use(USE_ESCAPE);
-}
+};
 
 /**
  * The parameter is the indexing base of `access` (`p[i]`, `p[i][j]`, ...).
@@ -551,7 +549,7 @@ function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, n
  * never be captured this way; but a store through the element counts as a
  * write through `p`, conservatively, as docs/wp4-arrays.md specifies.
  */
-function classifyElementUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse {
+const classifyElementUse = (unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse => {
   const program = unit.program;
   let node = access;
   for (;;) {
@@ -594,22 +592,22 @@ function classifyElementUse(unit: AnalysisUnit, table: TypeTable, access: Node):
     }
     return use(USE_READ);
   }
-}
+};
 
 /**
  * The constructor `new` runs for a struct type. `null` when the type is not
  * a struct or nothing constructs it.
  */
-export function constructorOf(program: CheckedProgram, table: TypeTable, type: i32): FunctionSig | null {
+export const constructorOf = (program: CheckedProgram, table: TypeTable, type: i32): FunctionSig | null => {
   if (type < 0 || !table.isStruct(type)) {
     return null;
   }
   const info = program.struct(table.nameOf(type));
   return info === null ? null : info.ctor;
-}
+};
 
 /** `` `${s}` ``: a template that lowers to its single string hole unchanged. */
-function isStringPassthrough(program: CheckedProgram, template: Node): boolean {
+const isStringPassthrough = (program: CheckedProgram, template: Node): boolean => {
   if (!isTemplateExpression(template)) {
     return false;
   }
@@ -618,7 +616,7 @@ function isStringPassthrough(program: CheckedProgram, template: Node): boolean {
     return false;
   }
   return program.nodeTypes[parts[0].id] === T_STRING;
-}
+};
 
 // ---- Per-function collection ------------------------------------------------------------
 
@@ -627,7 +625,7 @@ function isStringPassthrough(program: CheckedProgram, template: Node): boolean {
  * to claim. A `Result` layout is derived from the type, not declared (WP16),
  * so it is computed rather than looked up.
  */
-function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
+const structSize = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
   if (type < 0) {
     return 0;
   }
@@ -639,7 +637,7 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
   }
   const info = program.struct(table.nameOf(type));
   return info === null ? 0 : info.size;
-}
+};
 
 /**
  * The alignment a pointer of this type is *guaranteed* to have, which is 8 for
@@ -655,7 +653,7 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
  * `nish_alloc_struct` (which rounds to 8) or an entry-block alloca the emitter
  * gives `align 8`.
  */
-function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32 {
+const pointerAlign = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
   if (type < 0) {
     return 8;
   }
@@ -664,7 +662,7 @@ function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32
     return 8;
   }
   return record.align;
-}
+};
 
 /** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */
 /**
@@ -672,13 +670,24 @@ function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32
  * ABI packs into a register (WP17), which is not a pointer at all, so there is
  * nothing for the fixpoint to say about it.
  */
-function isPointerParam(table: TypeTable, type: i32): boolean {
+const isPointerParam = (table: TypeTable, type: i32): boolean => {
+  // An **allow-list**, and WP27 S2 is why that matters rather than being a
+  // stylistic preference. Every fact this predicate opens the door to —
+  // `dereferenceable`, `nonnull`, `align`, `nocapture`, `readonly` — is a claim
+  // about memory *this compiler laid out*: it knows the struct's size because
+  // it chose it, and the alignment because it emitted it. A `CPtr` is an
+  // address a C function owns, of unknown size, alignment and lifetime, and not
+  // one of those attributes could be justified for it. Because the answer below
+  // names what is allowed rather than what is not, `T_CPTR` falls out of it by
+  // construction; if it named exclusions instead, the next pointer-shaped type
+  // would be admitted by a case nobody remembered to write, and a wrong
+  // attribute is undefined behaviour rather than a missed optimisation.
   const inner = table.stripNull(type);
   if (table.isResult(inner)) {
     return !table.resultByValue(inner);
   }
   return table.isStruct(inner) || table.isArray(inner);
-}
+};
 
 class FactCollector {
   unit: AnalysisUnit;
@@ -1114,14 +1123,14 @@ class FactCollector {
  * `analyzeFunctions`) tells the collectors which allocations are allocas and
  * which locals hold them, and carries the allocation facts into the result.
  */
-export function collectFacts(
+export const collectFacts = (
   unit: AnalysisUnit,
   table: TypeTable,
   opts: Options,
   sig: FunctionSig,
   memory: EscapeResult | null,
   nodeCount: i32
-): FunctionFacts {
+): FunctionFacts => {
   const program = unit.program;
   const facts = new FunctionFacts(sig.paramNames, nodeCount);
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR;
@@ -1188,7 +1197,7 @@ export function collectFacts(
   }
   facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn;
   return facts;
-}
+};
 
 // ---- The fixpoint ------------------------------------------------------------------------
 
@@ -1200,12 +1209,12 @@ export function collectFacts(
  * writes or captures the matching parameter. The result is keyed by LLVM
  * symbol, so a caller in one module sees exactly what the exporter proved.
  */
-export function analyzeFunctions(
+export const analyzeFunctions = (
   units: AnalysisUnit[],
   table: TypeTable,
   opts: Options,
   runtime: RuntimeTable
-): FactsTable {
+): FactsTable => {
   // Round 1: plain facts and the capture fixpoint, which the escape analysis needs.
   const first = collectRound(units, table, opts, null);
   propagate(first, runtime);
@@ -1239,7 +1248,7 @@ export function analyzeFunctions(
     }
   }
   return facts;
-}
+};
 
 /** Escape results by symbol, the second round's input. */
 export class EscapeSet {
@@ -1262,12 +1271,12 @@ export class EscapeSet {
   }
 }
 
-function collectRound(
+const collectRound = (
   units: AnalysisUnit[],
   table: TypeTable,
   opts: Options,
   escapes: EscapeSet | null
-): FactsTable {
+): FactsTable => {
   const facts = new FactsTable();
   for (const unit of units) {
     for (const sig of unit.program.functions) {
@@ -1292,10 +1301,10 @@ function collectRound(
     }
   }
   return facts;
-}
+};
 
 /** Propagate effects, termination, pointer facts and allocation facts to a fixpoint. */
-function propagate(facts: FactsTable, runtime: RuntimeTable): void {
+const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
   let changed = true;
   while (changed) {
     changed = false;
@@ -1357,10 +1366,10 @@ function propagate(facts: FactsTable, runtime: RuntimeTable): void {
       }
     }
   }
-}
+};
 
 /** One caller/callee edge; answers whether anything about the caller moved. */
-function propagateCallee(facts: FactsTable, runtime: RuntimeTable, f: FunctionFacts, callee: string): boolean {
+const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFacts, callee: string): boolean => {
   let changed = false;
   const calleeFacts = facts.get(callee);
   const rt = runtime.lookup(callee);
@@ -1418,11 +1427,9 @@ function propagateCallee(facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
     }
   }
   return changed;
-}
+};
 
-function hasAttr(attrs: string[], name: string): boolean {
-  return attrs.indexOf(name) >= 0;
-}
+const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0;
 
 // ---- Counted loops ------------------------------------------------------------------------
 
@@ -1437,7 +1444,7 @@ const INT32_MAX: f64 = 2147483647.0;
  * A `for...of` over an array is counted unless its body may extend the array.
  * Every other loop (`while`, `do`, other `for` shapes) is unbounded.
  */
-export function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node): boolean {
+export const isCountedLoop = (unit: AnalysisUnit, table: TypeTable, loop: Node): boolean => {
   const program = unit.program;
   if (loop.kind === N_FOR_OF) {
     return !bodyMayExtend(unit, table, loop.children[2]);
@@ -1501,19 +1508,17 @@ export function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node):
     guarded.push(bound.text);
   }
   return !bodyDisturbs(loop.children[3], guarded);
-}
+};
 
-function absOf(value: i32): i32 {
-  return value < 0 ? -value : value;
-}
+const absOf = (value: i32): i32 => value < 0 ? -value : value;
 
-function isName(expr: Node, name: string): boolean {
+const isName = (expr: Node, name: string): boolean => {
   const e = unwrapParens(expr);
   return e.kind === N_IDENT && e.text === name;
-}
+};
 
 /** Signed step of `i++`, `++i`, `i--`, `--i`, `i += c`, `i -= c`; 0 for anything else. */
-function stepOf(expr: Node, name: string): i32 {
+const stepOf = (expr: Node, name: string): i32 => {
   if (expr.kind === N_UNARY && isName(expr.children[0], name)) {
     if (expr.text === "++") {
       return 1;
@@ -1536,7 +1541,7 @@ function stepOf(expr: Node, name: string): i32 {
     }
   }
   return 0;
-}
+};
 
 /**
  * `for (const x of a)` re-reads `a.length` every iteration, so it is bounded
@@ -1544,7 +1549,7 @@ function stepOf(expr: Node, name: string): i32 {
  * be aliased), any call to a user function (which could push through an alias
  * it receives), or a `throw`.
  */
-function bodyMayExtend(unit: AnalysisUnit, table: TypeTable, body: Node): boolean {
+const bodyMayExtend = (unit: AnalysisUnit, table: TypeTable, body: Node): boolean => {
   if (body.kind === N_THROW || isPushCall(unit.program, table, body)) {
     return true;
   }
@@ -1557,10 +1562,10 @@ function bodyMayExtend(unit: AnalysisUnit, table: TypeTable, body: Node): boolea
     }
   }
   return false;
-}
+};
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */
-function bodyDisturbs(body: Node, names: string[]): boolean {
+const bodyDisturbs = (body: Node, names: string[]): boolean => {
   if (body.kind === N_THROW) {
     return true;
   }
@@ -1586,11 +1591,11 @@ function bodyDisturbs(body: Node, names: string[]): boolean {
     }
   }
   return false;
-}
+};
 
 // ---- Attribute rendering --------------------------------------------------------------------
 
-export function functionAttributes(f: FunctionFacts): string[] {
+export const functionAttributes = (f: FunctionFacts): string[] => {
   const attrs: string[] = [];
   attrs.push("nounwind");
   if (f.willReturn) {
@@ -1602,15 +1607,15 @@ export function functionAttributes(f: FunctionFacts): string[] {
     attrs.push("readonly");
   }
   return attrs;
-}
+};
 
-export function paramAttributes(
+export const paramAttributes = (
   table: TypeTable,
   name: string,
   type: i32,
   f: FunctionFacts,
   privateAbi: boolean
-): string[] {
+): string[] => {
   const attrs: string[] = [];
   // `noundef` on everything except a by-value `Result` under the private ABI
   // (WP15 §7b), whose dead arm's slot is deliberately `undef` — and `noundef`
@@ -1707,20 +1712,20 @@ export function paramAttributes(
     }
   }
   return attrs;
-}
+};
 
 /**
  * `deref` is the struct size for struct-returning functions, 0 otherwise;
  * `privateAbi` is whether this function answers a by-value `Result` as the
  * arms rather than the word (WP15 §7b).
  */
-export function returnAttributes(
+export const returnAttributes = (
   table: TypeTable,
   type: i32,
   deref: i32,
   privateAbi: boolean,
   align: i32
-): string[] {
+): string[] => {
   const attrs: string[] = [];
   const kind = table.kindOf(type);
   if (type === T_VOID) {
@@ -1768,4 +1773,4 @@ export function returnAttributes(
     attrs.push(`align ${align}`); // WP6: may be null
   }
   return attrs;
-}
+};

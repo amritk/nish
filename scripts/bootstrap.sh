@@ -40,18 +40,23 @@
 #
 #   IR(seed, self/)   == IR(stage1, self/)     asserted for a stage0 seed only
 #   IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
-#   stage3 == stage2                           as files, off Darwin only
+#   stage3 == stage2                           as files on ELF; as code and
+#                                              size on Mach-O
 #
 # The last two are properties of the working tree and of nothing else: whatever
 # built stage1, the compiler `self/` describes has to agree with itself and
-# then reproduce itself. Both are asserted whatever the seed is -- except that
-# the third is reported rather than asserted on Darwin, because there it stops
-# being a property of the working tree: ld64 writes a debug map naming each .o
-# by path and mtime, so two links of identical inputs differ as files while
-# every IR equality holds. The fixed point is the IR equality above it; the
-# byte comparison is a proxy for it that the linker, not the compiler, decides.
-# Measured at the speed profile on macos-latest: 597,048 bytes both ways, all
-# IR equal (WP19 R2).
+# then reproduce itself. Both are asserted whatever the seed is.
+#
+# The third is a raw byte comparison, and on Mach-O two links of the same input
+# do not produce the same bytes: ld64 writes a debug map naming each .o by path
+# and mtime. That is a fact about the linker, not about `nish`. It is not a
+# reason to assert nothing there -- an exemption that accepts any difference
+# would accept a different compiler -- so on Darwin the comparison narrows
+# rather than lifting: the two binaries must still be the same size and must
+# still be identical once the debug information is stripped out, both of which
+# are facts about the code `nish` emitted. That comparison and the reasoning
+# for it live in `scripts/verify-binaries.sh`, which is a script rather than a
+# block in here so that `tests/run.js` can drive both platforms' arms.
 #
 # The first one is asserted only when the seed is stage0. The reason is not
 # that it is a weaker claim with another seed — it is a different claim with
@@ -332,27 +337,17 @@ if [ "$build_to" -ge 3 ]; then
   rm -rf "$work/stage3.modules"
   "$work/stage2" self/compile.ts --link "$work/stage3" --profile "$profile" >/dev/null
   [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
+  # `stage3 == stage2`, in scripts/verify-binaries.sh: byte-identical on ELF,
+  # and on Mach-O the same size and identical with ld64's debug map stripped,
+  # which is the narrowed form that arrives with WP19 G5's darwin binary. The
+  # comparison lives in a script of its own so that tests/run.js can drive
+  # every arm of it from one machine -- its header is where the reasoning is,
+  # and NISH_UNAME_S is how the suite asks for the other platform's arm.
   if [ "$verify" -eq 1 ]; then
-    if cmp -s "$work/stage2" "$work/stage3"; then
-      say "  stage3 == stage2: byte-identical binaries"
-    elif [ "$(uname -s)" = "Darwin" ]; then
-      # Reported, not asserted, and only here. The property this file
-      # comparison stands in for -- stage2 and stage3 are the same compiler --
-      # is the IR equality asserted immediately above, and that one is a fact
-      # about `nish`. Byte-identical *binaries* additionally require the
-      # linker to be deterministic, which is a fact about the linker: ld64
-      # writes a debug map naming each .o by path and mtime, so two links of
-      # identical inputs differ while the IR does not. Measured on
-      # macos-latest at the speed profile, 597,048 bytes both ways, with every
-      # IR equality green (WP19 R2, docs/wp10-ci.md).
-      #
-      # ELF keeps the assertion, because there it holds and it is worth having:
-      # this is the same shape as `IR(seed) == IR(stage1)`, reported rather
-      # than asserted when the comparison stops being about the bootstrap.
-      say "  stage3 != stage2 as files, on Darwin: ld64's debug map is not reproducible;"
-      say "  the IR equality above is the fixed point and it holds"
+    if verdict="$(bash scripts/verify-binaries.sh "$work/stage2" "$work/stage3" 2>&1)"; then
+      printf '%s\n' "$verdict" | while IFS= read -r line; do say "  $line"; done
     else
-      echo "bootstrap: stage3 is not byte-identical to stage2" >&2
+      printf '%s\n' "$verdict" >&2
       exit 1
     fi
   fi

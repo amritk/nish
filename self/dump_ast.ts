@@ -16,7 +16,7 @@ import { astLines } from "./ast_text";
 import { SourceFile } from "./diagnostics";
 import { Parser } from "./parser";
 
-export function main(): number {
+export const main = (): number => {
   if (process.argv.length < 2) {
     console.error("usage: dump_ast <file>");
     return 2;
@@ -41,4 +41,4 @@ export function main(): number {
     writeError(`${diagnostic.message()}\n`);
   }
   return parser.diagnostics.length > 0 ? 1 : 0;
-}
+};

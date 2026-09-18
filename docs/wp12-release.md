@@ -181,16 +181,40 @@ step below is done by hand.
 
    Nothing is cross-compiled, because the chain is a chain: `bootstrap.sh`
    runs stage1 to build stage2, and a stage1 for another architecture does not
-   run on the builder. The release job `needs` the whole matrix, so one broken
-   target stops the release rather than publishing three binaries of four —
-   the missing one is the seed some later `bootstrap` run will look for.
+   run on the builder. So "built" and "smoke-tested" mean the same thing on
+   every row — there is no tier that was produced for a machine nobody ran it
+   on. The release job `needs` the whole matrix, so one broken target stops the
+   release rather than publishing three binaries of four: the missing one is
+   the seed some later `bootstrap` run will look for.
 
-   The binaries are not only a convenience for people without Node: one of
-   them is the **seed** the next release is built from, which is why each is
-   verified and smoke-tested before it ships and why the names are fixed.
-   `ci.yml`'s `bootstrap` job downloads exactly
-   `nish-<version>-<triple>` for its own host from the latest release, so
-   renaming an asset breaks the freeze check rather than the release.
+   The binaries are not only a convenience for people without Node: each is
+   the **seed** its own platform's rolling-freeze check bootstraps from, which
+   is why each is verified and smoke-tested before it ships and why the names
+   are fixed. Those names are not written here, and not in either workflow:
+   `release.yml`'s matrix, its asset list and `ci.yml`'s `seeds` job all read
+   `.github/seed-targets.json`, where each platform carries the canonical
+   triple it is, the asset name derived from that triple by dropping the vendor
+   and the ABI, the runner label that provides it, and the version from which
+   a release attaches it. A release that does not attach a seed already **due**
+   turns `seeds` red, because a release that exists and carries no seed for a
+   platform it was supposed to carry one for is a regression rather than a
+   state of the world
+   ([wp10-ci.md](wp10-ci.md#the-seeded-build-and-what-a-missing-seed-reports)).
+   A repository with no release at all is the other case, and there the check
+   has no rows rather than failing: red would be a release train that can never
+   leave, since `release.yml`'s `release` job is `needs: ci`.
+
+   "Due" is a version comparison — `attachedSince` in that file, against the
+   release being asked about, in `.github/seed-due.sh` — and not a boolean,
+   for a reason worth writing down because the boolean shipped first and was
+   wrong. `attached: true` says *the workflow builds this today*; `seeds` needs
+   *that release carried this*, and a release is a past event which cannot grow
+   an asset. So the commit that taught `release.yml` to build the darwin pair
+   could not also mark them attached: v0.2.0 does not carry them, `seeds` would
+   go red, and the `release` job is `needs: ci` — the release that would carry
+   them could not be cut, and the flag could not be cleared until it was. A
+   version dates the claim, so the workflow change and the file change land
+   together and each release is judged against what it was due to attach.
 
 4. **npm publish is manual, and is blocked on the name.** `nish` on the
    public registry is somebody else's package — see "Open decision: the npm
@@ -232,9 +256,9 @@ npm pack --dry-run   # only dist/, runtime/, scripts/, README.md, LICENSE, docs/
 **`nish` 0.N is built by the last patch release of 0.(N−1).** The seed is a
 released binary one minor version back, never the working tree, and the whole
 0.N line — 0.N.0 and every patch after it — is built by that same seed.
-`scripts/bootstrap.sh` selects it with `NISH_BOOTSTRAP`, and CI's bootstrap job
-passes the last release, which is what enforces the rule rather than hoping for
-it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
+`scripts/bootstrap.sh` selects it with `NISH_BOOTSTRAP`, and CI's `bootstrap`
+job passes the last release, which is what enforces the rule rather than hoping
+for it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
 publishes a rule of the same shape; the reason to write ours down now is that a
 policy decided in the abstract costs nobody an argument during a release.
 
@@ -348,9 +372,12 @@ cost rather than what one did.
 - Prebuilt binaries of the compiler itself: it is a Node program, and the
   tarball is the release artefact. **Superseded, and now in fact reversed.**
   That was true when WP12 shipped and it is why `files` looks the way it does;
-  the compiler is no longer only a Node program, and every release attaches a
-  prebuilt binary for each of `x86_64`/`aarch64` × `linux`/`darwin`
-  ([wp19 G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node)).
+  the compiler is no longer only a Node program, and `release.yml` attaches a
+  prebuilt binary for each of `x86_64`/`aarch64` × `linux`/`darwin` — from the
+  release each one's `attachedSince` names, which is 0.1.1 for `x86_64-linux`
+  and 0.3.0 for the other three, because v0.2.0 was published before this
+  landed and a release already published cannot grow an asset
+  ([wp19 G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
   What is still not in any work package is *delivering* one through npm: that
   is option (b) of "which compiler the package ships" above, and it waits on
   the name. The bullet stays because it is the position the package was built

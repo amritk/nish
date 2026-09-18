@@ -52,6 +52,29 @@ export const BUILTIN_SCHEME: string = "nish:";
 export const STD_PREFIX: string = "nish/";
 
 /**
+ * The `exports` condition a package declares to say that it has Nish source
+ * for an Nish consumer to compile (`docs/wp21-packages.md` §2, §6). A literal,
+ * like every value here, for the reason the header gives.
+ *
+ * It is here for the reason `STD_PREFIX` is: it is a spelling of the project's
+ * name, and both compilers have to agree on it before either can resolve a
+ * bare specifier — a package that matched under stage0 and not under stage1
+ * would be a program that compiles with one compiler and not the other.
+ */
+export const PACKAGE_CONDITION: string = "nish";
+
+/**
+ * The mode-qualified spellings of the condition above: `nish-i32`, `nish-f64`.
+ *
+ * `--number-mode` decides what `number` *is*, so it is a compile-time ABI and a
+ * package can be silently wrong about it. Putting the mode in the condition
+ * makes a mismatch a resolution failure at the package boundary, before a byte
+ * of the dependency is checked. A function rather than a constant, so the
+ * literal rule above still holds of everything a constant here holds.
+ */
+export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CONDITION}-${numberMode}`;
+
+/**
  * The package version, baked in rather than read from `package.json`: stage1
  * has no JSON parser and no way to find the package root from a binary that
  * may have been copied anywhere. `tests/run.js` fails when this and

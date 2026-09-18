@@ -19,8 +19,10 @@ import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModul
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  collectStructTypeParamNames,
   collectTypeParamNames,
   isGenericFunction,
+  isGenericStruct,
   mentionsTypeParam,
   rejectDollarInSymbolName,
 } from "./generics";
@@ -73,6 +75,7 @@ import {
   STRUCT_INTERFACE,
   StructInfo,
   StructRegistry,
+  StructTemplateInfo,
 } from "./program";
 import { analyzeBounds } from "./bounds";
 import { checkResultLocalsHandled } from "./result";
@@ -118,15 +121,20 @@ export class Checker {
     for (const stmt of this.program.file.children) {
       if (stmt.kind === N_IMPORT) {
         collectImports(this.ctx, stmt);
-      } else if (stmt.kind === N_CLASS) {
-        const info = declareStruct(this.ctx, stmt, STRUCT_CLASS);
-        if (info !== null) {
-          declared.push(info);
-        }
-      } else if (stmt.kind === N_INTERFACE) {
-        const info = declareStruct(this.ctx, stmt, STRUCT_INTERFACE);
-        if (info !== null) {
-          declared.push(info);
+      } else if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
+        // WP18 G5: a class or interface with type parameters is a template, not
+        // a struct. It declares no layout, so it is registered beside the
+        // function templates and the member loop below skips it: its members
+        // are collected once per instantiation instead.
+        const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE;
+        if (isGenericStruct(stmt)) {
+          this.ctx.errored = false;
+          this.registerStructTemplate(stmt, kind);
+        } else {
+          const info = declareStruct(this.ctx, stmt, kind);
+          if (info !== null) {
+            declared.push(info);
+          }
         }
       } else if (stmt.kind === N_TYPE_ALIAS) {
         // Names first, resolution last: an alias may name a class declared
@@ -168,6 +176,10 @@ export class Checker {
         checkDefiniteAssignment(this.ctx, info);
       }
     }
+    // Every instantiation an annotation in this module's signatures asked for
+    // now has its members, and so does every struct declared here, so the two
+    // checks that need both can run (WP18 G5).
+    this.finishPendingStructs();
 
     // Last, exactly where stage0 puts it, so two compilers report one file's
     // diagnostics in one order: every alias is resolved even when nothing
@@ -205,7 +217,12 @@ export class Checker {
       // the module declares. It has not run yet, but qualifying an imported
       // symbol would rename the *exporter's* function, so say so rather than
       // depend on the order.
-      if (sig.definedIn(this.program.source)) {
+      // WP18: an instantiation's symbol carries the prefix from the moment it is
+      // minted, because it may be created on either side of this pass — a
+      // signature annotation that names `Box<i32>` runs before it, and a
+      // `new Box<i32>(v)` in a body runs long after. Qualifying it again would
+      // spell the package twice.
+      if (sig.instance === null && sig.definedIn(this.program.source)) {
         sig.name = `${prefix}${sig.name}`;
       }
     }
@@ -250,6 +267,7 @@ export class Checker {
       this.program.aliases.has(name) ||
       this.program.enums.has(name) ||
       this.program.structs.has(name) ||
+      this.program.structTemplates.has(name) ||
       this.program.templates.has(name) ||
       this.ctx.sigs.has(name) ||
       this.program.constants.has(name)
@@ -440,31 +458,106 @@ export class Checker {
   }
 
   /**
+   * WP18 G5: one generic class or interface declaration. It shares the single
+   * declaration namespace with everything else, and like a function template it
+   * never becomes a layout: `Box` has no fields until an instantiation binds its
+   * parameters, so it is not in `structs` and `Box` on its own is not a type.
+   */
+  registerStructTemplate(stmt: Node, kind: i32): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    const what = kind === STRUCT_CLASS ? "class" : "interface";
+    if (name.length === 0) {
+      this.ctx.error(stmt, kind === STRUCT_CLASS ? "Classes must be named" : "Interfaces must be named");
+      return;
+    }
+    if (name.startsWith("nish_")) {
+      this.ctx.error(nameNode, "Names starting with `nish_` are reserved for the runtime");
+      return;
+    }
+    if (rejectDollarInSymbolName(this.ctx, name, what, nameNode)) {
+      return;
+    }
+    if (this.program.structs.has(name) || this.program.structTemplates.has(name)) {
+      this.ctx.error(nameNode, `Duplicate declaration of \`${name}\``);
+      return;
+    }
+    if (this.ctx.sigs.has(name) || this.program.templates.has(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared as a function`);
+      return;
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    const template = new StructTemplateInfo(name, kind, stmt, this.program.source);
+    template.exported = isExported(stmt);
+    template.typeParams = collectStructTypeParamNames(stmt);
+    this.program.addStructTemplate(template);
+  }
+
+  /**
    * Pass 3 (WP18): check every instantiation's body, to a fixed point. Each one
    * may request more, and the queue is drained rather than recursed into, so
    * `from` is a chain of requests and not a call stack.
    */
   drainInstantiations(): void {
+    this.finishPendingStructs();
     let at = 0;
     while (at < this.ctx.pending.length) {
       const info = this.ctx.pending[at];
       at = at + 1;
       // Appended here rather than at the request, so that `functions` is in the
-      // order the bodies are checked and the emitter walks it the same way.
-      this.program.functions.push(info.sig);
+      // order the bodies are checked and the emitter walks it the same way. A
+      // method of an instantiated class is the exception: `collectStructMembers`
+      // appended it where a declared class's method is appended, which keeps an
+      // instantiated class's functions together and in member order.
+      if (info.owner === null) {
+        this.program.functions.push(info.sig);
+      }
       this.checkInstanceBody(info);
+      this.finishPendingStructs();
     }
     this.ctx.pending = [];
+  }
+
+  /**
+   * The `implements` and definite-assignment checks owed by struct
+   * instantiations, run once every struct in the module has its members.
+   *
+   * They cannot run at the request, because an annotation that names `Box<i32>`
+   * may be resolved before the interface `Box` implements has been collected —
+   * the same reason a *declared* struct's two checks are a sub-pass of their
+   * own rather than the tail of `collectStructMembers`.
+   */
+  finishPendingStructs(): void {
+    let at = 0;
+    while (at < this.ctx.pendingFinish.length) {
+      const info = this.ctx.pendingFinish[at];
+      at = at + 1;
+      this.ctx.errored = false;
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        checkImplements(this.ctx, info);
+        checkDefiniteAssignment(this.ctx, info);
+      }
+    }
+    this.ctx.pendingFinish = [];
+    this.ctx.errored = false;
   }
 
   /** One instantiation's body, over its own side tables and with its own type bindings. */
   checkInstanceBody(info: Instantiation): void {
     const savedBindings = this.ctx.typeBindings;
     const savedInstance = this.ctx.currentInstance;
+    const savedStruct = this.ctx.currentStructInstance;
     this.program.enterInstance(info);
     this.ctx.typeBindings = info.bindings;
     this.ctx.currentInstance = info;
+    // A method of an instantiated class continues its class's chain: a body
+    // that names `Box<T[]>` expands exactly as a field of that type would.
+    this.ctx.currentStructInstance = info.owner;
     this.checkFunctionBody(info.sig);
+    this.ctx.currentStructInstance = savedStruct;
     this.ctx.currentInstance = savedInstance;
     this.ctx.typeBindings = savedBindings;
     this.program.leaveInstance();
@@ -524,7 +617,11 @@ export class Checker {
    */
   checkBodies(): void {
     for (const sig of this.program.functions) {
-      if (sig.definedIn(this.program.source)) {
+      // WP18 G5: a method of an instantiated class is already in this list —
+      // `collectStructMembers` put it where a declared class's method goes —
+      // but its body means something only with its own tables and type bindings
+      // installed, so `drainInstantiations` is what checks it.
+      if (sig.instance === null && sig.definedIn(this.program.source)) {
         this.checkFunctionBody(sig);
       }
     }
@@ -768,6 +865,29 @@ export class Checker {
       this.bindStructImport(index, struct);
       return;
     }
+    // WP18 §11 G7: one definition per instantiation, in the module that
+    // declares the template, is the whole-program half of this package and has
+    // not landed. Refusing by name beats "has no exported function", which is
+    // what looking only at the exported signatures would say.
+    const structTemplate = target.structTemplate(imp.importedName);
+    if (structTemplate !== null) {
+      const what = structTemplate.kind === STRUCT_CLASS ? "class" : "interface";
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic ${what}, and a generic ` +
+          "class or interface cannot yet be instantiated from another module; declare it in the module that uses it"
+      );
+      return;
+    }
+    const template = target.template(imp.importedName);
+    if (template !== null) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic function, and a generic function cannot ` +
+          "yet be instantiated from another module; declare it in the module that calls it"
+      );
+      return;
+    }
     const sig = target.exported(imp.importedName);
     if (sig === null) {
       let exists = false;
@@ -875,9 +995,7 @@ export class Checker {
 }
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
-function nameOf(sig: FunctionSig): Node {
-  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
-}
+const nameOf = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 // ---- WP15 §8: the `performance` diagnostic class --------------------------------
 //
@@ -984,9 +1102,9 @@ class PerfWalk {
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void {
+export const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void => {
   walkPerformance(new PerfWalk(ctx, sig, body, unprovenIndices), body);
-}
+};
 
 /**
  * A bounds check `self/bounds.ts` could not remove, on an access inside a loop
@@ -1000,7 +1118,7 @@ export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node
  * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
  * the language already has, and half the proof comes off their declaration.
  */
-function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
+const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access;
   let index = access;
   if (access.kind === N_INDEX) {
@@ -1026,17 +1144,17 @@ function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
       `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
       `the upper one`
   );
-}
+};
 
 /** The source name of the local a bare identifier binds, or `""` for anything else. */
-function perfLocalName(ctx: CheckContext, expr: Node): string {
+const perfLocalName = (ctx: CheckContext, expr: Node): string => {
   const e = unwrapPerfParens(expr);
   if (e.kind !== N_IDENT) {
     return "";
   }
   const local = ctx.program.nodeLocals[e.id];
   return local === null ? "" : local.name;
-}
+};
 
 /**
  * Walk one function body. The loop stack is pushed around the parts of a loop
@@ -1045,7 +1163,7 @@ function perfLocalName(ctx: CheckContext, expr: Node): string {
  * loop and must warn, while `for (const x of xs) { ... }` gives `x` a fresh
  * binding every pass and must not.
  */
-function walkPerformance(walk: PerfWalk, node: Node): void {
+const walkPerformance = (walk: PerfWalk, node: Node): void => {
   if (node.kind === N_FOR) {
     walkPerformance(walk, node.children[0]);
     walk.loops.push(node);
@@ -1097,24 +1215,24 @@ function walkPerformance(walk: PerfWalk, node: Node): void {
   for (const child of node.children) {
     walkPerformance(walk, child);
   }
-}
+};
 
 /** Whether `node` is one of the accesses the bounds analysis could not prove. */
-function isUnprovenIndex(walk: PerfWalk, node: Node): boolean {
+const isUnprovenIndex = (walk: PerfWalk, node: Node): boolean => {
   for (const access of walk.unprovenIndices) {
     if (access === node) {
       return true;
     }
   }
   return false;
-}
+};
 
 /**
  * `s = <something built from s>` inside a loop that does not own `s`. Split
  * from the report below because the arena rule has to know whether this one is
  * already speaking about the same assignment: one line gets one warning.
  */
-function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean {
+const isQuadraticAccumulation = (walk: PerfWalk, expr: Node): boolean => {
   if (walk.loops.length === 0) {
     return false;
   }
@@ -1132,10 +1250,10 @@ function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean {
     return false;
   }
   return accumulates(walk.ctx, expr.children[1], target);
-}
+};
 
 /** `s = <something built from s>` inside a loop that does not own `s`. */
-function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
+const checkStringAccumulation = (walk: PerfWalk, expr: Node): void => {
   if (!isQuadraticAccumulation(walk, expr)) {
     return;
   }
@@ -1149,10 +1267,10 @@ function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
     `\`${target.name}\` is rebuilt from its own value on every iteration of this loop, so every pass copies all ` +
       `of it (quadratic in time and in arena bytes): collect the pieces in a \`string[]\` and \`join\` them after the loop`
   );
-}
+};
 
 /** A dynamically sized array allocated per iteration and dead by the end of it. */
-function checkLoopAllocation(walk: PerfWalk, decl: Node): void {
+const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
   if (walk.loops.length === 0) {
     return;
   }
@@ -1174,16 +1292,16 @@ function checkLoopAllocation(walk: PerfWalk, decl: Node): void {
       `past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, ` +
       `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
   );
-}
+};
 
 /** Strip parentheses; every shape test here is about the expression inside them. */
-function unwrapPerfParens(expr: Node): Node {
+const unwrapPerfParens = (expr: Node): Node => {
   let inner = expr;
   while (inner.kind === N_PAREN) {
     inner = inner.children[0];
   }
   return inner;
-}
+};
 
 /**
  * The value of `expr` is `target`'s own contents plus something. Only `+`
@@ -1191,7 +1309,7 @@ function unwrapPerfParens(expr: Node): Node {
  * that copy the accumulator; `s = f(s)` or `s = cond ? s : t` may do anything
  * or nothing, and guessing would break the "name a concrete rewrite" bar.
  */
-function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
+const accumulates = (ctx: CheckContext, expr: Node, target: Local): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind === N_IDENT) {
     const bound = ctx.program.nodeLocals[e.id];
@@ -1208,7 +1326,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
     }
   }
   return false;
-}
+};
 
 /**
  * `expr` allocates an array whose size is not a compile-time constant, so WP6
@@ -1221,7 +1339,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
  * decision goes the other way: a `const n = 8` is a local, not a literal, and
  * both sides agree it is dynamic.
  */
-function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean {
+const isDynamicArrayAllocation = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind !== N_NEW || !ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
     return false;
@@ -1234,10 +1352,10 @@ function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean {
   }
   const length = unwrapPerfParens(args.children[0]);
   return length.kind !== N_NUMBER || !isNonNegativeInteger(length.text);
-}
+};
 
 /** The literal is a non-negative integer as written: no sign, no dot, no exponent. */
-function isNonNegativeInteger(text: string): boolean {
+const isNonNegativeInteger = (text: string): boolean => {
   if (text.length === 0) {
     return false;
   }
@@ -1250,7 +1368,7 @@ function isNonNegativeInteger(text: string): boolean {
     i = i + 1;
   }
   return true;
-}
+};
 
 /**
  * Every reference to `local` inside `root` is consumed where it stands: an
@@ -1261,7 +1379,7 @@ function isNonNegativeInteger(text: string): boolean {
  *
  * `own` is the declaration that introduced `local`; its own name is not a use.
  */
-function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, own: Node): boolean {
+const usedOnlyWithinIteration = (ctx: CheckContext, root: Node, local: Local, own: Node): boolean => {
   if (root === own) {
     return usedOnlyWithinIteration(ctx, own.children[2], local, own);
   }
@@ -1287,17 +1405,17 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
     }
   }
   return true;
-}
+};
 
 /** `expr` is a direct reference to `local` (through parentheses only). */
-function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean {
+const isLocalRef = (ctx: CheckContext, expr: Node, local: Local): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind !== N_IDENT) {
     return false;
   }
   const bound = ctx.program.nodeLocals[e.id];
   return bound !== null && bound === local;
-}
+};
 
 
 // ---- Memory that is allocated and then never released ----------------------------
@@ -1318,9 +1436,7 @@ function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean {
 // warning nobody can act on is worse than no warning.
 
 /** The builtins that hand back freshly allocated memory by plain identifier. */
-function perfIsReadBuiltin(name: string): boolean {
-  return name === "readFileSync" || name === "readFileSyncOrNull";
-}
+const perfIsReadBuiltin = (name: string): boolean => name === "readFileSync" || name === "readFileSyncOrNull";
 
 /**
  * `expr` allocates from the arena in a way the checker can see for itself: a
@@ -1333,7 +1449,7 @@ function perfIsReadBuiltin(name: string): boolean {
  * un-actionable kind of warning. A string literal is not counted either — it
  * is constant data, not an allocation.
  */
-function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
+const perfAllocatesVisibly = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr);
   if (e.kind === N_NEW || e.kind === N_OBJECT || e.kind === N_ARRAY) {
     return true;
@@ -1355,7 +1471,7 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
     return callee.kind === N_IDENT && perfIsReadBuiltin(callee.text) && !ctx.sigs.has(callee.text);
   }
   return e.kind === N_BINARY && e.text === "+" && ctx.program.nodeTypes[e.id] === T_STRING;
-}
+};
 
 /**
  * A type that is a pointer at run time, and so names memory somebody has to
@@ -1363,9 +1479,7 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
  * register: the rule uses this to decide when to stay quiet, and counting a
  * borderline type as a pointer only ever means one warning fewer.
  */
-function perfIsPointerType(ctx: CheckContext, type: i32): boolean {
-  return ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
-}
+const perfIsPointerType = (ctx: CheckContext, type: i32): boolean => ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
 
 /**
  * A use of `local` that can let the value it holds outlive the statement it
@@ -1375,7 +1489,7 @@ function perfIsPointerType(ctx: CheckContext, type: i32): boolean {
  * element read or write through it, `.length`, a `for...of` source — consumes
  * the value where it stands and cannot keep it.
  */
-function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean {
+const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean => {
   if (node.kind === N_CALL) {
     for (const arg of node.children[1].children) {
       if (isLocalRef(ctx, arg, local)) {
@@ -1399,7 +1513,7 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
     return isLocalRef(ctx, node.children[2], local);
   }
   return node.kind === N_BINARY && node.text === "=" && isLocalRef(ctx, node.children[1], local);
-}
+};
 
 /**
  * Whether the value `local` holds *when `expr` runs* may already be reachable
@@ -1417,13 +1531,13 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
  * behind it. Outside one, only a capture that finishes before the assignment
  * starts can have taken a value the assignment is about to drop.
  */
-function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean {
+const perfHeldValueMayBeReachable = (walk: PerfWalk, expr: Node, local: Local): boolean => {
   const inLoop = walk.loops.length > 0;
   const root = inLoop ? walk.loops[0] : walk.body;
   return perfScanForCapture(walk.ctx, root, local, inLoop, expr.start);
-}
+};
 
-function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean {
+const perfScanForCapture = (ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean => {
   if ((inLoop || node.end <= before) && perfCapturesLocal(ctx, node, local)) {
     return true;
   }
@@ -1433,14 +1547,14 @@ function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop:
     }
   }
   return false;
-}
+};
 
 /**
  * `s = <an allocation>` where `s` is a local that was declared holding one.
  * Reported on the target, because the assignment is the thing to change. The
  * guards are stage0's, in the same order.
  */
-function checkArenaReassignment(walk: PerfWalk, expr: Node): void {
+const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
   const left = expr.children[0];
   if (left.kind !== N_IDENT) {
     return;
@@ -1470,7 +1584,7 @@ function checkArenaReassignment(walk: PerfWalk, expr: Node): void {
       `memory at all, so both allocations live until the program exits. Give each value its own \`const\`, or ` +
       `bracket the body with \`Arena.mark()\` and \`Arena.release(m)\``
   );
-}
+};
 
 // ---- Arithmetic that provably goes wrong (the overflow rules) --------------------
 //
@@ -1522,13 +1636,9 @@ class PerfConst {
   }
 }
 
-function perfNoConst(): PerfConst {
-  return new PerfConst(false, 0);
-}
+const perfNoConst = (): PerfConst => new PerfConst(false, 0);
 
-function perfMagnitude(value: i64): i64 {
-  return value < 0 ? -value : value;
-}
+const perfMagnitude = (value: i64): i64 => value < 0 ? -value : value;
 
 /**
  * The exact value of a constant integer expression, or "not a constant". Only
@@ -1541,7 +1651,7 @@ function perfMagnitude(value: i64): i64 {
  * constants.ts` folds those eagerly and makes an overflow a hard error, so
  * what is left for a warning is the arithmetic inside a function body.
  */
-function perfConstantInt(expr: Node): PerfConst {
+const perfConstantInt = (expr: Node): PerfConst => {
   const e = unwrapPerfParens(expr);
   if (e.kind === N_NUMBER) {
     if (!isNonNegativeInteger(e.text)) {
@@ -1578,17 +1688,17 @@ function perfConstantInt(expr: Node): PerfConst {
     return new PerfConst(true, left.value - right.value);
   }
   return perfNoConst();
-}
+};
 
 /** `expr` is a constant of a signed type whose value does not fit that type. */
-function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean {
+const perfOverflowsItsType = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr);
   if (ctx.program.nodeTypes[e.id] !== T_I32) {
     return false;
   }
   const folded = perfConstantInt(e);
   return folded.ok && (folded.value < I32_MIN || folded.value > I32_MAX);
-}
+};
 
 /**
  * A constant `+`, `-` or `*` whose value does not fit the signed type it is
@@ -1601,7 +1711,7 @@ function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean {
  * undefined behaviour and the warning would be arguing with a flag the author
  * passed on purpose.
  */
-function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
+const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
   if (walk.ctx.wrapping) {
     return;
   }
@@ -1625,7 +1735,7 @@ function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
       `${I32_MAX}), and signed overflow is undefined behaviour rather than a wrap: widen the operands with ` +
       `\`toI64\` first, or use --wrapping for two's-complement arithmetic`
   );
-}
+};
 
 /**
  * `toI64(a * b)` and `toF64(a * b)` on `i32` operands: the multiplication is
@@ -1641,7 +1751,7 @@ function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
  * A user function of the same name shadows the builtin, so a program that
  * declares one is left alone: the call is not a conversion at all there.
  */
-function checkWideningConversion(walk: PerfWalk, call: Node): void {
+const checkWideningConversion = (walk: PerfWalk, call: Node): void => {
   const callee = unwrapPerfParens(call.children[0]);
   if (callee.kind !== N_IDENT || (callee.text !== "toI64" && callee.text !== "toF64")) {
     return;
@@ -1667,7 +1777,7 @@ function checkWideningConversion(walk: PerfWalk, call: Node): void {
       `conversion cannot recover an overflow that has already happened: convert the operands first, as ` +
       `\`${callee.text}(a) ${arg.text} ${callee.text}(b)\``
   );
-}
+};
 
 /**
  * A shift by a literal count at or beyond the operand's width. The count is
@@ -1675,7 +1785,7 @@ function checkWideningConversion(walk: PerfWalk, call: Node): void {
  * means `x << 32` on an `i32` shifts by nothing at all -- never what the line
  * was written to do.
  */
-function checkShiftCount(walk: PerfWalk, expr: Node): void {
+const checkShiftCount = (walk: PerfWalk, expr: Node): void => {
   if (expr.text !== "<<" && expr.text !== ">>" && expr.text !== ">>>") {
     return;
   }
@@ -1695,4 +1805,4 @@ function checkShiftCount(walk: PerfWalk, expr: Node): void {
       `${count.value % width} and this shifts by that instead: mask the count yourself if that is intended, or ` +
       `shift a wider value — \`${expr.text}\` never shifts a value out of existence here`
   );
-}
+};

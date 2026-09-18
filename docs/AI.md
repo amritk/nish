@@ -119,7 +119,7 @@ rejects. This table is the highest-value part of the page.
 | `undefined` | forbidden | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
-| `class Box<T>`, `type Pair<T>`, a generic method | `` Generic type parameters are forbidden on a class in Nish `` | a generic **function** works — see below; a generic *type* does not |
+| `type Pair<T>` (a generic alias), a generic method | `` Generic type parameters are forbidden on a type alias in Nish `` | a generic **function**, **class** and **interface** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
@@ -129,7 +129,7 @@ rejects. This table is the highest-value part of the page.
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `for (const k in o)` | `Unsupported statement in Phase 1: ForInStatement` | `for (const x of xs)` over an array |
-| `import { readFileSync } from "fs"` | `Only relative import specifiers are supported` | `readFileSync` is a global; no import needed |
+| `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
 | `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
@@ -395,10 +395,63 @@ export const main = (): i32 => {
   concrete type.
 - **Not supported yet**, each with its own message: a constrained parameter
   (`<T extends Shape>`), a default type argument (`<T = string>`), type
-  parameters on a **class, interface, method or type alias**, and instantiating
-  a generic imported from another module. A generic `main` is refused.
+  parameters on a **method or type alias**, and instantiating a generic
+  imported from another module. A generic `main` is refused.
 - **`$` may not appear in a function, class or interface name** — it is what
   separates a generic's name from its type arguments in the emitted symbol.
+
+### Generic classes and interfaces
+
+A `class` or an `interface` may take type parameters too, and an instantiation
+is **an ordinary struct**: `Box<i32>` is `%struct.Box$i32` with `Box`'s fields
+at `T = i32`, and everything the language does to a struct works on it.
+
+```ts nish:ok
+class Box<T> {
+  value: T;
+  constructor(v: T) { this.value = v; }
+  get(): T { return this.value; }
+}
+
+interface Pair<A, B> { first: A; second: B; }
+
+export const main = (): i32 => {
+  const b = new Box<i32>(7);
+  const p: Pair<i32, string> = { first: 1, second: "hi" };
+  console.log(p.second);
+  return b.get();
+};
+```
+
+- **Write the type arguments out.** `Box` on its own is not a type — there is
+  no layout until `T` is bound — so it is `` `Box` is generic: it must be
+  written with its type arguments ``. The two positions that take them are an
+  annotation (`const b: Box<i32>`) and `new` (`new Box<i32>(7)`); a *call*
+  infers instead. A class that is not generic takes none.
+- **A type argument may be anything a type may be**, including another
+  instantiation: `Box<Point>`, `Box<Box<i32>>`, `Box<i32[]>`,
+  `Box<Result<i32, string>>`.
+- **`implements` may name an instantiation**: `class Box<T> implements
+  Container<T>` is checked per instantiation by the usual field-prefix rule.
+- **A field may not grow its own type argument.** `class Nest<T> { inner:
+  Nest<T[]> | null }` is `` Monomorphising `Nest` would not terminate ``;
+  `Nest<T>` and a type that mentions no parameter are both fine.
+- **A type parameter takes no type arguments of its own.** `T` is whatever the
+  instantiation bound it to, so `const y: T<i32>` is
+  `` Unsupported type reference `T<i32>` ``.
+- **A template obeys every rule a declared class obeys**: `declare class
+  Box<T>`, `export default class Box<T>`, `abstract class Box<T>` and
+  `interface Box<T> extends Base` are refused in the words their non-generic
+  spellings are refused in.
+- **A template claims its name.** `class Box<T>` is a declaration of `Box`, so
+  a function, constant, alias, enum or second class of that name is refused
+  whichever was written first: `` `Box` is already declared in this module ``,
+  or `` Duplicate declaration of `Box` `` for a second class.
+- **Two modules may not both declare a generic class of one name** once both
+  instantiate it: `%struct.Box$i32` is program-wide, so
+  `` Generic class `Holder` is also declared in helper.ts ``.
+- **Not supported yet**: a constrained parameter, a generic method of its own,
+  and importing a generic class or interface from another module.
 
 ### Calling C
 
@@ -582,8 +635,8 @@ export const main = (): i32 => {
 
 - A `type` alias is a second name for an existing type, **not a type of its
   own** — the same program with and without its aliases emits byte-identical
-  IR. A generic *alias* is still forbidden even though a generic function is
-  not; built-in names may not be aliased.
+  IR. A generic *alias* is still forbidden even though a generic function,
+  class and interface are not; built-in names may not be aliased.
 - A numeric `enum` is a **distinct type** represented as `i32`, and that is the
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
@@ -597,10 +650,22 @@ export const main = (): i32 => {
 
 - `export` goes on `const` (function or constant), `class`, and `interface`
   declarations. No `export default`, no `export { … }`, no `export *`.
-- The only import form is a **named import from a relative specifier**:
-  `import { square, cube as pow3 } from "./math"`. `.ts` is optional.
-  Bare specifiers, default imports, namespace imports, side-effect imports and
-  type-only imports are all rejected.
+- The only import form is a **named import**:
+  `import { square, cube as pow3 } from "./math"`. `.ts` is optional. Default
+  imports, namespace imports, side-effect imports and type-only imports are all
+  rejected.
+- A specifier is a relative path (`./x`, `../x`), a builtin module (`nish:fs`),
+  a standard-library module (`nish/text`), or a **package name** (`hash`,
+  `@scope/hash`, with a subpath after it if you want one).
+- **A package is resolved through `node_modules` and compiled from source.**
+  The package's `package.json` must offer the file under the `nish` export
+  condition — `{"exports": {".": {"nish": "./src/index.ts"}}}` — and the mode
+  gets a spelling of its own, `nish-i32` / `nish-f64`, for source that is only
+  correct under one `--number-mode`. The mode-qualified condition wins wherever
+  the package declares it, so a manifest carrying both never compiles the wrong
+  one of the two. A package without that condition is
+  `` Package `lodash` has no Nish entry point ``, which is what an ordinary npm
+  package gets: there is nothing to compile in a `.js` file.
 - Functions may be renamed on import; classes and interfaces may not — the type
   name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
@@ -833,7 +898,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined`, `?.`, `??`, a cast, a
-   callback, a generic *class* or *alias*, or `extends`?
+   callback, a generic *alias* or *method*, or `extends`?
 9. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a

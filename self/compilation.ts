@@ -31,23 +31,72 @@ import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes";
 import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
-import { StringMap } from "./map";
+import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
-import { packageDirOf, packageNameOf, ROOT_PACKAGE } from "./packages";
+import {
+  PACKAGE_ROOT_SEGMENT,
+  packageDirOf,
+  packageNameOf,
+  parseBareSpecifier,
+  ROOT_PACKAGE,
+} from "./packages";
 import { ParentTable } from "./parents";
 import { Parser } from "./parser";
 import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry } from "./program";
-import { basenameWithout, dirname, relativePath, resolveModule } from "./paths";
-import { CLI, STD_PREFIX } from "./branding";
+import {
+  basename,
+  basenameWithout,
+  dirname,
+  joinPath,
+  normalizePath,
+  relativePath,
+  resolveModule,
+} from "./paths";
+import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX } from "./branding";
+import { nishExportTarget } from "./manifest";
 import { stdModuleNames, stdModulePath } from "./std_modules";
 import { RuntimeTable } from "./runtime";
 import { splitByte } from "./strings";
 import { TypeTable } from "./types";
 import { validate } from "./validator";
+import { NUMBER_MODE_F64 } from "./context";
 
 const SLASH: i32 = 47;
+
+/**
+ * How many directories the `node_modules` walk visits before it gives up
+ * (`Compilation.findPackageDir`).
+ *
+ * Something has to end a relative walk, because it cannot recognise the
+ * filesystem root: `/..` is `/`, so each step past the root re-asks what the
+ * root already answered and the loop would never stop. 256 levels above the
+ * importing directory is two orders of magnitude past any working directory a
+ * compiler is run in, and it keeps a failed resolution instant — the spelled
+ * paths get longer as the walk climbs, and probing to PATH_MAX's worth of them
+ * costs about 1.8 s of kernel time where this costs a few milliseconds. What is
+ * left outside it is a package above a directory 256 deep, which needs the
+ * `cwd` builtin WP19 §A3 keeps out rather than a bigger number.
+ */
+const PACKAGE_WALK_LIMIT: i32 = 256;
+
+/**
+ * What resolving one specifier answers: the file, the package it is in when the
+ * specifier says, and the diagnostic when it says nothing that resolves
+ * (WP21 S2).
+ *
+ * `packageName` is `""` when the specifier does not state a package — a
+ * relative import stays wherever its path puts it — and `packages.ts` reads it
+ * off the path for those. `error` is `""` when the resolution worked; an error
+ * value rather than a throw, because the language has no exceptions and the
+ * caller has a sink to report into either way.
+ */
+export interface ResolvedModule {
+  path: string;
+  packageName: string;
+  error: string;
+}
 
 /** One source module: its identity, its tree, and the checker that owns it. */
 export class ModuleUnit {
@@ -284,12 +333,16 @@ export class Compilation {
       if (unit.resolved.has(imp.specifier)) {
         continue;
       }
-      const target = imp.specifier.startsWith(STD_PREFIX)
-        ? stdModulePath(this.opts.packageRoot, imp.specifier)
-        : resolveModule(dir, imp.specifier);
-      if (readFileSyncOrNull(target) === null) {
+      const found = this.resolveSpecifier(dir, imp.specifier);
+      if (found.error.length > 0) {
         // At the module specifier, where stage0 points
         // (`imp.node.moduleSpecifier` in `src/compilation.ts`).
+        checker.ctx.errorAtSpecifier(imp.decl, found.error);
+        checker.ctx.errored = false;
+        continue;
+      }
+      const target = found.path;
+      if (readFileSyncOrNull(target) === null) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
@@ -304,13 +357,160 @@ export class Compilation {
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
-      if (!this.load(target, imp.specifier.startsWith(STD_PREFIX) ? CLI : "")) {
+      if (!this.load(target, found.packageName)) {
         ok = false;
       } else {
         unit.resolved.set(imp.specifier, this.byPath.get(target, -1));
       }
     }
     return ok;
+  }
+
+  /**
+   * The file one import specifier names, and the package it puts that file in.
+   *
+   * Four forms, in the order they are recognised: `nish:x` is a builtin and
+   * never reaches here; `nish/x` is the standard library beside this compiler
+   * and is package `nish` wherever it was installed; `./x` and `../x` are
+   * files, and say nothing about a package; anything else is a bare specifier
+   * and is a package (WP21 S2).
+   */
+  resolveSpecifier(dir: string, specifier: string): ResolvedModule {
+    if (specifier.startsWith(STD_PREFIX)) {
+      const std: ResolvedModule = {
+        path: stdModulePath(this.opts.packageRoot, specifier),
+        packageName: CLI,
+        error: "",
+      };
+      return std;
+    }
+    if (specifier.startsWith("./") || specifier.startsWith("../")) {
+      const relative: ResolvedModule = { path: resolveModule(dir, specifier), packageName: "", error: "" };
+      return relative;
+    }
+    return this.resolveBareSpecifier(dir, specifier);
+  }
+
+  /**
+   * `import { blake3 } from "@scope/hash"` (WP21 S2, `docs/wp21-packages.md`
+   * §5b, §6).
+   *
+   * Node's algorithm, and deliberately not a resolver of our own: npm already
+   * owns the registry, the lockfile and the layout. What is ours is the
+   * condition — `nish`, or its mode-qualified spelling — and reading the
+   * `exports` map here rather than delegating is what makes a package that
+   * offers no Nish source fail saying so, which a resolver that only answers
+   * "unresolved" could never do.
+   *
+   * The package is **stated** here rather than read back off the resolved path:
+   * this is the code that found the manifest, so it is the code that knows
+   * which package the file is in.
+   */
+  resolveBareSpecifier(dir: string, specifier: string): ResolvedModule {
+    const failed: ResolvedModule = { path: "", packageName: "", error: "" };
+    const parsed = parseBareSpecifier(specifier);
+    if (parsed === null) {
+      // Pass 1 refuses a specifier that is neither relative nor a package name,
+      // so reaching here with one is a broken invariant rather than a user
+      // error. The sink is not the place for it and neither is a panic in a
+      // resolver, so it answers the same "cannot find" the caller reports.
+      failed.error = `Cannot find package \`${specifier}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
+      return failed;
+    }
+    const packageDir = this.findPackageDir(dir, parsed.name);
+    if (packageDir === null) {
+      failed.error = `Cannot find package \`${parsed.name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
+      return failed;
+    }
+    const manifest = readFileSyncOrNull(joinPath([packageDir, "package.json"]));
+    const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32";
+    // `findPackageDir` only answers a directory whose manifest it could read, so
+    // the null here is a file that vanished between the two reads. It takes the
+    // same route as a manifest with nothing in it for us, which is the honest
+    // answer: this compiler found no Nish entry point in that package.
+    let target: string | null = null;
+    if (manifest !== null) {
+      target = nishExportTarget(manifest, parsed.subpath, packageConditionFor(mode), PACKAGE_CONDITION);
+    }
+    if (target === null) {
+      // The package was found and is not an Nish package: its `exports` map has
+      // no `nish` condition for this subpath — or no `exports` at all, or one
+      // shaped in a way `manifest.ts` does not read. Saying it in these words is
+      // §6's point: a bare import of an ordinary npm package should fail naming
+      // the thing that is missing, not with a module-not-found that reads like
+      // the consumer mistyped their own file name. The second clause says what
+      // this compiler came away with rather than what the package declares,
+      // because the mode-qualified condition outranks the plain one (§10a): a
+      // manifest whose `nish-i32` names something that is not a file never
+      // reaches its perfectly good `nish` row, and a sentence about what the
+      // `exports` declares would send its author to a line that is correct.
+      //
+      // TODO(WP21 S3): the boundary diagnostics split this one message into the
+      // specific ones — a package that offers Nish in the *other* number mode,
+      // named with both modes, and an `engines.nish` floor above this compiler.
+      failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\``;
+      return failed;
+    }
+    // The manifest may name a file that is not there, which is the package's
+    // own mistake and not the consumer's — but it is still a module that could
+    // not be found, so the caller reports it as one.
+    //
+    // The path is joined, never resolved through a symlink: this language has no
+    // `realpath` builtin, so one package reached through two links is two
+    // modules and the WP21 S1 clash check refuses the program. Node's resolver
+    // realpaths and gets one, which is why pnpm's store resolves there and not
+    // here. stage0 *could* call `fs.realpathSync` and is deliberately not
+    // allowed to, because a program stage0 compiles and stage1 refuses is the
+    // divergence the oracles exist to prevent.
+    // TODO(WP21 S3): close it on both sides. `tests/link/package_symlink` is the
+    // declared case and `docs/wp21-packages.md` §10d states it.
+    const resolved: ResolvedModule = {
+      path: joinPath([packageDir, target]),
+      packageName: parsed.name,
+      error: "",
+    };
+    return resolved;
+  }
+
+  /**
+   * The directory of package `name` as Node would find it: `node_modules/<name>`
+   * with a `package.json` in it, in `from` or in any directory above it.
+   *
+   * A directory whose last segment is already `node_modules` is stepped over
+   * rather than searched, which is Node's rule and stops
+   * `node_modules/node_modules/<name>` from ever being looked for.
+   *
+   * The walk has to reach every directory stage0 reaches, because a program
+   * one compiler resolves and the other does not is a program that compiles
+   * with one compiler and not the other. Both walks are driven by the importing
+   * module's *name*, the one string both compilers hold for it (WP19 §A3); here
+   * that name is usually relative — `nish main.ts` run in `proj/src` gives `.`
+   * — so above `.` the walk is spelled with `..` rather than computed by
+   * `dirname` (`parentDirectory`), and `proj/node_modules` beside
+   * `proj/src/main.ts`, which is the ordinary npm layout, is found by both.
+   */
+  findPackageDir(from: string, name: string): string | null {
+    // Normalised first so that the `..` segments a relative walk produces are
+    // the only ones in the path, which is what `parentDirectory` reads.
+    let dir = normalizePath(from);
+    let steps = 0;
+    let searching = true;
+    while (searching) {
+      if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
+        const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name]);
+        if (readFileSyncOrNull(joinPath([candidate, "package.json"])) !== null) {
+          return candidate;
+        }
+      }
+      const parent = parentDirectory(dir);
+      if (parent.length === 0 || steps >= PACKAGE_WALK_LIMIT) {
+        searching = false;
+      } else {
+        dir = parent;
+        steps = steps + 1;
+      }
+    }
+    return null;
   }
 
   /**
@@ -367,7 +567,91 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.drainInstantiations();
     }
+    this.rejectInstantiatedStructClashes();
     return !this.sink.hasErrors();
+  }
+
+  /**
+   * WP18 G5 + WP21 section 9c: the struct-name rule, one pass later.
+   *
+   * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
+   * that both declare `Holder<T>` and both instantiate it at `i32` produce two
+   * different `%struct.Holder$i32`. `declaredStructs` catches that when both
+   * instantiations came from a *signature*, because it runs before bodies are
+   * checked; an instantiation a body asked for does not exist yet then, so the
+   * set is only final here.
+   *
+   * It has to be caught rather than left: the second module's registration
+   * replaces the layout the first one's objects were built with, so a field
+   * read through an imported signature lands on the wrong offset. That is a
+   * miscompile, not a link error.
+   *
+   * Two modules of one package clash for the same reason and are refused here
+   * too. Packages are what make `Holder` and `Holder` two names in
+   * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
+   * which is a program-wide `%struct` name and a program-wide method symbol
+   * whichever package asked for it. A declared `class Holder` in two modules of
+   * one package is caught before bodies, by `@Holder.constructor` clashing in
+   * `rejectSymbolClashes`; the generic spelling has no symbol until an
+   * instantiation exists, so it reached the emitter unremarked and produced two
+   * different `%struct.Holder$i32` and an invalid redefinition of
+   * `@Holder$i32.constructor`, with no diagnostic at all
+   * (`tests/link/generic_class_clash`).
+   *
+   * One message per template rather than per instantiation: two modules that
+   * both declare `Holder<T>` and both use it at `i32` and at `string` have made
+   * one mistake, not two.
+   */
+  rejectInstantiatedStructClashes(): void {
+    const owners = new StringMap();
+    const ownerPackages: string[] = [];
+    const ownerPaths: string[] = [];
+    const reported = new StringSet();
+    for (const unit of this.modules) {
+      for (const instance of unit.checker.program.structInstantiationList) {
+        // The module that declares the template owns every instantiation of
+        // it, whoever the annotation was written by.
+        if (instance.template.origin !== unit.source) {
+          continue;
+        }
+        const name = instance.info.name;
+        const seen = owners.get(name, -1);
+        if (seen < 0) {
+          owners.set(name, ownerPackages.length);
+          ownerPackages.push(unit.packageName);
+          ownerPaths.push(unit.path);
+          continue;
+        }
+        // A template is one declaration in one module, so its module's path and
+        // its own name name it uniquely -- which is the object identity stage0
+        // keys this set on.
+        if (!reported.add(`${unit.path}#${instance.template.sourceName}`)) {
+          continue;
+        }
+        const at = instance.template.decl.children[0];
+        if (ownerPackages[seen] === unit.packageName) {
+          // The sentence `rejectSymbolClashes` writes for a generic function,
+          // with the noun changed: it is the same rule one level up.
+          const kindWord = instance.template.kind === STRUCT_CLASS ? "class" : "interface";
+          this.sink.report(
+            unit.source,
+            at.start,
+            at.end,
+            `Generic ${kindWord} \`${instance.template.sourceName}\` is also declared in ${ownerPaths[seen]}; a class or interface name must be unique across the program, and an instantiation is named after its template`
+          );
+          continue;
+        }
+        const what = instance.info.kind === STRUCT_CLASS ? "Class" : "Interface";
+        const here = describePackage(unit.packageName);
+        const there = describePackage(ownerPackages[seen]);
+        this.sink.report(
+          unit.source,
+          at.start,
+          at.end,
+          `${what} \`${name}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
+        );
+      }
+    }
   }
 
   /** Every class and interface declared anywhere in the program, by name. */
@@ -563,15 +847,47 @@ export class Compilation {
   }
 }
 
+/**
+ * The directory above `dir`, or `""` when there is none left to visit — and the
+ * twin of `parentDirectory` in `src/compilation.ts`, step for step, because the
+ * two compilers have to visit the same directories in the same order.
+ *
+ * `dirname` answers this for an absolute path and stops at `/`. For a relative
+ * one it stops at `.`, and it is wrong above that: `dirname("..")` is `.`, back
+ * the way we came. So above `.` the walk is spelled — one more `..` per level —
+ * and the operating system resolves those against the working directory. That
+ * is how a compiler with no `cwd` builtin (WP19 §A3) searches the directories
+ * above the one it was run in.
+ *
+ * What the spelling gives up it now gives up on both sides: `..` names a
+ * directory without naming it, so an ancestor above the name's own root that is
+ * itself called `node_modules` cannot be recognised and is searched rather than
+ * stepped over. stage0 used to read that name off an absolute path and refuse
+ * the package — a program that compiled with one compiler and not the other —
+ * so its walk is driven by the module's name now too (`docs/wp21-packages.md`
+ * §10a, `tests/link/package_doubled`).
+ */
+const parentDirectory = (dir: string): string => {
+  if (dir.length > 0 && dir.charCodeAt(0) === SLASH) {
+    const parent = dirname(dir);
+    return parent === dir ? "" : parent; // `/` is the top of an absolute walk
+  }
+  if (dir === ".") {
+    return "..";
+  }
+  // In a normalised relative path every `..` leads, so a trailing one means
+  // the path is nothing but parent steps and the next level is one more.
+  if (dir === ".." || dir.endsWith("/..")) {
+    return `${dir}/..`;
+  }
+  return dirname(dir);
+};
+
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
-function nameNode(sig: FunctionSig): Node {
-  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
-}
+const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 /** How a diagnostic names a package: the program's own has no name to give. */
-function describePackage(packageName: string): string {
-  return packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
-}
+const describePackage = (packageName: string): string => packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
 
 /**
  * The wording of a duplicate-symbol rejection (WP21 S1).
@@ -584,7 +900,7 @@ function describePackage(packageName: string): string {
  * than assembled from a shared fragment, because a diagnostic's literal run is
  * what `scripts/gen-diagnostic-codes.mjs` keys its stable `NL` code on.
  */
-function clashMessage(sig: FunctionSig, previous: FunctionSig, previousFile: string, packageName: string): string {
+const clashMessage = (sig: FunctionSig, previous: FunctionSig, previousFile: string, packageName: string): string => {
   const where = `\`${sig.sourceName}\` is also defined in ${previousFile}`;
   if (sig.exported && previous.exported) {
     if (packageName === ROOT_PACKAGE) {
@@ -596,4 +912,4 @@ function clashMessage(sig: FunctionSig, previous: FunctionSig, previousFile: str
     return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`;
   }
   return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`;
-}
+};

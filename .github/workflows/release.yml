@@ -1,25 +1,36 @@
 # Nish release: on a `v*` tag, run the full CI workflow (test matrix, lint,
-# smoke), then build the npm tarball and the native compiler and attach both to
-# a GitHub release whose notes are the matching CHANGELOG.md section.
+# smoke), then build the npm tarball and one native compiler per supported
+# target and attach them all to a GitHub release whose notes are the matching
+# CHANGELOG.md section.
 #
-# Five artifacts, for two audiences:
-#   nish-<version>.tgz               the npm package; needs Node
-#   nish-<version>-x86_64-linux      the self-hosted compiler; needs nothing
-#   nish-<version>-aarch64-linux
-#   nish-<version>-x86_64-darwin
-#   nish-<version>-aarch64-darwin
+# Two audiences, and as many artifacts as the release is due to carry:
+#   nish-<version>.tgz             the npm package; needs Node
+#   nish-<version>-<asset>.tar.gz  the self-hosted compiler; needs nothing
 #
 # The binaries are also the seed: ci.yml's `bootstrap` job downloads the one
-# for its own host from the last release and builds self/ with it (WP19 G3),
-# so the triple in the name is a contract between the two workflows rather
-# than a label -- and the reason the darwin rows of that job had nothing to
-# seed from until this workflow built these (WP19 G5).
+# for its own host from the last release and builds self/ with it (WP19 G3), so
+# the name is a contract between the two workflows -- and neither workflow
+# spells it. Both read it from .github/seed-targets.json, because a contract
+# each side writes down separately is two strings that agree until one is
+# edited. That file carries all four of WP19 G5's platforms, the canonical
+# target triple each one is (src/codegen/target.ts), the runner label that
+# provides it, and the version from which a release attaches it; tests/run.js
+# checks all four of those against the compiler's own table, against the labels
+# this file can ask for, and against this file's own text.
+#
+# Nothing here is spelled, then, including the matrix: the `targets` job below
+# asks .github/seed-due.sh which assets THIS version is due to carry and the
+# `binaries` matrix is that answer. A platform is added by adding a row to the
+# JSON, and `seeds` in ci.yml grows its bootstrap row from the same file on the
+# next run.
 #
 # Each binary is built on a runner of its own architecture rather than
 # cross-compiled, because the chain is a chain: bootstrap.sh runs stage1 to
 # build stage2, and a stage1 for another architecture does not run here.
-# `scripts/build.sh` has no --target passthrough for the same reason -- it
-# lets clang fill the triple in from the host.
+# `scripts/build.sh` has no --target passthrough for the same reason -- it lets
+# clang fill the triple in from the host. The upshot worth having is that
+# "built" and "smoke-tested" mean the same thing on every row: there is no tier
+# that was produced for a machine nobody ran it on.
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
@@ -43,6 +54,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# `contents: write` is what `gh release create` needs, and only the `release`
+# job needs it. Every other job narrows to `contents: read` at the job level:
+# `binaries` runs `npm ci` and `brew install`, which is third-party install
+# code on four machines, and a token that can push to the repository and
+# publish a release is not something to hand it for the sake of one checkout.
 permissions:
   contents: write
 
@@ -58,41 +74,32 @@ jobs:
     name: ci
     uses: ./.github/workflows/ci.yml
 
-  # WP19 G5: one self-hosted compiler per supported target, each built and
-  # smoke-tested on its own hardware.
-  #
-  # `fail-fast: false` so a broken row names itself rather than hiding behind
-  # whichever failed first; the release job `needs` this one, so a single
-  # failure still stops the release instead of publishing three binaries of
-  # four. A partial release is the worse outcome: the missing one is the seed
-  # some later `bootstrap` row will look for and not find.
-  binaries:
-    name: binary (${{ matrix.triple }})
-    needs: ci
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - triple: x86_64-linux
-            runner: ubuntu-latest
-          - triple: aarch64-linux
-            runner: ubuntu-24.04-arm
-          - triple: x86_64-darwin
-            runner: macos-15-intel
-          - triple: aarch64-darwin
-            runner: macos-latest
+  # The matrix, as this release's own answer rather than a list. Separate from
+  # `binaries` because a matrix has to be known before the job it belongs to
+  # starts, and separate from `ci` because a mis-aimed dispatch should be red
+  # in seconds rather than after the test suite.
+  targets:
+    name: which binaries this release attaches
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      rows: ${{ steps.rows.outputs.rows }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      # The same guard the release job carries, here as well: this job stamps
-      # GITHUB_REF_NAME into an asset name, and a run aimed at a branch would
-      # otherwise build `nish-main-x86_64-linux` and upload it.
+      # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
+      # before the version is: dispatched at `main`, every step below would
+      # read GITHUB_REF_NAME as a branch name and the comparison underneath
+      # would report a version mismatch for what is really a mis-aimed run.
+      #
+      # It is checked here, first, because the version is what decides the
+      # matrix: aimed at a branch, `seed-due.sh main` is the question nobody
+      # meant to ask.
       - name: Ref must be a v* tag matching package.json version
         run: |
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then
@@ -106,6 +113,56 @@ jobs:
             exit 1
           fi
 
+      # An empty answer stops the release rather than producing a job with no
+      # rows: GitHub refuses an empty matrix as a strategy error, which would
+      # report as a broken workflow instead of as a release with no compiler
+      # in it. Zero due targets means the JSON is wrong, and saying so here is
+      # cheaper than reading a strategy error on a tag.
+      - name: Which assets this version is due to attach
+        id: rows
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          rows="$(bash .github/seed-due.sh "$version")"
+          if [ "$(printf '%s' "$rows" | jq 'length')" -eq 0 ]; then
+            echo "::error::.github/seed-targets.json has no target with an attachedSince of $version or older, so this release would attach no native compiler at all. Fix the file before releasing."
+            exit 1
+          fi
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
+          printf '%s' "$rows" | jq -r '.[] | "\(.asset)\t\(.triple)\t\(.runner)\tsince \(.attachedSince)"'
+          {
+            echo "### Native compilers this release attaches"
+            echo
+            echo "| Asset | Triple | Runner | Attached since |"
+            echo "| --- | --- | --- | --- |"
+            printf '%s' "$rows" | jq -r '.[] | "| `nish-'"$version"'-\(.asset).tar.gz` | `\(.triple)` | `\(.runner)` | \(.attachedSince) |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # WP19 G5: one self-hosted compiler per supported target, each built and
+  # smoke-tested on its own hardware.
+  #
+  # `fail-fast: false` so a broken row names itself rather than hiding behind
+  # whichever failed first; the release job `needs` this one, so a single
+  # failure still stops the release instead of publishing three binaries of
+  # four. A partial release is the worse outcome: the missing one is the seed
+  # some later `bootstrap` row will look for and not find.
+  binaries:
+    name: binary (${{ matrix.target.asset }})
+    needs: [ci, targets]
+    runs-on: ${{ matrix.target.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.rows) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
         run: |
@@ -118,12 +175,17 @@ jobs:
           done
           echo "$bin" >> "$GITHUB_PATH"
 
+      # Homebrew's llvm@18 carries clang, lld and llvm-as in one keg, so this
+      # is one formula rather than the Ubuntu side's symlink farm -- the tools
+      # are already unversioned inside it. No fallback for a missing linker:
+      # if the keg ever stops shipping one, the build fails at the link with
+      # clang's own message, which is a better diagnostic than a second `brew
+      # install` whose prefix this step does not put on PATH anyway.
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
         run: |
           brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
-          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
@@ -144,29 +206,29 @@ jobs:
       # stage2, not stage1: it is the first binary in the chain that no part of
       # stage0 emitted, and --verify is what says the stages agree.
       #
-      # The triple is checked against the machine before it is stamped into the
-      # name. An asset labelled for one architecture and built on another is
-      # the one failure this job cannot smoke-test its way out of: it runs
-      # here, it runs in the smoke step, and it fails on a user's machine and
-      # on the `bootstrap` row that seeds from it.
+      # The runner's own `uname` is checked against the row's `host` before the
+      # row's `asset` is stamped into a name. An asset labelled for one
+      # architecture and built on another is the one failure this job cannot
+      # smoke-test its way out of -- it runs here, it runs in the smoke step,
+      # and it fails on a user's machine and on the `bootstrap` row that seeds
+      # from it -- and it is not hypothetical: a GitHub label can change what
+      # it provides, which is what `macos-latest` did when it moved from Intel
+      # to Apple Silicon. The matrix pins label to triple, so this check fires
+      # exactly when that pinning has gone stale.
       - name: Build the native compiler
         id: binary
         env:
-          TRIPLE: ${{ matrix.triple }}
+          ASSET: ${{ matrix.target.asset }}
+          HOST: ${{ matrix.target.host }}
+          RUNNER_LABEL: ${{ matrix.target.runner }}
         run: |
-          case "$(uname -s)-$(uname -m)" in
-            Linux-x86_64)  host=x86_64-linux ;;
-            Linux-aarch64) host=aarch64-linux ;;
-            Darwin-arm64)  host=aarch64-darwin ;;
-            Darwin-x86_64) host=x86_64-darwin ;;
-            *) echo "::error::unknown host $(uname -s)-$(uname -m)"; exit 1 ;;
-          esac
-          if [ "$host" != "$TRIPLE" ]; then
-            echo "::error::this runner is $host but the matrix row says $TRIPLE"
+          host="$(uname -s)-$(uname -m)"
+          if [ "$host" != "$HOST" ]; then
+            echo "::error::$RUNNER_LABEL provides $host, but .github/seed-targets.json says the $ASSET row is built on $HOST. One of the two has moved: fix the row's runner or its host before releasing, because the asset would otherwise be labelled for an architecture it was not built on."
             exit 1
           fi
           version="${GITHUB_REF_NAME#v}"
-          name="nish-$version-$TRIPLE"
+          name="nish-$version-$ASSET"
           stage="build/release/$name"
           mkdir -p "$stage/bin" "$stage/scripts"
           bash scripts/bootstrap.sh -o "$stage/bin/nish" --profile speed --verify
@@ -177,10 +239,37 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "asset=build/release/$name.tar.gz" >> "$GITHUB_OUTPUT"
 
+      # The same gate the `Pack` step applies to the npm tarball, applied to
+      # the one that is the seed. `cp -r runtime` copies the directory today,
+      # so this is a check on the layout rather than a suspicion of the copy:
+      # a narrower copy, or a stage layout edited on one line, would publish a
+      # compiler that links `hello.ts` and fails on any program that reads a
+      # file, lists a directory, spawns a child or asks the clock. That is the
+      # half of the runtime no smoke test of one program can see, which is why
+      # the npm side has this list and why the seed should not be the artifact
+      # that goes without it.
+      - name: The tarball carries a whole compiler
+        run: |
+          tar -tzf "${{ steps.binary.outputs.asset }}" |
+            sed 's#^${{ steps.binary.outputs.name }}/##' | sort > "$RUNNER_TEMP/files.txt"
+          for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh LICENSE INSTALL.md; do
+            grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
+          done
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the seven that have to be there"
+
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
       # somewhere unrelated and drive it from a third directory, so neither the
       # repository nor the unpack directory can be what makes it work.
+      #
+      # Two programs, because one of them is not enough. `hello.ts` is a single
+      # module and exercises none of the layout the comment above spends six
+      # lines on: `examples/multi` is two modules, so the compiler has to plan
+      # `<exe>.modules/`, find `scripts/build.sh` relative to its own directory
+      # rather than to the working directory, and hand it several `.ll` files.
+      # A `--link` that resolved build.sh from the cwd on one path and from
+      # argv[0] on the other would pass on `hello.ts` and fail on every real
+      # program.
       - name: Smoke the native compiler
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -190,21 +279,26 @@ jobs:
           nish="$unpack/${{ steps.binary.outputs.name }}/bin/nish"
           test "$("$nish" --version)" = "nish $version"
           cp examples/hello.ts "$work/hello.ts"
+          mkdir -p "$work/multi"
+          cp examples/multi/main.ts examples/multi/math.ts "$work/multi/"
           cd "$work"
           "$nish" hello.ts --link hello
           test "$(./hello)" = "hello from Nish"
-          echo "native compiler works from an unrelated directory"
+          "$nish" multi/main.ts --link multi-app
+          set +e; ./multi-app; code=$?; set -e
+          test "$code" = "49" || { echo "::error::the unpacked compiler linked examples/multi but it exited $code, not 49"; exit 1; }
+          echo "native compiler works from an unrelated directory, on one module and on two"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: binary-${{ matrix.triple }}
+          name: binary-${{ matrix.target.asset }}
           path: ${{ steps.binary.outputs.asset }}
           if-no-files-found: error
           retention-days: 1
 
   release:
     name: release
-    needs: [ci, binaries]
+    needs: [ci, targets, binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -215,10 +309,9 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
 
-      # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
-      # before the version is: dispatched at `main`, every step below would
-      # read GITHUB_REF_NAME as a branch name and the comparison underneath
-      # would report a version mismatch for what is really a mis-aimed run.
+      # The same guard `targets` carries. Repeated rather than inherited
+      # because this job stamps GITHUB_REF_NAME into what it publishes, and a
+      # guard is worth having next to the step it guards.
       - name: Ref must be a v* tag matching package.json version
         run: |
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then
@@ -232,10 +325,10 @@ jobs:
             exit 1
           fi
 
-      # No LLVM here any more: this job packs and publishes, and the four
-      # compilers were built and smoke-tested on their own hardware by the
-      # `binaries` job above. `npm run build` is still needed, because `npm
-      # pack` ships `dist/`.
+      # No LLVM here any more: this job packs and publishes, and the compilers
+      # were built and smoke-tested on their own hardware by the `binaries` job
+      # above. `npm run build` is still needed, because `npm pack` ships
+      # `dist/`.
       - name: Install dependencies
         run: npm ci
 
@@ -243,24 +336,36 @@ jobs:
         run: npm run build
 
       # Every binary the matrix produced, back into one directory. The release
-      # job `needs: binaries`, so reaching this step at all means all four
-      # rows passed; `if-no-files-found: error` on the upload side and the
-      # count below are what stop a silently empty download from publishing a
-      # release with no compiler attached.
+      # job `needs: binaries`, so reaching this step at all means every row
+      # passed; `if-no-files-found: error` on the upload side and the check
+      # below are what stop a silently empty download from publishing a release
+      # with no compiler attached.
       - uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           merge-multiple: true
           path: build/release
 
-      - name: Every target is present
+      # The matrix reaches bash through `env:` rather than through ${{ }}, so
+      # the JSON is a value this script reads and never text the runner pastes
+      # into it. The list of assets is the same answer the matrix was built
+      # from, so this step and `gh release create` below cannot disagree about
+      # what the release carries.
+      - name: Every asset this version is due to attach is present
+        id: assets
+        env:
+          ROWS: ${{ needs.targets.outputs.rows }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          for triple in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin; do
-            asset="build/release/nish-$version-$triple.tar.gz"
-            test -s "$asset" || { echo "::error::$asset is missing or empty"; exit 1; }
-            echo "$(du -h "$asset" | cut -f1)  $asset"
-          done
+          : > build/release/assets.txt
+          while read -r asset; do
+            [ -n "$asset" ] || continue
+            path="build/release/nish-$version-$asset.tar.gz"
+            test -s "$path" || { echo "::error::$path is missing or empty"; exit 1; }
+            echo "$path" >> build/release/assets.txt
+            echo "$(du -h "$path" | cut -f1)  $path"
+          done < <(printf '%s' "$ROWS" | jq -r '.[].asset')
+          test -s build/release/assets.txt || { echo "::error::no native compiler assets to attach"; exit 1; }
 
       - name: Pack
         id: pack
@@ -308,13 +413,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          # The asset list the step above wrote and checked, so the attach and
+          # the check are one list rather than two.
+          assets=()
+          while IFS= read -r path; do assets+=("$path"); done < build/release/assets.txt
           gh release create "$GITHUB_REF_NAME" \
             "${{ steps.pack.outputs.tarball }}" \
-            "build/release/nish-$version-x86_64-linux.tar.gz" \
-            "build/release/nish-$version-aarch64-linux.tar.gz" \
-            "build/release/nish-$version-x86_64-darwin.tar.gz" \
-            "build/release/nish-$version-aarch64-darwin.tar.gz" \
+            "${assets[@]}" \
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag

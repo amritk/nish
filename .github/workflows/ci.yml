@@ -1,8 +1,16 @@
 # Nish continuous integration.
 #
-# test: typecheck + the full golden/native test suite on Linux and macOS with
-#       LLVM 18 (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size
-#       table in the job summary, and the IR cookbook staleness check.
+# test: typecheck + the full golden/native test suite on Linux with LLVM 18
+#       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size table
+#       in the job summary, and the IR cookbook staleness check. The matrix is
+#       written for macOS too and that row is commented out; the comment
+#       beside it names the five checks that fail there.
+# seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
+#       than one, so that "the freeze held" and "there was nothing here to
+#       check it with" are not the same colour. `seeds` asks the last release
+#       which seed binaries it attaches; `bootstrap` is one row per seed that
+#       exists, so a platform with no seed has no row rather than a green one.
+#       The table above the pair says which conclusion means which.
 # lint: `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
 #
@@ -38,30 +46,46 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is commented out, and what it is waiting for has
-        # changed. It used to be broken: macOS ships bash 3.2 (Apple will not
-        # ship GPLv3), where expanding an empty array as "${arr[@]}" under
-        # `set -u` is an "unbound variable" error and `mapfile` does not exist
-        # at all. Both are fixed -- scripts/build.sh spells its nine
-        # expansions of `pgo`, `elf`, `strip_flag` and `libs` as
-        # ${arr[@]+"${arr[@]}"}, and scripts/smoke.sh reads its program list
-        # with `while read` -- so restoring the row is uncommenting this line
-        # and nothing else.
+        # macos-latest stays out of THIS job, and the reason is no longer a
+        # guess. The row was run for the first time on 2026-09-13 (WP19 R2) and
+        # `npm test` fails there with **five** failures in four families, none
+        # of which is a compiler bug and all of which are checks that encode an
+        # ELF/Linux assumption:
         #
-        # It stays commented out on **cost**: this row is the whole job over
-        # again -- npm ci, typecheck, the full suite, smoke, the cookbook and
-        # registry checks, the size report -- behind a `brew install llvm@18`,
-        # on the slowest runner GitHub rents. Every push would wait for it.
-        # Turn it on when the suite is fast, or put it on a schedule the way
-        # parity.yml is; what it buys is the ld64 / Mach-O half of build.sh
-        # (-dead_strip, -Wl,-x, no -fuse-ld=lld, no -fno-plt) and Apple
-        # Silicon, neither of which any Linux runner exercises.
+        #   1,2. `llvm-dwarfdump` of the linked binary reports an empty
+        #        `.debug_line`. On Mach-O `clang -g` leaves DWARF in the .o
+        #        files and the executable carries only a debug map; `dsymutil`
+        #        is what produces a line table. Two checks read the executable.
+        #   3.   "--threads IR refuses to link against a runtime built without
+        #        -DNISH_THREADS" links fine and exits 0. ELF refuses a TLS
+        #        symbol against a non-TLS definition; ld64 does not. The safety
+        #        net build.sh's header describes does not exist on macOS --
+        #        which is a finding about the platform, not about the check.
+        #   4,5. `stage3 == stage2` as files failed at *identical size*
+        #        (597,048 bytes both). The IR equalities all pass, so the
+        #        compiler is deterministic and the linker is not: Mach-O's
+        #        debug map records each .o's path and mtime, which differ
+        #        between two links. FIXED: the comparison is
+        #        scripts/verify-binaries.sh now, and on Darwin it narrows to
+        #        the size plus equality with the debug map stripped rather
+        #        than lifting -- so it no longer blocks a darwin *release*
+        #        binary (WP19 G5) or a macOS row here.
         #
-        # `fail-fast: false` above is what would keep a macOS-only failure
-        # from cancelling the Linux row. Anything measured in bytes already
-        # knows it is a fact about one target: the runtime.c .text budget
-        # skips itself off linux-x64 (tests/run.js).
-        os: [ubuntu-latest] # , macos-latest
+        # Restoring the row therefore means porting the remaining three checks
+        # in two families, on hardware that has to be iterated against, and
+        # that is a package of its own rather than a line in this matrix. So
+        # NOTHING in this file runs on macOS until a release attaches a darwin
+        # seed: the `bootstrap` job below has one row per seed the last release
+        # attaches, and v0.2.0 attaches x86_64-linux alone.
+        #
+        # The install half is already written and was exercised by that run:
+        # the two "Install LLVM 18 + lld" steps below are guarded by
+        # `runner.os`, so restoring the row is this line plus the five fixes.
+        #
+        # `fail-fast: false` above is what would keep a macOS-only failure from
+        # cancelling the Linux row that says whether it is the platform or the
+        # change.
+        os: [ubuntu-latest] # , macos-latest -- see the five failures above
     steps:
       - uses: actions/checkout@v4
 
@@ -151,7 +175,63 @@ jobs:
 
   # WP19 G3: build self/ with the LAST RELEASED nish rather than with stage0.
   #
-  # This is the job that enforces the rolling freeze. Nish has no conditional
+  # Two jobs, because there are three answers and only two colours.
+  #
+  # `seeds` asks the last release which seed binaries it attaches; `bootstrap`
+  # is a matrix over that answer, one row per seed that actually exists. A
+  # platform with no seed therefore has no row rather than a green one, and
+  # nothing in the checks list claims a freeze that nothing checked. CLAUDE.md
+  # reads green as permission to merge, and this gate has now lied to that
+  # reader twice: first by passing with a warning when it had verified nothing,
+  # then by failing for a state in which nothing is wrong.
+  #
+  # WHICH CONCLUSION MEANS WHAT. Read the pair, not either half:
+  #
+  #   seeds green + a bootstrap row green   the freeze was checked with that
+  #                                         seed, on that seed's own platform,
+  #                                         and it held.
+  #   seeds green + no row for a platform   the freeze was NOT checked there,
+  #                                         and nothing is wrong: no release
+  #                                         carries a seed for it yet. The
+  #                                         `seeds` job summary lists every
+  #                                         platform in both states by name.
+  #   seeds green + bootstrap SKIPPED       the same, for every platform at
+  #                                         once: there is no release at all.
+  #   seeds RED                             a seed that should exist does not.
+  #                                         The release is missing an asset
+  #                                         release.yml attaches, and the
+  #                                         annotation says how to get unstuck.
+  #   a bootstrap row RED                   self/ does not build with the last
+  #                                         release, which is the rolling
+  #                                         freeze broken -- the failure this
+  #                                         pair exists to catch.
+  #
+  # A job skipped by an `if:` reports SUCCESS to branch protection -- that is
+  # GitHub's own rule for a conditional skip, as against a workflow skipped by
+  # a path filter, which stays pending and blocks. So the grey is for the
+  # reader and not for the merge button, which is the right way round:
+  # CLAUDE.md's merge rule is addressed to a reader, and a required check that
+  # stayed pending on every fork and before the first release is the deadlock
+  # below.
+  #
+  # WHY "no release at all" MAY NOT BE RED. `release.yml`'s `release` job is
+  # `needs: ci`, so a red CI is a release that cannot be cut. A repository with
+  # no release has no seed, and if that were red the first release could never
+  # be made: the gate would be waiting for an artifact only a release produces,
+  # and the release would be waiting for the gate. That is the 0.1.0 base case
+  # docs/wp12-release.md describes, and it is every fork of this repository on
+  # the day it is forked. It is also, exactly, the argument this file makes for
+  # keeping the macOS `test` row out, applied to a job that sits on the release
+  # path.
+  #
+  # WHY a missing x86_64-linux seed IS red. There the release exists and is
+  # supposed to carry it: .github/seed-targets.json marks that target
+  # `attached`, which is release.yml's own statement that it builds one. Its
+  # absence is a regression in that workflow or in the asset name the two
+  # workflows share, not a state of the world -- and it costs the rolling
+  # freeze its only check.
+  #
+  # This pair is what enforces the rolling freeze. Nish has no conditional
   # compilation and will not grow any -- there is no #[cfg(bootstrap)] to
   # write -- so "a construct added in 0.N cannot be used by self/ until
   # 0.(N+1)" (docs/wp12-release.md, "The bootstrap seed") is a discipline, and
@@ -159,19 +239,65 @@ jobs:
   # breaks here and nowhere else: `npm test` bootstraps with stage0, which
   # always knows every construct the working tree does.
   #
-  # Until 0.1.0 exists there is no seed, and this reports that and stops
-  # rather than inventing one. It is deliberately NOT a silent success: the
-  # step says which release it used, or that there was none, so a green run
-  # cannot be mistaken for a freeze that was actually checked.
+  # G3 asks for this on **both** operating systems and it runs on Linux alone,
+  # because v0.2.0 attaches x86_64-linux and nothing else. What kept the second
+  # one out was two things, and both have now landed:
   #
-  # G3 asks for this on both operating systems, and what is missing is now the
-  # seed rather than the runner: a release ships nish-<version>-x86_64-linux
-  # and nothing else, so there is no darwin binary to bootstrap from. The
-  # macOS half of this job lands with the other three binaries of G5, not
-  # here; see docs/wp19-stage0-retirement.md G5 for what that leaves open.
-  bootstrap:
-    name: bootstrap (from the last release)
+  #   * the darwin **seed**, which is WP19 G5. release.yml builds one per
+  #     target from .github/seed-targets.json, where `attachedSince` is 0.3.0
+  #     for the darwin pair. Until that release exists macOS is the second
+  #     state above: no row, and the `seeds` summary saying which version it
+  #     is waiting for.
+  #   * the **ld64 fixed point**, which was the fourth family in the `test`
+  #     matrix comment above. The comparison is scripts/verify-binaries.sh
+  #     now: byte-identical on ELF, and on Mach-O the same size plus equality
+  #     with the debug map stripped, which is narrowed rather than lifted. A
+  #     macOS row that arrived before that was fixed would have been red on the
+  #     day its seed did, which is the other way a gate lies about itself.
+  #
+  # Neither is a line in this file, and that is the point of the matrix being
+  # the release's answer: the row appears when the seed does, on the runner
+  # seed-targets.json names for it, with no edit here.
+  seeds:
+    name: which seeds the last release attaches
     runs-on: ubuntu-latest
+    outputs:
+      rows: ${{ steps.pick.outputs.rows }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The lookup is a job of its own, before any toolchain and before
+      # `npm ci`, for two reasons. It is the gate, so it should answer in
+      # seconds rather than after two minutes of setup it may be about to throw
+      # away; and its answer has to be a *job* conclusion and a matrix, because
+      # a step that skips inside a green job leaves the job green.
+      #
+      # The script is in a file rather than here so that `npm test` can run it:
+      # tests/run.js drives it against a stand-in for `gh` through each of its
+      # states, which is the check that was missing both times this logic was
+      # got wrong.
+      - name: Ask the last release what it carries
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/seed-matrix.sh
+
+  bootstrap:
+    name: bootstrap (${{ matrix.seed.asset }})
+    needs: seeds
+    # Before the first release nothing is seeded anywhere, which is an empty
+    # matrix -- and an empty matrix is a strategy GitHub refuses to evaluate
+    # rather than a job with no rows. `seeds` is what says so in that state,
+    # and this job is grey rather than green.
+    if: needs.seeds.outputs.rows != '[]'
+    runs-on: ${{ matrix.seed.runner }}
+    strategy:
+      # One platform's linker is not another's, so a failure on one row must
+      # not cancel the row that would say whether it is the platform or the
+      # change.
+      fail-fast: false
+      matrix:
+        seed: ${{ fromJSON(needs.seeds.outputs.rows) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -180,7 +306,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install LLVM 18 + lld
+      # The toolchain is installed on rows that have a seed to build with,
+      # which is all of them: a platform with no seed has no row and rents no
+      # runner. A `brew install llvm@18` on a row whose every later step is
+      # skipped is 42 seconds of the slowest runner GitHub rents, on every
+      # push, to emit one warning.
+      - name: Install LLVM 18 + lld (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
@@ -191,34 +323,43 @@ jobs:
           done
           echo "$bin" >> "$GITHUB_PATH"
 
+      - name: Install LLVM 18 + lld (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          prefix="$(brew --prefix llvm@18)"
+          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
       - name: Install dependencies
         run: npm ci
 
-      # `gh release download` fails when the repository has no release at all,
-      # which is the state before 0.1.0 -- so ask first and record the answer,
-      # rather than reading a failed download as "no release".
-      - name: Find the last release
-        id: seed
+      # The tarball name is .github/seed-targets.json's, resolved against the
+      # release by `seeds`. This row exists *because* that asset is on the
+      # release, so a download that fails here is a network or permissions
+      # fault rather than the absence the gate is about.
+      #
+      # The matrix reaches bash through `env:` rather than through ${{ }}
+      # spliced into the script. A maintainer-created tag is not a plausible
+      # attacker, but the value came out of a release and the rule costs
+      # nothing -- it is the one pr-title.yml already states.
+      - name: Download the seed
+        id: download
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.seed.tag }}
+          TARBALL: ${{ matrix.seed.tarball }}
         run: |
-          tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
-          if [ -z "$tag" ]; then
-            echo "no release yet: nothing to seed from, so the freeze is unchecked" >&2
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          name="nish-${tag#v}-x86_64-linux"
-          gh release download "$tag" --pattern "$name.tar.gz" --dir "$RUNNER_TEMP"
-          tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "path=$RUNNER_TEMP/$name/bin/nish" >> "$GITHUB_OUTPUT"
+          gh release download "$TAG" --pattern "$TARBALL" --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP"
+          echo "path=$RUNNER_TEMP/${TARBALL%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
 
       - name: Build self/ with the seed
-        if: steps.seed.outputs.tag != ''
+        env:
+          SEED: ${{ steps.download.outputs.path }}
         run: |
-          "${{ steps.seed.outputs.path }}" --version
-          NISH_BOOTSTRAP="${{ steps.seed.outputs.path }}" bash scripts/bootstrap.sh --verify
+          "$SEED" --version
+          NISH_BOOTSTRAP="$SEED" bash scripts/bootstrap.sh --verify
 
       # The command line's contract, asked of the compiler that outlives stage0.
       # `tests/nish/cli.ts` is a Nish program reading the compiler's own output —
@@ -228,7 +369,6 @@ jobs:
       # Two checks are stage0's own and report as counted skips, which the summary
       # below prints.
       - name: The CLI contract, against the self-hosted compiler
-        if: steps.seed.outputs.tag != ''
         run: |
           set -o pipefail
           npm run build
@@ -236,13 +376,20 @@ jobs:
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
+      # Reached only when every step above succeeded, which is the point: this
+      # line is a claim about a run that happened, and there is no branch of it
+      # that describes one that did not. The states in which it did not happen
+      # do not reach this job at all -- they are the `seeds` job's summary and
+      # a row that is not here.
       - name: Say what this proved
+        env:
+          TAG: ${{ matrix.seed.tag }}
+          ASSET: ${{ matrix.seed.asset }}
+          TRIPLE: ${{ matrix.seed.triple }}
         run: |
-          if [ -z "${{ steps.seed.outputs.tag }}" ]; then
-            echo "::notice::No release exists yet, so self/ was NOT built from a seed. The rolling freeze is unchecked until 0.1.0 ships."
-          else
-            echo "::notice::self/ built and verified with ${{ steps.seed.outputs.tag }} as the seed."
-          fi
+          echo "::notice::self/ built and verified with $TAG's $ASSET seed ($TRIPLE). That is the rolling freeze checked on this platform, and it says nothing about any other."
+          { echo "### The rolling freeze (WP19 G3)"; echo; echo "self/ built and verified with $TAG's \`$ASSET\` seed ($TRIPLE). That is this platform; the \`seeds\` job lists the platforms nothing checked."; } >> "$GITHUB_STEP_SUMMARY"
+
 
   # The golden cases again, through the harness written in the language rather
   # than through the one written in Node (`tests/nish/run.ts`, `npm run

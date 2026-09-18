@@ -13,6 +13,7 @@ import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
+import { instantiateWritten } from "./generics";
 import { assignInto, checkExpression } from "./expressions";
 import {
   N_ARRAY,
@@ -38,7 +39,7 @@ import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types";
  * constant is a value too, or `LIMIT.length` would be reported as an unknown
  * builtin.
  */
-export function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope): boolean {
+export const isValueReceiver = (ctx: CheckContext, receiver: Node, scope: Scope): boolean => {
   if (receiver.kind !== N_IDENT) {
     return true;
   }
@@ -50,7 +51,7 @@ export function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope)
     ctx.program.constant(receiver.text) !== null ||
     ctx.program.builtinImport(receiver.text) !== null
   );
-}
+};
 
 /**
  * What to do about an un-narrowed nullable, phrased for what was written.
@@ -60,7 +61,7 @@ export function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope)
  * the field to a local, which is provably safe and one load instead of two,
  * so the message names that idiom with the reader's own expression.
  */
-function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node): string {
+const nullableHint = (ctx: CheckContext, receiver: i32, receiverExpr: Node): string => {
   const spelled = ctx.table.typeName(receiver);
   const narrows = `\`${spelled}\` to \`${ctx.table.typeName(ctx.table.stripNull(receiver))}\``;
   if (receiverExpr.kind === N_MEMBER || receiverExpr.kind === N_INDEX) {
@@ -69,10 +70,10 @@ function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node): str
     return `only a local is narrowed, not a field or element, so bind it first: \`const ${local} = ${text}; if (${local} !== null) { ... }\` narrows ${narrows}`;
   }
   return `check for null first: \`if (p !== null) { ... }\` narrows ${narrows}`;
-}
+};
 
 /** `receiver.name` where `receiver` is a value, or a dotted builtin otherwise. */
-export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const receiverExpr = expr.children[0];
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
     // `Kind.If` (WP23). An enum name is not a value, so it arrives here the
@@ -110,19 +111,19 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
   return T_ERROR;
-}
+};
 
 /** `Kind.If`: the member's integer, recorded for the emitter, and the enum's type (WP23). */
-function checkEnumMember(ctx: CheckContext, expr: Node, info: EnumInfo): i32 {
+const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => {
   if (!info.hasMember(expr.text)) {
     ctx.errorAtProperty(expr, `Enum \`${info.name}\` has no member \`${expr.text}\``);
     return T_ERROR;
   }
   ctx.program.nodeEnumValues[expr.id] = info.memberValue(expr.text);
   return info.type;
-}
+};
 
-function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
+const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   const info = structOf(ctx, receiver);
   if (info === null) {
     return T_ERROR;
@@ -135,15 +136,13 @@ function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
     return T_ERROR;
   }
   return field.type;
-}
+};
 
 /** The `StructInfo` behind a struct-typed value; the emitter relies on the same lookup. */
-export function structOf(ctx: CheckContext, type: i32): StructInfo | null {
-  return ctx.program.struct(ctx.table.nameOf(type));
-}
+export const structOf = (ctx: CheckContext, type: i32): StructInfo | null => ctx.program.struct(ctx.table.nameOf(type));
 
 /** `receiver.method(args)` where `receiver` is a value. */
-export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const access = expr.children[0];
   const receiverExpr = access.children[0];
   const receiver = checkExpression(ctx, receiverExpr, scope, -1);
@@ -186,7 +185,7 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
   checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
-}
+};
 
 /**
  * `args` against `callee`'s parameters after `this`.
@@ -197,7 +196,7 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
  * (`takesDeclaredContext`). Everything else — an object literal, a `null` —
  * takes it either way.
  */
-export function checkMethodArguments(
+export const checkMethodArguments = (
   ctx: CheckContext,
   call: Node,
   callee: FunctionSig,
@@ -205,7 +204,7 @@ export function checkMethodArguments(
   what: string,
   scope: Scope,
   literalContext: boolean
-): void {
+): void => {
   const arity = callee.paramTypes.length - 1;
   if (args.children.length !== arity) {
     ctx.error(call, `\`${what}\` expects ${arity} argument(s), got ${args.children.length}`);
@@ -223,10 +222,10 @@ export function checkMethodArguments(
     }
     i = i + 1;
   }
-}
+};
 
 /** `new C(...)`, `new Array<T>(n)`, `new Int32Array(n)`. */
-export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const callee = expr.children[0];
   if (callee.kind !== N_IDENT) {
     return ctx.errorType(callee, "`new` requires a class name");
@@ -237,7 +236,19 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (arrayType !== -1) {
     return arrayType;
   }
-  const info = ctx.program.struct(name);
+  // WP18 G5: `new Box<i32>(7)` writes its type arguments out, because `new` is
+  // one of the two positions a one-token parser reads a type-argument list in
+  // and a constructor's own arguments need not mention every parameter.
+  const template = ctx.program.structTemplate(name);
+  let info: StructInfo | null = null;
+  if (template !== null) {
+    info = instantiateWritten(ctx, template, expr.children[1], callee);
+    if (info === null) {
+      return T_ERROR;
+    }
+  } else {
+    info = ctx.program.struct(name);
+  }
   if (info === null) {
     return ctx.errorType(callee, `Unknown class \`${name}\``);
   }
@@ -245,11 +256,12 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return ctx.errorType(expr, `Cannot \`new\` interface \`${name}\`; use an object literal: \`{ ... }\``);
   }
   // The parser reads `new Box<number>()`'s type arguments because `new
-  // Array<T>(n)` needs them; a declared class has none to take, and stage1 was
-  // compiling the program with the arguments ignored
-  // (`tests/cases/reject_cls_new_generic`).
-  if (expr.children[1].children.length > 0) {
-    return ctx.errorType(expr, "Generic classes are not supported");
+  // Array<T>(n)` needs them; a class that is *not* generic has none to take.
+  if (template === null && expr.children[1].children.length > 0) {
+    return ctx.errorType(
+      expr.children[1].children[0],
+      `\`${name}\` is not generic, so \`new ${name}\` takes no type arguments`
+    );
   }
   const ctor = info.ctor;
   if (ctor !== null) {
@@ -262,7 +274,7 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     );
   }
   return info.type;
-}
+};
 
 /**
  * Whether a declared type may serve as `value`'s contextual type in a position
@@ -292,7 +304,7 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
  * stage0's walks, so they are transparent here too: `{ code: c ? 1 : 2 }` gets
  * no more context than `{ code: 1 }` does.
  */
-export function takesDeclaredContext(value: Node): boolean {
+export const takesDeclaredContext = (value: Node): boolean => {
   if (value.kind === N_PAREN) {
     return takesDeclaredContext(value.children[0]);
   }
@@ -303,10 +315,10 @@ export function takesDeclaredContext(value: Node): boolean {
     return takesDeclaredContext(value.children[0]);
   }
   return value.kind !== N_NUMBER && value.kind !== N_ARRAY;
-}
+};
 
 /** `{ x: 1, y: 2 }`, which needs a contextual class or interface type. */
-export function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   if (want < 0 || !ctx.table.isStruct(ctx.table.stripNull(want))) {
     return ctx.errorType(
       expr,
@@ -363,10 +375,10 @@ export function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, 
     }
   }
   return want;
-}
+};
 
 /** `recv.f = v` and `recv.f op= v` where `recv` is a struct value. */
-export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0];
   const receiverExpr = target.children[0];
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
@@ -412,19 +424,19 @@ export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scop
     );
   }
   return assignInto(ctx, expr, scope, null, field.type, field.name, "field");
-}
+};
 
 /**
  * A `readonly` field may only be assigned by the constructor of the class that
  * declares it, through `this`, with a plain `=`.
  */
-function assignableReadonly(
+const assignableReadonly = (
   ctx: CheckContext,
   info: StructInfo,
   target: Node,
   receiverExpr: Node,
   op: string
-): boolean {
+): boolean => {
   const current = ctx.current;
   if (current === null || current.role !== ROLE_CONSTRUCTOR || op !== "=") {
     return false;
@@ -437,7 +449,7 @@ function assignableReadonly(
   }
   const owner = current.owner;
   return owner !== null && owner === info;
-}
+};
 
 // ---- String members -----------------------------------------------------------------
 //
@@ -448,22 +460,22 @@ function assignableReadonly(
 
 const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith";
 
-export function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
+export const checkStringProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   if (expr.text === "length") {
     return ctx.numberType();
   }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
   return T_ERROR;
-}
+};
 
-function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void {
+const checkIndexArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: string): void => {
   const type = checkExpression(ctx, arg, scope, ctx.numberType());
   if (type !== T_ERROR && !isNumeric(type)) {
     ctx.error(arg, `\`${name}\` expects a number index, got ${ctx.table.typeName(type)}`);
   }
-}
+};
 
-function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void {
+const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: string): void => {
   const type = checkExpression(ctx, arg, scope, T_STRING);
   if (type !== T_ERROR && type !== T_STRING) {
     // The wording `checkArgumentType` uses in `self/builtins.ts`, and stage0's
@@ -471,15 +483,15 @@ function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
     // rule from, and one sentence for a reader to recognise.
     ctx.error(arg, `\`${name}\` expects an argument of type string, got ${ctx.table.typeName(type)}`);
   }
-}
+};
 
-export function checkStringMethod(
+export const checkStringMethod = (
   ctx: CheckContext,
   call: Node,
   access: Node,
   args: Node,
   scope: Scope
-): i32 {
+): i32 => {
   const name = access.text;
   const count = args.children.length;
   if (name === "charCodeAt") {
@@ -520,4 +532,4 @@ export function checkStringMethod(
   }
   ctx.errorAtProperty(access, `Unknown method \`${name}\` on string (supported: ${STRING_METHODS})`);
   return T_ERROR;
-}
+};

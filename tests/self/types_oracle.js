@@ -81,7 +81,11 @@ function expectedTableSize(list) {
     }
   };
   for (const t of list) walk(t);
-  return 12 + keys.size;
+  // The fixed block of `self/types.ts`: `T_ERROR` through `T_CPTR`, which is
+  // `T_FIRST_DERIVED`. It is spelled here rather than imported because the
+  // point of this oracle is that the two models were written separately; a
+  // change to the block is meant to be a line in this file too.
+  return 13 + keys.size;
 }
 
 function expected() {

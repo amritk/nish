@@ -166,7 +166,26 @@ export type StaticType =
    * for exactly that reason — the LLVM value is the same pointer either way.
    * See `src/checker/result.ts` and `docs/LANGUAGE.md` -> "Result and error handling".
    */
-  | { kind: "result"; ok: StaticType; err: StaticType; state: ResultState };
+  | { kind: "result"; ok: StaticType; err: StaticType; state: ResultState }
+  /**
+   * `CPtr` (WP27 S2): an address a C function handed back, and nothing else.
+   *
+   * It is `i8*` in the IR and eight bytes wide, and that is the whole of what
+   * this compiler knows about it. It is **not** arena memory, not a
+   * `%struct.<name>`, not a `nish_str` — so the escape analysis must never
+   * treat one as a pointer it owns, and `isPointerParam` in
+   * `codegen/attributes.ts` is an allow-list of `struct`, `array` and `result`
+   * for exactly that reason: a `CPtr` falls out of it by construction rather
+   * than by a case somebody remembered to write.
+   *
+   * The operations are: come out of a foreign call, compare with `null` or with
+   * another `CPtr`, and go into a foreign call. No dereference, no arithmetic,
+   * no field, no index — which is what keeps "the compiler cannot prove this
+   * safe" from becoming "the compiler is wrong about this". Its *lifetime* is
+   * the C library's business and the compiler makes no claim about it;
+   * `docs/wp27-ffi.md` §2 is why that is honest rather than lax.
+   */
+  | { kind: "cptr" };
 
 /**
  * What the checker has proved about a `Result` value at one use site.
@@ -190,6 +209,26 @@ export const F64: StaticType = { kind: "f64" };
 export const BOOL: StaticType = { kind: "bool" };
 export const STRING: StaticType = { kind: "string" };
 export const VOID: StaticType = { kind: "void" };
+/**
+ * How a program spells the foreign pointer (WP27 S2).
+ *
+ * PascalCase, unlike every other type the language has, and that is the point:
+ * `i32` and `string` are this language's types and `CPtr` is not — it is C's,
+ * borrowed for the length of a call. The `C` is the reminder that its lifetime
+ * belongs to whoever `malloc`'d it.
+ *
+ * The name is answered by `resolveTypeNode` before any declared name is
+ * consulted, exactly as `i32` and `Int32Array` are, so `checker/aliases.ts`
+ * refuses `type CPtr = ...` outright — an alias nothing would ever look at is
+ * the silent failure that set exists to prevent. A `class CPtr` is accepted and
+ * simply unreachable by that name, which is what a `class Int32Array` already
+ * was; narrowing that is a decision about every builtin name at once and not
+ * this stage's.
+ */
+export const CPTR_NAME = "CPtr";
+
+/** The foreign pointer (WP27 S2); see the `cptr` member of `StaticType`. */
+export const CPTR: StaticType = { kind: "cptr" };
 
 /** The one header type every array shares; see `ARRAY_TYPE` in codegen/runtime.ts. */
 export const ARRAY_STRUCT = "%struct.nish_array";
@@ -240,6 +279,19 @@ export function isForeignScalar(t: StaticType): boolean {
   );
 }
 
+/**
+ * A type a `declare function` may name (WP27 S2): a scalar, or the foreign
+ * pointer in either the plain or the nullable spelling.
+ *
+ * `isForeignScalar` above is deliberately still its own predicate rather than
+ * being folded into this one. It answers "does this cross as one machine value
+ * with nothing for the escape analysis to be wrong about", which is the
+ * question S1 was sound by, and it is still the question the *parameter* rule
+ * asks after this one lets `CPtr` through: a nullable `CPtr` is a legal return
+ * type and not a legal parameter.
+ */
+export const isForeignType = (t: StaticType): boolean => isForeignScalar(t) || stripNull(t).kind === "cptr";
+
 export function isReadonlyArray(t: StaticType): boolean {
   return t.kind === "array" && t.readonly === true;
 }
@@ -260,7 +312,10 @@ export const TYPED_ARRAY_ALIASES: Readonly<Record<string, StaticType>> = {
 
 /** True for the types that may be nullable: every value that is an LLVM pointer. */
 export function isPointerType(t: StaticType): boolean {
-  return t.kind === "struct" || t.kind === "array" || t.kind === "string";
+  // `cptr` is here because `CPtr | null` is the *only* way a foreign call can
+  // report failure: C says "no" with a null pointer and has no second channel
+  // to say it through (WP27 S2, `docs/wp27-ffi.md` §3).
+  return t.kind === "struct" || t.kind === "array" || t.kind === "string" || t.kind === "cptr";
 }
 
 export function nullableOf(inner: StaticType): StaticType {
@@ -408,6 +463,11 @@ export function llvmType(t: StaticType): string {
       return llvmType(t.inner);
     case "result":
       return `%struct.${resultStructName(t)}*`;
+    // The foreign pointer is `i8*` and deliberately nothing more specific: this
+    // compiler laid out nothing behind it, so there is no pointee type it could
+    // honestly name (WP27 S2).
+    case "cptr":
+      return "i8*";
   }
 }
 
@@ -485,10 +545,16 @@ export function alignOf(t: StaticType): number {
       return 8; // a pointer
     case "result":
       return 8; // a pointer
+    case "cptr":
+      return 8; // a pointer, and one this compiler did not allocate
   }
 }
 
 export function typeToString(t: StaticType): string {
+  // Spelled as the source spells it. Every other type's `kind` *is* its
+  // spelling; this one is the exception because `cptr` is the tag and `CPtr`
+  // is the name a program writes (WP27 S2).
+  if (t.kind === "cptr") return CPTR_NAME;
   if (t.kind === "array") return `${t.readonly === true ? "readonly " : ""}${typeToString(t.elem)}[]`;
   if (t.kind === "struct" || t.kind === "enum") return t.name;
   if (t.kind === "nullable") return `${typeToString(t.inner)} | null`;
@@ -600,7 +666,7 @@ export function unsignedMax(t: StaticType): bigint {
  * unchanged for every caller, including recursive ones (element types of
  * arrays, for instance) that would otherwise have to thread a lookup through.
  */
-export type NamedTypeResolver = (name: string) => StaticType | undefined;
+export type NamedTypeResolver = (name: string, ref?: ts.TypeReferenceNode) => StaticType | undefined;
 const namedTypeResolvers = new WeakMap<ts.SourceFile, NamedTypeResolver>();
 
 export function registerNamedTypes(sourceFile: ts.SourceFile, resolver: NamedTypeResolver): void {
@@ -630,8 +696,19 @@ export function resolveTypeNode(
       throw new CompileError(`\`any\` is forbidden in ${LANGUAGE}`, node, sourceFile);
     case ts.SyntaxKind.UnknownKeyword:
       throw new CompileError(`\`unknown\` is forbidden in ${LANGUAGE}`, node, sourceFile);
-    case ts.SyntaxKind.ArrayType:
-      return arrayOf(resolveTypeNode((node as ts.ArrayTypeNode).elementType, sourceFile, opts));
+    case ts.SyntaxKind.ArrayType: {
+      // The refusal is spanned on the *element* annotation, not on the whole
+      // `T[]`: the message names the element type, `Array<T>` and
+      // `ReadonlyArray<T>` already report on their argument through
+      // `elementType` below, and every other element-level complaint lands on
+      // the element (`Nope[]` reports `Nope`). `self/annotations.ts`'s
+      // `elementType` spans it the same way, and the two compilers have to
+      // agree on the span, not only on the code and the words.
+      const element = (node as ts.ArrayTypeNode).elementType;
+      const elem = resolveTypeNode(element, sourceFile, opts);
+      rejectForeignPointer(elem, "an array element", element, sourceFile);
+      return arrayOf(elem);
+    }
     case ts.SyntaxKind.TypeOperator: {
       // `readonly T[]`. TypeScript itself allows the modifier on nothing else
       // (TS1354, "only permitted on array and tuple literal types"), so a
@@ -670,7 +747,7 @@ export function resolveTypeNode(
         if (ref.typeArguments?.length !== 1) {
           throw new CompileError("`Array` needs exactly one type argument, e.g. `Array<number>`", node, sourceFile);
         }
-        return arrayOf(resolveTypeNode(ref.typeArguments[0], sourceFile, opts));
+        return arrayOf(elementType(ref.typeArguments[0], sourceFile, opts));
       }
       // `ReadonlyArray<T>` is `readonly T[]`, the way `Array<T>` is `T[]`.
       if (ts.isIdentifier(ref.typeName) && ref.typeName.text === "ReadonlyArray") {
@@ -681,7 +758,7 @@ export function resolveTypeNode(
             sourceFile
           );
         }
-        return readonlyArrayOf(resolveTypeNode(ref.typeArguments[0], sourceFile, opts));
+        return readonlyArrayOf(elementType(ref.typeArguments[0], sourceFile, opts));
       }
       if (ts.isIdentifier(ref.typeName) && ref.typeArguments && TYPED_ARRAY_ALIASES[ref.typeName.text]) {
         throw new CompileError(
@@ -689,6 +766,16 @@ export function resolveTypeNode(
           node,
           sourceFile
         );
+      }
+      // WP18 G5: a user generic. `Box<i32>` names one instantiated struct, and
+      // the resolver mints it on demand — after the built-in constructors
+      // above, so nothing that was already a type argument list changes
+      // meaning, and before the arity refusals below, so a generic declared
+      // with the wrong number of arguments is refused by the rule that names
+      // its template rather than by "unsupported type reference".
+      if (ts.isIdentifier(ref.typeName) && ref.typeArguments && ref.typeArguments.length > 0) {
+        const instance = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text, ref);
+        if (instance) return instance;
       }
       if (ts.isIdentifier(ref.typeName) && !ref.typeArguments) {
         switch (ref.typeName.text) {
@@ -708,10 +795,15 @@ export function resolveTypeNode(
             return F32;
           case "f64":
             return F64;
+          // WP27 S2. Resolved here rather than through `namedTypeResolvers`
+          // because it is not declared anywhere: there is no `class CPtr` for a
+          // module to import, and the name means the same thing in every file.
+          case CPTR_NAME:
+            return CPTR;
         }
         const alias = TYPED_ARRAY_ALIASES[ref.typeName.text];
         if (alias) return arrayOf(alias);
-        const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text);
+        const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text, ref);
         if (named) return named;
       }
       throw new CompileError(
@@ -728,6 +820,53 @@ export function resolveTypeNode(
       );
   }
 }
+
+/**
+ * Where a `CPtr` may be written, and the one diagnostic for everywhere else
+ * (WP27 S2, `docs/wp27-ffi.md` §7).
+ *
+ * The allowed positions are a `declare function`'s parameters and return type,
+ * and a local that holds what such a call answered. Everything else is refused,
+ * and the refusals are not timidity — each one is a place where the compiler
+ * would have to make a claim about the pointer that it cannot support:
+ *
+ *   - **A field, an array element or a `Result` arm** would put a foreign
+ *     address inside a value this compiler lays out and the arena owns, and the
+ *     escape analysis walks those. A `CPtr` is not arena memory and must never
+ *     be treated as though it were, which is the bug class WP26 fixed in
+ *     `getenv` and §2 says FFI re-opens in user code.
+ *   - **A parameter or return type of a function this program defines** would
+ *     put one across a boundary the C header, the `.d.ts` and the N-API shim
+ *     all describe, and none of the three has a spelling for an address whose
+ *     provenance and lifetime are unknown.
+ *
+ * What is left is a pointer that comes out of C, sits in a local, and goes back
+ * into C — the `opendir`/`readdir`/`closedir` shape §3 names as the motivating
+ * request — which needs no claim about it at all beyond its width.
+ */
+export const rejectForeignPointer = (
+  t: StaticType,
+  position: string,
+  node: ts.Node,
+  sourceFile: ts.SourceFile
+): void => {
+  if (!mentionsCPtr(t)) return;
+  throw new CompileError(
+    `\`${CPTR_NAME}\` cannot be ${position}: a foreign pointer may only appear in a \`declare function\` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives`,
+    node,
+    sourceFile
+  );
+};
+
+/** `Array<T>`'s and `ReadonlyArray<T>`'s argument, refused when it is a `CPtr`. */
+const elementType = (node: ts.TypeNode, sourceFile: ts.SourceFile, opts: CompilerOptions): StaticType => {
+  const elem = resolveTypeNode(node, sourceFile, opts);
+  rejectForeignPointer(elem, "an array element", node, sourceFile);
+  return elem;
+};
+
+/** Whether `t` is a `CPtr`, or a `CPtr | null`. Nothing else can contain one. */
+export const mentionsCPtr = (t: StaticType): boolean => stripNull(t).kind === "cptr";
 
 /**
  * `Result<T, E>` (WP16). Written like a generic, but there are no user
@@ -748,6 +887,8 @@ function resolveResult(ref: ts.TypeReferenceNode, sourceFile: ts.SourceFile, opt
   }
   const ok = resolveTypeNode(ref.typeArguments[0], sourceFile, opts);
   const err = resolveTypeNode(ref.typeArguments[1], sourceFile, opts);
+  rejectForeignPointer(ok, "a `Result` arm", ref.typeArguments[0], sourceFile);
+  rejectForeignPointer(err, "a `Result` arm", ref.typeArguments[1], sourceFile);
   if (err.kind === "void") {
     throw new CompileError(
       "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)",

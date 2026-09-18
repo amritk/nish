@@ -48,14 +48,10 @@ import {
 const PARSE_RUNTIME: string = "nish_parse_number";
 const SAT_I32: string = "llvm.fptosi.sat.i32.f64";
 
-function callIntrinsic(emitter: Emitter, name: string, ret: string, args: string): string {
-  return emitter.fn.emitValue(`call ${ret} ${emitter.useRuntime(name)}(${args})`);
-}
+const callIntrinsic = (emitter: Emitter, name: string, ret: string, args: string): string => emitter.fn.emitValue(`call ${ret} ${emitter.useRuntime(name)}(${args})`);
 
 /** The first argument of a call, which is what most builtins take. */
-function firstArgument(expr: Node): Node {
-  return expr.children[1].children[0];
-}
+const firstArgument = (expr: Node): Node => expr.children[1].children[0];
 
 // ---- Conversions --------------------------------------------------------------------
 
@@ -65,13 +61,13 @@ function firstArgument(expr: Node): Node {
  * `fptoui.sat` clamps a negative double to 0 rather than to the type's
  * minimum, which is the only sensible answer for an unsigned type.
  */
-export function conversionIntrinsic(table: TypeTable, from: i32, to: i32): string {
+export const conversionIntrinsic = (table: TypeTable, from: i32, to: i32): string => {
   if (!isFloat(from) || !isInteger(to)) {
     return "";
   }
   const family = isUnsigned(to) ? "fptoui" : "fptosi";
   return `llvm.${family}.sat.${table.llvmType(to)}.${from === T_F32 ? "f32" : "f64"}`;
-}
+};
 
 /**
  * Lower a numeric `value` of type `from` to type `to`.
@@ -82,7 +78,7 @@ export function conversionIntrinsic(table: TypeTable, from: i32, to: i32): strin
  * signedness, narrow with `trunc`, and cross to or from a float with the
  * signed or unsigned form.
  */
-export function emitConversion(emitter: Emitter, value: string, from: i32, to: i32): string {
+export const emitConversion = (emitter: Emitter, value: string, from: i32, to: i32): string => {
   if (from === to) {
     return value;
   }
@@ -107,10 +103,10 @@ export function emitConversion(emitter: Emitter, value: string, from: i32, to: i
   }
   const op = intBits(from) < intBits(to) ? (isUnsigned(from) ? "zext" : "sext") : "trunc";
   return emitter.fn.emitValue(`${op} ${fromTy} ${value} to ${toTy}`);
-}
+};
 
 /** The type a plain-identifier conversion builtin targets, or -1 when the name is not one. */
-function builtinConversionTarget(name: string): i32 {
+const builtinConversionTarget = (name: string): i32 => {
   if (name === "toI32") {
     return T_I32;
   }
@@ -136,12 +132,12 @@ function builtinConversionTarget(name: string): i32 {
     return T_F64;
   }
   return -1;
-}
+};
 
 // ---- Math ---------------------------------------------------------------------------
 
 /** The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string. */
-function f64UnaryIntrinsic(name: string): string {
+const f64UnaryIntrinsic = (name: string): string => {
   if (
     name === "sqrt" ||
     name === "floor" ||
@@ -155,32 +151,32 @@ function f64UnaryIntrinsic(name: string): string {
     return `llvm.${name}.f64`;
   }
   return "";
-}
+};
 
 /**
  * `Math.abs` on an unsigned value is the identity, so it lowers to no
  * instruction; the empty string says "there is no intrinsic to call".
  */
-function absIntrinsic(table: TypeTable, type: i32): string {
+const absIntrinsic = (table: TypeTable, type: i32): string => {
   if (isUnsigned(type)) {
     return "";
   }
   return isInteger(type) ? `llvm.abs.${table.llvmType(type)}` : `llvm.fabs.${type === T_F32 ? "f32" : "f64"}`;
-}
+};
 
 /** `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed ones. */
-function minMaxIntrinsic(table: TypeTable, which: string, type: i32): string {
+const minMaxIntrinsic = (table: TypeTable, which: string, type: i32): string => {
   if (!isInteger(type)) {
     return `llvm.${which}num.${type === T_F32 ? "f32" : "f64"}`;
   }
   return `llvm.${isUnsigned(type) ? "u" : "s"}${which}.${table.llvmType(type)}`;
-}
+};
 
 /**
  * `Math.pow(x, y)`: `llvm.pow.f64` plus the two ECMAScript special cases C99
  * `pow` gets wrong — `pow(x, NaN)` is NaN and `pow(±1, ±Infinity)` is NaN.
  */
-function emitMathPow(emitter: Emitter, expr: Node): string {
+const emitMathPow = (emitter: Emitter, expr: Node): string => {
   const args = expr.children[1];
   const x = emitter.emitExpression(args.children[0]);
   const y = emitter.emitExpression(args.children[1]);
@@ -193,23 +189,23 @@ function emitMathPow(emitter: Emitter, expr: Node): string {
   const special = emitter.fn.emitValue(`and i1 ${xOne}, ${yInf}`);
   const nan = emitter.fn.emitValue(`or i1 ${yNaN}, ${special}`);
   return emitter.fn.emitValue(`select i1 ${nan}, double 0x7FF8000000000000, double ${p}`);
-}
+};
 
 /**
  * `Math.round(x)`: JavaScript rounds half toward +infinity, which is neither
  * `llvm.round` nor `llvm.roundeven`, and `floor(x + 0.5)` is wrong for
  * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`.
  */
-function emitMathRound(emitter: Emitter, expr: Node): string {
+const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr));
   const floor = callIntrinsic(emitter, "llvm.floor.f64", "double", `double ${x}`);
   const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`);
   const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`);
   const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`);
   return emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`);
-}
+};
 
-function emitMathAbs(emitter: Emitter, expr: Node): string {
+const emitMathAbs = (emitter: Emitter, expr: Node): string => {
   const arg = firstArgument(expr);
   const type = emitter.typeOf(arg);
   const x = emitter.emitExpression(arg);
@@ -219,34 +215,34 @@ function emitMathAbs(emitter: Emitter, expr: Node): string {
   }
   const ty = emitter.llvm(type);
   return callIntrinsic(emitter, intrinsic, ty, isInteger(type) ? `${ty} ${x}, i1 false` : `${ty} ${x}`);
-}
+};
 
-function emitMathMinMax(emitter: Emitter, expr: Node, which: string): string {
+const emitMathMinMax = (emitter: Emitter, expr: Node, which: string): string => {
   const args = expr.children[1];
   const type = emitter.typeOf(args.children[0]);
   const a = emitter.emitExpression(args.children[0]);
   const b = emitter.emitExpression(args.children[1]);
   const ty = emitter.llvm(type);
   return callIntrinsic(emitter, minMaxIntrinsic(emitter.table, which, type), ty, `${ty} ${a}, ${ty} ${b}`);
-}
+};
 
 // ---- Process, files and the arena ------------------------------------------------------
 
 /** Every argument as an `i8*`, which is what the file and stream builtins take. */
-function stringArgs(emitter: Emitter, expr: Node): string {
+const stringArgs = (emitter: Emitter, expr: Node): string => {
   const parts: string[] = [];
   for (const arg of expr.children[1].children) {
     parts.push(`i8* ${emitter.emitExpression(arg)}`);
   }
   return parts.join(", ");
-}
+};
 
 /** `write` / `writeError`: the bytes as they are, on fd 1 or 2. */
-function emitStreamWrite(emitter: Emitter, expr: Node, fd: i32): string {
+const emitStreamWrite = (emitter: Emitter, expr: Node, fd: i32): string => {
   const text = emitter.emitExpression(firstArgument(expr));
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
   return "void";
-}
+};
 
 /**
  * `panic(message)`: the message and a newline on stderr, then exit 1 — the
@@ -254,25 +250,23 @@ function emitStreamWrite(emitter: Emitter, expr: Node, fd: i32): string {
  * rather than two. `nish_exit` is `noreturn`, which is what makes the
  * `unreachable` legal and lets a non-void function end with a panic.
  */
-function emitPanic(emitter: Emitter, expr: Node): string {
+const emitPanic = (emitter: Emitter, expr: Node): string => {
   const message = emitter.emitExpression(firstArgument(expr));
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`);
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 1)`);
   emitter.fn.emit("unreachable");
   return "void";
-}
+};
 
 /** `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
-function emitParseCall(emitter: Emitter, s: string, mode: i32): string {
-  return emitter.fn.emitValue(
+const emitParseCall = (emitter: Emitter, s: string, mode: i32): string => emitter.fn.emitValue(
     `call double ${emitter.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`
   );
-}
 
 // ---- Dotted builtins -------------------------------------------------------------------
 
 /** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
-export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string {
+export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): string => {
   if (name === "console.log") {
     return emitConsoleLog(emitter, expr);
   }
@@ -328,16 +322,16 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_used")}()`);
   }
   process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
-}
+};
 
 /**
  * The runtime symbols and intrinsics the dotted lowerings above may call. The
  * order of the tests is theirs, so a reader can diff the two halves.
  */
-export function builtinCallees(program: CheckedProgram, table: TypeTable, call: Node): string[] {
+export const builtinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] => {
   const access = call.children[0];
   return builtinCalleesNamed(program, table, call, `${access.children[0].text}.${access.text}`);
-}
+};
 
 /**
  * The same, under a name the call site does not spell. A `nish:` import can
@@ -346,12 +340,12 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
  * program spelled it — an omission here is a wrong attribute, not a cosmetic
  * difference.
  */
-export function builtinCalleesNamed(
+export const builtinCalleesNamed = (
   program: CheckedProgram,
   table: TypeTable,
   call: Node,
   name: string
-): string[] {
+): string[] => {
   const out: string[] = [];
   const args = call.children[1];
   const firstType = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1;
@@ -423,19 +417,19 @@ export function builtinCalleesNamed(
     return out;
   }
   return out;
-}
+};
 
 // ---- Identifier builtins ----------------------------------------------------------------
 
 /** A call of a builtin by plain name, when no user function of that name is in scope. */
-export function isIdentifierBuiltinCall(program: CheckedProgram, call: Node): boolean {
+export const isIdentifierBuiltinCall = (program: CheckedProgram, call: Node): boolean => {
   if (call.children[0].kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
     return false;
   }
   return isBuiltinFunction(call.children[0].text);
-}
+};
 
-export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: string): string {
+export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: string): string => {
   const target = builtinConversionTarget(name);
   if (target >= 0) {
     const arg = firstArgument(expr);
@@ -550,7 +544,7 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
     return emitPanic(emitter, expr);
   }
   process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
-}
+};
 
 /** The other half of the pair above, in the same order. */
 /**
@@ -561,25 +555,23 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
  * vector that outlives the call. It answers for both names, because both reach
  * that same C.
  */
-export function isSpawnCall(program: CheckedProgram, call: Node): boolean {
+export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0];
   if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
     return false;
   }
   return callee.text === "spawnSync" || callee.text === "spawnSyncTo";
-}
+};
 
-export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, call: Node): string[] {
-  return identifierBuiltinCalleesNamed(program, table, call, call.children[0].text);
-}
+export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] => identifierBuiltinCalleesNamed(program, table, call, call.children[0].text);
 
 /** The same, under the name a `nish:` import bound — see `builtinCalleesNamed`. */
-export function identifierBuiltinCalleesNamed(
+export const identifierBuiltinCalleesNamed = (
   program: CheckedProgram,
   table: TypeTable,
   call: Node,
   name: string
-): string[] {
+): string[] => {
   const out: string[] = [];
   if (!isBuiltinFunction(name)) {
     return out;
@@ -663,12 +655,12 @@ export function identifierBuiltinCalleesNamed(
     return out;
   }
   return out; // f64ToBits / bitsToF64: one bitcast, no call
-}
+};
 
 // ---- Namespace properties -----------------------------------------------------------------
 
 /** `Math.PI`, `Math.E`, `process.argv` and the two machine strings: values rather than calls. */
-export function emitNamespaceProperty(emitter: Emitter, expr: Node, name: string): string {
+export const emitNamespaceProperty = (emitter: Emitter, expr: Node, name: string): string => {
   if (name === "Math.PI") {
     return f64Hex(Math.PI);
   }
@@ -692,4 +684,4 @@ export function emitNamespaceProperty(emitter: Emitter, expr: Node, name: string
     return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_arch")}()`);
   }
   process.exit(internalError(`emitter: unexpected builtin property \`${name}\``));
-}
+};

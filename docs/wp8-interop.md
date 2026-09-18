@@ -12,7 +12,7 @@ nish x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
 ```
 
 Both compilers write them. The self-hosted compiler carries its own port of
-the generators (`self/interop_*.ts`, WP14 §7) and answers the same three flags
+the generators (`self/interop_*.ts`, WP14 §7) and answers the same four flags
 with the same bytes; `tests/self/interop_oracle.js` is what says so.
 
 ## The C ABI
@@ -496,6 +496,78 @@ const addon = createRequire(import.meta.url)("./build/add.node");
 addon.add(2, 3); // 5
 ```
 
+### `--emit-napi-async <shim.c>`: the same exports, off the event loop
+
+The shim above runs the Nish function on whatever thread N-API handed it,
+which for a `require()`d addon is Node's main thread. A function that runs for
+200 ms blocks Node's event loop for 200 ms — every timer late, every socket
+unanswered, every frame dropped for as long as the call lasts. That is the
+defect [wp24-async.md](wp24-async.md) §5.1 names as A1, and it is the one
+thing that package recommended building.
+
+`--emit-napi-async` writes the same shim **plus** a promise-returning
+`<name>Async` for every export whose arguments and result are plain scalars:
+
+```bash
+node dist/index.js tests/self/interop_async.ts -o build/spin.ll \
+  --emit-napi-async build/spin_napi.c --threads
+scripts/build.sh build/spin.ll runtime/runtime.c build/spin_napi.c \
+  -o build/spin.node --profile napi --threads
+node examples/node-addon-async.mjs build/spin.node 120000
+# sync spin()        call   220 ms   worst loop stall   218.06 ms   over   8 ticks
+# async spinAsync()  call   220 ms   worst loop stall     0.36 ms   over  42 ticks
+```
+
+The call takes just as long either way — the work is identical and nothing got
+faster. What changed is who waits: `napi_create_async_work` runs it on libuv's
+thread pool and `napi_create_promise` / `napi_resolve_deferred` hand JavaScript
+a promise, so the loop keeps turning. **There is no language surface and no new
+syntax.** The compiled function is exactly as synchronous as it ever was and is
+still exported under its own name; all of the asynchrony is in the generated C,
+which is why this landed without a line of `docs/LANGUAGE.md` changing.
+
+Three properties are worth knowing before using it:
+
+- **`--threads` is required on both halves, and neither absence is silent.**
+  The worker allocates while the JS thread runs, so the arena has to be the
+  thread-local one (`wp20-threads.md` §4 T0) — in the generated C *and* in the
+  module's own IR. Without `-DNISH_THREADS` the arena is one process-wide bump
+  allocator that two threads would corrupt silently, so the shim opens with an
+  `#error`; and `nish --emit-napi-async` refuses to run without `--threads`
+  (exit 2), because a module that allocates inline reads `@nish_arena` as a
+  plain global otherwise and neither the shim's `#error` nor the link would
+  notice — a non-TLS reference links against the runtime's `_Thread_local`
+  definition without complaint in a `-shared -fPIC` build. The exec callback
+  brackets the call with `nish_arena_mark` / `nish_arena_release` on the
+  worker's own arena, which keeps a reused pool thread flat instead of growing
+  for the life of the process.
+- **`<name>Async` rejects; it never throws.** The promise is created before the
+  arguments are read, so a wrong argument comes back as a rejected `TypeError`
+  with the same message the synchronous wrapper throws. A promise-returning
+  function that threw synchronously would be the one failure a `.catch` cannot
+  reach.
+- **Scalars only, and the rest say why.** A string or typed-array parameter or
+  result keeps its synchronous wrapper alone, and the shim names it with the
+  reason. The arena is per-thread, so a mark taken on the JS thread cannot be
+  released on the worker; and a typed array is *borrowed* from the JS
+  `ArrayBuffer`, which N-API guarantees only for the duration of the callback
+  that read it — an asynchronous call outlives that callback by design.
+
+```c
+/* Not bridged asynchronously, and why. ... */
+/* tests/self/interop_async.ts: label(n: number): string -- no `labelAsync`: it returns string, which lives in the worker thread's arena */
+/* tests/self/interop_async.ts: total(xs: Int32Array): number -- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads */
+```
+
+A by-value `Result` *parameter* does cross, because it is scalars in a register
+and is read on the JS thread like any other argument; a `Result` *result* does
+not yet, because boxing one is several `napi_*` calls inside the completion
+callback. Marshalling a string or an array through a `malloc`ed copy is the
+shape that would lift the restriction, and it is deliberately not in this cut.
+
+Without the flag nothing changes: `--emit-napi` writes the byte-identical shim
+it always did, which is what lets an addon adopt this one call site at a time.
+
 ## Batching: cross the boundary once per batch
 
 Every call from JS into native code costs more than the work a small
@@ -566,14 +638,15 @@ real pass over the buffer on top of the crossing.
 | `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
 | `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
-| `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`. |
-| `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same three flags and writes the same files. |
-| `tests/self/interop_oracle.js` | Both compilers over the corpus below, all four generated files compared byte for byte. |
+| `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async` (which requires `--threads`). |
+| `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same four flags and writes the same files. |
+| `tests/self/interop_oracle.js` | Both compilers over the corpus below, all five generated files compared byte for byte — the asynchronous shim among them. |
 | `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts`, `tests/self/interop_unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
 | `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
+| `tests/self/interop_async.ts`, `examples/node-addon-async.mjs` | The WP24 A1 fixture — the shapes that get a `<name>Async` and the string and borrowed-array ones that do not — and the harness that calls both and measures what the loop was spared. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
-| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `nish_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, and the comment a skipped function leaves behind. |
+| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `nish_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, the comment a skipped function leaves behind, and the WP24 A1 asynchronous exports — that `--emit-napi-async` is additive and inert when absent, that it is refused without `--threads`, that the generated C refuses to compile without `-DNISH_THREADS`, and that a built addon agrees with its synchronous twin while leaving the event loop responsive. |
 
 ## Not in this package
 

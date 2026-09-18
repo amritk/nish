@@ -57,9 +57,7 @@ export const EFFECT_READ: i32 = 1;
 export const EFFECT_WRITE: i32 = 2;
 
 /** The more impure of two effects, which is how a caller inherits its callees'. */
-export function maxEffect(a: i32, b: i32): i32 {
-  return a >= b ? a : b;
-}
+export const maxEffect = (a: i32, b: i32): i32 => a >= b ? a : b;
 
 export class RuntimeFunction {
   name: string;
@@ -90,31 +88,31 @@ export class RuntimeFunction {
 const STR: string = "i8* noundef nonnull readonly align 8";
 const STR_NOCAP: string = "i8* noundef nonnull readonly align 8 nocapture";
 
-function attrs1(a: string): string[] {
+const attrs1 = (a: string): string[] => {
   const out: string[] = [];
   out.push(a);
   return out;
-}
+};
 
-function attrs2(a: string, b: string): string[] {
+const attrs2 = (a: string, b: string): string[] => {
   const out: string[] = [];
   out.push(a);
   out.push(b);
   return out;
-}
+};
 
-function attrs3(a: string, b: string, c: string): string[] {
+const attrs3 = (a: string, b: string, c: string): string[] => {
   const out = attrs2(a, b);
   out.push(c);
   return out;
-}
+};
 
 /**
  * A pure math intrinsic (WP7). Every one is a total function of its operands
  * with no memory access, so `readnone willreturn` is a fact rather than a
  * hope, and `EFFECT_NONE` keeps callers `readnone` through the fixpoint.
  */
-function intrinsic(name: string, ret: string, params: string): RuntimeFunction {
+const intrinsic = (name: string, ret: string, params: string): RuntimeFunction => {
   const fn = new RuntimeFunction(
     name,
     `declare ${ret} @${name}(${params})`,
@@ -123,12 +121,10 @@ function intrinsic(name: string, ret: string, params: string): RuntimeFunction {
   );
   fn.intrinsic = true;
   return fn;
-}
+};
 
 /** `nounwind willreturn`, which is what almost every runtime symbol carries. */
-function plain(name: string, signature: string, effect: i32): RuntimeFunction {
-  return new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect);
-}
+const plain = (name: string, signature: string, effect: i32): RuntimeFunction => new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect);
 
 /**
  * The runtime ABI as one ordered table, with a name index beside it.
@@ -498,20 +494,20 @@ export class RuntimeTable {
   }
 }
 
-export function inlineAllocatorAttrs(): string[] {
+export const inlineAllocatorAttrs = (): string[] => {
   const out: string[] = [];
   out.push("alwaysinline");
   out.push("nounwind");
   out.push("willreturn");
   out.push("allocsize(0)");
   return out;
-}
+};
 
 /**
  * The inline bump allocator. `size` is rounded up to 8 bytes so every object
  * (and therefore every field of every struct) is 8-byte aligned.
  */
-export function inlineAllocator(attrGroup: string): string {
+export const inlineAllocator = (attrGroup: string): string => {
   const lines: string[] = [];
   lines.push(`define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) ${attrGroup} {`);
   lines.push("entry:");
@@ -537,4 +533,4 @@ export function inlineAllocator(attrGroup: string): string {
   lines.push("  ret i8* %grown");
   lines.push("}");
   return lines.join("\n");
-}
+};

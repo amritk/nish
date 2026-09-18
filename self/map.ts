@@ -27,7 +27,7 @@
  * be undefined under the default `nsw` (WP15 §3). Same instructions, same
  * bits, same hash — `u32` is only where the claim is true.
  */
-export function hashString(key: string): i32 {
+export const hashString = (key: string): i32 => {
   let hash: u32 = 2166136261;
   let i = 0;
   while (i < key.length) {
@@ -36,7 +36,7 @@ export function hashString(key: string): i32 {
     i = i + 1;
   }
   return toI32(hash);
-}
+};
 
 /** The initial bucket count. Small: most scopes hold a handful of names. */
 const INITIAL_SLOTS: i32 = 16;

@@ -321,7 +321,7 @@ the IR; only a computed count costs the mask
 ### Nullable types
 
 `T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t-null)). It
+(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t--null)). It
 is the same LLVM pointer type as `T` with the constant `null` as one more
 value, so nothing is boxed; `null` takes its type from context.
 
@@ -641,7 +641,14 @@ spelling; the two compile to identical IR, instruction for instruction
   (`` Parameter `x` needs a type annotation ``; `explicit return type`,
   `tests/cases/reject_missing_return_type`).
 - Functions may call each other in any order; signatures are collected
-  before bodies are checked (`tests/cases/locals`, `cf_fib`).
+  before bodies are checked (`tests/cases/locals`, `cf_fib`). **This holds for
+  the arrow form too**, which is not what a reader who knows that a `const` is
+  not hoisted in JavaScript would expect: a module-level `const` bound to an
+  arrow *is* a function declaration, so it is in scope for the whole module and
+  not only below its own line, and two of them may call each other
+  (`tests/cases/fn_arrow_hoisting`). Nothing else would let a file be converted
+  from one spelling to the other without reordering it
+  ([wp22-arrow-functions.md](wp22-arrow-functions.md) §8b).
 - Calls take exactly the declared number of arguments (`expects 1 argument`,
   `tests/cases/reject_arity`), each of exactly the declared type
   (`` Argument 1 of `area`: expected Shape, got Rect ``,
@@ -781,7 +788,7 @@ program twice, with one golden between them.
 - **Generic aliases are forbidden**, unlike a generic *function*: an alias
   only renames a type that already exists, so there is nothing for a type
   argument to apply to. `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) ``
+  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -913,13 +920,17 @@ and their `.ll` goldens are byte-identical files.
   `export * from`, and `export =` are rejected
   (`Only functions can be exported`; `` `export default` is not supported ``,
   `tests/cases/reject_export_default`).
-- The only import form is a named import from a relative specifier:
-  `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
-  The specifier must start with `./` or `../`, name one of the three builtin
-  modules below, or name a standard-library module as `nish/<module>`
-  (`Only relative import specifiers are supported`,
-  `tests/cases/reject_bare_import`, `tests/cases/reject_bare_package`); `.ts` is optional and `./x.js` maps to
-  `./x.ts`; paths resolve relative to the importing file. Default imports
+- The only import form is a named import: `import { square, cube as pow3 } from
+  "./math"` (`tests/link/two_file`). The specifier must start with `./` or
+  `../`, name one of the three builtin modules below, name a standard-library
+  module as `nish/<module>`, or be a **package name** — `hash` or
+  `@scope/hash`, each of which may be followed by a subpath
+  (`@scope/hash/blake3`), resolved through `node_modules` and the `nish` export
+  condition (`tests/link/package_bare`; a package that is not installed is
+  `` Cannot find package `hash` ``, `tests/cases/reject_bare_package`). Anything
+  else is `Import specifier ... must be relative`
+  (`tests/cases/reject_bare_import`). `.ts` is optional and `./x.js` maps to
+  `./x.ts`; a relative path resolves relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
   imports (`Namespace imports`, `reject_namespace_import`), side-effect
   imports (`Side-effect imports`, `reject_side_effect_import`), and
@@ -940,8 +951,68 @@ and their `.ll` goldens are byte-identical files.
   specifier rather than by where the file sits, because reading it off the path
   would answer differently for an installed compiler and a checkout of the same
   version.
-- Every other bare specifier is refused: there is no package resolution
-  (`reject_bare_package`, `docs/wp21-packages.md` §5b).
+- **A package is imported by name, and what is resolved is its source.**
+  `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
+  importing file's directory and in every directory above it — above the
+  directory the compiler was run in included, which is the ordinary npm layout
+  (`tests/link/package_above`) — stepping over an ancestor already called
+  `node_modules` wherever the module's own name spells one, as Node does
+  (`tests/link/package_doubled`) — reads that package's `package.json`, and
+  compiles the file its `exports` map offers for the **`nish` condition**
+  (`tests/link/package_bare`, `docs/wp21-packages.md` §2):
+
+  ```jsonc
+  { "exports": { ".": { "nish": "./src/index.ts" }, "./util": { "nish": "./src/util.ts" } } }
+  ```
+
+  Source, not a built artifact, and that is the decision rather than a stage:
+  the whole-program fact fixpoint, monomorphisation, and `--number-mode` being
+  a compile-time ABI each make a prebuilt library strictly worse than the
+  source that is already there (`docs/wp21-packages.md` §3). The consequence a
+  reader should carry away is that a dependency is compiled, checked and
+  optimised as if it were your own code, and its non-exported functions are
+  `internal` and dead-stripped like your own.
+  - **The number mode rides in the condition.** `nish-i32` and `nish-f64` are
+    the mode-qualified spellings, and the compiler asks for its own mode first
+    and then plain `nish` — so a package correct under either declares `nish`,
+    a package that needs different source per mode declares both, and a
+    mismatch is a *resolution* failure at the package boundary rather than a
+    wrong answer at run time. "First" is the compiler's order and not the
+    manifest's: the mode-qualified condition wins wherever the package
+    declares it, unlike Node, which would take whichever of the two the
+    manifest names first (`tests/link/package_mode_order`,
+    `tests/link/package_mode_order_f64`). Node's order is right for rival
+    conditions and wrong for these two, because `nish-f64` is not a rival of
+    `nish` but `nish` refined by the mode: honouring the order would let a
+    package write `nish` above `nish-f64` and never have its f64 source
+    compiled, with nothing said about it — the silent mismatch this spelling
+    exists to make loud.
+  - **Presence of the condition is the claim.** A package that offers this
+    compiler no file for the subpath asked for is
+    `` Package `plainjs` has no Nish entry point: its `exports` gave this
+    compiler no file to compile for `.` `` (`tests/link/package_not_nish`) —
+    which is what an ordinary npm package gets, in words that name what is
+    missing. The sentence reports what the compiler came away with rather than
+    what the manifest declares, because the two are not the same thing: a
+    `nish-f64` that names something other than a file outranks a `nish` that is
+    there and correct, and is what the message is about. A package that is not
+    installed at all is `` Cannot find package `@x/y` ``
+    (`tests/cases/reject_bare_package`).
+  - **A package is where its path says, and a symlink is not followed.** One
+    package installed twice, or reached both directly and through a symlink —
+    pnpm's layout, and npm's whenever it cannot hoist — is two packages of one
+    name, and that is refused by the clash check rather than merged the way
+    Node's `realpath` merges it (`tests/link/package_symlink`,
+    `docs/wp21-packages.md` §10d). Both compilers refuse it alike: resolving a
+    symlink needs a call the language does not have.
+  - **Only the `nish` conditions are honoured**, and a subpath is an exact key:
+    `default`, `import` and `node` are skipped rather than matched, and the
+    `"./*"` pattern form is not read. A target is a string beginning with `./`
+    and naming a file inside the package.
+  - A package's symbols carry its prefix (`@pkg_bare.scale`), so two packages
+    may each keep a private `helper()`; the root package — the program being
+    compiled — has no prefix and its IR is unchanged (`docs/wp21-packages.md`
+    §9).
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,
@@ -1087,11 +1158,20 @@ class Point {
   `implements`, below: repeat the fields you were going to inherit as the
   class's first fields and name an interface that declares them. Shared
   behaviour is a free function over that interface.
-- **Rejected**: `static` (`tests/cases/reject_cls_static`),
+- **Rejected**: `static` on a field, a method or the constructor
+  (`tests/cases/reject_cls_static`, `reject_cls_method_static`,
+  `reject_cls_ctor_static`) — the word is still a legal member *name*, and
+  `static?: i32` is an optional field called `static`
+  (`reject_cls_field_named_static`), and on an interface field too, where the
+  message says which kind it is (`reject_cls_static_interface`) — `readonly` on
+  a method or the constructor, which has no storage to be read-only
+  (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, type parameters on a class or on one of its methods
-  (`tests/cases/reject_generic_class`, `reject_generic_method`), decorators
+  `declare class`, type parameters on a *method* of its own
+  (`reject_generic_method`; the class's own parameters are in scope in every
+  method — see [Generic classes and interfaces](#generic-classes-and-interfaces)),
+  decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
 
@@ -1158,13 +1238,96 @@ export const main = (): i32 => {
   unaffected — only names that become symbols are restricted.
 - **Not supported yet**, each with its own message: a constrained parameter
   (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
-  type argument (`<T = string>`), type parameters on a class, an interface, a
-  method or a type alias, and instantiating a generic imported from another
-  module (`` is a generic function, and a generic function cannot yet be
-  instantiated from another module ``). A generic `main` is refused too: the
-  entry point is called by the C runtime, which has no type arguments to give
-  it. The design and the milestones are in
-  [wp18-generics.md](wp18-generics.md).
+  type argument (`<T = string>`), type parameters on a method or a type alias,
+  and instantiating a generic imported from another module
+  (`` is a generic function, and a generic function cannot yet be instantiated
+  from another module ``). A generic `main` is refused too: the entry point is
+  called by the C runtime, which has no type arguments to give it. The design
+  and the milestones are in [wp18-generics.md](wp18-generics.md).
+
+### Generic classes and interfaces
+
+A `class` or an `interface` may declare type parameters too, and an
+instantiation is **an ordinary struct**: `Box<i32>` is `%struct.Box$i32` with
+`Box`'s fields at `T = i32`, its methods are `@Box$i32.get` and
+`@Box$i32.constructor`, and everything the language already does to a struct —
+the layout, `implements`, `new`, field access, the C header, the debug info —
+works on it unchanged (`tests/cases/gen_box_i32`, `gen_box_string`).
+
+```typescript
+class Box<T> {
+  value: T;
+  constructor(v: T) { this.value = v; }
+  get(): T { return this.value; }
+}
+
+interface Pair<A, B> { first: A; second: B; }
+
+export const main = (): i32 => {
+  const b = new Box<i32>(7);                            // %struct.Box$i32
+  const p: Pair<i32, string> = { first: 1, second: "" }; // %struct.Pair$i32$str
+  return b.get();
+};
+```
+
+- **The type arguments are written out, never inferred.** `Box` on its own is
+  not a type, because there is no layout until `T` is bound:
+  `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` ``
+  (`tests/cases/reject_generic_class`). The two positions that take them are an
+  annotation (`const b: Box<i32>`) and `new` (`new Box<i32>(7)`) — the two a
+  one-token parser can read a type-argument list in, which is the same reason a
+  *call* infers instead (§2a of [wp18-generics.md](wp18-generics.md)). A class
+  that is not generic takes none:
+  `` `Point` is not generic, so `new Point` takes no type arguments ``
+  (`tests/cases/reject_cls_new_generic`).
+- **A type argument may be anything a type may be**, including another
+  instantiation: `Box<Point>` is `%struct.Box$$Point` and `Box<Box<i32>>` is
+  `%struct.Box$$Box$i32`, the `>>` split back into two by the parser
+  (`tests/cases/gen_box_struct`, `gen_nested`). A *type parameter* takes none,
+  though: `T` is whatever the instantiation bound it to, so `const y: T<i32>`
+  is `` Unsupported type reference `T<i32>` ``
+  (`tests/cases/reject_generic_type_param_args`).
+- **A template obeys every rule a declared class obeys.** Type parameters
+  change what a declaration *means*, not what it may be written with, so
+  `declare class Box<T>`, `export default class Box<T>`, `abstract class
+  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
+  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `reject_generic_export_default`, `reject_generic_abstract`,
+  `reject_generic_interface_extends`).
+- **A template claims its name in the one declaration namespace.** `class
+  Box<T>` is a declaration of `Box`, so a function, a constant, an alias, an
+  enum or a second class of that name is refused whichever was written first —
+  the structs pass runs before the functions pass, so the template is always
+  the one already there (`tests/cases/reject_generic_class_fn_clash`,
+  `reject_generic_class_after_fn`, `reject_generic_class_redeclared`).
+- **An instantiation's name is program-wide**, because `%struct.Box$i32` and
+  `@Box$i32.constructor` are. So two modules may not both declare a generic
+  class or interface of one name once both instantiate it:
+  `` Generic class `Holder` is also declared in helper.ts; a class or interface name must be unique across the program, and an instantiation is named after its template ``
+  (`tests/link/generic_class_clash`), and across two packages the wording is
+  the one `tests/link/package_generic_class_clash` pins. Nothing about the two
+  declarations is visible at a call, so left unreported the second layout would
+  simply replace the first and a field read would land on the wrong offset.
+- **`implements` may name an instantiation.** `class Box<T> implements
+  Container<T>` is checked once per instantiation, against `Container$i32`, by
+  the ordinary field-prefix rule — the interface's fields are the class's first
+  fields, so the conversion is one `bitcast` (`tests/cases/gen_implements`).
+- **Each instantiation gets its own facts**, exactly as a generic function's
+  do: one `new Box<T>(v)` in a body that does not escape is an entry-block
+  `alloca` at `T = i32` and an arena bump at `T = string` when the box is
+  returned — one source line, two memory behaviours (`tests/cases/gen_stack`).
+- **A field may not grow its own type argument.** `class Nest<T> { inner:
+  Nest<T[]> | null }` asks for a strictly larger instantiation every time it is
+  laid out:
+  `` Monomorphising `Nest` would not terminate: `Nest<i32>` names `Nest<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; name `T` itself, or a type that does not mention it ``
+  (`tests/cases/reject_generic_expanding_field`). `Nest<T>` and a type that
+  mentions no parameter are both fine — it is the same rule a generic
+  function's recursive call is held to, stated over fields.
+- **Not supported yet**: a constrained parameter (`<T extends Shape>`), a
+  generic method of its own on a class, and importing a generic class or
+  interface from another module
+  (`` is a generic class, and a generic class or interface cannot yet be
+  instantiated from another module ``).
 
 ### Interfaces and object literals
 
@@ -1245,15 +1408,65 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**Every position must be a scalar** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
-`f32`, `f64`, `boolean`, `void`. A `string`, an array, a class or an interface is
-rejected with
-`` and a declared C function takes scalars only `` in a parameter
+**Every position must be a scalar or `CPtr`** — `i32`, `i64`, `u8`, `u16`,
+`u32`, `u64`, `f32`, `f64`, `boolean`, `void`, and the foreign pointer below. A
+`string`, an array, a class or an interface is rejected with
+`` and a declared C function takes scalars and `CPtr` only `` in a parameter
 (`tests/cases/reject_ffi_string_param`) and
-`` returns a scalar only `` in the return position
-(`reject_ffi_string_return`). This is not a stylistic limit: a scalar boundary has
-no pointer for a foreign function to capture or free, which is what lets the
-escape analysis stay correct without knowing anything about the callee.
+`` returns a scalar or `CPtr` only `` in the return position
+(`reject_ffi_string_return`). This is not a stylistic limit: **no pointer this
+compiler allocated crosses the boundary in either direction**, so there is
+nothing for a foreign function to capture or free, which is what lets the escape
+analysis stay correct without knowing anything about the callee.
+
+#### `CPtr`: the pointer a C function hands back
+
+**`CPtr` is an address C owns.** It is eight bytes and `i8*` in the IR, and that
+is the whole of what the compiler knows about it: it is not arena memory, not a
+`%struct`, not a `nish_str`, and its lifetime is the C library's business
+(`tests/cases/ffi_pointer`, [cookbook](IR_COOKBOOK.md#cptr-the-pointer-a-c-function-hands-back)).
+
+```ts
+declare function calloc(count: u64, size: u64): CPtr | null;
+declare function free(block: CPtr): void;
+```
+
+- **It may be written in a `declare function` signature and on a local that
+  holds one, and nowhere else.** A field, an array element, a `Result` arm, a
+  type argument, and the parameters or return type of a function this program
+  defines are all
+  `` `CPtr` cannot be ...: a foreign pointer may only appear in a `declare
+  function` signature or on a local bound to one ``
+  (`reject_ffi_pointer_field`, `reject_ffi_pointer_array`,
+  `reject_ffi_pointer_param`, `reject_ffi_pointer_return`,
+  `reject_ffi_pointer_type_argument_fn`). The first group
+  would put a foreign address inside a value the arena owns and the escape
+  analysis walks; the second would put one across a boundary `--emit-header`,
+  `--emit-dts` and `--emit-napi` describe, and none of the three has a spelling
+  for an address whose provenance and lifetime are unknown. The type-argument
+  clause is stated at a generic *function*'s instantiation; a generic *class* at
+  `CPtr` is refused by whichever member rule the monomorphised class reaches
+  (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
+  out — see `docs/wp27-ffi.md` §7a for the one that does not.
+- **`null` comes only from a foreign call.** A `declare function` may *return*
+  `CPtr | null` and may not *take* one
+  (`` cannot be nullable: a foreign pointer is narrowed with `!== null` before
+  it is passed back ``, `reject_ffi_pointer_nullable_param`), so a pointer is
+  narrowed with `if (p !== null)` before it goes back to C. The narrowing is the
+  ordinary nullable one (WP6); a `CPtr | null` local may also hold the literal
+  `null`, which is the only `CPtr` value that did not come from C and the only
+  one that cannot be passed to it.
+- **No arithmetic, no dereference, no index, no member.** `p + 1` is
+  `` Operator `+` requires two operands of the same numeric type ``
+  (`reject_ffi_pointer_arithmetic`) and `p[0]` is
+  `` Cannot index a value of type CPtr ``. What is left is `=== null`,
+  `!== null`, comparing two `CPtr`s, assignment, and passing one to another
+  foreign function.
+- **It gets no pointer attributes.** `dereferenceable`, `align`, `nonnull`,
+  `nocapture` and `readonly` are each a claim about memory this compiler laid
+  out, and it laid out none of this; `isPointerParam` in
+  `src/codegen/attributes.ts` is an allow-list so that a `CPtr` falls out of it
+  by construction rather than by a case somebody remembered to write.
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
 `export`ed** (`reject_ffi_export`), because `export` offers other modules a
@@ -1273,6 +1486,14 @@ which to do anything else. See
 **A program that calls C is no longer one the compiler can reason about end to
 end.** That is the trade the feature is: the whole-program fact fixpoint is the
 performance thesis, and a foreign call is a hole in it.
+
+**And it is outside the differential oracle by construction.** The oracle
+rewrites a program to JavaScript and runs it against `runtime/shim.mjs`, on the
+premise that the same source means the same thing in both worlds; that premise
+does not hold for a source whose meaning is "whatever this C function does"
+([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the
+other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
+real libc, and the attribute assertions.
 
 ## Statements
 
@@ -1874,7 +2095,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
-| `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
+| `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). `null` when the path cannot be read *as a file* — missing, a **directory**, a parent that cannot be searched, a pipe with no length to ask for — which is the same set `readFileSync` prints `nish: cannot read <path>` for. It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
 
@@ -2524,10 +2745,10 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
-| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
 | type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
-| type *arguments* on `new` of a declared class | `` Generic classes are not supported `` | `reject_cls_new_generic` |
+| a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
+| type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
