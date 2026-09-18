@@ -26,6 +26,50 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-18
+
+### Added
+
+- interop: Run an N-API export on libuv's thread pool with `--emit-napi-async` ([#67](https://github.com/amritk/nish/pull/67))
+- checker: Monomorphise generic classes and interfaces ([`9000434`](https://github.com/amritk/nish/commit/9000434))
+- checker: Resolve a package by name through the `nish` export condition ([`4bf07f0`](https://github.com/amritk/nish/commit/4bf07f0))
+- checker: Add `CPtr`, the opaque pointer a C function hands back ([`50410a5`](https://github.com/amritk/nish/commit/50410a5))
+- release: Build and smoke-test a native compiler for each supported target ([`16110e2`](https://github.com/amritk/nish/commit/16110e2))
+- runtime: Divide a range of work across threads ([#88](https://github.com/amritk/nish/pull/88))
+
+### Fixed
+
+- self: Let the checker state the member-header rules the parser was eating ([`ca7d4a5`](https://github.com/amritk/nish/commit/ca7d4a5))
+- checker: Name a `nish/` module by the package, not by the importer ([`97f0f4e`](https://github.com/amritk/nish/commit/97f0f4e))
+
+### Performance
+
+- tests: Compile the golden cases in one process instead of one each ([`9072355`](https://github.com/amritk/nish/commit/9072355))
+- tests: Link the golden cases against a runtime built once per run ([`7b8815f`](https://github.com/amritk/nish/commit/7b8815f))
+- checker: Fold a proven `substring` clamp, and warn where the proof did not come off ([`19b4569`](https://github.com/amritk/nish/commit/19b4569))
+- codegen: Release the arena scope ahead of a tail call ([#85](https://github.com/amritk/nish/pull/85))
+- ci: Stop re-running the whole suite to widen one gate, and cache Node's module compilation ([#87](https://github.com/amritk/nish/pull/87))
+- codegen: Mark a scalar-argument tail call `tail` ([#86](https://github.com/amritk/nish/pull/86))
+
+### Changed
+
+- self: Declare every function in the self-hosted compiler as an arrow ([`de62d60`](https://github.com/amritk/nish/commit/de62d60))
+
+### Documentation
+
+- checker: Close contiguous class arrays by costing the migration ([#73](https://github.com/amritk/nish/pull/73))
+- codegen: Refute the invariant array header and re-scope item 1b ([#70](https://github.com/amritk/nish/pull/70))
+- tests: Record four measurement traps the tooling hides ([`6aadfff`](https://github.com/amritk/nish/commit/6aadfff))
+
+### Build
+
+- self: Add the codemod and the byte-for-byte IR diff stage C's rewrite needs ([`15c663a`](https://github.com/amritk/nish/commit/15c663a))
+
+### CI
+
+- bootstrap: Skip the rolling freeze where no seed can exist, fail where one is missing ([#68](https://github.com/amritk/nish/pull/68))
+
+
 ## [0.2.0] - 2026-09-13
 
 ### Added
@@ -109,3 +153,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.1.0]: https://github.com/amritk/nish/releases/tag/v0.1.0
 [0.1.1]: https://github.com/amritk/nish/releases/tag/v0.1.1
 [0.2.0]: https://github.com/amritk/nish/releases/tag/v0.2.0
+[0.3.0]: https://github.com/amritk/nish/releases/tag/v0.3.0
