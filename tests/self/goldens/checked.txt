@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 329 programs, 5546 dump lines.
+# 329 programs, 5551 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3586,6 +3586,9 @@ function test(): i32 -> @test [exported]
   callee 21:18 step -> @step
 program tests/cases/perf_inline_quiet.ts
 module tests/cases/perf_inline_quiet.ts (entry)
+function abs(x: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
 function exported(n: i32): i32 -> @exported [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -3594,13 +3597,15 @@ function internalHelper(n: i32): i32 -> @internalHelper
   stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
-  calls: exported internalHelper nish_arena_mark nish_arena_release nish_str_from_i32
+  calls: abs exported internalHelper nish_arena_mark nish_arena_release nish_str_from_i32
   stackSites=0 stackLocals=0
-  local 10:7 total: i32 (let)
-  local 13:7 i: i32 (let)
-  callee 15:21 exported -> @exported
-  callee 21:19 internalHelper -> @internalHelper
-  local 24:9 s: string (const)
+  local 17:7 total: i32 (let)
+  local 20:7 i: i32 (let)
+  callee 22:21 exported -> @exported
+  callee 28:19 internalHelper -> @internalHelper
+  local 32:7 j: i32 (let)
+  callee 34:21 abs -> @abs
+  local 39:9 s: string (const)
 program tests/cases/perf_overflow.ts
 module tests/cases/perf_overflow.ts (entry)
 function test(): i32 -> @test [exported]

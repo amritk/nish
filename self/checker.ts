@@ -1192,6 +1192,13 @@ function checkNotInlinable(walk: PerfWalk, call: Node): void {
   if (callee === null || callee.exported) {
     return;
   }
+  // A `declare function` is external because C defines it, not because this
+  // module withheld an `export`: the rewrite named below cannot be taken (the
+  // checker refuses `export declare function`) and dropping
+  // `--no-strict-exports` would not make it `internal` either. WP27 S1.
+  if (callee.foreign()) {
+    return;
+  }
   ctx.performance(
     call.children[0],
     `\`${callee.sourceName}\` is called here inside a loop and \`--no-strict-exports\` keeps it an external ` +
