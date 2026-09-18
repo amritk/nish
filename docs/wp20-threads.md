@@ -1,6 +1,11 @@
 # WP20: Threads
 
-**T0 is built; T1 to T4 are proposed, not implemented.** This is the plan of
+**T0 is built; T1 to T4 are proposed, not implemented — and the payoff T4 was
+waiting to be measured against is now measured (§8): 3.76x on four cores for a
+compute kernel at 94% efficiency, and, on an allocating one, an answer that
+depends on the body rather than on the thread count — 3.10x while the arena is
+left to grow, 1.86x once it is recycled, and the recycling itself worth 4.2x.
+Fix the body, then add threads.** This is the plan of
 record for the question "how does Nish do true multithreading, like Go or
 Rust", and the shape of the answer is forced by decisions the project has
 already made rather than chosen freely. The normative rules would land in
@@ -381,8 +386,19 @@ This is where the measurable payoff is. Of the seven programs in
 [BENCHMARKS.md](BENCHMARKS.md), `nbody` (1.22x behind Rust) and `spectral`
 (1.12x) are exactly this shape, and a four-core machine changes those numbers
 by more than any single-thread item on the WP15 list can. That is the
-argument for the whole package, and it should be measured on a prototype
-before T1 is designed rather than after T4 is built.
+argument for the whole package, and this note asked for it to be measured on a
+prototype before T1 is designed rather than after T4 is built.
+
+**That prototype has now been run, and §8 is what it said.** In one line:
+3.76x on four cores for a compute kernel, against a WP15 list whose largest
+remaining single-thread item is worth 2.48x and whose typical one is worth a
+few per cent. The payoff is real and it is the largest number left anywhere in
+the plan. What the prototype also said, and what this section did not expect,
+is that an *allocating* body's scaling is decided by its arena discipline and
+not by T4: the same loop returns 3.10x with the arena left to grow and 1.86x
+once it is recycled, and the recycling is worth 4.2x on its own (§8a). So T4
+needs an arena story and not only a partitioning story, which is a design
+input this note did not know it had.
 
 ## 5. Diagnostics
 
@@ -412,7 +428,13 @@ and it must name the field that disqualified the type rather than the type.
 - **Detached threads**, per §3.4, and the atomic refcounting they would need.
 - **Async/await.** `async` and `await` are forbidden constructs with their own
   Phase 0 rules and no event loop behind them (LANGUAGE.md). Threads do not
-  change that and this note does not propose to.
+  change that and this note does not propose to. What has changed since is the
+  direction the question can be asked from:
+  [wp28-compatibility-mode.md](wp28-compatibility-mode.md) §6 proposes that a
+  *ported* `await` be lowered onto this note's T1 and T2 rather than onto an
+  event loop, which makes the keyword a spelling of spawn-and-join rather than
+  a concurrency model of its own. That is downstream of T1 and T2 by decision
+  (§7), so nothing in it moves a rule here.
   [wp24-async.md](wp24-async.md) is the plan of record for the question, and it
   reaches the same answer from the other side: the I/O surface is synchronous
   and there is nothing to await, so what an asker usually wants is T0 plus an
@@ -443,8 +465,277 @@ that can be answered in a day. Nothing about the 1.0 freeze argues against
 it. **It landed on that argument** — the benchmark question is answered in §4
 T0, and the answer was "nothing, unless the program asks".
 
-The remaining order, then: **a T4-shaped prototype to measure the payoff before
-the surface is designed; T1 and T2 together after the freeze; T3 after WP15
-item 8.** Nothing in that order changed when T0 landed, and the one thing T0
-unblocks outside this note is [wp24-async.md](wp24-async.md) §5.1's A1, which is
-now buildable and still unowned.
+The remaining order, then: **T1 and T2 together after the freeze; T3 after WP15
+item 8.** The T4-shaped prototype that used to open that sentence has been run
+(§8), so the measurement it was gating no longer gates anything: T1 is designed
+against 3.76x rather than against a prediction. Nothing else in the order
+changed when T0 landed, and the one thing T0 unblocks outside this note is
+[wp24-async.md](wp24-async.md) §5.1's A1, which is built.
+
+One thing has been *added* to the order since, from the other end. WP28's
+compatibility dialect ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)
+§6) proposes `async`/`await` as notation that a flag re-targets, and its
+`--async-model threads` lowering — `Promise.all` over non-interfering calls
+becoming a real fork and join — is this note's T1 and T2 wearing a JavaScript
+spelling. **Threads come first, and the decision is recorded here rather than
+only there**: the engine is built as `Thread.spawn` / `join` and a
+`parallelFor`, with its own surface and its own diagnostics, and only then is
+it something a ported `await` can be lowered onto. Building the notation first
+would mean designing T2's shareable-type rule through a keyword that hides it,
+which is the opposite of the order §4 T2 asks for — "the stage that decides how
+much real work is expressible, so it is the one to prototype against a real
+program before committing to the surface".
+
+## 8. The T4 payoff, measured
+
+§4 T4 and §7 both asked for this before T1's surface was designed, so here it
+is. Nothing in the language spawns a thread, so the prototype is what T0 made
+possible and no more: three kernels compiled to the C ABI by the ordinary
+compiler, and a pthreads driver that splits one **fixed** amount of work across
+T threads, so the only variable is T. The programs are in §9; the machine is
+four physical cores of an Intel Xeon at 2.80 GHz with 16 GB, no SMT and no
+cgroup CPU quota, in a container — which puts a hard ceiling of 4x on every row
+below and leaves what a larger machine does unmeasured.
+
+Best of five to nine per row, thread counts interleaved run by run so a busy
+patch of machine hits all four. The absolute numbers are this box's and are not
+[BENCHMARKS.md](BENCHMARKS.md)'s; only the ratios in each row mean anything.
+
+| Kernel | t=1 | t=2 | t=3 | t=4 | at 4 | efficiency |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| arithmetic — a hash chain over a range, no allocation | 971 ms | 489 ms | 325 ms | 258 ms | **3.76x** | 94% |
+| allocating — one 8-byte object per iteration, arena left to grow | 1,389 ms | 739 ms | 570 ms | 448 ms | **3.10x** | 78% |
+| the same, with `Arena.reset()` every 4,096 objects | 371 ms | 243 ms | 246 ms | 200 ms | **1.86x** | 46% |
+
+And the other half of the question, because a thread-local arena is not free
+and T0 measured 1.48x for it on a pure-bump microbenchmark. The same kernels
+built *without* `--threads` and run on one thread, interleaved against the
+`--threads` build:
+
+| Kernel, one thread | without `--threads` | with | cost |
+| --- | ---: | ---: | ---: |
+| arithmetic | 983 ms | 979 ms | none (noise) |
+| allocating, arena grows | 1,289 ms | 1,422 ms | **1.10x** |
+| allocating, arena recycled | 305 ms | 372 ms | **1.22x** |
+
+**The net figures** — what a program gains against the binary it would build
+today — are therefore **3.81x** for the compute kernel, **2.88x** for the
+allocating one, and **1.53x** for the allocating one that recycles.
+
+### 8a. What the three rows say together, which is not what one row says
+
+The compute kernel is the easy result and it is the one T4 was argued on: 94%
+of four cores, and a payoff larger than anything left on the WP15 list, whose
+one remaining big item is worth 2.48x and whose typical item is worth a few per
+cent.
+
+The two allocating rows are the interesting ones, because **they are the same
+program and they disagree**. Recycling the arena every 4,096 objects makes the
+single-threaded program **4.2x faster** (1,289 ms to 305) and makes it
+**scale far worse** (3.10x to 1.86x). Both are true and they are the same fact
+seen twice, and the cause is measured rather than supposed — peak resident set
+at four threads, by `bench/rss.c`:
+
+| | allocated | peak RSS |
+| --- | ---: | ---: |
+| arena left to grow | 1.6 GB | **1,432,228 KB** (1.37 GiB) |
+| arena recycled every 4,096 objects | 1.6 GB | **1,828 KB** |
+
+The unbounded version spends most of its time touching a gigabyte and a third
+of memory it has never touched before, and page-fault work parallelises
+reasonably well, so it "scales" partly by having something slow to divide. Take
+the slow part away — the same program, 800 times less resident — and what is
+left is a very short loop, a bump and two stores and two loads, that saturates
+something shared at two threads.
+
+That table is also worth reading on its own, because it is this language's
+central memory trade in two rows: the same source, the same output, and three
+orders of magnitude of peak memory between a program that resets its arena and
+one that does not. It belongs in whatever T4 documents about `parallelFor`
+bodies.
+
+The honest ordering for a user follows directly, and it is worth stating in
+this note because it is what a `parallelFor` will be judged on: **fix the
+body's allocation first, then add threads.** In absolute terms the best
+configuration measured (recycled arena, four threads, 200 ms) beats the naive
+one (unbounded arena, one thread, no `--threads`, 1,289 ms) by **6.4x**, and
+4.2x of that is arena discipline while 1.5x is the threads. A `parallelFor`
+that returns 1.5x over a badly written body will read as a disappointing
+feature when the 4.2x sitting next to it was never taken.
+
+### 8b. What the saturation is, and what is still unexplained
+
+Partly chunk churn, and that part is measured. `Arena.reset()` keeps the newest
+chunk and frees the rest, and chunks are `malloc`ed at 64 KB, so the reset
+interval decides how much the four threads contend inside the C library rather
+than inside anything this project wrote:
+
+| reset interval | bytes per batch | t=1 | t=4 | at 4 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,024 objects | 8 KB — never leaves one chunk | 365 ms | 195 ms | 1.87x |
+| 4,096 | 32 KB — still one chunk | 371 ms | 200 ms | 1.86x |
+| 65,536 | 512 KB — eight chunks freed per reset | 403 ms | 256 ms | 1.57x |
+
+So chunk churn accounts for the 1.87x → 1.57x spread and **not** for the base:
+with the batch provably inside a single chunk, so that no `malloc` or `free`
+happens in the steady state at all, four threads still return only 1.87x. That
+residual is not explained by this prototype. The candidate is store throughput
+— every iteration writes 8 fresh bytes and reads them back, and four cores
+sharing one L2 and one memory controller is exactly where that stops scaling —
+and the experiment that would separate it is a kernel with the same allocation
+pattern and more arithmetic per object, which is a measurement for whoever
+builds T4 rather than one this note needs.
+
+### 8c. Design inputs the prototype turned up
+
+Four, and none of them is a number:
+
+1. **The arena's per-thread teardown already exists.** The worker calls
+   `nish_free_arena()` before returning and frees *its own* arena, leaving the
+   parent's untouched — the thread-local storage class does that for free. T1's
+   trampoline therefore has its cleanup path available today and needs no new
+   runtime entry point, which removes the one thing §3.5's 69-byte budget was
+   most likely to be spent on.
+2. **`parallelFor` needs an arena story, not just a partitioning story.** §8a is
+   the whole argument: the body's allocation discipline moves the result by more
+   than the thread count does. Whether T4 recycles per work item, per partition,
+   or leaves it to the body is a design decision this note previously did not
+   know it had to make.
+3. **`--threads` is the wrong default even now.** The 1.10x to 1.22x at one
+   thread is the price of being *able* to spawn, and a program that never spawns
+   should not pay it. T1 should therefore imply the flag from the language
+   surface rather than ask for it beside it: a program that names
+   `Thread.spawn` gets the thread-local arena, one that does not gets today's
+   binary, byte for byte.
+4. **The scaling is measured on kernels, not on `BENCHMARKS.md`.** `nbody` and
+   `spectral` are the shapes §4 T4 names, and neither has been partitioned,
+   because nothing in the language can partition it. The 3.76x is what the
+   runtime and the codegen allow; what a `parallelFor` over `nbody` returns is
+   T4's own acceptance test and is still unmeasured.
+
+## 9. Appendix: the prototype, in full
+
+§8's measurements are the only new facts in this note since T0 landed, so the
+programs are here rather than only reported. Nothing below is a test case: it
+is a spike, it lives in this appendix by the same convention
+[wp24-async.md](wp24-async.md) §11 follows, and it uses no language feature
+that does not exist today.
+
+The kernels, compiled with `--no-stack-alloc` so that the two allocating ones
+actually reach the arena rather than being turned into registers by WP6 — which
+is what they would otherwise be, and is a finding of its own:
+[wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 prices that
+transformation at 8.76x.
+
+```ts
+// T4 payoff prototype. Two kernels over a half-open range, each exported with
+// the C ABI so a pthreads driver can run T of them over disjoint ranges: the
+// arithmetic one to measure scaling where nothing touches the arena, and the
+// allocating one to measure it where everything does.
+class P {
+  x: i32;
+  y: i32;
+  constructor(x: i32, y: i32) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+export function sumRange(lo: i32, hi: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = lo; i < hi; i++) {
+    const m: i32 = acc ^ (i * 1103515245);
+    acc = ((m >> 13) ^ m) + 1;
+  }
+  return acc;
+}
+
+export function allocRange(lo: i32, hi: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = lo; i < hi; i++) {
+    const p = new P(i, acc);
+    acc = ((p.x * 3) ^ (p.y + 1)) + 1;
+  }
+  return acc;
+}
+
+export function allocRangeScoped(lo: i32, hi: i32): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = lo; i < hi; i++) {
+    const p = new P(i, acc);
+    acc = ((p.x * 3) ^ (p.y + 1)) + 1;
+    if ((i & 4095) === 4095) {
+      Arena.reset();
+    }
+  }
+  return acc;
+}
+```
+
+The driver, which is the only part that knows there is more than one thread:
+
+```c
+/* T4 prototype driver: split one fixed amount of work across T pthreads and
+   time the whole thing, so the only variable is T. */
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+extern int sumRange(int lo, int hi);
+extern int allocRange(int lo, int hi);
+extern int allocRangeScoped(int lo, int hi);
+void nish_free_arena(void);
+
+typedef struct { int lo, hi, out, alloc; } job;
+
+static void *worker(void *p) {
+  job *j = (job *)p;
+  j->out = j->alloc == 2 ? allocRangeScoped(j->lo, j->hi)
+                        : j->alloc ? allocRange(j->lo, j->hi)
+                                   : sumRange(j->lo, j->hi);
+  nish_free_arena(); /* this thread's arena, not the parent's */
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  int threads = atoi(argv[1]);
+  int total = atoi(argv[2]);
+  int alloc = argc > 3 ? (strcmp(argv[3], "scoped") == 0 ? 2 : strcmp(argv[3], "alloc") == 0) : 0;
+  job jobs[16];
+  pthread_t th[16];
+  struct timespec a, b;
+  int per = total / threads;
+  clock_gettime(CLOCK_MONOTONIC, &a);
+  for (int t = 0; t < threads; t++) {
+    jobs[t].lo = t * per;
+    jobs[t].hi = (t + 1) * per;
+    jobs[t].alloc = alloc;
+    pthread_create(&th[t], 0, worker, &jobs[t]);
+  }
+  int acc = 0;
+  for (int t = 0; t < threads; t++) {
+    pthread_join(th[t], 0);
+    acc ^= jobs[t].out;
+  }
+  clock_gettime(CLOCK_MONOTONIC, &b);
+  double ms = (b.tv_sec - a.tv_sec) * 1000.0 + (b.tv_nsec - a.tv_nsec) / 1e6;
+  printf("%s t=%d %.0f ms acc=%d\n", alloc == 2 ? "scoped" : alloc ? "alloc" : "arith", threads, ms, acc);
+  return 0;
+}
+```
+
+Built and run — `rss` is `bench/rss.c`, which is how §8a's peak-memory table
+was taken:
+
+```bash
+nish kernel.ts --no-stack-alloc -o kernel.ll
+scripts/build.sh kernel.ll driver.c runtime/runtime.c -o t4 --profile speed --threads
+./t4 <threads> 800000000           # the arithmetic kernel
+./t4 <threads> 200000000 alloc     # the arena left to grow
+./t4 <threads> 200000000 scoped    # the arena recycled every 4,096 objects
+# and the same three from a build without --threads, for §8's cost table.
+# §8b's interval table is the `scoped` kernel with 4095 replaced by 1023 and
+# by 65535.
+```
