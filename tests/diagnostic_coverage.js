@@ -68,7 +68,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { jobsFrom, pool, run } from "./pool.js";
-import { readCodesRegistry } from "./self/codes-registry.js";
+import { readCodesRegistry } from "../scripts/codes-registry.js";
 import { extraArgs, linkPrograms, root } from "./self/corpus.js";
 
 const WORDINGS = path.join(root, "tests", "wordings");
@@ -102,7 +102,7 @@ const CASE_NAME = /^(nl\d{4})_[a-z0-9_]+\.ts$/;
  *
  * The parse and both halves of that fix -- `^\s+`, and raising rather than
  * answering an empty registry -- now live once, in
- * [`tests/self/codes-registry.js`](./self/codes-registry.js). Three readers
+ * [`scripts/codes-registry.js`](../scripts/codes-registry.js). Three readers
  * drifting apart is what issue #96 is about; this one keys the result by code,
  * because what it asks of the registry is which rule a `--json` object names.
  */

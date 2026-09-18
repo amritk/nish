@@ -31,7 +31,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { parseCodesRegistry } from "./self/codes-registry.js";
+import { parseCodesRegistry } from "../scripts/codes-registry.js";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { changedPrograms, corpus as parityCorpus, readPathList, removedPrograms } from "./self/parity.js";
@@ -729,7 +729,7 @@ if (!only || "diagnostics".includes(only)) {
 
   // One table, two compilers: the pairs must be identical, exactly as
   // `branding.ts` must name the same language on both sides.
-  // The parse itself is `tests/self/codes-registry.js`, shared with the
+  // The parse itself is `scripts/codes-registry.js`, shared with the
   // generator and with `tests/diagnostic_coverage.js` -- three copies of one
   // regex is how the first two drifted apart (issue #96), and that module's
   // header is where the story lives. It raises on a registry whose shape has

@@ -11,10 +11,14 @@
  * cannot drift apart again
  * ([issue #96](https://github.com/amritk/nish/issues/96)).
  *
- * The generator reaching into `tests/` for it is why `package.json` stops
- * shipping that script, exactly as it already stops shipping
- * `scripts/arrow-verify.mjs` for importing `tests/self/corpus.js`. Neither is
- * a loss: both read `src/`, which no tarball carries either.
+ * It lives here rather than under `tests/` for two reasons. The emitter that
+ * writes this format is `rows()` in `gen-diagnostic-codes.mjs`, next door, and
+ * #96 was the two halves drifting apart -- WP22 stage C changed what the
+ * emitter wrote and no reader followed -- so the reader belongs beside the
+ * writer. And `scripts/` ships in the npm tarball while `tests/` does not, so
+ * a shared module under `tests/` would leave the shipped generator importing a
+ * path the package cannot resolve, which `tests/run.js` refuses
+ * (`npm pack ships no script whose imports it cannot resolve`).
  *
  * Two properties are the whole point of having it, and both are here because
  * they have failed:
@@ -31,7 +35,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const root = path.resolve(import.meta.dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..");
 
 /**
  * One entry of the emitted table: the quoted fragment on its own line, then

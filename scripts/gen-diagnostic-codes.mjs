@@ -46,7 +46,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readCodesRegistry } from "../tests/self/codes-registry.js";
+import { readCodesRegistry } from "./codes-registry.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STAGE0 = path.join(ROOT, "src", "codes.ts");
@@ -144,7 +144,7 @@ const collect = () => {
  * Read the assignments already committed, so the numbers survive a
  * regeneration -- the whole promise of a code is that it does not move.
  *
- * The parse is `tests/self/codes-registry.js`, shared with the two readers in
+ * The parse is `scripts/codes-registry.js` next door, shared with the two readers in
  * `tests/`, and it raises rather than answering an empty registry. That raise
  * is the point of sharing it here: an empty map loses every assignment *and*
  * the per-band watermark taken from it, so the next generation renumbers the
