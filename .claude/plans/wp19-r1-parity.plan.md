@@ -65,19 +65,19 @@ stages:
 
 `node tests/run.js --parity` compiles the whole corpus with both compilers under every flag variation and compares exit status, stdout, stderr and every file written. It is the only check that asks whether a program or a flag is still stage0's, and WP19 R1 — the first of the six gates stage0's retirement stands on — is green exactly when its undeclared difference set is empty.
 
-It is not green. The nightly [Parity workflow](../../.github/workflows/parity.yml) has been red on its last four runs, and on 2026-09-17 it reported `13020 runs over 868 programs (2120.3 s); 55 undeclared difference(s), 2646 declared`. Three classes account for the 55: the `ModuleID` path spelling in the two `std/` link cases, the `-g` internal compiler error on a `CPtr` program, and a diagnostic mismatch on `reject_generic_expanding_field`. The first of those looks closed on `main` already — `97f0f4e` landed after that run — so the set this plan closes is the other two, re-measured on the base SHA before any worker spawns.
+It is not green. The nightly [Parity workflow](../../.github/workflows/parity.yml) has been red on its last four runs, and on 2026-09-17 it reported `13020 runs over 868 programs (2120.3 s); 55 undeclared difference(s), 2646 declared`. Three classes account for the 55: the `ModuleID` path spelling in the two `std/` link cases, the `-g` internal compiler error on a `CPtr` program, and a diagnostic mismatch on `reject_generic_expanding_field`. The first of those is closed: re-measured on the base SHA on 2026-09-18, the mode reports `13230 runs over 882 programs (2384.2 s); 18 undeclared difference(s), 2674 declared`, and all 18 are the other two classes — 4 rows of the `-g` internal compiler error and 14 of the diagnostic mismatch.
 
 Two things about the gate matter as much as the difference set. All four red runs happened at a SHA whose `parity.yml` had no `record` job, so no issue was opened and the gate's red state has been visible only to somebody who opened the run — which is the failure wp19 §A5 records having cost the project once already. And the mode runs nightly on `main` only, so a pull request can reintroduce a difference and merge green; that is how the `CPtr` internal compiler error reached `main` in the first place.
 
 ## The CPtr debug-info failure
 
-stage1 exits 70 — the internal-compiler-error status — compiling a `CPtr` program under `-g`, where stage0 compiles it. Four rows of the difference set are this.
+stage1 exits 70 — the internal-compiler-error status — compiling a `CPtr` program under `-g`, where stage0 compiles it. Four rows of the difference set are this, over **two** programs — `tests/cases/ffi_pointer.ts` and `docs/cookbook/decl_ffi_pointer.ts` — each contributing an `exit` row and a `files` row, because stage0 writes the `.ll` and stage1 writes nothing.
 
 `CPtr` is opaque by construction (`docs/wp27-ffi.md`): the compiler knows nothing about what the pointer addresses, and the escape classifier and `isPointerParam` are allow-lists that a foreign pointer falls out of. Debug-info emission is the one path that has to say something about a type it has no structure for, and it is where an allow-list that returns nothing meets a caller that expects a name.
 
 Reproduce it first, with the exact command the mode runs, and read the ICE object rather than guessing from the exit status. The fix belongs in the debug-info path in both compilers if both are wrong and in `self/` alone if stage0 is right; whichever it is, `-g` over a `CPtr` program has no golden today, which is why nothing caught this.
 
-**Owns:** `self/debug.ts`, `src/codegen/debug.ts`, `self/ice.ts`, `self/types.ts`, `tests/cases/ffi_pointer*`, `tests/cases/dbg_*`, `docs/wp27-ffi.md`
+**Owns:** `self/debug.ts`, `src/codegen/debug.ts`, `self/ice.ts`, `self/types.ts`, `tests/cases/ffi_pointer*`, `tests/cases/dbg_*`, `docs/cookbook/decl_ffi_pointer*`, `docs/wp27-ffi.md`
 
 ## The cascading diagnostic
 
