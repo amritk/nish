@@ -50,11 +50,13 @@
 #
 # The third is a raw byte comparison, and on Mach-O two links of the same input
 # did not produce the same bytes -- measured, at identical size, with every IR
-# equality green (WP19 R2). WHICH bytes is measured too now, and so is why:
-# LC_UUID, which ld64 derives from the output PATH, plus on arm64 the one
-# code-directory slot that hashes the page it sits on. That is why `link_stage`
-# below builds every comparable stage at one path, and with it the comparison
-# holds as raw bytes on Mach-O as well. Under that, on Darwin only, the script
+# equality green (WP19 R2). WHICH bytes is measured too now, and so is what they
+# vary with: LC_UUID, stable across two links to one output path and differing
+# on a link to another, plus on arm64 the one code-directory slot that hashes
+# the page it sits on. That is why `link_stage` below builds every comparable
+# stage at one path, and with it the comparison holds as raw bytes on Mach-O as
+# well -- measured end to end, whatever the UUID turns out to be a function of.
+# Under that, on Darwin only, the script
 # still asserts the size, strips what it can, and reports anything left over as
 # *unattributed* rather than as a compiler difference -- narrower than raw bytes
 # and wider than an exemption, which would accept a stage3 that is a different
@@ -305,15 +307,17 @@ survey_ir() {
 # place afterwards.
 #
 # The shared path is what makes `stage3 == stage2` hold on Mach-O, and it is
-# measured rather than tidy-mindedness: ld64 derives LC_UUID from the output
-# PATH. Two links of one input to one path produce one UUID and byte-identical
-# files; the same two to `.../one` and `.../two` differ in exactly those sixteen
-# bytes. So stage2 at `$work/stage2` and stage3 at `$work/stage3` guaranteed two
-# different UUIDs for two compilers that had agreed about every other byte, and
-# the comparison could only ever report that as unattributed. The measurement,
-# the offsets and the remedy that did not work are in
-# docs/wp10-ci.md#ci-matrix, and build.sh's Darwin branch says why the flag that
-# drops the load command is not the answer.
+# measured rather than tidy-mindedness: LC_UUID is stable across two links to
+# one output path and differs on a link to another. Two links of one input to
+# one path produce one UUID and byte-identical files; the same two to `.../one`
+# and `.../two` differ in exactly those sixteen bytes. So stage2 at
+# `$work/stage2` and stage3 at `$work/stage3` gave two different UUIDs to two
+# compilers that had agreed about every other byte, and the comparison could
+# only ever report that as unattributed. The output path is the leading reason
+# and the probe cannot rule out an invocation counter -- docs/wp10-ci.md#ci-matrix
+# has that, the offsets, and the remedy that did not work -- but the shared path
+# was measured to work end to end either way, and build.sh's Darwin branch says
+# why the flag that drops the load command is not the answer.
 #
 # It costs one rename per stage and weakens nothing: the comparison is still a
 # raw `cmp` of the two files.

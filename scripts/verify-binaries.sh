@@ -51,14 +51,29 @@
 # An unloadable compiler is worse than any reproducibility, and ELF's
 # `--build-id=none` has no Mach-O twin.
 #
-# WHAT SETTLED IT was one more measurement: ld64 derives the UUID from the
-# OUTPUT PATH. Three links of one input by one compiler, on both rows -- twice
-# to the same output path, once to a different one -- and the two sharing a
-# path came out byte-identical with one UUID, while the third differed in the
-# UUID and in nothing else. Not the clock, not a random number, and not a hash
-# of the output's own content.
+# WHAT SETTLED IT was one more measurement. Three links of one input by one
+# compiler, on both rows -- twice to the same output path, once to a different
+# one -- and what came back is that the UUID is STABLE ACROSS TWO LINKS TO ONE
+# PATH and DIFFERS ON A LINK TO ANOTHER, with nothing else in the file moving.
+# It is not a hash of the output's own content, then, which is what ld64
+# classic did and what would have made any two links of one input agree.
 #
-# That made the failure the harness's rather than the toolchain's:
+# The output path is the leading explanation and it is not the only one the
+# probe leaves standing. The two same-path links were invocations 1 and 2 and
+# the differing-path link was invocation 3, and the probe never went back to
+# the first path -- so path-identity and invocation-order are confounded, and
+# anything that had changed by the third link (a coarse clock tick, a
+# per-session counter, an intermediate name derived from the path rather than
+# equal to it) fits the same numbers. A fourth link back to the first path,
+# expected to reproduce the FIRST UUID, is the one line that would tell them
+# apart, and it was not run.
+#
+# The remedy holds either way, which is why this is left as it is rather than
+# guessed at: run 4 measured it end to end, with a real `bootstrap.sh --verify`
+# on both darwin rows, and got byte-identical stages. Whatever LC_UUID is a
+# function of, two stages linked at one path agree.
+#
+# That makes the failure the harness's rather than the toolchain's:
 # `scripts/bootstrap.sh` linked stage2 at `$work/stage2` and stage3 at
 # `$work/stage3`, so two compilers that agreed about every other byte were
 # guaranteed two different UUIDs. It links both at `$work/stage` now and moves
@@ -186,13 +201,13 @@ fi
   echo "bootstrap:"
   echo "bootstrap: This difference is UNATTRIBUTED. It is a failure rather than a warning,"
   echo "bootstrap: because the alternative accepts a stage3 that is a different compiler."
-  echo "bootstrap: The one thing ld64 was measured to vary here is LC_UUID, which it"
-  echo "bootstrap: derives from the OUTPUT PATH -- and on arm64 the code-directory slot"
-  echo "bootstrap: that hashes the page it sits on. That is ruled out for a bootstrap from"
-  echo "bootstrap: this tree, because scripts/bootstrap.sh links every comparable stage at"
-  echo "bootstrap: one path. So either these two were not built that way, which \`otool -l\`"
-  echo "bootstrap: will show by disagreeing about the uuid, or ld64 is varying something"
-  echo "bootstrap: new. Attribute the differing bytes before changing anything, the way the"
+  echo "bootstrap: The one thing ld64 was measured to vary here is LC_UUID -- and on arm64"
+  echo "bootstrap: the code-directory slot that hashes the page it sits on. It was stable"
+  echo "bootstrap: across two links to one path, which is why scripts/bootstrap.sh links"
+  echo "bootstrap: every comparable stage at one path, and that was measured to hold end to"
+  echo "bootstrap: end. So either these two were not built that way, which \`otool -l\` will"
+  echo "bootstrap: show by disagreeing about the uuid, or ld64 is varying something new."
+  echo "bootstrap: Attribute the differing bytes before changing anything, the way the"
   echo "bootstrap: first measurement was made (docs/wp10-ci.md#ci-matrix)."
 } >&2
 exit 1

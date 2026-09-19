@@ -129,10 +129,10 @@ case "$(uname -s)" in
     # so the UUID stays. The ELF branch's --build-id=none below is the flag
     # this would have been; ELF has no loader that insists on one.
     #
-    # It costs nothing, because the UUID is a function of the output PATH and
-    # not of the clock: two links of one input to one path agree. That is what
-    # scripts/bootstrap.sh links every comparable stage at one path for, and it
-    # is why `stage3 == stage2` holds on Mach-O with the load command in.
+    # It costs nothing, because the UUID was measured stable across two links
+    # of one input to one output path, and differing on a link to another. That
+    # is what scripts/bootstrap.sh links every comparable stage at one path for,
+    # and it is why `stage3 == stage2` holds on Mach-O with the load command in.
     gc=(-Wl,-dead_strip); strip_flag=(-Wl,-x) ;;
   *)
     gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)

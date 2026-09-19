@@ -36,7 +36,7 @@ job.
 | --- | --- | --- |
 | 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
-| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Cause settled**: it is `LC_UUID`, which ld64 derives from the *output path*, so two stages built at two paths could not agree. `scripts/bootstrap.sh` links them at one path now; `tests/self/bootstrap.js`, the other half of this family, still does not — see below |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Cause settled**: it is `LC_UUID`, which is stable across two links to one output path and differs on a link to another, so two stages built at two paths could not agree. `scripts/bootstrap.sh` links them at one path now; `tests/self/bootstrap.js`, the other half of this family, still does not — see below |
 
 The `stage3 == stage2` family reached further than this job:
 `scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
@@ -99,7 +99,7 @@ loader that insists on a build id, which is why `--build-id=none` has always
 been free on that side and this is not its Mach-O twin. So the flag is not in
 `build.sh`; the Darwin branch links with `-Wl,-x` and keeps the UUID.
 
-#### What the UUID is a hash of, which is what settles it
+#### What the UUID varies with, which is what settles it
 
 Ruling the flag out left the question that mattered: ld64 classic hashed the
 output's own *content*, which would have made two links of one input agree, and
@@ -108,17 +108,38 @@ whether the fixed point can be reached at all. Three links of one input by one
 compiler, twice to the same output path and once to a different one, on both
 rows:
 
-| | `x86_64-darwin` | `aarch64-darwin` |
-| --- | --- | --- |
-| same input, **same** output path | identical, one UUID `1474A511…` | identical, one UUID `3715A948…` |
-| same input, **other** output path | 16 bytes differ, and the UUID with them | 51 bytes differ, and the UUID with them |
+| Link | Output path | `x86_64-darwin` | `aarch64-darwin` |
+| --- | --- | --- | --- |
+| 1 | `…/one` | UUID `1474A511…` | UUID `3715A948…` |
+| 2 | `…/one` | identical to link 1, same UUID | identical to link 1, same UUID |
+| 3 | `…/two` | 16 bytes differ, and the UUID with them | 51 bytes differ, and the UUID with them |
 
-**`LC_UUID` is a function of the output path.** Not the clock, not a random
-number, not the content. Which makes the failure a property of the harness
-rather than of the toolchain: `scripts/bootstrap.sh` linked stage2 at
-`$work/stage2` and stage3 at `$work/stage3`, so two compilers that agreed about
-every other byte were *guaranteed* two different UUIDs, and the comparison could
-only ever call that unattributed.
+The **Link** column is the part to read with the **Output path** column: the
+two that agree are also the two that ran first, which is what the next
+paragraph is about.
+
+**The UUID is stable across two links to one path, and differs on a link to
+another** — with nothing else in the file moving. So it is not a hash of the
+output's own content, which is what ld64 classic did and what would have made
+any two links of one input agree.
+
+**The output path is the leading explanation, and the probe does not rule out
+an invocation counter.** The two same-path links were invocations 1 and 2 and
+the differing-path link was invocation 3, and the probe never went back to the
+first path — so path-identity and invocation-order are confounded. Anything
+that had changed by the third link fits the same numbers: a coarse clock tick,
+a per-session counter, an intermediate name derived from the path rather than
+equal to it. A fourth link back to the first path, expected to reproduce the
+*first* UUID, is the one line that would tell them apart, and it was not run.
+
+**The remedy holds either way**, which is why this is recorded as it stands
+rather than guessed at: run 4 below measured it end to end, and whatever
+`LC_UUID` is a function of, two stages linked at one path agree.
+
+Either way the failure was the harness's rather than the toolchain's:
+`scripts/bootstrap.sh` linked stage2 at `$work/stage2` and stage3 at
+`$work/stage3`, so two compilers that agreed about every other byte got two
+different UUIDs, and the comparison could only ever call that unattributed.
 
 Both are linked at `$work/stage` now and moved into place afterwards, so there
 is nothing left for the UUID to differ about. It weakens nothing — `stage3 ==
