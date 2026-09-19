@@ -173,45 +173,45 @@ function fieldScale(dst: i32[], h: Holder): void -> @fieldScale [exported]
   pointer dst: size=0 writesThrough=true captured=false
   pointer h: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 24:7 i: i32 (let)
+  local 31:7 i: i32 (let)
 function constScale(dst: i32[], h: Holder): void -> @constScale [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer dst: size=0 writesThrough=true captured=false
   pointer h: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 32:9 xs: i32[] (const)
-  local 33:7 i: i32 (let)
+  local 39:9 xs: i32[] (const)
+  local 40:7 i: i32 (let)
 function grown(h: Holder): i32 -> @grown [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow
   pointer h: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 43:7 i: i32 (let)
+  local 50:7 i: i32 (let)
 function guarded(h: Holder | null, n: i32): i32 -> @guarded [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer h: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 58:7 s: i32 (let)
-  local 59:7 i: i32 (let)
+  local 65:7 s: i32 (let)
+  local 66:7 i: i32 (let)
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Holder.constructor constScale fieldScale grown guarded nish_panic_index
   stackSites=5 stackLocals=1
-  local 70:9 src: i32[] (const)
-  local 71:9 dst: i32[] (const)
-  callee 72:3 fieldScale -> @fieldScale
-  callee 72:19 new Holder -> @Holder.constructor
-  local 73:9 a: i32 (const)
-  callee 74:3 constScale -> @constScale
-  callee 74:19 new Holder -> @Holder.constructor
-  local 75:9 b: i32 (const)
-  callee 76:18 grown -> @grown
-  callee 76:24 new Holder -> @Holder.constructor
-  callee 76:43 guarded -> @guarded
-  callee 76:62 guarded -> @guarded
-  callee 76:70 new Holder -> @Holder.constructor
+  local 77:9 src: i32[] (const)
+  local 78:9 dst: i32[] (const)
+  callee 79:3 fieldScale -> @fieldScale
+  callee 79:19 new Holder -> @Holder.constructor
+  local 80:9 a: i32 (const)
+  callee 81:3 constScale -> @constScale
+  callee 81:19 new Holder -> @Holder.constructor
+  local 82:9 b: i32 (const)
+  callee 83:18 grown -> @grown
+  callee 83:24 new Holder -> @Holder.constructor
+  callee 83:43 guarded -> @guarded
+  callee 83:62 guarded -> @guarded
+  callee 83:70 new Holder -> @Holder.constructor
 program tests/cases/arr_index_read_write.ts
 module tests/cases/arr_index_read_write.ts (entry)
 function set(a: i32[], i: i32, v: i32): void -> @set

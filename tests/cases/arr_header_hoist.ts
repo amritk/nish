@@ -13,6 +13,13 @@
 // compares against is the *same SSA value* the bounds check compares against.
 // That second half is §2c's criterion and the reason the first half alone is
 // not enough — two lengths are two loop exits, whatever they were loaded from.
+// A caution for anyone measuring this shape with `bench/hoist_field.ts`: that
+// benchmark's `field` number is **bimodal on code placement**, not on the loop.
+// The same ten-instruction inner loop reads ~755 ms or ~1493 ms depending on
+// which *other* functions in the module were hoisted, and building either
+// binary with `-Wl,-mllvm,-align-all-nofallthru-blocks=4` puts both at ~754 ms.
+// Quote it with that flag, or the number is a coin toss rather than a
+// measurement.
 class Holder {
   xs: i32[];
   constructor(xs: i32[]) {
