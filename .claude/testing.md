@@ -254,7 +254,7 @@ It is not a replacement for this file's subject, and what it leaves out is now
 short enough to name: the cross-module `declare`/`define` attribute agreement,
 which needs a regular expression the language does not have, `UPDATE_GOLDENS`,
 which it must never do, and every pipeline check — interop sidecars, layout,
-wasm and napi profiles, packaging, the self-hosting oracles, the fourteen parity
+wasm and napi profiles, packaging, the self-hosting oracles, the sixteen parity
 flag variations. `tests/run.js` is still what proves the compiler; the runner
 proves the language can host a harness. Its own header comment is the accurate
 description of what it covers; keep the two in step.
