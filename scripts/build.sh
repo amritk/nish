@@ -119,16 +119,20 @@ case "$(uname -s)" in
     # (-s is deprecated on macOS). No -fuse-ld=lld: ld64 does LTO natively.
     #
     # NOT -no_uuid, however tempting it looks from the reproducibility side.
-    # LC_UUID is what makes two links of one input differ here -- measured, on
+    # LC_UUID is what made two links of one input differ here -- measured, on
     # both darwin rows (docs/wp10-ci.md#ci-matrix) -- and dropping it does make
     # them identical, and the binary then does not run: on arm64 dyld refuses
     # an image with no LC_UUID outright, `missing LC_UUID load command`
     # followed by SIGABRT, so the stage1 that linked went on to abort the
     # moment the bootstrap ran it. Measured too, on the run after the one that
-    # named the UUID. An unloadable compiler is worse than a comparison that
-    # narrows, so the UUID stays and scripts/verify-binaries.sh carries the
-    # Mach-O half. The ELF branch's --build-id=none below is the flag this
-    # would have been; ELF has no loader that insists on one.
+    # named the UUID. An unloadable compiler is worse than any reproducibility,
+    # so the UUID stays. The ELF branch's --build-id=none below is the flag
+    # this would have been; ELF has no loader that insists on one.
+    #
+    # It costs nothing, because the UUID is a function of the output PATH and
+    # not of the clock: two links of one input to one path agree. That is what
+    # scripts/bootstrap.sh links every comparable stage at one path for, and it
+    # is why `stage3 == stage2` holds on Mach-O with the load command in.
     gc=(-Wl,-dead_strip); strip_flag=(-Wl,-x) ;;
   *)
     gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
