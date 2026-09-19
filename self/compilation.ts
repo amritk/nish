@@ -266,8 +266,14 @@ export class Compilation {
     const source = new SourceFile(path, text);
     const parser = new Parser(source);
     const file = parser.parseSourceFile();
+    // Recorded rather than printed, because the stream and the shape are the
+    // driver's to choose. Printed here, a parser refusal was the human report
+    // whatever the command line said, so `--json` answered a program stage1's
+    // grammar cannot read with an exit status, an empty stdout and text on a
+    // stream the contract says is empty — the one thing `docs/LANGUAGE.md`
+    // promises `--json` never does.
     for (const diagnostic of parser.diagnostics) {
-      writeError(`${diagnostic.message()}\n`);
+      this.sink.add(diagnostic);
     }
     if (parser.diagnostics.length > 0) {
       return false;

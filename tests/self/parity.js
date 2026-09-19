@@ -76,6 +76,7 @@ const VARIATIONS = [
   { name: "--number-mode f64", args: ["--number-mode", "f64"], family: "--number-mode" },
   { name: "--target", args: ["--target", "x86_64-unknown-linux-gnu"], family: "--target" },
   { name: "--target host", args: ["--target", "host"], family: "--target" },
+  { name: "--json", args: ["--json"], family: "--json" },
   { name: "--emit-checked", args: ["--emit-checked"], family: "dump", stdoutOnly: true },
   { name: "--emit-ast", args: ["--emit-ast"], family: "dump", stdoutOnly: true },
 ];
@@ -106,32 +107,29 @@ const DECLARED = [
     matches: (want, got, run) => {
       const zero = firstDiagnostic(want);
       const one = firstDiagnostic(got);
-      const syntax = (line) => line.includes(": syntax error: ");
-      // stage1's parser refused the file and stage0's Phase 0 refused the same
-      // file. Both said no, in different words, and stage1 has nothing further
-      // to say because it never built a tree. Anything else — stage0 accepting
-      // the program, a different file, stage1 refusing where stage0 does not —
-      // falls through and reports.
-      if (!syntax(one)) return false;
       // Under `--emit-ast` stage0 says nothing at all: the `typescript` parser
       // recovers from the syntax error and it prints the tree it got. There is
       // no stage0 diagnostic to compare against, and the reason is this one.
-      if (zero === "") return run.flags.includes("--emit-ast");
-      return (
-        !syntax(zero) && diagnosticFile(one) !== "" && diagnosticFile(one) === diagnosticFile(zero)
-      );
+      if (zero === "" && isSyntaxError(one)) return run.flags.includes("--emit-ast");
+      return parserRefusedFirst(zero, one);
     },
     why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is Nish-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
   },
   {
     surface: "exit",
     matches: (want, got, run) => {
-      const syntax = firstDiagnostic(run.one.stderr).includes(": syntax error: ");
+      const syntax = isSyntaxError(firstReport(run.flags, run.one));
       // Only that direction: stage0 dumped a tree and exited 0, stage1 could
       // not read the file. stage1 exiting 0 where stage0 refuses is a failure.
       return syntax && want === "0" && got === "1";
     },
     why: "the same parser refusal as the stderr declaration above, on the surface a dump flag reaches: `--emit-ast` asks for the tree of a program stage1's grammar cannot read, so there is none to print and it exits 1, while stage0 parses it with the `typescript` package, which recovers from the syntax error, dumps a tree and exits 0. Declared only when stage1's own first diagnostic is that syntax error and only in that direction.",
+  },
+  {
+    flag: "--json",
+    surface: "stdout",
+    matches: (want, got) => parserRefusedFirst(firstJsonDiagnostic(want), firstJsonDiagnostic(got)),
+    why: "the stderr declaration above, on the stream `--json` moves a diagnostic to. It is the same rule read off the machine-readable shape — `parserRefusedFirst` is shared, so the two cannot come to mean different things — and it is narrow in the same way: stage1's first object must be the syntax error, stage0's must not be, and both must name the same file. stage0 accepting a program stage1 refuses is still a failure, and so is every later object, the exit status and every file written.",
   },
   {
     flag: "--emit-checked",
@@ -182,6 +180,64 @@ function declaredFor(flags, surface, want, got, run) {
 function firstDiagnostic(text) {
   return text.split("\n").find((line) => / (error|warning): /.test(line)) ?? "";
 }
+
+/**
+ * The first `--json` object of a report, spelled as the summary line the human
+ * report carries for the same diagnostic.
+ *
+ * One spelling serves both streams because `--json`'s `message` keeps the kind
+ * prefix a syntax error has (`docs/LANGUAGE.md`, `--json`), so the predicates
+ * below read one shape and cannot come to mean two different things on the two
+ * surfaces. A band-0 object — an unusable toolchain, an internal error — has no
+ * position, so it spells a line no predicate matches and is reported rather
+ * than declared, which is the right answer: nobody has decided those may
+ * differ.
+ */
+const firstJsonDiagnostic = (text) => {
+  for (const line of text.split("\n")) {
+    // A run carries a dump flag as well as `--json` whenever the program asks
+    // for one in its own `.args` (`tests/cases/dump_checked`), and then stdout
+    // is the dump: a line of it that does not parse is not a diagnostic.
+    if (!line.startsWith("{")) continue;
+    let object = null;
+    try {
+      object = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    return `${object.file}:${object.line}:${object.column}: ${object.message}`;
+  }
+  return "";
+};
+
+/** The first diagnostic of a run, off whichever stream its flags put it on. */
+const firstReport = (flags, result) =>
+  flags.includes("--json") ? firstJsonDiagnostic(result.stdout) : firstDiagnostic(result.stderr);
+
+/** Whether a summary line is the parser's refusal rather than a named rule. */
+const isSyntaxError = (line) => line.includes(": syntax error: ");
+
+/**
+ * stage1's parser refused the file and stage0's Phase 0 refused the same file.
+ * Both said no, in different words, and stage1 has nothing further to say
+ * because it never built a tree. Anything else — stage0 accepting the program,
+ * a different file, stage1 refusing where stage0 does not — falls through and
+ * reports.
+ *
+ * Shared by the stderr and the `--json` stdout declarations, because it is one
+ * decision seen on two streams and a second copy of it would be a second thing
+ * to keep narrow. It keys on the kind word rather than on the `NL0001` a
+ * `--json` object carries — which is what `refusedByParser` in
+ * `tests/diagnostic_coverage.js` keys on — because the human summary line has
+ * no code in it at all (`tests/run.js`, "the human summary line does not"), and
+ * one predicate over both streams is worth more here than the better field over
+ * one. The prefix is a contract rather than prose: `docs/LANGUAGE.md` states it.
+ */
+const parserRefusedFirst = (zero, one) =>
+  isSyntaxError(one) &&
+  !isSyntaxError(zero) &&
+  diagnosticFile(one) !== "" &&
+  diagnosticFile(one) === diagnosticFile(zero);
 
 /** The file a diagnostic line names, or "" when it names none. */
 function diagnosticFile(line) {

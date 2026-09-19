@@ -189,8 +189,14 @@ const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
   return `${info.intValue}`;
 };
 
-/** `line:col`, as `src/dump.ts` writes a position. */
-const position = (source: SourceFile, offset: i32): string => `${source.lineOf(offset)}:${source.columnOf(offset)}`;
+/**
+ * `line:col`, as `src/dump.ts` writes a position — in UTF-16 code units,
+ * because that is what its `getLineAndCharacterOfPosition` counts. The two
+ * counts only differ on a line with a non-ASCII character before the position,
+ * which is why `checked_oracle.js` never saw this one.
+ */
+const position = (source: SourceFile, offset: i32): string =>
+  `${source.lineOf(offset)}:${source.columnOf(offset)}`;
 
 /**
  * The locals and callees of one body, in source order, read back out of the

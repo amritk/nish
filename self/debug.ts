@@ -567,7 +567,7 @@ export class DebugInfo {
   /** `!N` of the `DILocation` for the start of `node` in the current function; identical positions share one. */
   locationOf(node: Node): string {
     const line = this.source.lineOf(node.start);
-    const column = this.source.columnOf(node.start);
+    const column = this.source.byteColumnOf(node.start);
     return this.module.addMetadata(`!DILocation(line: ${line}, column: ${column}, scope: ${this.subprogram})`);
   }
 
