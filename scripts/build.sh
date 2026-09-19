@@ -117,7 +117,22 @@ case "$(uname -s)" in
   Darwin)
     # ld64: -dead_strip is the --gc-sections equivalent, -x drops local symbols
     # (-s is deprecated on macOS). No -fuse-ld=lld: ld64 does LTO natively.
-    gc=(-Wl,-dead_strip); strip_flag=(-Wl,-x) ;;
+    #
+    # -no_uuid drops LC_UUID, and it is what makes two links of one input the
+    # same bytes on Mach-O -- the ELF branch below has dropped its build id for
+    # the same reason since it was written. Measured rather than assumed: with
+    # the UUID in, `stage3 == stage2` differed at identical size on both darwin
+    # rows, and the differing bytes were LC_UUID's sixteen and nothing else on
+    # x86_64, plus the one code-directory hash slot covering that page on arm64,
+    # where ld64 also ad-hoc signs (docs/wp10-ci.md#ci-matrix has the offsets).
+    # The signature was the consequence and the UUID the cause: with -no_uuid
+    # both binaries are byte-identical and scripts/verify-binaries.sh takes its
+    # ELF path on Darwin too.
+    #
+    # It rides with `strip_flag` rather than with `gc` because `-g` clears that
+    # array, and `-g` is exactly when the UUID has to stay: a dSYM binds to its
+    # binary by UUID, so a debug build that dropped it could not be symbolicated.
+    gc=(-Wl,-dead_strip); strip_flag=(-Wl,-x -Wl,-no_uuid) ;;
   *)
     gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
     elf=(-fno-plt)
