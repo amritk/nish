@@ -41,8 +41,8 @@
 #   IR(seed, self/)   == IR(stage1, self/)     asserted for a stage0 seed only
 #   IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
 #   stage3 == stage2                           as files, on ELF and on Mach-O
-#                                              alike; see below for the net
-#                                              under the Mach-O half
+#                                              alike; see below for what the
+#                                              Mach-O half took
 #
 # The last two are properties of the working tree and of nothing else: whatever
 # built stage1, the compiler `self/` describes has to agree with itself and
@@ -50,14 +50,15 @@
 #
 # The third is a raw byte comparison, and on Mach-O two links of the same input
 # did not produce the same bytes -- measured, at identical size, with every IR
-# equality green (WP19 R2). WHICH bytes is measured too now: LC_UUID, on both
-# darwin rows, plus on arm64 the one code-directory slot that hashes the page it
-# sits on. `scripts/build.sh` links Darwin with `-Wl,-no_uuid` for it, so the
-# comparison holds as raw bytes there as well. Under that, on Darwin only, the
-# script still asserts the size, strips what it can, and reports anything left
-# over as *unattributed* rather than as a compiler difference -- narrower than
-# raw bytes and wider than an exemption, which would accept a stage3 that is a
-# different compiler. The comparison and the reasoning live in
+# equality green (WP19 R2). WHICH bytes is measured too now, and so is why:
+# LC_UUID, which ld64 derives from the output PATH, plus on arm64 the one
+# code-directory slot that hashes the page it sits on. That is why `link_stage`
+# below builds every comparable stage at one path, and with it the comparison
+# holds as raw bytes on Mach-O as well. Under that, on Darwin only, the script
+# still asserts the size, strips what it can, and reports anything left over as
+# *unattributed* rather than as a compiler difference -- narrower than raw bytes
+# and wider than an exemption, which would accept a stage3 that is a different
+# compiler. The comparison and the reasoning live in
 # `scripts/verify-binaries.sh` -- a script rather than a block in here so that
 # `tests/run.js` can drive both platforms' branches -- and its header has the
 # measurement, byte offsets and all.
@@ -304,21 +305,18 @@ survey_ir() {
 # place afterwards.
 #
 # The shared path is what makes `stage3 == stage2` hold on Mach-O, and it is
-# measured rather than tidy-mindedness. ld64 derives LC_UUID from the output
-# PATH: two links of one input to one path produce one UUID and byte-identical
-# files, and the same two links to `.../one` and `.../two` produce different
-# UUIDs and differ in exactly those sixteen bytes -- on both darwin rows, and on
-# arm64 plus the code-directory slot that hashes the page the UUID sits on
-# (docs/wp10-ci.md#ci-matrix). Linking stage2 at `$work/stage2` and stage3 at
-# `$work/stage3` therefore guaranteed two different UUIDs for two compilers that
-# had agreed about every other byte, and the comparison could only ever report
-# that as unattributed. Both are linked at `$work/stage` now, so there is
-# nothing left for the UUID to differ about.
+# measured rather than tidy-mindedness: ld64 derives LC_UUID from the output
+# PATH. Two links of one input to one path produce one UUID and byte-identical
+# files; the same two to `.../one` and `.../two` differ in exactly those sixteen
+# bytes. So stage2 at `$work/stage2` and stage3 at `$work/stage3` guaranteed two
+# different UUIDs for two compilers that had agreed about every other byte, and
+# the comparison could only ever report that as unattributed. The measurement,
+# the offsets and the remedy that did not work are in
+# docs/wp10-ci.md#ci-matrix, and build.sh's Darwin branch says why the flag that
+# drops the load command is not the answer.
 #
-# Dropping the load command with `-Wl,-no_uuid` was the other way, and it is
-# closed: dyld on arm64 refuses an image that has none, so the stage links and
-# will not run (scripts/build.sh's Darwin branch says so where the flag would
-# go). This costs one rename per stage and weakens nothing.
+# It costs one rename per stage and weakens nothing: the comparison is still a
+# raw `cmp` of the two files.
 #
 # stage1 is left out because nothing compares it to a binary -- `IR(seed) ==
 # IR(stage1)` compares the .ll files its build wrote, and those are the same
@@ -371,13 +369,14 @@ if [ "$build_to" -ge 3 ]; then
   say "stage3: self/ compiled by stage2"
   link_stage "$work/stage2" stage3
   [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
-  # `stage3 == stage2`, in scripts/verify-binaries.sh: byte-identical on ELF,
-  # and on Mach-O the size asserted, debug information stripped where a tool
-  # can strip it, and anything left over failed as *unattributed*. The
-  # comparison lives in a script of its own so that tests/run.js can drive
-  # every branch of it from one machine -- its header is where the reasoning
-  # is, including what has and has not been measured about Mach-O, and
-  # NISH_UNAME_S is how the suite asks for the other platform's branch.
+  # `stage3 == stage2`, in scripts/verify-binaries.sh: byte-identical, which
+  # both stages being linked at one path is what buys on Mach-O as well. Under
+  # that, on Darwin, it still asserts the size, strips debug information where
+  # a tool can strip it, and fails anything left over as *unattributed* -- a
+  # net now rather than the arm that decides a darwin row. The comparison lives
+  # in a script of its own so that tests/run.js can drive every branch of it
+  # from one machine -- its header is where the reasoning is, and NISH_UNAME_S
+  # is how the suite asks for the other platform's branch.
   if [ "$verify" -eq 1 ]; then
     if verdict="$(bash scripts/verify-binaries.sh "$work/stage2" "$work/stage3" 2>&1)"; then
       printf '%s\n' "$verdict" | while IFS= read -r line; do say "  $line"; done
