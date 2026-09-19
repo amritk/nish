@@ -22,9 +22,11 @@ the tarball. Check with `npm pack --dry-run`.
 `src/index.ts` resolves `scripts/build.sh` and `runtime/runtime.c` from the
 package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
 working directory, so a global install works from any directory — today
-`npm install -g ./nish-<version>.tgz` from the release, because the registry
-name is not ours (see "Open decision: the npm name is taken"). The
-`// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
+`npm install -g ./nish-<version>.tgz` from the release, because nothing is
+published to the registry yet: the name is settled (see "The npm name") and the
+installer that would carry it is not built (see "Open decision: which compiler
+the package ships").
+The `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
 unrelated directory with the installed `nish`.
 
@@ -426,6 +428,83 @@ one: which compiler the package ships is a separate open decision, and G5's
 installer is not built. The name is settled; publishing is not.
 
 ## Open decision: which compiler the package ships
+
+**Decided 2026-09-19: (c) for which binary, (b) for delivery, (a) as the
+fallback.** `bin.nish` runs the self-hosted native compiler. `dist/` stays in
+the package and keeps both of the jobs it already has — the bootstrap seed
+every stage starts from, and the differential oracle every phase of `self/` is
+compared against — and stops being the thing a user runs. The binary reaches
+the machine as per-platform prebuilt packages, the (b) row below, and a
+platform with no binary of its own falls back to (a). The three rows were never
+alternatives: (c) says which binary is `nish`, (b) says how it arrives, and (a)
+is what (b) does when it has nothing to hand over.
+
+Two of the reasons this stayed open are gone, and one of them went stale
+without anybody editing it, which is worth naming.
+
+**(c) has no objection left.** All four of the things
+[wp14-selfhost.md](wp14-selfhost.md) §7a listed as still stage0's have closed —
+`--target host` and `--emit-ast` are answered, `-o <dir>` is stated, and an
+internal error exits 70 with its own report. What remains for (c) is
+[wp19-stage0-retirement.md](wp19-stage0-retirement.md)'s later gates — the seed
+protocol, oracle succession, distribution — rather than anything about the
+compiler's own surface. The row below already recorded that; what it did not do
+is draw the conclusion.
+
+**(b)'s recorded cost is false, and it was the reason (b) was ruled out.** The
+row below prices (b) at "a release build matrix that does not exist.
+`release.yml` runs one `ubuntu-latest` job and attaches one tarball". Neither
+half is true today. `release.yml`'s `binaries` job is
+`runs-on: ${{ matrix.target.runner }}` (line 165) over
+`target: ${{ fromJSON(needs.targets.outputs.rows) }}` (line 171) with
+`fail-fast: false` (line 169) — one runner per target architecture, nothing
+cross-compiled, and the rows are `.github/seed-targets.json`'s answer rather
+than a list the workflow spells. The `release` job attaches the npm tarball
+*and* every asset the matrix produced, from one `assets.txt` the attach and the
+check share. And the rows are not theoretical: `acbca9f` (#114, 2026-09-19)
+exercised the three rows `.github/seed-targets.json` marks
+`attachedSince: 0.4.0` — `aarch64-linux`, `aarch64-darwin`, `x86_64-darwin` —
+on the hardware each row names, and all three pass. The fourth row,
+`x86_64-linux`, is `attachedSince: 0.1.1` and needed no exercising: this job
+has built and attached it at every release since, `v0.1.1` through `v0.3.0`.
+
+Nothing edited that cost into being wrong. It was true when it was written, the
+matrix was then built for the seed protocol's sake rather than for this
+decision, #114 proved the rows, and the sentence went stale where it stood
+while still reading like a measurement. That is the failure this document's
+neighbourhood is about, and this row is an instance of it rather than an
+exception to it.
+
+What (b) honestly costs, now that its blocker is built:
+
+- **N+1 packages published per release** instead of one — the main package and
+  one `nish-<os>-<arch>` per attached target — so the publish step becomes a
+  loop over the same `seed-targets.json` rows, and a partially published
+  release is a new failure mode to answer for.
+- **A fallback for a platform with no binary**, and that fallback is (a). The
+  two are additive rather than exclusive, which is why (a) is recorded here as
+  the fallback rather than ruled out.
+
+**The rule: `bin.nish` is the native binary, `dist/` is the seed and the
+oracle, and a cost in the table below is re-measured before it is cited
+again.**
+
+None of this is implemented and this note is still not a plan. `package.json`
+still ships `dist/` and `files` still does not list `self/`, exactly as the note
+below describes; no `nish-<os>-<arch>` package exists; and the G5 installer
+that would carry the decision has not been designed, let alone written. What
+changed on 2026-09-19 is which of the three rows the work will follow, not that
+any of it was done.
+
+The heading still says "Open decision" because
+[wp19-stage0-retirement.md](wp19-stage0-retirement.md) links to this section
+by that anchor from its remaining-work list; renaming it and repointing that link is one change, and
+it is not this one.
+
+The rest of this section is the record of why, and is left as it was written —
+including (b)'s stale cost, which is the point.
+
+---
 
 The position this project is run on: **the compiled native binary is what
 should reach a user.** `build/nish` — stage2, the self-hosted compiler built
