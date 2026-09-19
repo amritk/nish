@@ -5,8 +5,14 @@
 // The shape is the one §2c names — `knownAtMost` in `self/bounds.ts` is it
 // verbatim — and it is the one the §2b alias domains do *not* already fix:
 // there the header load sits in a bounds-checked block, where LLVM may not
-// speculate it out. `fieldScale` is that loop; `constScale` is the hoist a
-// programmer writes by hand, and the two must now emit the same loop.
+// speculate it out. `fieldScale` is that loop and `constScale` is the hoist a
+// programmer writes by hand, and after this the two read their headers the same
+// way — but they are still *not* the same loop, and the check below says so:
+// `constScale` carries one bounds check and `fieldScale` two, because
+// `checker/bounds.ts` keys its length facts by variable and never by a property
+// path, so `h.xs.length` proves nothing about `h.xs[i]`. That second check is
+// the second loop exit, and closing it is that file's work rather than the
+// emitter's.
 //
 // `tests/run.js` pins what a golden cannot say in words: no header-domain load
 // is left inside `@fieldScale`'s loop, and the `len` the `while` condition
@@ -73,6 +79,36 @@ export const guarded = (h: Holder | null, n: i32): i32 => {
   return s;
 };
 
+// A store in the loop to a field the path names. The hoisted value *is* that
+// field's load, so replacing it mid-loop has to refuse the hoist -- and the
+// refusal is by field name, which is what lets a loop that advances `this.pos`
+// still hoist `this.source`.
+export const replaced = (h: Holder, other: i32[]): i32 => {
+  let s = 0;
+  let i = 0;
+  while (i < 3) {
+    s = s + h.xs[i];
+    h.xs = other;
+    i = i + 1;
+  }
+  return s;
+};
+
+// A path rooted at a local the loop itself declares: there is no value to lift
+// above the declaration, because the preheader runs before it. `hs` is a
+// parameter and is hoisted; `h` is not, so no `%struct.Holder` load may appear
+// ahead of the loop.
+export const declaredInside = (hs: Holder[], n: i32): i32 => {
+  let s = 0;
+  let i = 0;
+  while (i < n) {
+    const h = hs[0];
+    s = s + h.xs[0];
+    i = i + 1;
+  }
+  return s;
+};
+
 export const test = (): i32 => {
   const src = [1, 2, 3, 4];
   const dst = new Array<i32>(4);
@@ -80,5 +116,13 @@ export const test = (): i32 => {
   const a = dst[0] + dst[1] + dst[2] + dst[3];
   constScale(dst, new Holder(src));
   const b = dst[0] + dst[1] + dst[2] + dst[3];
-  return a + b + grown(new Holder([0])) + guarded(null, 0) + guarded(new Holder(src), 4);
+  return (
+    a +
+    b +
+    grown(new Holder([0])) +
+    guarded(null, 0) +
+    guarded(new Holder(src), 4) +
+    replaced(new Holder(src), [9, 9, 9]) +
+    declaredInside([new Holder(src)], 3)
+  );
 };

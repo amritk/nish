@@ -2051,6 +2051,28 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       guarded !== "" && !guarded.slice(0, guarded.indexOf("\nwhile.cond:")).includes("getelementptr"),
       guarded
     );
+    // The two refusals that are about the *path* rather than the header. Each is
+    // a proof that could otherwise break in silence, since the hoist they refuse
+    // is the one that reads a stale field load.
+    //
+    // `@replaced` stores `h.xs` inside the loop it reads `h.xs[i]` in, so the
+    // path is shadowed by name and nothing is lifted. `@declaredInside` roots
+    // its path at a `const` the loop body declares, which the preheader runs
+    // before -- and it is the discriminating case, because `hs` *is* a
+    // parameter and *is* hoisted in the same preheader: the refusal is per path,
+    // not a blanket refusal of the loop. So both assert on the field *GEP*
+    // specifically: a bare `getelementptr` would catch the array header `hs`
+    // legitimately contributes, and a bare `%struct.Holder` would catch the
+    // parameter's own type in the `define` line and the `alloca` of the local.
+    for (const fn of ["replaced", "declaredInside"]) {
+      const body = ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "";
+      const preheader = body.slice(0, body.indexOf("\nwhile.cond:"));
+      check(
+        `arr_header_hoist: @${fn} refuses the path, so no \`Holder.xs\` load is lifted above the loop`,
+        body !== "" && preheader !== "" && !preheader.includes("getelementptr inbounds %struct.Holder"),
+        body
+      );
+    }
     // The other half of the fact: a loop that grows the array it reads may not
     // be hoisted at all, because `push` is what moves `len`, `cap` and `data`.
     const grown = ir.match(/define[^\n]*@grown\b[\s\S]*?\n}/)?.[0] ?? "";
