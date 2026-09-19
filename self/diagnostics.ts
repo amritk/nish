@@ -130,17 +130,25 @@ export class SourceFile {
    * two. Continuation bytes are none of their own.
    */
   codeUnits(from: i32, to: i32): i32 {
+    const length = this.text.length;
+    const end = to < length ? to : length;
     let units = 0;
     let i = from;
-    const limit = to < this.text.length ? to : this.text.length;
-    while (i < limit) {
+    while (i < end) {
       const byte = this.text.charCodeAt(i);
       if (startsCharacter(byte)) {
         units = units + (isFourByteLead(byte) ? 2 : 1);
       }
       i = i + 1;
     }
-    return units;
+    // Past the last byte there is nothing to classify, and an offset does
+    // reach there: a span whose end is the end of the file is one past it.
+    // stage0 counts the overshoot as characters — `getLineAndCharacterOfPosition`
+    // answers `position - lineStart` with no line to bound it — so one byte
+    // past the file is one column past its last
+    // (`tests/self/diagnostics_fixture.txt`, `error at 325`).
+    const beyond = from > length ? from : length;
+    return to > beyond ? units + (to - beyond) : units;
   }
 
   /** The text of a 0-based line without its terminator, `\r\n` included. */
