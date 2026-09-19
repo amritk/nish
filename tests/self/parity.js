@@ -196,7 +196,17 @@ function firstDiagnostic(text) {
 const firstJsonDiagnostic = (text) => {
   for (const line of text.split("\n")) {
     if (!line.startsWith("{") || !line.endsWith("}")) continue;
-    const object = JSON.parse(line);
+    // A run can carry both `--json` and a dump flag — `tests/cases/dump_checked`
+    // asks for `--emit-checked` in its own `.args` — and then stdout is the
+    // dump. A line of it that happens to be brace-wrapped is not a diagnostic,
+    // so it is skipped rather than crashing the mode; a line that parses is one
+    // by construction, because nothing else writes objects there.
+    let object = null;
+    try {
+      object = JSON.parse(line);
+    } catch {
+      continue;
+    }
     return `${object.file}:${object.line}:${object.column}: ${object.message}`;
   }
   return "";

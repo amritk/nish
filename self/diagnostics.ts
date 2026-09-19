@@ -166,17 +166,17 @@ export class SourceFile {
   }
 }
 
-/**
- * One error, anchored to a half-open byte span of one file. `line` and
- * `column` are computed when it is reported rather than when it is printed,
- * because the sort in `DiagnosticSink` reads them for every comparison.
- */
 /** Whether a UTF-8 byte begins a character rather than continuing the one before it. */
 const startsCharacter = (byte: i32): boolean => (byte & 0xc0) !== 0x80;
 
 /** Whether a UTF-8 byte opens a four-byte sequence, which is two UTF-16 code units. */
 const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0;
 
+/**
+ * One error, anchored to a half-open byte span of one file. `line` and
+ * `column` are computed when it is reported rather than when it is printed,
+ * because the sort in `DiagnosticSink` reads them for every comparison.
+ */
 export class Diagnostic {
   source: SourceFile;
   start: i32;

@@ -1,13 +1,8 @@
-// A diagnostic column is counted in UTF-16 code units, not in the bytes the
-// self-hosted compiler stores a source file as: `é` is two bytes and one
-// column, `🎉` is four bytes and two. Both sit before the caret here, so the
-// two counts differ by three and every surface that carries a column says so
-// — the report and its caret, `--emit-checked`, and `--json`'s `column` and
-// `endColumn`.
-//
-// No corpus program had a non-ASCII character in front of a caret before this
-// one, so the two compilers were free to disagree about all of it and did
-// (WP19 §A5: an empty difference set is a fact about the corpus).
+// A diagnostic column counts UTF-16 code units, not the bytes the self-hosted
+// compiler stores a file as: `é` is one column and two bytes, `🎉` is two and
+// four. Both sit before the caret, so the two counts differ by three here —
+// which is the whole reason this case exists, because no other corpus program
+// puts a non-ASCII character in front of one (WP19 §A5).
 export const main = (): number => {
   const cafe = "café 🎉"; const n: i32 = cafe;
   return n;

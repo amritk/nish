@@ -307,9 +307,6 @@ const rejectThrow: Validator = (node, sf) =>
     node,
     sf
   );
-/** Spelled once, because `rejectDebugger` measures the caret against its length. */
-const DEBUGGER_KEYWORD = "debugger";
-
 const rejectDebugger: Validator = (node, sf) =>
   fail(
     `\`debugger\` is forbidden in ${LANGUAGE} (no debugger hook)`,
@@ -322,7 +319,7 @@ const rejectDebugger: Validator = (node, sf) =>
     // (`forbiddenValue` in `self/validator.ts`). Nothing pinned the difference:
     // a `.err` sidecar is matched as a substring and no golden holds a caret
     // run, so it took `--json`'s `endColumn` entering the parity cross product.
-    { start: node.getStart(sf), end: node.getStart(sf) + DEBUGGER_KEYWORD.length },
+    { start: node.getStart(sf), end: node.getStart(sf) + "debugger".length },
     sf
   );
 const rejectLabeled: Validator = (node, sf) =>
