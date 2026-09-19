@@ -14,12 +14,24 @@
 // `try`/`catch`; it is written out here rather than hidden so the cost stays
 // visible.
 //
-// **Columns are bytes**, as everywhere in `self/`, where stage0's are UTF-16
-// code units. The two agree for every ASCII source line, which is every line
-// of every `.err` golden; a diagnostic pointing into a line with a multi-byte
-// character is the one place stage0 and stage1 can print different columns for
-// the same error, and the same mapping the lexer oracle already does resolves
-// it.
+// **A reported column is UTF-16 code units** and an offset is bytes, so the
+// two are converted between rather than being the same number: `columnOf` is
+// the byte count a `DILocation` wants and `reportedColumnOf` is the code-unit
+// count a diagnostic, an excerpt caret and `--emit-checked` want, which is
+// what stage0 has always printed.
+//
+// This paragraph used to say the opposite, and how it was wrong is worth
+// keeping. It said columns were bytes "as everywhere in `self/`", noted that
+// stage0 counts code units, and then retired the difference on the grounds
+// that "the two agree for every ASCII source line, which is every line of
+// every `.err` golden". Both halves were true and the conclusion was not: a
+// claim about the corpus is not a claim about the language, and the compilers
+// printed different columns for the same error for as long as both existed.
+// Nothing failed, because no corpus program put a non-ASCII character in front
+// of a caret. `tests/cases/reject_diag_utf8` is that program, and
+// `docs/LANGUAGE.md` states the unit now so it is a rule rather than a note in
+// a header. `self/debug.ts` carried the same caveat about the same subject and
+// was wrong the same way (WP19 §A5).
 //
 // The performance warnings of WP15 §8 are the one diagnostic here that is not
 // an error. They ride on the same `Diagnostic` with `kind` set to
@@ -30,10 +42,13 @@
 // which `reportPerformance` keeps as the list is built, for the reason written
 // there. `src/diagnostics.ts` orders them the same way and has to, because the
 // two are one compiler in two implementations and `--json` promises the same
-// stream from either. Only the WP15 block of `tests/run.js` catches a drift —
-// it reruns the cases it names through stage1 and compares the whole report —
-// and it is a *counted skip* with no C toolchain. Outside those cases, and on
-// a machine without clang, this is a rule a reader keeps, not one a test catches.
+// stream from either. Two things catch a drift: the WP15 block of
+// `tests/run.js`, which reruns the cases it names through stage1 and compares
+// the whole report, and the `--json` variation of `tests/self/parity.js`,
+// which compares the stream itself over every program in the corpus. The first
+// is a *counted skip* with no C toolchain and the second is the nightly rather
+// than `npm test`, so this is still a rule a reader keeps on a machine without
+// clang — but it is no longer only that.
 
 import { codeFor } from "./codes";
 import { compareStrings, jsonQuote, StringBuilder } from "./strings";
