@@ -124,7 +124,7 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind readonly }
+attributes #1 = { nounwind willreturn readonly }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

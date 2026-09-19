@@ -145,7 +145,13 @@ import { withInstance } from "../checker/generics.js";
 import { intrinsicType, isAssignmentOperator } from "../checker/classes.js";
 import { unwrapParens } from "../checker/control-flow.js";
 import { CompilerOptions, DEFAULT_OPTIONS, StaticType, resultByValue, stripNull } from "../types.js";
-import { arrayMethodName, isPushCall, storesInlineElements } from "./emit/arrays.js";
+import {
+  arrayMethodName,
+  isPushCall,
+  isResizeCall,
+  setProgramFacts,
+  storesInlineElements,
+} from "./emit/arrays.js";
 import { CallSite, EscapeResult, analyzeEscapes } from "./escape.js";
 import { collectBuiltinFacts } from "./emit/expressions.js";
 import { factCollectors } from "./emit/members.js";
@@ -177,6 +183,29 @@ export interface FunctionFacts {
   loopsBounded: boolean;
   /** Contains `throw`, which lowers to `llvm.trap`: a side effect that never returns. */
   hasTrap: boolean;
+  /**
+   * WP15 §2c: the function may move an array's `len` — `a.push(v)`, which also
+   * moves `cap` and `data` when it grows, or `a.pop()`, which moves `len`
+   * alone — directly or through a callee (fixpoint over the call graph).
+   *
+   * This is the whole-program "does not grow an array" fact §2c's candidate 2
+   * waits on, and the point of it is what it leaves *out*. `PointerParamFacts.
+   * writesThrough` lumps a `push` in with every other store, so a function
+   * that only writes elements is indistinguishable from one that reallocates
+   * the buffer. An element write leaves the header alone — that is exactly
+   * what the §2b alias domains encode — so a header fact built on
+   * `writesThrough` would refuse every loop that writes an element, which is
+   * the loop a header hoist exists for. Separating the two is the whole
+   * change: `resizesArray` is about the 24 bytes of `{ len, cap, data }` and
+   * nothing else.
+   *
+   * It is deliberately *not* per parameter. A `push` anywhere a loop can reach
+   * may be a push to the array that loop is reading, because two names can
+   * hold one array and nothing here proves they do not; refining this to
+   * "grows *that* array" is an aliasing question this fact does not answer and
+   * must not be read as answering.
+   */
+  resizesArray: boolean;
   effect: MemoryEffect;
   /** Returns on every input (modulo stack exhaustion); refined by the call-graph fixpoint. */
   willReturn: boolean;
@@ -278,14 +307,16 @@ export function analyzeFunctions(
   const list = Array.isArray(programs)
     ? (programs as readonly CheckedProgram[])
     : [programs as CheckedProgram];
-  const collect = (escapes?: Map<string, EscapeResult>) => {
+  const collect = (escapes?: Map<string, EscapeResult>, known?: Map<string, FunctionFacts>) => {
     const facts = new Map<string, FunctionFacts>();
     for (const program of list) {
       for (const sig of program.functions) {
         // WP18: per instantiation, over that instantiation's side tables. The
         // facts are keyed by symbol already, so `eq$i32` being `readnone` and
         // `eq$str` `readonly` needs nothing but the right tables here.
-        const f = withInstance(program, sig, () => collectFacts(program, sig, opts, escapes?.get(sig.name)));
+        const f = withInstance(program, sig, () =>
+          collectFacts(program, sig, opts, escapes?.get(sig.name), known)
+        );
         facts.set(sig.name, f);
       }
     }
@@ -302,8 +333,12 @@ export function analyzeFunctions(
       escapes.set(sig.name, withInstance(program, sig, () => analyzeEscapes(program, sig, first, opts)));
     }
   }
-  // Round 2: the same facts with stack allocations applied, then the scope decision.
-  const facts = collect(escapes);
+  // Round 2: the same facts with stack allocations applied, then the scope
+  // decision. `first` carries round 1's fixpoint, which is what lets a
+  // `for...of` ask whether its calls actually grow an array (WP15 §2c) rather
+  // than assuming every one of them does. `resizesArray` is settled by then:
+  // it is syntax plus the call graph, and neither moves between the rounds.
+  const facts = collect(escapes, first);
   propagate(facts);
   for (const f of facts.values()) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
@@ -313,6 +348,11 @@ export function analyzeFunctions(
       f.callees.add("nish_arena_release");
     }
   }
+  // WP15 2c: Phase C1 asks whether a loop can grow an array before it hoists
+  // that array's header, and the answer is only ever this table's. Handing it
+  // over here rather than importing it there keeps the one import direction
+  // this pair has: `emit/arrays.ts` knows nothing about the call graph.
+  setProgramFacts(facts);
   return facts;
 }
 
@@ -356,6 +396,13 @@ function propagate(facts: Map<string, FunctionFacts>): void {
         // WP9: whatever a callee lets out of its own frame is out of this one too.
         if (calleeFacts?.allocEscapes && !f.allocEscapes) {
           f.allocEscapes = true;
+          changed = true;
+        }
+        // WP15 §2c: growing an array is a property of the whole closure, the
+        // same way allocation is — a caller that pushes nothing still moves a
+        // header when the callee it invokes does.
+        if (calleeFacts?.resizesArray && !f.resizesArray) {
+          f.resizesArray = true;
           changed = true;
         }
         if (calleeFacts?.usesArenaControl && !f.usesArenaControl) {
@@ -633,13 +680,15 @@ function collectFacts(
   program: CheckedProgram,
   sig: FunctionSig,
   opts: CompilerOptions,
-  memory?: EscapeResult
+  memory?: EscapeResult,
+  known?: Map<string, FunctionFacts>
 ): FunctionFacts {
   const facts: FunctionFacts = {
     hasLoops: false,
     readsMemory: false,
     loopsBounded: true,
     hasTrap: false,
+    resizesArray: false,
     effect: "none",
     willReturn: true,
     callsNoReturn: false,
@@ -681,6 +730,12 @@ function collectFacts(
     facts.effect = "write";
     facts.willReturn = false;
     facts.readsMemory = true;
+    // S1's boundary is scalars only, so a C body cannot reach an array header
+    // at all; this says otherwise for the same reason the two lines above do,
+    // which is that a body nobody can read asserts the worst of everything it
+    // cannot be *seen* to avoid. S2 widening the type check must revisit the
+    // block rather than inherit a `false` nobody re-derived.
+    facts.resizesArray = true;
     return facts;
   }
   // A `returned` or `leaked` allocation is still an allocation.
@@ -733,12 +788,13 @@ function collectFacts(
   const visit = (node: ts.Node): void => {
     if (ts.isIterationStatement(node, false)) {
       facts.hasLoops = true;
-      if (!isCountedLoop(program, node)) facts.loopsBounded = false;
+      if (!isCountedLoop(program, node, known)) facts.loopsBounded = false;
     }
     if (ts.isThrowStatement(node)) facts.hasTrap = true;
     if (ts.isCallExpression(node)) {
       const callee = program.callees.get(node);
       if (callee) facts.callees.add(callee.name);
+      if (isResizeCall(program, node)) facts.resizesArray = true;
     }
     const param = paramRef(node);
     if (param !== undefined) noteUse(param, node as ts.Expression);
@@ -789,8 +845,12 @@ const INT32_MAX = 0x7fffffff;
  * array (`bodyMayExtend`, WP4). Every other loop (`while`, `do`, other
  * `for` shapes) is unbounded.
  */
-export function isCountedLoop(program: CheckedProgram, loop: ts.IterationStatement): boolean {
-  if (ts.isForOfStatement(loop)) return !bodyMayExtend(program, loop.statement);
+export function isCountedLoop(
+  program: CheckedProgram,
+  loop: ts.IterationStatement,
+  known?: Map<string, FunctionFacts>
+): boolean {
+  if (ts.isForOfStatement(loop)) return !bodyMayExtend(program, loop.statement, known);
   if (!ts.isForStatement(loop) || !loop.initializer || !loop.condition || !loop.incrementor) return false;
   if (!ts.isVariableDeclarationList(loop.initializer) || loop.initializer.declarations.length !== 1)
     return false;
@@ -850,22 +910,37 @@ function isIncDec(kind: ts.SyntaxKind): boolean {
 /**
  * `for (const x of a)` re-reads `a.length` every iteration, so it is bounded
  * unless the body can grow an array: any `push` (on any array, since `a` may
- * be aliased), any call to a user function (which could push through an
- * alias it receives), or a `throw`.
+ * be aliased), a call that can grow one, or a `throw`.
+ *
+ * `known` is the call-graph fixpoint's answer for the callees, when there is
+ * one. Without it every user call has to count as growing the array, because a
+ * callee handed the same array may push through it — which is what this asked
+ * before `resizesArray` existed, and is still what round 1 asks, since the
+ * fixpoint has not run yet. With it the question is the one that was always
+ * meant: does anything this body reaches actually move a `len`?
  */
-function bodyMayExtend(program: CheckedProgram, body: ts.Node): boolean {
+function bodyMayExtend(
+  program: CheckedProgram,
+  body: ts.Node,
+  known?: Map<string, FunctionFacts>
+): boolean {
   let extends_ = false;
   const visit = (node: ts.Node): void => {
     if (extends_) return;
-    if (
-      ts.isThrowStatement(node) ||
-      isPushCall(program, node) ||
-      (ts.isCallExpression(node) && program.callees.has(node))
-    ) {
+    if (ts.isThrowStatement(node) || isResizeCall(program, node)) {
       extends_ = true;
-    } else {
-      ts.forEachChild(node, visit);
+      return;
     }
+    if (ts.isCallExpression(node)) {
+      const callee = program.callees.get(node);
+      // An unresolved callee is a builtin, and no builtin but `push`/`pop`
+      // reaches a user array's header; those two are above.
+      if (callee && (known?.get(callee.name)?.resizesArray ?? true)) {
+        extends_ = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
   };
   visit(body);
   return extends_;

@@ -26,6 +26,7 @@
 // that calls `nish_panic_index` and never returns. Comparing *unsigned* makes a
 // negative index fail too.
 
+import { HoistedHeader, isResizeCall } from "./attributes";
 import { parseIntegerLiteral } from "./constants";
 import { Emitter, LoopTarget } from "./emit";
 import {
@@ -35,11 +36,24 @@ import {
   emitIntBinary,
   isBitwiseAssignment,
 } from "./emit_ops";
-import { unwrapParens } from "./emit_util";
+import { arrayMethodName, isAssignmentOperator, unwrapParens } from "./emit_util";
 import { internalError } from "./ice";
-import { N_NUMBER, Node } from "./nodes";
+import {
+  N_BINARY,
+  N_CALL,
+  N_IDENT,
+  N_INDEX,
+  N_MEMBER,
+  N_NEW,
+  N_NUMBER,
+  N_THIS,
+  N_UNARY,
+  N_VAR_DECL,
+  Node,
+} from "./nodes";
 import { elementLLVMType, elementStride, inlineElementStruct, StructInfo } from "./program";
-import { ARRAY_TYPE } from "./runtime";
+import { Local, STORAGE_PARAM } from "./symbols";
+import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
 
 const HEADER: string = ARRAY_STRUCT;
@@ -105,6 +119,391 @@ export const elementAccess = (emitter: Emitter): string => {
   return `, !alias.scope ${aliasScopeList(emitter, false)}, !noalias ${aliasScopeList(emitter, true)}`;
 };
 
+// ---- Loop header hoisting (WP15 section 2c) ------------------------------------------
+
+/**
+ * A stable array location: the binding a property path is rooted at, and the
+ * chain below it. `root` is `null` when the expression is not a shape a
+ * preheader can stand in for -- a call, an element access, a reassignable
+ * local -- because re-evaluating one of those could panic, allocate, or simply
+ * answer something else, and none of that is a hoist.
+ */
+class ArrayPath {
+  root: Local | null;
+  path: string;
+  /**
+   * The type the chain *declares*, carried rather than looked up at the use
+   * site because the two differ exactly where it matters. The checker records
+   * the *narrowed* type for an identifier inside `if (h !== null)`, and a hoist
+   * lifts the load to the preheader, which is outside that guard: taking the
+   * narrowed answer would dereference a null `h` in a loop whose body never
+   * runs.
+   */
+  type: i32;
+
+  constructor(root: Local | null, path: string, type: i32) {
+    this.root = root;
+    this.path = path;
+    this.type = type;
+  }
+}
+
+/**
+ * The array an expression denotes: the header pointer, plus the hoisted fields
+ * when an enclosing loop lifted them. Every read of `len` or `data` goes
+ * through `baseLength` / `baseData`, so a hoisted loop and an ordinary one
+ * differ in one place rather than at every access.
+ */
+class ArrayBase {
+  arr: string;
+  header: HoistedHeader | null;
+
+  constructor(arr: string, header: HoistedHeader | null) {
+    this.arr = arr;
+    this.header = header;
+  }
+}
+
+/** One array a loop reads, and which header fields the loop asks for. */
+class ArrayUse {
+  expr: Node;
+  /** Narrowed here so that nothing downstream compares two nullable roots. */
+  root: Local;
+  path: string;
+  len: boolean;
+  data: boolean;
+
+  constructor(expr: Node, root: Local, path: string, len: boolean, data: boolean) {
+    this.expr = expr;
+    this.root = root;
+    this.path = path;
+    this.len = len;
+    this.data = data;
+  }
+}
+
+const NO_PATH = (): ArrayPath => new ArrayPath(null, "", -1);
+
+/**
+ * The location `expr` reads, or a path with a `null` root when `expr` is not
+ * one this can stand in for.
+ *
+ * What qualifies is an identifier (or `this`) bound to a parameter or a
+ * non-mutable local, optionally followed by property accesses: `src`, `h.xs`,
+ * `this.state.atMostIndex`. Every link has to be a plain struct, because the
+ * preheader load happens whether or not the body runs and a `T | null` narrowed
+ * *inside* the loop would be dereferenced before its guard.
+ */
+const pathOf = (emitter: Emitter, expr: Node): ArrayPath => {
+  const inner = unwrapParens(expr);
+  if (inner.kind === N_IDENT || inner.kind === N_THIS) {
+    const local = emitter.program.nodeLocals[inner.id];
+    if (local === null || (local.storage !== STORAGE_PARAM && local.mutable)) {
+      return NO_PATH();
+    }
+    // `local.type` is what it was declared as, which is the answer a preheader
+    // needs.
+    return new ArrayPath(local, "", local.type);
+  }
+  if (inner.kind !== N_MEMBER) {
+    return NO_PATH();
+  }
+  const below = pathOf(emitter, inner.children[0]);
+  // A plain struct, declared: `T | null` is refused here whatever a guard
+  // inside the loop narrowed it to. Anything with no struct to look the field
+  // up in -- an imported module's name, a class named in a `new`, an enum --
+  // falls out of the same test rather than needing a case of its own.
+  if (below.root === null || !emitter.table.isStruct(below.type)) {
+    return NO_PATH();
+  }
+  const info = emitter.program.struct(emitter.table.nameOf(below.type));
+  if (info === null) {
+    return NO_PATH();
+  }
+  const field = info.field(inner.text);
+  if (field === null) {
+    return NO_PATH();
+  }
+  return new ArrayPath(below.root, `${below.path}.${inner.text}`, field.type);
+};
+
+/** The hoisted header for `expr`, when an enclosing loop's preheader loaded one. */
+const hoistedFor = (emitter: Emitter, expr: Node): HoistedHeader | null => {
+  const headers = emitter.current.hoistedHeaders;
+  if (headers.length === 0) {
+    return null;
+  }
+  const path = pathOf(emitter, expr);
+  const root = path.root;
+  if (root === null) {
+    return null;
+  }
+  let i = headers.length - 1;
+  while (i >= 0) {
+    const found = headers[i];
+    if (found.root === root && found.path === path.path) {
+      return found;
+    }
+    i = i - 1;
+  }
+  return null;
+};
+
+/** Lower the receiver of an element access or a `.length`, reusing a hoisted header where there is one. */
+const emitArrayBase = (emitter: Emitter, expr: Node): ArrayBase => {
+  const header = hoistedFor(emitter, expr);
+  if (header !== null) {
+    return new ArrayBase(header.arr, header);
+  }
+  return new ArrayBase(emitter.emitExpression(expr), null);
+};
+
+/** The array's `len`: the preheader's value inside a hoisted loop, a fresh load outside one. */
+const baseLength = (emitter: Emitter, base: ArrayBase): string => {
+  const header = base.header;
+  if (header !== null) {
+    return header.len;
+  }
+  return loadHeaderField(emitter, base.arr, 0, "i64");
+};
+
+/** The array's `data`, on the same terms as `baseLength`. */
+const baseData = (emitter: Emitter, base: ArrayBase): string => {
+  const header = base.header;
+  if (header !== null) {
+    return header.data;
+  }
+  return loadHeaderField(emitter, base.arr, 2, "i8*");
+};
+
+/**
+ * Whether anything `loop` does can move an array header, which is the whole of
+ * what a hoisted `len` and `data` depend on.
+ *
+ * Two things can: a `push` or a `pop` written in the loop, and a call to a user
+ * function the fixpoint says grows an array (`FunctionFacts.resizesArray`). A
+ * builtin cannot -- `push` and `pop` are the only builtins that reach a user
+ * array's header and both are caught in the first place -- and an element store
+ * cannot either, which is the reason the fact is not `writesThrough`: a loop
+ * that writes `dst[i]` is exactly the loop this is for.
+ *
+ * A callee with no facts is treated as growing one, so an unanalysed program
+ * hoists nothing rather than hoisting wrongly.
+ */
+const loopMayResize = (emitter: Emitter, node: Node): boolean => {
+  if (isResizeCall(emitter.program, emitter.table, node)) {
+    return true;
+  }
+  if (node.kind === N_CALL) {
+    const callee = emitter.program.nodeCallees[node.id];
+    if (callee !== null) {
+      const facts = emitter.facts.get(callee.name);
+      if (facts === null || facts.resizesArray) {
+        return true;
+      }
+    }
+  }
+  for (const child of node.children) {
+    if (loopMayResize(emitter, child)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Collect the field names `loop` stores to into `names`, and answer whether it
+ * can store to a field it cannot name -- a `new`, or a call to a user function
+ * that writes memory.
+ *
+ * A hoisted `h.xs` is a field load lifted into the preheader, so it stands only
+ * while nothing in the loop puts a different array in that field. A store to a
+ * field of *another* name cannot, whatever it aliases, which is why the names
+ * are collected rather than a single flag: a loop that advances `this.pos` may
+ * still hoist `this.source`.
+ *
+ * `effect === EFFECT_WRITE` is a blunt instrument for the calls -- it is also
+ * true of a callee that only allocates -- and a narrower "writes a field" fact
+ * would let more loops through. It is the fact that exists today, and being too
+ * careful here costs a hoist rather than an answer.
+ */
+const storedFields = (emitter: Emitter, node: Node, names: string[]): boolean => {
+  let opaque = false;
+  if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    const target = unwrapParens(node.children[0]);
+    if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
+      names.push(target.text);
+    }
+  } else if (node.kind === N_UNARY) {
+    const target = unwrapParens(node.children[0]);
+    if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
+      names.push(target.text);
+    }
+  } else if (node.kind === N_NEW) {
+    opaque = true; // the constructor stores fields, and not only its own
+  } else if (node.kind === N_CALL) {
+    const callee = emitter.program.nodeCallees[node.id];
+    if (callee !== null) {
+      const facts = emitter.facts.get(callee.name);
+      if (facts === null || facts.effect === EFFECT_WRITE) {
+        opaque = true;
+      }
+    }
+  }
+  for (const child of node.children) {
+    if (storedFields(emitter, child, names)) {
+      opaque = true;
+    }
+  }
+  return opaque;
+};
+
+/** Every local `loop` declares: a path rooted at one of them cannot be lifted above its declaration. */
+const localsDeclaredIn = (emitter: Emitter, node: Node, out: Local[]): void => {
+  if (node.kind === N_VAR_DECL) {
+    const local = emitter.program.nodeLocals[node.id];
+    if (local !== null) {
+      out.push(local);
+    }
+  }
+  for (const child of node.children) {
+    localsDeclaredIn(emitter, child, out);
+  }
+};
+
+/** Record one array receiver, merging with an earlier use of the same location. */
+const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean, out: ArrayUse[]): void => {
+  const path = pathOf(emitter, expr);
+  const root = path.root;
+  // Again the declared type: an `i32[] | null` narrowed inside the loop is
+  // still nullable where the preheader would read its header.
+  if (root === null || !emitter.table.isArray(path.type)) {
+    return;
+  }
+  for (const found of out) {
+    if (found.root === root && found.path === path.path) {
+      found.len = found.len || len;
+      found.data = found.data || data;
+      return;
+    }
+  }
+  out.push(new ArrayUse(expr, root, path.path, len, data));
+};
+
+/**
+ * Collect the array receivers `loop` reads through, one entry per distinct
+ * location, with whether the loop needs that array's `len` (a `.length` read or
+ * a bounds check) and its `data` (any element access).
+ *
+ * Nested loops are walked too: their preheaders sit inside this one, so an
+ * array both of them read is better hoisted here, and an array only the inner
+ * loop reads is hoisted by the inner loop's own scope.
+ */
+const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
+  if (node.kind === N_INDEX) {
+    // A proven index reads no length (`emitBoundsCheck` skips the check), so
+    // asking for one here would put a load in the preheader the loop never
+    // uses. The proof is read in both places or in neither.
+    const needsLen = !emitter.opts.uncheckedIndexing && !emitter.program.nodeProvenIndex[node.id];
+    noteArrayUse(emitter, node.children[0], needsLen, true, out);
+  } else if (node.kind === N_MEMBER && node.text === "length") {
+    noteArrayUse(emitter, node.children[0], true, false, out);
+  }
+  for (const child of node.children) {
+    arrayUses(emitter, child, out);
+  }
+};
+
+/** Whether any link of a path names a field the loop stores to. */
+const pathIsShadowed = (expr: Node, names: string[]): boolean => {
+  let link = unwrapParens(expr);
+  while (link.kind === N_MEMBER) {
+    if (names.indexOf(link.text) >= 0) {
+      return true;
+    }
+    link = unwrapParens(link.children[0]);
+  }
+  return false;
+};
+
+/**
+ * Lift every array header `loop` reads into the block being emitted, which is
+ * the loop's preheader, and open a scope so the loop body reads them back.
+ *
+ * `emit_control.ts` calls this with the branch into the loop head not yet
+ * written, so what this emits lands in the block that dominates the whole loop
+ * and runs once. `closeHeaderScope` closes it.
+ *
+ * The point of lifting `len` rather than only the header pointer is the whole
+ * of section 2c's criterion: a loop over an array in a class field reads the
+ * length *twice*, once for the `while` condition and once for the bounds check,
+ * and those are two loads of one address that GVN is not obliged to merge. One
+ * `len` here is one value in both places by construction.
+ */
+export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
+  const facts = emitter.current;
+  facts.hoistedScopeStarts.push(facts.hoistedHeaders.length);
+  if (!emitter.opts.optimizeAttributes || loopMayResize(emitter, loop)) {
+    return;
+  }
+  const uses: ArrayUse[] = [];
+  arrayUses(emitter, loop, uses);
+  if (uses.length === 0) {
+    return;
+  }
+  const names: string[] = [];
+  const opaque = storedFields(emitter, loop, names);
+  const declared: Local[] = [];
+  localsDeclaredIn(emitter, loop, declared);
+  for (const use of uses) {
+    const root = use.root;
+    let skip = false;
+    for (const local of declared) {
+      if (local === root) {
+        skip = true; // declared inside the loop: no value to lift
+      }
+    }
+    if (use.path.length > 0) {
+      // A property path, so the field loads move too and have to be stable.
+      if (opaque || pathIsShadowed(use.expr, names)) {
+        skip = true;
+      }
+    }
+    if (skip) {
+      continue;
+    }
+    emitter.declareType(ARRAY_TYPE);
+    const arr = emitter.emitExpression(use.expr);
+    // An array's header is `dereferenceable(24)` wherever one is reachable, so
+    // both loads are safe in a preheader the body may never leave. The unused
+    // one is not emitted: a loop that only reads `.length` should not grow a
+    // `data` load it never asks for.
+    let len = "";
+    if (use.len) {
+      len = loadHeaderField(emitter, arr, 0, "i64");
+    }
+    let data = "";
+    if (use.data) {
+      data = loadHeaderField(emitter, arr, 2, "i8*");
+    }
+    facts.hoistedHeaders.push(new HoistedHeader(root, use.path, arr, len, data));
+  }
+};
+
+/** Close the innermost scope `openHeaderScope` opened. */
+export const closeHeaderScope = (emitter: Emitter): void => {
+  const facts = emitter.current;
+  const starts = facts.hoistedScopeStarts;
+  if (starts.length === 0) {
+    return;
+  }
+  const start = starts[starts.length - 1];
+  starts.pop();
+  while (facts.hoistedHeaders.length > start) {
+    facts.hoistedHeaders.pop();
+  }
+};
+
 // ---- Header access ------------------------------------------------------------------
 
 /** Address of header field `index` (0 len, 1 cap, 2 data). */
@@ -131,9 +530,9 @@ const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(em
  * an inline record the slot type is the struct itself, so this *is* the
  * element's value: the GEP strides by `sizeof` and lands on the object.
  */
-const elementPointer = (emitter: Emitter, arr: string, elem: i32, idx: string): string => {
+const elementPointer = (emitter: Emitter, base: ArrayBase, elem: i32, idx: string): string => {
   const ty = slotType(emitter, elem);
-  const data = loadHeaderField(emitter, arr, 2, "i8*");
+  const data = baseData(emitter, base);
   const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
   return emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${idx}`);
 };
@@ -142,8 +541,8 @@ const elementPointer = (emitter: Emitter, arr: string, elem: i32, idx: string): 
  * Read element `idx`: the slot's value, or — for an inline record — the slot's
  * *address*, which is what a struct value is everywhere else in the emitter.
  */
-const loadElement = (emitter: Emitter, arr: string, elem: i32, idx: string): string => {
-  const slot = elementPointer(emitter, arr, elem, idx);
+const loadElement = (emitter: Emitter, base: ArrayBase, elem: i32, idx: string): string => {
+  const slot = elementPointer(emitter, base, elem, idx);
   if (inlineStruct(emitter, elem) !== null) {
     return slot;
   }
@@ -244,11 +643,11 @@ export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void
  * every check and trusts the program, while a proof removes one check and the
  * safety is unchanged (WP15 §2.1/§2.2, `self/bounds.ts`).
  */
-const emitBoundsCheck = (emitter: Emitter, arr: string, idx: string, site: Node): void => {
+const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: Node): void => {
   if (emitter.opts.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
     return;
   }
-  emitRangeCheck(emitter, idx, loadLength(emitter, arr));
+  emitRangeCheck(emitter, idx, baseLength(emitter, base));
 };
 
 /**
@@ -372,10 +771,10 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
 export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.typeOf(expr);
   emitter.declareType(ARRAY_TYPE);
-  const arr = emitter.emitExpression(expr.children[0]);
+  const base = emitArrayBase(emitter, expr.children[0]);
   const idx = emitIndex(emitter, expr.children[1]);
-  emitBoundsCheck(emitter, arr, idx, expr);
-  return loadElement(emitter, arr, elem, idx);
+  emitBoundsCheck(emitter, base, idx, expr);
+  return loadElement(emitter, base, elem, idx);
 };
 
 /**
@@ -388,19 +787,19 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.typeOf(target);
   const ty = emitter.llvm(elem);
   emitter.declareType(ARRAY_TYPE);
-  const arr = emitter.emitExpression(target.children[0]);
+  const base = emitArrayBase(emitter, target.children[0]);
   const idx = emitIndex(emitter, target.children[1]);
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1]);
-    emitBoundsCheck(emitter, arr, idx, target);
-    storeElement(emitter, elementPointer(emitter, arr, elem, idx), elem, value);
+    emitBoundsCheck(emitter, base, idx, target);
+    storeElement(emitter, elementPointer(emitter, base, elem, idx), elem, value);
     return value;
   }
   // The array and the index were evaluated once, above; the check and the GEP
   // happen once here, and the load and the store share the address. That is
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
-  emitBoundsCheck(emitter, arr, idx, target);
-  const slot = elementPointer(emitter, arr, elem, idx);
+  emitBoundsCheck(emitter, base, idx, target);
+  const slot = elementPointer(emitter, base, elem, idx);
   const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
   let value = "";
   if (isBitwiseAssignment(expr.text)) {
@@ -420,8 +819,8 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
 /** `a.length`, in the `number` width the checker recorded. */
 export const emitArrayLength = (emitter: Emitter, expr: Node): string => {
   emitter.declareType(ARRAY_TYPE);
-  const arr = emitter.emitExpression(expr.children[0]);
-  return emitNumberFromI64(emitter, loadLength(emitter, arr), expr);
+  const base = emitArrayBase(emitter, expr.children[0]);
+  return emitNumberFromI64(emitter, baseLength(emitter, base), expr);
 };
 
 /** The byte length of a runtime string, shared by `join`. */
@@ -463,7 +862,7 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   );
   fn.emit(`br label %${storeBlock.label}`);
   fn.placeBlock(storeBlock);
-  storeElement(emitter, elementPointer(emitter, arr, elem, len), elem, value);
+  storeElement(emitter, elementPointer(emitter, new ArrayBase(arr, null), elem, len), elem, value);
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
   return emitNumberFromI64(emitter, newLen, expr);
@@ -494,7 +893,7 @@ const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
   // An inline record comes back as the address of the slot that was just
   // dropped. The bytes are still there; the next `push` reuses them, which is
   // why the checker counts `pop` as a mutation.
-  return loadElement(emitter, arr, elem, last);
+  return loadElement(emitter, new ArrayBase(arr, null), elem, last);
 };
 
 /**
@@ -525,7 +924,7 @@ const emitArrayIndexOf = (emitter: Emitter, expr: Node, arr: string, elem: i32):
   // For an inline record the element *is* the slot address, so the `icmp eq`
   // still asks what it always asked: is this the same object? Identity is now
   // "the same slot", which is the only identity a contiguous array has.
-  const element = loadElement(emitter, arr, elem, at);
+  const element = loadElement(emitter, new ArrayBase(arr, null), elem, at);
   const hit = emitElementEquals(emitter, elem, element, value);
   fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
 
@@ -586,7 +985,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   fn.emit(`br i1 ${sumMore}, label %${sumBodyBlock.label}, label %${copyBlock.label}`);
 
   fn.placeBlock(sumBodyBlock);
-  const partPtr = elementPointer(emitter, arr, T_STRING, sumAt);
+  const partPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, sumAt);
   const part = fn.emitValue(`load i8*, i8** ${partPtr}${emitter.align8()}${elementAccess(emitter)}`);
   const total = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
   const grown = fn.emitValue(`add i64 ${total}, ${stringLength(emitter, part)}`);
@@ -620,7 +1019,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const sepData = fn.emitValue(`getelementptr inbounds i8, i8* ${sep}, i64 8`);
   fn.emit(`call void @${MEMCPY}(i8* ${cursor}, i8* ${sepData}, i64 ${gapLen}, i1 false)`);
   const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`);
-  const itemPtr = elementPointer(emitter, arr, T_STRING, copyAt);
+  const itemPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, copyAt);
   const item = fn.emitValue(`load i8*, i8** ${itemPtr}${emitter.align8()}${elementAccess(emitter)}`);
   const itemLen = stringLength(emitter, item);
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`);
@@ -697,7 +1096,7 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   fn.placeBlock(bodyBlock);
   // The loop variable holds what `a[i]` holds: for an inline record that is the
   // slot's address, so the body reads and writes the element in place.
-  const value = loadElement(emitter, arr, elem, idx);
+  const value = loadElement(emitter, new ArrayBase(arr, null), elem, idx);
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`);
   emitter.loops.push(new LoopTarget(endBlock, incBlock));
   emitter.emitStatement(stmt.children[2]);

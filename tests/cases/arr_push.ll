@@ -96,34 +96,33 @@ push.store.1:
   %40 = call i8* @nish_str_from_i32(i32 %39)
   call void @nish_print(i8* %40)
   store i32 0, i32* %i.addr.1, align 4
+  %41 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 0
+  %43 = load i64, i64* %42, align 8, !alias.scope !3, !noalias !4
+  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 2
+  %45 = load i8*, i8** %44, align 8, !alias.scope !3, !noalias !4
   br label %for.cond.1
 
 for.cond.1:
-  %41 = load i32, i32* %i.addr.1, align 4
-  %42 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 0
-  %44 = load i64, i64* %43, align 8, !alias.scope !3, !noalias !4
-  %45 = trunc i64 %44 to i32
-  %46 = icmp slt i32 %41, %45
-  br i1 %46, label %for.body.1, label %for.end.1
+  %46 = load i32, i32* %i.addr.1, align 4
+  %47 = trunc i64 %43 to i32
+  %48 = icmp slt i32 %46, %47
+  br i1 %48, label %for.body.1, label %for.end.1
 
 for.body.1:
-  %47 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %48 = load i32, i32* %i.addr.1, align 4
-  %49 = sext i32 %48 to i64
-  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
-  %51 = load i8*, i8** %50, align 8, !alias.scope !3, !noalias !4
-  %52 = bitcast i8* %51 to i32*
-  %53 = getelementptr inbounds i32, i32* %52, i64 %49
-  %54 = load i32, i32* %53, align 4, !alias.scope !4, !noalias !3
-  %55 = call i8* @nish_str_from_i32(i32 %54)
-  call void @nish_print(i8* %55)
+  %49 = load i32, i32* %i.addr.1, align 4
+  %50 = sext i32 %49 to i64
+  %51 = bitcast i8* %45 to i32*
+  %52 = getelementptr inbounds i32, i32* %51, i64 %50
+  %53 = load i32, i32* %52, align 4, !alias.scope !4, !noalias !3
+  %54 = call i8* @nish_str_from_i32(i32 %53)
+  call void @nish_print(i8* %54)
   br label %for.inc.1
 
 for.inc.1:
-  %56 = load i32, i32* %i.addr.1, align 4
-  %57 = add nsw i32 %56, 1
-  store i32 %57, i32* %i.addr.1, align 4
+  %55 = load i32, i32* %i.addr.1, align 4
+  %56 = add nsw i32 %55, 1
+  store i32 %56, i32* %i.addr.1, align 4
   br label %for.cond.1
 
 for.end.1:

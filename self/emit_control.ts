@@ -11,6 +11,7 @@
 // `phi`; mutable locals already live in allocas, so loops load and store them
 // and `mem2reg` builds the loop phis later.
 
+import { closeHeaderScope, openHeaderScope } from "./emit_arrays";
 import { Emitter, LoopTarget } from "./emit";
 import {
   compoundFloatOpcode,
@@ -90,6 +91,10 @@ export const emitWhile = (emitter: Emitter, stmt: Node): void => {
   const bodyBlock = fn.newBlock("while.body");
   const endBlock = fn.newBlock("while.end");
 
+  // WP15 section 2c: the block being emitted is the loop's preheader, so this
+  // is where an array header the loop reads is loaded -- once, and into one
+  // `len` that the condition below and the bounds checks in the body both read.
+  openHeaderScope(emitter, stmt);
   branch(emitter, condBlock);
   fn.placeBlock(condBlock);
   condBranch(emitter, emitter.emitExpression(stmt.children[0]), bodyBlock, endBlock);
@@ -99,6 +104,7 @@ export const emitWhile = (emitter: Emitter, stmt: Node): void => {
   emitLoopBody(emitter, stmt.children[1], loop);
   fallThrough(emitter, condBlock);
 
+  closeHeaderScope(emitter);
   fn.placeBlock(endBlock);
   if (isAlwaysTrue(stmt.children[0]) && !loop.hasBreak) {
     fn.emit("unreachable");
@@ -111,6 +117,7 @@ export const emitDo = (emitter: Emitter, stmt: Node): void => {
   const condBlock = fn.newBlock("do.cond");
   const endBlock = fn.newBlock("do.end");
 
+  openHeaderScope(emitter, stmt);
   branch(emitter, bodyBlock);
   fn.placeBlock(bodyBlock);
   const loop = new LoopTarget(endBlock, condBlock);
@@ -120,6 +127,7 @@ export const emitDo = (emitter: Emitter, stmt: Node): void => {
   fn.placeBlock(condBlock);
   condBranch(emitter, emitter.emitExpression(stmt.children[1]), bodyBlock, endBlock);
 
+  closeHeaderScope(emitter);
   fn.placeBlock(endBlock);
   if (isAlwaysTrue(stmt.children[1]) && !loop.hasBreak) {
     fn.emit("unreachable");
@@ -157,6 +165,7 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
   } else if (initializer.kind !== N_EMPTY) {
     emitter.emitExpression(initializer);
   }
+  openHeaderScope(emitter, stmt);
   branch(emitter, head);
 
   if (condBlock !== null) {
@@ -177,6 +186,7 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
     fallThrough(emitter, head);
   }
 
+  closeHeaderScope(emitter);
   if (hasCond || loop.hasBreak) {
     fn.placeBlock(endBlock);
     if (isAlwaysTrue(condition) && !loop.hasBreak) {

@@ -172,6 +172,35 @@ export class CallSite {
   }
 }
 
+/**
+ * One array's header, read once in the preheader of the loop that reads the
+ * array: the header pointer, its `len` and its `data`, and the path they were
+ * read through.
+ *
+ * It lives here rather than in `emit_arrays.ts` because `FunctionFacts` is the
+ * per-function record the emitter already carries (`Emitter.current`), and the
+ * language has no module-level mutable state for a scope stack to live in --
+ * which is how `src/codegen/emit/arrays.ts` holds the same thing.
+ */
+export class HoistedHeader {
+  /** The binding the path is rooted at; identity, not name, is what matches. */
+  root: Local;
+  /** The property chain below the root: `".xs"`, `".state.atMostIndex"`, or `""`. */
+  path: string;
+  arr: string;
+  /** `""` when the loop never asks for it, so nothing is loaded for it either. */
+  len: string;
+  data: string;
+
+  constructor(root: Local, path: string, arr: string, len: string, data: string) {
+    this.root = root;
+    this.path = path;
+    this.arr = arr;
+    this.len = len;
+    this.data = data;
+  }
+}
+
 export class FunctionFacts {
   hasLoops: boolean;
   /** The body loads from memory it does not own (a header read, a field or element read). */
@@ -180,6 +209,26 @@ export class FunctionFacts {
   loopsBounded: boolean;
   /** Contains `throw`, which lowers to `llvm.trap`: a side effect that never returns. */
   hasTrap: boolean;
+  /**
+   * WP15 section 2c: the function may move an array's `len` -- `a.push(v)`,
+   * which also moves `cap` and `data` when it grows, or `a.pop()`, which moves
+   * `len` alone -- directly or through a callee (fixpoint over the call graph).
+   *
+   * This is the whole-program "does not grow an array" fact, and the point of
+   * it is what it leaves out. `PointerParamFacts.writesThrough` lumps a `push`
+   * in with every other store, so a function that only writes elements is
+   * indistinguishable from one that reallocates the buffer. An element write
+   * leaves the header alone -- that is exactly what the section 2b alias
+   * domains encode -- so a header fact built on `writesThrough` would refuse
+   * every loop that writes an element, which is the loop a header hoist exists
+   * for. Separating the two is the whole change: this is about the 24 bytes of
+   * `{ len, cap, data }` and nothing else.
+   *
+   * It is deliberately not per parameter. A `push` anywhere a loop can reach
+   * may be a push to the array that loop is reading, because two names can
+   * hold one array and nothing here proves they do not.
+   */
+  resizesArray: boolean;
   effect: i32;
   willReturn: boolean;
   /** Can reach a `noreturn` runtime call, directly or through a callee. */
@@ -235,12 +284,22 @@ export class FunctionFacts {
   readsArenaState: boolean;
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[];
+  /**
+   * WP15 section 2c: the array headers the enclosing loops lifted into their
+   * preheaders, innermost scope last, with `hoistedScopeStarts` marking where
+   * each open scope begins. Emission scratch rather than an analysis result:
+   * `emit_arrays.ts` fills it when a loop opens and truncates it when the loop
+   * closes, and it is empty outside one.
+   */
+  hoistedHeaders: HoistedHeader[];
+  hoistedScopeStarts: i32[];
 
   constructor(paramNames: string[], nodeCount: i32) {
     this.hasLoops = false;
     this.readsMemory = false;
     this.loopsBounded = true;
     this.hasTrap = false;
+    this.resizesArray = false;
     this.effect = EFFECT_NONE;
     this.willReturn = true;
     this.callsNoReturn = false;
@@ -251,6 +310,8 @@ export class FunctionFacts {
     this.freshThis = false;
     this.returnDeref = 0;
     this.returnAlign = 8;
+    this.hoistedHeaders = [];
+    this.hoistedScopeStarts = [];
     this.stackSites = new Array<boolean>(nodeCount);
     this.stackLocals = [];
     this.stackParams = new StringSet();
@@ -705,13 +766,23 @@ class FactCollector {
   opts: Options;
   sig: FunctionSig;
   facts: FunctionFacts;
+  /** Round 1's fixpoint, or `null` in round 1 itself; see `bodyMayExtend`. */
+  known: FactsTable | null;
 
-  constructor(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, facts: FunctionFacts) {
+  constructor(
+    unit: AnalysisUnit,
+    table: TypeTable,
+    opts: Options,
+    sig: FunctionSig,
+    facts: FunctionFacts,
+    known: FactsTable | null
+  ) {
     this.unit = unit;
     this.table = table;
     this.opts = opts;
     this.sig = sig;
     this.facts = facts;
+    this.known = known;
   }
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
@@ -776,7 +847,7 @@ class FactCollector {
     const program = this.unit.program;
     if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
       this.facts.hasLoops = true;
-      if (!isCountedLoop(this.unit, this.table, node)) {
+      if (!isCountedLoop(this.unit, this.table, node, this.known)) {
         this.facts.loopsBounded = false;
       }
     }
@@ -1028,12 +1099,14 @@ class FactCollector {
   collectMethodFacts(call: Node, method: string): void {
     if (method === "push") {
       this.facts.effect = EFFECT_WRITE;
+      this.facts.resizesArray = true;
       this.facts.callees.add("nish_array_grow");
       return;
     }
     if (method === "pop") {
       // Stores the shortened length back, and panics on an empty array.
       this.facts.effect = EFFECT_WRITE;
+      this.facts.resizesArray = true;
       if (!this.opts.uncheckedIndexing) {
         this.facts.callees.add("nish_panic_index");
       }
@@ -1139,7 +1212,8 @@ export const collectFacts = (
   opts: Options,
   sig: FunctionSig,
   memory: EscapeResult | null,
-  nodeCount: i32
+  nodeCount: i32,
+  known: FactsTable | null
 ): FunctionFacts => {
   const program = unit.program;
   const facts = new FunctionFacts(sig.paramNames, nodeCount);
@@ -1190,10 +1264,15 @@ export const collectFacts = (
     facts.effect = EFFECT_WRITE;
     facts.willReturn = false;
     facts.readsMemory = true;
+    // S1's boundary is scalars only, so a C body cannot reach an array header
+    // at all; this says otherwise for the same reason the three lines above
+    // do. S2 widening the type check must revisit the block rather than
+    // inherit a `false` nobody re-derived.
+    facts.resizesArray = true;
     return facts;
   }
 
-  const collector = new FactCollector(unit, table, opts, sig, facts);
+  const collector = new FactCollector(unit, table, opts, sig, facts, known);
   const body = sig.body();
   if (body !== null) {
     collector.visit(body);
@@ -1233,7 +1312,7 @@ export const analyzeFunctions = (
   runtime: RuntimeTable
 ): FactsTable => {
   // Round 1: plain facts and the capture fixpoint, which the escape analysis needs.
-  const first = collectRound(units, table, opts, null);
+  const first = collectRound(units, table, opts, null, null);
   propagate(first, runtime);
   const escapes = new EscapeSet();
   for (const unit of units) {
@@ -1253,8 +1332,12 @@ export const analyzeFunctions = (
       }
     }
   }
-  // Round 2: the same facts with stack allocations applied, then the scope decision.
-  const facts = collectRound(units, table, opts, escapes);
+  // Round 2: the same facts with stack allocations applied, then the scope
+  // decision. `first` carries round 1's fixpoint, which is what lets a
+  // `for...of` ask whether its calls actually grow an array (WP15 section 2c)
+  // rather than assuming every one of them does. `resizesArray` is settled by
+  // then: it is syntax plus the call graph, and neither moves between rounds.
+  const facts = collectRound(units, table, opts, escapes, first);
   propagate(facts, runtime);
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
@@ -1292,7 +1375,8 @@ const collectRound = (
   units: AnalysisUnit[],
   table: TypeTable,
   opts: Options,
-  escapes: EscapeSet | null
+  escapes: EscapeSet | null,
+  known: FactsTable | null
 ): FactsTable => {
   const facts = new FactsTable();
   for (const unit of units) {
@@ -1311,7 +1395,10 @@ const collectRound = (
       if (instance !== null) {
         unit.program.enterInstance(instance);
       }
-      facts.set(sig.name, collectFacts(unit, table, opts, sig, memory, unit.program.nodeTypes.length));
+      facts.set(
+        sig.name,
+        collectFacts(unit, table, opts, sig, memory, unit.program.nodeTypes.length, known)
+      );
       if (instance !== null) {
         unit.program.leaveInstance();
       }
@@ -1438,6 +1525,13 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
       f.allocEscapes = true;
       changed = true;
     }
+    // WP15 section 2c: growing an array is a property of the whole closure,
+    // the same way allocation is -- a caller that pushes nothing still moves a
+    // header when the callee it invokes does.
+    if (calleeFacts.resizesArray && !f.resizesArray) {
+      f.resizesArray = true;
+      changed = true;
+    }
     if (calleeFacts.usesArenaControl && !f.usesArenaControl) {
       f.usesArenaControl = true;
       changed = true;
@@ -1465,10 +1559,15 @@ const INT32_MAX: f64 = 2147483647.0;
  * A `for...of` over an array is counted unless its body may extend the array.
  * Every other loop (`while`, `do`, other `for` shapes) is unbounded.
  */
-export const isCountedLoop = (unit: AnalysisUnit, table: TypeTable, loop: Node): boolean => {
+export const isCountedLoop = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  loop: Node,
+  known: FactsTable | null
+): boolean => {
   const program = unit.program;
   if (loop.kind === N_FOR_OF) {
-    return !bodyMayExtend(unit, table, loop.children[2]);
+    return !bodyMayExtend(unit, table, loop.children[2], known);
   }
   if (loop.kind !== N_FOR) {
     return false;
@@ -1566,23 +1665,50 @@ const stepOf = (expr: Node, name: string): i32 => {
 
 /**
  * `for (const x of a)` re-reads `a.length` every iteration, so it is bounded
- * unless the body can grow an array: any `push` (on any array, since `a` may
- * be aliased), any call to a user function (which could push through an alias
- * it receives), or a `throw`.
+ * unless the body can grow an array: any `push` or `pop`, a call that can grow
+ * one, or a `throw`.
+ *
+ * `known` is the call-graph fixpoint's answer for the callees, or `null` when
+ * there is not one yet. Without it every user call has to count as growing the
+ * array, because a callee handed the same array may push through it -- which
+ * is what this asked before `resizesArray` existed, and is still what round 1
+ * asks, since the fixpoint has not run. With it the question is the one that
+ * was always meant: does anything this body reaches actually move a `len`?
  */
-const bodyMayExtend = (unit: AnalysisUnit, table: TypeTable, body: Node): boolean => {
-  if (body.kind === N_THROW || isPushCall(unit.program, table, body)) {
+const bodyMayExtend = (unit: AnalysisUnit, table: TypeTable, body: Node, known: FactsTable | null): boolean => {
+  if (body.kind === N_THROW || isResizeCall(unit.program, table, body)) {
     return true;
   }
-  if (body.kind === N_CALL && unit.program.nodeCallees[body.id] !== null) {
-    return true;
+  if (body.kind === N_CALL) {
+    const callee = unit.program.nodeCallees[body.id];
+    // An unresolved callee is a builtin, and no builtin but `push`/`pop`
+    // reaches a user array's header; those two are above.
+    if (callee !== null) {
+      if (known === null) {
+        return true;
+      }
+      const calleeFacts = known.get(callee.name);
+      if (calleeFacts === null || calleeFacts.resizesArray) {
+        return true;
+      }
+    }
   }
   for (const child of body.children) {
-    if (bodyMayExtend(unit, table, child)) {
+    if (bodyMayExtend(unit, table, child, known)) {
       return true;
     }
   }
   return false;
+};
+
+/**
+ * `a.push(v)` or `a.pop()`: the two calls that move an array's `len`, and so
+ * the two a hoisted header has to be safe from. Every other array method reads
+ * (`indexOf`, `join`) or builds something new.
+ */
+export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const method = arrayMethodName(program, table, node);
+  return method === "push" || method === "pop";
 };
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */
