@@ -1531,10 +1531,13 @@ None of these needs anybody's permission. They need somebody's afternoon.
    with the command still `nish` — so what is left is the work the name was
    standing in front of: the package fetches or ships the native binary
    instead of carrying the Node compiler, and `tests/run.js`'s WP12 pack,
-   install and link round trip has to stay green across the change. It waits
-   on one more decision of its own, which compiler the package ships
-   ([wp12-release.md](wp12-release.md#open-decision-which-compiler-the-package-ships)),
-   and that one is about packaging rather than about a name.
+   install and link round trip has to stay green across the change. The second
+   decision it waited on — which compiler the package ships — was answered on
+   2026-09-19 too
+   ([wp12-release.md](wp12-release.md#which-compiler-the-package-ships)): the
+   self-hosted native binary, delivered as per-platform packages, with
+   `self/` shipped so a platform without one can build it. So nothing in this
+   item is waiting on a person any more.
 3. **The macOS `test` failures that are not the fixed point** (G3). Measured
    2026-09-13 and still open: an empty `.debug_line` in a Mach-O executable —
    DWARF lives in the `.o` files until `dsymutil` runs — and a `--threads` link

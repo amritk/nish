@@ -24,8 +24,8 @@ package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
 working directory, so a global install works from any directory — today
 `npm install -g ./nish-<version>.tgz` from the release, because nothing is
 published to the registry yet: the name is settled (see "The npm name") and the
-installer that would carry it is not built (see "Open decision: which compiler
-the package ships").
+installer that would carry it is not built (see "Which compiler the package
+ships").
 The `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
 unrelated directory with the installed `nish`.
@@ -222,11 +222,11 @@ step below is done by hand.
    version dates the claim, so the workflow change and the file change land
    together and each release is judged against what it was due to attach.
 
-4. **npm publish is manual, and is blocked on the name.** `nish` on the
-   public registry is somebody else's package — see "Open decision: the npm
-   name is taken" below — so there is nothing to publish under that name yet
-   and the recipe here is written against whichever name that decision lands
-   on. Settle the name first; then releasing to the registry is
+4. **npm publish is manual, and is blocked on the installer rather than on
+   the name.** `nish` on the public registry is somebody else's package, and
+   this one is `@amritk/nish` as of 2026-09-19 — see "The npm name" below —
+   so what is missing is no longer a name but the installer that would be
+   published under it. Once the installer exists, releasing to the registry is
 
    ```bash
    git checkout v0.2.0
@@ -235,12 +235,12 @@ step below is done by hand.
 
    To automate it, add an `NPM_TOKEN` repository secret and uncomment the
    `Publish to npm` step at the end of `release.yml` (it uses
-   `NODE_AUTH_TOKEN` and `--provenance`). `--access public` stays on that
-   command line whichever name wins, because a scoped package is private by
-   default and a private publish on a free account fails at the registry
-   rather than in the workflow.
+   `NODE_AUTH_TOKEN` and `--provenance`). `--access public` is not optional
+   now that the name is scoped: a scoped package is private by default and a
+   private publish on a free account fails at the registry rather than in the
+   workflow.
 
-   Until the name is settled the release is the distribution, and it already
+   Until the installer exists the release is the distribution, and it already
    works: `release.yml` attaches `nish-<version>.tgz` to every release, and
    `npm install -g ./nish-<version>.tgz` installs exactly what `npm publish`
    would have uploaded ([INSTALL.md](INSTALL.md), §2).
@@ -427,7 +427,7 @@ still has not been run, for the reason the *next* section gives rather than this
 one: which compiler the package ships is a separate open decision, and G5's
 installer is not built. The name is settled; publishing is not.
 
-## Open decision: which compiler the package ships
+## Which compiler the package ships
 
 **Decided 2026-09-19: (c) for which binary, (b) for delivery, (a) as the
 fallback.** `bin.nish` runs the self-hosted native compiler. `dist/` stays in
@@ -496,11 +496,6 @@ that would carry the decision has not been designed, let alone written. What
 changed on 2026-09-19 is which of the three rows the work will follow, not that
 any of it was done.
 
-The heading still says "Open decision" because
-[wp19-stage0-retirement.md](wp19-stage0-retirement.md) links to this section
-by that anchor from its remaining-work list; renaming it and repointing that link is one change, and
-it is not this one.
-
 The rest of this section is the record of why, and is left as it was written —
 including (b)'s stale cost, which is the point.
 
@@ -551,14 +546,18 @@ cost rather than what one did.
   the compiler is no longer only a Node program, and `release.yml` attaches a
   prebuilt binary for each of `x86_64`/`aarch64` × `linux`/`darwin` — from the
   release each one's `attachedSince` names — 0.1.1 for `x86_64-linux`, and
-  0.4.0 for the other three, which wait on a run that exercises their rows,
-  the darwin pair additionally on the ld64 fixed point
+  0.4.0 for the other three. Those three waited on a run that exercised their
+  rows, and the darwin pair additionally on the ld64 fixed point; `acbca9f`
+  (#114) ran all three on their own hardware on 2026-09-19 and settled the
+  Mach-O comparison, so what they wait on now is a release that carries the
+  assets rather than any work
   ([wp10-ci.md](wp10-ci.md#ci-matrix))
   ([wp19 G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
-  What is still not in any work package is *delivering* one through npm: that
-  is option (b) of "which compiler the package ships" above, and it waits on
-  the name. The bullet stays because it is the position the package was built
-  under, and because the `files` whitelist still reflects it.
+  *Delivering* one through npm is option (b) of "which compiler the package
+  ships" above, which is decided and no longer waits on the name — it is work
+  now, and it is the one thing in this bullet that has not been done. The
+  bullet stays because it is the position the package was built under, and
+  because the `files` whitelist still reflects it.
 
 Multi-error reporting and `--json` diagnostics were listed here as a WP10
 follow-up and have since landed in WP10 itself: every phase that can recover
