@@ -26,56 +26,98 @@
 #     on that platform is WHICH BYTES. The measurement runs its own three stages
 #     without --verify, so it produces the evidence whether or not the row passes.
 #
-# The row is looked up rather than typed: the asset is the dispatch input, and
-# everything else about it -- the runner label, the host `uname` pair, the triple
-# -- comes from .github/seed-targets.json, which is the one place those are
-# spelled.
+# No row is typed here. The `rows` job asks .github/seed-targets.json, which is
+# the one place an asset, a runner label, a host `uname` pair and a triple are
+# spelled, and the matrix below is that answer -- the same shape release.yml's
+# `targets` -> `binaries` pair has, for the same reason.
+#
+# TWO TRIGGERS, and the second one is not decoration. `workflow_dispatch` is what
+# the note prescribes and what a person should use. It was not available to the
+# session that wrote this: dispatching a workflow needs `actions: write` and the
+# token here has `actions: read`, so the API answered 403. A `push:` trigger
+# scoped to this branch runs the same jobs, on the same hardware, with the same
+# steps, and the branch goes away with the file, so it is the same throwaway.
+# `paths:` is what keeps a documentation push from spending three runners on a
+# result it cannot change.
+#
+# On a dispatch the `asset` input names one row and the matrix is that row alone.
+# On a push it is every row `.github/seed-due.sh` says this version is NOT yet due
+# -- exactly the rows no release has ever carried, which is the set this file
+# exists to exercise.
 name: Exercise a seed target (throwaway)
 
 on:
   workflow_dispatch:
     inputs:
       asset:
-        description: "the `asset` of the .github/seed-targets.json row to exercise (e.g. the aarch64 linux one)"
-        required: true
+        description: "the `asset` of one .github/seed-targets.json row, or empty for every row not yet due"
+        required: false
         type: string
+  push:
+    branches: ["feature/m6-dual-compiler-removal/seed-exercise"]
+    paths:
+      - ".github/workflows/exercise-target.yml"
+      - ".github/seed-targets.json"
+      - "scripts/**"
+      - "self/**"
+      - "src/**"
+      - "runtime/**"
 
 permissions:
   contents: read
 
+# Three macOS and ARM runners per push is enough to want the last push to be the
+# one that answers.
+concurrency:
+  group: exercise-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # release.yml's `targets` job, narrowed to one row. Separate for the same
-  # reason that one is: a matrix -- or here a `runs-on:` -- has to be known
-  # before the job it belongs to starts.
-  row:
-    name: which row `${{ inputs.asset }}` is
+  # release.yml's `targets` job, asking the complement of its question. A matrix
+  # has to be known before the job it belongs to starts, which is why that one is
+  # a job of its own and why this one is too.
+  rows:
+    name: which rows have never run
     runs-on: ubuntu-latest
     outputs:
-      runner: ${{ steps.row.outputs.runner }}
-      host: ${{ steps.row.outputs.host }}
-      triple: ${{ steps.row.outputs.triple }}
+      rows: ${{ steps.rows.outputs.rows }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Look the row up in .github/seed-targets.json
-        id: row
+      - name: Which rows this run exercises
+        id: rows
         env:
           ASSET: ${{ inputs.asset }}
         run: |
-          row="$(jq -c --arg a "$ASSET" '.targets[] | select(.asset == $a)' .github/seed-targets.json)"
-          if [ -z "$row" ]; then
-            echo "::error::.github/seed-targets.json has no target whose asset is \`$ASSET\`. The assets it does have: $(jq -r '[.targets[].asset] | join(", ")' .github/seed-targets.json)"
+          version="$(node -p "require('./package.json').version")"
+          if [ -n "$ASSET" ]; then
+            rows="$(jq -c --arg a "$ASSET" '[.targets[] | select(.asset == $a)]' .github/seed-targets.json)"
+          else
+            # Every row release.yml would NOT build at this version: the rows no
+            # release has carried, which is the set that wants exercising. The
+            # due half is seed-due.sh's own answer, so this job and release.yml
+            # cannot come to disagree about what "due" means.
+            due="$(bash .github/seed-due.sh "$version" | jq -c '[.[].asset]')"
+            rows="$(jq -c --argjson due "$due" '[.targets[] | select(.asset as $a | $due | index($a) | not)]' .github/seed-targets.json)"
+          fi
+          if [ "$(printf '%s' "$rows" | jq 'length')" -eq 0 ]; then
+            echo "::error::no row of .github/seed-targets.json to exercise (asset=\`$ASSET\`, version=$version). The assets it has: $(jq -r '[.targets[].asset] | join(", ")' .github/seed-targets.json)"
             exit 1
           fi
-          for field in runner host triple; do
-            echo "$field=$(printf '%s' "$row" | jq -r ".$field")" >> "$GITHUB_OUTPUT"
-          done
-          printf '%s' "$row" | jq -r '"\(.asset)\t\(.triple)\t\(.runner)\tsince \(.attachedSince)"'
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
+          printf '%s' "$rows" | jq -r '.[] | "\(.asset)\t\(.triple)\t\(.runner)\tsince \(.attachedSince)"'
 
   binary:
-    name: binary (${{ inputs.asset }})
-    needs: row
-    runs-on: ${{ needs.row.outputs.runner }}
+    name: binary (${{ matrix.target.asset }})
+    needs: rows
+    runs-on: ${{ matrix.target.runner }}
+    # A broken row names itself rather than hiding behind whichever failed first.
+    # Learning which platforms pass is the whole point of the exercise, so one
+    # red row must not cancel the others.
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.rows.outputs.rows) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -110,14 +152,15 @@ jobs:
         run: npm run build
 
       # EXERCISE: not in release.yml's `binaries` job, and the reason this
-      # workflow was dispatched at a mac at all.
+      # workflow was aimed at a mac at all.
       #
       # Three stages without --verify, so the comparison does not stop the job
       # before it has said anything. Then every differing byte is attributed to
-      # the load command, section or blob it falls inside, by walking the Mach-O
-      # headers of both files. "Unattributed" is what verify-binaries.sh reports
-      # and it is the absence of exactly this; the script below is the presence
-      # of it, and it is where the measurement in the commit body comes from.
+      # the load command, section or linkedit blob it falls inside, by walking
+      # the Mach-O headers of both files. "Unattributed" is what
+      # verify-binaries.sh reports and it is the absence of exactly this; the
+      # script below is the presence of it, and it is where the measurement in
+      # the commit body comes from.
       - name: Measure what ld64 varies between stage2 and stage3 (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -132,6 +175,8 @@ jobs:
           otool -l "$a" > "$RUNNER_TEMP/a.lc"
           otool -l "$b" > "$RUNNER_TEMP/b.lc"
           diff "$RUNNER_TEMP/a.lc" "$RUNNER_TEMP/b.lc" || true
+          echo "== codesign =="
+          codesign -dvvv "$a" 2>&1 || true
           echo "== every differing byte, attributed =="
           python3 - "$a" "$b" <<'ATTRIBUTE'
           # Attribute every differing byte between two Mach-O files to the load command,
@@ -152,7 +197,7 @@ jobs:
 
 
           def regions(buf):
-              """[(start, end, label)], innermost last so the last match wins."""
+              """[(start, end, label)], every file range these headers name."""
               magic, _, _, _, ncmds, sizeofcmds = struct.unpack_from("<IiiIII", buf, 0)
               if magic != 0xFEEDFACF:
                   sys.exit(f"not a 64-bit little-endian Mach-O (magic {magic:#x})")
@@ -171,7 +216,7 @@ jobs:
                       for i in range(nsects):
                           s = off + 72 + i * 80
                           sect = buf[s:s + 16].split(b"\0")[0].decode()
-                          addr, size = struct.unpack_from("<QQ", buf, s + 32)
+                          size = struct.unpack_from("<Q", buf, s + 40)[0]
                           soff = struct.unpack_from("<I", buf, s + 48)[0]
                           if size and soff:
                               out.append((soff, soff + size, f"section {seg},{sect}"))
@@ -192,6 +237,7 @@ jobs:
 
 
           def label(regs, pos):
+              """The narrowest region containing pos, which is the most specific answer."""
               hit = [r for r in regs if r[0] <= pos < r[1]]
               return min(hit, key=lambda r: r[1] - r[0])[2] if hit else "UNATTRIBUTED"
 
@@ -237,9 +283,9 @@ jobs:
       - name: Build the native compiler
         id: binary
         env:
-          ASSET: ${{ inputs.asset }}
-          HOST: ${{ needs.row.outputs.host }}
-          RUNNER_LABEL: ${{ needs.row.outputs.runner }}
+          ASSET: ${{ matrix.target.asset }}
+          HOST: ${{ matrix.target.host }}
+          RUNNER_LABEL: ${{ matrix.target.runner }}
         run: |
           host="$(uname -s)-$(uname -m)"
           if [ "$host" != "$HOST" ]; then
