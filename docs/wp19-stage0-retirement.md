@@ -1501,39 +1501,31 @@ None of these needs anybody's permission. They need somebody's afternoon.
    and the rule that a difference must be named in `CHANGELOG.md`. This is the
    successor to the two largest dying oracles and it is the single biggest
    unstarted piece of R6.
-2. **A release that carries the darwin and `aarch64-linux` seeds** (G3, G5).
-   The measurement and the fix are done and merged — `acbca9f` (#114): all
-   three previously unexercised rows run on their own hardware and green, and
-   the Mach-O `stage3 == stage2` comparison holding as a raw `cmp` (see R2 and
-   §G5). What is left is not work on the compiler or the harness but a
-   **release**, because a release already published cannot grow an asset.
-   G3's macOS `bootstrap` row then appears on its own from
-   `seed-targets.json`, with no edit to `ci.yml`.
-3. **The macOS `test` failures that are not the fixed point** (G3). Measured
+2. **The macOS `test` failures that are not the fixed point** (G3). Measured
    2026-09-13 and still open: an empty `.debug_line` in a Mach-O executable —
    DWARF lives in the `.o` files until `dsymutil` runs — and a `--threads` link
    ld64 accepts where ELF refuses it. Each encodes an ELF/Linux assumption in
    the check rather than a compiler bug, and together they keep `macos-latest`
    out of the test matrix independently of the seed
    ([wp10-ci.md](wp10-ci.md#ci-matrix)).
-4. **stage1's `packageRoot()` sensitivity to `argv[0]`** (§A7's third bullet).
+3. **stage1's `packageRoot()` sensitivity to `argv[0]`** (§A7's third bullet).
    `./build/nish` and `/abs/path/build/nish` answer differently for one
    program, and the harness happens to invoke the spelling that agrees — which
    is the *whole* reason that family reads as closed. Unmeasured by anything.
-5. **stage1 writing one file where stage0 writes two**, when two modules share
+4. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
    change that found it, and unmeasured.
-6. **#94** — stage0's `Checker.error` throw removing the members after a failed
+5. **#94** — stage0's `Checker.error` throw removing the members after a failed
    one, so a later field is reported as unknown when it is not. Still
    reproduces on this tree (2026-09-19); the corpus does not have the shape, so
    G1 cannot see it.
 
-Items 4, 5 and 6 share a property worth naming: **each is a defect the gate is
+Items 3, 4 and 5 share a property worth naming: **each is a defect the gate is
 green in spite of, because no corpus program poses the question.** That is
 §A5's first lesson and §A8's, and it is the honest qualification on every green
 number in the table above — the difference set is a lower bound.
 
-#### A human's decision — two, and neither is a checkbox
+#### A human's decision — three, and none is a checkbox
 
 **The registry name.** G5's last bullet is the package becoming a thin
 installer, and the installer has no name to be installed under: `nish` on npm
@@ -1544,6 +1536,20 @@ is not a technical blocker and no amount of work closes it** — the gate does
 not depend on which answer, only on there being one. Until somebody picks, R4
 cannot finish and G5 cannot close, and that is the whole of what is stopping
 either.
+
+**A release that carries the darwin and `aarch64-linux` seeds** (G3, G5). The
+measurement and the fix are done and merged — `acbca9f` (#114): all three
+previously unexercised rows run on their own hardware and green, and the Mach-O
+`stage3 == stage2` comparison holding as a raw `cmp` (see R2 and §G5). What is
+left is a **release**, because a release already published cannot grow an
+asset — and in this repository a release is a person's: `chore(release):
+<version>` on `release/next` is the one pull request an agent must never merge,
+because merging it tags and publishes ([AGENTS.md](../AGENTS.md)). #92 is open
+waiting on exactly that. **This is the cheapest of the three, because there is
+nothing to weigh** — nobody is trading anything off, somebody has to press the
+button — but it is the same *kind* of thing as the other two, and this section
+sorts by kind. Once a release carries those assets, G3's macOS `bootstrap` row
+appears on its own from `seed-targets.json`, with no edit to `ci.yml`.
 
 **Whether the second implementation still earns its keep.** §7's trigger is the
 day the seed's only remaining job is to be a seed — *a release cycle in which
