@@ -26,13 +26,18 @@
  *     wordings are deliberately different — a message about the operator the
  *     programmer wrote beats one about a node kind — and the count is the
  *     measurement, not a hole. `tests/self/parser_refusals.txt` is that
- *     measurement written down, case by case and sentence by sentence, and it
- *     is compared with the bucket both ways: a rule that leaves the checker's
- *     reach fails until somebody registers it, and a rule that comes back
- *     fails until somebody deletes its line. Before that register the bucket
- *     was a number in the summary line below and nothing held it to anything,
- *     which is the caveat `docs/wp19-stage0-retirement.md` §5's R3 row states
- *     against its own declaration;
+ *     measurement case by case, and its header is the contract; the bucket and
+ *     the register are compared both ways below, so a rule leaving the
+ *     checker's reach and a rule coming back each fail until somebody says so.
+ *     Before the register the bucket was a number in the summary line and
+ *     nothing held it to anything, which is the caveat
+ *     `docs/wp19-stage0-retirement.md` §5's R3 row states against its own
+ *     declaration. It gates on every run, where the same shrink-only rule in
+ *     `tests/diagnostic_coverage.js` waits for `--strict-refusals`: that tool
+ *     runs over *two* compilers and its list is true of one of them, so
+ *     `tests/run.js` passes the flag on one of its two runs. This oracle has
+ *     only ever run stage1, so there is no run the register is not true of and
+ *     no flag to put it behind;
  *   - the compiler compiles it and only the link step refuses it. What this
  *     oracle runs is `self/dump_checked.ts`, a dump entry point with no
  *     `--link` of its own, so a case whose refusal comes from the linker has
@@ -60,20 +65,17 @@ const REFUSALS = path.join(root, "tests", "self", "parser_refusals.txt");
 const SUPPORTED_FLAGS = new Set(["--number-mode"]);
 
 /**
- * A `<case>  <the rest of the line>` list, `#` for a whole-line comment — the
- * shape `tests/diagnostic_coverage.js` reads its two lists with, and the shape
- * both of this oracle's lists have:
+ * A `<case>  <the rest of the line>` list — the shape
+ * `tests/diagnostic_coverage.js` reads its two shrink-only lists with, and the
+ * shape of both of this oracle's: `reject_backlog.txt`, the cases stage1 does
+ * not refuse the same way *yet*, where nothing follows the name, and
+ * `parser_refusals.txt`, where the rest of the line is the sentence stage1
+ * answers with. Neither is a permanent exemption: a line that stops being true
+ * fails the run in each of them.
  *
- *   - `reject_backlog.txt`, the cases stage1 does not refuse the same way
- *     *yet*, whose count the summary prints so that the remaining work is
- *     visible rather than hidden in a skip. Nothing follows the name;
- *   - `parser_refusals.txt`, the cases stage1's parser refuses before the
- *     phase that owns the rule can state it, where the rest of the line is the
- *     sentence stage1 answers with.
- *
- * Both are the current state rather than a permanent exemption, so both fail
- * in the direction that matters: a backlog case that starts agreeing, and a
- * registered case the parser stops refusing, each fail until the line goes.
+ * `#` starts a comment only at the start of a line, where `backlog()` used to
+ * strip one anywhere. A registered sentence can contain a `#` — a diagnostic
+ * quotes what the programmer wrote — and no case name can.
  */
 function register(file) {
   const rows = new Map();
@@ -119,7 +121,7 @@ function compare(seed, binary, entry) {
   // A parser refusal is a different wording by design; the checker's is not.
   // The `syntax error: ` prefix is what puts the case in the bucket, so it is
   // the bucket's name rather than part of the sentence, and the register does
-  // not repeat it on all 89 of its lines.
+  // not repeat it on every line.
   if (/syntax error:/.test(output)) return { parser: firstLine(output).replace(/^syntax error: /, "") };
   const missing = entry.fragments.filter((fragment) => !output.includes(fragment));
   if (missing.length > 0) {
@@ -204,22 +206,30 @@ function main(argv) {
   const all = corpus();
   const inputs =
     named.length > 0
-      ? named
-          .map((f) => path.resolve(f))
-          .map((f) => all.find((e) => e.file === f) ?? { name: f, file: f, linked: false, fragments: [] })
+      ? // Deduplicated, so that naming a case twice does not compile it twice
+        // and does not ask the register for two lines about it.
+        [...new Set(named.map((f) => path.resolve(f)))].map(
+          (f) =>
+            all.find((e) => e.file === f) ?? {
+              name: f,
+              file: f,
+              linked: false,
+              fragments: [],
+              // Not a case in this corpus, so the register does not cover it.
+              foreign: true,
+            }
+        )
       : all;
   const known = register(BACKLOG);
   const refusals = register(REFUSALS);
   const refusalsFile = path.relative(root, REFUSALS);
-  // The register describes this corpus, in both of the directions below: a
-  // file named on the command line that is not part of it has no line to have,
-  // and a line naming no case in it is stale rather than unproven.
-  const present = new Set(all.map((entry) => entry.name));
   let agreed = 0;
   let checked = 0;
   const parser = [];
-  const refused = new Set();
   const skipped = [];
+  // Registered cases this run could not ask the question of, so that a skip is
+  // never reported below as the parser having changed its mind.
+  const unproven = new Set();
   const failed = [];
   const pending = [];
   for (const entry of inputs) {
@@ -227,10 +237,10 @@ function main(argv) {
     const where = path.relative(root, entry.file);
     if (result.parser !== undefined) {
       parser.push(`${where}: ${result.parser}`);
-      refused.add(entry.name);
       const pinned = refusals.get(entry.name);
+      refusals.delete(entry.name);
       if (pinned === undefined) {
-        if (present.has(entry.name)) {
+        if (entry.foreign !== true) {
           failed.push(
             `${where}: refused by stage1's parser and not in ${refusalsFile} — ` +
               `add the line: ${entry.name}\t${result.parser}`
@@ -243,6 +253,7 @@ function main(argv) {
       }
     } else if (result.skipped !== undefined) {
       skipped.push(`${where}: ${result.skipped}`);
+      unproven.add(entry.name);
     } else if (result.failed !== undefined) {
       if (known.has(entry.name)) pending.push(`${where}: ${result.failed}`);
       else failed.push(`${where}: ${result.failed}`);
@@ -255,12 +266,20 @@ function main(argv) {
   }
   // The other direction, and the one the register is *for*: its purpose is to
   // shrink, so an entry the parser has stopped refusing is a claim about
-  // nothing. Only a whole run may ask it — with a few cases named on the
-  // command line, "nothing refuses this" would be a fact about the filter.
+  // nothing. The loop above deleted every entry it matched, so what is left in
+  // `refusals` is exactly that. Only a whole run may ask it — with a few cases
+  // named on the command line, "nothing refuses this" would be a fact about
+  // the filter rather than about the parser.
   if (named.length === 0) {
     for (const name of refusals.keys()) {
-      if (refused.has(name)) continue;
-      const why = present.has(name)
+      if (unproven.has(name)) {
+        failed.push(
+          `${name}: skipped by this run, so nothing here proves it — remove it ` +
+            `from ${refusalsFile}, or the flag in its \`.args\` that skipped it`
+        );
+        continue;
+      }
+      const why = all.some((entry) => entry.name === name)
         ? "stage1's parser does not refuse it any more"
         : "names no case in this corpus";
       failed.push(`${name}: ${why} — remove it from ${refusalsFile}`);

@@ -41,6 +41,18 @@
 #     stage1 prints today rather than a note somebody wrote once. A reworded
 #     parser message fails the run and the failure quotes the new sentence.
 #
+# What an entry does *not* pin is stage1's output past its first line. A case
+# that starts printing four syntax errors where it printed one keeps its entry
+# and its sentence, and nothing here notices — which is the shape a class
+# member *named* `static` had until 0.3.0. This is a ceiling on what is in the
+# bucket, not a golden for what the bucket prints.
+#
+# The central form is deliberate. Every other per-case expectation in this
+# suite is a sidecar beside the program — `.err`, `.args`, `.ll`, `.out` — and
+# a `tests/cases/<case>.stage1.err` would put these sentences under the same
+# convention and leave this file a list of names. It would also scatter the one
+# thing the file exists to show: the set, in one place, countable in one look.
+#
 # `tests/wordings/parser_refusals.txt` is this file's sister and not a
 # duplicate of it: the same §A3 class, measured over `tests/wordings/` — one
 # program per diagnostic code — where an entry means the *code*'s wording is
