@@ -13,9 +13,16 @@
  * in the fixture included, because one wrong line start moves every
  * diagnostic after it.
  *
- * The fixtures are ASCII apart from their line endings: stage0 counts columns
- * in UTF-16 code units and stage1 in bytes, which agree exactly there, and
- * `self/diagnostics.ts` says where they would not.
+ * The fixtures are ASCII apart from their line endings, and that is a limit of
+ * this oracle rather than a property of the subject: `expected()` builds its
+ * spans as "every 13th byte" and diffs them against offsets the `typescript`
+ * API indexes in UTF-16 code units, so the two only line up while every
+ * character is one byte. Both compilers count a *column* in code units
+ * (`docs/LANGUAGE.md`), and until they did, the paragraph here retired the
+ * difference on the strength of the fixture — which is the mistake
+ * `self/diagnostics.ts`'s header is now about. The end-to-end case is
+ * `tests/cases/reject_diag_utf8`; making a fixture here non-ASCII needs the
+ * span rule to map between the two indices first.
  */
 import fs from "node:fs";
 import path from "node:path";

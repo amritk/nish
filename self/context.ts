@@ -158,10 +158,21 @@ export class CheckContext {
    * statement stage0 had already left.
    */
   error(node: Node, message: string): void {
+    this.errorAtSpan(node.start, node.end, message);
+  }
+
+  /**
+   * Report against a span the tree has no node for, and poison the statement.
+   *
+   * The guard and the flag live here rather than at each `errorAt*` below, so
+   * that a fifth of them cannot be written without the invariant `error`'s
+   * comment describes. What each caller supplies is the span and nothing else.
+   */
+  errorAtSpan(start: i32, end: i32, message: string): void {
     if (this.errored) {
       return;
     }
-    this.sink.report(this.source, node.start, node.end, message);
+    this.sink.report(this.source, start, end, message);
     this.errored = true;
   }
 
@@ -194,8 +205,7 @@ export class CheckContext {
       this.error(node, message);
       return;
     }
-    this.sink.report(this.source, start - 1, end, message);
-    this.errored = true;
+    this.errorAtSpan(start - 1, end, message);
   }
 
   /**
@@ -207,11 +217,22 @@ export class CheckContext {
    * caret sits under `g` where stage0 puts it under `paramNames`.
    */
   errorAtProperty(member: Node, message: string): void {
-    if (this.errored) {
-      return;
-    }
-    this.sink.report(this.source, member.end - member.text.length, member.end, message);
-    this.errored = true;
+    this.errorAtSpan(member.end - member.text.length, member.end, message);
+  }
+
+  /**
+   * Report against the *key* of an object-literal property rather than the
+   * whole `key: value`, which is where stage0 puts it (`prop.name` in
+   * `src/validator.ts`). The key is the property's own first `text.length`
+   * bytes, because `parseObjectLiteral` accepts only a plain identifier there.
+   *
+   * It and `errorAtProperty` are mirror images — the head of a node's `text`
+   * and the tail of it — and both exist because `nodes.ts` has no child node
+   * for a name. A third of them is the signal to carry a `textStart` on `Node`
+   * instead; two are cheaper than four bytes on every node in the program.
+   */
+  errorAtKey(property: Node, message: string): void {
+    this.errorAtSpan(property.start, property.start + property.text.length, message);
   }
 
   /**

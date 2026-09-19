@@ -14,12 +14,20 @@
 // `try`/`catch`; it is written out here rather than hidden so the cost stays
 // visible.
 //
-// **Columns are bytes**, as everywhere in `self/`, where stage0's are UTF-16
-// code units. The two agree for every ASCII source line, which is every line
-// of every `.err` golden; a diagnostic pointing into a line with a multi-byte
-// character is the one place stage0 and stage1 can print different columns for
-// the same error, and the same mapping the lexer oracle already does resolves
-// it.
+// **A reported column is UTF-16 code units** and an offset is bytes, so the
+// two are converted between rather than being the same number: `columnOf` is
+// the code-unit count a diagnostic, an excerpt caret and `--emit-checked`
+// want, which is what stage0 has always printed, and `byteColumnOf` is the
+// byte count a `DILocation` wants.
+//
+// This paragraph used to say columns were bytes here and code units in stage0,
+// and then retire the difference because "the two agree for every ASCII source
+// line, which is every line of every `.err` golden" — a claim about the corpus
+// read as a claim about the language. No corpus program put a non-ASCII
+// character in front of a caret, so the two compilers printed different columns
+// for the same error unnoticed for as long as both existed.
+// `tests/cases/reject_diag_utf8` is that program. `self/debug.ts` carried the
+// same caveat about the same subject and was wrong the same way (WP19 §A5).
 //
 // The performance warnings of WP15 §8 are the one diagnostic here that is not
 // an error. They ride on the same `Diagnostic` with `kind` set to
@@ -30,10 +38,13 @@
 // which `reportPerformance` keeps as the list is built, for the reason written
 // there. `src/diagnostics.ts` orders them the same way and has to, because the
 // two are one compiler in two implementations and `--json` promises the same
-// stream from either. Only the WP15 block of `tests/run.js` catches a drift —
-// it reruns the cases it names through stage1 and compares the whole report —
-// and it is a *counted skip* with no C toolchain. Outside those cases, and on
-// a machine without clang, this is a rule a reader keeps, not one a test catches.
+// stream from either. Two things catch a drift: the WP15 block of
+// `tests/run.js`, which reruns the cases it names through stage1 and compares
+// the whole report, and the `--json` variation of `tests/self/parity.js`,
+// which compares the stream itself over every program in the corpus. The first
+// is a *counted skip* with no C toolchain and the second is the nightly rather
+// than `npm test`, so this is still a rule a reader keeps on a machine without
+// clang — but it is no longer only that.
 
 import { codeFor } from "./codes";
 import { compareStrings, jsonQuote, StringBuilder } from "./strings";
@@ -94,9 +105,72 @@ export class SourceFile {
     return this.lineIndex(offset) + 1;
   }
 
-  /** The 1-based column of `offset`, counted in bytes. */
-  columnOf(offset: i32): i32 {
+  /**
+   * The 1-based column of `offset`, counted in bytes.
+   *
+   * This is the **debugger's** column and not the editor's: a `DILocation`
+   * column is read back against the file's bytes, which is what `clang -g`
+   * writes and what WP19 §A5 settled for `self/debug.ts`. It carries the
+   * qualifier and `columnOf` does not because it is the rarer answer — one
+   * caller, in `self/debug.ts` — and a name is read more often than the doc
+   * comment under it, so the wrong pick has to be typed deliberately.
+   */
+  byteColumnOf(offset: i32): i32 {
     return offset - this.starts[this.lineIndex(offset)] + 1;
+  }
+
+  /**
+   * The 1-based column of `offset`, counted in UTF-16 code units — the column
+   * a diagnostic reports and `--emit-checked` prints.
+   *
+   * The consumer here is an editor rather than a debugger, so the unit is the
+   * one an editor indexes a line by, which is also what stage0 has always
+   * answered: its positions come from the `typescript` API and that counts
+   * code units. Nothing compared the two until `--json` joined the parity
+   * cross product, because the count only differs on a line with a non-ASCII
+   * character before the caret and no corpus program had one
+   * (`tests/cases/reject_diag_utf8`).
+   */
+  columnOf(offset: i32): i32 {
+    return this.codeUnits(this.starts[this.lineIndex(offset)], offset) + 1;
+  }
+
+  /**
+   * How many UTF-16 code units the bytes `[from, to)` spell.
+   *
+   * Every byte that begins a character is one, except a four-byte sequence:
+   * that is a code point above the BMP and costs a surrogate pair, so it is
+   * two. Continuation bytes are none of their own.
+   *
+   * It walks where the byte arithmetic it replaced did not, and the walk is as
+   * long as the column. Measured over the whole corpus `--emit-checked` dump:
+   * 171,094 positions, 2.86 M byte-iterations, 1.6 ms inside a 4.6 s pass. The
+   * cost is O(errors × line length), so it is only reachable on generated or
+   * minified source; the longest line in `self/`, `tests/cases/` and
+   * `examples/` is 503 bytes.
+   */
+  codeUnits(from: i32, to: i32): i32 {
+    const length = this.text.length;
+    let units = 0;
+    let i = from;
+    while (i < to) {
+      if (i >= length) {
+        // An offset does reach past the last byte: a span whose end is the end
+        // of the file is one beyond it. There is nothing there to classify, and
+        // stage0 counts the overshoot as characters — its
+        // `getLineAndCharacterOfPosition` answers `position - lineStart` with no
+        // line to bound it — so each one is a column
+        // (`tests/self/diagnostics_fixture.txt`, `error at 325`).
+        units = units + 1;
+      } else {
+        const byte = this.text.charCodeAt(i);
+        if (startsCharacter(byte)) {
+          units = units + (isFourByteLead(byte) ? 2 : 1);
+        }
+      }
+      i = i + 1;
+    }
+    return units;
   }
 
   /** The text of a 0-based line without its terminator, `\r\n` included. */
@@ -113,6 +187,12 @@ export class SourceFile {
     return this.text.substring(from, end);
   }
 }
+
+/** Whether a UTF-8 byte begins a character rather than continuing the one before it. */
+const startsCharacter = (byte: i32): boolean => (byte & 0xc0) !== 0x80;
+
+/** Whether a UTF-8 byte opens a four-byte sequence, which is two UTF-16 code units. */
+const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0;
 
 /**
  * One error, anchored to a half-open byte span of one file. `line` and
@@ -155,17 +235,31 @@ export class Diagnostic {
     const line = this.source.lineIndex(this.start);
     const text = this.source.lineText(line);
     const lineNo = `${this.line}`;
-    const lineEnd = this.source.starts[line] + text.length;
+    const lineStart = this.source.starts[line];
+    const lineEnd = lineStart + text.length;
     const markerEnd = this.end < lineEnd ? this.end : lineEnd;
-    let markerLength = markerEnd - this.start;
+    // In code units, like the column: the caret has to land under the byte the
+    // column names, and a terminal counts characters rather than bytes
+    // (`formatSourceExcerpt` in `src/diagnostics.ts` pads by code units too).
+    let markerLength = this.source.codeUnits(this.start, markerEnd);
     if (markerLength < 1) {
       markerLength = 1;
     }
 
+    // One pad character per code unit, as `formatSourceExcerpt` in
+    // `src/diagnostics.ts` emits one per JavaScript string index. `codeUnits`
+    // cannot do it: the tab has to be mirrored per character, not counted.
+    const prefix = this.start - lineStart;
     const pad = new StringBuilder();
     let i = 0;
-    while (i < this.column - 1) {
-      pad.addChar(text.charCodeAt(i) === CH_TAB ? CH_TAB : 32);
+    while (i < prefix) {
+      const byte = text.charCodeAt(i);
+      if (startsCharacter(byte)) {
+        pad.addChar(byte === CH_TAB ? CH_TAB : 32);
+        if (isFourByteLead(byte)) {
+          pad.addChar(32);
+        }
+      }
       i = i + 1;
     }
     const marker = new StringBuilder();
@@ -249,10 +343,22 @@ export class DiagnosticSink {
   }
 
   reportKind(source: SourceFile, start: i32, end: i32, kind: string, text: string): void {
-    if (!this.fileOrder.has(source.path)) {
-      this.fileOrder.set(source.path, this.fileOrder.size());
+    this.add(new Diagnostic(source, start, end, kind, text));
+  }
+
+  /**
+   * Record a diagnostic somebody else built. The parser builds its own — it
+   * refuses before there is a checker to report through — and they belong in
+   * the report with every other error, so that the *driver* is what decides
+   * whether that report is the human one on stderr or `--json`'s objects on
+   * stdout. stage0 has always routed a syntax error this way
+   * (`StaticSyntaxError` is a `CompileError` and goes to its sink).
+   */
+  add(diagnostic: Diagnostic): void {
+    if (!this.fileOrder.has(diagnostic.source.path)) {
+      this.fileOrder.set(diagnostic.source.path, this.fileOrder.size());
     }
-    this.items.push(new Diagnostic(source, start, end, kind, text));
+    this.items.push(diagnostic);
   }
 
   /**
