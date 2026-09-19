@@ -41,10 +41,10 @@ import { codeFor } from "./codes.js";
  * the order of a machine-readable stream and part of what it promises.
  * `self/diagnostics.ts` orders them the same way and has to, because the two
  * are one compiler in two implementations and `--json` answers the same stream
- * from either — but nothing in the suite would catch it if they drifted:
- * `tests/self/parity.js` compares the stderr lines matching ` error: ` and
- * ` warning: `, which a `performance` line is neither of, and no variation of
- * it passes `--json`. This is a rule a reader keeps, not one a test catches.
+ * from either. Only the WP15 block of `tests/run.js` catches a drift — it
+ * reruns the cases it names through stage1 and compares the whole report — and
+ * it is a *counted skip* with no C toolchain. Outside those cases, and on a
+ * machine without clang, this is a rule a reader keeps, not one a test catches.
  */
 
 /** A half-open character range `[start, end)` into a source file's text. */
@@ -241,8 +241,10 @@ export class DiagnosticSink {
    * `Array.sort` and `self/compile.ts` reads the list directly, and the two
    * halves of a diagnostic are worth more when they read alike. It is a stable
    * insertion sort: the stream arrives in a few nearly sorted runs, one per
-   * pass, so the scan back is short, and the list is small whatever happens —
-   * compiling all sixty modules of `self/` produces about seventy warnings.
+   * pass, so the scan back is short, and the list stays under a hundred over
+   * the whole of `self/` — no exact count is written here, because it moves
+   * with every rule the class gains, and nothing cascades into a warning the
+   * way one bad declaration cascades into errors.
    */
   reportPerformance(warning: PerformanceWarning): void {
     if (!this.warningFileOrder.has(warning.file))

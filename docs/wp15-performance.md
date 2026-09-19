@@ -1387,7 +1387,20 @@ and the original six:
 | allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
 | not inlinable | a call **inside a loop** to a function the module does not export, while `--no-strict-exports` is keeping it an external symbol | drop the flag |
 | clamp not folded | a `substring` **bound** the §2 proof could not place in `[0, s.length]`, on a call inside a loop | the guard that proves it, which makes the compiler write the bound through, or `slice`, which has no clamp |
-| wasteful struct padding | reordering a struct's fields would shrink it | names the current size, the achievable size, and the field order that gets there |
+| wasteful struct padding | a `class` or `interface` whose declared field order costs it bytes no order has to spend, and whose order is the author's to change — a class that `implements` an interface is silent, and so is a generic instantiation | names the current size, the size the same fields reach in their best order, and that order in full |
+
+All ten rules ship. **Nine of them are found while pass 2 walks the bodies; the
+tenth is not** — a struct's layout is known in pass 1, when its members are
+collected, long before a body is checked. That is why the warning list is put
+in report order as it is built rather than printed in the order the analysis
+produced it: which pass found a warning is not a key, so the stream reads each
+file top to bottom either way. The order itself is normative in
+[`LANGUAGE.md`](LANGUAGE.md) — by file, **in the order files are first warned
+about**, then by position, then by code — and `tests/cases/diag_order_pass1`
+is the case that holds the pass-1 rule to it. §9 item 2 records what measuring
+the four rules that were once waiting taught, `NL9007` through `NL9010`; the
+other six are specified in [`LANGUAGE.md`](LANGUAGE.md) and pinned by their
+`tests/cases/perf_*` cases.
 
 The bar cuts both ways, and the dropped-allocation rule is where it shows.
 A function that loses its arena scope to a local assigned in a branch retains
@@ -1465,8 +1478,8 @@ measurement closed says so and says why.
    `tests/cases/perf_str_concat_loop`, `perf_str_concat_quiet`,
    `perf_alloc_loop` and `perf_alloc_quiet` pin them.
 
-   **The four rows that were said to be waiting are now three answers and one
-   correction**, and nine of §8's ten rules exist:
+   **The four rows that were said to be waiting are answered, one of them by a
+   correction**, and all ten of §8's rules exist:
    - **bounds check not eliminated** — shipped with item 6, not waiting.
      `NL9007`, `tests/cases/perf_bounds_loop` / `perf_bounds_quiet`. This row
      had gone stale.
@@ -1576,16 +1589,89 @@ measurement closed says so and says why.
      whose advice `NL9009` cannot write is the unsigned bound recorded below,
      and it is the weaker defect: the guard is refused, but `slice` — the other
      rewrite the message names — compiles.
-   - **wasteful struct padding** — still not shipped, and what blocks it is
-     the *report* rather than the analysis. The layout is already computed
-     (`computeLayout` in `checker/classes.ts`, `StructInfo.size`/`align` and
-     `FieldInfo.offset`), so the better packing is arithmetic. But a struct is
-     laid out in pass 1 and every §8 warning today comes out of one
-     source-order walk in pass 2, so the warning would print ahead of every
-     warning in the same file. Closing it means giving the warning list a sort,
-     in both compilers, which changes the order of a machine-readable stream
-     and is worth doing deliberately rather than as a side effect of a
-     diagnostic.
+   - **wasteful struct padding** — shipped, `NL9010`, the tenth and last of
+     them, and **both halves of this row turned out smaller than they
+     sounded.**
+
+     **The analysis is one accumulator, and it is a proof rather than a
+     heuristic.** `computeLayout` already walked the fields in declaration
+     order rounding each to its alignment; it now also sums their widths and
+     answers that sum rounded up to the struct's alignment as a `floor`. Every
+     field type in the language has a size equal to its alignment — one byte
+     for `boolean`, a power of two up to a pointer's eight for everything else
+     — so laying the fields out widest first leaves no interior gap at all,
+     which makes the floor both *reachable* and a *lower bound on every order*.
+     A struct whose size already equals its floor cannot be improved by any
+     permutation, and most structs are one of those — 72 of the 83 `class` and
+     `interface` declarations in `self/` — so the common path is one add per
+     field and one comparison. The firing path is not cheap and does not need
+     to be: `widestFirst` scans the field list once per power of two from the
+     struct's alignment down to 1, `layoutSize` scans again, and the quoted
+     order is a third pass, so about six over a struct one program in eight
+     has.
+
+     The floor is only the gate. Where the rule does fire, the smaller number
+     the message quotes is what the named order really lays out to
+     (`layoutSize`), so it stays true of the declared size whatever `sizeOf`
+     and `alignOf` come to say about a type — and a `layoutSize` below the
+     declared size is a proof that this rewrite wins rather than a guess that
+     it might. `widestFirst` is a stable bucket pass down the powers of two
+     rather than a sort, because the message *quotes* the order and the two
+     compilers have to agree on it to the byte — and `self/` has no
+     `Array.sort`, so `src/` computes it the way `self/` has to.
+
+     **The report was the real blocker, it was closed first in its own change,
+     and the premise this row used to give for it was already false.** The old
+     text said every §8 warning came out of one source-order walk in pass 2.
+     It did not: a generic's body is checked when one of its *instantiations*
+     is finished rather than where the generic is written, so a warning inside
+     a generic already came out after one written further down the same file,
+     and `tests/cases/diag_order` is that stream — found at 36 before 26,
+     reported 26 before 36. The class owed itself an order before this rule
+     existed; a warning computed in pass 1 only made the debt impossible to
+     keep carrying, since without an order it would print ahead of every
+     warning in its file. So the sort landed on its own — by file, then
+     position, then code, inserted as the list is built in both compilers —
+     because it changes the order of a machine-readable stream and that is
+     worth deciding rather than absorbing as a side effect of a diagnostic.
+     With it, which pass found a warning is not a key at all.
+
+     **What the sort's own change expected of this rule is not what it
+     delivered.** That change left the code key exercised but not falsifiable,
+     and named this warning as what would close it. It did not: a padding
+     warning is anchored to a struct's *name*, which no other §8 rule reports
+     on, so it can never share a span with one. Measured at `c656ee3`:
+     replacing both codes in `compareWarnings` with one constant and
+     recompiling leaves `diag_order`, `diag_order_pass1` and `perf_padding`
+     byte-identical, `--json` included. Nothing in the suite pins that, so it
+     is a dated reading rather than a standing fact — the first rule whose span
+     can coincide with another's in reverse code order retires it. What
+     `diag_order_pass1` does
+     close is the other key: two padding warnings found before a single body has
+     been checked, two accumulators found after both of them, and a report that
+     reads 20, 26, 36, 42, which is the file top to bottom. That is the key the
+     sort was written for.
+
+     **Two shapes stay silent**, because §8's bar is a rewrite the message can
+     name and neither has one: a class that `implements` an interface, whose
+     first fields are the interface's own and in its order, so "declare them
+     widest first" would be advice that stops the program compiling; and a
+     generic instantiation, where one declaration is shared by every
+     instantiation and the order that suits one type argument need not suit
+     another. An *interface* is the other side of that rule, and there it is a
+     clause rather than a silence: the message always ends "and in any class
+     that `implements` it", because whether an interface has implementers is
+     not known until a pass after the layout. Naming the clause unconditionally
+     is harmless where nothing implements the interface, and the difference
+     between advice and a broken build where something does.
+
+     Measured at `c656ee3` over the sixty modules of `self/` that declare no
+     `main`: **eleven structs**, ten of them spending 8 bytes a value and one —
+     `ConstInfo`, 80 bytes where 64 would do — spending 16, out of 81
+     performance warnings in all. `tests/cases/perf_padding`, `perf_padding_quiet`,
+     `diag_order_pass1`, and the four-case comparison in `tests/run.js` that
+     holds stage1 to the report stage0 prints, which is the only place in the
+     suite a `performance:` line is compared across the two compilers.
 3. **Slice iterators** (§2.3) — **measured, and not taken**. The array half was
    already banked by §2b: `for (const x of xs)` and the counted loop over
    `xs[i]` link to byte-identical binaries, and a guarded byte loop is
@@ -1649,5 +1735,12 @@ measurement closed says so and says why.
 8. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
    the one self-hosting most depends on.
 
-An explicit bounds-check opt-out (§2.4) is deferred until 6 has landed and the
-surviving checks have been counted.
+An explicit bounds-check opt-out (§2.4) was deferred until 6 had landed and the
+surviving checks had been counted. Both have happened, and the count closed the
+item rather than opening it: the checks that survive across the whole of `self/`
+are each an invariant the program has and the compiler cannot see, and each has
+a rewrite `NL9007` already names — not a language feature's worth of them, so
+the opt-out stays unbuilt. **§2.4 is where that count lives**, with the shapes
+behind it and the spellings that were considered; it is not repeated here,
+because a corpus count restated in a second place is one that goes stale in
+whichever place nobody re-measures.

@@ -30,10 +30,10 @@
 // which `reportPerformance` keeps as the list is built, for the reason written
 // there. `src/diagnostics.ts` orders them the same way and has to, because the
 // two are one compiler in two implementations and `--json` promises the same
-// stream from either — but nothing in the suite would catch it if they drifted:
-// `tests/self/parity.js` compares the stderr lines matching ` error: ` and
-// ` warning: `, which a `performance` line is neither of, and no variation of
-// it passes `--json`. This is a rule a reader keeps, not one a test catches.
+// stream from either. Only the WP15 block of `tests/run.js` catches a drift —
+// it reruns the cases it names through stage1 and compares the whole report —
+// and it is a *counted skip* with no C toolchain. Outside those cases, and on
+// a machine without clang, this is a rule a reader keeps, not one a test catches.
 
 import { codeFor } from "./codes";
 import { compareStrings, jsonQuote, StringBuilder } from "./strings";
@@ -268,10 +268,10 @@ export class DiagnosticSink {
    * is written, and a pass-1 warning is found before pass 2 has looked at the
    * file at all. It is a stable insertion sort: the stream arrives in a few
    * nearly sorted runs, one per pass, so the scan back is short, and the list
-   * is small whatever happens — compiling all sixty modules of `self/` produces
-   * about seventy warnings. `sorted()` needs a merge sort instead because one
-   * bad declaration can cascade into thousands of errors, and nothing cascades
-   * into a warning.
+   * stays under a hundred over the whole of `self/` — no exact count is
+   * written here, because it moves with every rule the class gains. `sorted()`
+   * needs a merge sort instead because one bad declaration can cascade into
+   * thousands of errors, and nothing cascades into a warning.
    */
   reportPerformance(source: SourceFile, start: i32, end: i32, text: string): void {
     if (!this.warningFileOrder.has(source.path)) {
