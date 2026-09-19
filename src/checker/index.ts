@@ -52,9 +52,11 @@ import {
 } from "./declarations.js";
 import { CheckContext, LoopInfo } from "./context.js";
 import {
+  GenericHome,
   Instantiation,
   MAX_INSTANTIATIONS,
   MAX_INSTANTIATIONS_PER_TEMPLATE,
+  RequestSite,
   StructInstantiation,
   StructTemplateInfo,
   TemplateInfo,
@@ -183,6 +185,19 @@ export class Checker implements CheckContext {
    * replaces the entry rather than reporting a duplicate.
    */
   private readonly reachableOnly = new Set<string>();
+  /** The symbols already in `program.externalInstances`, so each is declared once (WP18 G7). */
+  private readonly externalInstanceNames = new Set<string>();
+  /**
+   * `Box<i32>` written in a *signature* annotation, where `Box` is imported
+   * (WP18 G7).
+   *
+   * Pass 1 runs before pass 1b has bound a single import — a module's
+   * signatures are collected the moment it is parsed, which is what makes an
+   * import cycle legal — so the template is not in hand when the annotation is
+   * resolved and there is no layout to build. The request is written down here
+   * and made as soon as every module has bound its imports.
+   */
+  private readonly deferredInstances: { imp: ImportBinding; args: StaticType[]; at: ts.Node }[] = [];
 
   constructor(
     sourceFile: ts.SourceFile,
@@ -209,6 +224,7 @@ export class Checker implements CheckContext {
       callees: new WeakMap(),
       structs: new Map(),
       reachableStructs: [],
+      externalInstances: [],
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
       provenIndices: new WeakSet(),
@@ -229,6 +245,18 @@ export class Checker implements CheckContext {
       // in there rather than falling through to "unsupported type reference".
       const structTemplate = this.structTemplates.get(name);
       if (structTemplate) return this.instantiateStructNode(structTemplate, ref);
+      // WP18 G7: `Box<i32>` where `Box` comes from another module, resolved
+      // during pass 1 — before any import is bound, so the branch above has
+      // nothing to answer with. The *name* is knowable anyway: an
+      // instantiation is `instanceSymbol(<the exporter's name>, <the
+      // arguments>)` and both halves are in hand (§3c), so the annotation
+      // resolves to the struct it is going to be and the request itself waits
+      // for `makeDeferredInstantiations`. From pass 1b on, the branch above
+      // answers instead, because binding the import put the template in scope.
+      if (ref?.typeArguments && ref.typeArguments.length > 0) {
+        const imported = this.program.imports.find((imp) => imp.localName === name);
+        if (imported) return this.deferInstantiation(imported, ref);
+      }
       // Beyond this point the name takes no type arguments: a type parameter,
       // an ordinary class, an alias, an enum or an import. Leaving those to the
       // caller's refusal keeps `Point<i32>` saying "unsupported type reference",
@@ -272,6 +300,7 @@ export class Checker implements CheckContext {
     this.bindImports((b) =>
       this.error(`Cannot resolve import \`${b.specifier}\` when checking a single module`, b.node)
     );
+    this.makeDeferredInstantiations();
     this.sink.throwIfErrors();
     this.checkBodies();
     this.sink.throwIfErrors();
@@ -302,7 +331,7 @@ export class Checker implements CheckContext {
           // function templates and `collectStructMembers` below skips it: its
           // members are collected once per instantiation instead.
           if (stmt.typeParameters && stmt.typeParameters.length > 0) {
-            this.registerStructTemplate(collectStructTemplate(stmt, this.sf));
+            this.registerStructTemplate(collectStructTemplate(stmt, this.sf, this));
             return;
           }
           const info = declareStruct(this, stmt);
@@ -446,7 +475,7 @@ export class Checker implements CheckContext {
       );
     }
     if (stmt.typeParameters && stmt.typeParameters.length > 0) {
-      this.registerTemplate(collectFunctionTemplate(stmt, this.sf));
+      this.registerTemplate(collectFunctionTemplate(stmt, this.sf, this));
       return;
     }
     this.registerFunction(collectFunctionSignature(stmt, this.sf, this.opts), stmt);
@@ -463,7 +492,7 @@ export class Checker implements CheckContext {
     const decl = stmt.declarationList.declarations[0];
     const arrow = arrowFunctionOf(decl)!;
     if (arrow.typeParameters && arrow.typeParameters.length > 0) {
-      this.registerTemplate(collectArrowTemplate(stmt, decl, arrow, this.sf));
+      this.registerTemplate(collectArrowTemplate(stmt, decl, arrow, this.sf, this));
       return;
     }
     this.registerFunction(collectArrowSignature(stmt, decl, arrow, this.sf, this.opts), stmt);
@@ -556,19 +585,143 @@ export class Checker implements CheckContext {
     this.program.templates.set(name, template);
   }
 
+  /** The package prefix this module's symbols carry (WP21 S1); `GenericHome`'s half of it. */
+  get symbolPrefix(): string {
+    return this.program.symbolPrefix;
+  }
+
+  /** This module's view of a struct name; the other half of `GenericHome`. */
+  lookupStruct = (name: string): StructInfo | undefined => this.program.structs.get(name);
+
+  /** Where a request made from this module was written, for whoever answers it (WP18 G7). */
+  private requestSite(): RequestSite {
+    return {
+      sf: this.sf,
+      fromFunction: this.currentInstance,
+      fromStruct: this.currentStructInstance,
+      lookupStruct: this.lookupStruct,
+    };
+  }
+
   /**
-   * WP18: the instantiation request. Answers the specialised signature for one
-   * (template, type-argument tuple), creating and queueing it the first time it
-   * is asked for — so a tuple seen twice is one `define`, and the FIFO queue
-   * makes the order the discovery order in both compilers.
+   * Register `root` and everything it reaches as layouts this module can hold
+   * values of but does not define (WP18 G7).
+   *
+   * It is `closeReachableStructs` for one struct, with `from` saying which
+   * module's registry the edges are followed in — the requester's when a type
+   * argument brings a layout to the template, the declaring module's when an
+   * instantiation brings one back. Each lands in `structs`, so the layout
+   * resolves and `%struct.<name>` is written, and in `reachableOnly`, so the
+   * name stays out of the type namespace: nobody may write `Box$i32`, and
+   * `identity<Point>` does not put `Point` in scope in the module that declares
+   * `identity`.
+   *
+   * `symbols` is what the two directions disagree about. An instantiated class
+   * coming *back* brings its constructor and methods, which the module that
+   * asked for it calls. A type argument going *out* brings only a layout: the
+   * language has no way to call a member of a type parameter, so the template's
+   * module never emits a call to one, and declaring the symbols anyway would
+   * put a `declare` in front of a definition that `--strict-exports` made
+   * `internal` in the module it came from.
+   */
+  private registerForeignLayouts(
+    root: StructInfo,
+    from: (name: string) => StructInfo | undefined,
+    symbols: boolean
+  ): void {
+    const pending: StructInfo[] = [];
+    const reach = (info: StructInfo): void => {
+      if (this.program.structs.has(info.name)) return;
+      this.program.structs.set(info.name, info);
+      if (symbols) this.program.reachableStructs.push(info);
+      this.reachableOnly.add(info.name);
+      pending.push(info);
+    };
+    reach(root);
+    // A cursor rather than `pop()`, and `self/generics.ts` walks it the same way
+    // so the two registries end up in the same order: `pop()` answers `T` in the
+    // language and `T | undefined` in `lib.es5`, which is the one divergence
+    // `runtime/nish.d.ts` documents and the suite tolerates in exactly one file.
+    for (let at = 0; at < pending.length; at++) {
+      for (const name of referencedStructNames(pending[at])) {
+        const next = from(name);
+        if (next) reach(next);
+      }
+    }
+  }
+
+  /**
+   * Make every layout a type argument mentions visible here (WP18 G7).
+   *
+   * A template is monomorphised in its own module, so `identity<Point>` puts a
+   * `%struct.Point` — and a `getelementptr` through its fields — into a module
+   * that may never have heard of `Point`. The layout comes from the module that
+   * made the request, which had to have it to write the request down.
+   */
+  private adoptArgumentLayouts(args: readonly StaticType[], site: RequestSite): void {
+    // A request this module made of its own template already has every layout
+    // it could hand over, so there is nothing to walk.
+    if (site.sf === this.sf) return;
+    const note = (type: StaticType): void => {
+      if (type.kind === "struct") {
+        const info = site.lookupStruct(type.name);
+        if (info) this.registerForeignLayouts(info, site.lookupStruct, false);
+      } else if (type.kind === "array") note(type.elem);
+      else if (type.kind === "nullable") note(type.inner);
+      else if (type.kind === "result") {
+        note(type.ok);
+        note(type.err);
+      }
+    };
+    for (const arg of args) note(arg);
+  }
+
+  /**
+   * WP18: the instantiation request, from wherever it was written.
+   *
+   * G7 let it cross a module boundary, and the answer to what that means is
+   * that the *request* crosses and the *work* does not: a template is
+   * monomorphised in the scope it was declared in, because that is the only
+   * scope its annotations and its body mean anything in, so this forwards to
+   * `template.home` and keeps only the site. A local template is the same path
+   * with `home === this`, which is every program that existed before G7.
    */
   instantiate(template: TemplateInfo, args: StaticType[], at: ts.Node): FunctionSig {
-    // WP21 S1: inside the package that declares the template. `qualifySymbols`
-    // runs at the end of pass 1 and instantiations are appended during pass 2,
-    // so an instantiation never passes through it -- the prefix has to be part
-    // of the symbol from the moment it is minted, or a generic would be the one
-    // declaration in the language whose symbol escaped its package.
-    const symbol = instanceSymbol(this.program.symbolPrefix + template.sourceName, args);
+    const sig = template.home.instantiateHere(template, args, at, this.requestSite());
+    // The definition is the declaring module's; this module links against it.
+    if (template.home !== this) this.useExternalInstance(sig);
+    return sig;
+  }
+
+  /**
+   * One instantiation this module calls and another module defines. Recorded
+   * once per symbol, in request order, so the `declare`s the emitter writes are
+   * in the order the calls were checked in and a golden does not depend on a
+   * map's iteration.
+   */
+  private useExternalInstance(sig: FunctionSig): void {
+    if (this.externalInstanceNames.has(sig.name)) return;
+    this.externalInstanceNames.add(sig.name);
+    this.program.externalInstances.push(sig);
+  }
+
+  /**
+   * The answering half of `instantiate`: this module declares `template`, so
+   * this is where the specialised signature is created and queued the first
+   * time a tuple is asked for — so a tuple seen twice is one `define`, and the
+   * FIFO queue makes the order the discovery order in both compilers.
+   */
+  instantiateHere(template: TemplateInfo, args: StaticType[], at: ts.Node, site: RequestSite): FunctionSig {
+    this.adoptArgumentLayouts(args, site);
+    // WP21 S1: inside the package that declares the template, which since G7 is
+    // not necessarily the package that asked. `qualifySymbols` runs at the end
+    // of pass 1 and instantiations are appended during pass 2, so an
+    // instantiation never passes through it -- the prefix has to be part of the
+    // symbol from the moment it is minted, or a generic would be the one
+    // declaration in the language whose symbol escaped its package. It is read
+    // off the *template* rather than off `this.program` so that the two cannot
+    // drift apart again if the forwarding above ever changes shape.
+    const symbol = instanceSymbol(template.home.symbolPrefix + template.sourceName, args);
     const existing = this.program.instantiations.get(symbol);
     if (existing) return existing.sig;
 
@@ -578,7 +731,7 @@ export class Checker implements CheckContext {
     // -- an instantiation is the first point at which `T` is known to be one.
     // The message is the same, because it is the same rule.
     for (const arg of args) {
-      rejectForeignPointer(arg, `a type argument of \`${template.sourceName}\``, at, this.sf);
+      rejectForeignPointer(arg, `a type argument of \`${template.sourceName}\``, at, site.sf);
     }
 
     // Termination (§4). A request that puts one of its own type arguments
@@ -593,7 +746,7 @@ export class Checker implements CheckContext {
     // diagnostic about a mistake nobody made that §4a exists to stop. The
     // struct half spans both and chooses there; the caps below have nothing to
     // choose, because a cap refusal has no ancestor to hand back.
-    const growing = expandingAncestor(this.currentInstance, template, args, (n) => this.structInstance(n));
+    const growing = expandingAncestor(site.fromFunction, template, args, (n) => this.structInstance(n));
     if (growing) {
       // Written here rather than returned from a helper, for the reason the
       // clash message in `compilation.ts` is one literal: the code generator
@@ -604,7 +757,8 @@ export class Checker implements CheckContext {
       const parts = nonTerminatingParts(template, growing.ancestor, args, growing.index);
       this.error(
         `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` asks for \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; pass \`${parts.param}\` itself, or a type that does not mention it`,
-        at
+        at,
+        site.sf
       );
     }
     // The caps are the backstop for everything the rule does not see, and they
@@ -613,14 +767,16 @@ export class Checker implements CheckContext {
       this.error(
         `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
           "this compiler's limit rather than a rule of the language",
-        at
+        at,
+        site.sf
       );
     }
     if (this.program.instantiations.size >= MAX_INSTANTIATIONS) {
       this.error(
         `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
           "rather than a rule of the language",
-        at
+        at,
+        site.sf
       );
     }
 
@@ -635,7 +791,7 @@ export class Checker implements CheckContext {
       sig,
       bindings,
       tables: newNodeTables(),
-      from: this.currentInstance,
+      from: site.fromFunction,
     };
     sig.instance = instance;
     template.count += 1;
@@ -682,7 +838,8 @@ export class Checker implements CheckContext {
    * may request more, and the queue is drained rather than recursed into, so
    * `from` is a chain of requests and not a call stack.
    */
-  drainInstantiations(): void {
+  drainInstantiations(): boolean {
+    const worked = this.pending.length > 0 || this.pendingFinish.length > 0;
     this.finishPendingStructs();
     while (this.pending.length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
@@ -696,6 +853,7 @@ export class Checker implements CheckContext {
       if (!this.sink.recover(() => this.checkInstanceBody(instance))) instance.sig.poisoned = true;
       this.finishPendingStructs();
     }
+    return worked;
   }
 
   /**
@@ -737,9 +895,18 @@ export class Checker implements CheckContext {
     this.program.structTemplates.set(name, template);
   }
 
-  /** The instantiation a mangled struct name belongs to; `undefined` for a declared struct. */
+  /**
+   * The instantiation a mangled struct name belongs to; `undefined` for a
+   * declared struct.
+   *
+   * Answered off the *layout* rather than off this module's request log, so
+   * that a `Box$i32` this module imported reads back its arguments exactly as
+   * one it asked for itself does. Since WP18 G7 those are two different
+   * modules, and the termination rule and inference both have to see through
+   * the difference.
+   */
   structInstance(name: string): StructInstantiation | undefined {
-    return this.program.structInstantiations.get(name);
+    return this.program.structs.get(name)?.instance;
   }
 
   /**
@@ -749,6 +916,62 @@ export class Checker implements CheckContext {
    */
   private instantiateStructNode(template: StructTemplateInfo, ref?: ts.TypeReferenceNode): StaticType {
     return instantiateWritten(this, template, ref?.typeArguments ?? [], ref ?? template.nameNode).type;
+  }
+
+  /**
+   * Write down a request for an imported template and answer the type it will
+   * resolve to (WP18 G7). The arguments are resolved here, in the scope the
+   * annotation sits in, exactly as a local template's are.
+   */
+  private deferInstantiation(imp: ImportBinding, ref: ts.TypeReferenceNode): StaticType {
+    const args = (ref.typeArguments ?? []).map((node) => resolveTypeNode(node, this.sf, this.opts));
+    this.deferredInstances.push({ imp, args, at: ref });
+    return { kind: "struct", name: instanceSymbol(imp.importedName, args) };
+  }
+
+  /**
+   * Pass 1b, after every module has bound its imports: make the requests pass 1
+   * could only write down.
+   *
+   * It runs after *every* module has bound rather than after this one, because
+   * the module that answers resolves the template's members in its own scope
+   * and those members may name its own imports.
+   */
+  makeDeferredInstantiations(): void {
+    for (const request of this.deferredInstances) {
+      // An import that bound to nothing at all already has a diagnostic of its
+      // own, and a second one about the same name would only bury it.
+      const bound =
+        request.imp.structTemplate ??
+        request.imp.template ??
+        request.imp.struct ??
+        request.imp.sig ??
+        request.imp.constant ??
+        request.imp.builtin;
+      if (!bound) continue;
+      this.sink.recover(() => this.makeDeferredInstantiation(request));
+    }
+    this.deferredInstances.length = 0;
+  }
+
+  private makeDeferredInstantiation(request: { imp: ImportBinding; args: StaticType[]; at: ts.Node }): void {
+    const template = request.imp.structTemplate;
+    if (!template) {
+      this.error(
+        `\`${request.imp.importedName}\` in \`${request.imp.specifier}\` takes no type arguments: only a generic ` +
+          "class or interface is written with them",
+        request.at
+      );
+    }
+    if (request.args.length !== template.typeParams.length) {
+      const example = template.typeParams.map(() => "number").join(", ");
+      this.error(
+        `\`${template.sourceName}\` is generic: it must be written with its type arguments, e.g. ` +
+          `\`${template.sourceName}<${example}>\``,
+        request.at
+      );
+    }
+    this.instantiateStruct(template, request.args, request.at);
   }
 
   /**
@@ -765,6 +988,28 @@ export class Checker implements CheckContext {
    * them is the side-table overlay every specialised body already needed.
    */
   instantiateStruct(template: StructTemplateInfo, args: StaticType[], at: ts.Node): StructInfo {
+    const info = template.home.instantiateStructHere(template, args, at, this.requestSite());
+    // The layout and its members are the declaring module's; this module holds
+    // values of the type, so it needs the `%struct` declaration and the
+    // `declare`s for its constructor and methods — which is exactly what an
+    // imported *declared* class gets through `reachableStructs`.
+    if (template.home !== this) this.useExternalStruct(info, template.home);
+    return info;
+  }
+
+  /** The layout this module can hold values of, and whatever its members reach. */
+  private useExternalStruct(info: StructInfo, home: GenericHome): void {
+    this.registerForeignLayouts(info, home.lookupStruct, true);
+  }
+
+  /** The answering half of `instantiateStruct`: this module declares `template`. */
+  instantiateStructHere(
+    template: StructTemplateInfo,
+    args: StaticType[],
+    at: ts.Node,
+    site: RequestSite
+  ): StructInfo {
+    this.adoptArgumentLayouts(args, site);
     const name = instanceSymbol(template.sourceName, args);
     const existing = this.program.structInstantiations.get(name);
     if (existing) return existing.info;
@@ -783,7 +1028,7 @@ export class Checker implements CheckContext {
     // Termination, the struct half (§4). A field whose type puts one of the
     // struct's own type arguments under a constructor starts a chain with no
     // end, and it is refused by name rather than by a depth count.
-    const growing = expandingStructAncestor(this.currentStructInstance, template, args, (n) =>
+    const growing = expandingStructAncestor(site.fromStruct, template, args, (n) =>
       this.structInstance(n)
     );
     if (growing) {
@@ -795,7 +1040,7 @@ export class Checker implements CheckContext {
       const refusal = new CompileError(
         `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` names \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; name \`${parts.param}\` itself, or a type that does not mention it`,
         at,
-        this.sf
+        site.sf
       );
       // WP18 §4a: the recovery is a *declaration's*, and this is where that is
       // decided. `collectInstanceMembers` is the one caller that clears
@@ -805,7 +1050,7 @@ export class Checker implements CheckContext {
       // write loses it, and the ancestor is the something. Reported without
       // throwing so the members after this one are still collected and refused
       // too.
-      if (this.currentInstance === undefined) {
+      if (site.fromFunction === undefined) {
         this.report(refusal);
         return growing.ancestor.info;
       }
@@ -823,14 +1068,16 @@ export class Checker implements CheckContext {
       this.error(
         `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
           "this compiler's limit rather than a rule of the language",
-        at
+        at,
+        site.sf
       );
     }
     if (this.program.instantiations.size + this.program.structInstantiations.size >= MAX_INSTANTIATIONS) {
       this.error(
         `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
           "rather than a rule of the language",
-        at
+        at,
+        site.sf
       );
     }
 
@@ -856,12 +1103,13 @@ export class Checker implements CheckContext {
       typeArgs: args,
       info,
       bindings,
-      from: this.currentStructInstance,
+      from: site.fromStruct,
     };
     template.count += 1;
     // Registered before the members are collected, so a field that mentions the
     // struct's own instantiation (`next: Node<i32> | null`) finds it rather
     // than asking for it a second time.
+    info.instance = instance;
     this.program.structs.set(name, info);
     this.program.structInstantiations.set(name, instance);
     this.collectInstanceMembers(instance);
@@ -890,7 +1138,12 @@ export class Checker implements CheckContext {
       this.currentStructInstance = savedStruct;
       this.typeBindings = savedBindings;
     }
-    const prefix = this.program.symbolPrefix;
+    // WP18 G7: the *template's* package, not this module's. They are the same
+    // one whenever this module declares the template — which is always, because
+    // `instantiateStruct` forwards a foreign request to the module that does —
+    // and reading it from the template is what keeps that true by construction
+    // rather than by a refusal somewhere else.
+    const prefix = instance.template.home.symbolPrefix;
     for (let i = before; i < this.program.functions.length; i++) {
       const sig = this.program.functions[i];
       // A nested instantiation's member: `collectStructMembers` above resolved a
@@ -900,9 +1153,6 @@ export class Checker implements CheckContext {
       // WP21 S1: an instantiation's symbol is complete from the moment it is
       // minted, because `qualifySymbols` runs once at the end of pass 1 and an
       // instantiation may be created on either side of it.
-      // TODO(WP18 G7): the prefix must become the *template's* rather than this
-      // module's once a generic may be instantiated from another module; the
-      // two are the same one only because importing a template is refused.
       sig.name = prefix + sig.name;
       const member: Instantiation = {
         owner: instance,
@@ -1002,25 +1252,13 @@ export class Checker implements CheckContext {
     }
     const structTemplate = target.structTemplates.get(imp.importedName);
     if (structTemplate) {
-      // WP18 §11 G7, the same rule one level up: an instantiation is defined in
-      // the module that declares its template, and that half has not landed.
-      // Refusing by name beats "has no exported function".
-      this.error(
-        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic ${structTemplate.kind}, and a generic ` +
-          "class or interface cannot yet be instantiated from another module; declare it in the module that uses it",
-        imp.element
-      );
+      this.bindStructTemplateImport(imp, structTemplate);
+      return;
     }
     const template = target.templates.get(imp.importedName);
     if (template) {
-      // WP18 §11 G7: one definition per instantiation, in the module that
-      // declares the template, is the whole-program half of this package and
-      // has not landed. Refusing by name beats "no exported function".
-      this.error(
-        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic function, and a generic function cannot ` +
-          "yet be instantiated from another module; declare it in the module that calls it",
-        imp.element
-      );
+      this.bindTemplateImport(imp, template);
+      return;
     }
     const sig = target.exports.get(imp.importedName);
     if (!sig) {
@@ -1082,6 +1320,102 @@ export class Checker implements CheckContext {
     }
     this.typeNames.add(imp.localName);
     this.program.structs.set(imp.localName, struct);
+  }
+
+  /**
+   * WP18 G7: an imported generic function. What is bound is the *template*,
+   * and that is the whole difference from every other import.
+   *
+   * A plain import is one name and one symbol, so it binds a `FunctionSig` and
+   * the emitter writes one `declare`. A template is one name and as many
+   * symbols as the program has distinct type-argument tuples for it, none of
+   * which exists yet: each is minted the first time a call site here picks it,
+   * defined by the module that declares the template, and recorded in
+   * `externalInstances` so this module declares exactly the ones it calls.
+   *
+   * The local name may differ from the exported one and the *symbol* does not
+   * follow it: `import { identity as id }` still calls `@identity$i32`, because
+   * one instantiation is one definition for the whole program and the module
+   * that defines it never learns what anyone else called it.
+   */
+  private bindTemplateImport(imp: ImportBinding, template: TemplateInfo): void {
+    if (!template.exported) {
+      this.error(
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`,
+        imp.element
+      );
+    }
+    if (this.importsUsedAsTypes.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is a function imported from \`${imp.specifier}\`, not a type`, imp.element);
+    }
+    const clash = this.sigs.get(imp.localName);
+    if (clash) {
+      const origin = this.program.imports.find((o) => o.sig === clash);
+      this.error(
+        origin
+          ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`,
+        imp.element
+      );
+    }
+    const twin = this.templates.get(imp.localName);
+    if (twin) {
+      const origin = this.program.imports.find((o) => o.template === twin);
+      this.error(
+        origin
+          ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`,
+        imp.element
+      );
+    }
+    imp.template = template;
+    this.templates.set(imp.localName, template);
+  }
+
+  /**
+   * WP18 G7, one level up: an imported generic class or interface. It joins
+   * this module's template table rather than its struct table, because a
+   * template has no layout — `Box` is not a type here any more than it is in
+   * the module that wrote it, and `Box<i32>` is.
+   *
+   * Unlike a declared class it *may* be renamed on import. The ABI a declared
+   * class pins is its own name; a template has no symbol at all, and the
+   * instantiation that does is named after the template's source name wherever
+   * the request came from, so `import { Box as B }` and `B<i32>` still name
+   * `%struct.Box$i32`.
+   */
+  private bindStructTemplateImport(imp: ImportBinding, template: StructTemplateInfo): void {
+    if (!template.exported) {
+      this.error(
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`,
+        imp.element
+      );
+    }
+    // Named with no type arguments somewhere in this module's signatures: the
+    // arity rule, said in the words a locally declared template says it in.
+    if (this.importsUsedAsTypes.has(imp.localName)) {
+      const example = template.typeParams.map(() => "number").join(", ");
+      this.error(
+        `\`${template.sourceName}\` is generic: it must be written with its type arguments, e.g. ` +
+          `\`${template.sourceName}<${example}>\``,
+        imp.element
+      );
+    }
+    if (this.sigs.has(imp.localName) || this.templates.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is already declared in this module`, imp.element);
+    }
+    const clash = this.reachableOnly.has(imp.localName) ? undefined : this.program.structs.get(imp.localName);
+    if (clash !== undefined || this.structTemplates.has(imp.localName)) {
+      const origin = this.program.imports.find((o) => o !== imp && o.localName === imp.localName);
+      this.error(
+        origin
+          ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`,
+        imp.element
+      );
+    }
+    imp.structTemplate = template;
+    this.structTemplates.set(imp.localName, template);
   }
 
   /**
@@ -1184,8 +1518,14 @@ export class Checker implements CheckContext {
     return this.program;
   }
 
-  error(message: string, node: ts.Node): never {
-    throw new CompileError(message, node, this.sf);
+  /**
+   * Throw a `CompileError` at `node`. `sf` is the file `node` belongs to and
+   * defaults to this module's own, which is every call but the ones WP18 G7
+   * forwards: a request for another module's template is refused in the file
+   * that *wrote* it, not in the file that answers it.
+   */
+  error(message: string, node: ts.Node, sf: ts.SourceFile = this.sf): never {
+    throw new CompileError(message, node, sf);
   }
 
   report(err: CompileError): void {

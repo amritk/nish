@@ -461,6 +461,11 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.bindImports((imp) => unit.resolved.get(imp.specifier)!.checker.program);
     }
+    // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
+    // Pass 1 could only write the request down — it runs as each module is
+    // parsed, long before any import is bound — and it is made here, once every
+    // module can answer one and can resolve its own imports while doing so.
+    for (const unit of this.modules) unit.checker.makeDeferredInstantiations();
     // After every module is bound, so that a struct reached through a chain of
     // modules does not depend on the order they were bound in.
     const declared = this.declaredStructs();
@@ -476,7 +481,19 @@ export class Compilation {
     // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
     // point. It runs per module in load order because an instantiation is
     // checked by the module that declares its template, in that module's scope.
-    for (const unit of this.modules) unit.checker.drainInstantiations();
+    //
+    // The sweep repeats because G7 let a request cross a module boundary in
+    // either direction: draining one module's queue checks bodies that ask
+    // other modules for instantiations, including modules already drained this
+    // sweep, and those bodies ask in turn. It ends because the set of
+    // (template, tuple) pairs only grows and the caps in `checker/generics.ts`
+    // bound it.
+    for (let working = true; working; ) {
+      working = false;
+      for (const unit of this.modules) {
+        if (unit.checker.drainInstantiations()) working = true;
+      }
+    }
     this.rejectInstantiatedStructClashes();
     this.sink.throwIfErrors();
     this.checked = true;

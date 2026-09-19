@@ -17,6 +17,7 @@
 // class — is a reference to the object rather than an index, because an index
 // would be into the wrong module's list. Everything local is an index.
 
+import { CheckContext } from "./context";
 import { SourceFile } from "./diagnostics";
 import { BuiltinExport } from "./nish_modules";
 import { StringMap, StringSet } from "./map";
@@ -141,14 +142,25 @@ export class TemplateInfo {
   exported: boolean;
   /** How many instantiations it has produced, for the per-template cap. */
   count: i32;
+  /**
+   * The module that declares it, which is where every instantiation of it is
+   * made (WP18 G7).
+   *
+   * A template is monomorphised in the scope its body was written in, whoever
+   * asked: the annotations it resolves name that module's classes and its own
+   * imports, and its symbols belong to that module's package. A request from
+   * another module is forwarded here rather than answered where it was written.
+   */
+  home: CheckContext;
 
-  constructor(sourceName: string, decl: Node, origin: SourceFile) {
+  constructor(sourceName: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName;
     this.typeParams = [];
     this.decl = decl;
     this.origin = origin;
     this.exported = false;
     this.count = 0;
+    this.home = home;
   }
 }
 
@@ -171,8 +183,10 @@ export class StructTemplateInfo {
   exported: boolean;
   /** How many instantiations it has produced, for the per-template cap. */
   count: i32;
+  /** The module that declares it; `TemplateInfo.home` one level up (WP18 G7). */
+  home: CheckContext;
 
-  constructor(sourceName: string, kind: i32, decl: Node, origin: SourceFile) {
+  constructor(sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName;
     this.kind = kind;
     this.typeParams = [];
@@ -180,6 +194,7 @@ export class StructTemplateInfo {
     this.origin = origin;
     this.exported = false;
     this.count = 0;
+    this.home = home;
   }
 }
 
@@ -339,12 +354,25 @@ export class StructInfo {
   poisoned: boolean;
   /** Pass 1b progress, so a struct is collected once. */
   collected: boolean;
+  /**
+   * The (template, type-argument tuple) this layout was monomorphised from, or
+   * `null` for a class or interface somebody declared (WP18 G5).
+   *
+   * It is on the layout rather than only in `CheckedProgram.structInstantiations`
+   * because the arguments have to be readable wherever the *struct* is visible:
+   * an instantiated class is an ordinary struct and its type carries no
+   * arguments at all, and since G7 the module that declares the template is not
+   * necessarily the module asking. `FunctionSig.instance` is the same field one
+   * level down, for the same reason.
+   */
+  instance: StructInstantiation | null;
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name;
     this.kind = kind;
     this.origin = origin;
     this.type = type;
+    this.instance = null;
     this.fields = [];
     this.fieldIndex = new StringMap();
     this.size = 0;
@@ -488,6 +516,30 @@ export class EnumInfo {
   }
 }
 
+/**
+ * `Box<i32>` written in a *signature* annotation, where `Box` is imported
+ * (WP18 G7).
+ *
+ * Pass 1 runs before pass 1b has bound a single import — a module's signatures
+ * are collected the moment it is parsed, which is what makes an import cycle
+ * legal — so the template is not in hand when the annotation is resolved and
+ * there is no layout to build. The *name* is knowable anyway, because an
+ * instantiation is `instanceSymbol(<the exporter's name>, <the arguments>)` and
+ * both halves are in hand, so the annotation resolves to the struct it is going
+ * to be and the request itself is made as soon as every module has bound.
+ */
+export class DeferredInstance {
+  imp: ImportBinding;
+  args: i32[];
+  at: Node;
+
+  constructor(imp: ImportBinding, args: i32[], at: Node) {
+    this.imp = imp;
+    this.args = args;
+    this.at = at;
+  }
+}
+
 /** One name brought in by `import { f, g as h } from "./m"`. */
 export class ImportBinding {
   /** Module specifier text: a relative path (`./math`) or a builtin module (`nish:fs`). */
@@ -514,6 +566,16 @@ export class ImportBinding {
    * declare, only the canonical spelling the builtin checkers are keyed by.
    */
   builtin: BuiltinExport | null;
+  /**
+   * Set instead of the four above when the imported name is an exported generic
+   * function (WP18 G7). There is no one signature to bind: the import names a
+   * template, and each type-argument tuple a call site here picks becomes a
+   * symbol of its own, defined by the module that declares it and listed in
+   * `externalInstances`.
+   */
+  template: TemplateInfo | null;
+  /** The same, one level up: an exported generic class or interface (WP18 G7). */
+  structTemplate: StructTemplateInfo | null;
 
   constructor(specifier: string, importedName: string, localName: string, node: Node, decl: Node) {
     this.specifier = specifier;
@@ -525,6 +587,8 @@ export class ImportBinding {
     this.struct = null;
     this.constant = null;
     this.builtin = null;
+    this.template = null;
+    this.structTemplate = null;
   }
 }
 
@@ -600,6 +664,19 @@ export class CheckedProgram {
   structList: StructInfo[];
   /** Indices into `structList` that this module never named; see `src/checker/index.ts`. */
   reachableStructs: i32[];
+  /**
+   * Instantiations this module *calls* but does not define: WP18 G7's half of
+   * an import. A generic is monomorphised once, in the module that declares the
+   * template, so a caller in another module links against that one `define` and
+   * needs a `declare` for it — which is what an imported plain function gets
+   * through `imports`, and what a template has no `ImportBinding` to hang on
+   * because one import can become any number of symbols.
+   */
+  externalInstances: FunctionSig[];
+  /** The symbols already in `externalInstances`, so each is declared once. */
+  externalInstanceNames: StringSet;
+  /** Requests pass 1 could only write down; `Checker.makeDeferredInstantiations` makes them. */
+  deferredInstances: DeferredInstance[];
   /**
    * The struct names this module may *write* as a type: what it declares and
    * what it imports. Narrower than `structs`, which also holds the reachable
@@ -735,6 +812,9 @@ export class CheckedProgram {
     this.structs = new StringMap();
     this.structList = [];
     this.reachableStructs = [];
+    this.externalInstances = [];
+    this.externalInstanceNames = new StringSet();
+    this.deferredInstances = [];
     this.typeNames = new StringSet();
     this.importsUsedAsTypes = new StringSet();
     this.constants = new StringMap();
@@ -840,7 +920,20 @@ export class CheckedProgram {
   }
 
   addTemplate(info: TemplateInfo): void {
-    this.templates.set(info.sourceName, this.templateList.length);
+    this.addTemplateAs(info.sourceName, info);
+  }
+
+  /**
+   * The same, under a name this module chose: `import { identity as id }`
+   * (WP18 G7). Only the *lookup* takes the local name — the symbol an
+   * instantiation gets is still built from `info.sourceName`, because one
+   * instantiation is one definition for the whole program and the module that
+   * defines it never learns what anyone else called it. `info.origin` is what
+   * tells a declaration from an import here, exactly as it does for a struct
+   * and for an imported `FunctionSig`.
+   */
+  addTemplateAs(name: string, info: TemplateInfo): void {
+    this.templates.set(name, this.templateList.length);
     this.templateList.push(info);
   }
 
@@ -856,13 +949,28 @@ export class CheckedProgram {
   }
 
   /** The generic class or interface called `name` in this module, or `null` (WP18 G5). */
+  /** The import that gave this module `localName`, or `null` (WP18 G7). */
+  importNamed(localName: string): ImportBinding | null {
+    for (const imp of this.imports) {
+      if (imp.localName === localName) {
+        return imp;
+      }
+    }
+    return null;
+  }
+
   structTemplate(name: string): StructTemplateInfo | null {
     const at = this.structTemplates.get(name, -1);
     return at < 0 ? null : this.structTemplateList[at];
   }
 
   addStructTemplate(info: StructTemplateInfo): void {
-    this.structTemplates.set(info.sourceName, this.structTemplateList.length);
+    this.addStructTemplateAs(info.sourceName, info);
+  }
+
+  /** The same, under a name this module chose on import (WP18 G7). */
+  addStructTemplateAs(name: string, info: StructTemplateInfo): void {
+    this.structTemplates.set(name, this.structTemplateList.length);
     this.structTemplateList.push(info);
   }
 
@@ -871,10 +979,30 @@ export class CheckedProgram {
    * is a struct somebody declared. An instantiated class is an ordinary struct
    * and its type carries no arguments, so this is where the termination rule
    * and inference read them back.
+   *
+   * This is the module's own request log, which is what decides whether a
+   * request has already been answered *here*; `structArguments` below is the
+   * other question, and the two are deliberately not one method.
    */
   structInstance(name: string): StructInstantiation | null {
     const at = this.structInstantiations.get(name, -1);
     return at < 0 ? null : this.structInstantiationList[at];
+  }
+
+  /**
+   * The arguments a mangled struct name was instantiated at, wherever the
+   * layout came from (WP18 G7).
+   *
+   * Answered off the *layout* rather than off this module's request log, so
+   * that a `Box$i32` this module imported reads back its arguments exactly as
+   * one it asked for itself does. Since G7 those are two different modules, and
+   * the termination rule and inference both have to see through the difference
+   * — while `structInstance` above must not, because "has this module already
+   * registered one?" is what tells two modules declaring one template apart.
+   */
+  structArguments(name: string): StructInstantiation | null {
+    const info = this.struct(name);
+    return info === null ? null : info.instance;
   }
 
   addStructInstance(name: string, info: StructInstantiation): void {

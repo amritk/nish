@@ -32,7 +32,7 @@ import { CheckContext } from "./context";
 import { collectFunctionSignature } from "./declarations";
 import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
-import { collectStructMembers } from "./structs";
+import { collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
 import {
   N_CLASS,
   N_EMPTY,
@@ -47,7 +47,9 @@ import {
   Node,
 } from "./nodes";
 import {
+  DeferredInstance,
   FunctionSig,
+  ImportBinding,
   Instantiation,
   StructInfo,
   StructInstantiation,
@@ -181,7 +183,7 @@ export const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean
     // its own, so they are read back out of the instantiation its mangled name
     // belongs to. Without this, `grow<T>` asking for `grow<Box<T>>` would look
     // like a request for an unrelated named type and would not terminate.
-    const instance = ctx.program.structInstance(table.nameOf(outer));
+    const instance = ctx.program.structArguments(table.nameOf(outer));
     if (instance !== null) {
       for (const arg of instance.typeArgs) {
         if (containsType(ctx, inner, arg)) {
@@ -349,7 +351,7 @@ export const unifyAnnotation = (
   // class is an ordinary struct, so they are read back out of the instantiation
   // the mangled name belongs to.
   if (table.kindOf(arg) === K_STRUCT) {
-    const instance = ctx.program.structInstance(table.nameOf(arg));
+    const instance = ctx.program.structArguments(table.nameOf(arg));
     if (instance !== null && instance.template.sourceName === name && instance.typeArgs.length === argc) {
       let i = 0;
       while (i < argc) {
@@ -433,6 +435,27 @@ export const nonTerminatingStructMessage = (
 };
 
 /**
+ * Write down a request for an imported template and answer the type it will
+ * resolve to (WP18 G7).
+ *
+ * The arguments are resolved here, in the scope the annotation sits in, exactly
+ * as a local template's are; only the request itself waits, because the module
+ * that answers it has not bound its own imports yet. The name it answers with
+ * is the one the request is going to mint, so the annotation is already right
+ * and nothing has to be patched up afterwards.
+ */
+export const deferInstantiation = (ctx: CheckContext, imp: ImportBinding, written: Node, at: Node): i32 => {
+  const args: i32[] = [];
+  if (written.kind === N_LIST) {
+    for (const node of written.children) {
+      args.push(resolveType(node, ctx));
+    }
+  }
+  ctx.program.deferredInstances.push(new DeferredInstance(imp, args, at));
+  return ctx.table.structOf(instanceSymbol(ctx.table, imp.importedName, args));
+};
+
+/**
  * The struct one written type-argument list names (WP18 G5). All three
  * positions that may carry one go through here — an annotation (`Box<i32>`),
  * `new Box<i32>(v)` and an `implements Container<T>` clause — so the arity rule
@@ -472,6 +495,130 @@ export const instantiateWritten = (
 };
 
 /**
+ * Where a request was written, as the module that answers it needs it (WP18 G7).
+ *
+ * A template is instantiated in the scope it was *declared* in, so the work
+ * crosses a module boundary while the mistake a user can make with it does not:
+ * a termination refusal or a cap is about this call, in this file, inside
+ * whichever instantiation's body was being checked when it was made. All three
+ * therefore travel with the request rather than being read off the answering
+ * module, whose own cursors are about its own work.
+ */
+export class RequestSite {
+  /** The module the request was written in; every refusal about it is reported there. */
+  asker: CheckContext;
+  /** The instantiation whose body made the request, or `null` for ordinary code. */
+  fromFunction: Instantiation | null;
+  /** The struct instantiation whose members or method body made it, if one did. */
+  fromStruct: StructInstantiation | null;
+
+  constructor(asker: CheckContext) {
+    this.asker = asker;
+    this.fromFunction = asker.currentInstance;
+    this.fromStruct = asker.currentStructInstance;
+  }
+}
+
+/**
+ * Register `info` here as a layout this module can hold values of but does not
+ * define (WP18 G7), and answer whether it was new.
+ *
+ * It is `closeReachableStructs` for one struct. `symbols` is what the two
+ * directions of a forwarded request disagree about: an instantiated class
+ * coming *back* brings its constructor and methods, which the module that asked
+ * for it calls, while a type argument going *out* brings only a layout — the
+ * language has no way to call a member of a type parameter, so the template's
+ * module never emits a call to one, and declaring the symbols anyway would put
+ * a `declare` in front of a definition `--strict-exports` made `internal` in
+ * the module it came from. Neither direction touches `typeNames`: nobody may
+ * write `Box$i32`, and `identity<Point>` does not put `Point` in scope in the
+ * module that declares `identity`.
+ */
+const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolean): boolean => {
+  if (ctx.program.structs.has(info.name)) {
+    return false;
+  }
+  if (symbols) {
+    ctx.program.reachableStructs.push(ctx.program.structList.length);
+  }
+  ctx.program.addStruct(info.name, info);
+  return true;
+};
+
+/** `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry. */
+export const registerForeignLayouts = (
+  ctx: CheckContext,
+  root: StructInfo,
+  from: CheckContext,
+  symbols: boolean
+): void => {
+  const pending: StructInfo[] = [];
+  if (reachForeignLayout(ctx, root, symbols)) {
+    pending.push(root);
+  }
+  // A cursor rather than `pop()`, and `src/` walks it the same way so the two
+  // registries end up in the same order: `pop()` answers `T` in this language
+  // and `T | undefined` in `lib.es5`, which is the one divergence
+  // `runtime/nish.d.ts` documents, and the suite's `tsc` pass over `self/`
+  // tolerates it in exactly one file. Breadth-first is no worse than
+  // depth-first here — everything reachable is registered either way — and it
+  // costs one `i32`.
+  let at = 0;
+  while (at < pending.length) {
+    const info = pending[at];
+    at = at + 1;
+    const names = new StringSet();
+    referencedStructNames(ctx.table, info, names);
+    let i = 0;
+    while (i < names.size()) {
+      const next = from.program.struct(names.at(i));
+      if (next !== null && reachForeignLayout(ctx, next, symbols)) {
+        pending.push(next);
+      }
+      i = i + 1;
+    }
+  }
+};
+
+/**
+ * Make every layout a type argument mentions visible in the answering module
+ * (WP18 G7).
+ *
+ * A template is monomorphised in its own module, so `identity<Point>` puts a
+ * `%struct.Point` — and a `getelementptr` through its fields — into a module
+ * that may never have heard of `Point`. The layout comes from the module that
+ * made the request, which had to have it to write the request down.
+ */
+export const adoptArgumentLayouts = (ctx: CheckContext, args: i32[], site: RequestSite): void => {
+  if (site.asker === ctx) {
+    return;
+  }
+  const names = new StringSet();
+  for (const arg of args) {
+    noteStructNames(ctx.table, arg, names);
+  }
+  let i = 0;
+  while (i < names.size()) {
+    const info = site.asker.program.struct(names.at(i));
+    if (info !== null) {
+      registerForeignLayouts(ctx, info, site.asker, false);
+    }
+    i = i + 1;
+  }
+};
+
+/**
+ * One instantiation this module calls and another module defines. Recorded once
+ * per symbol, in request order, so the `declare`s the emitter writes are in the
+ * order the calls were checked in.
+ */
+export const useExternalInstance = (ctx: CheckContext, sig: FunctionSig): void => {
+  if (ctx.program.externalInstanceNames.add(sig.name)) {
+    ctx.program.externalInstances.push(sig);
+  }
+};
+
+/**
  * The struct instantiation request (WP18 G5). Answers the ordinary `StructInfo`
  * one (struct template, type-argument tuple) names, creating it the first time
  * it is asked for — and collecting its members immediately rather than queueing
@@ -490,6 +637,27 @@ export const instantiateStruct = (
   args: i32[],
   at: Node
 ): StructInfo | null => {
+  const home = template.home;
+  const info = instantiateStructHere(home, template, args, at, new RequestSite(ctx));
+  // The layout and its members are the declaring module's; this module holds
+  // values of the type, so it needs the `%struct` declaration and the
+  // `declare`s for its constructor and methods — which is exactly what an
+  // imported *declared* class gets through `reachableStructs`.
+  if (info !== null && home !== ctx) {
+    registerForeignLayouts(ctx, info, home, true);
+  }
+  return info;
+};
+
+/** The answering half of `instantiateStruct`: this module declares `template`. */
+export const instantiateStructHere = (
+  ctx: CheckContext,
+  template: StructTemplateInfo,
+  args: i32[],
+  at: Node,
+  site: RequestSite
+): StructInfo | null => {
+  adoptArgumentLayouts(ctx, args, site);
   const name = instanceSymbol(ctx.table, template.sourceName, args);
   const existing = ctx.program.structInstance(name);
   if (existing !== null) {
@@ -508,10 +676,11 @@ export const instantiateStruct = (
   // Termination, the struct half. A field whose type puts one of the struct's
   // own type arguments under a constructor starts a chain with no end, and it
   // is refused by name rather than by a depth count.
-  const growing = expandingStructAncestor(ctx, ctx.currentStructInstance, template, args);
+  const growing = expandingStructAncestor(ctx, site.fromStruct, template, args);
   if (growing !== null) {
-    const wasErrored = ctx.errored;
-    ctx.error(at, nonTerminatingStructMessage(ctx.table, template, growing.ancestor, args, growing.index));
+    const asker = site.asker;
+    const wasErrored = asker.errored;
+    asker.error(at, nonTerminatingStructMessage(ctx.table, template, growing.ancestor, args, growing.index));
     // WP18 §4a: the recovery is a *declaration's*, and this is where that is
     // decided. `collectInstanceMembers` is the one caller that clears
     // `ctx.currentInstance` while `ctx.currentStructInstance` is set, so a
@@ -522,8 +691,8 @@ export const instantiateStruct = (
     // only the first is wanted here, because stage0 reports this one through
     // `report` rather than `error` and carries on collecting the members after
     // it. Silencing them would be a difference `--parity` finds.
-    if (ctx.currentInstance === null) {
-      ctx.errored = wasErrored;
+    if (site.fromFunction === null) {
+      asker.errored = wasErrored;
       return growing.ancestor.info;
     }
     // Anywhere else the request came from an expression in a body, where the
@@ -536,7 +705,7 @@ export const instantiateStruct = (
   }
   // The caps answer with nothing, for the reason `instantiate` below says.
   if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
-    ctx.error(
+    site.asker.error(
       at,
       `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
         "this compiler's limit rather than a rule of the language"
@@ -544,7 +713,7 @@ export const instantiateStruct = (
     return null;
   }
   if (ctx.program.instantiationList.length + ctx.program.structInstantiationList.length >= MAX_INSTANTIATIONS) {
-    ctx.error(
+    site.asker.error(
       at,
       `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
         "rather than a rule of the language"
@@ -561,11 +730,12 @@ export const instantiateStruct = (
   const info = new StructInfo(name, template.kind, ctx.table.structOf(name), template.decl, template.origin);
   info.exported = template.exported;
   const instance = new StructInstantiation(template, args, info, bindings);
-  instance.from = ctx.currentStructInstance;
+  instance.from = site.fromStruct;
   template.count = template.count + 1;
   // Registered before the members are collected, so a field that mentions the
   // struct's own instantiation (`next: Node<i32> | null`) finds it rather than
   // asking for it a second time.
+  info.instance = instance;
   ctx.program.addStruct(name, info);
   ctx.program.addStructInstance(name, instance);
   collectInstanceMembers(ctx, instance);
@@ -593,7 +763,12 @@ export const collectInstanceMembers = (ctx: CheckContext, instance: StructInstan
   ctx.currentStructInstance = savedStruct;
   ctx.typeBindings = savedBindings;
   ctx.errored = savedErrored;
-  const prefix = ctx.program.symbolPrefix;
+  // WP18 G7: the *template's* package, not this module's. They are the same one
+  // whenever this module declares the template — which is always, because
+  // `instantiateStruct` forwards a foreign request to the module that does —
+  // and reading it from the template is what keeps that true by construction
+  // rather than by a refusal somewhere else.
+  const prefix = instance.template.home.program.symbolPrefix;
   let i = before;
   while (i < ctx.program.functions.length) {
     const sig = ctx.program.functions[i];
@@ -607,9 +782,6 @@ export const collectInstanceMembers = (ctx: CheckContext, instance: StructInstan
     // WP21 S1: an instantiation's symbol is complete from the moment it is
     // minted, because `qualifySymbols` runs once at the end of pass 1 and an
     // instantiation may be created on either side of it.
-    // TODO(WP18 G7): the prefix must become the *template's* rather than this
-    // module's once a generic may be instantiated from another module; the two
-    // are the same one only because importing a template is refused.
     sig.name = `${prefix}${sig.name}`;
     const member = new Instantiation(null, instance.typeArgs, sig, instance.bindings, ctx.program.nodeTypes.length);
     member.owner = instance;
@@ -632,12 +804,37 @@ export const instantiate = (
   args: i32[],
   at: Node
 ): FunctionSig | null => {
-  // WP21 S1: inside the package that declares the template. `qualifySymbols`
-  // runs at the end of pass 1 and instantiations are appended during pass 2, so
-  // an instantiation never passes through it -- the prefix has to be part of the
-  // symbol from the moment it is minted, or a generic would be the one
-  // declaration in the language whose symbol escaped its package.
-  const symbol = instanceSymbol(ctx.table, ctx.program.symbolPrefix + template.sourceName, args);
+  const home = template.home;
+  const sig = instantiateHere(home, template, args, at, new RequestSite(ctx));
+  // The definition is the declaring module's; this module links against it.
+  if (sig !== null && home !== ctx) {
+    useExternalInstance(ctx, sig);
+  }
+  return sig;
+};
+
+/**
+ * The answering half of `instantiate`: this module declares `template`, so this
+ * is where the specialised signature is created and queued the first time a
+ * tuple is asked for.
+ */
+export const instantiateHere = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  args: i32[],
+  at: Node,
+  site: RequestSite
+): FunctionSig | null => {
+  adoptArgumentLayouts(ctx, args, site);
+  // WP21 S1: inside the package that declares the template, which since G7 is
+  // not necessarily the package that asked. `qualifySymbols` runs at the end of
+  // pass 1 and instantiations are appended during pass 2, so an instantiation
+  // never passes through it -- the prefix has to be part of the symbol from the
+  // moment it is minted, or a generic would be the one declaration in the
+  // language whose symbol escaped its package. It is read off the *template*
+  // rather than off `ctx.program` so that the two cannot drift apart again if
+  // the forwarding above ever changes shape.
+  const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + template.sourceName, args);
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
     return existing.sig;
@@ -648,7 +845,7 @@ export const instantiate = (
   // an instantiation is the first point at which `T` is known to be one. The
   // message is the same, because it is the same rule.
   for (const arg of args) {
-    if (rejectForeignPointer(ctx, arg, `a type argument of \`${template.sourceName}\``, at)) {
+    if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null;
     }
   }
@@ -664,13 +861,13 @@ export const instantiate = (
   // diagnostic about a mistake nobody made that §4a exists to stop. The struct
   // half spans both and chooses there; the caps below have nothing to choose,
   // because a cap refusal has no ancestor to hand back.
-  const growing = expandingAncestor(ctx, ctx.currentInstance, template, args);
+  const growing = expandingAncestor(ctx, site.fromFunction, template, args);
   if (growing !== null) {
-    ctx.error(at, nonTerminatingMessage(ctx.table, template, growing.ancestor, args, growing.index));
+    site.asker.error(at, nonTerminatingMessage(ctx.table, template, growing.ancestor, args, growing.index));
     return null;
   }
   if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
-    ctx.error(
+    site.asker.error(
       at,
       `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
         "this compiler's limit rather than a rule of the language"
@@ -678,7 +875,7 @@ export const instantiate = (
     return null;
   }
   if (ctx.program.instantiationList.length >= MAX_INSTANTIATIONS) {
-    ctx.error(
+    site.asker.error(
       at,
       `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
         "rather than a rule of the language"
@@ -703,7 +900,7 @@ export const instantiate = (
   sig.sourceName = instanceDisplayName(ctx.table, template.sourceName, args);
   sig.exported = template.exported;
   const info = new Instantiation(template, args, sig, bindings, ctx.program.nodeTypes.length);
-  info.from = ctx.currentInstance;
+  info.from = site.fromFunction;
   sig.instance = info;
   template.count = template.count + 1;
   ctx.program.addInstantiation(symbol, info);

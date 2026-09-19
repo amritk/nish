@@ -269,6 +269,8 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
     const constant = imp.constant;
     const builtin = imp.builtin;
     const sig = imp.sig;
+    const template = imp.template;
+    const structTemplate = imp.structTemplate;
     let what = "unbound";
     if (struct !== null) {
       what = `struct ${struct.name}`;
@@ -278,6 +280,15 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
       what = `builtin ${builtin.canonical}`;
     } else if (sig !== null) {
       what = `function @${sig.name}`;
+    } else if (structTemplate !== null) {
+      // WP18 G7: a template binds to no symbol at all. One import becomes one
+      // `define` per distinct type-argument tuple, in the module that declares
+      // it, so what the dump can name is the template rather than a name the
+      // linker will see.
+      const kindWord = structTemplate.kind === STRUCT_CLASS ? "class" : "interface";
+      what = `generic ${kindWord} ${structTemplate.sourceName}`;
+    } else if (template !== null) {
+      what = `generic function ${template.sourceName}`;
     }
     out.push(`import ${imp.localName} from ${jsonQuote(imp.specifier)} -> ${what}`);
   }

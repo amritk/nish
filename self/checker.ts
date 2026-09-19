@@ -21,6 +21,7 @@ import { collectFunctionSignature, collectImports, isExported, markEntryMain } f
 import {
   collectStructTypeParamNames,
   collectTypeParamNames,
+  instantiateStruct,
   isGenericFunction,
   isGenericStruct,
   mentionsTypeParam,
@@ -67,6 +68,7 @@ import {
   AliasInfo,
   CheckedProgram,
   ConstInfo,
+  DeferredInstance,
   EnumInfo,
   FunctionSig,
   Instantiation,
@@ -428,7 +430,7 @@ export class Checker {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
       return;
     }
-    const template = new TemplateInfo(name, stmt, this.program.source);
+    const template = new TemplateInfo(name, stmt, this.program.source, this.ctx);
     template.exported = isExported(stmt);
     template.typeParams = collectTypeParamNames(stmt);
     if (template.exported && name === "main") {
@@ -499,7 +501,7 @@ export class Checker {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
       return;
     }
-    const template = new StructTemplateInfo(name, kind, stmt, this.program.source);
+    const template = new StructTemplateInfo(name, kind, stmt, this.program.source, this.ctx);
     template.exported = isExported(stmt);
     template.typeParams = collectStructTypeParamNames(stmt);
     this.program.addStructTemplate(template);
@@ -510,7 +512,8 @@ export class Checker {
    * may request more, and the queue is drained rather than recursed into, so
    * `from` is a chain of requests and not a call stack.
    */
-  drainInstantiations(): void {
+  drainInstantiations(): boolean {
+    const worked = this.ctx.pending.length > 0 || this.ctx.pendingFinish.length > 0;
     this.finishPendingStructs();
     let at = 0;
     while (at < this.ctx.pending.length) {
@@ -528,6 +531,7 @@ export class Checker {
       this.finishPendingStructs();
     }
     this.ctx.pending = [];
+    return worked;
   }
 
   /**
@@ -874,27 +878,17 @@ export class Checker {
       this.bindStructImport(index, struct);
       return;
     }
-    // WP18 §11 G7: one definition per instantiation, in the module that
-    // declares the template, is the whole-program half of this package and has
-    // not landed. Refusing by name beats "has no exported function", which is
-    // what looking only at the exported signatures would say.
+    // WP18 G7. `origin` is what tells a declaration from the exporter's own
+    // import, exactly as it does for a class above: a template is not
+    // re-exported by the module that imported it.
     const structTemplate = target.structTemplate(imp.importedName);
-    if (structTemplate !== null) {
-      const what = structTemplate.kind === STRUCT_CLASS ? "class" : "interface";
-      this.ctx.error(
-        imp.node,
-        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic ${what}, and a generic ` +
-          "class or interface cannot yet be instantiated from another module; declare it in the module that uses it"
-      );
+    if (structTemplate !== null && structTemplate.origin === target.source) {
+      this.bindStructTemplateImport(index, structTemplate);
       return;
     }
     const template = target.template(imp.importedName);
-    if (template !== null) {
-      this.ctx.error(
-        imp.node,
-        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic function, and a generic function cannot ` +
-          "yet be instantiated from another module; declare it in the module that calls it"
-      );
+    if (template !== null && template.origin === target.source) {
+      this.bindTemplateImport(index, template);
       return;
     }
     const sig = target.exported(imp.importedName);
@@ -972,6 +966,156 @@ export class Checker {
     imp.struct = struct;
     this.program.addStruct(imp.localName, struct);
     this.program.typeNames.add(imp.localName);
+  }
+
+  /**
+   * WP18 G7: an imported generic function. What is bound is the *template*, and
+   * that is the whole difference from every other import.
+   *
+   * A plain import is one name and one symbol, so it binds a `FunctionSig` and
+   * the emitter writes one `declare`. A template is one name and as many symbols
+   * as the program has distinct type-argument tuples for it, none of which
+   * exists yet: each is minted the first time a call site here picks it, defined
+   * by the module that declares the template, and recorded in
+   * `externalInstances` so this module declares exactly the ones it calls.
+   *
+   * The local name may differ from the exported one and the *symbol* does not
+   * follow it: `import { identity as id }` still calls `@identity$i32`, because
+   * one instantiation is one definition for the whole program and the module
+   * that defines it never learns what anyone else called it.
+   */
+  bindTemplateImport(index: i32, template: TemplateInfo): void {
+    const imp = this.program.imports[index];
+    if (!template.exported) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
+      );
+      return;
+    }
+    if (this.program.importsUsedAsTypes.has(imp.localName)) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.localName}\` is a function imported from \`${imp.specifier}\`, not a type`
+      );
+    }
+    if (this.ctx.sigs.has(imp.localName) || this.program.templates.has(imp.localName)) {
+      let origin = "";
+      for (const other of this.program.imports) {
+        const bound = other.template;
+        if (other !== imp && other.localName === imp.localName && origin.length === 0 && bound !== null) {
+          origin = other.specifier;
+        }
+      }
+      this.ctx.error(
+        imp.node,
+        origin.length > 0
+          ? `\`${imp.localName}\` is already imported from \`${origin}\``
+          : `\`${imp.localName}\` is already declared in this module`
+      );
+      return;
+    }
+    imp.template = template;
+    this.program.addTemplateAs(imp.localName, template);
+  }
+
+  /**
+   * WP18 G7, one level up: an imported generic class or interface. It joins this
+   * module's template table rather than its struct table, because a template has
+   * no layout — `Box` is not a type here any more than it is in the module that
+   * wrote it, and `Box<i32>` is.
+   *
+   * Unlike a declared class it *may* be renamed on import. The ABI a declared
+   * class pins is its own name; a template has no symbol at all, and the
+   * instantiation that does is named after the template's source name wherever
+   * the request came from, so `import { Box as B }` and `B<i32>` still name
+   * `%struct.Box$i32`.
+   */
+  bindStructTemplateImport(index: i32, template: StructTemplateInfo): void {
+    const imp = this.program.imports[index];
+    if (!template.exported) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
+      );
+      return;
+    }
+    // Named with no type arguments somewhere in this module's signatures: the
+    // arity rule, said in the words a locally declared template says it in.
+    if (this.program.importsUsedAsTypes.has(imp.localName)) {
+      let example = "";
+      let i = 0;
+      while (i < template.typeParams.length) {
+        example = i === 0 ? "number" : `${example}, number`;
+        i = i + 1;
+      }
+      this.ctx.error(
+        imp.node,
+        `\`${template.sourceName}\` is generic: it must be written with its type arguments, e.g. ` +
+          `\`${template.sourceName}<${example}>\``
+      );
+      return;
+    }
+    if (
+      this.ctx.sigs.has(imp.localName) ||
+      this.program.structs.has(imp.localName) ||
+      this.program.structTemplates.has(imp.localName)
+    ) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already declared in this module`);
+      return;
+    }
+    imp.structTemplate = template;
+    this.program.addStructTemplateAs(imp.localName, template);
+  }
+
+  /**
+   * Pass 1b, after every module has bound its imports: make the requests pass 1
+   * could only write down (WP18 G7).
+   *
+   * It runs after *every* module has bound rather than after this one, because
+   * the module that answers resolves the template's members in its own scope
+   * and those members may name its own imports.
+   */
+  makeDeferredInstantiations(): void {
+    for (const request of this.program.deferredInstances) {
+      this.ctx.errored = false;
+      this.makeDeferredInstantiation(request);
+    }
+    this.ctx.errored = false;
+    this.program.deferredInstances = [];
+  }
+
+  makeDeferredInstantiation(request: DeferredInstance): void {
+    const imp = request.imp;
+    const template = imp.structTemplate;
+    if (template === null) {
+      // An import that bound to nothing at all already has a diagnostic of its
+      // own, and a second one about the same name would only bury it.
+      if (imp.sig === null && imp.struct === null && imp.constant === null && imp.builtin === null && imp.template === null) {
+        return;
+      }
+      this.ctx.error(
+        request.at,
+        `\`${imp.importedName}\` in \`${imp.specifier}\` takes no type arguments: only a generic ` +
+          "class or interface is written with them"
+      );
+      return;
+    }
+    if (request.args.length !== template.typeParams.length) {
+      let example = "";
+      let i = 0;
+      while (i < template.typeParams.length) {
+        example = i === 0 ? "number" : `${example}, number`;
+        i = i + 1;
+      }
+      this.ctx.error(
+        request.at,
+        `\`${template.sourceName}\` is generic: it must be written with its type arguments, e.g. ` +
+          `\`${template.sourceName}<${example}>\``
+      );
+      return;
+    }
+    instantiateStruct(this.ctx, template, request.args, request.at);
   }
 
   /**

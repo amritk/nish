@@ -1387,8 +1387,13 @@ Generic **classes and interfaces** (G5) followed, in both compilers, single
 module: a `StructInfo` per instantiation, methods and a constructor per
 instantiation, type arguments after `new` and in an annotation, `implements`
 over an instantiated interface, and the struct half of the termination rule.
-§15.4 records what it decided differently from §11's sketch. Constraints (G6),
-the whole-program rule (G7) and the peripheries (G8) are not done; §16 is the
+§15.4 records what it decided differently from §11's sketch.
+
+The **whole-program rule** (G7) followed: a template may be exported, imported
+and instantiated from anywhere, each instantiation is defined once in the
+module that declares the template, and every other module `declare`s it. §15.5
+records what *it* decided differently, including the trap §16 marked, which is
+closed. Constraints (G6) and the peripheries (G8) are not done; §16 is the
 order to take them in.
 
 The acceptance test of §9 holds and is checked rather than asserted:
@@ -1580,6 +1585,69 @@ definitions and the header does not compile; without the escape `Box_arr<i32>`
 and `Box<i32[]>` are one name. `tests/cases/gen_export_header` is the first of
 those, compiled under `-Wall -Wextra -Werror -pedantic`.
 
+### 15.5 G7, and the five things it had to decide
+
+**The request crosses a module boundary; the work does not.** A template is
+monomorphised in the scope it was *declared* in, because that is the only scope
+its annotations and its body mean anything in — `wrap<T>(x: T): Node` names the
+declaring module's `Node`, not the caller's. So `Checker.instantiate` and
+`self/generics.ts`'s `instantiate` forward to `template.home` and keep only the
+*site*: the file the call was written in, and the instantiation whose body made
+it. The site is what a termination or cap refusal is reported against, which is
+why it travels rather than being read off the answering module — whose own
+cursors are about its own work. A local template is the same path with
+`home === this`, which is every program that existed before G7, and the
+`IR(stage0) == IR(stage1)` equality over the whole corpus is unmoved.
+
+**The trap §16 marked is closed by construction rather than by a rule.** An
+instantiation's symbol is now minted from `template.home.symbolPrefix`, and an
+instantiated class's methods from `instance.template.home.symbolPrefix` in
+`collectInstanceMembers` — the two `TODO(WP18 G7)` lines, gone. Reading the
+prefix off the *template* is what makes the answer right whoever asked, instead
+of right because the module that instantiates is always the module that
+declares. `tests/link/package_generic_import` is the program that would have
+been miscompiled: a package exports `pick<T>` and `Holder<T>`, the root package
+and a second package both instantiate them at `i32`, and there is one
+`@pkg_lib.pick$i32` and one `@pkg_lib.Holder$i32.get` for the whole program.
+`tests/link/package_generic` is the other half of the pair and is unchanged:
+three packages each declaring a *private* `pick<T>` still mint three symbols.
+
+**A type argument carries its layout across.** `identity<Point>` puts a
+`%struct.Point` into the module that declares `identity`, which may never have
+heard of `Point` — so the request brings the layout with it, and the answer
+brings back whatever the instantiated class itself reaches. Both go through the
+one closure `closeReachableStructs` already performs for an imported class,
+with one difference stated where it is made: a layout going *out* brings no
+symbols. The language has no way to call a member of a type parameter, so the
+template's module never emits a call to one, and declaring them anyway would
+put a `declare` in front of a definition `--strict-exports` made `internal` in
+the module it came from.
+
+**A signature annotation could only write the request down.** Pass 1 runs as
+each module is parsed — which is what makes an import cycle legal — so
+`Box<i32>` in an exported signature is resolved before a single import is
+bound, and there is no template in hand. The *name* is knowable anyway, because
+§3c makes an instantiation `instanceSymbol(<the exporter's name>, <the
+arguments>)` and both halves are there, so the annotation resolves to the
+struct it is going to be and the request is made in a new sub-pass after every
+module has bound. That sub-pass is also where the one new rule of this
+milestone is stated: a type-argument list on an imported name that is not a
+template (`` `Point` in `./lib` takes no type arguments ``, NL2325), which
+cannot be refused where it is written because at that point nothing knows what
+`Point` is.
+
+**Two questions about a mangled struct name had to come apart.** "Which
+arguments was `Box$i32` made from?" is answered off the *layout* now, so that a
+`Box$i32` a module imported reads back its arguments exactly as one it asked
+for itself does — the termination rule and inference both have to see through
+the difference. "Has *this module* already registered one?" stays the module's
+own request log, and the two are deliberately not one method:
+`tests/link/generic_class_clash` is two modules each declaring a private
+`Holder<T>`, and merging the questions makes the second module reuse the
+first's layout instead of registering a clashing one, which is the miscompile
+that case exists to catch. stage1 made exactly that mistake first, and the
+reject oracle is what said so.
+
 ---
 
 ## 16. What is next, in order
@@ -1588,38 +1656,16 @@ those, compiled under `-Wall -Wextra -Werror -pedantic`.
    it decided differently, including that the struct half of the termination
    rule *is* a request chain after all, over a second cursor rather than over a
    template graph.
-2. **G7, whole-program.** One definition per instantiation, in the module that
-   declares the template, and a `declare` everywhere else. The refusal that
-   stands in for it today (`is a generic function, and a generic function
-   cannot yet be instantiated from another module`) is the case to delete when
-   it lands, and `tests/link/generic_import/` and `generic_two_importers/` are
-   the tests §12 names.
-
-   **A trap is laid here, and it is worth reading before starting.** An
-   instantiation's symbol carries a package prefix (WP21 S1), and it is minted
-   from the *instantiating* module's prefix — `instantiate` in
-   `checker/index.ts` and `self/generics.ts` reads `program.symbolPrefix`. That
-   is correct only because of the refusal above: the module that instantiates is
-   always the module that declares, so the two prefixes are the same one. The
-   moment a template may be instantiated from another module, they are not, and
-   the prefix has to become the **template's** rather than the caller's —
-   otherwise two packages importing one generic mint the same symbol and the
-   whole-program fact table in `codegen/attributes.ts`, which is keyed by
-   symbol, hands one instantiation the other's purity and escape facts. That is
-   a miscompile rather than a link error, which is the same failure WP21 S1
-   exists to prevent for plain functions. `tests/link/package_generic` is the
-   fixture that pins the prefix today and the one to extend when G7 lands.
-
-   G5 laid the same trap one level up and left it marked: an instantiated
-   class's *methods* are minted with `program.symbolPrefix` too, in
-   `collectInstanceMembers` (`src/checker/index.ts` and `self/generics.ts`),
-   and each carries a `TODO(WP18 G7)` beside the line. They are correct for
-   exactly the same reason and stop being correct at exactly the same moment,
-   so the two are one change rather than two. The refusal that holds them
-   apart until then is `` is a generic class, and a generic class or interface
-   cannot yet be instantiated from another module ``
-   (`tests/wordings/nl2316_generic_class_import`), and it is the second case to
-   delete when G7 lands.
+2. ~~**G7, whole-program.**~~ **Landed** — §15.5 records what it decided, and
+   the trap this entry used to warn about is closed: an instantiation's symbol
+   is minted from the *template's* `symbolPrefix` rather than the instantiating
+   module's, in `instantiate` and in `collectInstanceMembers` on both sides, so
+   two packages importing one generic mint one symbol for one function instead
+   of one symbol for two. `tests/link/package_generic_import` pins it,
+   `tests/link/generic_import` and `generic_two_importers` are §12's two cases,
+   and the two refusals that stood in for the milestone are deleted (their
+   codes, NL2298 and NL2316, are retired in `tests/wordings/unreachable.txt`
+   and reserved for ever, as every retired code is).
 3. **G6, constraints.** Member access on a constrained parameter admitted at the
    template, satisfaction checked at each instantiation. Small next to G5, and
    it wants G5 first because `<T extends Shape>` is most useful on a container.

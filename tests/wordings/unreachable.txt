@@ -17,6 +17,8 @@
 # handed to another one. The entry costs a string and matches nothing.
 NL2001  retired: the overload/override rule the inheritance work removed
 NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
+NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal WP18 G7 replaced; a template is imported and instantiated now (tests/link/generic_import)
+NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by WP18 G7 (tests/link/generic_import, tests/link/package_generic_import)
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule

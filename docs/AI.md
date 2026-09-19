@@ -393,10 +393,18 @@ export const main = (): i32 => {
 - **Every other rule still applies inside.** A type parameter is not a hole to
   smuggle something through: each instantiation is checked with `T` bound to a
   concrete type.
+- **A template may be exported and instantiated from another module.** Each
+  instantiation is defined once, in the module that declares the template, and
+  `declare`d everywhere else — so one imported name becomes one symbol per
+  distinct type-argument tuple, and two modules asking for the same tuple share
+  the one definition. A type argument may be a class the declaring module has
+  never heard of. A template that is not exported cannot be imported, and an
+  imported one may be renamed (`import { identity as id }`) without moving the
+  symbol. A type-argument list on an imported name that is *not* a template is
+  `` `Point` in `./lib` takes no type arguments ``.
 - **Not supported yet**, each with its own message: a constrained parameter
-  (`<T extends Shape>`), a default type argument (`<T = string>`), type
-  parameters on a **method or type alias**, and instantiating a generic
-  imported from another module. A generic `main` is refused.
+  (`<T extends Shape>`), a default type argument (`<T = string>`), and type
+  parameters on a **method or type alias**. A generic `main` is refused.
 - **`$` may not appear in a function, class or interface name** — it is what
   separates a generic's name from its type arguments in the emitted symbol.
 
@@ -450,8 +458,14 @@ export const main = (): i32 => {
 - **Two modules may not both declare a generic class of one name** once both
   instantiate it: `%struct.Box$i32` is program-wide, so
   `` Generic class `Holder` is also declared in helper.ts ``.
-- **Not supported yet**: a constrained parameter, a generic method of its own,
-  and importing a generic class or interface from another module.
+- **A generic class or interface may be imported**, and the rule is a generic
+  function's: `%struct.Box$i32` and every `@Box$i32.*` symbol are defined once,
+  by the module that declares `Box<T>`, and `declare`d by every module that
+  holds one. Unlike a declared class it may be renamed on import, because the
+  name that crosses the ABI is the template's. Named without its type arguments
+  it is `` `Crate` is generic: it must be written with its type arguments ``.
+- **Not supported yet**: a constrained parameter and a generic method of its
+  own.
 
 ### Calling C
 

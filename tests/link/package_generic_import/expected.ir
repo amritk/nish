@@ -1,0 +1,5 @@
+define noundef i32 @pkg_lib.pick$i32(i32 noundef %a, i32 noundef %b)
+define void @pkg_lib.Holder$i32.constructor(
+define noundef i32 @pkg_lib.Holder$i32.get(
+declare noundef i32 @pkg_lib.pick$i32(i32 noundef, i32 noundef)
+declare noundef i32 @pkg_lib.Holder$i32.get(

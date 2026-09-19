@@ -169,6 +169,16 @@ and compiled twice; neither `define` has anything generic left in it, and
 symbol renamed. `identity$str` keeps its parameter's pointer attributes but not
 `nocapture`, because returning the pointer is an escape.
 
+The module boundary changes nothing about the IR and everything about where it
+is written: a template exported and called from another module is monomorphised
+where it is *declared*, so the `define`s below stay in this module and the
+caller gets a `declare` carrying these exact attributes. One instantiation is
+one definition for the whole program however many modules ask for it
+(`tests/link/generic_import`, `generic_two_importers`), and the symbol carries
+the declaring package's prefix (`tests/link/package_generic_import`). A
+two-module program cannot be a snippet here, which is why those three are the
+cases that pin it.
+
 <!-- cookbook:begin gen_function -->
 ```ts
 const identity = <T>(x: T): T => x;
@@ -359,6 +369,11 @@ nodes are all computed from the instantiation rather than from the template.
 Compare the two below: the `i32` box is four bytes and the `string` box is
 eight, and the string constructor's `%v` loses `nocapture` because it is stored
 into a field — which is exactly what a hand-written `BoxStr` would do.
+
+An imported `Box<T>` is the same picture across two files: `%struct.Box$i32`
+and its members are emitted by the module that declares `Box`, and a module
+that holds one gets the `%struct` line and a `declare` per member, exactly as
+it does for an imported declared class.
 
 <!-- cookbook:begin gen_class -->
 ```ts

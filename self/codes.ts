@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 409;
+export const RULE_COUNT: i32 = 410;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -401,6 +401,8 @@ export const diagnosticRules = (): string[] => [
   "NL2041",
   "` needs an explicit return type annotation",
   "NL2096",
+  "` takes no type arguments: only a generic ",
+  "NL2325",
   "`substring` expects 1 or 2 arguments, got ",
   "NL2153",
   "Loose equality is forbidden; use === / !==",
