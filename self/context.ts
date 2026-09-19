@@ -215,6 +215,27 @@ export class CheckContext {
   }
 
   /**
+   * Report against the *key* of an object-literal property rather than the
+   * whole `key: value`. stage0 hands `prop.name` to the error
+   * (`src/validator.ts`) and this tree has no node for the key: it is `text` on
+   * the property, and `parseObjectLiteral` only ever accepts a plain identifier
+   * there, so the key is the property's own first `text.length` bytes.
+   *
+   * Without it the caret ran to the end of the value — and so did `--json`'s
+   * `endColumn`, which is the half nothing was checking: a `.err` sidecar is
+   * matched as a substring and the human excerpt's caret run is pinned by no
+   * golden at all, so the span was free to differ until `--json` entered the
+   * parity cross product.
+   */
+  errorAtKey(property: Node, message: string): void {
+    if (this.errored) {
+      return;
+    }
+    this.sink.report(this.source, property.start, property.start + property.text.length, message);
+    this.errored = true;
+  }
+
+  /**
    * Report a WP15 §8 performance warning against a node's own span. It never
    * poisons anything and never reaches the exit code: the compilation goes on
    * exactly as it would have without it.

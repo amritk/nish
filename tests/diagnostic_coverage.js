@@ -218,6 +218,14 @@ const defaultCompiler = () => {
  * every time the two disagreed. The directory form takes a multi-module
  * `tests/link/` program as happily as a single file.
  */
+/**
+ * Whether a run's `--json` objects are the parser turning the file down rather
+ * than a phase naming a rule. Every syntax error carries one code (`SYNTAX` in
+ * `self/codes.ts`), which is the field to key on: the prose is two different
+ * parsers' and is allowed to improve.
+ */
+const refusedByParser = (result) => result.objects.some((o) => o.code === "NL0001");
+
 const compile = async (compiler, program) => {
   const named = path.relative(root, program.file).split(path.sep).join("/");
   const out = path.join(BUILD, program.stem.replace(/[^\w.-]+/g, "_"));
@@ -311,7 +319,15 @@ const main = async (argv) => {
       // owns the rule can state it (§A3's declared class), and stage1 answers
       // a handful of these programs differently or not at all (§2B). Both are
       // per-case declarations, and anything else is a failure.
-      if (/syntax error:/.test(result.stderr) && refusals.has(c.stem)) {
+      //
+      // The refusal is read off the objects as well as off stderr, because
+      // this runs the compiler with `--json` and under `--json` a diagnostic is
+      // an object on stdout and stderr is empty — which is the whole contract
+      // (`docs/LANGUAGE.md`). stage1 used to print its parser's refusals to
+      // stderr whatever the command line said, so the stderr test alone was
+      // reading a bug for a signal; now that it answers the flag, these 41
+      // cases are what asks on every `npm test` whether it still does.
+      if ((/syntax error:/.test(result.stderr) || refusedByParser(result)) && refusals.has(c.stem)) {
         refused.push(c.stem);
         return;
       }

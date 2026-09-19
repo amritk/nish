@@ -28,13 +28,19 @@
  */
 import ts from "typescript";
 import { LANGUAGE } from "./branding.js";
-import { CompileError, DiagnosticSink } from "./diagnostics.js";
+import { CompileError, DiagnosticSink, SourceSpan } from "./diagnostics.js";
 import { lookup } from "./lookup.js";
 
 type Validator = (node: ts.Node, sf: ts.SourceFile) => void;
 
-function fail(message: string, node: ts.Node, sf: ts.SourceFile): never {
-  throw new CompileError(message, node, sf);
+/**
+ * `where` is normally the offending node. A raw span is for the handful of
+ * rules whose message names something narrower than any node in the
+ * `typescript` tree — `rejectDebugger` below is the one — and `CompileError`
+ * has always taken both.
+ */
+function fail(message: string, where: ts.Node | SourceSpan, sf: ts.SourceFile): never {
+  throw new CompileError(message, where, sf);
 }
 
 // ---- Banned names -----------------------------------------------------------
@@ -301,8 +307,24 @@ const rejectThrow: Validator = (node, sf) =>
     node,
     sf
   );
+/** Spelled once, because `rejectDebugger` measures the caret against its length. */
+const DEBUGGER_KEYWORD = "debugger";
+
 const rejectDebugger: Validator = (node, sf) =>
-  fail(`\`debugger\` is forbidden in ${LANGUAGE} (no debugger hook)`, node, sf);
+  fail(
+    `\`debugger\` is forbidden in ${LANGUAGE} (no debugger hook)`,
+    // The keyword, not the statement: a `DebuggerStatement` runs to its
+    // semicolon and the message names `debugger`, so the caret was a character
+    // wider than the thing it was about. Every other forbidden *name* — `eval`,
+    // `globalThis`, `arguments` — is refused at its identifier, and this is the
+    // one that was not, because `debugger` is a statement kind here and an
+    // ordinary identifier to stage1, which parses no `debugger` keyword at all
+    // (`forbiddenValue` in `self/validator.ts`). Nothing pinned the difference:
+    // a `.err` sidecar is matched as a substring and no golden holds a caret
+    // run, so it took `--json`'s `endColumn` entering the parity cross product.
+    { start: node.getStart(sf), end: node.getStart(sf) + DEBUGGER_KEYWORD.length },
+    sf
+  );
 const rejectLabeled: Validator = (node, sf) =>
   fail(`Labeled statements are forbidden in ${LANGUAGE} (use structured loops)`, node, sf);
 

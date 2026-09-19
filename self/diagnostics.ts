@@ -94,9 +94,53 @@ export class SourceFile {
     return this.lineIndex(offset) + 1;
   }
 
-  /** The 1-based column of `offset`, counted in bytes. */
+  /**
+   * The 1-based column of `offset`, counted in bytes.
+   *
+   * This is the **debugger's** column and not the editor's: a `DILocation`
+   * column is read back against the file's bytes, which is what `clang -g`
+   * writes and what WP19 §A5 settled for `self/debug.ts`. A diagnostic wants
+   * `reportedColumnOf` below instead.
+   */
   columnOf(offset: i32): i32 {
     return offset - this.starts[this.lineIndex(offset)] + 1;
+  }
+
+  /**
+   * The 1-based column of `offset`, counted in UTF-16 code units — the column
+   * a diagnostic reports and `--emit-checked` prints.
+   *
+   * The consumer here is an editor rather than a debugger, so the unit is the
+   * one an editor indexes a line by, which is also what stage0 has always
+   * answered: its positions come from the `typescript` API and that counts
+   * code units. Nothing compared the two until `--json` joined the parity
+   * cross product, because the count only differs on a line with a non-ASCII
+   * character before the caret and no corpus program had one
+   * (`tests/cases/reject_diag_utf8`).
+   */
+  reportedColumnOf(offset: i32): i32 {
+    return this.codeUnits(this.starts[this.lineIndex(offset)], offset) + 1;
+  }
+
+  /**
+   * How many UTF-16 code units the bytes `[from, to)` spell.
+   *
+   * Every byte that begins a character is one, except a four-byte sequence:
+   * that is a code point above the BMP and costs a surrogate pair, so it is
+   * two. Continuation bytes are none of their own.
+   */
+  codeUnits(from: i32, to: i32): i32 {
+    let units = 0;
+    let i = from;
+    const limit = to < this.text.length ? to : this.text.length;
+    while (i < limit) {
+      const byte = this.text.charCodeAt(i);
+      if (startsCharacter(byte)) {
+        units = units + (isFourByteLead(byte) ? 2 : 1);
+      }
+      i = i + 1;
+    }
+    return units;
   }
 
   /** The text of a 0-based line without its terminator, `\r\n` included. */
@@ -119,6 +163,12 @@ export class SourceFile {
  * `column` are computed when it is reported rather than when it is printed,
  * because the sort in `DiagnosticSink` reads them for every comparison.
  */
+/** Whether a UTF-8 byte begins a character rather than continuing the one before it. */
+const startsCharacter = (byte: i32): boolean => (byte & 0xc0) !== 0x80;
+
+/** Whether a UTF-8 byte opens a four-byte sequence, which is two UTF-16 code units. */
+const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0;
+
 export class Diagnostic {
   source: SourceFile;
   start: i32;
@@ -137,7 +187,7 @@ export class Diagnostic {
     this.kind = kind;
     this.text = text;
     this.line = source.lineOf(start);
-    this.column = source.columnOf(start);
+    this.column = source.reportedColumnOf(start);
   }
 
   /** `<file>:<line>:<col>: <kind>: <text>` — the line the tests match on. */
@@ -155,17 +205,27 @@ export class Diagnostic {
     const line = this.source.lineIndex(this.start);
     const text = this.source.lineText(line);
     const lineNo = `${this.line}`;
-    const lineEnd = this.source.starts[line] + text.length;
+    const lineStart = this.source.starts[line];
+    const lineEnd = lineStart + text.length;
     const markerEnd = this.end < lineEnd ? this.end : lineEnd;
-    let markerLength = markerEnd - this.start;
+    // In code units, like the column: the caret has to land under the byte the
+    // column names, and a terminal counts characters rather than bytes
+    // (`formatSourceExcerpt` in `src/diagnostics.ts` pads by code units too).
+    let markerLength = this.source.codeUnits(this.start, markerEnd);
     if (markerLength < 1) {
       markerLength = 1;
     }
 
     const pad = new StringBuilder();
-    let i = 0;
-    while (i < this.column - 1) {
-      pad.addChar(text.charCodeAt(i) === CH_TAB ? CH_TAB : 32);
+    let i = lineStart;
+    while (i < this.start) {
+      const byte = text.charCodeAt(i - lineStart);
+      if (startsCharacter(byte)) {
+        pad.addChar(byte === CH_TAB ? CH_TAB : 32);
+        if (isFourByteLead(byte)) {
+          pad.addChar(32);
+        }
+      }
       i = i + 1;
     }
     const marker = new StringBuilder();
@@ -203,7 +263,7 @@ export class Diagnostic {
    */
   json(): string {
     const endLine = this.source.lineOf(this.end);
-    const endColumn = this.source.columnOf(this.end);
+    const endColumn = this.source.reportedColumnOf(this.end);
     const performance = this.kind === PERFORMANCE;
     const severity = performance ? PERFORMANCE : "error";
     const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`;
@@ -249,10 +309,22 @@ export class DiagnosticSink {
   }
 
   reportKind(source: SourceFile, start: i32, end: i32, kind: string, text: string): void {
-    if (!this.fileOrder.has(source.path)) {
-      this.fileOrder.set(source.path, this.fileOrder.size());
+    this.add(new Diagnostic(source, start, end, kind, text));
+  }
+
+  /**
+   * Record a diagnostic somebody else built. The parser builds its own — it
+   * refuses before there is a checker to report through — and they belong in
+   * the report with every other error, so that the *driver* is what decides
+   * whether that report is the human one on stderr or `--json`'s objects on
+   * stdout. stage0 has always routed a syntax error this way
+   * (`StaticSyntaxError` is a `CompileError` and goes to its sink).
+   */
+  add(diagnostic: Diagnostic): void {
+    if (!this.fileOrder.has(diagnostic.source.path)) {
+      this.fileOrder.set(diagnostic.source.path, this.fileOrder.size());
     }
-    this.items.push(new Diagnostic(source, start, end, kind, text));
+    this.items.push(diagnostic);
   }
 
   /**
