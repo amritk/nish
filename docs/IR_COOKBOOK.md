@@ -3035,26 +3035,26 @@ entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %total.addr, align 4
   store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4
   br label %for.cond
 
 for.cond:
-  %0 = load i32, i32* %i.addr, align 4
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
-  %3 = trunc i64 %2 to i32
-  %4 = icmp slt i32 %0, %3
-  br i1 %4, label %for.body, label %for.end
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = trunc i64 %1 to i32
+  %6 = icmp slt i32 %4, %5
+  br i1 %6, label %for.body, label %for.end
 
 for.body:
-  %5 = load i32, i32* %total.addr, align 4
-  %6 = load i32, i32* %i.addr, align 4
-  %7 = sext i32 %6 to i64
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
-  %10 = bitcast i8* %9 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %7
+  %7 = load i32, i32* %total.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = sext i32 %8 to i64
+  %10 = bitcast i8* %3 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %9
   %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
-  %13 = add nsw i32 %5, %12
+  %13 = add nsw i32 %7, %12
   store i32 %13, i32* %total.addr, align 4
   br label %for.inc
 
@@ -3099,6 +3099,62 @@ attributes #1 = { nounwind willreturn readonly }
 !4 = !{!2}
 ```
 <!-- cookbook:end arr_bounds_proven -->
+
+### An array in a class field: the header hoisted into the preheader
+
+A loop over an array held in a **class field** reads the header through a field
+load, and the §2b alias domains do not reach it: the second read sits in a
+bounds-checked block, where LLVM may not speculate it out. So the emitter does
+the hoist itself, wherever the whole-program fact
+`FunctionFacts.resizesArray` proves that nothing the loop reaches can `push`
+or `pop` (WP15 §2c candidate 2, `src/codegen/attributes.ts`). The field load,
+`len` and `data` are read once in the loop's preheader:
+
+```llvm
+entry:
+  %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !8, !noalias !9   ; len, once
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !8, !noalias !9   ; data, once
+  br label %while.cond
+
+while.cond:
+  %11 = trunc i64 %3 to i32                                       ; the condition's length
+  %12 = icmp slt i32 %10, %11
+
+while.body:
+  %17 = icmp ult i64 %16, %3                                      ; the bounds check's: the same %3
+```
+
+**The second half is the point, not the first.** "No header load left in the
+loop" is satisfiable while buying nothing — §2c reached that state by hand,
+with metadata, and measured the program 5 ms *slower*, because a preheader load
+per use still leaves two length values, two compares and two loop exits. What
+the emitter guarantees here is **one length value feeding the loop condition and
+the bounds check both**, by construction rather than by hoping GVN merges two
+loads of one address.
+
+Three things refuse the hoist, and each is the whole of a proof:
+
+- a `push` or `pop` anywhere in the loop, or a call to a function the fixpoint
+  says grows an array — those are what move `len`, `cap` and `data`;
+- a store in the loop to a field named anywhere in the path (`h.xs = other`),
+  since the hoisted value is a field load;
+- a path rooted at a local the loop itself declares, or at a reassignable one,
+  or through a nullable link that a guard *inside* the loop narrows.
+
+The lowering is pinned by `tests/cases/arr_header_hoist.ts` and the checks
+`tests/run.js` runs over it, which assert both halves by name.
+
+**What this does not buy, and where that lives.** The loop above still carries
+*two* bounds checks where the same loop written `const xs = h.xs` carries one,
+because `src/checker/bounds.ts` keys its length facts by variable and never by
+a property path — a local cannot be written through an alias, a field can. So
+`h.xs.length` proves nothing about `h.xs[i]`. That second check is a second
+loop exit and it is what keeps the vectoriser away; closing it is that file's
+work, not the emitter's.
 
 ### `--unchecked-indexing`
 

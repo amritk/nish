@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 341 programs, 5891 dump lines.
+# 342 programs, 5967 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -156,6 +156,83 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=2 stackLocals=0
   callee 16:15 total -> @total
   local 17:12 word: string (let)
+program tests/cases/arr_header_hoist.ts
+module tests/cases/arr_header_hoist.ts (entry)
+struct Holder (class) size=8 align=8
+  field xs: i32[] index=0 offset=0
+  constructor -> @Holder.constructor
+function Holder.constructor(this: Holder, xs: i32[]): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: xs
+  pointer this: size=8 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function fieldScale(dst: i32[], h: Holder): void -> @fieldScale [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 37:7 i: i32 (let)
+function constScale(dst: i32[], h: Holder): void -> @constScale [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 45:9 xs: i32[] (const)
+  local 46:7 i: i32 (let)
+function grown(h: Holder): i32 -> @grown [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_array_grow
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 56:7 i: i32 (let)
+function guarded(h: Holder | null, n: i32): i32 -> @guarded [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 71:7 s: i32 (let)
+  local 72:7 i: i32 (let)
+function replaced(h: Holder, other: i32[]): i32 -> @replaced [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: other
+  calls: nish_panic_index
+  pointer h: size=8 writesThrough=true captured=false
+  pointer other: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 87:7 s: i32 (let)
+  local 88:7 i: i32 (let)
+function declaredInside(hs: Holder[], n: i32): i32 -> @declaredInside [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer hs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 102:7 s: i32 (let)
+  local 103:7 i: i32 (let)
+  local 105:11 h: Holder (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Holder.constructor constScale declaredInside fieldScale grown guarded nish_alloc_struct nish_panic_index replaced
+  stackSites=7 stackLocals=1
+  local 113:9 src: i32[] (const)
+  local 114:9 dst: i32[] (const)
+  callee 115:3 fieldScale -> @fieldScale
+  callee 115:19 new Holder -> @Holder.constructor
+  local 116:9 a: i32 (const)
+  callee 117:3 constScale -> @constScale
+  callee 117:19 new Holder -> @Holder.constructor
+  local 118:9 b: i32 (const)
+  callee 122:5 grown -> @grown
+  callee 122:11 new Holder -> @Holder.constructor
+  callee 123:5 guarded -> @guarded
+  callee 124:5 guarded -> @guarded
+  callee 124:13 new Holder -> @Holder.constructor
+  callee 125:5 replaced -> @replaced
+  callee 125:14 new Holder -> @Holder.constructor
+  callee 126:5 declaredInside -> @declaredInside
+  callee 126:21 new Holder -> @Holder.constructor
 program tests/cases/arr_index_read_write.ts
 module tests/cases/arr_index_read_write.ts (entry)
 function set(a: i32[], i: i32, v: i32): void -> @set
@@ -1880,7 +1957,7 @@ function scale(l: i32): i32 -> @scale
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
 function heaviest(kinds: i32[]): i32 -> @heaviest
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: weight
   pointer kinds: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1889,7 +1966,7 @@ function heaviest(kinds: i32[]): i32 -> @heaviest
   local 34:11 w: i32 (const)
   callee 34:15 weight -> @weight
 function test(): i32 -> @test [exported]
-  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: heaviest scale weight
   stackSites=1 stackLocals=1
   local 43:9 kinds: i32[] (const)
@@ -1907,7 +1984,7 @@ function scale(l: Level): i32 -> @scale
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
 function heaviest(kinds: Kind[]): i32 -> @heaviest
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: weight
   pointer kinds: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1916,7 +1993,7 @@ function heaviest(kinds: Kind[]): i32 -> @heaviest
   local 41:11 w: i32 (const)
   callee 41:15 weight -> @weight
 function test(): i32 -> @test [exported]
-  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: heaviest scale weight
   stackSites=1 stackLocals=1
   local 50:9 kinds: Kind[] (const)
@@ -4390,7 +4467,7 @@ function widen(b: u8): i32 -> @widen
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
 function sum(data: u8[]): i32 -> @sum
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: widen
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -4417,7 +4494,7 @@ function parsed(n: i32): Result<i32, string> -> @parsed
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: first labelOf nish_arena_mark nish_arena_release nish_print parsed reading sum
   stackSites=2 stackLocals=2
   local 49:9 data: u8[] (const)
@@ -4439,7 +4516,7 @@ function widen(b: u8): i32 -> @widen
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
 function sum(data: u8[]): i32 -> @sum
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: widen
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -4466,7 +4543,7 @@ function parsed(n: i32): Result<i32, string> -> @parsed
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: first labelOf nish_arena_mark nish_arena_release nish_print parsed reading sum
   stackSites=2 stackLocals=2
   local 57:9 data: u8[] (const)

@@ -28,6 +28,7 @@ import {
   intOpcode,
 } from "./context.js";
 import { emitIntBinary } from "./arithmetic.js";
+import { closeHeaderScope, openHeaderScope } from "./arrays.js";
 
 // ---- Branch helpers -----------------------------------------------------------
 
@@ -100,6 +101,10 @@ const emitWhile: StatementEmitter = (ctx, node) => {
   const bodyBlock = fn.newBlock("while.body");
   const endBlock = fn.newBlock("while.end");
 
+  // WP15 2c: the block being emitted is the loop's preheader, so this is where
+  // an array header the loop reads is loaded -- once, and into one `len` that
+  // the condition below and the bounds checks in the body both read.
+  openHeaderScope(ctx, stmt);
   branch(ctx, condBlock);
   fn.placeBlock(condBlock);
   condBranch(ctx, ctx.emitExpression(stmt.expression), bodyBlock, endBlock);
@@ -112,6 +117,7 @@ const emitWhile: StatementEmitter = (ctx, node) => {
   });
   fallThrough(ctx, condBlock);
 
+  closeHeaderScope();
   fn.placeBlock(endBlock);
   if (isAlwaysTrue(stmt.expression) && !loop.hasBreak) fn.emit("unreachable");
 };
@@ -123,6 +129,7 @@ const emitDo: StatementEmitter = (ctx, node) => {
   const condBlock = fn.newBlock("do.cond");
   const endBlock = fn.newBlock("do.end");
 
+  openHeaderScope(ctx, stmt);
   branch(ctx, bodyBlock);
   fn.placeBlock(bodyBlock);
   const loop = emitLoopBody(ctx, stmt.statement, {
@@ -135,6 +142,7 @@ const emitDo: StatementEmitter = (ctx, node) => {
   fn.placeBlock(condBlock);
   condBranch(ctx, ctx.emitExpression(stmt.expression), bodyBlock, endBlock);
 
+  closeHeaderScope();
   fn.placeBlock(endBlock);
   if (isAlwaysTrue(stmt.expression) && !loop.hasBreak) fn.emit("unreachable");
 };
@@ -159,6 +167,7 @@ const emitFor: StatementEmitter = (ctx, node) => {
     if (ts.isVariableDeclarationList(stmt.initializer)) ctx.emitVariableDeclarations(stmt.initializer);
     else ctx.emitExpression(stmt.initializer);
   }
+  openHeaderScope(ctx, stmt);
   branch(ctx, head);
 
   if (condBlock) {
@@ -182,6 +191,7 @@ const emitFor: StatementEmitter = (ctx, node) => {
     fallThrough(ctx, head);
   }
 
+  closeHeaderScope();
   if (condBlock || loop.hasBreak) {
     fn.placeBlock(endBlock);
     if (isAlwaysTrue(stmt.condition) && !loop.hasBreak) fn.emit("unreachable");

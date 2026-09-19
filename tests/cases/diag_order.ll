@@ -82,14 +82,14 @@ entry:
   %i.addr = alloca i32, align 4
   store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %s.addr, align 8
   store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
   br label %while.cond
 
 while.cond:
-  %0 = load i32, i32* %i.addr, align 4
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
-  %3 = trunc i64 %2 to i32
-  %4 = icmp slt i32 %0, %3
+  %2 = load i32, i32* %i.addr, align 4
+  %3 = trunc i64 %1 to i32
+  %4 = icmp slt i32 %2, %3
   br i1 %4, label %while.body, label %while.end
 
 while.body:
