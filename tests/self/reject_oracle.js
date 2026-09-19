@@ -210,7 +210,11 @@ function main(argv) {
       : all;
   const known = register(BACKLOG);
   const refusals = register(REFUSALS);
-  const registerName = path.relative(root, REFUSALS);
+  const refusalsFile = path.relative(root, REFUSALS);
+  // The register describes this corpus, in both of the directions below: a
+  // file named on the command line that is not part of it has no line to have,
+  // and a line naming no case in it is stale rather than unproven.
+  const present = new Set(all.map((entry) => entry.name));
   let agreed = 0;
   let checked = 0;
   const parser = [];
@@ -226,13 +230,15 @@ function main(argv) {
       refused.add(entry.name);
       const pinned = refusals.get(entry.name);
       if (pinned === undefined) {
-        failed.push(
-          `${where}: refused by stage1's parser and not in ${registerName} — ` +
-            `add the line: ${entry.name}\t${result.parser}`
-        );
+        if (present.has(entry.name)) {
+          failed.push(
+            `${where}: refused by stage1's parser and not in ${refusalsFile} — ` +
+              `add the line: ${entry.name}\t${result.parser}`
+          );
+        }
       } else if (pinned !== result.parser) {
         failed.push(
-          `${where}: ${registerName} pins ${JSON.stringify(pinned)}, got ${JSON.stringify(result.parser)}`
+          `${where}: ${refusalsFile} pins ${JSON.stringify(pinned)}, got ${JSON.stringify(result.parser)}`
         );
       }
     } else if (result.skipped !== undefined) {
@@ -252,13 +258,12 @@ function main(argv) {
   // nothing. Only a whole run may ask it — with a few cases named on the
   // command line, "nothing refuses this" would be a fact about the filter.
   if (named.length === 0) {
-    const present = new Set(all.map((entry) => entry.name));
     for (const name of refusals.keys()) {
       if (refused.has(name)) continue;
       const why = present.has(name)
         ? "stage1's parser does not refuse it any more"
         : "names no case in this corpus";
-      failed.push(`${name}: ${why} — remove it from ${registerName}`);
+      failed.push(`${name}: ${why} — remove it from ${refusalsFile}`);
     }
   }
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
