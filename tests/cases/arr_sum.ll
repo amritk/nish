@@ -40,32 +40,32 @@ define internal void @fill(%struct.nish_array* noundef nonnull align 8 dereferen
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4
   br label %for.cond
 
 for.cond:
-  %0 = load i32, i32* %i.addr, align 4
-  %1 = icmp slt i32 %0, %n
-  br i1 %1, label %for.body, label %for.end
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = icmp slt i32 %4, %n
+  br i1 %5, label %for.body, label %for.end
 
 for.body:
-  %2 = load i32, i32* %i.addr, align 4
-  %3 = sext i32 %2 to i64
-  %4 = load i32, i32* %i.addr, align 4
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4
-  %7 = icmp ult i64 %3, %6
-  br i1 %7, label %bounds.ok, label %bounds.fail
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = sext i32 %6 to i64
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = icmp ult i64 %7, %1
+  br i1 %9, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %3, i64 %6)
+  call void @nish_panic_index(i64 %7, i64 %1)
   unreachable
 
 bounds.ok:
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
-  %10 = bitcast i8* %9 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %3
-  store i32 %4, i32* %11, align 4, !alias.scope !4, !noalias !3
+  %10 = bitcast i8* %3 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %7
+  store i32 %8, i32* %11, align 4, !alias.scope !4, !noalias !3
   br label %for.inc
 
 for.inc:
@@ -84,33 +84,33 @@ entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %total.addr, align 4
   store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4
   br label %for.cond
 
 for.cond:
-  %0 = load i32, i32* %i.addr, align 4
-  %1 = icmp slt i32 %0, %n
-  br i1 %1, label %for.body, label %for.end
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = icmp slt i32 %4, %n
+  br i1 %5, label %for.body, label %for.end
 
 for.body:
-  %2 = load i32, i32* %total.addr, align 4
-  %3 = load i32, i32* %i.addr, align 4
-  %4 = sext i32 %3 to i64
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4
-  %7 = icmp ult i64 %4, %6
-  br i1 %7, label %bounds.ok, label %bounds.fail
+  %6 = load i32, i32* %total.addr, align 4
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = sext i32 %7 to i64
+  %9 = icmp ult i64 %8, %1
+  br i1 %9, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %4, i64 %6)
+  call void @nish_panic_index(i64 %8, i64 %1)
   unreachable
 
 bounds.ok:
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
-  %10 = bitcast i8* %9 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %4
+  %10 = bitcast i8* %3 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %8
   %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
-  %13 = add nsw i32 %2, %12
+  %13 = add nsw i32 %6, %12
   store i32 %13, i32* %total.addr, align 4
   br label %for.inc
 

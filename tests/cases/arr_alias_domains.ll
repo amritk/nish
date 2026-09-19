@@ -7,42 +7,42 @@ define void @scale(%struct.nish_array* noundef nonnull align 8 dereferenceable(2
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
   br label %while.cond
 
 while.cond:
-  %0 = load i32, i32* %i.addr, align 4
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
-  %3 = trunc i64 %2 to i32
-  %4 = icmp slt i32 %0, %3
-  br i1 %4, label %while.body, label %while.end
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = trunc i64 %1 to i32
+  %10 = icmp slt i32 %8, %9
+  br i1 %10, label %while.body, label %while.end
 
 while.body:
-  %5 = load i32, i32* %i.addr, align 4
-  %6 = sext i32 %5 to i64
-  %7 = load i32, i32* %i.addr, align 4
-  %8 = sext i32 %7 to i64
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 2
-  %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
-  %11 = bitcast i8* %10 to i32*
-  %12 = getelementptr inbounds i32, i32* %11, i64 %8
-  %13 = load i32, i32* %12, align 4, !alias.scope !4, !noalias !3
-  %14 = mul nsw i32 %13, 2
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4
-  %17 = icmp ult i64 %6, %16
-  br i1 %17, label %bounds.ok, label %bounds.fail
+  %11 = load i32, i32* %i.addr, align 4
+  %12 = sext i32 %11 to i64
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = sext i32 %13 to i64
+  %15 = bitcast i8* %3 to i32*
+  %16 = getelementptr inbounds i32, i32* %15, i64 %14
+  %17 = load i32, i32* %16, align 4, !alias.scope !4, !noalias !3
+  %18 = mul nsw i32 %17, 2
+  %19 = icmp ult i64 %12, %5
+  br i1 %19, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %6, i64 %16)
+  call void @nish_panic_index(i64 %12, i64 %5)
   unreachable
 
 bounds.ok:
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 2
-  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4
-  %20 = bitcast i8* %19 to i32*
-  %21 = getelementptr inbounds i32, i32* %20, i64 %6
-  store i32 %14, i32* %21, align 4, !alias.scope !4, !noalias !3
+  %20 = bitcast i8* %7 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 %12
+  store i32 %18, i32* %21, align 4, !alias.scope !4, !noalias !3
   %22 = load i32, i32* %i.addr, align 4
   %23 = add nsw i32 %22, 1
   store i32 %23, i32* %i.addr, align 4

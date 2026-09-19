@@ -15,52 +15,52 @@ entry:
   %key.addr = alloca i32, align 4
   %j.addr = alloca i32, align 4
   store i32 1, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4
   br label %for.cond
 
 for.cond:
-  %0 = load i32, i32* %i.addr, align 4
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
-  %3 = trunc i64 %2 to i32
-  %4 = icmp slt i32 %0, %3
-  br i1 %4, label %for.body, label %for.end
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = trunc i64 %1 to i32
+  %6 = icmp slt i32 %4, %5
+  br i1 %6, label %for.body, label %for.end
 
 for.body:
-  %5 = load i32, i32* %i.addr, align 4
-  %6 = sext i32 %5 to i64
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4
-  %9 = bitcast i8* %8 to i32*
-  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = sext i32 %7 to i64
+  %9 = bitcast i8* %3 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %8
   %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3
   store i32 %11, i32* %key.addr, align 4
   %12 = load i32, i32* %i.addr, align 4
   %13 = sub nsw i32 %12, 1
   store i32 %13, i32* %j.addr, align 4
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
   br label %while.cond
 
 while.cond:
-  %14 = load i32, i32* %j.addr, align 4
-  %15 = icmp sge i32 %14, 0
-  br i1 %15, label %land.rhs, label %land.end
+  %18 = load i32, i32* %j.addr, align 4
+  %19 = icmp sge i32 %18, 0
+  br i1 %19, label %land.rhs, label %land.end
 
 land.rhs:
-  %16 = load i32, i32* %j.addr, align 4
-  %17 = sext i32 %16 to i64
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %19 = load i64, i64* %18, align 8, !alias.scope !3, !noalias !4
-  %20 = icmp ult i64 %17, %19
-  br i1 %20, label %bounds.ok, label %bounds.fail
+  %20 = load i32, i32* %j.addr, align 4
+  %21 = sext i32 %20 to i64
+  %22 = icmp ult i64 %21, %15
+  br i1 %22, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %17, i64 %19)
+  call void @nish_panic_index(i64 %21, i64 %15)
   unreachable
 
 bounds.ok:
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4
-  %23 = bitcast i8* %22 to i32*
-  %24 = getelementptr inbounds i32, i32* %23, i64 %17
+  %23 = bitcast i8* %17 to i32*
+  %24 = getelementptr inbounds i32, i32* %23, i64 %21
   %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3
   %26 = load i32, i32* %key.addr, align 4
   %27 = icmp sgt i32 %25, %26
@@ -76,67 +76,55 @@ while.body:
   %31 = sext i32 %30 to i64
   %32 = load i32, i32* %j.addr, align 4
   %33 = sext i32 %32 to i64
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %35 = load i64, i64* %34, align 8, !alias.scope !3, !noalias !4
-  %36 = icmp ult i64 %33, %35
-  br i1 %36, label %bounds.ok.1, label %bounds.fail.1
+  %34 = icmp ult i64 %33, %15
+  br i1 %34, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 %33, i64 %35)
+  call void @nish_panic_index(i64 %33, i64 %15)
   unreachable
 
 bounds.ok.1:
-  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %38 = load i8*, i8** %37, align 8, !alias.scope !3, !noalias !4
-  %39 = bitcast i8* %38 to i32*
-  %40 = getelementptr inbounds i32, i32* %39, i64 %33
-  %41 = load i32, i32* %40, align 4, !alias.scope !4, !noalias !3
-  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %43 = load i64, i64* %42, align 8, !alias.scope !3, !noalias !4
-  %44 = icmp ult i64 %31, %43
-  br i1 %44, label %bounds.ok.2, label %bounds.fail.2
+  %35 = bitcast i8* %17 to i32*
+  %36 = getelementptr inbounds i32, i32* %35, i64 %33
+  %37 = load i32, i32* %36, align 4, !alias.scope !4, !noalias !3
+  %38 = icmp ult i64 %31, %15
+  br i1 %38, label %bounds.ok.2, label %bounds.fail.2
 
 bounds.fail.2:
-  call void @nish_panic_index(i64 %31, i64 %43)
+  call void @nish_panic_index(i64 %31, i64 %15)
   unreachable
 
 bounds.ok.2:
-  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %46 = load i8*, i8** %45, align 8, !alias.scope !3, !noalias !4
-  %47 = bitcast i8* %46 to i32*
-  %48 = getelementptr inbounds i32, i32* %47, i64 %31
-  store i32 %41, i32* %48, align 4, !alias.scope !4, !noalias !3
-  %49 = load i32, i32* %j.addr, align 4
-  %50 = sub nsw i32 %49, 1
-  store i32 %50, i32* %j.addr, align 4
+  %39 = bitcast i8* %17 to i32*
+  %40 = getelementptr inbounds i32, i32* %39, i64 %31
+  store i32 %37, i32* %40, align 4, !alias.scope !4, !noalias !3
+  %41 = load i32, i32* %j.addr, align 4
+  %42 = sub nsw i32 %41, 1
+  store i32 %42, i32* %j.addr, align 4
   br label %while.cond
 
 while.end:
-  %51 = load i32, i32* %j.addr, align 4
-  %52 = add nsw i32 %51, 1
-  %53 = sext i32 %52 to i64
-  %54 = load i32, i32* %key.addr, align 4
-  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %56 = load i64, i64* %55, align 8, !alias.scope !3, !noalias !4
-  %57 = icmp ult i64 %53, %56
-  br i1 %57, label %bounds.ok.3, label %bounds.fail.3
+  %43 = load i32, i32* %j.addr, align 4
+  %44 = add nsw i32 %43, 1
+  %45 = sext i32 %44 to i64
+  %46 = load i32, i32* %key.addr, align 4
+  %47 = icmp ult i64 %45, %1
+  br i1 %47, label %bounds.ok.3, label %bounds.fail.3
 
 bounds.fail.3:
-  call void @nish_panic_index(i64 %53, i64 %56)
+  call void @nish_panic_index(i64 %45, i64 %1)
   unreachable
 
 bounds.ok.3:
-  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %59 = load i8*, i8** %58, align 8, !alias.scope !3, !noalias !4
-  %60 = bitcast i8* %59 to i32*
-  %61 = getelementptr inbounds i32, i32* %60, i64 %53
-  store i32 %54, i32* %61, align 4, !alias.scope !4, !noalias !3
+  %48 = bitcast i8* %3 to i32*
+  %49 = getelementptr inbounds i32, i32* %48, i64 %45
+  store i32 %46, i32* %49, align 4, !alias.scope !4, !noalias !3
   br label %for.inc
 
 for.inc:
-  %62 = load i32, i32* %i.addr, align 4
-  %63 = add nsw i32 %62, 1
-  store i32 %63, i32* %i.addr, align 4
+  %50 = load i32, i32* %i.addr, align 4
+  %51 = add nsw i32 %50, 1
+  store i32 %51, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:

@@ -1958,6 +1958,148 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       o.status === 0 && /<(4|8) x i32>/.test(body),
       o.status === 0 ? body : String(o.stderr)
     );
+    // WP15 §2c's criterion, pinned for the first time. Vectorising is the
+    // *consequence*; what makes it possible is that the two lengths this loop
+    // compares against — `src.length` for the `while` and `dst.length` for the
+    // bounds check — collapse into a single trip count in the preheader, so the
+    // loop has one exit. `llvm.umin.i64` is that collapse, by name. §2c reached
+    // "no header load left in the loop" by hand, with metadata, and measured the
+    // program 5 ms *slower*, because two lengths were still two lengths; the
+    // `umin` is the thing that was actually different about the fast builds, and
+    // nothing here asserted it until now.
+    check(
+      "arr_alias_domains: opt -O2 collapses the two lengths into one trip count (llvm.umin)",
+      o.status === 0 && /call i64 @llvm\.umin\.i64\(/.test(body),
+      o.status === 0 ? body : String(o.stderr)
+    );
+  }
+
+  // WP15 §2c candidate 2: the emitter lifts an array header into the loop's
+  // preheader. Two things are asserted and they are not the same thing.
+  //
+  // The first is the hoist: no load in the *header* alias domain is left inside
+  // `@fieldScale`'s loop. §2b's domains do not reach this shape on their own,
+  // because the header load sits in a bounds-checked block where LLVM may not
+  // speculate it out — which is exactly what §2c found in `self/bounds.ts`.
+  //
+  // The second is §2c's criterion, and it is the one that matters: the `len` the
+  // `while` condition compares against and the `len` the bounds check compares
+  // against must be *the same SSA value*. A preheader load per use satisfies
+  // "hoisted once per loop" and buys nothing, because two lengths are two loop
+  // exits whatever they were loaded from. One value is the emitter saying so by
+  // construction rather than hoping GVN merges them.
+  const hoistLl = path.join(buildDir, "arr_header_hoist.ll");
+  if (fs.existsSync(hoistLl)) {
+    const ir = fs.readFileSync(hoistLl, "utf8");
+    // `!alias.scope !N` where !N is the header scope list; read the number out
+    // of the metadata rather than assuming it, since nodes are interned per
+    // module and a new one anywhere would renumber them.
+    const headerNode = ir.match(/^(![0-9]+) = !\{!"header",/m)?.[1];
+    const headerScope = headerNode
+      ? ir.match(new RegExp(`^(![0-9]+) = !\\{${headerNode.replace("!", "!")}\\}$`, "m"))?.[1]
+      : undefined;
+    for (const fn of ["fieldScale", "constScale"]) {
+      const body = ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "";
+      const loop = body.slice(body.indexOf("\nwhile.cond:"));
+      const left = headerScope
+        ? (loop.match(new RegExp(`= load [^\\n]*!alias\\.scope ${headerScope}(?![0-9])`, "g")) ?? [])
+        : [];
+      check(
+        `arr_header_hoist: @${fn} has no array-header load inside the loop`,
+        headerScope !== undefined && body !== "" && loop !== "" && left.length === 0,
+        `header scope ${headerScope}, left in the loop: ${left.join(" | ") || "(none)"}\n${body}`
+      );
+      if (fn === "fieldScale") {
+        // The condition truncs the i64 length to the `number` width; the bounds
+        // check on the *same* array compares the i64 directly. Both must name
+        // one register — that is §2c's criterion, and the first `icmp ult` in
+        // the loop is this array's, since it is read before `dst` is written.
+        const condLen = loop.match(/%[0-9]+ = trunc i64 (%[0-9]+) to i32/)?.[1];
+        const checkLen = loop.match(/icmp ult i64 %[0-9]+, (%[0-9]+)/)?.[1];
+        check(
+          `arr_header_hoist: @${fn} feeds the loop condition and the bounds check one length`,
+          condLen !== undefined && condLen === checkLen,
+          `condition length ${condLen}, bounds-check length ${checkLen}\n${body}`
+        );
+      }
+    }
+    // And the measured reason the two are still not the same program, which is
+    // not the hoist at all. `checker/bounds.ts` keys its length facts by
+    // *variable and never by a property path* — its own header says so, and for
+    // a sound reason: a local cannot be written through an alias, a field can.
+    // So `const xs = h.xs` proves `xs[i]` in range and `h.xs.length` proves
+    // nothing about `h.xs[i]`: `constScale` carries one bounds check and
+    // `fieldScale` two, and the second is the second loop exit that keeps the
+    // vectoriser away. Measured on `bench/hoist_field.ts`, dropping it by hand
+    // closes the whole 1.90x. The hoist above is what a *property path* holder
+    // would be proved against; the proof itself is that file's to make, so this
+    // pins the half that exists rather than asserting the gap, which a fix
+    // would have to delete.
+    const panics = (fn) =>
+      ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(
+        /call void @nish_panic_index/g
+      ) ?? []).length;
+    check(
+      "arr_header_hoist: the checker's proof reaches @constScale's element read and not @fieldScale's",
+      panics("constScale") === 1 && panics("fieldScale") > panics("constScale"),
+      `constScale ${panics("constScale")} bounds checks, fieldScale ${panics("fieldScale")}`
+    );
+    // A `Holder | null` narrowed by a guard *inside* the loop: the preheader is
+    // outside that guard, so the path is refused on its *declared* type. Reading
+    // the type the checker records at the use site -- the narrowed one -- made
+    // this a null dereference in the preheader of a loop that runs zero times.
+    // The `.out` catches that by running; this says which property broke.
+    const guarded = ir.match(/define[^\n]*@guarded\b[\s\S]*?\n}/)?.[0] ?? "";
+    check(
+      "arr_header_hoist: @guarded narrows a `Holder | null` in the loop, so nothing is lifted above the guard",
+      guarded !== "" && !guarded.slice(0, guarded.indexOf("\nwhile.cond:")).includes("getelementptr"),
+      guarded
+    );
+    // The two refusals that are about the *path* rather than the header. Each is
+    // a proof that could otherwise break in silence, since the hoist they refuse
+    // is the one that reads a stale field load.
+    //
+    // `@replaced` stores `h.xs` inside the loop it reads `h.xs[i]` in, so the
+    // path is shadowed by name and nothing is lifted. `@declaredInside` roots
+    // its path at a `const` the loop body declares, which the preheader runs
+    // before -- and it is the discriminating case, because `hs` *is* a
+    // parameter and *is* hoisted in the same preheader: the refusal is per path,
+    // not a blanket refusal of the loop. So both assert on the field *GEP*
+    // specifically: a bare `getelementptr` would catch the array header `hs`
+    // legitimately contributes, and a bare `%struct.Holder` would catch the
+    // parameter's own type in the `define` line and the `alloca` of the local.
+    for (const fn of ["replaced", "declaredInside"]) {
+      const body = ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "";
+      const preheader = body.slice(0, body.indexOf("\nwhile.cond:"));
+      check(
+        `arr_header_hoist: @${fn} refuses the path, so no \`Holder.xs\` load is lifted above the loop`,
+        body !== "" && preheader !== "" && !preheader.includes("getelementptr inbounds %struct.Holder"),
+        body
+      );
+      if (fn === "declaredInside") {
+        // The positive half, and the half that makes this case discriminating.
+        // Without it a regression to "hoist nothing in this loop at all" would
+        // leave the preheader even freer of `%struct.Holder` and the check
+        // above would still pass. `hs` is a parameter, it is indexed in the
+        // loop, and it *is* lifted — under `--plain`, which turns this pass
+        // off, this entry block holds no `getelementptr` at all and `hs`'s
+        // header GEP appears twice inside the loop body instead.
+        check(
+          "arr_header_hoist: @declaredInside still hoists `hs`, so the refusal is per path and not per loop",
+          preheader.includes("getelementptr inbounds %struct.nish_array, %struct.nish_array* %hs"),
+          body
+        );
+      }
+    }
+    // The other half of the fact: a loop that grows the array it reads may not
+    // be hoisted at all, because `push` is what moves `len`, `cap` and `data`.
+    const grown = ir.match(/define[^\n]*@grown\b[\s\S]*?\n}/)?.[0] ?? "";
+    const grownLoop = grown.slice(grown.indexOf("\nwhile.cond:"));
+    check(
+      "arr_header_hoist: @grown pushes in the loop, so nothing is hoisted out of it",
+      grown !== "" && grownLoop.includes("getelementptr inbounds %struct.nish_array"),
+      grown
+    );
   }
   if (has("opt")) {
     const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll");
