@@ -37,7 +37,7 @@
 # tag. A tag on a release whose bootstrap did not prove the property is worse
 # than no tag, because it is a claim nobody can falsify afterwards.
 #
-# The five answers:
+# The answers:
 #
 #   * **The tag is due.** Every named job succeeded, the version is one a tag
 #     can be named after, and the remote carries no `ddc` tag for it. The tag is
@@ -62,9 +62,19 @@
 #     `needs:` list edited down is a release that would tag without a proof and
 #     this is what stops it.
 #
-#   * **The version is not one a tag can be named after**, or there is no commit
-#     to point the tag at. Both are the workflow handing this script something
-#     other than a release, and both are red rather than a tag named after it.
+#   * **Something that is not a release, or not a repository this can ask.** A
+#     name no tag can be called, a checkout with no commit to point at, a remote
+#     that cannot be asked whether the tag is already there, a push the remote
+#     rejects. Each is red and each cuts nothing, because the alternative to a
+#     refusal here is a tag on the wrong commit, on no commit, or a duplicate of
+#     one already there.
+#
+# What this script cannot see is the shape of the job graph itself: a `needs:`
+# and a `DDC_PROOF` edited together name fewer jobs consistently and look exactly
+# like a healthy release from in here. `tests/run.js` reads release.yml for that,
+# and the two halves are what make the pair complete -- the test catches the
+# consistent edit before it is merged, and DDC_PROOF catches the inconsistent one
+# at the moment it would tag.
 #
 # The tag is cut **before** `gh release create` publishes, which is the one
 # ordering choice here with a cost either way. A release that then fails to
@@ -81,13 +91,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# The decision, as a value rather than as prose: `tag` is what this release's
-# tag is (or would have been) called and `created` says whether this run is what
-# cut it. The annotations below are what a person reads; this is what
-# `tests/run.js` reads, and what a later step would name the tag from rather
-# than spelling the derivation a second time.
-out="${GITHUB_OUTPUT:-/dev/null}"
-
 # Always consumes its input, so that a run outside Actions -- the test harness,
 # or somebody asking what this release would decide -- is not a broken pipe.
 summary() {
@@ -100,20 +103,21 @@ if [ $# -ne 1 ] || [ -z "$1" ]; then
 fi
 version="${1#v}"
 
-# Dotted integers, with a prerelease suffix allowed because a prerelease proves
-# the property exactly as a release does and `ddc-0.3.0-rc1` names its commit
-# perfectly well. What this refuses is a branch name, which is what
-# GITHUB_REF_NAME holds when the workflow is dispatched at one -- the `targets`
-# job refuses that first, and this is the same guard next to the step that would
-# otherwise stamp it into a permanent tag.
-if ! printf '%s' "$version" | grep -Eq '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$'; then
-  echo "created=false" >> "$out"
+# Whether the version can NAME a tag, and nothing more. Which versions are
+# releasable is `.github/seed-due.sh`'s question -- it takes dotted integers and
+# stops the run on anything else -- and the `targets` job has already asked it
+# before this job exists. A second, stricter grammar here would be a second
+# version scheme that can refuse a release the first one allowed, at the one step
+# whose refusal costs a publish; so a prerelease is tagged rather than argued
+# with, and the day `seed-due.sh` learns a new scheme this does not have to be
+# taught it too. What is refused is what is not a version at all: a branch name,
+# which is what GITHUB_REF_NAME holds when the workflow is dispatched at one.
+if ! printf '%s' "$version" | grep -Eq '^[0-9][0-9A-Za-z.+-]*$'; then
   echo "::error::.github/ddc-tag.sh was handed '$1', which is not a version a tag can be named after. This runs on a v* tag and takes GITHUB_REF_NAME without its leading v; a branch name reaching it means the workflow was dispatched at a branch. No ddc tag is cut."
   exit 1
 fi
 
 tag="ddc-$version"
-echo "tag=$tag" >> "$out"
 
 # Every job the release ran to prove the property, and what it answered. The
 # pairs are the argument rather than something this script discovers, because
@@ -133,7 +137,6 @@ done
 
 if [ "$jobs" -eq 0 ] || [ -n "$unproved" ]; then
   named="${unproved:- (DDC_PROOF is empty, so no job claims to have proved anything)}"
-  echo "created=false" >> "$out"
   echo "::error::No $tag tag: the run that would carry it did not prove IR(stage0, self/) == IR(stage1, self/) and the fixed point. What answered:$named. That proof is tests/self/bootstrap.js in the ci job and scripts/bootstrap.sh --verify in every binaries row, and DDC_PROOF is their needs.<job>.result -- an empty result means the job did not run, and a job missing from the list means this job's needs: no longer names it. A tag cut here would be a provenance claim nobody could falsify later, which is worse than no tag (docs/wp19-stage0-retirement.md G6), so this is red and nothing is cut."
   summary <<EOF
 ### Provenance (WP19 G6)
@@ -151,7 +154,6 @@ fi
 # catches a checkout that does not contain it, which would otherwise be a tag
 # pointing at nothing.
 if ! sha="$(git rev-parse --verify "${GITHUB_SHA:-HEAD}^{commit}" 2>/dev/null)" || [ -z "$sha" ]; then
-  echo "created=false" >> "$out"
   echo "::error::No $tag tag: this checkout has no commit at '${GITHUB_SHA:-HEAD}' to point it at. The tag names the commit the release is built from, so there is nothing to cut until the checkout carries it."
   exit 1
 fi
@@ -179,7 +181,6 @@ fi
 # push the remote rejects, and the job would then blame a concurrent run for
 # what was a network error. git's own message is on stderr and reaches the log.
 if ! remote="$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")"; then
-  echo "created=false" >> "$out"
   echo "::error::No $tag tag: this job could not ask the remote whether one already exists -- git's message is above. Nothing is cut, because a tag cut without that answer is either a duplicate of one already there or a second claim on a commit that already has one. Re-run this job once the remote can be reached; if $tag is already cut at this release's commit the re-run is green and there is nothing to repair."
   exit 1
 fi
@@ -195,7 +196,6 @@ $remote
 EOF
 
 if [ "$tagged" = "$sha" ]; then
-  echo "created=false" >> "$out"
   echo "::notice::$tag is already cut at $sha, which is the commit this release is built from. Nothing to do: this is a re-run of a release that already recorded its provenance, and re-cutting a tag it already has would fail the release rather than protect anything (docs/wp19-stage0-retirement.md G6)."
   summary <<EOF
 ### Provenance (WP19 G6)
@@ -207,7 +207,6 @@ EOF
 fi
 
 if [ -n "$tagged" ]; then
-  echo "created=false" >> "$out"
   echo "::error::$tag already exists and points at $tagged, but this release is built from $sha. Two commits cannot both be the last one at which IR(stage0, self/) == IR(stage1, self/) held for $version, and a provenance tag that moved is worth less than none: G6's procedure checks out the tag and re-runs the proof there. Nothing is cut. Either this version was released once already -- in which case release a new patch version rather than rebuilding this one (docs/wp12-release.md) -- or delete $tag, decide which commit it belongs on, and run this again."
   exit 1
 fi
@@ -218,12 +217,10 @@ fi
 # group did not serialise. git says so on stderr and this says which release it
 # happened during, rather than ending the job on a bare exit status.
 if ! git tag "$tag" "$sha" || ! git push origin "refs/tags/$tag"; then
-  echo "created=false" >> "$out"
   echo "::error::$tag could not be cut at $sha, although no tag of that name existed when this job asked the remote. Something cut one in between -- another run of this workflow, or a tag pushed by hand. Read git's message above, check what $tag now points at, and re-run this job: if it points at $sha the re-run is green and there is nothing to repair."
   exit 1
 fi
 
-echo "created=true" >> "$out"
 echo "::notice::Cut $tag at $sha. This release's ci and binaries jobs both proved IR(stage0, self/) == IR(stage1, self/) and the fixed point over every module of self/, so this commit is one the property can be re-verified at afterwards: docs/wp19-stage0-retirement.md G6 has the four-step procedure, and it is the only thing that survives R6 deleting src/."
 summary <<EOF
 ### Provenance (WP19 G6)

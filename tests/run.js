@@ -7129,7 +7129,6 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         PATH: `${path.join(seedDir, "bin")}${path.delimiter}${process.env.PATH}`,
         FAKE_TAG: tag,
         FAKE_ASSETS: assets,
-        GITHUB_OUTPUT: outFile,
         GITHUB_STEP_SUMMARY: "",
       },
     });
@@ -7304,9 +7303,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
    * the one thing it changes, which is what makes the arms readable as a set.
    */
   const ddcTag = (args, env) => {
-    const outFile = path.join(ddcDir, "output");
     const logFile = path.join(ddcDir, "log");
-    fs.writeFileSync(outFile, "");
     fs.writeFileSync(logFile, "");
     const r = spawnSync("bash", [path.join(root, ".github", "ddc-tag.sh"), ...args], {
       cwd: root,
@@ -7314,10 +7311,9 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
       env: {
         ...process.env,
         PATH: `${path.join(ddcDir, "bin")}${path.delimiter}${process.env.PATH}`,
-        GITHUB_OUTPUT: outFile,
         GITHUB_STEP_SUMMARY: "",
         GITHUB_SHA: releaseSha,
-        DDC_PROOF: "ci:success targets:success binaries:success",
+        DDC_PROOF: "ci:success binaries:success",
         GIT_LOG: logFile,
         FAKE_HEAD: releaseSha,
         FAKE_TAGGED: "",
@@ -7327,45 +7323,37 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
         ...env,
       },
     });
-    const written = fs.readFileSync(outFile, "utf8");
-    const value = (key) => new RegExp(`^${key}=(.*)$`, "m").exec(written)?.[1];
-    // What git was asked to do, as the first word of each call: `tag` and `push` are the
-    // two that change the world, and a state that must not cut a tag is one where neither
-    // appears however the script got there.
-    const asked = fs
-      .readFileSync(logFile, "utf8")
-      .split("\n")
-      .filter((l) => l.length > 0);
     return {
       ...r,
-      tag: value("tag"),
-      created: value("created"),
-      git: asked,
-      verbs: asked.map((l) => l.split(" ")[0]),
+      git: fs
+        .readFileSync(logFile, "utf8")
+        .split("\n")
+        .filter((l) => l.length > 0),
     };
   };
-  const wrote = (r) => r.verbs.includes("tag") || r.verbs.includes("push");
+  // `tag` and `push` are the two calls that change the world, so a state that must not cut
+  // a tag is one where neither appears, however the script got there.
+  const wrote = (r) => r.git.some((l) => /^(tag|push) /.test(l));
 
   const cut = ddcTag([ddcVersion]);
   check(
     `ddc tag: a release whose proving jobs are green cuts ddc-${ddcVersion} at the commit it is built from`,
     cut.status === 0 &&
-      cut.tag === `ddc-${ddcVersion}` &&
-      cut.created === "true" &&
       cut.git.includes(`tag ddc-${ddcVersion} ${releaseSha}`) &&
       cut.git.includes(`push origin refs/tags/ddc-${ddcVersion}`) &&
       cut.stdout.includes("::notice::"),
     `exit ${cut.status}\n${cut.git.join("\n")}\n${cut.stdout}${cut.stderr}`
   );
 
-  // A prerelease proves the property exactly as a release does, so it is tagged rather
-  // than refused -- which is the one place this script deliberately answers a version
-  // shape differently from `.github/seed-due.sh`, where an unorderable version has to stop
-  // the run because the answer there is a comparison. Here the version is only a name.
+  // Which versions are releasable is `.github/seed-due.sh`'s question, and it is asked
+  // before this job exists. So a version this cannot order is not this script's to refuse a
+  // second time: here the version is only a name, and a stricter grammar would be a second
+  // version scheme able to refuse, at the last step before a publish, a release the first
+  // one allowed.
   const rc = ddcTag(["0.3.0-rc1"]);
   check(
     "ddc tag: a prerelease is a commit the property holds at, so it is tagged rather than refused",
-    rc.status === 0 && rc.tag === "ddc-0.3.0-rc1" && rc.git.includes(`tag ddc-0.3.0-rc1 ${releaseSha}`),
+    rc.status === 0 && rc.git.includes(`tag ddc-0.3.0-rc1 ${releaseSha}`),
     `exit ${rc.status}\n${rc.git.join("\n")}\n${rc.stdout}${rc.stderr}`
   );
 
@@ -7375,7 +7363,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   const again = ddcTag([ddcVersion], { FAKE_TAGGED: releaseSha });
   check(
     "ddc tag: a re-run of a release whose tag is already cut at that commit changes nothing and stays green",
-    again.status === 0 && again.created === "false" && !wrote(again) && again.stdout.includes("::notice::"),
+    again.status === 0 && !wrote(again) && again.stdout.includes("already cut"),
     `exit ${again.status}\n${again.git.join("\n")}\n${again.stdout}${again.stderr}`
   );
 
@@ -7392,7 +7380,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   });
   check(
     "ddc tag: an annotated tag of that name on this commit is the re-run, not a tag that moved",
-    annotated.status === 0 && annotated.created === "false" && !wrote(annotated),
+    annotated.status === 0 && !wrote(annotated) && annotated.stdout.includes("already cut"),
     `exit ${annotated.status}\n${annotated.git.join("\n")}\n${annotated.stdout}${annotated.stderr}`
   );
 
@@ -7420,7 +7408,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   // The refusal G6 turns on. A tag on a release whose bootstrap did not prove the property
   // claims something nobody can check afterwards, and it is indistinguishable from an
   // honest one, so a failed proving job cuts nothing.
-  const unproved = ddcTag([ddcVersion], { DDC_PROOF: "ci:success targets:success binaries:failure" });
+  const unproved = ddcTag([ddcVersion], { DDC_PROOF: "ci:success binaries:failure" });
   check(
     "ddc tag: a release whose binaries job did not prove the property cuts no tag and fails",
     unproved.status === 1 &&
@@ -7435,7 +7423,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   // does not need is the empty string rather than an error, so the pair arrives with no
   // result and the script refuses -- which is the whole reason it is told the results
   // rather than assuming them from having been reached at all.
-  const dropped = ddcTag([ddcVersion], { DDC_PROOF: "ci:success targets:success binaries:" });
+  const dropped = ddcTag([ddcVersion], { DDC_PROOF: "ci:success binaries:" });
   check(
     "ddc tag: a proving job dropped from the job's needs arrives with no result and cuts no tag",
     dropped.status === 1 &&
@@ -7443,6 +7431,16 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
       dropped.stdout.includes("binaries=(no result)") &&
       !wrote(dropped),
     `exit ${dropped.status}\n${dropped.git.join("\n")}\n${dropped.stdout}${dropped.stderr}`
+  );
+
+  // A job named with nothing beside it, which is what a hand-edited env line looks like when
+  // the `${{ ... }}` is deleted rather than the job. A token the script cannot read must not
+  // be counted as one that proved something, and this is the arm that says so.
+  const shapeless = ddcTag([ddcVersion], { DDC_PROOF: "ci:success binaries" });
+  check(
+    "ddc tag: a job named with no result at all is not read as a job that proved something",
+    shapeless.status === 1 && shapeless.stdout.includes("binaries=(no result)") && !wrote(shapeless),
+    `exit ${shapeless.status}\n${shapeless.git.join("\n")}\n${shapeless.stdout}${shapeless.stderr}`
   );
 
   const silent = ddcTag([ddcVersion], { DDC_PROOF: "" });
@@ -7475,7 +7473,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   const noCommit = ddcTag([ddcVersion], { FAKE_HEAD: "" });
   check(
     "ddc tag: no commit to point the tag at is a refusal rather than a tag on nothing",
-    noCommit.status === 1 && noCommit.stdout.includes("::error::") && !noCommit.verbs.includes("tag"),
+    noCommit.status === 1 && noCommit.stdout.includes("::error::") && !wrote(noCommit),
     `exit ${noCommit.status}\n${noCommit.git.join("\n")}\n${noCommit.stdout}${noCommit.stderr}`
   );
 
@@ -7485,7 +7483,7 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   const raced = ddcTag([ddcVersion], { FAKE_PUSH_FAILS: "1" });
   check(
     "ddc tag: a push the remote rejects ends with an ::error:: naming the release, not a bare exit status",
-    raced.status === 1 && raced.stdout.includes("::error::") && raced.created === "false",
+    raced.status === 1 && raced.stdout.includes("::error::") && raced.git.includes(`push origin refs/tags/ddc-${ddcVersion}`),
     `exit ${raced.status}\n${raced.git.join("\n")}\n${raced.stdout}${raced.stderr}`
   );
 
@@ -7494,23 +7492,32 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   // the job graph rather than the script, so both are read out of the workflow -- and the
   // script cannot check either one, since a job that is told about no proving job at all
   // is exactly the state the refusal above cannot tell from a healthy run.
+  // The seed-target block above refuses to match a layout, and says why: an earlier version
+  // of it matched two adjacent lines and would have gone red on a reformat. This cannot be
+  // written that way, because the claim *is* which job needs which and a `needs:` list only
+  // means something attached to a job key. So the job key is the only layout read, the list
+  // is accepted in each of the three spellings Actions takes, and the parse is asserted
+  // before anything is concluded from it -- a file this cannot read reports itself as one,
+  // rather than as a release that publishes without its provenance.
   const releaseWorkflow = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
-  const ymlJobs = {};
-  let currentJob = null;
-  for (const line of releaseWorkflow.split("\n")) {
-    const named = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
-    if (named) {
-      currentJob = named[1];
-      ymlJobs[currentJob] = "";
-      continue;
-    }
-    if (currentJob) ymlJobs[currentJob] += `${line}\n`;
-  }
-  const needsOf = (job) => {
-    const m = /needs:\s*\[([^\]]*)\]/.exec(ymlJobs[job] ?? "");
-    return m ? m[1].split(",").map((n) => n.trim()) : [];
+  const jobBody = (job) => {
+    const after = releaseWorkflow.split(new RegExp(`^ {2}${job}:[ \t]*(?:#.*)?$`, "m"))[1];
+    return after === undefined ? "" : after.split(/^ {2}[A-Za-z0-9_-]+:/m)[0];
   };
-  const ddcJob = ymlJobs.ddc ?? "";
+  const needsOf = (job) => {
+    const m = /needs:[ \t]*(\[[^\]]*\]|[^\n]*)((?:\n[ \t]*-[^\n]*)*)/.exec(jobBody(job));
+    if (!m) return [];
+    const flow = m[1].startsWith("[") ? m[1].slice(1, -1) : m[1];
+    const block = m[2].split("\n").map((l) => l.replace(/^[ \t]*-[ \t]*/, ""));
+    return [...flow.split(","), ...block].map((n) => n.trim()).filter((n) => n.length > 0);
+  };
+  const unreadable = ["ci", "targets", "binaries", "ddc", "release"].filter((j) => jobBody(j).length === 0);
+  check(
+    "ddc tag: release.yml still spells its jobs the way the two checks below read them",
+    unreadable.length === 0 && needsOf("release").length > 0,
+    `no body found for: ${unreadable.join(", ") || "(none)"}; release needs: ${needsOf("release").join(", ") || "(nothing)"}. The workflow may be correct and this reader stale: it takes a job key at two spaces and a needs: list as a flow sequence, a block list or a bare name.`
+  );
+  const ddcJob = jobBody("ddc");
   check(
     "ddc tag: release.yml cuts it with the script, after the jobs that prove the property and before the release is published",
     /bash\s+\.github\/ddc-tag\.sh/.test(ddcJob) &&
