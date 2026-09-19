@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
