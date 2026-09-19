@@ -171,6 +171,10 @@ step below is done by hand.
      from a directory unrelated to both the checkout and the unpack. Each job
      checks its runner's own `uname` against the triple it was asked for, so
      an asset cannot be labelled for an architecture it was not built on;
+   - cuts this release's **provenance tag**, `ddc-<version>`, at the commit
+     being released — after the jobs above have proved the property it stands
+     for and before anything is published (`.github/ddc-tag.sh`, and "The
+     provenance tag" below);
    - `gh release create v0.2.0 nish-0.2.0.tgz` plus the four
      `nish-0.2.0-<triple>.tar.gz`, with the notes rendered from
      `changelog/0.2.0.json` — the file the release pull request was reviewed
@@ -241,6 +245,11 @@ step below is done by hand.
 
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
+The `ddc-<version>` tag that release cut stays where it is and should: it names
+a commit at which `IR(stage0, self/) == IR(stage1, self/)` held, which is still
+true of that commit whether or not the release it was cut during was published.
+Cutting the next one is the next release's job, and `.github/ddc-tag.sh` refuses
+to move an existing one rather than quietly repointing it.
 
 To preview what the train would produce, without pushing anything:
 
@@ -287,6 +296,47 @@ Rule 1 of [wp14-selfhost.md](wp14-selfhost.md) §6 — a construct enters the
 language before it enters `self/` — therefore survives stage0's retirement
 unchanged, and only its subject changes, from stage0 to the seed. Add the
 construct to the language, ship the release, then use it in `self/`.
+
+## The provenance tag
+
+Every release cuts `ddc-<version>` at the commit it is built from, and no
+release step asks anyone to remember it.
+
+The tag is [WP19 G6](wp19-stage0-retirement.md#g6--the-provenance-is-recorded-before-it-is-lost)'s:
+it marks a commit at which `IR(stage0, self/) == IR(stage1, self/)` and the
+fixed point both hold — two independently written implementations of this
+language emitting identical IR for every module of `self/`, which is the second
+half of diverse double-compiling and which no other self-hosted compiler in
+that document's table asserts. G6 writes down how to re-verify it from the tag:
+check the tag out, `npm ci`, `npm run build`, `node tests/self/bootstrap.js`.
+After R6 deletes `src/` there is no second implementation left to disagree
+with, so the tags cut before that day are the only commits the property can
+ever be demonstrated at again.
+
+That is why it is cut by the workflow rather than by a person. The cost of
+forgetting is paid once and is not recoverable: the first release nobody
+remembers is the release after which the property can no longer be
+demonstrated, and a gate that is remembered at every release except one is not
+a gate. So `release.yml` has a `ddc` job between the binaries and the release,
+and `.github/ddc-tag.sh` is what decides:
+
+| The run | What it does |
+| --- | --- |
+| the proving jobs are green and no `ddc` tag exists for this version | cuts the tag at the released commit and pushes it |
+| the tag is already there, on that commit | nothing, and green — a re-run of a release that already recorded its provenance is not a failure |
+| the tag is already there, on another commit | refuses: two commits cannot both be this version's, and a provenance tag that moved is worth less than none |
+| a job that proves the property did not succeed, or is no longer named | refuses, and says which job — a tag cut on a run that proved nothing is a claim nobody can falsify afterwards, which is worse than no tag |
+
+What proves the property is not that script and must not become it:
+`tests/self/bootstrap.js`, which `npm test` runs in the `ci` job, and
+`scripts/bootstrap.sh --verify` with stage0 as the seed, which every row of the
+`binaries` job runs — the stage0 seed is the one for which `IR(seed) ==
+IR(stage1)` is asserted rather than reported ("The bootstrap seed" above). The
+script reads what those jobs answered, through `DDC_PROOF`, and decides.
+
+Each of those rows is a case in the WP19 block of `tests/run.js`, driven
+against a stand-in for `git`, because the refusal cannot be reached in a real
+release without the release going wrong and a gate nobody can fail is a wish.
 
 ## Open decision: the npm name is taken
 

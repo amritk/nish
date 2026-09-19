@@ -7233,6 +7233,365 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   }
 }
 
+// ---- WP19 G6: the provenance tag the release cuts ------------------------------------
+// `.github/ddc-tag.sh` decides whether the release being built may carry a `ddc-<version>`
+// tag -- the tag G6 asks for, marking the last commit at which
+// `IR(stage0, self/) == IR(stage1, self/)` and the fixed point both hold. It is the
+// cheapest gate in `docs/wp19-stage0-retirement.md` and the only one that cannot be
+// recovered later: once R6 deletes `src/` there is no second implementation left to
+// disagree with, so a release that forgot the tag is a release after which nothing can be
+// said about diverse double-compiling at all.
+//
+// Which is why the release cuts it rather than a person remembering to, and why the
+// deciding is a script driven from here. Everything below is reached from whatever
+// machine the suite runs on, through a stand-in for `git` that answers from `FAKE_*` and
+// records what it was asked -- the pattern the seed-matrix block above uses for `gh`, for
+// the reason §G3 records twice: this class of logic has been written as inline shell in a
+// workflow where nothing could run it, and the correction each time was a script and a
+// test that reaches every arm. The arm that matters most is the refusal, because it
+// cannot be reached in a real release without the release going wrong: a tag cut on a run
+// that did not prove the property is a claim nobody can falsify afterwards, which is
+// worse than no tag.
+if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
+  const ddcVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  // The commit the release is built from, as GITHUB_SHA hands it over. Any 40 hex digits
+  // would do; this one is a literal so a log line naming it is unmistakably the stub's.
+  const releaseSha = "0123456789abcdef0123456789abcdef01234567";
+
+  const ddcDir = path.join(buildDir, "wp19-ddc-tag");
+  fs.rmSync(ddcDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(ddcDir, "bin"), { recursive: true });
+  const gitStub = path.join(ddcDir, "bin", "git");
+  fs.writeFileSync(
+    gitStub,
+    [
+      "#!/usr/bin/env bash",
+      "# Stand-in for `git`, answering from FAKE_* and recording every call in $GIT_LOG.",
+      "# Every FAKE_* is always set by the runner below, empty where the case does not use",
+      "# it, so the reads here need no defaults.",
+      "# `ls-remote` prints what git prints: nothing when FAKE_TAGGED is empty, one",
+      "# <sha>TAB<ref> line for a lightweight tag, and for an annotated one (FAKE_TAG_OBJECT)",
+      "# the two lines git really answers with -- the tag object on refs/tags/<tag> and the",
+      "# commit it peels to on refs/tags/<tag>^{}. It fails outright under FAKE_LS_REMOTE_FAILS,",
+      "# which is a remote that could not be reached rather than one carrying no tag.",
+      "# `rev-parse` fails the way git fails on a commit this checkout does not have, and",
+      "# `push` is rejected when FAKE_PUSH_FAILS is set.",
+      'printf \'%s\\n\' "$*" >> "$GIT_LOG"',
+      'case "$1" in',
+      '  ls-remote)',
+      '    [ -z "$FAKE_LS_REMOTE_FAILS" ] || { echo "fatal: could not read from remote repository" >&2; exit 128; }',
+      '    if [ -n "$FAKE_TAG_OBJECT" ]; then',
+      "      printf '%s\\t%s\\n' \"$FAKE_TAG_OBJECT\" \"$4\"",
+      '      # The peeled line only when it was asked for by name, which is how git matches',
+      '      # its patterns: `refs/tags/<tag>` does not match `refs/tags/<tag>^{}`.',
+      "      [ \"$5\" = \"$4^{}\" ] && printf '%s\\t%s^{}\\n' \"$FAKE_TAGGED\" \"$4\"",
+      '      exit 0',
+      '    fi',
+      "    [ -z \"$FAKE_TAGGED\" ] || printf '%s\\t%s\\n' \"$FAKE_TAGGED\" \"$4\" ;;",
+      '  rev-parse) [ -n "$FAKE_HEAD" ] || exit 128; printf \'%s\\n\' "$FAKE_HEAD" ;;',
+      '  push) [ -z "$FAKE_PUSH_FAILS" ] || { echo "! [remote rejected] already exists" >&2; exit 1; } ;;',
+      "esac",
+      "exit 0",
+      "",
+    ].join("\n")
+  );
+  fs.chmodSync(gitStub, 0o755);
+
+  /**
+   * One run of the script, with the workflow's environment supplied and every part of it
+   * overridable. The defaults are the state a healthy release is in -- both proving jobs
+   * green, a commit to tag, no `ddc` tag on the remote -- so each case below names only
+   * the one thing it changes, which is what makes the arms readable as a set.
+   */
+  const ddcTag = (args, env) => {
+    const logFile = path.join(ddcDir, "log");
+    fs.writeFileSync(logFile, "");
+    const r = spawnSync("bash", [path.join(root, ".github", "ddc-tag.sh"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${path.join(ddcDir, "bin")}${path.delimiter}${process.env.PATH}`,
+        GITHUB_STEP_SUMMARY: "",
+        GITHUB_SHA: releaseSha,
+        DDC_PROOF: "ci:success binaries:success",
+        GIT_LOG: logFile,
+        FAKE_HEAD: releaseSha,
+        FAKE_TAGGED: "",
+        FAKE_TAG_OBJECT: "",
+        FAKE_LS_REMOTE_FAILS: "",
+        FAKE_PUSH_FAILS: "",
+        ...env,
+      },
+    });
+    return {
+      ...r,
+      git: fs
+        .readFileSync(logFile, "utf8")
+        .split("\n")
+        .filter((l) => l.length > 0),
+    };
+  };
+  // `tag` and `push` are the two calls that change the world, so a state that must not cut
+  // a tag is one where neither appears, however the script got there.
+  const wrote = (r) => r.git.some((l) => /^(tag|push) /.test(l));
+
+  const cut = ddcTag([ddcVersion]);
+  check(
+    `ddc tag: a release whose proving jobs are green cuts ddc-${ddcVersion} at the commit it is built from`,
+    cut.status === 0 &&
+      cut.git.includes(`tag ddc-${ddcVersion} ${releaseSha}`) &&
+      cut.git.includes(`push origin refs/tags/ddc-${ddcVersion}`) &&
+      cut.stdout.includes("::notice::"),
+    `exit ${cut.status}\n${cut.git.join("\n")}\n${cut.stdout}${cut.stderr}`
+  );
+
+  // Which versions are releasable is `.github/seed-due.sh`'s question, and it is asked
+  // before this job exists. So a version this cannot order is not this script's to refuse a
+  // second time: here the version is only a name, and a stricter grammar would be a second
+  // version scheme able to refuse, at the last step before a publish, a release the first
+  // one allowed.
+  const rc = ddcTag(["0.3.0-rc1"]);
+  check(
+    "ddc tag: a prerelease is a commit the property holds at, so it is tagged rather than refused",
+    rc.status === 0 && rc.git.includes(`tag ddc-0.3.0-rc1 ${releaseSha}`),
+    `exit ${rc.status}\n${rc.git.join("\n")}\n${rc.stdout}${rc.stderr}`
+  );
+
+  // The re-run. `gh release create` failing leaves a release worth running again, and the
+  // step that already did its job must not be what stops it: the tag is there, at this
+  // commit, and there is nothing to do. Re-cutting it would fail at the push instead.
+  const again = ddcTag([ddcVersion], { FAKE_TAGGED: releaseSha });
+  check(
+    "ddc tag: a re-run of a release whose tag is already cut at that commit changes nothing and stays green",
+    again.status === 0 && !wrote(again) && again.stdout.includes("already cut"),
+    `exit ${again.status}\n${again.git.join("\n")}\n${again.stdout}${again.stderr}`
+  );
+
+  // The same re-run, with the tag cut by hand and therefore annotated. An annotated tag is
+  // an object of its own, so `ls-remote` answers the tag object's sha on `refs/tags/<tag>`
+  // and the commit only on a second `refs/tags/<tag>^{}` line -- and a question that asks
+  // for the first ref alone gets the first line alone, which is a sha that equals no
+  // commit. Read that way this case becomes the refusal below: a tag sitting exactly where
+  // this release would put it, reported as a tag that moved, on a job the release now
+  // needs. The pattern that asks for the peeled ref is what this holds in place.
+  const annotated = ddcTag([ddcVersion], {
+    FAKE_TAGGED: releaseSha,
+    FAKE_TAG_OBJECT: "1e6e6ab91e6e6ab91e6e6ab91e6e6ab91e6e6ab9",
+  });
+  check(
+    "ddc tag: an annotated tag of that name on this commit is the re-run, not a tag that moved",
+    annotated.status === 0 && !wrote(annotated) && annotated.stdout.includes("already cut"),
+    `exit ${annotated.status}\n${annotated.git.join("\n")}\n${annotated.stdout}${annotated.stderr}`
+  );
+
+  // A remote that could not be asked is not a remote carrying no tag. Reading it as one
+  // turns the re-run above into a push the remote rejects, and the job then blames a
+  // concurrent run for what was a network failure.
+  const unreachable = ddcTag([ddcVersion], { FAKE_LS_REMOTE_FAILS: "1" });
+  check(
+    "ddc tag: a remote that cannot be asked whether the tag exists is a refusal, not an empty answer",
+    unreachable.status === 1 && unreachable.stdout.includes("::error::") && !wrote(unreachable),
+    `exit ${unreachable.status}\n${unreachable.git.join("\n")}\n${unreachable.stdout}${unreachable.stderr}`
+  );
+
+  // The same tag on another commit is the opposite answer: two commits cannot both be the
+  // last one at which the property held for one version, and a provenance tag that moved
+  // is worth less than none, because G6's procedure checks the tag out and re-runs the
+  // proof there.
+  const moved = ddcTag([ddcVersion], { FAKE_TAGGED: "beefbeefbeefbeefbeefbeefbeefbeefbeefbeef" });
+  check(
+    "ddc tag: a tag of that name on another commit refuses rather than moving it",
+    moved.status === 1 && moved.stdout.includes("::error::") && !wrote(moved),
+    `exit ${moved.status}\n${moved.git.join("\n")}\n${moved.stdout}${moved.stderr}`
+  );
+
+  // The refusal G6 turns on. A tag on a release whose bootstrap did not prove the property
+  // claims something nobody can check afterwards, and it is indistinguishable from an
+  // honest one, so a failed proving job cuts nothing.
+  const unproved = ddcTag([ddcVersion], { DDC_PROOF: "ci:success binaries:failure" });
+  check(
+    "ddc tag: a release whose binaries job did not prove the property cuts no tag and fails",
+    unproved.status === 1 &&
+      unproved.stdout.includes("::error::") &&
+      unproved.stdout.includes("binaries=failure") &&
+      !wrote(unproved),
+    `exit ${unproved.status}\n${unproved.git.join("\n")}\n${unproved.stdout}${unproved.stderr}`
+  );
+
+  // And the shape that reaches that arm in a release nothing else is wrong with: a
+  // `needs:` edited to drop a proving job. `${{ needs.<job>.result }}` for a job the job
+  // does not need is the empty string rather than an error, so the pair arrives with no
+  // result and the script refuses -- which is the whole reason it is told the results
+  // rather than assuming them from having been reached at all.
+  const dropped = ddcTag([ddcVersion], { DDC_PROOF: "ci:success binaries:" });
+  check(
+    "ddc tag: a proving job dropped from the job's needs arrives with no result and cuts no tag",
+    dropped.status === 1 &&
+      dropped.stdout.includes("::error::") &&
+      dropped.stdout.includes("binaries=(no result)") &&
+      !wrote(dropped),
+    `exit ${dropped.status}\n${dropped.git.join("\n")}\n${dropped.stdout}${dropped.stderr}`
+  );
+
+  // A job named with nothing beside it, which is what a hand-edited env line looks like when
+  // the `${{ ... }}` is deleted rather than the job. A token the script cannot read must not
+  // be counted as one that proved something, and this is the arm that says so.
+  const shapeless = ddcTag([ddcVersion], { DDC_PROOF: "ci:success binaries" });
+  check(
+    "ddc tag: a job named with no result at all is not read as a job that proved something",
+    shapeless.status === 1 && shapeless.stdout.includes("binaries=(no result)") && !wrote(shapeless),
+    `exit ${shapeless.status}\n${shapeless.git.join("\n")}\n${shapeless.stdout}${shapeless.stderr}`
+  );
+
+  const silent = ddcTag([ddcVersion], { DDC_PROOF: "" });
+  check(
+    "ddc tag: no job at all claiming to have proved anything is a refusal, not a tag",
+    silent.status === 1 && silent.stdout.includes("::error::") && !wrote(silent),
+    `exit ${silent.status}\n${silent.git.join("\n")}\n${silent.stdout}${silent.stderr}`
+  );
+
+  // A workflow_dispatch aimed at a branch: `targets` refuses it first, and this refuses to
+  // stamp a branch name into a permanent tag if it ever gets here. Nothing is asked of git
+  // at all, because the name is wrong before any state is.
+  //
+  // Both spellings, because the interesting one is the second. `main` is refused by any
+  // check at all; `123-fix-bug` is an ordinary issue-numbered branch, it starts with a
+  // digit, and it is what says this grammar is a version shape rather than "not obviously
+  // a word". A branch named `123` is accepted and has to be: that is a dotted integer, and
+  // this check is deliberately looser than `.github/seed-due.sh` so that it can never
+  // refuse a version that one released.
+  for (const name of ["main", "123-fix-bug"]) {
+    const branch = ddcTag([name]);
+    check(
+      `ddc tag: \`${name}\` where a version belongs is refused before git is asked anything`,
+      branch.status === 1 && branch.stdout.includes("::error::") && branch.git.length === 0,
+      `exit ${branch.status}\n${branch.git.join("\n")}\n${branch.stdout}${branch.stderr}`
+    );
+  }
+
+  const noArgs = ddcTag([]);
+  check(
+    "ddc tag: run with no version at all it answers usage on stderr and exits 2",
+    noArgs.status === 2 && noArgs.stderr.includes("usage:") && noArgs.git.length === 0,
+    `exit ${noArgs.status}\n${noArgs.stdout}${noArgs.stderr}`
+  );
+
+  // A checkout that does not contain the commit the release is built from. The tag names a
+  // commit and nothing else, so there is nothing to cut until there is one -- and a tag
+  // pointing at nothing is the one outcome that would look like provenance and be none.
+  const noCommit = ddcTag([ddcVersion], { FAKE_HEAD: "" });
+  check(
+    "ddc tag: no commit to point the tag at is a refusal rather than a tag on nothing",
+    noCommit.status === 1 && noCommit.stdout.includes("::error::") && !wrote(noCommit),
+    `exit ${noCommit.status}\n${noCommit.git.join("\n")}\n${noCommit.stdout}${noCommit.stderr}`
+  );
+
+  // A tag that appeared between the question and the push -- a hand-cut one, or a second
+  // run the concurrency group did not serialise. git says what happened on stderr; the job
+  // has to say which release it happened during, rather than ending on a bare exit status.
+  const raced = ddcTag([ddcVersion], { FAKE_PUSH_FAILS: "1" });
+  check(
+    "ddc tag: a push the remote rejects ends with an ::error:: naming the release, not a bare exit status",
+    raced.status === 1 && raced.stdout.includes("::error::") && raced.git.includes(`push origin refs/tags/ddc-${ddcVersion}`),
+    `exit ${raced.status}\n${raced.git.join("\n")}\n${raced.stdout}${raced.stderr}`
+  );
+
+  // Where the script sits in the release, which is half of what G6 asks for: the tag is
+  // cut AFTER the jobs that prove the property and BEFORE anything is published. Both are
+  // the job graph rather than the script, so both are read out of the workflow -- and the
+  // script cannot check either one, since a job that is told about no proving job at all
+  // is exactly the state the refusal above cannot tell from a healthy run.
+  // The seed-target block above refuses to match a layout, and says why: an earlier version
+  // of it matched two adjacent lines and would have gone red on a reformat. This cannot be
+  // written that way, because the claim *is* which job needs which and a `needs:` list only
+  // means something attached to a job key. So the job key is the only layout read, the list
+  // is accepted in each of the three spellings Actions takes, and the parse is asserted
+  // before anything is concluded from it -- a file this cannot read reports itself as one,
+  // rather than as a release that publishes without its provenance.
+  const releaseWorkflow = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
+  const jobBody = (job) => {
+    const after = releaseWorkflow.split(new RegExp(`^ {2}${job}:[ \t]*(?:#.*)?$`, "m"))[1];
+    return after === undefined ? "" : after.split(/^ {2}[A-Za-z0-9_-]+:/m)[0];
+  };
+  const needsOf = (job) => {
+    const m = /needs:[ \t]*(\[[^\]]*\]|[^\n]*)((?:\n[ \t]*-[^\n]*)*)/.exec(jobBody(job));
+    if (!m) return [];
+    const flow = m[1].startsWith("[") ? m[1].slice(1, -1) : m[1];
+    const block = m[2].split("\n").map((l) => l.replace(/^[ \t]*-[ \t]*/, ""));
+    return [...flow.split(","), ...block].map((n) => n.trim()).filter((n) => n.length > 0);
+  };
+  const unreadable = ["ci", "targets", "binaries", "ddc", "release"].filter((j) => jobBody(j).length === 0);
+  check(
+    "ddc tag: release.yml still spells its jobs the way the two checks below read them",
+    unreadable.length === 0 && needsOf("release").length > 0,
+    `no body found for: ${unreadable.join(", ") || "(none)"}; release needs: ${needsOf("release").join(", ") || "(nothing)"}. The workflow may be correct and this reader stale: it takes a job key at two spaces and a needs: list as a flow sequence, a block list or a bare name.`
+  );
+  const ddcJob = jobBody("ddc");
+  check(
+    "ddc tag: release.yml cuts it with the script, after the jobs that prove the property and before the release is published",
+    /bash\s+\.github\/ddc-tag\.sh/.test(ddcJob) &&
+      needsOf("ddc").includes("ci") &&
+      needsOf("ddc").includes("binaries") &&
+      needsOf("release").includes("ddc"),
+    `ddc needs: ${needsOf("ddc").join(", ") || "(no job)"}; release needs: ${needsOf("release").join(", ")}`
+  );
+  // And that it tells the script what each of those jobs answered. This is the pair the
+  // `binaries:` case above is about: the env line is what carries a dropped `needs:` into
+  // the script as an empty result, so a release.yml that stopped naming a proving job here
+  // would refuse quietly on a good release or tag quietly on a bad one, depending on which
+  // half was edited.
+  // The claim the version check rests on, run rather than argued. `.github/seed-due.sh` is
+  // the one script that decides which versions are releasable, and `ddc-tag.sh` only asks
+  // whether a version can name a tag -- so it has to be the looser of the two, or it
+  // refuses, at the last step before a publish and on a job `release` needs, a release that
+  // seed-due.sh allowed. Two regexes a reviewer can read side by side is how that was held
+  // until now, and nothing ran them together: edit either one later and the claim goes
+  // false with the suite green throughout.
+  //
+  // The verdict comes from running seed-due.sh rather than from restating its pattern here,
+  // which is the whole point -- a copy of the pattern would be the two-strings defect this
+  // file's neighbouring block exists to prevent. jq's absence is the same counted skip it
+  // is there, because that script is jq.
+  if (!has("jq")) {
+    skip(
+      "ddc tag: jq is not installed, so .github/seed-due.sh did not run and the subset it shares with ddc-tag.sh is unchecked here"
+    );
+  } else {
+    // Shapes rather than a corpus: the release line, a version with more components than
+    // anyone writes, a bare integer (which seed-due.sh orders, so this must name it), and
+    // the version in package.json so the set moves with the repository.
+    const shapes = ["0.1.1", "0.4.0", "1.2.3.4.5", "123", "9999.0.0", ddcVersion];
+    const refused = [];
+    let ordered = 0;
+    for (const shape of shapes) {
+      const due = spawnSync("bash", [path.join(root, ".github", "seed-due.sh"), shape], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      // A version seed-due.sh will not order is one it stops the release on, so this script
+      // never sees it and owes it nothing.
+      if (due.status !== 0) continue;
+      ordered += 1;
+      const named = ddcTag([shape]);
+      if (named.stdout.includes("is not a version a tag can be named after")) refused.push(shape);
+    }
+    check(
+      `ddc tag: every version .github/seed-due.sh will order is one this can name a tag after (${ordered} of ${shapes.length} shapes)`,
+      refused.length === 0 && ordered >= 5,
+      refused.length > 0
+        ? `seed-due.sh orders ${refused.join(", ")} and ddc-tag.sh will not tag it, so a release it allows is one this job refuses`
+        : `only ${ordered} shapes were ordered at all, so this check proved little; give it versions seed-due.sh accepts`
+    );
+  }
+
+  check(
+    "ddc tag: the job tells the script what each proving job answered, which is how a dropped needs: reaches it",
+    /DDC_PROOF:[^\n]*needs\.ci\.result/.test(ddcJob) && /DDC_PROOF:[^\n]*needs\.binaries\.result/.test(ddcJob),
+    ddcJob.split("\n").find((l) => l.includes("DDC_PROOF")) ?? "the job sets no DDC_PROOF"
+  );
+}
+
 // ---- WP19: stage3 == stage2, on both platforms ---------------------------------------
 // `scripts/verify-binaries.sh` is the last equality `scripts/bootstrap.sh --verify`
 // asserts, and it is a script of its own so that this block can ask it for the branch
