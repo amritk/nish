@@ -489,7 +489,7 @@ case written to pin one rule.
 easily overstated. It covers the golden cases and the link programs, and none of
 the pipeline checks: no interop sidecars, no layout assertions, no wasm profiles,
 no packaging, no differential rewrite, no self-hosting oracles, and none of the
-fourteen flag variations `tests/self/parity.js` runs. What it demonstrates is
+sixteen flag variations `tests/self/parity.js` runs. What it demonstrates is
 that the language can host its own harness. What `tests/run.js` does is prove
 the compiler.
 

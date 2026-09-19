@@ -357,7 +357,7 @@ as well — same jobs, same hardware, same steps — and went away with the bran
 `.github/workflows/parity.yml` runs `node tests/run.js --parity` on a
 `schedule:` at 06:17 UTC, and on `workflow_dispatch` with an optional `only`
 filter. It is the corpus half of WP19 G1: every program in the corpus through
-both compilers under all fifteen flag variations, comparing exit status,
+both compilers under all sixteen flag variations, comparing exit status,
 stdout, stderr and every file written.
 
 It is a workflow of its own rather than a step in `test` because of what it
