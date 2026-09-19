@@ -307,18 +307,17 @@ const rejectThrow: Validator = (node, sf) =>
     node,
     sf
   );
+/**
+ * The span is the keyword, not the statement: a `DebuggerStatement` runs to its
+ * semicolon and the message names `debugger`, so the caret was a character
+ * wider than the thing it was about. Every other forbidden *name* — `eval`,
+ * `globalThis`, `arguments` — is refused at its identifier, and this is the one
+ * that was not, because `debugger` is a statement kind here and an ordinary
+ * identifier to stage1 (`forbiddenValue` in `self/validator.ts`).
+ */
 const rejectDebugger: Validator = (node, sf) =>
   fail(
     `\`debugger\` is forbidden in ${LANGUAGE} (no debugger hook)`,
-    // The keyword, not the statement: a `DebuggerStatement` runs to its
-    // semicolon and the message names `debugger`, so the caret was a character
-    // wider than the thing it was about. Every other forbidden *name* — `eval`,
-    // `globalThis`, `arguments` — is refused at its identifier, and this is the
-    // one that was not, because `debugger` is a statement kind here and an
-    // ordinary identifier to stage1, which parses no `debugger` keyword at all
-    // (`forbiddenValue` in `self/validator.ts`). Nothing pinned the difference:
-    // a `.err` sidecar is matched as a substring and no golden holds a caret
-    // run, so it took `--json`'s `endColumn` entering the parity cross product.
     { start: node.getStart(sf), end: node.getStart(sf) + "debugger".length },
     sf
   );

@@ -111,7 +111,7 @@ const DECLARED = [
       // recovers from the syntax error and it prints the tree it got. There is
       // no stage0 diagnostic to compare against, and the reason is this one.
       if (zero === "" && isSyntaxError(one)) return run.flags.includes("--emit-ast");
-      return refusedByTheParser(zero, one);
+      return parserRefusedFirst(zero, one);
     },
     why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is Nish-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
   },
@@ -128,8 +128,8 @@ const DECLARED = [
   {
     flag: "--json",
     surface: "stdout",
-    matches: (want, got) => refusedByTheParser(firstJsonDiagnostic(want), firstJsonDiagnostic(got)),
-    why: "the stderr declaration above, on the stream `--json` moves a diagnostic to. It is the same rule read off the machine-readable shape — `refusedByTheParser` is shared, so the two cannot come to mean different things — and it is narrow in the same way: stage1's first object must be the syntax error, stage0's must not be, and both must name the same file. stage0 accepting a program stage1 refuses is still a failure, and so is every later object, the exit status and every file written.",
+    matches: (want, got) => parserRefusedFirst(firstJsonDiagnostic(want), firstJsonDiagnostic(got)),
+    why: "the stderr declaration above, on the stream `--json` moves a diagnostic to. It is the same rule read off the machine-readable shape — `parserRefusedFirst` is shared, so the two cannot come to mean different things — and it is narrow in the same way: stage1's first object must be the syntax error, stage0's must not be, and both must name the same file. stage0 accepting a program stage1 refuses is still a failure, and so is every later object, the exit status and every file written.",
   },
   {
     flag: "--emit-checked",
@@ -195,12 +195,10 @@ function firstDiagnostic(text) {
  */
 const firstJsonDiagnostic = (text) => {
   for (const line of text.split("\n")) {
-    if (!line.startsWith("{") || !line.endsWith("}")) continue;
-    // A run can carry both `--json` and a dump flag — `tests/cases/dump_checked`
-    // asks for `--emit-checked` in its own `.args` — and then stdout is the
-    // dump. A line of it that happens to be brace-wrapped is not a diagnostic,
-    // so it is skipped rather than crashing the mode; a line that parses is one
-    // by construction, because nothing else writes objects there.
+    // A run carries a dump flag as well as `--json` whenever the program asks
+    // for one in its own `.args` (`tests/cases/dump_checked`), and then stdout
+    // is the dump: a line of it that does not parse is not a diagnostic.
+    if (!line.startsWith("{")) continue;
     let object = null;
     try {
       object = JSON.parse(line);
@@ -212,12 +210,7 @@ const firstJsonDiagnostic = (text) => {
   return "";
 };
 
-/**
- * The first diagnostic of one compiler's run, off whichever stream this
- * invocation puts it on: `--json` is one flat object per diagnostic on stdout
- * and an empty stderr, and every other invocation is the human summary on
- * stderr.
- */
+/** The first diagnostic of a run, off whichever stream its flags put it on. */
 const firstReport = (flags, result) =>
   flags.includes("--json") ? firstJsonDiagnostic(result.stdout) : firstDiagnostic(result.stderr);
 
@@ -233,9 +226,14 @@ const isSyntaxError = (line) => line.includes(": syntax error: ");
  *
  * Shared by the stderr and the `--json` stdout declarations, because it is one
  * decision seen on two streams and a second copy of it would be a second thing
- * to keep narrow.
+ * to keep narrow. It keys on the kind word rather than on the `NL0001` a
+ * `--json` object carries — which is what `refusedByParser` in
+ * `tests/diagnostic_coverage.js` keys on — because the human summary line has
+ * no code in it at all (`tests/run.js`, "the human summary line does not"), and
+ * one predicate over both streams is worth more here than the better field over
+ * one. The prefix is a contract rather than prose: `docs/LANGUAGE.md` states it.
  */
-const refusedByTheParser = (zero, one) =>
+const parserRefusedFirst = (zero, one) =>
   isSyntaxError(one) &&
   !isSyntaxError(zero) &&
   diagnosticFile(one) !== "" &&

@@ -16,22 +16,18 @@
 //
 // **A reported column is UTF-16 code units** and an offset is bytes, so the
 // two are converted between rather than being the same number: `columnOf` is
-// the byte count a `DILocation` wants and `reportedColumnOf` is the code-unit
-// count a diagnostic, an excerpt caret and `--emit-checked` want, which is
-// what stage0 has always printed.
+// the code-unit count a diagnostic, an excerpt caret and `--emit-checked`
+// want, which is what stage0 has always printed, and `byteColumnOf` is the
+// byte count a `DILocation` wants.
 //
-// This paragraph used to say the opposite, and how it was wrong is worth
-// keeping. It said columns were bytes "as everywhere in `self/`", noted that
-// stage0 counts code units, and then retired the difference on the grounds
-// that "the two agree for every ASCII source line, which is every line of
-// every `.err` golden". Both halves were true and the conclusion was not: a
-// claim about the corpus is not a claim about the language, and the compilers
-// printed different columns for the same error for as long as both existed.
-// Nothing failed, because no corpus program put a non-ASCII character in front
-// of a caret. `tests/cases/reject_diag_utf8` is that program, and
-// `docs/LANGUAGE.md` states the unit now so it is a rule rather than a note in
-// a header. `self/debug.ts` carried the same caveat about the same subject and
-// was wrong the same way (WP19 §A5).
+// This paragraph used to say columns were bytes here and code units in stage0,
+// and then retire the difference because "the two agree for every ASCII source
+// line, which is every line of every `.err` golden" — a claim about the corpus
+// read as a claim about the language. No corpus program put a non-ASCII
+// character in front of a caret, so the two compilers printed different columns
+// for the same error unnoticed for as long as both existed.
+// `tests/cases/reject_diag_utf8` is that program. `self/debug.ts` carried the
+// same caveat about the same subject and was wrong the same way (WP19 §A5).
 //
 // The performance warnings of WP15 §8 are the one diagnostic here that is not
 // an error. They ride on the same `Diagnostic` with `kind` set to
@@ -114,10 +110,12 @@ export class SourceFile {
    *
    * This is the **debugger's** column and not the editor's: a `DILocation`
    * column is read back against the file's bytes, which is what `clang -g`
-   * writes and what WP19 §A5 settled for `self/debug.ts`. A diagnostic wants
-   * `reportedColumnOf` below instead.
+   * writes and what WP19 §A5 settled for `self/debug.ts`. It carries the
+   * qualifier and `columnOf` does not because it is the rarer answer — one
+   * caller, in `self/debug.ts` — and a name is read more often than the doc
+   * comment under it, so the wrong pick has to be typed deliberately.
    */
-  columnOf(offset: i32): i32 {
+  byteColumnOf(offset: i32): i32 {
     return offset - this.starts[this.lineIndex(offset)] + 1;
   }
 
@@ -133,7 +131,7 @@ export class SourceFile {
    * character before the caret and no corpus program had one
    * (`tests/cases/reject_diag_utf8`).
    */
-  reportedColumnOf(offset: i32): i32 {
+  columnOf(offset: i32): i32 {
     return this.codeUnits(this.starts[this.lineIndex(offset)], offset) + 1;
   }
 
@@ -143,27 +141,36 @@ export class SourceFile {
    * Every byte that begins a character is one, except a four-byte sequence:
    * that is a code point above the BMP and costs a surrogate pair, so it is
    * two. Continuation bytes are none of their own.
+   *
+   * It walks where the byte arithmetic it replaced did not, and the walk is as
+   * long as the column. Measured over the whole corpus `--emit-checked` dump:
+   * 171,094 positions, 2.86 M byte-iterations, 1.6 ms inside a 4.6 s pass. The
+   * cost is O(errors × line length), so it is only reachable on generated or
+   * minified source; the longest line in `self/`, `tests/cases/` and
+   * `examples/` is 503 bytes.
    */
   codeUnits(from: i32, to: i32): i32 {
     const length = this.text.length;
-    const end = to < length ? to : length;
     let units = 0;
     let i = from;
-    while (i < end) {
-      const byte = this.text.charCodeAt(i);
-      if (startsCharacter(byte)) {
-        units = units + (isFourByteLead(byte) ? 2 : 1);
+    while (i < to) {
+      if (i >= length) {
+        // An offset does reach past the last byte: a span whose end is the end
+        // of the file is one beyond it. There is nothing there to classify, and
+        // stage0 counts the overshoot as characters — its
+        // `getLineAndCharacterOfPosition` answers `position - lineStart` with no
+        // line to bound it — so each one is a column
+        // (`tests/self/diagnostics_fixture.txt`, `error at 325`).
+        units = units + 1;
+      } else {
+        const byte = this.text.charCodeAt(i);
+        if (startsCharacter(byte)) {
+          units = units + (isFourByteLead(byte) ? 2 : 1);
+        }
       }
       i = i + 1;
     }
-    // Past the last byte there is nothing to classify, and an offset does
-    // reach there: a span whose end is the end of the file is one past it.
-    // stage0 counts the overshoot as characters — `getLineAndCharacterOfPosition`
-    // answers `position - lineStart` with no line to bound it — so one byte
-    // past the file is one column past its last
-    // (`tests/self/diagnostics_fixture.txt`, `error at 325`).
-    const beyond = from > length ? from : length;
-    return to > beyond ? units + (to - beyond) : units;
+    return units;
   }
 
   /** The text of a 0-based line without its terminator, `\r\n` included. */
@@ -210,7 +217,7 @@ export class Diagnostic {
     this.kind = kind;
     this.text = text;
     this.line = source.lineOf(start);
-    this.column = source.reportedColumnOf(start);
+    this.column = source.columnOf(start);
   }
 
   /** `<file>:<line>:<col>: <kind>: <text>` — the line the tests match on. */
@@ -239,10 +246,14 @@ export class Diagnostic {
       markerLength = 1;
     }
 
+    // One pad character per code unit, as `formatSourceExcerpt` in
+    // `src/diagnostics.ts` emits one per JavaScript string index. `codeUnits`
+    // cannot do it: the tab has to be mirrored per character, not counted.
+    const prefix = this.start - lineStart;
     const pad = new StringBuilder();
-    let i = lineStart;
-    while (i < this.start) {
-      const byte = text.charCodeAt(i - lineStart);
+    let i = 0;
+    while (i < prefix) {
+      const byte = text.charCodeAt(i);
       if (startsCharacter(byte)) {
         pad.addChar(byte === CH_TAB ? CH_TAB : 32);
         if (isFourByteLead(byte)) {
@@ -286,7 +297,7 @@ export class Diagnostic {
    */
   json(): string {
     const endLine = this.source.lineOf(this.end);
-    const endColumn = this.source.reportedColumnOf(this.end);
+    const endColumn = this.source.columnOf(this.end);
     const performance = this.kind === PERFORMANCE;
     const severity = performance ? PERFORMANCE : "error";
     const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`;

@@ -196,7 +196,7 @@ const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
  * which is why `checked_oracle.js` never saw this one.
  */
 const position = (source: SourceFile, offset: i32): string =>
-  `${source.lineOf(offset)}:${source.reportedColumnOf(offset)}`;
+  `${source.lineOf(offset)}:${source.columnOf(offset)}`;
 
 /**
  * The locals and callees of one body, in source order, read back out of the

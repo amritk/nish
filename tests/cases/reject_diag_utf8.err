@@ -1,1 +1,1 @@
-Cannot initialize i32 variable `n` with string
+reject_diag_utf8.ts:7:42: error: Cannot initialize i32 variable `n` with string
