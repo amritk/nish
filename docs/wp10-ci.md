@@ -36,7 +36,7 @@ job.
 | --- | --- | --- |
 | 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
-| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Cause settled**: it is `LC_UUID`, which is stable across two links to one output path and differs on a link to another, so two stages built at two paths could not agree. `scripts/bootstrap.sh` links them at one path now; `tests/self/bootstrap.js`, the other half of this family, still does not — see below |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Which bytes: settled** — `LC_UUID`, stable across two links to one output path and differing on a link to another, so two stages built at two paths could not agree. **What it varies with: not settled** — the output path is the leading explanation, not a finding. **The remedy: measured** — `scripts/bootstrap.sh` links them at one path now and both darwin rows come out byte-identical. `tests/self/bootstrap.js`, the other half of this family, still links at two — see below |
 
 The `stage3 == stage2` family reached further than this job:
 `scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
@@ -99,7 +99,7 @@ loader that insists on a build id, which is why `--build-id=none` has always
 been free on that side and this is not its Mach-O twin. So the flag is not in
 `build.sh`; the Darwin branch links with `-Wl,-x` and keeps the UUID.
 
-#### What the UUID varies with, which is what settles it
+#### What the UUID varies with, and why the remedy holds either way
 
 Ruling the flag out left the question that mattered: ld64 classic hashed the
 output's own *content*, which would have made two links of one input agree, and
