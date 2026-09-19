@@ -7541,6 +7541,50 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   // the script as an empty result, so a release.yml that stopped naming a proving job here
   // would refuse quietly on a good release or tag quietly on a bad one, depending on which
   // half was edited.
+  // The claim the version check rests on, run rather than argued. `.github/seed-due.sh` is
+  // the one script that decides which versions are releasable, and `ddc-tag.sh` only asks
+  // whether a version can name a tag -- so it has to be the looser of the two, or it
+  // refuses, at the last step before a publish and on a job `release` needs, a release that
+  // seed-due.sh allowed. Two regexes a reviewer can read side by side is how that was held
+  // until now, and nothing ran them together: edit either one later and the claim goes
+  // false with the suite green throughout.
+  //
+  // The verdict comes from running seed-due.sh rather than from restating its pattern here,
+  // which is the whole point -- a copy of the pattern would be the two-strings defect this
+  // file's neighbouring block exists to prevent. jq's absence is the same counted skip it
+  // is there, because that script is jq.
+  if (!has("jq")) {
+    skip(
+      "ddc tag: jq is not installed, so .github/seed-due.sh did not run and the subset it shares with ddc-tag.sh is unchecked here"
+    );
+  } else {
+    // Shapes rather than a corpus: the release line, a version with more components than
+    // anyone writes, a bare integer (which seed-due.sh orders, so this must name it), and
+    // the version in package.json so the set moves with the repository.
+    const shapes = ["0.1.1", "0.4.0", "1.2.3.4.5", "123", "9999.0.0", ddcVersion];
+    const refused = [];
+    let ordered = 0;
+    for (const shape of shapes) {
+      const due = spawnSync("bash", [path.join(root, ".github", "seed-due.sh"), shape], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      // A version seed-due.sh will not order is one it stops the release on, so this script
+      // never sees it and owes it nothing.
+      if (due.status !== 0) continue;
+      ordered += 1;
+      const named = ddcTag([shape]);
+      if (named.stdout.includes("is not a version a tag can be named after")) refused.push(shape);
+    }
+    check(
+      `ddc tag: every version .github/seed-due.sh will order is one this can name a tag after (${ordered} of ${shapes.length} shapes)`,
+      refused.length === 0 && ordered >= 5,
+      refused.length > 0
+        ? `seed-due.sh orders ${refused.join(", ")} and ddc-tag.sh will not tag it, so a release it allows is one this job refuses`
+        : `only ${ordered} shapes were ordered at all, so this check proved little; give it versions seed-due.sh accepts`
+    );
+  }
+
   check(
     "ddc tag: the job tells the script what each proving job answered, which is how a dropped needs: reaches it",
     /DDC_PROOF:[^\n]*needs\.ci\.result/.test(ddcJob) && /DDC_PROOF:[^\n]*needs\.binaries\.result/.test(ddcJob),
