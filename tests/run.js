@@ -7129,6 +7129,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         PATH: `${path.join(seedDir, "bin")}${path.delimiter}${process.env.PATH}`,
         FAKE_TAG: tag,
         FAKE_ASSETS: assets,
+        GITHUB_OUTPUT: outFile,
         GITHUB_STEP_SUMMARY: "",
       },
     });
