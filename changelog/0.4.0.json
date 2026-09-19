@@ -1,0 +1,398 @@
+{
+  "version": "0.4.0",
+  "date": "2026-09-19",
+  "tag": "v0.4.0",
+  "range": {
+    "from": "v0.3.0",
+    "to": "7ff7ce1"
+  },
+  "entries": [
+    {
+      "id": "give-a-cptr-its-own-dwarf-type-and",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "give a `CPtr` its own DWARF type and its own debug-cache entry",
+      "body": "`-g` over a program holding a `CPtr` was broken in both compilers, in two different ways, and nothing could see it because no `-g` case had ever named one. `node tests/run.js --parity` could: it compiles the whole corpus under every flag variation, and it saw four rows of stage1 exiting 70 where stage0 exited 0.\n\nBoth compilers look a scalar up in an allow-list — a `BASIC_TYPES` table in `src/codegen/debug.ts`, a `switch` in `self/debug.ts` — and a foreign pointer falls out of both, exactly as it falls out of `isPointerParam` and the escape classifier. Here, though, the caller wants a name back. stage0 wrote the miss out as `!N = undefined`, which `llvm-as` rejects; stage1 exited 70 on `debug: no DWARF basic type for type id 12`.\n\nA `CPtr` is now `!DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)` in both: DWARF's `void *`, and what `clang -g` writes for one. The width is the whole of what this compiler knows about an address a C function handed back, so the width is the whole of what it says. Pointer-to-`char`, on the strength of the `i8*` a `CPtr` and a string share, was the tempting answer and is the wrong one — a debugger told `char *` prints a foreign address as text.\n\nThe second bug was found while writing the first one's test, and is the more serious of the two. `DebugInfo` interns a type's metadata under the name `typeToString` gives it, and the foreign pointer's name is `CPtr` — so is a declared `class CPtr`'s, which is legal source. One program holding both shared a single cache entry under `-g`, and whichever was described first answered for the other: a pointer `malloc` returned came out as `%struct.CPtr*`, which is a debugger reading a field out of memory this compiler never laid out. The foreign pointer is memoised in a field of its own now — it has one form per module and no parameters, so it needs no key at all, and the one it was borrowing was never safe to borrow.\n\nWithout `-g` nothing in this path runs and the IR is byte-for-byte what it was.",
+      "metrics": [
+        "4 of 18 undeclared `--parity` differences closed; 165 runs over 11 programs, 0 undeclared"
+      ],
+      "refs": [
+        "docs/wp27-ffi.md#7e-what--g-says-about-a-type-with-no-structure"
+      ],
+      "tests": [
+        "tests/cases/dbg_cptr",
+        "tests/cases/dbg_cptr_shadow"
+      ],
+      "commits": [
+        "4e8964f"
+      ],
+      "pr": 90,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "recover-from-a-refused-monomorphisation-only-where-the",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "recover from a refused monomorphisation only where the request is a declaration's",
+      "body": "A generic whose field puts its own type argument under a constructor is refused by the WP18 §4 termination rule, and both compilers then emitted a *second* diagnostic that the other did not — stage0 saying `inner` is not a field of `Nest$i32`, which it is, and stage1 advising an annotation that is not the fix. Fourteen of the parity mode's eighteen undeclared differences were that one case under fourteen flag variations.\n\nOne mistake now produces one diagnostic, and the same one from both compilers. A refused request that is a **declaration's** is answered with the ancestor instantiation whose type arguments it grew: `Nest<i32[]>` is refused and the field is handed `Nest<i32>`, which is exactly the program the sentence tells the reader to write — \"name `T` itself\". The class the programmer did write keeps its field and its layout, so nothing downstream has to invent a second mistake to describe a type that is missing.\n\nWhere the request is an **expression's**, the refusal keeps its throw, and that line is the correction the first shape of this change needed. `expandingStructAncestor` walks the chain `currentStructInstance` maintains, and that chain is live while a struct's members are collected *and* while one of its methods is checked — so `new Nest<T[]>()` inside a method body reached the recovery too, and substituting there bought nothing while costing a sentence about a mistake nobody made, against a mangled symbol nobody wrote. A field's type is a layout and has to be something; the value of a `new` expression is not, it flows into the statement around it. Both compilers tell the two apart by reading what both already maintained: `collectInstanceMembers` is the one caller that clears `currentInstance` while `currentStructInstance` is set.\n\n\"One diagnostic\" is per offending annotation rather than per program: a class with two fields both naming `Nest<T[]>` has two to fix and is told about both. The function half is unchanged and is now explained by the same rule rather than one of its own, since a generic function is only ever requested from an expression.\n\nFive cases pin it, all agreeing byte for byte between the two compilers under every flag variation: the original, the body trigger, the recovery, two offending fields, and a three-deep cycle.",
+      "metrics": [
+        "14 of 18 undeclared parity differences closed; 75 runs over 5 programs, 0 undeclared; npm test 1960 passed, 0 failed, 2 skipped, undegraded"
+      ],
+      "refs": [
+        "docs/wp18-generics.md"
+      ],
+      "tests": [
+        "tests/cases/reject_generic_expanding_field_method",
+        "_recovered",
+        "_twice",
+        "_chain",
+        "tests/wordings/nl2319_generic_expanding_field"
+      ],
+      "commits": [
+        "b632f26"
+      ],
+      "pr": 91,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "check-parity-on-the-pull-request-that-touches",
+      "type": "ci",
+      "scope": "parity",
+      "breaking": false,
+      "title": "check parity on the pull request that touches a corpus program",
+      "body": "`node tests/run.js --parity` is the only check that asks whether a program or a\nflag is still stage0's, and it ran nightly on `main` and nowhere else. That\nfixes \"nobody remembered to type the command\"; it does not stop a pull request\nmerging a difference, which is how the `CPtr` internal compiler error under\n`-g` reached `main` on a green pull request and sat there for four red nights.\n\nThe full corpus cannot go on the push path -- measured on `ubuntu-latest`,\n13,260 runs over 884 programs in a 36-minute job -- so the check is bounded by\nwhat the pull request touched. `parity-select` maps the diff onto corpus\nprograms in seconds with no toolchain and publishes the count; `parity-changed`\nis gated once at the job level and does not exist at all when the answer is\nnone, so \"a pull request that touches no corpus program pays nothing\" is a job\nconclusion rather than a step that skipped. The mapping is ownership, not\nsubstring: a `tests/link/<name>/` program owns its directory and every other\nprogram owns its entry and sidecars, so `add.ts` selects `add` and not\n`add_plain`. Sixteen checks pin that rule on every `npm test`, because a\nselector asserted only by a doc comment could be replaced with a substring\nmatch and leave the suite green -- the same failure one file over from the one\nbeing fixed. Deletions are reported rather than compared: a program that is\ngone has no source to compile, but a gate that answers \"nothing was compared\"\nto a diff that removed three cases is describing its own coverage wrongly.\n\nThe nightly's `record` job, which opens an issue on a red or unmeasured run,\nhad never fired -- every red night ran at a SHA predating it. Proved against a\nreal run rather than read: it opened #93 with the difference table, and the two\nconditions carrying it both hold, `inputs` being null off a `workflow_dispatch`\nand job outputs surviving a job that failed.\n\n`tests/diagnostic_coverage.js` read the registry with a pattern keyed on four\nliteral spaces, and `self/codes.ts` has been two-space indented since the arrow\nrefactor, so it parsed 0 of 408 codes and printed `coverage 0/0 codes` with exit\n0. It reads any indentation now, and an empty registry is a failure rather than\na vacuous pass, because nothing else distinguishes \"every code is covered\" from\n\"there are no codes\".\n\nMeasured: parity: 13320 runs over 888 programs (2644.1 s); 0 undeclared\ndifference(s), 2682 declared -- exit 0, the first zero since WP19 R1 reopened;\ndiagnostic coverage 0/0 codes before, 344/408 with 64 unreachable after; the\nbounded check adds 5 s when no corpus program is touched and 10 s + 47 s when\none is, both in parallel with the rest of CI; npm test 1976 passed, 0 failed,\n2 skipped, undegraded",
+      "metrics": [],
+      "refs": [
+        "docs/wp19-stage0-retirement.md",
+        "docs/MASTER_PLAN.md"
+      ],
+      "tests": [
+        "tests/run.js \"parity --changed\"",
+        "tests/diagnostic_coverage.js"
+      ],
+      "commits": [
+        "7f6e833"
+      ],
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "the-field-shape-program-wp15-measures-the-header",
+      "type": "test",
+      "scope": "bench",
+      "breaking": false,
+      "title": "the field-shape program WP15 measures the header hoist on",
+      "body": "WP15 §2c measured the array-header hoist at 2.48x on a loop whose source\narray is held in a class field — the shape `self/` is written in, and\n`knownAtMost` in `self/bounds.ts` verbatim — and that number lived only in\nthe note. §1 of the same note is the standard it is held to: a number with\nno program, no flags and no file is not a measurement. `bench/hoist_field.ts`\nis the program, so the figure is re-derivable on the reader's own box.\n\nThree scans do the same arithmetic over the same 8192 doubles and differ\nonly in where the source array is kept: a parameter, a class field, and a\nclass field read once into a `const` before the loop. They are timed against\neach other in alternating rounds inside one process, the way `bench/substr.ts`\nis, so a machine drifting under the run drifts under all three.\n\nThe third scan is what makes this an acceptance test rather than a stopwatch.\nIt is the hoist written by hand in the source, measured in the same process,\nso the number the emitter has to reach comes from the reader's machine rather\nthan from §2c's. Under `opt -O3` the parameter and hoisted loops fold their\ntwo lengths into one trip count — an `llvm.umin.i64` in the preheader — and\nvectorise; the field loop keeps two lengths, a second exit and a per-iteration\nreload of the array's `data`, and does not. That is the criterion §2c insists\non, and why \"no header load left in the loop\" is not it: §2c reached that\nstate by hand and measured the program 5 ms slower.\n\n`tests/self/goldens/checked.txt` moves with it. `bench` is a corpus directory\n(`tests/self/corpus.js`), so a new program there is compiled by both compilers\nand its `--emit-checked` dump is recorded; the diff is one count line and 90\nlines of this program's dump, written by `tests/self/goldens.js --update`.",
+      "metrics": [
+        "2.38x, field shape against parameter shape, on an 8192-element f64 loop"
+      ],
+      "refs": [
+        "docs/wp15-performance.md §2c"
+      ],
+      "tests": [
+        "bench/hoist_field.ts"
+      ],
+      "commits": [
+        "cf13559"
+      ],
+      "pr": 98,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "give-the-warning-list-a-deliberate-report-order",
+      "type": "refactor",
+      "scope": "diagnostics",
+      "breaking": false,
+      "title": "give the warning list a deliberate report order",
+      "body": "The `performance` warnings of a compilation now have a report order of their\nown — by file, then by position in that file, then by diagnostic code — kept as\nthe list is built rather than left to the order the analysis happened to find\nthem in.\n\n`src/diagnostics.ts` used to say they needed no sort, because \"the analysis\nmeets them in module load order and then in source order\". That was not even\ntrue of the nine pass-2 warnings: a generic's body is checked when one of its\ninstantiations is *finished* rather than where the generic is written, so a\nwarning inside a generic already came out after one written further down the\nsame file. It stops being true altogether for a warning computed in pass 1,\nwhich is what the struct-padding rule will be — without an order it would print\nahead of every warning in its file.\n\n`--json` prints one object per warning, so this is the order of a\nmachine-readable stream and part of what that stream promises, which is why it\nis its own change rather than a side effect of the warning that needs it.\n\nThe insertion is deliberate rather than a call into the existing `sorted()`\nmerge sort: `self/compile.ts` reads the list directly, so the order has to be an\ninvariant of the list rather than of one accessor, and the two compilers are\nworth more when they read alike. The warning list gets a file-order table of its\nown, so recording a warning can never move one error in front of another. The\nsort is stable and the code is only the last key, so two warnings of one code at\none position keep the order the analysis produced them in.\n\n`tests/cases/diag_order` pins the position key — its first warning is found\nthird and reported first — and a second leg holds stage1 to the report stage0\nproduces, built through the stage1 binary the suite already links for the\nstage1-only register. The code key is pinned but not falsifiable: every pair of\ntoday's nine warnings that could share a span is mutually exclusive by\nconstruction, so nothing can currently arrive out of code order. The fixture\nsays so, and the padding warning is what will close it.\n\nMeasured: a no-op on today's corpus — 70 warnings over 60 `self/` modules,\n`--json` byte-identical before and after, and identical from either compiler;\nworst-case reverse arrival costs 69 ms at 800 warnings and 71 ms at 1600",
+      "metrics": [],
+      "refs": [
+        "docs/wp15-performance.md"
+      ],
+      "tests": [
+        "tests/cases/diag_order",
+        "tests/run.js \"performance\""
+      ],
+      "commits": [
+        "f500ce1"
+      ],
+      "pr": 99,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "an-empty-flag-set-fails-the-parity-comparison",
+      "type": "fix",
+      "scope": "test",
+      "breaking": false,
+      "title": "an empty flag set fails the parity comparison",
+      "body": "The WP19 parity mode reads each compiler's flags out of its own `--help` and\nreports what one set holds and the other does not. Two empty sets hold the\nsame nothing, so they agreed: \"the two compilers document the same flags\" and\n\"neither help text was parsed\" printed the same green line, and the flag-set\nhalf runs in every `npm test`.\n\nAn empty set from either side is now a difference row of its own, returned\ninstead of the per-flag rows — with one side empty every flag of the other\nreads as \"stage1's alone\", forty rows none of which names what happened. It is\nthe guard `tests/diagnostic_coverage.js` grew over the diagnostic registry,\nin this file's grammar. The `^ {2}` option-line pattern is untouched on\npurpose: widening it to `^\\s+` would count every flag a description mentions.\n\nThe guard is demonstrated rather than trusted. Every run of the mode first\nasks the comparison about a help text that names no option, in each pairing\nwith one that does, and about two that parse and agree — so neither a guard\nthat stops firing nor a guard that swallows a real difference can pass\nunnoticed. It costs microseconds and runs before a compiler is built.",
+      "metrics": [],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/self/parity.js --flags-only"
+      ],
+      "commits": [
+        "06b8a20"
+      ],
+      "pr": 101,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "one-shared-diagnostic-registry-reader-102",
+      "type": "refactor",
+      "scope": "test",
+      "breaking": false,
+      "title": "one shared diagnostic-registry reader",
+      "body": "Three places parse the fragment-and-code table back out of `codes.ts`: the code\ngenerator, which preserves every number it has already handed out;\n`tests/diagnostic_coverage.js`, which asks which codes the suite reaches; and the\n`codes:` checks in `tests/run.js`, which require both compilers to hold the same\ntable. Three copies of one regular expression is how two of them drifted apart,\nand the generator's copy was still keyed on four literal spaces -- exactly the\nindentation level `self/codes.ts` lost when WP22 stage C rewrote its tables as\narrows with concise bodies.\n\nThe parse is now one module, `scripts/codes-registry.js`. It recognises a pair by\n`^\\s+`, so indentation is not part of the contract, and it raises rather than\nanswering an empty registry. It sits beside the emitter that writes the format --\n`rows()` in `gen-diagnostic-codes.mjs`, next door -- because #96 is the two halves\ndrifting apart: stage C changed what the emitter wrote and no reader followed.\n`scripts/` also ships in the npm tarball where `tests/` does not, so the shared\nmodule resolves for every caller and the tarball carries five scripts where it\ncarried four, with nothing removed and no `files` edit.\n\nThe generator is the reader that mattered. `existing()` keeps the promise that a\ndiagnostic code never moves; if its parse returns empty, the per-band watermark\ntaken from it is lost and the next generation renumbers the whole registry -- and\na code is a published contract that `--json` tools filter on. `--check` does catch\nsuch a renumbering, because it builds in memory and compares against disk. The\ntrouble is that the remedy a red `--check` prints is to run the generator, and\nthat run writes the renumbering out. Reading a moved registry has to fail at the\nread.\n\nNothing about the current tree changes behaviour: `existing()` reads\n`src/codes.ts` alone, which is still indented four spaces. What goes away is the\ncondition under which a reindent silently renumbers.\n\nTwo checks in `tests/run.js` pin both halves of the guard rather than trusting\nthem: the live table reindented to two spaces still reads as its full 408 rules,\nand the same table with its indentation stripped raises instead of reading as\nempty. Each was demonstrated failing with its half of the reader removed.",
+      "metrics": [
+        "reindenting src/codes.ts to two spaces and regenerating moves 349 of 408 codes before this change and 0 after"
+      ],
+      "refs": [
+        "https://github.com/amritk/nish/issues/96"
+      ],
+      "tests": [
+        "tests/run.js `codes: the registry reader is indentation-agnostic`",
+        "`codes: a registry the reader cannot parse raises rather than reading as empty`"
+      ],
+      "commits": [
+        "5e5b8cf"
+      ],
+      "pr": 102,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "warn-when-reordering-a-struct-s-fields-would",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "warn when reordering a struct's fields would shrink it",
+      "body": "WP15 section 8 specifies ten performance rules. The tenth — wasteful struct\npadding — is the last of them to ship, and section 8's hint column is the\nspecification the message meets: it names the size the struct is, the size the\nsame fields reach in their best order, and the order that reaches it.\n\n`computeLayout` already walks the fields in declaration order, rounding each to\nits alignment. It now carries one more accumulator — the sum of the field widths\n— and answers that sum rounded up to the struct's alignment as the packed size,\nso there is no second walk over a sorted copy. Every field type in the language\nhas a size equal to its alignment: one byte for `boolean`, a power of two up to\na pointer's eight for everything else. Laying the fields out widest first\ntherefore leaves no interior gap at all, which makes that number both reachable\nand a lower bound on every order — so a strictly smaller packed size is a proof\nthat a reordering wins rather than a guess that it might.\n\nIt is the first section 8 warning computed in **pass 1**, which is what the\nreport order added in #99 was for: without it a padding warning would print\nahead of every warning in its file. `tests/cases/diag_order_pass1` is the case\n`diag_order` could not be — two padding warnings found before a single body has\nbeen checked, two accumulator warnings found after both of them, and a report\nthat reads the file top to bottom — and stage1 is held to the same report\nthrough the binary the suite already links.\n\nTwo shapes stay silent, because section 8's bar is a rewrite the message can\nname and neither of them has one: a class that `implements` an interface, whose\nfirst fields are the interface's own and in its order, and a generic\ninstantiation, which shares one declaration with every other instantiation of\nthe same class.\n\nMeasured: 11 structs over the 60 modules of `self/`, 8 or 16 bytes each, and\nnothing anywhere else in the corpus",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/wp15-performance.md"
+      ],
+      "tests": [
+        "tests/cases/perf_padding",
+        "perf_padding_quiet",
+        "diag_order_pass1"
+      ],
+      "commits": [
+        "c656ee3"
+      ],
+      "pr": 103,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "close-the-padding-item-and-re-state-how",
+      "type": "docs",
+      "scope": "wp15",
+      "breaking": false,
+      "title": "close the padding item and re-state how §8 warnings are ordered",
+      "body": "`docs/wp15-performance.md` still described the tenth `performance` rule as\nunshipped and blocked, and gave a reason for the block that was not true even\nwhen it was written. Two changes have landed since: the warning list got a\ndeliberate report order, and the wasteful-struct-padding rule shipped on top of\nit. This brings the document, the master plan, and the comment on both sides of\n`DiagnosticSink` back in line with the code.\n\n**§9 item 2's padding bullet** is rewritten as a shipped row: `NL9010`, what the\nanalysis turned out to be, and what the review taught. The layout floor is one\naccumulator on a walk `computeLayout` already made — and because every field\ntype in the language has a size equal to its alignment, laying the fields out\nwidest first leaves no interior gap, so the floor is both reachable and a lower\nbound over every order. That is what makes a `layoutSize` below the declared\nsize a proof that the rewrite wins rather than a guess that it might.\n\nThe ordering concern the old bullet raised was real, and it was closed first in\na change of its own, because the order of `--json` is a contract. What the old\nbullet got wrong was the reason. Every §8 warning did *not* come out of one\nsource-order walk in pass 2: a generic's body is checked when one of its\ninstantiations finishes, so the class already owed itself an order before a\npass-1 rule existed. And the sort's own change expected this rule to make the\ncode key falsifiable, which it did not — replacing both codes in\n`compareWarnings` with one constant leaves `diag_order`, `diag_order_pass1` and\n`perf_padding` byte-identical, `--json` included. That reading is dated in the\ndocument rather than stated as standing, because nothing in the suite pins it.\nWhat `diag_order_pass1` closes is the other key, the one the sort was written\nfor.\n\n**§8's rule table** gave the padding row a one-line specification and no mention\nof the two shapes that stay silent; it now describes what ships, without quoting\nmessage prose that is allowed to change between releases. A paragraph after the\ntable states the pass split once, where the class is specified, and points at\n`docs/LANGUAGE.md` for the order itself — including the \"in the order files are\nfirst warned about\" qualifier, which is the only non-obvious part of the key and\nthe part a restatement loses.\n\n**§9's trailer** said the bounds-check opt-out waits on item 6 and a count of\nthe surviving checks. Both happened and §2.4 records the answer, so §9 now says\nwhat §2.4 says — and points at it for the count rather than restating a\ncorpus-derived number in a second place.\n\n**`docs/MASTER_PLAN.md`** item 2 said four of §8's warnings were still waiting on\nthe analyses that feed them. All ten ship.\n\n**Both `diagnostics.ts` files** claimed nothing in the suite would catch the two\ncompilers disagreeing about warning order. One thing does — the WP15 block of\n`tests/run.js` — and it is a counted skip where there is no C toolchain to link\na stage1 binary with, so the comment now says both halves. Neither file carries\na warning count any more: the old one had gone stale, and a corpus count in a\nsource comment is a count nothing re-derives.\n\nBoth comments are rewritten at their original line count. `--emit-checked`\nrecords every local and callee by line, so a line added to a comment in\n`self/diagnostics.ts` rewrites 98 lines of `tests/self/goldens/checked_self.txt`\nfor no change in meaning; at net zero the golden does not move and the five\nstage1 goldens agree untouched.\n\nMeasured at c656ee3 over the sixty modules of `self/` that declare no `main`:\n11 structs reach NL9010, ten spending 8 bytes a value and `ConstInfo` 16, out of\n81 performance warnings; 72 of the 83 struct declarations are already at floor",
+      "metrics": [],
+      "refs": [
+        "docs/wp15-performance.md",
+        "docs/MASTER_PLAN.md",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [],
+      "commits": [
+        "32322a8"
+      ],
+      "pr": 105,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "hoist-an-array-s-header-out-of-the",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "hoist an array's header out of the loop that reads it",
+      "body": "An array held in a class field now has its header — the field load, `len` and\n`data` — read once in the loop's preheader wherever the whole program proves\nnothing the loop reaches can grow the array, with **one length value feeding the\nloop condition and the bounds check both**.\n\nThat criterion is WP15 §2c's, and it is sharp in a way the obvious one is not.\n\"No header load left in the loop\" is satisfiable while buying nothing: a\npreheader load *per use* still leaves two length values, two compares and two\nloop exits, and §2c reached exactly that state by hand and measured the program\n5 ms slower. What the emitter guarantees is one SSA value in both places, by\nconstruction rather than by hoping GVN merges two loads of one address.\n\nThe prerequisite was a fact the fixpoint did not have.\n`PointerParamFacts.writesThrough` lumps a `push` in with every other store, so a\nfunction that only writes elements is indistinguishable from one that\nreallocates the buffer — and an element write leaves the header alone, which is\nthe whole of what the §2b alias domains encode. `FunctionFacts.resizesArray`\nseparates the two and propagates over the call graph like any other property of\na closure. Its second consumer is `bodyMayExtend`, which until now read every\nuser call in a `for...of` body as growing the array; four functions in the\ncorpus gain `willreturn` from asking the fixpoint instead.\n\nFour things refuse the hoist, and each is the whole of a proof: a `push` or\n`pop` the loop can reach, a store in the loop to a field the path names, a path\nrooted at a local the loop declares or at a reassignable one, and a link whose\n**declared** type is nullable. That last is a miscompile rather than a missed\noptimisation if it is got wrong, and the first version did get it wrong: the\nchecker records the narrowed type inside `if (h !== null)`, and the preheader is\noutside that guard, so resolving the path on the narrowed answer put a null\ndereference ahead of a loop whose body never ran.\n\n**It does not reach §2c's acceptance number, and the reason is not the hoist.**\n`bench/hoist_field.ts`'s field scan does not move once loop alignment is pinned\n(755 ms against 753 ms). What separates it from the parameter shape is a second\nbounds check, which is a second loop exit, and that check exists because\n`src/checker/bounds.ts` keys its length facts by variable and never by a\nproperty path — so `const xs = h.xs` proves `xs[i]` in range while\n`h.xs.length` proves nothing about `h.xs[i]`. §2c's criterion is therefore\nnecessary but not sufficient: what the fast shapes have is one *compare*, from\nthe checker's proof rather than from any hoist. That work is now issue #106,\nand this hoist is what a property-path holder would be proved against.\n\nMeasured: 1.96x on an isolated field scan where LLVM had not already hoisted the\nreload (1492 ms -> 761 ms); neutral on bench/hoist_field.ts with loop alignment\npinned (755 ms -> 753 ms); self/bounds.ts 25 -> 23 functions carrying a\nheader-domain load inside a loop. Intel Xeon @ 2.80GHz, LLVM 18, --profile\nspeed, minimum of 7 alternating rounds, taskset -c 0",
+      "metrics": [],
+      "refs": [
+        "docs/wp15-performance.md#2c"
+      ],
+      "tests": [
+        "tests/cases/arr_header_hoist",
+        "tests/run.js (arr_alias_domains: llvm.umin)"
+      ],
+      "commits": [
+        "52de350"
+      ],
+      "pr": 104,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "a-generic-may-be-exported-and-instantiated-from",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a generic may be exported and instantiated from another module",
+      "body": "WP18 G7, the whole-program half of generics. A template declared in one module\ncan now be imported and instantiated anywhere: each (template, type-argument\ntuple) is defined exactly once, in the module that declares the template, and\nevery other module emits a `declare` carrying that definition's attributes. One\nimported name becomes one symbol per distinct tuple rather than one symbol,\nwhich is the whole of what makes a template unlike every other import. The two\nrefusals that stood in for this milestone are deleted; their codes, NL2298 and\nNL2316, are retired and reserved.\n\n**The request crosses a module boundary; the work does not.** A template is\nmonomorphised in the scope it was declared in, because that is the only scope\nits annotations and its body mean anything in, so `instantiate` forwards to the\ndeclaring module and keeps only the *site*: the file the call was written in,\nand the instantiation whose body made it. That is what a termination or cap\nrefusal is reported against, and it is what lets the termination rule's chain\nfollow a request across modules.\n\n**It closes the trap §16 marked.** An instantiation's symbol was minted from the\n*instantiating* module's package prefix, which was correct only while importing\na template was refused — the module that instantiated was always the module\nthat declared. It is the template's now, in `instantiate` and in\n`collectInstanceMembers`, where the two `TODO(WP18 G7)` lines were. Without\nthat, two packages importing one generic mint one symbol for two different\nfunctions and the whole-program fact table in `codegen/attributes.ts`, which is\nkeyed by symbol, hands one instantiation the other's purity and escape facts:\na miscompile rather than a link error.\n\n**A type argument carries its layout across.** `identity<Point>` puts a\n`%struct.Point` into a module that has never heard of `Point`, so the request\nbrings the layout and the answer brings back whatever the instantiated class\nitself reaches — both through the closure an imported class already goes\nthrough. A layout going *out* brings no symbols, because the language has no\nway to call a member of a type parameter.\n\n**A signature annotation could only write its request down.** Pass 1 resolves a\nmodule's annotations as soon as it is parsed, which is what makes an import\ncycle legal, so `Box<i32>` in an exported signature is read before any import is\nbound. The name is knowable anyway, so the annotation resolves to the struct it\nwill be and the request is made in a sub-pass after every module has bound —\nwhich is also where this milestone's one new rule lives: a type-argument list on\nan imported name that is not a template (NL2325).\n\nMeasured: one `define` per instantiation over four modules, 5,144 B linked;\nIR(stage0) == IR(stage1) byte for byte on every new case, bootstrap unmoved\nRefs: docs/wp18-generics.md §15.5, docs/LANGUAGE.md\nTests: tests/link/generic_import, generic_two_importers, generic_import_chain,\npackage_generic_import, generic_import_private, generic_import_no_args,\ngeneric_import_plain, tests/wordings/nl2325_type_args_on_import",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5b613cb"
+      ],
+      "pr": 111,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-18"
+    },
+    {
+      "id": "decide-the-three-proposed-rows-and-the-questions",
+      "type": "docs",
+      "scope": "wp23",
+      "breaking": false,
+      "title": "decide the three proposed rows, and the questions they answer",
+      "body": "WP23 §4 to §6 stood as proposals to be reviewed. Each already carried its own\nargument to a recommendation; what was missing was the verdict, and a note whose\nrows are all answered is worth more to the M4 freeze than one whose last three\nare open. So the recommendations become decisions, the sections that argued them\nare untouched, and each heading gains a paragraph saying what was decided and\nwhat would turn it.\n\n**§4, module-level mutable state — no.** One candidate, whose whole content is a\nboolean a driver already parsed, against a new IR construct, the first writable\nglobal the compiler defines for user code, a symbol in the flat namespace WP21\nhas to fix, and a thread-local decision taken years before WP20 lands. §4 stays\nas the design. The revisit trigger is the count §4.6 proposed — two more places\nin `self/` wanting it for a reason that is *not* a CLI flag — and §10 question 3,\nwhich asked whether a count or a WP20 stage was the right trigger, is answered by\ntaking the count: a count is falsifiable by reading the corpus.\n\nThe divergence §4.6 names is **not** closed by this and is recorded as still\nowed: `self/ice.ts`'s `internalError` prints the human report and not the\n`NL0003` object stage0 prints, so orientation rule 7 is a stated contract stage1\ndoes not honour. The comment beside it gives module state as one of its three\nreasons, and that reason is now answered — the remedy is `json` on `Options` and\none parameter through the callers, and it needs no language change.\n\n**§5, pairs and multiple return — yes, as a library type, and the gate is\nalready open.** §5.4 read the gate as \"when WP18 is green\" and it is narrower\nthan that: G5 gave a generic interface more than one type parameter and G7 made a\ntemplate exportable, which together are the whole of what a library type is. The\nfour lines §5.2 designed compile and link today, checked by compiling them rather\nthan asserted; G6 and G8 are not prerequisites. §10 question 5 — `std/` or each\nprogram — is answered because its premise expired: there is a `std/` now.\n\n**§6, compile-time function parameters — not scheduled.** §6.4's trigger is WP18\nlanded plus two real programs asking, and this records the first: wp29 §6 names\nthis row as the prerequisite for its P1 and nothing else on that page needs a\nlanguage feature that does not exist. wp29 §6 gains the other half of that\nsentence, so its P1 reads as gated on a second ask rather than on an argument\nnobody has had.\n\nNone of the three adds a rule to LANGUAGE.md, which takes all three off M4's\ncritical path — §11's first bullet said that was undecided and it is decided now.",
+      "metrics": [],
+      "refs": [
+        "docs/wp23-language-surface.md §4",
+        "§5",
+        "§6",
+        "§10",
+        "§11"
+      ],
+      "tests": [],
+      "commits": [
+        "ae6b45b"
+      ],
+      "pr": 112,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-19"
+    },
+    {
+      "id": "register-the-cases-stage1-s-parser-refuses-and",
+      "type": "test",
+      "scope": "oracle",
+      "breaking": false,
+      "title": "register the cases stage1's parser refuses, and fail when the set moves",
+      "body": "WP19 §5's R3 row stated a caveat against its own declaration: the reject\noracle's parser bucket was a count in a summary line with nothing comparing it\nto a ceiling, so the next rule to leave the parser's reach would migrate a case\ninto it silently. The row's own remedy — \"read the bucket's number across such\na change\" — is an instruction to a person, which is the same class of gate as a\nnumber in a document: it holds until somebody forgets.\n\n`tests/self/parser_refusals.txt` is the ceiling instead: 89 entries, each a case\nand the sentence stage1 answers with, modelled on `tests/self/stage1_only.txt`\ndown to its header. The comparison fails in both directions, so the register\nshrinks as rules move back into the checker's reach rather than only growing.\n\nIt also watches itself fail. `auditRegister` is a function of what a run\nobserved and nothing else, and `selfCheck` drives it over fabricated inputs\nbefore a compiler is built — eight cases over the four failures and the four\nsilences that frame them, each watched failing under a separate mutation of the\naudit. Without it a green run is one where all four branches are unreached, and\ndeleting any of them would have changed no assertion in `npm test`.",
+      "metrics": [
+        "8 self-check cases, 4 mutations of the audit watched failing, 0 of them visible to `npm test` before"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/self/reject_oracle.js",
+        "tests/self/parser_refusals.txt"
+      ],
+      "commits": [
+        "06f0416"
+      ],
+      "pr": 115,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-19"
+    },
+    {
+      "id": "json-carries-a-syntax-error-and-a-column",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "--json carries a syntax error, and a column counts code units",
+      "body": "`--json` is one of the two machine-readable contracts the compiler promises —\none flat object per diagnostic, every failure expressed as one of them — and\n`VARIATIONS` in `tests/self/parity.js` had never named it. The cross product\nthat compares the two compilers on every surface a command line produces had\ntherefore never asked them the question a CI consumer asks.\n\nAdding the variation found 180 undeclared differences over 901 programs, all of\nthem on `--json`, and 178 were one defect: `Compilation.load` wrote the\nparser's refusals to stderr with `writeError` whatever the command line said,\nso stage1 answered a syntax error with an empty stdout where stage0 printed an\nobject. The diagnostics go into the sink now, where stage0 has always put its\nown, and the driver decides the stream.\n\nTwo spans were narrowed to the thing their message names — `__proto__` in\nstage1, `debugger` in stage0 — and one class had **no rows at all**: a\ndiagnostic column counted bytes in stage1 where stage0 counts UTF-16 code\nunits, in the default mode, under no flag. It measured zero because no corpus\nprogram put a non-ASCII character in front of a caret, and both\n`self/diagnostics.ts` and `self/debug.ts` had written that caveat down and then\nretired it on the strength of the ASCII goldens. `tests/cases/reject_diag_utf8`\nis what makes the corpus ask from here on, and its `.err` pins the column so\n`npm test` enforces the rule rather than only the nightly.\n\nNo miscompile: every `.ll` file was byte-identical between the two compilers\nunder every variation, before the fixes and after them.",
+      "metrics": [
+        "180 undeclared differences before, 0 after, over 14432 runs and 902 programs"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/cases/reject_diag_utf8",
+        "tests/self/parity.js"
+      ],
+      "commits": [
+        "862c7cc"
+      ],
+      "pr": 117,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-19"
+    },
+    {
+      "id": "exercise-the-aarch64-and-darwin-rows-before-a",
+      "type": "ci",
+      "scope": "seed",
+      "breaking": false,
+      "title": "exercise the aarch64 and darwin rows before a release attaches them",
+      "body": "Three rows of `.github/seed-targets.json` carried `attachedSince: 0.4.0` and\nnone had ever run, while the 0.4.0 release pull request was open. That file's\nown note says why that is not recoverable: `ci.yml`'s `bootstrap` matrix is\nbuilt from what a release *carries*, not from `attachedSince`, so the release\nthat first attaches a seed gives that platform a row on every push from then\non, and rolling the version back does not clear it.\n\nAll three were exercised first, on their own hardware, and all three pass. So\n`0.4.0` is a promise those rows can keep — proved rather than assumed.\n\nGetting there settled the Mach-O `stage3 == stage2` comparison, which had been\nred as *unattributed* and blamed on a debug map that a `--profile speed` link\nnever emits. The differing bytes are `LC_UUID`'s, and the failure was the\nharness's rather than the toolchain's: `bootstrap.sh` linked stage2 at\n`$work/stage2` and stage3 at `$work/stage3`, so two compilers that agreed about\nevery other byte were guaranteed two different UUIDs. Both are linked at one\npath now and moved into place afterwards. The comparison is still a raw `cmp`\nof the two files — nothing relaxed, nothing masked, no load command dropped —\nand it holds on Mach-O as it does on ELF.\n\n`-Wl,-no_uuid` is closed off with evidence rather than left as a proposal: it\nlinks, and then dyld on arm64 refuses the image, so the stage aborts before it\ncompiles anything.\n\nWhat the UUID varies with is deliberately not claimed. Measured: it is stable\nacross two links to one output path and differs on a link to another, which\nrules out a hash of the output's own content. Not established: whether it is\nthe path or something that had changed by the third link, because the probe\nnever returned to the first. The remedy does not rest on the answer.",
+      "metrics": [
+        "three seed rows green through bootstrap --verify, the tarball check and the smoke test; both darwin rows byte-identical"
+      ],
+      "refs": [
+        "docs/wp10-ci.md#ci-matrix"
+      ],
+      "tests": [
+        "scripts/verify-binaries.sh",
+        "tests/run.js seed-targets"
+      ],
+      "commits": [
+        "acbca9f"
+      ],
+      "pr": 114,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-19"
+    },
+    {
+      "id": "cut-the-ddc-provenance-tag-from-the-release",
+      "type": "ci",
+      "scope": "release",
+      "breaking": false,
+      "title": "cut the ddc provenance tag from the release that proves it",
+      "body": "WP19 G6 asks for one tag — `ddc-<version>`, on the last commit at which\n`IR(stage0, self/) == IR(stage1, self/)` and the fixed point both hold — and\nwrites down the four-step procedure for re-verifying the property from it. The\nparagraph existed; the tag did not, and nothing in the repository would ever\nhave cut one. So G6 was a procedure for checking out a tag that does not exist,\nand it would have stayed that way until the release where somebody happened to\nremember — which is the release after the one where they did not.\n\nIt is the cheapest gate in the document and the only one that is unrecoverable:\nafter R6 deletes `src/` there is no second implementation left to disagree with,\nso a release that forgets the tag is the release after which nothing can be said\nabout diverse double-compiling at all.\n\n`.github/ddc-tag.sh` decides whether a release may carry the tag and what it is\nnamed. It proves nothing itself and must not grow a proof — the property is\nproved by `tests/self/bootstrap.js` inside `npm test` in the `ci` job, and by\n`scripts/bootstrap.sh --verify` with stage0 as the seed on every `binaries` row\n— and the script reads what those jobs answered through `DDC_PROOF`. A job that\ndid not run reports an empty result, and a `needs:` edited to drop one reports\nnothing at all, which is the same answer: the proof did not run, and neither may\ntag. `release.yml` gains a `ddc` job needing `[ci, targets, binaries]`, and\n`release` now needs it, so the tag is cut after the proof and before the\npublish — a release that then fails to publish leaves a tag naming a commit at\nwhich the property did hold, and the re-run is green.\n\nEvery arm is driven from `tests/run.js` against a stand-in for git, and every\narm was also exercised end to end against real git in a throwaway bare\nrepository, because a stand-in can only be as right as its author's model of\ngit. That is how the first defect was found: `git ls-remote --tags origin\nrefs/tags/<tag>` never returns the peeled `refs/tags/<tag>^{}` line, so an\nannotated tag's answer is its tag object's sha, which equals no commit — a tag\ncut by hand on exactly the released commit read as a tag that had moved, and\nwith `release` needing this job that is a release nobody can cut. Both patterns\nare asked for now, and a failed `ls-remote` is a refusal of its own rather than\nbeing read as \"no tag exists\".\n\nThe version check was corrected in review to refuse what its comment claims: it\nhad accepted `123-fix-bug`, an ordinary issue-numbered branch, while claiming to\nrefuse \"what is not a version at all\". It is dotted integers with at most one\n`-suffix` and one `+build` now, deliberately still a superset of what\n`.github/seed-due.sh` accepts, so this can never refuse at the last step before\na publish a release that the one script deciding releasability allowed.",
+      "metrics": [
+        "19 checks over every arm of the script, 4 deliberate mutations watched failing"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/run.js (the WP19 ddc-tag block)"
+      ],
+      "commits": [
+        "21a9381"
+      ],
+      "pr": 116,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-19"
+    },
+    {
+      "id": "re-measure-every-gate-and-state-what-r6",
+      "type": "docs",
+      "scope": "wp19",
+      "breaking": false,
+      "title": "re-measure every gate and state what R6 is still waiting on",
+      "body": "Every gate state in WP19 was true on the day it was written, and several had\nstopped being true. They are replaced with measurements taken on merged `main`,\neach carrying its date and the command that produced it, so M6's remaining\ndistance is a list rather than a recollection.\n\n§5a is new and does the part the gate table cannot: it answers whether R6 is a\ndecision somebody makes or a project somebody schedules, by sorting what stands\nbetween into three kinds — closed and measured, open work that needs an\nafternoon, and a human's decision. A row in the wrong bucket is how \"we are\nnearly there\" survives contact with a year, which is why they are separated\nrather than listed as one backlog.\n\n§A8 is new and records the `--json` result as the fifth way this gate has\nreported green while something was wrong, and the one the previous four could\nnot have found: the cross product is only ever as wide as `VARIATIONS`. 180\nundeclared differences on an otherwise-green corpus, 178 of them one defect\nacross 89 programs, and a fourth class with zero rows — a diagnostic column\ncounting bytes against UTF-16 code units, in the default mode under no flag,\ninvisible because no corpus program put a non-ASCII character in front of a\ncaret. §A5 gains the third instance of the pathology it catalogues: a caveat\nwritten down in `self/diagnostics.ts` and then retired against ASCII goldens,\nthe same move `self/debug.ts` made.\n\nWhat the gates now say: G1 green over the corpus on `862c7cc`, G2's wording\nhalf green with the count and the tool, G3 and G5 closed by `acbca9f` with the\nMach-O `LC_UUID` difference traced to the harness linking stage2 and stage3 at\ndifferent paths — stated as the leading explanation rather than as a finding,\nbecause the probe never returned to the first path and path-identity is\nconfounded with invocation order. G6 closed by `21a9381`, which merged during\nthis pull request's review; the check count is derived from the command rather\nthan copied from that description, which said 18 where the tree has 19.\n\nG5 stays open on a decision rather than an oversight: the installer has no\nregistry name, `nish` on npm having belonged to somebody else since 2014.\n\nAnd the section on being ready to delete says plainly that this week's evidence\npoints the other way. §7's trigger is a release cycle in which stage0 found\nnothing; in the run that produced these numbers, stage0 caught a\nmachine-readable contract stage1 was not answering at all across 89 programs,\nand each compiler caught a span the other got wrong. A document arguing for\nretirement while its own measurements pointed away from it would be the exact\nfailure this package has now recorded five times.",
+      "metrics": [
+        "14432 runs over 902 programs, 0 undeclared differences, on 862c7cc"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md",
+        "docs/MASTER_PLAN.md"
+      ],
+      "tests": [],
+      "commits": [
+        "7ff7ce1"
+      ],
+      "pr": 118,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-19"
+    }
+  ]
+}

@@ -26,6 +26,47 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-19
+
+### Added
+
+- checker: Warn when reordering a struct's fields would shrink it ([#103](https://github.com/amritk/nish/pull/103))
+- checker: A generic may be exported and instantiated from another module ([#111](https://github.com/amritk/nish/pull/111))
+
+### Fixed
+
+- codegen: Give a `CPtr` its own DWARF type and its own debug-cache entry ([#90](https://github.com/amritk/nish/pull/90))
+- checker: Recover from a refused monomorphisation only where the request is a declaration's ([#91](https://github.com/amritk/nish/pull/91))
+- test: An empty flag set fails the parity comparison ([#101](https://github.com/amritk/nish/pull/101))
+- cli: --json carries a syntax error, and a column counts code units ([#117](https://github.com/amritk/nish/pull/117))
+
+### Performance
+
+- codegen: Hoist an array's header out of the loop that reads it ([#104](https://github.com/amritk/nish/pull/104))
+
+### Changed
+
+- diagnostics: Give the warning list a deliberate report order ([#99](https://github.com/amritk/nish/pull/99))
+- test: One shared diagnostic-registry reader ([#102](https://github.com/amritk/nish/pull/102))
+
+### Documentation
+
+- wp15: Close the padding item and re-state how §8 warnings are ordered ([#105](https://github.com/amritk/nish/pull/105))
+- wp23: Decide the three proposed rows, and the questions they answer ([#112](https://github.com/amritk/nish/pull/112))
+- wp19: Re-measure every gate and state what R6 is still waiting on ([#118](https://github.com/amritk/nish/pull/118))
+
+### Tests
+
+- bench: The field-shape program WP15 measures the header hoist on ([#98](https://github.com/amritk/nish/pull/98))
+- oracle: Register the cases stage1's parser refuses, and fail when the set moves ([#115](https://github.com/amritk/nish/pull/115))
+
+### CI
+
+- parity: Check parity on the pull request that touches a corpus program ([`7f6e833`](https://github.com/amritk/nish/commit/7f6e833))
+- seed: Exercise the aarch64 and darwin rows before a release attaches them ([#114](https://github.com/amritk/nish/pull/114))
+- release: Cut the ddc provenance tag from the release that proves it ([#116](https://github.com/amritk/nish/pull/116))
+
+
 ## [0.3.0] - 2026-09-18
 
 ### Added
@@ -154,3 +195,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.1.1]: https://github.com/amritk/nish/releases/tag/v0.1.1
 [0.2.0]: https://github.com/amritk/nish/releases/tag/v0.2.0
 [0.3.0]: https://github.com/amritk/nish/releases/tag/v0.3.0
+[0.4.0]: https://github.com/amritk/nish/releases/tag/v0.4.0
