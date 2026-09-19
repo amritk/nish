@@ -338,7 +338,52 @@ Each of those rows is a case in the WP19 block of `tests/run.js`, driven
 against a stand-in for `git`, because the refusal cannot be reached in a real
 release without the release going wrong and a gate nobody can fail is a wish.
 
-## Open decision: the npm name is taken
+## The npm name
+
+**Decided 2026-09-19: the package is `@amritk/nish`, and the command stays
+`nish`.** That is option (a) below, taken without the project rename option (b)
+would have carried. `package.json#name` is the scoped name; `bin.nish` is
+untouched, so [`src/branding.ts`](../src/branding.ts) and
+[`self/branding.ts`](../self/branding.ts) — the two files the whole compiler
+reads its name from — do not move, and nothing a user reads in a diagnostic
+changes.
+
+Verified free on the day it was taken, with the command below pointed at the
+scoped name: `https://registry.npmjs.org/@amritk%2Fnish` answered 404.
+
+What it costs, stated rather than discovered later:
+
+- **`npm publish` needs `--access public`**, every time, because a scoped
+  package is private by default and a private publish on a free account fails
+  at the registry rather than in the workflow. The commented-out publish step at
+  the end of `release.yml` already carries the flag; that is the whole of the
+  mitigation, and it is already written down.
+- **The install line and the command line are two different strings** —
+  `npm install -g @amritk/nish`, then `nish`. Every README has to say so once.
+- **`npm pack` names the tarball `amritk-nish-<version>.tgz`**, not
+  `nish-<version>.tgz`. Measured, not assumed: the `Release` workflow's asset
+  name follows it, and nothing else does — `.github/seed-matrix.sh` and
+  `.github/seed-due.sh` key on the native `*.tar.gz` rows and never on the npm
+  tarball, so the bootstrap matrix is unaffected. `node tests/run.js wp12`
+  (57 passed) and `seed` (38 passed) are green across the rename.
+- **`STD_PREFIX` stays `nish/`** and is now deliberately *not* a spelling of
+  `package.json#name`, which its own comment in both branding files used to
+  claim. No name that is available could have kept that identity, since the
+  identity needed the bare `nish`. It costs nothing while the standard library
+  is resolved by the compiler rather than by npm; the day a third-party package
+  is consumed through npm resolution ([wp21-packages.md](wp21-packages.md) §2),
+  `nish/text` would resolve against somebody else's package and the prefix has
+  to become `@amritk/nish/`. That is a WP21 decision, recorded here so it is not
+  discovered there.
+
+One check moved with the decision. `tests/nish/cli.ts` read the expected tool
+name out of `package.json#name`, which was right only while the package and the
+command were one string; it reads `bin`'s key now, which is what "the tool the
+user typed" always meant.
+
+The rest of this section is the record of why, and is left as it was written.
+
+---
 
 `npm install -g nish` does not install this compiler and never has. The name
 `nish` on the public registry belongs to somebody else and has since 2014:
@@ -374,9 +419,11 @@ the whole compiler reads its name from. The options, and what each costs:
 | **(c) npm's dispute process** | npm's package-name dispute policy covers this shape exactly — a name held by a package nobody maintains — and it begins by contacting the owner | slow, and its outcome is npm's to decide rather than ours: it is the only option here that can still fail after the waiting. The courteous first move is the same one it starts with anyway, which is to ask the author directly. Worth opening *in parallel* with (a), never instead of it |
 
 (a) is reversible into (b) or (c) and neither of the others is reversible into
-it; that ordering is the only thing this note claims. Nothing has been chosen,
-`package.json#name` is still `nish`, and that is why `npm publish` has not been
-run and why step 4 of the release procedure says so.
+it; that ordering is the only thing this note claimed, and it is why (a) was
+taken. **`package.json#name` is `@amritk/nish` as of 2026-09-19.** `npm publish`
+still has not been run, for the reason the *next* section gives rather than this
+one: which compiler the package ships is a separate open decision, and G5's
+installer is not built. The name is settled; publishing is not.
 
 ## Open decision: which compiler the package ships
 

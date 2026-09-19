@@ -304,6 +304,33 @@ const writeFixtures = (): void => {
 };
 
 /**
+ * The tool the user types, which is `bin`'s key and not `name`.
+ *
+ * Those were one string until the package took a scope. The registry name is
+ * `@amritk/nish` because `nish` belongs to somebody else, and the command is
+ * still `nish` (`docs/wp12-release.md`, "The npm name"). `name` names the
+ * package; `bin`'s key names the tool, and the tool is what `--version` and the
+ * usage text are about — so reading `name` here was only ever right by
+ * coincidence, and the scope is what ended the coincidence.
+ */
+const toolName = (manifest: string): string | null => {
+  const bin = jsonField(manifest, "bin");
+  if (bin === null) {
+    return null;
+  }
+  const open: i32 = toI32(bin.indexOf('"'));
+  if (open < 0) {
+    return null;
+  }
+  const rest: string = bin.substring(open + 1);
+  const close: i32 = toI32(rest.indexOf('"'));
+  if (close < 0) {
+    return null;
+  }
+  return rest.substring(0, close);
+};
+
+/**
  * The tool's own name and version, both read out of `package.json` with the
  * module under test.
  *
@@ -318,17 +345,17 @@ const checkIdentity = (t: Suite, cli: Cli): string => {
     t.fail("--version", "cannot read package.json (run this from the repository root)");
     return "";
   }
-  const name = jsonField(manifest, "name");
+  const name = toolName(manifest);
   const version = jsonField(manifest, "version");
   if (name === null || version === null) {
-    t.fail("--version", "package.json has no name or no version field");
+    t.fail("--version", "package.json has no bin entry or no version field");
     return "";
   }
   const run = cli.plain("version", ["--version"]);
   if (!t.eqI32("--version exits 0", run.status, 0)) {
     return name;
   }
-  t.eqStr("--version prints the name and version in package.json", trim(run.stdout), `${name} ${version}`);
+  t.eqStr("--version prints the tool's name and the version in package.json", trim(run.stdout), `${name} ${version}`);
   t.eqStr("--version says nothing on stderr", trim(run.stderr), "");
   return name;
 };
