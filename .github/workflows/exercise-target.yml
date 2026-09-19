@@ -177,6 +177,34 @@ jobs:
           diff "$RUNNER_TEMP/a.lc" "$RUNNER_TEMP/b.lc" || true
           echo "== codesign =="
           codesign -dvvv "$a" 2>&1 || true
+          # What the UUID is a function of. ld64 classic hashed the output's
+          # own content, which would make two links of one input agree; these
+          # do not agree, so it is a hash of something else, and which
+          # something decides whether the fixed point can be reached without
+          # dropping the load command (dyld refuses an arm64 image that has no
+          # LC_UUID, so dropping it is not on the table). Three links of one
+          # input by one compiler: twice to the same output path, once to a
+          # different one.
+          echo "== is the UUID a function of the content, the output path, or neither =="
+          p="$RUNNER_TEMP/probe"
+          mkdir -p "$p"
+          uuid_of() { otool -l "$1" | awk '/LC_UUID/ { seen = 1 } seen && $1 == "uuid" { print $2; exit }'; }
+          compare() {
+            if cmp -s "$p/$1" "$p/$2"; then
+              echo "  $1 vs $2: IDENTICAL"
+            else
+              echo "  $1 vs $2: differ in $(cmp -l "$p/$1" "$p/$2" | wc -l | tr -d ' ') bytes"
+            fi
+            echo "    $1 uuid $(uuid_of "$p/$1")"
+            echo "    $2 uuid $(uuid_of "$p/$2")"
+          }
+          stage2="$RUNNER_TEMP/measure/selfhost/stage2"
+          "$stage2" self/compile.ts --link "$p/one" --profile speed >/dev/null
+          mv "$p/one" "$p/first"
+          "$stage2" self/compile.ts --link "$p/one" --profile speed >/dev/null
+          "$stage2" self/compile.ts --link "$p/two" --profile speed >/dev/null
+          compare first one
+          compare first two
           echo "== every differing byte, attributed =="
           python3 - "$a" "$b" <<'ATTRIBUTE'
           # Attribute every differing byte between two Mach-O files to the load command,
