@@ -17,7 +17,7 @@
 import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
 import { AliasInfo } from "./program";
-import { instantiateWritten } from "./generics";
+import { deferInstantiation, instantiateWritten } from "./generics";
 import {
   N_LIST,
   N_TYPE_ARRAY,
@@ -249,6 +249,15 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     if (written !== null) {
       const instantiated = instantiateWritten(ctx, written, args, node);
       return instantiated === null ? T_ERROR : instantiated.type;
+    }
+    // WP18 G7: `Box<i32>` where `Box` comes from another module, resolved
+    // during pass 1 — before any import is bound, so the branch above has
+    // nothing to answer with. The request is written down and made as soon as
+    // every module has bound; from pass 1b on the branch above answers instead,
+    // because binding the import put the template in scope.
+    const imported = ctx.program.importNamed(name);
+    if (imported !== null) {
+      return deferInstantiation(ctx, imported, args, node);
     }
     return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`);
   }

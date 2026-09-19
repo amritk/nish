@@ -395,6 +395,8 @@ const RULES: string[] = [
     "NL2041",
     "` needs an explicit return type annotation",
     "NL2096",
+    "` takes no type arguments: only a generic ",
+    "NL2325",
     "`substring` expects 1 or 2 arguments, got ",
     "NL2153",
     "Loose equality is forbidden; use === / !==",
@@ -876,7 +878,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 409;
+export const RULE_COUNT = 410;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

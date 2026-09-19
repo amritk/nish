@@ -23,7 +23,7 @@ import {
   typeToString,
 } from "../types.js";
 import { ConstInfo } from "./constants.js";
-import { StructTemplateInfo, TemplateInfo } from "./generics.js";
+import { GenericHome, StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 import { isNishSpecifier, nishModuleNames } from "./nish-modules.js";
 import { STD_PREFIX } from "../branding.js";
@@ -301,7 +301,11 @@ function collectTypeParams(list: readonly ts.TypeParameterDeclaration[], sf: ts.
  * checks is checked here except the *types*: the annotations mention the type
  * parameters, so they stay as syntax and are resolved once per instantiation.
  */
-export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.SourceFile): TemplateInfo {
+export function collectFunctionTemplate(
+  decl: ts.FunctionDeclaration,
+  sf: ts.SourceFile,
+  home: GenericHome
+): TemplateInfo {
   if (!decl.name) throw new CompileError("Functions must be named", decl, sf);
   // A generic `declare function` arrives here rather than at
   // `collectFunctionSignature`, because a function with type parameters is a
@@ -333,6 +337,7 @@ export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.Sou
     body: decl.body,
     exported: hasExportModifier(decl),
     count: 0,
+    home,
   };
 }
 
@@ -383,7 +388,8 @@ export const rejectStructModifiers = (
  */
 export const collectStructTemplate = (
   decl: ts.ClassDeclaration | ts.InterfaceDeclaration,
-  sf: ts.SourceFile
+  sf: ts.SourceFile,
+  home: GenericHome
 ): StructTemplateInfo => {
   const kind = ts.isClassDeclaration(decl) ? "class" : "interface";
   if (!decl.name) throw new CompileError(`${kind === "class" ? "Classes" : "Interfaces"} must be named`, decl, sf);
@@ -410,6 +416,7 @@ export const collectStructTemplate = (
     nameNode: decl.name,
     exported: hasExportModifier(decl),
     count: 0,
+    home,
   };
 };
 
@@ -418,7 +425,8 @@ export function collectArrowTemplate(
   stmt: ts.VariableStatement,
   decl: ts.VariableDeclaration,
   arrow: ts.ArrowFunction,
-  sf: ts.SourceFile
+  sf: ts.SourceFile,
+  home: GenericHome
 ): TemplateInfo {
   if (!ts.isIdentifier(decl.name)) throw new CompileError("Functions must be named", decl.name, sf);
   const name = decl.name.text;
@@ -443,6 +451,7 @@ export function collectArrowTemplate(
     body: arrow.body,
     exported: hasExportModifier(stmt),
     count: 0,
+    home,
   };
 }
 

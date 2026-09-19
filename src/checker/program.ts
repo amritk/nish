@@ -61,6 +61,18 @@ export interface StructInfo {
   collected?: "collecting" | "done";
   decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
   exported: boolean;
+  /**
+   * The (template, type-argument tuple) this layout was monomorphised from, or
+   * absent for a class or interface somebody declared (WP18 G5).
+   *
+   * It is on the layout rather than only in `CheckedProgram.structInstantiations`
+   * because the arguments have to be readable wherever the *struct* is visible:
+   * an instantiated class is an ordinary struct and its `StaticType` carries no
+   * arguments at all (§3c), and since G7 the module that declares the template
+   * is not necessarily the module asking. `FunctionSig.instance` is the same
+   * field one level down, for the same reason.
+   */
+  instance?: StructInstantiation;
   /** A member or heritage clause was rejected (WP10): the layout is incomplete; skip follow-on checks. */
   poisoned?: boolean;
 }
@@ -178,6 +190,16 @@ export interface ImportBinding {
   struct?: StructInfo;
   /** Set instead of `sig` when the imported name is an exported module constant (WP14). */
   constant?: ConstInfo;
+  /**
+   * Set instead of `sig` when the imported name is an exported generic function
+   * (WP18 G7). There is no one signature to bind: the import names a template,
+   * and each type-argument tuple a call site here picks becomes a symbol of its
+   * own, defined by the module that declares it and listed in
+   * `externalInstances`.
+   */
+  template?: TemplateInfo;
+  /** The same, one level up: an exported generic class or interface (WP18 G7). */
+  structTemplate?: StructTemplateInfo;
   /**
    * Set instead of `sig` when the specifier is a `nish:` module: the import
    * names a builtin, so there is no signature to bind and no symbol to
@@ -313,6 +335,15 @@ export interface CheckedProgram {
    * exactly as it declares an imported class's.
    */
   reachableStructs: StructInfo[];
+  /**
+   * Instantiations this module *calls* but does not define: WP18 G7's half of
+   * an import. A generic is monomorphised once, in the module that declares the
+   * template, so a caller in another module links against that one `define` and
+   * needs a `declare` for it -- which is what an imported plain function gets
+   * through `imports`, and what a template has no `ImportBinding` to hang on
+   * because one import can become any number of symbols.
+   */
+  externalInstances: FunctionSig[];
   /**
    * Expressions whose class-typed value is used where an interface it
    * implements is expected (WP2). `types` records the interface; the emitter

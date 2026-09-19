@@ -319,10 +319,21 @@ export class Emitter implements EmitContext {
       // way the global spelling does, to an intrinsic or a `nish_*` symbol the
       // runtime table already declares on first use.
       if (imp.builtin) continue;
+      // WP18 G7: an imported template declares nothing by itself. One name
+      // becomes a symbol per distinct type-argument tuple, and the tuples this
+      // module actually asked for are declared below — the functions through
+      // `externalInstances`, an instantiated class's members through
+      // `reachableStructs`, exactly as an imported declared class's are.
+      if (imp.template !== undefined || imp.structTemplate !== undefined) continue;
       const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
       if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
       declare(sigs);
     }
+    // WP18 G7: an instantiation this module calls and another module defines.
+    // It hangs off no `ImportBinding`, because one imported template becomes a
+    // symbol per distinct type-argument tuple rather than a symbol per name,
+    // so the checker collected the ones this module actually asked for.
+    declare(this.program.externalInstances);
     // A struct this module never named but can hold values of: its methods
     // and constructor are defined by whichever module declared it, so they
     // are `declare`d here for the same reason an imported class's are.

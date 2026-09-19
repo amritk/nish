@@ -1,0 +1,4 @@
+%struct.Pair$i32 = type { i32, i32 }
+define void @Box$$Pair$i32.constructor(
+define noundef i32 @twice$i32(i32 noundef %x)
+define noundef i32 @doubled$str(

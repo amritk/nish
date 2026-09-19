@@ -1,0 +1,4 @@
+define noundef i32 @pick$i32(
+define noundef nonnull align 8 i8* @pick$str(
+declare noundef i32 @pick$i32(
+declare noundef nonnull align 8 i8* @pick$str(

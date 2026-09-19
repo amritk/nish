@@ -180,7 +180,7 @@ const reportWastefulPadding = (ctx: CheckContext, info: StructInfo, floor: i32):
   if (floor >= info.size) {
     return;
   }
-  if (info.implementsNames.length > 0 || ctx.program.structInstance(info.name) !== null) {
+  if (info.implementsNames.length > 0 || ctx.program.structArguments(info.name) !== null) {
     return;
   }
   const fields = widestFirst(ctx, info.fields, info.align);

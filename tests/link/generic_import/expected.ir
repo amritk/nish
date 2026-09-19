@@ -1,0 +1,7 @@
+define noundef i32 @identity$i32(i32 noundef %x)
+define noundef nonnull align 8 i8* @identity$str(i8* noundef nonnull noalias readonly align 8 %x)
+define void @Box$i32.constructor(
+define void @Box$$Point.constructor(
+declare noundef i32 @identity$i32(i32 noundef)
+declare void @Box$$Point.constructor(
+%struct.Point = type { i32, i32 }

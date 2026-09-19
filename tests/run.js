@@ -1458,8 +1458,12 @@ function functionHeaders(ir) {
   const groups = new Map();
   for (const m of ir.matchAll(/^attributes (#\d+) = \{ (.*) \}$/gm)) groups.set(m[1], m[2]);
   const out = new Map();
+  // `$` is part of a symbol name, not a word character: WP18 mangles an
+  // instantiation as `identity$i32`, and a pattern without it silently found no
+  // cross-module generic at all — which is exactly the pair this check exists
+  // to compare since G7 put the `define` and the `declare` in two modules.
   for (const m of ir.matchAll(
-    /^(define|declare) (?:internal )?(.*?) @([\w.]+)\((.*?)\)(?: (#\d+))?(?: \{)?$/gm
+    /^(define|declare) (?:internal )?(.*?) @([\w.$]+)\((.*?)\)(?: (#\d+))?(?: \{)?$/gm
   )) {
     const params = m[4].replace(/ %[\w.]+(?=,|$)/g, ""); // drop parameter names: declares have none
     out.set(m[3], { kind: m[1], sig: `${m[2]} (${params})`, attrs: m[5] ? (groups.get(m[5]) ?? m[5]) : "" });

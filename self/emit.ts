@@ -518,6 +518,14 @@ export class Emitter {
       if (imp.builtin !== null) {
         continue;
       }
+      // WP18 G7: an imported template declares nothing by itself. One name
+      // becomes a symbol per distinct type-argument tuple, and the tuples this
+      // module actually asked for are declared below — the functions through
+      // `externalInstances`, an instantiated class's members through
+      // `reachableStructs`, exactly as an imported declared class's are.
+      if (imp.template !== null || imp.structTemplate !== null) {
+        continue;
+      }
       const struct = imp.struct;
       const sig = imp.sig;
       if (struct !== null) {
@@ -530,6 +538,11 @@ export class Emitter {
         process.exit(internalError(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``));
       }
     }
+    // WP18 G7: an instantiation this module calls and another module defines.
+    // It hangs off no `ImportBinding`, because one imported template becomes a
+    // symbol per distinct type-argument tuple rather than a symbol per name, so
+    // the checker collected the ones this module actually asked for.
+    this.declareAll(this.program.externalInstances, seen);
     // A struct this module never named but can hold values of: its methods and
     // constructor are defined by whichever module declared it, so they are
     // `declare`d here for the same reason an imported class's are.

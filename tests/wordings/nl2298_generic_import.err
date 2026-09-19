@@ -1,1 +1,0 @@
-`identity` in `./wordings_generic` is a generic function, and a generic function cannot yet be instantiated from another module; declare it in the module that calls it

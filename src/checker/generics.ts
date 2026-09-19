@@ -37,6 +37,86 @@ import { ConstInfo } from "./constants.js";
 import { FunctionSig, LocalVar, StructInfo } from "./program.js";
 
 /**
+ * Where a request was written, as the module that answers it needs it (WP18 G7).
+ *
+ * A template is instantiated in the scope it was *declared* in, so the work
+ * crosses a module boundary while the mistake a user can make with it does
+ * not: a termination refusal or a cap is about this call, in this file, inside
+ * whichever instantiation's body was being checked when it was made. All three
+ * therefore travel with the request rather than being read off the answering
+ * module, whose own cursors are about its own work.
+ */
+export type RequestSite = {
+  /** The file the request was written in: where a refusal about it points. */
+  sf: ts.SourceFile;
+  /** The instantiation whose body made the request, or `undefined` for ordinary code. */
+  fromFunction: Instantiation | undefined;
+  /** The struct instantiation whose members or method body made it, if one did. */
+  fromStruct: StructInstantiation | undefined;
+  /**
+   * The requesting module's view of a struct name.
+   *
+   * A type argument may be a layout the *answering* module has never heard of
+   * — `identity<Point>` where `Point` is the caller's own class — and the
+   * answering module needs it, because it is the one that writes
+   * `%struct.Point` into the monomorphised body. The requester had to have the
+   * layout to write the request down, so this is where it comes from.
+   */
+  lookupStruct: (name: string) => StructInfo | undefined;
+};
+
+/**
+ * The module that *declares* a template, as the rest of the package needs it
+ * (WP18 G7).
+ *
+ * A template is instantiated in the scope its body was written in, whoever
+ * asked: the annotations it resolves name that module's classes, its own
+ * imports and its own aliases, and its symbols belong to that module's
+ * package. So a request made from another module is forwarded here rather than
+ * answered where it was written, and this is the whole of what a template
+ * remembers about home.
+ *
+ * It is a structural type rather than `Checker` because `Checker` imports this
+ * file. Three members are the whole of the crossing, which is also the argument
+ * that the crossing is small.
+ */
+export type GenericHome = {
+  /**
+   * The package prefix every symbol this module mints carries (WP21 S1). An
+   * instantiation's symbol is minted from *this* rather than from the prefix of
+   * the module that asked for it, and that is the whole of why G7 is one change
+   * and not two: two packages importing one generic would otherwise mint one
+   * symbol for two different functions, and the whole-program fact table in
+   * `codegen/attributes.ts` -- which is keyed by symbol -- would hand one of
+   * them the other's purity and escape facts. That is a miscompile rather than
+   * a link error, the same failure WP21 S1 exists to prevent for a plain
+   * function.
+   */
+  readonly symbolPrefix: string;
+  /** Answer a function template's request, in this module's scope. */
+  instantiateHere: (
+    template: TemplateInfo,
+    args: StaticType[],
+    at: ts.Node,
+    site: RequestSite
+  ) => FunctionSig;
+  /**
+   * This module's view of a struct name, for the layouts an instantiation hands
+   * back: `Box<i32>` may have a field of a class only the declaring module ever
+   * wrote, and the module holding the `Box$i32` needs that layout too. It is
+   * `RequestSite.lookupStruct` pointing the other way.
+   */
+  lookupStruct: (name: string) => StructInfo | undefined;
+  /** The struct half of the same forwarding. */
+  instantiateStructHere: (
+    template: StructTemplateInfo,
+    args: StaticType[],
+    at: ts.Node,
+    site: RequestSite
+  ) => StructInfo;
+};
+
+/**
  * A generic function declaration, in either spelling. Nothing about it is
  * resolved: `decl` carries the parameter and return annotations, which mention
  * `typeParams` and therefore mean nothing until an instantiation binds them.
@@ -61,6 +141,8 @@ export interface TemplateInfo {
   exported: boolean;
   /** How many instantiations this template has produced, for the per-template cap. */
   count: number;
+  /** The module that declares it, which is where every instantiation of it is made (WP18 G7). */
+  home: GenericHome;
 }
 
 /** The node-keyed half of `CheckedProgram`: what one instantiation owns a copy of. */
@@ -92,6 +174,8 @@ export type StructTemplateInfo = {
   exported: boolean;
   /** How many instantiations this template has produced, for the per-template cap. */
   count: number;
+  /** The module that declares it, which is where every instantiation of it is made (WP18 G7). */
+  home: GenericHome;
 };
 
 /**

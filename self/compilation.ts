@@ -534,6 +534,13 @@ export class Compilation {
       }
       unit.checker.bindImports(targets);
     }
+    // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
+    // Pass 1 could only write the request down — it runs as each module is
+    // parsed, long before any import is bound — and it is made here, once every
+    // module can answer one and can resolve its own imports while doing so.
+    for (const unit of this.modules) {
+      unit.checker.makeDeferredInstantiations();
+    }
     // After every module is bound, so a struct reached through a chain of
     // modules does not depend on the order they were bound in.
     const declared = this.declaredStructs();
@@ -565,8 +572,21 @@ export class Compilation {
     // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
     // point. Per module in load order, because an instantiation is checked by
     // the module that declares its template, in that module's scope.
-    for (const unit of this.modules) {
-      unit.checker.drainInstantiations();
+    //
+    // The sweep repeats because G7 let a request cross a module boundary in
+    // either direction: draining one module's queue checks bodies that ask
+    // other modules for instantiations, including modules already drained this
+    // sweep, and those bodies ask in turn. It ends because the set of
+    // (template, tuple) pairs only grows and the caps in `self/generics.ts`
+    // bound it.
+    let working = true;
+    while (working) {
+      working = false;
+      for (const unit of this.modules) {
+        if (unit.checker.drainInstantiations()) {
+          working = true;
+        }
+      }
     }
     this.rejectInstantiatedStructClashes();
     return !this.sink.hasErrors();
@@ -730,6 +750,12 @@ export class Compilation {
       // symbols and two packages may each keep a private `identity<T>` exactly
       // as they may each keep a private `helper()`.
       for (const template of unit.checker.program.templateList) {
+        // An imported template is the exporter's declaration, not a second one
+        // (WP18 G7) — the same guard the loop below applies to an imported
+        // signature.
+        if (template.origin !== unit.source) {
+          continue;
+        }
         const symbol = unit.checker.program.symbolPrefix + template.sourceName;
         const at = owners.get(symbol, -1);
         if (at < 0) {

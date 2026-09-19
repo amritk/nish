@@ -166,6 +166,10 @@ export function dumpChecked(compilation: Compilation): string {
     const pkg = program.packageName === "" ? "" : ` [package ${program.packageName}]`;
     lines.push(`module ${displayName(unit.fileName)}${unit.isEntry ? " (entry)" : ""}${pkg}`);
     for (const imp of program.imports) {
+      // WP18 G7: a template binds to no symbol at all. One import becomes one
+      // `define` per distinct type-argument tuple, in the module that declares
+      // it, so what the dump can name is the template rather than a name the
+      // linker will see.
       const what = imp.struct
         ? `struct ${imp.struct.name}`
         : imp.constant
@@ -174,7 +178,11 @@ export function dumpChecked(compilation: Compilation): string {
             ? `builtin ${imp.builtin.canonical}`
             : imp.sig
               ? `function @${imp.sig.name}`
-              : "unbound";
+              : imp.structTemplate
+                ? `generic ${imp.structTemplate.kind} ${imp.structTemplate.sourceName}`
+                : imp.template
+                  ? `generic function ${imp.template.sourceName}`
+                  : "unbound";
       lines.push(`import ${imp.localName} from ${JSON.stringify(imp.specifier)} -> ${what}`);
     }
     // Module constants (WP14) carry their folded value: it is the whole of

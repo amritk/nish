@@ -1236,14 +1236,35 @@ export const main = (): i32 => {
   `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
   (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
   unaffected — only names that become symbols are restricted.
+- **A template may be exported and instantiated from another module, and each
+  instantiation is defined exactly once**, in the module that declares the
+  template. Everywhere else it is a `declare` carrying that definition's
+  attributes, which is what an imported plain function gets — the difference is
+  that one imported name becomes one symbol per distinct type-argument tuple
+  rather than one symbol (`tests/link/generic_import`). Two modules asking for
+  the same tuple share the one definition (`tests/link/generic_two_importers`),
+  and the symbol carries the **declaring** package's prefix, so a package that
+  exports `pick<T>` owns `@pkg_lib.pick$i32` however many packages call it
+  (`tests/link/package_generic_import`). A type argument may be a class the
+  declaring module has never heard of: the layout travels with the request, and
+  the instantiation is emitted where the template is (`identity<Point>` in
+  `tests/link/generic_import`). A template that is not exported cannot be
+  imported, in the words every other private declaration is refused in
+  (`tests/link/generic_import_private`), and an imported generic may be renamed
+  — `import { Box as B }` — without moving the symbol, because the instantiation
+  is named after the template rather than after whatever the caller called it.
+- **A type-argument list belongs to a template and to nothing else.** An
+  imported name that is not one is refused when the import binds, rather than
+  where the annotation is written, because a module's signatures are resolved
+  as soon as it is parsed and before any import is bound:
+  `` `Point` in `./lib` takes no type arguments: only a generic class or interface is written with them ``
+  (`tests/link/generic_import_plain`).
 - **Not supported yet**, each with its own message: a constrained parameter
   (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
-  type argument (`<T = string>`), type parameters on a method or a type alias,
-  and instantiating a generic imported from another module
-  (`` is a generic function, and a generic function cannot yet be instantiated
-  from another module ``). A generic `main` is refused too: the entry point is
-  called by the C runtime, which has no type arguments to give it. The design
-  and the milestones are in [wp18-generics.md](wp18-generics.md).
+  type argument (`<T = string>`), and type parameters on a method or a type
+  alias. A generic `main` is refused too: the entry point is called by the C
+  runtime, which has no type arguments to give it. The design and the
+  milestones are in [wp18-generics.md](wp18-generics.md).
 
 ### Generic classes and interfaces
 
@@ -1323,11 +1344,17 @@ export const main = (): i32 => {
   (`tests/cases/reject_generic_expanding_field`). `Nest<T>` and a type that
   mentions no parameter are both fine — it is the same rule a generic
   function's recursive call is held to, stated over fields.
-- **Not supported yet**: a constrained parameter (`<T extends Shape>`), a
-  generic method of its own on a class, and importing a generic class or
-  interface from another module
-  (`` is a generic class, and a generic class or interface cannot yet be
-  instantiated from another module ``).
+- **A generic class or interface may be imported**, and the whole-program rule
+  is the one a generic function's is: `%struct.Box$i32` and every
+  `@Box$i32.*` symbol are defined once, by the module that declares `Box<T>`,
+  and `declare`d by every module that holds one (`tests/link/generic_import`,
+  `tests/link/package_generic_import`). Unlike a declared class it may be
+  renamed on import, because the name that crosses the ABI is the template's
+  and not the caller's. Named without its type arguments it is refused in the
+  same words a locally declared template is
+  (`tests/link/generic_import_no_args`).
+- **Not supported yet**: a constrained parameter (`<T extends Shape>`) and a
+  generic method of its own on a class.
 
 ### Interfaces and object literals
 
