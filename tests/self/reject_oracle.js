@@ -25,7 +25,14 @@
  *     name rather than by the message stage0's Phase 0 validator writes. Those
  *     wordings are deliberately different — a message about the operator the
  *     programmer wrote beats one about a node kind — and the count is the
- *     measurement, not a hole;
+ *     measurement, not a hole. `tests/self/parser_refusals.txt` is that
+ *     measurement written down, case by case and sentence by sentence, and it
+ *     is compared with the bucket both ways: a rule that leaves the checker's
+ *     reach fails until somebody registers it, and a rule that comes back
+ *     fails until somebody deletes its line. Before that register the bucket
+ *     was a number in the summary line below and nothing held it to anything,
+ *     which is the caveat `docs/wp19-stage0-retirement.md` §5's R3 row states
+ *     against its own declaration;
  *   - the compiler compiles it and only the link step refuses it. What this
  *     oracle runs is `self/dump_checked.ts`, a dump entry point with no
  *     `--link` of its own, so a case whose refusal comes from the linker has
@@ -47,26 +54,37 @@ import { linkWith, seedForOracle, spawnSeed, withoutSeed } from "./seed.js";
 
 const CASES = path.join(root, "tests", "cases");
 const BACKLOG = path.join(root, "tests", "self", "reject_backlog.txt");
+const REFUSALS = path.join(root, "tests", "self", "parser_refusals.txt");
 
 /** `--number-mode` is the only flag `self/dump_checked.ts` takes. */
 const SUPPORTED_FLAGS = new Set(["--number-mode"]);
 
 /**
- * The cases stage1 does not refuse the same way *yet*, one name per line.
- * Listing one keeps the suite green while the port finishes, and the count is
- * printed in the summary so the remaining work is visible rather than hidden
- * in a skip. A listed case that starts agreeing is a failure too: the file is
- * the current state of the port, not a permanent exemption.
+ * A `<case>  <the rest of the line>` list, `#` for a whole-line comment — the
+ * shape `tests/diagnostic_coverage.js` reads its two lists with, and the shape
+ * both of this oracle's lists have:
+ *
+ *   - `reject_backlog.txt`, the cases stage1 does not refuse the same way
+ *     *yet*, whose count the summary prints so that the remaining work is
+ *     visible rather than hidden in a skip. Nothing follows the name;
+ *   - `parser_refusals.txt`, the cases stage1's parser refuses before the
+ *     phase that owns the rule can state it, where the rest of the line is the
+ *     sentence stage1 answers with.
+ *
+ * Both are the current state rather than a permanent exemption, so both fail
+ * in the direction that matters: a backlog case that starts agreeing, and a
+ * registered case the parser stops refusing, each fail until the line goes.
  */
-function backlog() {
-  if (!fs.existsSync(BACKLOG)) return new Set();
-  return new Set(
-    fs
-      .readFileSync(BACKLOG, "utf8")
-      .split("\n")
-      .map((line) => line.replace(/#.*$/, "").trim())
-      .filter((line) => line.length > 0)
-  );
+function register(file) {
+  const rows = new Map();
+  if (!fs.existsSync(file)) return rows;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.replace(/^\s*#.*$/, "").trim();
+    if (text.length === 0) continue;
+    const at = text.search(/\s/);
+    rows.set(at < 0 ? text : text.slice(0, at), at < 0 ? "" : text.slice(at).trim());
+  }
+  return rows;
 }
 
 /** The flags this case is compiled with, split into what stage1 takes and what it does not. */
@@ -99,7 +117,10 @@ function compare(seed, binary, entry) {
   const output = `${run.stdout}${run.stderr}`;
   if (run.status === 0) return { failed: "stage1 accepted it" };
   // A parser refusal is a different wording by design; the checker's is not.
-  if (/syntax error:/.test(output)) return { parser: firstLine(output) };
+  // The `syntax error: ` prefix is what puts the case in the bucket, so it is
+  // the bucket's name rather than part of the sentence, and the register does
+  // not repeat it on all 89 of its lines.
+  if (/syntax error:/.test(output)) return { parser: firstLine(output).replace(/^syntax error: /, "") };
   const missing = entry.fragments.filter((fragment) => !output.includes(fragment));
   if (missing.length > 0) {
     return { failed: `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}` };
@@ -123,7 +144,7 @@ function firstLine(output) {
 /**
  * Every negative case: the single-module `reject_*` goldens, then the whole
  * programs of `tests/link/` that carry an `expected.err`. `name` is what the
- * backlog file lists a case under.
+ * backlog and the parser-refusal register list a case under.
  */
 function corpus() {
   const entries = [];
@@ -163,7 +184,11 @@ function corpus() {
  * the compiler that builds the binary must too (WP19 G2.3).
  */
 function build(seed) {
-  return linkWith(seed, path.join("self", "dump_checked.ts"), path.join(root, "build", "self", "dump_checked"));
+  return linkWith(
+    seed,
+    path.join("self", "dump_checked.ts"),
+    path.join(root, "build", "self", "dump_checked")
+  );
 }
 
 function main(argv) {
@@ -183,10 +208,13 @@ function main(argv) {
           .map((f) => path.resolve(f))
           .map((f) => all.find((e) => e.file === f) ?? { name: f, file: f, linked: false, fragments: [] })
       : all;
-  const known = backlog();
+  const known = register(BACKLOG);
+  const refusals = register(REFUSALS);
+  const registerName = path.relative(root, REFUSALS);
   let agreed = 0;
   let checked = 0;
   const parser = [];
+  const refused = new Set();
   const skipped = [];
   const failed = [];
   const pending = [];
@@ -195,6 +223,18 @@ function main(argv) {
     const where = path.relative(root, entry.file);
     if (result.parser !== undefined) {
       parser.push(`${where}: ${result.parser}`);
+      refused.add(entry.name);
+      const pinned = refusals.get(entry.name);
+      if (pinned === undefined) {
+        failed.push(
+          `${where}: refused by stage1's parser and not in ${registerName} — ` +
+            `add the line: ${entry.name}\t${result.parser}`
+        );
+      } else if (pinned !== result.parser) {
+        failed.push(
+          `${where}: ${registerName} pins ${JSON.stringify(pinned)}, got ${JSON.stringify(result.parser)}`
+        );
+      }
     } else if (result.skipped !== undefined) {
       skipped.push(`${where}: ${result.skipped}`);
     } else if (result.failed !== undefined) {
@@ -205,6 +245,20 @@ function main(argv) {
     } else {
       agreed++;
       checked += result.fragments;
+    }
+  }
+  // The other direction, and the one the register is *for*: its purpose is to
+  // shrink, so an entry the parser has stopped refusing is a claim about
+  // nothing. Only a whole run may ask it — with a few cases named on the
+  // command line, "nothing refuses this" would be a fact about the filter.
+  if (named.length === 0) {
+    const present = new Set(all.map((entry) => entry.name));
+    for (const name of refusals.keys()) {
+      if (refused.has(name)) continue;
+      const why = present.has(name)
+        ? "stage1's parser does not refuse it any more"
+        : "names no case in this corpus";
+      failed.push(`${name}: ${why} — remove it from ${registerName}`);
     }
   }
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);

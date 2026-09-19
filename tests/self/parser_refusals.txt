@@ -1,0 +1,151 @@
+# The parser-refusal register: the cases stage1 turns down in its *parser*,
+# before the phase that owns the rule can state it.
+#
+# One entry per line, two fields:
+#
+#   <case>   <the syntax error stage1 answers with>
+#
+# <case> is a name under `tests/cases`, without the extension, or `link/<name>`
+# for a whole program under `tests/link`. The sentence is stage1's first line
+# of output, less its `file:line:column:` span and less the `syntax error: `
+# that every line here would otherwise carry — that prefix is what names the
+# bucket rather than part of what stage1 says. Blank lines and lines
+# whose first non-blank character is `#` are ignored; a `#` inside a sentence
+# is part of it.
+#
+# What an entry *means*, in the tool that reads this file:
+#
+#   - `tests/self/reject_oracle.js` counts the case in its parser bucket
+#     instead of holding stage1's message against the fragments the case's
+#     `.err` pins. The two wordings are different on purpose — lex and parse
+#     what is written, refuse in the phase that owns the rule
+#     (`.claude/selfhost.md`), and a sentence about the operator the programmer
+#     wrote beats one about a node kind — so the bucket is a measurement rather
+#     than a hole, and this file is that measurement written down.
+#
+# The oracle compares the register against the bucket in both directions on
+# every unfiltered run, which is the whole of why the file exists:
+#
+#   - a case in the bucket and not here fails. That is a rule leaving the
+#     checker's reach, and it is the migration `docs/wp19-stage0-retirement.md`
+#     §5's R3 row said nothing was watching for: "the reject oracle's parser
+#     bucket is a count in a summary line and nothing compares it to a ceiling,
+#     so the next rule that leaves the parser's reach migrates a case into the
+#     bucket silently."
+#   - a case here and not in the bucket fails too, and that direction matters
+#     as much: the register's purpose is to *shrink*. The member-header family
+#     — `x?: T`, `x!: T`, `m?()` and `static` — left the parser for the checker
+#     in 0.3.0 and took the bucket from 92 to 89. A register that only ever
+#     grew would have recorded that improvement as an unchanged number.
+#   - the sentence is compared as well, so an entry is a claim about what
+#     stage1 prints today rather than a note somebody wrote once. A reworded
+#     parser message fails the run and the failure quotes the new sentence.
+#
+# `tests/wordings/parser_refusals.txt` is this file's sister and not a
+# duplicate of it: the same §A3 class, measured over `tests/wordings/` — one
+# program per diagnostic code — where an entry means the *code*'s wording is
+# stage0's alone. This one is measured over the `reject_*` goldens and the
+# `tests/link/` negatives, where an entry means the *case*'s fragments are.
+#
+# Two rules the file cannot enforce and a reviewer must:
+#
+#   1. An entry is a measurement, never a licence. These sentences are what
+#      the user sees after R6, when stage0's are gone, and a sentence that
+#      cannot name the member, the rule or the class it belongs to is worth
+#      moving to the phase that can — which is how the member-header family
+#      came off. Registering a case records the state; it does not settle it.
+#   2. This file records what stage1's parser does, and never decides it.
+#      Moving a case in or out is a rule changing phase, which is a language
+#      change: it belongs to the change that moves the rule, with the case's
+#      `.err`, §A3's declaration and this entry all updated together, not to a
+#      line edited until the run goes green.
+
+reject_arr_forof_expression	expected `;`, found `IDENT`
+reject_arr_hole	expected an expression, found `,`
+reject_arr_spread	expected an expression, found `...`
+reject_arrow_annotated	expected `)`, found `:`
+reject_arrow_let	a module holds no top-level `let`; use `const`
+reject_arrow_return_type	a return type annotation is required
+reject_as_any	expected `;`, found `IDENT`
+reject_as_unknown	expected an expression, found `<`
+reject_async_function	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_await	expected `;`, found `NUMBER`
+reject_cls_anonymous	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
+reject_cls_compound_operator	expected `;`, found `**=`
+reject_cls_ctor_no_body	expected `{`, found `;`
+reject_cls_ctor_return_type	expected `{`, found `:`
+reject_cls_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_cls_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
+reject_cls_field_declare	a type annotation is required
+reject_cls_field_no_type	a type annotation is required
+reject_cls_field_optional_untyped	a type annotation is required
+reject_cls_field_string_name	a class member is a field, a method or a constructor, found `STRING`
+reject_cls_index_signature	a class member is a field, a method or a constructor, found `[`
+reject_cls_literal_key	an object literal key must be a plain identifier
+reject_cls_literal_member	expected `}`, found `(`
+reject_cls_method_no_body	expected `{`, found `;`
+reject_cls_method_optional_untyped	a return type annotation is required
+reject_cls_new_not_identifier	expected `(`, found `[`
+reject_cls_param_property	a type annotation is required
+reject_cls_static_block	a class member is a field, a method or a constructor, found `{`
+reject_cls_static_field_untyped	a type annotation is required
+reject_comma_expression	expected `)`, found `,`
+reject_computed_property	an object literal key must be a plain identifier
+reject_const_destructured	expected a name, found `{`
+reject_const_top_level_let	a module holds no top-level `let`; use `const`
+reject_declare_global	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_decorator	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `@`
+reject_default_import	expected `{`, found `IDENT`
+reject_delete	expected `;`, found `IDENT`
+reject_destructure_local	expected a name, found `[`
+reject_dynamic_import	expected an expression, found `import`
+reject_enum_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_export_assignment	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `=`
+reject_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
+reject_export_import_equals	`export` cannot introduce an import
+reject_export_list	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `{`
+reject_fn_anonymous	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
+reject_fn_nested	expected an expression, found `function`
+reject_fn_two_names	expected `;`, found `,`
+reject_generator	expected a name, found `*`
+reject_generic_abstract	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_generic_constraint	a constrained type parameter (`T extends ...`) is not supported yet
+reject_generic_declare_class	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_generic_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
+reject_generic_interface_extends	expected `{`, found `extends`
+reject_generic_method	a type annotation is required
+reject_iface_extends	expected `{`, found `extends`
+reject_iface_index_signature	an interface holds only annotated fields
+reject_iface_member_unsupported	an interface holds only annotated fields
+reject_import_template_specifier	a module specifier must be a string literal
+reject_import_type_only	expected `{`, found `IDENT`
+reject_in_operator	expected `;`, found `IDENT`
+reject_instanceof	expected `;`, found `IDENT`
+reject_labeled_statement	expected `;`, found `:`
+reject_loose_equality	expected `;`, found `==`
+reject_loose_inequality	expected `;`, found `!=`
+reject_missing_return_type	a return type annotation is required
+reject_multi_decl	a type annotation is required
+reject_multi_forbidden	expected `;`, found `IDENT`
+reject_namespace	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_namespace_import	expected `{`, found `*`
+reject_nullish	expected `;`, found `??`
+reject_object_spread	an object literal key must be a plain identifier
+reject_op_exponent	expected `;`, found `**`
+reject_optional_chain	expected `;`, found `?.`
+reject_param_default	expected `)`, found `=`
+reject_param_destructured	expected a name, found `{`
+reject_param_rest	expected a name, found `...`
+reject_regex	expected an expression, found `/`
+reject_satisfies	expected `;`, found `IDENT`
+reject_side_effect_import	expected `{`, found `STRING`
+reject_top_level_stmt	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+reject_try_catch	expected `;`, found `{`
+reject_type_alias_generic	expected `=`, found `<`
+reject_type_keyof	expected `)`, found `IDENT`
+reject_typeof_operator	expected `;`, found `IDENT`
+reject_var_in_for	expected `;`, found `IDENT`
+reject_var_keyword	expected `;`, found `IDENT`
+reject_void_expression	expected `;`, found `NUMBER`
+reject_with_statement	expected `;`, found `{`
+reject_yield	expected `;`, found `NUMBER`
