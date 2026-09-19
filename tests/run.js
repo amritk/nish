@@ -7454,12 +7454,21 @@ if (!only || "ddc-tag".includes(only) || "wp19".includes(only)) {
   // A workflow_dispatch aimed at a branch: `targets` refuses it first, and this refuses to
   // stamp a branch name into a permanent tag if it ever gets here. Nothing is asked of git
   // at all, because the name is wrong before any state is.
-  const branch = ddcTag(["main"]);
-  check(
-    "ddc tag: a branch name where a version belongs is refused before git is asked anything",
-    branch.status === 1 && branch.stdout.includes("::error::") && branch.git.length === 0,
-    `exit ${branch.status}\n${branch.git.join("\n")}\n${branch.stdout}${branch.stderr}`
-  );
+  //
+  // Both spellings, because the interesting one is the second. `main` is refused by any
+  // check at all; `123-fix-bug` is an ordinary issue-numbered branch, it starts with a
+  // digit, and it is what says this grammar is a version shape rather than "not obviously
+  // a word". A branch named `123` is accepted and has to be: that is a dotted integer, and
+  // this check is deliberately looser than `.github/seed-due.sh` so that it can never
+  // refuse a version that one released.
+  for (const name of ["main", "123-fix-bug"]) {
+    const branch = ddcTag([name]);
+    check(
+      `ddc tag: \`${name}\` where a version belongs is refused before git is asked anything`,
+      branch.status === 1 && branch.stdout.includes("::error::") && branch.git.length === 0,
+      `exit ${branch.status}\n${branch.git.join("\n")}\n${branch.stdout}${branch.stderr}`
+    );
+  }
 
   const noArgs = ddcTag([]);
   check(

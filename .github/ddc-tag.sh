@@ -103,16 +103,17 @@ if [ $# -ne 1 ] || [ -z "$1" ]; then
 fi
 version="${1#v}"
 
-# Whether the version can NAME a tag, and nothing more. Which versions are
-# releasable is `.github/seed-due.sh`'s question -- it takes dotted integers and
-# stops the run on anything else -- and the `targets` job has already asked it
-# before this job exists. A second, stricter grammar here would be a second
-# version scheme that can refuse a release the first one allowed, at the one step
-# whose refusal costs a publish; so a prerelease is tagged rather than argued
-# with, and the day `seed-due.sh` learns a new scheme this does not have to be
-# taught it too. What is refused is what is not a version at all: a branch name,
-# which is what GITHUB_REF_NAME holds when the workflow is dispatched at one.
-if ! printf '%s' "$version" | grep -Eq '^[0-9][0-9A-Za-z.+-]*$'; then
+# Dotted integers, with at most one `-suffix` and one `+build` after them. Which
+# versions are RELEASABLE is `.github/seed-due.sh`'s question -- it takes dotted
+# integers and stops the run on anything else -- and the `targets` job has
+# already asked it before this job exists. So this is deliberately the looser of
+# the two and cannot refuse a release that one allowed: every version
+# `seed-due.sh` accepts is matched here, plus the prerelease spellings it would
+# have to learn first. What that leaves it able to refuse is a name that is not a
+# version at all, which is what GITHUB_REF_NAME holds when the workflow is
+# dispatched at a branch -- `main`, and `123-fix-bug` too, because the suffix is
+# one group and an issue-numbered branch needs two.
+if ! printf '%s' "$version" | grep -Eq '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?(\+[0-9A-Za-z.]+)?$'; then
   echo "::error::.github/ddc-tag.sh was handed '$1', which is not a version a tag can be named after. This runs on a v* tag and takes GITHUB_REF_NAME without its leading v; a branch name reaching it means the workflow was dispatched at a branch. No ddc tag is cut."
   exit 1
 fi
