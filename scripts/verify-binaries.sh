@@ -19,40 +19,76 @@
 # and that is the strongest form of "stage2 reproduces itself": it is asserted
 # there and nothing here relaxes it.
 #
-# On Mach-O they do not, and that is measured rather than expected: on
+# On Mach-O they did not, and that was measured rather than expected: on
 # macos-latest (2026-09-13, WP19 R2) stage3 and stage2 differed at identical
 # size -- 597,048 bytes both -- while every IR equality in bootstrap.sh passed.
-# Same size, differing bytes: something small and fixed-width is not
-# reproducible, and it is the linker's rather than the compiler's.
+# Same size, differing bytes: something small and fixed-width was not
+# reproducible, and it was the linker's rather than the compiler's.
 #
-# WHAT THAT SOMETHING IS HAS NOT BEEN MEASURED, and an earlier version of this
-# header said it had. It claimed ld64's debug map -- the table naming each .o
-# by path and mtime -- and that claim is wrong for the binaries this script is
-# actually handed:
+# WHAT THAT SOMETHING WAS is now measured, and an earlier version of this
+# header first claimed it wrongly and then said, correctly, that nobody had run
+# it on a mac. Somebody has: a throwaway workflow ran release.yml's `binaries`
+# steps on both darwin rows on 2026-09-19 and attributed every differing byte
+# to the load command, section or linkedit blob it falls inside.
 #
-#   * `scripts/bootstrap.sh` defaults to `--profile speed` and never passes
-#     `-g`, so there is no DWARF in the .o files and ld64 emits no debug map to
-#     begin with.
-#   * `scripts/build.sh`'s Darwin branch links the speed and size profiles with
-#     `-Wl,-x`, so any local-symbol table is gone at link time, before this
-#     script sees the file.
+#   x86_64-darwin    649,808 bytes both, 16 differing, all at 0x468..0x478:
+#   (macos-15-intel) LC_UUID's sixteen bytes of UUID, and nothing else in the
+#                    file. `otool -l` diffed to the one `uuid` line.
 #
-# So stripping debug information off these two is a no-op or close to it, and a
-# comparison that leans on it explains nothing. The leading candidate for what
-# does differ is **LC_UUID**: ld64 writes one by default, it is a fixed-width
-# content hash in a load command, no strip removes or recomputes it -- that is
-# deliberate, so a dSYM keeps matching its binary -- and it fits the
-# measurement exactly, being small, fixed-width, and present in a binary with
-# no symbols and no debug info.
+#   aarch64-darwin   646,696 bytes both, 48 differing: the same sixteen at
+#   (macos-latest)   0x468, plus 33 in the LC_CODE_SIGNATURE blob at 0x9ca81 --
+#                    one SHA-256 code-directory slot. ld64 ad-hoc signs arm64
+#                    (`codesign -dvvv`: adhoc,linker-signed) and that slot is
+#                    the page hash of the page LC_UUID sits on, so the
+#                    signature is the consequence and the UUID the cause. The
+#                    Intel row, which ld64 does not sign at all, is the control
+#                    for that claim.
 #
-# That is a candidate and not a finding. Nobody has run this on a mac. If it
-# turns out to be right the remedy is one of two one-liners, and both belong in
-# the commit that measures it rather than in this one: link with
-# `-Wl,-no_uuid`, which makes the byte comparison hold outright, or mask the
-# LC_UUID load command here before comparing.
+# So LC_UUID it was, as this header had guessed. The remedy it proposed was
+# wrong, and that is measured too: `-Wl,-no_uuid` does make the two files
+# identical, and dyld on arm64 then refuses to load either of them -- `missing
+# LC_UUID load command`, then SIGABRT -- so the stage links and will not start.
+# An unloadable compiler is worse than any reproducibility, and ELF's
+# `--build-id=none` has no Mach-O twin.
 #
-# WHAT IS ASSERTED ON DARWIN, then, is narrower than raw bytes and wider than
-# nothing:
+# WHAT SETTLED IT was one more measurement. Three links of one input by one
+# compiler, on both rows -- twice to the same output path, once to a different
+# one -- and what came back is that the UUID is STABLE ACROSS TWO LINKS TO ONE
+# PATH and DIFFERS ON A LINK TO ANOTHER, with nothing else in the file moving.
+# It is not a hash of the output's own content, then, which is what ld64
+# classic did and what would have made any two links of one input agree.
+#
+# The output path is the leading explanation and it is not the only one the
+# probe leaves standing. The two same-path links were invocations 1 and 2 and
+# the differing-path link was invocation 3, and the probe never went back to
+# the first path -- so path-identity and invocation-order are confounded, and
+# anything that had changed by the third link (a coarse clock tick, a
+# per-session counter, an intermediate name derived from the path rather than
+# equal to it) fits the same numbers. A fourth link back to the first path,
+# expected to reproduce the FIRST UUID, is the one line that would tell them
+# apart, and it was not run.
+#
+# The remedy holds either way, which is why this is left as it is rather than
+# guessed at: run 4 measured it end to end, with a real `bootstrap.sh --verify`
+# on both darwin rows, and got byte-identical stages. Whatever LC_UUID is a
+# function of, two stages linked at one path agree.
+#
+# That makes the failure the harness's rather than the toolchain's:
+# `scripts/bootstrap.sh` linked stage2 at `$work/stage2` and stage3 at
+# `$work/stage3`, so two compilers that agreed about every other byte were
+# guaranteed two different UUIDs. It links both at `$work/stage` now and moves
+# each into place afterwards, and both darwin rows reach the `cmp -s` above and
+# stop at it. Nothing below was relaxed to get there.
+#
+# The debug map, which an even earlier version of this header named, was never
+# it: bootstrap.sh defaults to `--profile speed` and never passes `-g`, so
+# there is no DWARF in the .o files for ld64 to build a map from, and build.sh
+# already dropped the local symbols at the link.
+#
+# WHAT IS ASSERTED ON DARWIN is therefore a net under a byte comparison that
+# now holds, rather than the arm that decides a darwin row. It costs nothing
+# while the two files are identical, and it is narrower than raw bytes and
+# wider than nothing when some future toolchain starts varying something else:
 #
 #   * the two files are the same SIZE. The measurement above is that they were,
 #     exactly, while differing -- so a difference in generated code, which is
@@ -60,15 +96,16 @@
 #     past it. This is the assertion doing the work.
 #   * they are identical once debug information is stripped, where a tool on
 #     PATH can strip it. At `--profile speed` that is expected to remove
-#     nothing, per the two bullets above; it is kept because it costs nothing
-#     and because `--profile debug` does put DWARF in the .o files.
+#     nothing, per the debug-map paragraph above; it is kept because it costs
+#     nothing and because `--profile debug` does put DWARF in the .o files.
 #
 # A pair that is the same size and still differs after that is reported as
 # **unattributed** and fails. It fails because the alternative is a blanket
 # exemption that would accept a stage3 that is a different compiler, which is
 # the one thing this comparison is for; and it says "unattributed" rather than
-# "the code differs" because on the evidence above it is at least as likely to
-# be LC_UUID. The message carries the next step.
+# "the code differs" because the one thing ld64 was measured to vary is already
+# accounted for by the shared link path, so what is left is unknown rather than
+# damning. The message carries the next step.
 #
 # WHAT THE TESTS PROVE. `tests/run.js` reaches every branch here, and for the
 # Darwin branches it does so two ways: with ELF pairs, which establish the
@@ -76,7 +113,10 @@
 # what format the files are -- and with a fabricated minimal Mach-O pair
 # differing only in LC_UUID, which is the real format and the real field. That
 # second one is what says the unattributed arm is reachable with a benign pair,
-# and it is asserted as a known limitation rather than as a pass.
+# and it is asserted as a known limitation rather than as a pass. It stays a
+# limitation of this script, and it has stopped describing what a bootstrap
+# produces: the stages still carry an LC_UUID each, and bootstrap.sh links them
+# at one path, so the two agree and there is no such pair to forgive.
 set -euo pipefail
 
 if [ $# -ne 2 ]; then
@@ -161,10 +201,13 @@ fi
   echo "bootstrap:"
   echo "bootstrap: This difference is UNATTRIBUTED. It is a failure rather than a warning,"
   echo "bootstrap: because the alternative accepts a stage3 that is a different compiler."
-  echo "bootstrap: But it may well be benign: the leading candidate is LC_UUID, the"
-  echo "bootstrap: content hash ld64 writes by default and no strip removes. To find out,"
-  echo "bootstrap: compare these two with \`otool -l\` and look at the LC_UUID commands."
-  echo "bootstrap: If that is all that differs, link with -Wl,-no_uuid or mask the load"
-  echo "bootstrap: command here, and record the measurement (docs/wp10-ci.md#ci-matrix)."
+  echo "bootstrap: The one thing ld64 was measured to vary here is LC_UUID -- and on arm64"
+  echo "bootstrap: the code-directory slot that hashes the page it sits on. It was stable"
+  echo "bootstrap: across two links to one path, which is why scripts/bootstrap.sh links"
+  echo "bootstrap: every comparable stage at one path, and that was measured to hold end to"
+  echo "bootstrap: end. So either these two were not built that way, which \`otool -l\` will"
+  echo "bootstrap: show by disagreeing about the uuid, or ld64 is varying something new."
+  echo "bootstrap: Attribute the differing bytes before changing anything, the way the"
+  echo "bootstrap: first measurement was made (docs/wp10-ci.md#ci-matrix)."
 } >&2
 exit 1

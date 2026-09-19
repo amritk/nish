@@ -29,14 +29,14 @@ That is new information rather than a guess, and it replaces the cost argument
 that used to stand here: `npm test` on `macos-latest` reported **five failures in
 four families**, none of them a compiler bug and all of them checks that encode
 an ELF/Linux assumption. Three of the five are untouched; the `stage3 ==
-stage2` family is **narrowed** below, and it was the one that reached past this
+stage2` family is **settled** below, and it was the one that reached past this
 job.
 
 | | What fails | Why |
 | --- | --- | --- |
 | 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
-| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Narrowed, not fixed** — and which bytes ld64 varies is still unmeasured; see below |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Which bytes: settled** — `LC_UUID`, stable across two links to one output path and differing on a link to another, so two stages built at two paths could not agree. **What it varies with: not settled** — the output path is the leading explanation, not a finding. **The remedy: measured** — `scripts/bootstrap.sh` links them at one path now and both darwin rows come out byte-identical. `tests/self/bootstrap.js`, the other half of this family, still links at two — see below |
 
 The `stage3 == stage2` family reached further than this job:
 `scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
@@ -44,50 +44,146 @@ release workflow and a **darwin binary**
 ([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)) as well
 as between G3 and a macOS `bootstrap` row.
 
-That one is **narrowed, and still open.** The comparison moved into
+That one is **settled, by running it.** The comparison had moved into
 `scripts/verify-binaries.sh`, where on Darwin it asserts the size, strips what
 a tool on `PATH` can strip, and fails anything left over as *unattributed*
-rather than as a compiler difference.
+rather than as a compiler difference. That narrowing was an improvement on two
+counts and a settlement on neither: it no longer accepted any difference at
+all, which a blanket exemption would, and it no longer **misreported** a benign
+difference as a broken fixed point, which the first version of it did — but it
+could not let a real darwin bootstrap through, because *which* bytes ld64
+varied had never been measured. Nobody had run it on a mac.
 
-The narrowing is an improvement on two counts and a settlement on neither. It
-no longer accepts any difference at all, which a blanket exemption would, and
-it no longer **misreports** a benign difference as a broken fixed point, which
-the first version of it did. What it does not do is let a real darwin
-bootstrap through, because *which* bytes differ has not been measured:
+#### What ld64 varies, measured
 
-- An earlier version of this section, and of the script, said the difference
-  was ld64's debug map — the table naming each `.o` by path and mtime. That is
-  wrong for the binaries being compared. `scripts/bootstrap.sh` defaults to
-  `--profile speed` and never passes `-g`, so there is no DWARF in the `.o`
-  files and no debug map is emitted; and `scripts/build.sh` links the speed and
-  size profiles on Darwin with `-Wl,-x`, so the local-symbol table is gone at
-  link time anyway. Stripping debug information off those two removes nothing.
-- The leading candidate is **`LC_UUID`**: ld64 writes one by default, it is a
-  fixed-width content hash in a load command, and no `strip` removes or
-  recomputes it — deliberately, so a dSYM keeps matching its binary. It fits
-  the measurement, which is a small fixed-width difference at identical size in
-  a binary with no symbols and no debug info. Measured on Linux against a
-  fabricated minimal Mach-O pair: `llvm-objcopy --strip-debug` leaves an
-  LC_UUID-only difference in place, and GNU `strip` will not read Mach-O at
-  all.
-- If that is what it is, the remedy is one line — link with `-Wl,-no_uuid`, or
-  mask the load command before comparing — and it belongs in the commit that
-  measures it.
+Somebody has now. A throwaway workflow ran `release.yml`'s `binaries` steps on
+both darwin rows on 2026-09-19, built three stages at `--profile speed` without
+`--verify` so the comparison could not stop the job before it had said
+anything, and attributed every differing byte to the load command, section or
+linkedit blob it falls inside.
 
-So the darwin pair's `attachedSince` in `.github/seed-targets.json` is held
-past the next release rather than this being called done, and `tests/run.js`
-pins the LC_UUID case as a **known limitation** rather than as a pass.
-`NISH_UNAME_S` lets it drive both platforms' branches from one machine, which
-establishes the script's control flow everywhere and the Mach-O behaviour only
-for that one fabricated pair.
+| Row | Runner | Size, both | Differing | Where |
+| --- | --- | --- | --- | --- |
+| `x86_64-darwin` | `macos-15-intel` | 649,808 | 16 bytes | `0x468`–`0x478`: `LC_UUID`'s sixteen bytes of UUID, and nothing else in the file |
+| `aarch64-darwin` | `macos-latest` | 646,696 | 48 bytes | the same sixteen at `0x468`, plus 33 in the `LC_CODE_SIGNATURE` blob at `0x9ca81` — one SHA-256 code-directory slot |
+
+`otool -l` diffed to the one `uuid` line on both rows. The arm64 row's extra 33
+bytes are the signature and not a second cause: ld64 ad-hoc signs arm64
+(`codesign -dvvv` reports `adhoc,linker-signed`) and that slot is the page hash
+of the page `LC_UUID` sits on. The Intel row is the control for that claim —
+ld64 does not sign there at all, and there the UUID is the whole of the
+difference.
+
+The debug map, which an even earlier version of this section named, was never
+it: `scripts/bootstrap.sh` defaults to `--profile speed` and never passes `-g`,
+so there is no DWARF in the `.o` files for ld64 to build a map from, and
+`build.sh` had already dropped the local symbols at the link.
+
+#### The candidate was right and its remedy is not available
+
+`-Wl,-no_uuid` was the one-liner this section proposed, and it was tried on the
+next run. It does what it says: with it both darwin rows link at the size they
+linked at before and the binaries are byte-identical, and on `macos-15-intel`
+the whole row went **green** — bootstrap, tarball, smoke test and all. On
+`macos-latest` the row died one step further on, in the loader:
+
+```
+dyld[20816]: missing LC_UUID load command in .../selfhost/stage1
+Abort trap: 6
+```
+
+**dyld on arm64 refuses an image that has no `LC_UUID`.** stage1 linked at
+646,696 bytes and aborted the moment `bootstrap.sh` ran it to build stage2, so
+the flag turns a reproducible compiler into one that does not start. ELF has no
+loader that insists on a build id, which is why `--build-id=none` has always
+been free on that side and this is not its Mach-O twin. So the flag is not in
+`build.sh`; the Darwin branch links with `-Wl,-x` and keeps the UUID.
+
+#### What the UUID varies with, and why the remedy holds either way
+
+Ruling the flag out left the question that mattered: ld64 classic hashed the
+output's own *content*, which would have made two links of one input agree, and
+these did not. So the hash is over something else, and which something decides
+whether the fixed point can be reached at all. Three links of one input by one
+compiler, twice to the same output path and once to a different one, on both
+rows:
+
+| Link | Output path | `x86_64-darwin` | `aarch64-darwin` |
+| --- | --- | --- | --- |
+| 1 | `…/one` | UUID `1474A511…` | UUID `3715A948…` |
+| 2 | `…/one` | identical to link 1, same UUID | identical to link 1, same UUID |
+| 3 | `…/two` | 16 bytes differ, and the UUID with them | 51 bytes differ, and the UUID with them |
+
+The **Link** column is the part to read with the **Output path** column: the
+two that agree are also the two that ran first, which is what the next
+paragraph is about.
+
+**The UUID is stable across two links to one path, and differs on a link to
+another** — with nothing else in the file moving. So it is not a hash of the
+output's own content, which is what ld64 classic did and what would have made
+any two links of one input agree.
+
+**The output path is the leading explanation, and the probe does not rule out
+an invocation counter.** The two same-path links were invocations 1 and 2 and
+the differing-path link was invocation 3, and the probe never went back to the
+first path — so path-identity and invocation-order are confounded. Anything
+that had changed by the third link fits the same numbers: a coarse clock tick,
+a per-session counter, an intermediate name derived from the path rather than
+equal to it. A fourth link back to the first path, expected to reproduce the
+*first* UUID, is the one line that would tell them apart, and it was not run.
+
+**The remedy holds either way**, which is why this is recorded as it stands
+rather than guessed at: run 4 below measured it end to end, and whatever
+`LC_UUID` is a function of, two stages linked at one path agree.
+
+Either way the failure was the harness's rather than the toolchain's:
+`scripts/bootstrap.sh` linked stage2 at `$work/stage2` and stage3 at
+`$work/stage3`, so two compilers that agreed about every other byte got two
+different UUIDs, and the comparison could only ever call that unattributed.
+
+Both are linked at `$work/stage` now and moved into place afterwards, so there
+is nothing left for the UUID to differ about. It weakens nothing — `stage3 ==
+stage2` is still a raw `cmp` of the two files, on Mach-O as on ELF — and it
+costs one rename per stage. stage1 is left alone because nothing compares it to
+a binary: `IR(seed) == IR(stage1)` compares the `.ll` files its build wrote, and
+those are the same bytes wherever the executable landed.
+
+Both darwin rows then report what Linux has always reported:
+
+```
+IR(stage0) == IR(stage1): 61 modules identical
+IR(stage1) == IR(stage2): 61 modules identical
+stage3 == stage2: byte-identical binaries
+```
+
+**The other half of that family is not fixed, and is now a one-line job.**
+`tests/self/bootstrap.js` is a second implementation of the same chain — the
+one `npm test` runs — and it links `<work>/stage2` and `<work>/stage3`, then
+compares them with no Mach-O narrowing at all. It passes on ELF and would still
+fail on a mac, for exactly the reason measured above. It wants the same
+treatment: link both at one path and move each into place. That is what rows 4
+and 5 of the table are, one check each, and settling the cause is what makes
+the second one mechanical.
+
+The Darwin narrowing in `verify-binaries.sh` stays, as a net under a comparison
+that now holds rather than as the arm that decides a darwin row: it costs
+nothing while the two files are identical, and it is what a toolchain that
+starts varying something else would meet. `tests/run.js` still pins the LC_UUID
+case as a **known limitation** of that script — a fabricated Mach-O pair
+differing only in LC_UUID is reported unattributed rather than forgiven — and
+that is now a statement about the script rather than about what a bootstrap
+produces. `NISH_UNAME_S` lets the suite drive both platforms' branches from one
+machine.
 
 Restoring the `test` row means porting the other **three** checks in the two
 families above against hardware that has to be iterated on, which is a package
 of its own rather than a line in the matrix. The install half is already
 written and was exercised by that run: both "Install LLVM 18 + lld" steps in
 the `test` job are guarded by `runner.os`, so restoring the row is one
-uncommented line plus those three fixes — and whatever the `stage3 == stage2`
-family turns out to need.
+uncommented line plus those three fixes, plus the one-line shared-path change
+`tests/self/bootstrap.js` wants. The `stage3 == stage2` family, which that
+sentence used to end by deferring to an unmeasured question, is now that one
+known change.
 
 The two defects the row was waiting for before this are both bash 3.2,
 which macOS ships as
@@ -184,25 +280,24 @@ described as triples the compiler accepts, which it never has.
 
 G3 asks for this on **both** operating systems, and it runs on Linux alone.
 v0.2.0 attaches `x86_64-linux` and nothing else and a published release cannot
-grow an asset, so the earliest any second row could appear is the next release
-— and for **macOS** it is later than that: the darwin pair's `attachedSince` is
-0.4.0, for the reason in the second bullet below — and so is
-`aarch64-linux`, for the first.
-Two things had to land before the second platform. **One has; one is narrowed
-and still open**, which is why the macOS row is not imminent:
+grow an asset, so the earliest any second row could appear is the next release.
+The darwin pair's `attachedSince` is 0.4.0 and so is
+`aarch64-linux`, and **all three have now been exercised** on the hardware
+their rows name. Two things had to land before the second platform, and both
+have:
 
 - the darwin **seed**, which is
   [G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and
   which `release.yml` now builds — one per target, from
   `.github/seed-targets.json`.
-- the **ld64 fixed point** — the `stage3 == stage2` family in the table above.
-  `scripts/verify-binaries.sh` narrows it rather than settling it, as that
-  section explains, so a darwin `binaries` row is as likely as not to fail as
-  *unattributed* and take the release with it. `attachedSince` for the darwin
-  pair is therefore `0.4.0`, past the next release: the version moves after
-  the run that measures which bytes ld64 varies. `aarch64-linux` is `0.4.0`
-  too, but only for want of an exercising run: it is ELF, so none of the ld64
-  problem applies to it, which makes it the natural first row to attach.
+- the **ld64 fixed point** — the `stage3 == stage2` family in the table above,
+  settled by the measurement in that section and by the shared link path it led
+  to. Before it, a darwin `binaries` row was as likely as not to fail as
+  *unattributed* and take the release with it, which is why those two versions
+  were set past the release that was then next. `aarch64-linux` shared the
+  version for a different reason: it is ELF, so none of the ld64 problem ever
+  applied to it, and it waited only on an exercising run — which makes it the
+  natural first row to attach.
 
 Neither is a line in `ci.yml`: the matrix is the release's answer, so the row
 appears when the seed does, on the runner `seed-targets.json` names for it —
@@ -237,6 +332,24 @@ steps down to the smoke test, no upload — deleted once it has been green.
 Teaching `release.yml` a dry-run input would be the principled fix and is
 deliberately not part of this: it adds a path to the publishing workflow that
 has itself never run.
+
+**That is what was done, and it is what the three versions above rest on.** The
+throwaway took its matrix from `.github/seed-due.sh`'s answer inverted — every
+row this version is *not* due, which is exactly the set no release has carried
+— and ran the `binaries` steps on all three at once, with `fail-fast: false` so
+a red row would name itself:
+
+| Run | `aarch64-linux` | `aarch64-darwin` | `x86_64-darwin` |
+| --- | --- | --- | --- |
+| [1, as things stood](https://github.com/amritk/nish/actions/runs/35431909673) | **green**, through the smoke test | measured; `--verify` red as *unattributed* | measured; `--verify` red as *unattributed* |
+| [2, with `-Wl,-no_uuid`](https://github.com/amritk/nish/actions/runs/35432446491) | green | **red in dyld**: the linked stage1 will not start | **green**, byte-identical |
+| [3, the flag reverted, probing the UUID](https://github.com/amritk/nish/actions/runs/35432749109) | green | red as *unattributed*, and the probe answered | red as *unattributed*, and the probe answered |
+| [4, both stages linked at one path](https://github.com/amritk/nish/actions/runs/35433181271) | green | **green**, byte-identical | **green**, byte-identical |
+
+One thing the note could not have known: `workflow_dispatch` needs
+`actions: write`, and the token the runs were driven from has `actions: read`,
+so the API answered 403. The throwaway carried a branch-scoped `push:` trigger
+as well — same jobs, same hardware, same steps — and went away with the branch.
 
 
 ### The parity run, nightly
