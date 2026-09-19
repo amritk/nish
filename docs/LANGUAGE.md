@@ -39,6 +39,15 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
 
 - **Encoding.** Source is UTF-8. String contents are stored as UTF-8 bytes
   (`tests/cases/str_escape`).
+- **A diagnostic column counts UTF-16 code units**, 1-based, from the start of
+  the line — so `é` is one column and two bytes, and an emoji is two columns
+  and four. That is the unit an editor indexes a line by, and an editor is who
+  reads a column: it is what the summary line prints, what the caret under the
+  excerpt is placed by, what `--emit-checked` prints, and what `--json`'s
+  `column` and `endColumn` carry (`tests/cases/reject_diag_utf8`). A
+  `DILocation` column under `-g` is the other answer and counts **bytes**,
+  because a debugger reads it back against the file's bytes
+  (`tests/cases/dbg_utf8`).
 - **Numeric literals.** Decimal, hexadecimal (`0x10`), binary (`0b1`),
   octal (`0o17`), exponent (`1e3`), and separators (`1_000`) are accepted
   *(CLI only)*. A literal's type comes from its context (see

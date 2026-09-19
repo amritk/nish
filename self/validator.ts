@@ -191,7 +191,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       break;
     case N_PROPERTY:
       if (node.text === "__proto__") {
-        ctx.error(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)");
+        ctx.errorAtKey(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)");
       }
       break;
     case N_NEW:
