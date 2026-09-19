@@ -884,7 +884,14 @@ file converted when it is opened for another reason — rather than as a flag da
 The rest of the language surface has no owner either, and a review of the
 corpus for the sentence *the language has no X* turned up eight candidates
 that belong to nobody: [wp23-language-surface.md](wp23-language-surface.md) is
-the plan of record, and its most useful half is the three it **refuses**.
+the plan of record, every row of it is now answered, and its most useful half
+is what it **refuses** — three declined outright (§7 to §9), module-level
+mutable state decided *no* with a concrete revisit trigger, and compile-time
+function parameters *not scheduled* until a second real program asks. Of the
+three that were still proposals, only one is a yes — `Pair<A, B>` in `std/`,
+which WP18 G5 and G7 between them made buildable. It never reaches the M4
+freeze because it adds a *library type* and not a rule, which is also why none
+of the three is on M4's critical path.
 Non-generic `type` aliases and a numeric `enum` have both landed — both were
 pure checker work that changed no byte of IR, the alias because `Int32Array`
 already establishes that an alias is the type it names, the enum because

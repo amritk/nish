@@ -633,7 +633,7 @@ The promise as a first-class value does not.**
 | `await` on a known call site, sequentially | **yes** | the same |
 | fixed-arity `awaitAll(f(), g())` over known calls | **yes** | the same — both callees are static, so no type is named |
 | homogeneous `awaitAll(fs)` over an array of pending calls | **yes, after WP18** | futures held as data — A4 |
-| `Promise.all([a, b])` typed as a *tuple* of mixed types | **no, not in that form** | tuples plus variadic generics; wp23 §5 proposes `Pair<A, B>` as a library interface under WP18 rather than tuple syntax, and stops at two |
+| `Promise.all([a, b])` typed as a *tuple* of mixed types | **no, not in that form** | tuples plus variadic generics; wp23 §5 decides `Pair<A, B>` as a library type under WP18 rather than tuple syntax, and stops at two |
 | `p.then(x => ...)` with an inline callback | **no** | a function value, which Phase 0 forbids — and the prohibition is load-bearing, not incidental |
 | `p.then(namedFunction)` | **conceivable, speculative** | wp23 §6's compile-time function parameters, itself after WP18 and explicitly not a relaxation of function values |
 | storing a promise in a field, passing it around, attaching a handler later | **no** | the same function-value prohibition, plus futures-as-data |

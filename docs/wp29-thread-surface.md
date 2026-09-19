@@ -316,6 +316,16 @@ So the dependency is: wp23 §6 for a statically known callee, and it is a
 prerequisite for P1 rather than a nice-to-have. Nothing else on this page needs
 a language feature that does not exist.
 
+**And that prerequisite is decided *not scheduled*** ([wp23](wp23-language-surface.md)
+§6), which is the honest state of P1 rather than a reason to route around it.
+wp23 §6 asks for two real programs to want a compile-time function parameter
+before it is built, and names this section as the first of them — so P1 is not
+blocked on an argument anybody still has to win, only on a second ask. What
+must not happen in the meantime is P1 being built against the *other* kind of
+callee: WP28 §7.4 measured a callee the checker cannot name at 1.26x for the
+call and up to 8.76x for the escape proof it forfeits, and an intrinsic that
+accepted one would spend the whole margin this page exists to buy.
+
 ---
 
 ## 7. What replaces the borrow checker, and what a worker may hand back

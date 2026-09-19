@@ -1,13 +1,15 @@
 # WP23: The language surface a corpus review turned up
 
-**Proposed, not implemented, except for §2 and §3.** This note is the plan of
-record for the language additions that a review of the corpus found wanting
-and that no existing work package owns. Two of them (§2 non-generic `type`
-aliases, §3 numeric `enum`) are being built now and are marked as landing;
-everything in §4 to §6 is a proposal to be reviewed rather than a record of
-something that shipped, and §7 to §9 are the items the same review looked at
-and **declined**. Where the answer is genuinely open, §10 says so instead of
-inventing certainty.
+**Every row is answered.** This note is the plan of record for the language
+additions that a review of the corpus found wanting and that no existing work
+package owns. Two of them (§2 non-generic `type` aliases, §3 numeric `enum`)
+**landed**; §7 to §9 are the items the same review looked at and **declined**;
+and §4 to §6, which stood as proposals while they were reviewed, are decided
+now — §4 **no**, §5 **yes, as a library type**, §6 **not scheduled**. Each of
+the three keeps the section that argued it and gains a decision paragraph under
+its heading saying what was decided and what would turn it; the argument is not
+restated, because the argument is what the section already is. Where the answer
+is genuinely open, §10 says so instead of inventing certainty.
 
 [LANGUAGE.md](LANGUAGE.md) stays normative for what the language *is*. The
 rules for §2 and §3 land there as the work does, and this note does not restate
@@ -36,6 +38,12 @@ cost nothing at runtime. Ergonomics alone is not a reason, which is why §7 to
 rather than as conveniences.
 
 Exactly one item here is functional: §4. The rest are shapes.
+
+That §4 is also the one decided **no** is not the rule failing. The rule says
+an addition must close a functional gap *or* cost nothing at run time — it does
+not oblige the language to close every gap it finds, and §4.6's answer is that
+this one's whole content is a boolean a driver already parsed. A functional gap
+is what makes an addition *eligible*, not what makes it worth its cost.
 
 ---
 
@@ -188,10 +196,37 @@ has no layout to stand in for. §10 question 2 — whether an enum takes a width
 
 ---
 
-## 4. Module-level mutable state — **proposed**
+## 4. Module-level mutable state — **decided: no**
 
 This is the only item in the note that closes a *functional* gap. Everything
 else is a shape; this is a thing the compiler cannot do.
+
+**Decided: no, and §4 stays as the design for when a second use case turns
+up.** §4.6 is the argument and is not restated here. The short of it: the one
+candidate's whole content is a boolean a driver already parsed, the parameter
+version costs seven ugly signatures and no proofs, and the module-state version
+costs a new IR construct, the first writable global the compiler defines for
+user code, a symbol in the flat namespace WP21 has to fix, a thread-local
+decision taken years before WP20 lands, and a withdrawn row from WP20 §2's
+asset table. One case is not enough to add the first mutable global to a
+language whose *absence* of them is load-bearing in another package's safety
+argument.
+
+**The revisit trigger is concrete**, in the shape [wp18-generics.md](wp18-generics.md)
+§14 uses: two more places in `self/` wanting module state for a reason that is
+**not** "a CLI flag a driver already parsed" brings this back with its own
+cases. One more of the same shape does not.
+
+**The divergence §4.6 names is still open, and deciding this row did not close
+it.** `self/ice.ts`'s `internalError` prints the human report and not the
+`NL0003` object stage0 prints, so orientation rule 7 — every failure, internal
+errors included, is one `--json` object — is a stated contract that is not true
+of stage1. The comment beside it gives module state as one of its three
+reasons, and that reason is now answered: the remedy is `json` on `Options` and
+one parameter through the callers, it needs no language change, and it is owed
+whatever happens to this row. `docs/wp14-selfhost.md` §7 records the difference
+among the deliberate ones; it is the one entry there that is a to-do rather
+than a decision.
 
 ### 4.1 The evidence, traced exactly
 
@@ -413,7 +448,44 @@ true, and it needs no language change at all.
 
 ---
 
-## 5. Pairs and multiple return — **proposed**
+## 5. Pairs and multiple return — **decided: a library type, and unblocked**
+
+**Decided: `Pair<A, B>` as a library type under WP18; no tuple syntax, and no
+special case in the grammar.** §5.4 is the argument.
+
+**What changed since it was written is that the gate is open.** §5.4 said this
+costs one interface declaration "on the day WP18 is green", and read the gate
+as the whole package. It is narrower than that, and the two milestones it
+actually needed are both in: G5 gave a generic *interface* more than one type
+parameter, and G7 (wp18 §15.5) made a template exportable — which together are
+the whole of what a library type is. The four lines §5.2 designed compile and
+link today:
+
+```ts
+// the module it would live in
+export interface Pair<A, B> { first: A; second: B; }
+
+// the caller, in another module
+import { Pair } from "./pair";
+const scanEscape = (at: i32): Pair<i32, boolean> => ({ first: at + 2, second: true });
+```
+
+(compiled and run as a two-module program to check that claim rather than
+assert it; `std/` has no `pair.ts` yet, and adding one is what this row now
+asks for)
+
+and that is §5.1's strong case answered with the `Lexer` field gone: an object
+literal at the return, no constructor, and nothing on the class to write and
+read three lines apart. A `class Pair<A, B>` works too, for a caller that wants
+a constructor; the interface is the cheaper of the two and is what §5.2 asked
+for. What is still out is G6, which anything wanting to *constrain* `A` or `B`
+would need, and G8, which an exported `Pair` crossing a C boundary would.
+Neither is a prerequisite here.
+
+So the row is decided **and** buildable, and §10 question 5 — which of `std/`
+or each program — is answered there rather than left open: `std/` exists now,
+so it goes in `std/`. What remains is the construct checklist for it, which is
+a build rather than a decision.
 
 ### 5.1 The evidence, and what is not evidence
 
@@ -534,7 +606,22 @@ doing now is not adding a type constructor to the grammar in the meantime.
 
 ---
 
-## 6. Compile-time function parameters — **proposed, and speculative**
+## 6. Compile-time function parameters — **decided: not scheduled**
+
+**Decided: not scheduled.** §6.4 is the argument, and the reason to keep the
+section is negative rather than positive — so that the next person who wants
+`xs.map(f)` finds the shape that is compatible with this compiler written out
+beside the reasons the general version never will be.
+
+**The trigger now has a named first consumer, which is what makes it
+measurable.** §6.4 asks for WP18 to have landed and for a real program to have
+asked twice. [wp29-thread-surface.md](wp29-thread-surface.md) §6 is one of the
+two asks and says so plainly: every parallel form that note proposes takes a
+body, a body is a function argument, and its P1 is gated on this row and on
+nothing else on that page. WP28 §7.4 has already measured the half this row
+would build at **no run-time cost**, because the callee is statically known.
+One more ask of that shape and this comes back with a schedule; until then the
+answer to "when" is "not yet", not "never".
 
 **This does not relax function values, and nothing here should be read as
 proposing that.** `Function` is a Phase 0 error with a stated reason — "no
@@ -808,23 +895,34 @@ reviewed before more code is written.
    struct once WP15 item 7 makes struct arrays contiguous, and choosing later
    is a layout change. Choosing now on no evidence is guessing.
 
-3. **The revisit trigger for module state** (§4.6). "Two more use cases that
-   are not a CLI flag" is proposed. Is that the right trigger, or should the
-   trigger be a WP20 stage rather than a count — since restriction 4 means the
-   feature's meaning is settled by the threading model?
+3. ~~**The revisit trigger for module state** (§4.6).~~ **Answered by taking
+   the count.** §4 is decided *no* with "two more places in `self/` that are
+   not a CLI flag a driver already parsed" as the trigger, because a count is
+   falsifiable by reading the corpus and a WP20 stage is not: restriction 4
+   settles the feature's *meaning* against the threading model, which is a
+   thing to check when the trigger fires rather than the trigger itself. If
+   WP20 lands first it narrows what the answer may be, and does not change
+   what asks the question.
 
-4. **Whether `--json` parity for `NL0003` should be closed before §4 is
-   decided at all.** This note recommends yes and recommends the parameter, but
-   it is a WP19-shaped decision (a stated contract two compilers disagree
-   about) rather than a language one, and `tests/self/parity.js` is where it
-   would be pinned.
+4. ~~**Whether `--json` parity for `NL0003` should be closed before §4 is
+   decided at all.**~~ **Answered by events: no, and the two are independent.**
+   §4 is decided and the divergence is still open, which is the arrangement
+   this question was unsure was possible. It is a WP19-shaped decision (a
+   stated contract two compilers disagree about) rather than a language one,
+   the remedy needs no language change, and `tests/self/parity.js` is where it
+   would be pinned. What deciding §4 *did* settle is that waiting for module
+   state is no longer one of the reasons it is open.
 
-5. **Whether `Pair<A, B>` belongs in a standard library or in each program**
-   (§5). wp18 §6.1 refuses to make `Result` and `Array` library code and gives
-   good reasons; `Pair` has none of them — it is an ordinary two-field
-   interface — so it could simply be declared in whatever program wants it.
-   There is no standard library today and this note does not propose creating
-   one for a four-line type.
+5. ~~**Whether `Pair<A, B>` belongs in a standard library or in each
+   program** (§5).~~ **Answered, because the premise expired.** This question
+   turned on "there is no standard library today", and there is one now:
+   [`std/`](../std/README.md) holds `testing`, `text` and `json`, and a program
+   reaches them as `nish/text`. wp18 §6.1's reasons for keeping `Result` and
+   `Array` out of library code still do not apply to `Pair` — it is an ordinary
+   two-field interface with no compiler knowledge behind it — and that is now an
+   argument for `std/` rather than against it, because `std/` is exactly where
+   a type like that belongs. Declaring it per program was only ever the answer
+   while there was nowhere else to put it.
 
 6. **Whether a compile-time function parameter and a type parameter share one
    mangling segment or two** (§6). It matters only for `--emit-header`
@@ -840,11 +938,14 @@ reviewed before more code is written.
 
 ## 11. What this note does not decide
 
-- **Whether any of §4 to §6 lands before the M4 freeze.** M4 freezes the
-  language reference (MASTER_PLAN §9) and each of the three adds rules to it.
-  §4's recommendation is that it does not land at all yet; §5 and §6 are gated
-  on WP18, which is WP15 item 8, which is not before M4. The honest default is
-  the same one [wp20-threads.md](wp20-threads.md) §7 takes: 1.1 scope.
+- ~~**Whether any of §4 to §6 lands before the M4 freeze.**~~ **Answered, and
+  the answer is none of them** — which is what takes all three off M4's
+  critical path. M4 freezes the language reference (MASTER_PLAN §9), and none
+  of the three adds a rule to it: §4 is decided no, §6 is not scheduled, and §5
+  adds a *library type* rather than a rule, so `std/` gaining a `Pair` moves
+  `std/README.md` and not LANGUAGE.md. The honest default is still the one
+  [wp20-threads.md](wp20-threads.md) §7 takes — 1.1 scope — but it is now a
+  decision rather than a deferral.
 - **Anything about `self/` adopting §2 or §3.** Nish-0 excludes both by
   name and a construct enters the language before it enters `self/`
   ([`.claude/selfhost.md`](../.claude/selfhost.md), rule 1). Converting 171
