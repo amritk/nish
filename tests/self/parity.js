@@ -193,14 +193,14 @@ function firstDiagnostic(text) {
  * than declared, which is the right answer: nobody has decided those may
  * differ.
  */
-function firstJsonDiagnostic(text) {
+const firstJsonDiagnostic = (text) => {
   for (const line of text.split("\n")) {
     if (!line.startsWith("{") || !line.endsWith("}")) continue;
     const object = JSON.parse(line);
     return `${object.file}:${object.line}:${object.column}: ${object.message}`;
   }
   return "";
-}
+};
 
 /**
  * The first diagnostic of one compiler's run, off whichever stream this
@@ -208,14 +208,11 @@ function firstJsonDiagnostic(text) {
  * and an empty stderr, and every other invocation is the human summary on
  * stderr.
  */
-function firstReport(flags, result) {
-  return flags.includes("--json") ? firstJsonDiagnostic(result.stdout) : firstDiagnostic(result.stderr);
-}
+const firstReport = (flags, result) =>
+  flags.includes("--json") ? firstJsonDiagnostic(result.stdout) : firstDiagnostic(result.stderr);
 
 /** Whether a summary line is the parser's refusal rather than a named rule. */
-function isSyntaxError(line) {
-  return line.includes(": syntax error: ");
-}
+const isSyntaxError = (line) => line.includes(": syntax error: ");
 
 /**
  * stage1's parser refused the file and stage0's Phase 0 refused the same file.
@@ -228,14 +225,11 @@ function isSyntaxError(line) {
  * decision seen on two streams and a second copy of it would be a second thing
  * to keep narrow.
  */
-function refusedByTheParser(zero, one) {
-  return (
-    isSyntaxError(one) &&
-    !isSyntaxError(zero) &&
-    diagnosticFile(one) !== "" &&
-    diagnosticFile(one) === diagnosticFile(zero)
-  );
-}
+const refusedByTheParser = (zero, one) =>
+  isSyntaxError(one) &&
+  !isSyntaxError(zero) &&
+  diagnosticFile(one) !== "" &&
+  diagnosticFile(one) === diagnosticFile(zero);
 
 /** The file a diagnostic line names, or "" when it names none. */
 function diagnosticFile(line) {
