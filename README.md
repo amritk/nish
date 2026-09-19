@@ -48,7 +48,8 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-# the npm name `nish` belongs to an unrelated package; install the release tarball
+# not published yet: this compiler is `@amritk/nish`, and `nish` is an unrelated
+# package. Install the release tarball; the command it installs is `nish`.
 curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
 npm install -g ./nish-0.1.1.tgz
 ```

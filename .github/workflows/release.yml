@@ -4,7 +4,7 @@
 # CHANGELOG.md section.
 #
 # Two audiences, and as many artifacts as the release is due to carry:
-#   nish-<version>.tgz             the npm package; needs Node
+#   amritk-nish-<version>.tgz      the npm package (@amritk/nish); needs Node
 #   nish-<version>-<asset>.tar.gz  the self-hosted compiler; needs nothing
 #
 # The binaries are also the seed: ci.yml's `bootstrap` job downloads the one

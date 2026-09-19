@@ -92,17 +92,25 @@ the Ubuntu steps inside it.
 
 ## 2. Install the compiler
 
-**Not from npm yet.** `npm install -g nish` installs somebody else's package.
-The name `nish` on the public registry has belonged to `stdarg`'s "A Node.js
-Interactive shell" since February 2014 — versions 0.0.0 and 0.0.1, both
-deprecated by their author, nothing published since. Which name this compiler
-takes is an open decision; the options and what each costs are in
-[docs/wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken).
-Until it is settled, install from a release or from a checkout.
+**Not from npm yet**, though the name is now settled. `npm install -g nish`
+installs somebody else's package: `nish` on the public registry has belonged to
+`stdarg`'s "A Node.js Interactive shell" since February 2014 — versions 0.0.0
+and 0.0.1, both deprecated by their author, nothing published since. **This
+compiler is `@amritk/nish`** (decided 2026-09-19,
+[docs/wp12-release.md](wp12-release.md#the-npm-name)), and the command it
+installs is still `nish` — the package name and the command are two different
+strings, and that is the one thing the scope costs.
+
+Nothing is published under it yet: which compiler the package ships is a
+separate open decision and the installer is not built. Until then, install from
+a release or from a checkout.
 
 From a release tarball on GitHub — the same package `npm publish` would upload,
 carried by the release instead of the registry. The `Release` workflow attaches
-`nish-<version>.tgz` to the release it builds for a `v*` tag:
+the npm tarball to the release it builds for a `v*` tag. `npm pack` names it
+after `package.json#name`, so it is `amritk-nish-<version>.tgz` from 0.4.0 on
+and `nish-<version>.tgz` for the releases cut before the scope was taken — the
+example below is one of those:
 
 ```bash
 curl -LO https://github.com/amritk/nish/releases/download/v0.2.0/nish-0.2.0.tgz

@@ -1,5 +1,5 @@
 {
-  "name": "nish",
+  "name": "@amritk/nish",
   "version": "0.3.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
