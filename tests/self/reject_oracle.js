@@ -61,6 +61,9 @@ const CASES = path.join(root, "tests", "cases");
 const BACKLOG = path.join(root, "tests", "self", "reject_backlog.txt");
 const REFUSALS = path.join(root, "tests", "self", "parser_refusals.txt");
 
+/** The register, as every message about it names it. */
+const REFUSALS_FILE = path.relative(root, REFUSALS);
+
 /** `--number-mode` is the only flag `self/dump_checked.ts` takes. */
 const SUPPORTED_FLAGS = new Set(["--number-mode"]);
 
@@ -88,6 +91,150 @@ function register(file) {
   }
   return rows;
 }
+
+/**
+ * The register against the bucket, in both directions, as a function of what a
+ * run observed and of nothing else:
+ *
+ *   - `bucket` is `{ name, where, sentence }` per case stage1's parser refused;
+ *   - `unproven` is the registered names this run could not ask, because the
+ *     case was skipped. Unproven is not stale, and keeping the two apart is
+ *     the whole reason this is a set rather than an absence;
+ *   - `registered` is the register as read, and is **consumed**: what is left
+ *     after the bucket is walked is exactly the lines nothing matched;
+ *   - `present` is the case names this corpus has, so that a file named on the
+ *     command line and not in it is held to nothing;
+ *   - `whole` is whether every case ran. The second direction is a question
+ *     only a whole run may ask: with a handful of cases named on the command
+ *     line, "nothing refuses this" would be a fact about the filter rather
+ *     than about the parser, which is why `--require-coverage` is asked of one
+ *     of `tests/diagnostic_coverage.js`'s two runs and not the other.
+ *
+ * It takes its inputs rather than reading them so that `selfCheck` can watch
+ * each of its four failures happen, on every run. A gate nobody has seen fail
+ * is a wish, which is the argument the register itself makes.
+ */
+const auditRegister = ({ bucket, unproven, registered, present, whole }) => {
+  const failed = [];
+  for (const { name, where, sentence } of bucket) {
+    const pinned = registered.get(name);
+    registered.delete(name);
+    if (pinned === undefined) {
+      if (present.has(name)) {
+        failed.push(
+          `${where}: refused by stage1's parser and not in ${REFUSALS_FILE} — ` +
+            `add the line: ${name}\t${sentence}`
+        );
+      }
+    } else if (pinned !== sentence) {
+      failed.push(
+        `${where}: ${REFUSALS_FILE} pins ${JSON.stringify(pinned)}, got ${JSON.stringify(sentence)}`
+      );
+    }
+  }
+  if (!whole) return failed;
+  // The direction the register is *for*: its purpose is to shrink, so a line
+  // the walk above did not match is a claim about nothing.
+  for (const name of registered.keys()) {
+    if (unproven.has(name)) {
+      failed.push(
+        `${name}: skipped by this run, so nothing here proves it — remove it ` +
+          `from ${REFUSALS_FILE}, or the flag in its \`.args\` that skipped it`
+      );
+      continue;
+    }
+    const why = present.has(name)
+      ? "stage1's parser does not refuse it any more"
+      : "names no case in this corpus";
+    failed.push(`${name}: ${why} — remove it from ${REFUSALS_FILE}`);
+  }
+  return failed;
+};
+
+/**
+ * `auditRegister`'s four failures, watched happening, before a compiler is
+ * built and in about a millisecond.
+ *
+ * The corpus cannot do this. A green run is one where every one of those
+ * failures is unreached, so deleting the `registered.delete(name)` above — or
+ * any other branch of it — would change nothing about `npm test`, and the
+ * register would go back to being a file nothing compares. That is the defect
+ * the register exists to close, one level up, and it would be a strange file
+ * to add without answering it here.
+ */
+const selfCheck = () => {
+  const present = new Set(["reject_here", "reject_gone", "reject_flagged"]);
+  const one = (name, sentence, where = `tests/cases/${name}.ts`) => [{ name, where, sentence }];
+  const audit = (over) =>
+    auditRegister({
+      bucket: [],
+      unproven: new Set(),
+      registered: new Map(),
+      present,
+      whole: true,
+      ...over,
+    });
+  const pinned = () => new Map([["reject_here", "found `??`"]]);
+  const cases = [
+    [
+      "a registered case refused with its sentence says nothing",
+      audit({ bucket: one("reject_here", "found `??`"), registered: pinned() }),
+      [],
+    ],
+    [
+      "a case in the bucket and not in the register",
+      audit({ bucket: one("reject_here", "found `??`") }),
+      ["reject_here", "not in", "add the line"],
+    ],
+    [
+      "a sentence that is not the one pinned",
+      audit({ bucket: one("reject_here", "found `?.`"), registered: pinned() }),
+      ["reject_here", "pins"],
+    ],
+    [
+      "a case the parser has stopped refusing",
+      audit({ registered: new Map([["reject_gone", "found `??`"]]) }),
+      ["reject_gone", "does not refuse it any more"],
+    ],
+    [
+      "a line naming no case in this corpus",
+      audit({ registered: new Map([["reject_absent", "found `??`"]]) }),
+      ["reject_absent", "names no case"],
+    ],
+    [
+      "a registered case this run skipped is unproven, not stale",
+      audit({
+        registered: new Map([["reject_flagged", "found `??`"]]),
+        unproven: new Set(["reject_flagged"]),
+      }),
+      ["reject_flagged", "skipped by this run"],
+    ],
+    [
+      "a file named on the command line that this corpus has not",
+      audit({ bucket: one("/tmp/scratch.ts", "found `??`", "/tmp/scratch.ts") }),
+      [],
+    ],
+    [
+      "a filtered run does not ask what only a whole run may",
+      audit({ registered: new Map([["reject_gone", "found `??`"]]), whole: false }),
+      [],
+    ],
+  ];
+  const failed = [];
+  for (const [what, got, wanted] of cases) {
+    if (wanted.length === 0) {
+      if (got.length > 0) failed.push(`self-check: ${what} — reported ${JSON.stringify(got[0])}`);
+    } else if (got.length !== 1) {
+      failed.push(`self-check: ${what} — wanted one failure, got ${got.length}`);
+    } else {
+      const missing = wanted.find((fragment) => !got[0].includes(fragment));
+      if (missing !== undefined) {
+        failed.push(`self-check: ${what} — wanted ${JSON.stringify(missing)} in ${JSON.stringify(got[0])}`);
+      }
+    }
+  }
+  return { failed, count: cases.length };
+};
 
 /** The flags this case is compiled with, split into what stage1 takes and what it does not. */
 function argsFor(file) {
@@ -196,6 +343,13 @@ function build(seed) {
 function main(argv) {
   const verbose = argv.includes("--verbose");
   const named = withoutSeed(argv).filter((a) => !a.startsWith("--"));
+  // Before anything is built, because a broken gate should cost a millisecond
+  // to find rather than the two minutes the corpus takes.
+  const selfChecked = selfCheck();
+  if (selfChecked.failed.length > 0) {
+    for (const f of selfChecked.failed) process.stdout.write(`  FAIL ${f}\n`);
+    return 1;
+  }
   const seed = seedForOracle(argv);
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
@@ -209,26 +363,17 @@ function main(argv) {
       ? // Deduplicated, so that naming a case twice does not compile it twice
         // and does not ask the register for two lines about it.
         [...new Set(named.map((f) => path.resolve(f)))].map(
-          (f) =>
-            all.find((e) => e.file === f) ?? {
-              name: f,
-              file: f,
-              linked: false,
-              fragments: [],
-              // Not a case in this corpus, so the register does not cover it.
-              foreign: true,
-            }
+          (f) => all.find((e) => e.file === f) ?? { name: f, file: f, linked: false, fragments: [] }
         )
       : all;
   const known = register(BACKLOG);
-  const refusals = register(REFUSALS);
-  const refusalsFile = path.relative(root, REFUSALS);
   let agreed = 0;
   let checked = 0;
   const parser = [];
+  const bucket = [];
   const skipped = [];
   // Registered cases this run could not ask the question of, so that a skip is
-  // never reported below as the parser having changed its mind.
+  // never audited as the parser having changed its mind.
   const unproven = new Set();
   const failed = [];
   const pending = [];
@@ -237,20 +382,7 @@ function main(argv) {
     const where = path.relative(root, entry.file);
     if (result.parser !== undefined) {
       parser.push(`${where}: ${result.parser}`);
-      const pinned = refusals.get(entry.name);
-      refusals.delete(entry.name);
-      if (pinned === undefined) {
-        if (entry.foreign !== true) {
-          failed.push(
-            `${where}: refused by stage1's parser and not in ${refusalsFile} — ` +
-              `add the line: ${entry.name}\t${result.parser}`
-          );
-        }
-      } else if (pinned !== result.parser) {
-        failed.push(
-          `${where}: ${refusalsFile} pins ${JSON.stringify(pinned)}, got ${JSON.stringify(result.parser)}`
-        );
-      }
+      bucket.push({ name: entry.name, where, sentence: result.parser });
     } else if (result.skipped !== undefined) {
       skipped.push(`${where}: ${result.skipped}`);
       unproven.add(entry.name);
@@ -264,27 +396,15 @@ function main(argv) {
       checked += result.fragments;
     }
   }
-  // The other direction, and the one the register is *for*: its purpose is to
-  // shrink, so an entry the parser has stopped refusing is a claim about
-  // nothing. The loop above deleted every entry it matched, so what is left in
-  // `refusals` is exactly that. Only a whole run may ask it — with a few cases
-  // named on the command line, "nothing refuses this" would be a fact about
-  // the filter rather than about the parser.
-  if (named.length === 0) {
-    for (const name of refusals.keys()) {
-      if (unproven.has(name)) {
-        failed.push(
-          `${name}: skipped by this run, so nothing here proves it — remove it ` +
-            `from ${refusalsFile}, or the flag in its \`.args\` that skipped it`
-        );
-        continue;
-      }
-      const why = all.some((entry) => entry.name === name)
-        ? "stage1's parser does not refuse it any more"
-        : "names no case in this corpus";
-      failed.push(`${name}: ${why} — remove it from ${refusalsFile}`);
-    }
-  }
+  failed.push(
+    ...auditRegister({
+      bucket,
+      unproven,
+      registered: register(REFUSALS),
+      present: new Set(all.map((entry) => entry.name)),
+      whole: named.length === 0,
+    })
+  );
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
   if (verbose) {
     for (const p of pending) process.stdout.write(`  backlog ${p}\n`);
@@ -295,7 +415,8 @@ function main(argv) {
   const note = pending.length > 0 ? `, ${pending.length} in the backlog` : "";
   process.stdout.write(
     `${agreed}/${compared} cases rejected with the expected message (${checked} fragments), ` +
-      `${parser.length} refused by the parser instead, ${skipped.length} skipped${note}, ` +
+      `${parser.length} refused by the parser instead (register self-check ` +
+      `${selfChecked.count}/${selfChecked.count}), ${skipped.length} skipped${note}, ` +
       `seed ${seed.label}\n`
   );
   return failed.length === 0 ? 0 : 1;
