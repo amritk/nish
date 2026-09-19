@@ -2072,6 +2072,20 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         body !== "" && preheader !== "" && !preheader.includes("getelementptr inbounds %struct.Holder"),
         body
       );
+      if (fn === "declaredInside") {
+        // The positive half, and the half that makes this case discriminating.
+        // Without it a regression to "hoist nothing in this loop at all" would
+        // leave the preheader even freer of `%struct.Holder` and the check
+        // above would still pass. `hs` is a parameter, it is indexed in the
+        // loop, and it *is* lifted — under `--plain`, which turns this pass
+        // off, this entry block holds no `getelementptr` at all and `hs`'s
+        // header GEP appears twice inside the loop body instead.
+        check(
+          "arr_header_hoist: @declaredInside still hoists `hs`, so the refusal is per path and not per loop",
+          preheader.includes("getelementptr inbounds %struct.nish_array, %struct.nish_array* %hs"),
+          body
+        );
+      }
     }
     // The other half of the fact: a loop that grows the array it reads may not
     // be hoisted at all, because `push` is what moves `len`, `cap` and `data`.
