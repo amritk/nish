@@ -36,7 +36,7 @@ job.
 | --- | --- | --- |
 | 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
 | 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
-| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Settled**: it was `LC_UUID`, which ld64 derives from the *output path*, so the two stages were built at two paths and could not agree; `scripts/bootstrap.sh` links them at one path now. See below |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Cause settled**: it is `LC_UUID`, which ld64 derives from the *output path*, so two stages built at two paths could not agree. `scripts/bootstrap.sh` links them at one path now; `tests/self/bootstrap.js`, the other half of this family, still does not — see below |
 
 The `stage3 == stage2` family reached further than this job:
 `scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
@@ -135,6 +135,15 @@ IR(stage1) == IR(stage2): 61 modules identical
 stage3 == stage2: byte-identical binaries
 ```
 
+**The other half of that family is not fixed, and is now a one-line job.**
+`tests/self/bootstrap.js` is a second implementation of the same chain — the
+one `npm test` runs — and it links `<work>/stage2` and `<work>/stage3`, then
+compares them with no Mach-O narrowing at all. It passes on ELF and would still
+fail on a mac, for exactly the reason measured above. It wants the same
+treatment: link both at one path and move each into place. That is what rows 4
+and 5 of the table are, one check each, and settling the cause is what makes
+the second one mechanical.
+
 The Darwin narrowing in `verify-binaries.sh` stays, as a net under a comparison
 that now holds rather than as the arm that decides a darwin row: it costs
 nothing while the two files are identical, and it is what a toolchain that
@@ -150,8 +159,10 @@ families above against hardware that has to be iterated on, which is a package
 of its own rather than a line in the matrix. The install half is already
 written and was exercised by that run: both "Install LLVM 18 + lld" steps in
 the `test` job are guarded by `runner.os`, so restoring the row is one
-uncommented line plus those three fixes. The `stage3 == stage2` family, which
-that sentence used to end by deferring to, needs nothing further.
+uncommented line plus those three fixes, plus the one-line shared-path change
+`tests/self/bootstrap.js` wants. The `stage3 == stage2` family, which that
+sentence used to end by deferring to an unmeasured question, is now that one
+known change.
 
 The two defects the row was waiting for before this are both bash 3.2,
 which macOS ships as
