@@ -52,6 +52,18 @@ drives the script's platform mapping against every row of
 `.github/seed-targets.json` rather than letting it hold a second copy of the
 asset names.
 
+Upgrading through that channel is running the script again — there is no
+`nish upgrade`, and there is a reason beyond nobody having written one. The
+compiler has no networking: `runtime/` has no sockets and no TLS, and it is
+under a `.text` budget this document's neighbours defend, so a compiler that
+downloaded its own replacement would have to grow one or shell out. The CLI
+also has no subcommand grammar — `main(argv)` reads a non-flag argument as an
+input file, so `nish upgrade` today asks for a file called `upgrade` — and it
+would have to answer for the npm channel too, where writing into
+`node_modules` is npm's business and gets undone by the next `npm ci`. So
+upgrading belongs to whatever installed the compiler, which is `npm update -g`
+on one side and this script on the other.
+
 The `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
 unrelated directory with the installed `nish` — which, with no platform package

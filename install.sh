@@ -11,19 +11,41 @@
 # the binary was built, --verify'd and smoke-tested on hardware of its own
 # architecture by .github/workflows/release.yml before the release existed.
 #
-#   NISH_INSTALL=/opt/nish sh install.sh        where it goes
-#   sh install.sh v0.4.0                        a version other than the latest
-#
 # The other way in is npm -- `npm install -g @amritk/nish` -- which gets the
 # same binary through per-platform packages, and falls back to a compiler that
 # runs under node on a platform this does not cover. docs/INSTALL.md §2 has
-# both.
+# both, and says which to pick.
 set -eu
 
 REPO="amritk/nish"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'USAGE'
+install.sh - install the nish native compiler
+
+  curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
+  sh install.sh [<version>] [options]
+
+Arguments:
+  <version>            a release to install, e.g. 0.4.0 or v0.4.0.
+                       Default: the latest release.
+
+Options:
+  --dir <path>         where to install. Default: $NISH_INSTALL, or ~/.nish
+  --force              reinstall even when that version is already there
+  --uninstall          remove the install directory and stop
+  -h, --help           this text
+
+Environment:
+  NISH_INSTALL         same as --dir
+
+Upgrading is running this again: it installs over an existing install, and
+says nothing needs doing when the version already matches.
+USAGE
+}
 
 # The `asset` half of a release asset name, from what `uname` says. This is the
 # inverse of the `host` field in .github/seed-targets.json -- that file is the
@@ -87,10 +109,67 @@ nish_write_wrapper() {
   chmod +x "$_dir/bin/nish"
 }
 
+# An absolute spelling of a path, without requiring it to exist yet.
+#
+# The wrapper `nish_write_wrapper` writes bakes this in, and a wrapper holding
+# a relative path resolves against whoever's working directory happens to be
+# current -- so `--dir build/nish` produces a compiler that runs from the
+# directory it was installed from and nowhere else, which is a worse version of
+# the argv[0] defect the wrapper exists to work around. `$PWD` rather than
+# `cd`, so a path whose parent does not exist yet still comes back absolute.
+nish_abspath() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    *) printf '%s\n' "$PWD/${1#./}" ;;
+  esac
+}
+
+# The version a compiler reports, or nothing. `--version` answers `nish <v>`,
+# and the word is dropped here so the caller compares versions. Anything
+# unreadable, unrunnable or not there at all is "nothing", because every one of
+# those means the same thing to this script.
+nish_version_of() {
+  [ -x "$1" ] || return 0
+  "$1" --version 2>/dev/null | sed -n 's/^nish //p' || true
+}
+
+# The version installed in a directory, through its wrapper -- so this answers
+# for the install as a whole rather than for a binary, and comes back empty if
+# the wrapper is there but points somewhere that is not.
+nish_installed_version() {
+  nish_version_of "$1/bin/nish"
+}
+
 # Sourced for the functions alone, by the tests that check them against
 # seed-targets.json and against the defect above. Everything below is the
 # install.
 [ "${NISH_INSTALL_SOURCE_ONLY:-}" = "1" ] && return 0 2>/dev/null
+
+version=""
+install_dir="${NISH_INSTALL:-$HOME/.nish}"
+force=""
+uninstall=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h | --help) usage; exit 0 ;;
+    --dir) [ $# -ge 2 ] || die "--dir needs a path"; install_dir="$2"; shift 2 ;;
+    --force) force=1; shift ;;
+    --uninstall) uninstall=1; shift ;;
+    -*) die "unknown option $1 (try --help)" ;;
+    *) [ -z "$version" ] || die "two versions given: $version and $1"; version="$1"; shift ;;
+  esac
+done
+
+install_dir="$(nish_abspath "$install_dir")"
+
+if [ -n "$uninstall" ]; then
+  [ -d "$install_dir" ] || die "nothing installed in $install_dir"
+  rm -rf "$install_dir"
+  say "removed $install_dir"
+  say "If you added it to your PATH, take that line out of your shell profile."
+  exit 0
+fi
 
 asset="$(nish_asset "$(uname -s)" "$(uname -m)" || true)"
 if [ -z "$asset" ]; then
@@ -103,7 +182,7 @@ fi
 command -v curl >/dev/null 2>&1 || die "curl is required"
 command -v tar >/dev/null 2>&1 || die "tar is required"
 
-version="${1:-${NISH_VERSION:-}}"
+[ -n "$version" ] || version="${NISH_VERSION:-}"
 if [ -z "$version" ]; then
   # The redirect rather than the API: /releases/latest redirects to the tag, so
   # this needs no token and is not rate limited the way api.github.com is for
@@ -115,14 +194,32 @@ fi
 case "$version" in v*) ;; *) version="v$version" ;; esac
 plain="${version#v}"
 
-install_dir="${NISH_INSTALL:-$HOME/.nish}"
+have="$(nish_installed_version "$install_dir")"
+if [ "$have" = "$plain" ] && [ -z "$force" ]; then
+  say "nish $plain is already installed in $install_dir"
+  say "Nothing to do. --force reinstalls it."
+  exit 0
+fi
+
 name="nish-$plain-$asset"
 url="https://github.com/$REPO/releases/download/$version/$name.tar.gz"
 
-say "installing nish $plain ($asset) into $install_dir"
+if [ "$have" = "$plain" ]; then
+  say "reinstalling nish $plain ($asset) in $install_dir"
+elif [ -n "$have" ]; then
+  say "upgrading nish $have to $plain ($asset) in $install_dir"
+else
+  say "installing nish $plain ($asset) into $install_dir"
+fi
 
-tmp="$(mktemp -d)"
+# Staged beside the destination rather than in $TMPDIR, so the swap at the end
+# is a rename within one filesystem rather than a copy across two.
+parent="$(dirname "$install_dir")"
+mkdir -p "$parent"
+tmp="$(mktemp -d "$parent/.nish-install.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT INT TERM
+stage="$tmp/stage"
+mkdir -p "$stage"
 
 curl -fSL --progress-bar "$url" -o "$tmp/nish.tar.gz" ||
   die "could not download $url
@@ -133,21 +230,98 @@ curl -fSL --progress-bar "$url" -o "$tmp/nish.tar.gz" ||
 # --strip-components=1 because the tarball holds one directory, `$name/`, whose
 # layout is already the one the compiler needs: bin/nish beside runtime/ and
 # scripts/, which it resolves one level up from its own path.
-mkdir -p "$install_dir"
-tar -xzf "$tmp/nish.tar.gz" -C "$install_dir" --strip-components=1
-[ -x "$install_dir/bin/nish" ] || die "$install_dir/bin/nish is missing after unpacking $name.tar.gz"
+tar -xzf "$tmp/nish.tar.gz" -C "$stage" --strip-components=1
+[ -x "$stage/bin/nish" ] || die "$name.tar.gz does not carry bin/nish"
+# Three files rather than release.yml's seven, and deliberately the short list:
+# these are what every release since 0.1.1 has carried, and the rest is what a
+# given release happens to have. `runtime_os.c` arrived in 0.2.0 when the
+# runtime was split into two translation units, so demanding it here would make
+# this script refuse to install 0.1.1 -- which it did, until it was pointed at
+# one. What the tarball ought to contain is `release.yml`'s question and it
+# gates it at build time; this is only checking that what arrived is a compiler
+# and not, say, an HTML error page that `tar` happened to accept.
+for f in bin/nish runtime/runtime.c runtime/nish.h scripts/build.sh; do
+  [ -e "$stage/$f" ] || die "$name.tar.gz is missing $f, so this is not a usable compiler"
+done
 
+nish_write_wrapper "$stage"
+
+# Run the thing before letting it replace a working compiler, and check it says
+# the version that was asked for. That catches a truncated download, a tarball
+# built for another architecture, and an asset whose name does not match what
+# is inside it -- none of which `tar` complains about.
+#
+# The binary directly, not through the wrapper: the wrapper written above holds
+# an absolute path, and at this point that path is the staging directory, which
+# is about to stop existing. It is rewritten after the move.
+got="$(nish_version_of "$stage/libexec/nish")"
+[ -n "$got" ] || die "the compiler in $name.tar.gz did not run on this machine"
+[ "$got" = "$plain" ] || die "$name.tar.gz contains nish $got, not $plain"
+
+# Swap, rather than unpacking over the top. A failed or partial extract into a
+# live install leaves no working compiler and nothing to go back to; this way
+# the old one stays whole until the new one has run.
+backup=""
+
+# Put back whatever was there. Written as an `if` rather than
+# `[ -n "$backup" ] && mv ...`: under `set -e` a bare AND-list whose left side
+# is false is itself a failed command, so the short form would exit the script
+# on the no-backup path -- silently, before the `die` beneath it could say
+# what went wrong.
+restore_backup() {
+  if [ -n "$backup" ]; then
+    rm -rf "$install_dir"
+    mv "$backup" "$install_dir"
+  fi
+}
+
+if [ -e "$install_dir" ]; then
+  backup="$tmp/previous"
+  mv "$install_dir" "$backup"
+fi
+if ! mv "$stage" "$install_dir"; then
+  restore_backup
+  die "could not move the new install into $install_dir; the previous one is untouched"
+fi
+
+# Now that the files are at their final path, rewrite the wrapper to point at
+# it. Calling this a second time is safe and is what the marker in it is for:
+# the binary is already in libexec/ and `bin/nish` is already a wrapper, so
+# this rewrites the one line and moves nothing.
 nish_write_wrapper "$install_dir"
 
-installed="$("$install_dir/bin/nish" --version 2>/dev/null || true)"
-[ -n "$installed" ] || die "$install_dir/bin/nish did not run on this machine"
+# Through the wrapper this time, which is what a user will run. A version here
+# proves the whole path: the command, the absolute exec, and the binary.
+final="$(nish_installed_version "$install_dir")"
+if [ "$final" != "$plain" ]; then
+  # The staged binary ran a moment ago, so reaching here means the move or the
+  # wrapper rewrite went wrong rather than the download. Put the old install
+  # back anyway: the trap is about to delete the backup, and leaving a broken
+  # compiler in place with nothing to fall back to is the one outcome all of
+  # this staging exists to avoid.
+  restore_backup
+  die "installed into $install_dir, but running $install_dir/bin/nish did not answer nish $plain"
+fi
+installed="nish $final"
 
 say ""
 say "$installed is in $install_dir/bin"
+case ":$PATH:" in
+  *":$install_dir/bin:"*)
+    say ""
+    say "That directory is already on your PATH."
+    ;;
+  *)
+    say ""
+    say "Put it on your PATH by adding this to your shell profile:"
+    say ""
+    say "    export PATH=\"$install_dir/bin:\$PATH\""
+    ;;
+esac
 say ""
-say "Put it on your PATH by adding this to your shell profile:"
-say ""
-say "    export PATH=\"$install_dir/bin:\$PATH\""
+say "  nish --version          what you just installed"
+say "  sh install.sh           upgrade to the latest release"
+say "  sh install.sh --help    versions, --dir, --uninstall"
 say ""
 # Not a symlink into /usr/local/bin. A symlink leaves argv[0] pointing at the
 # link, and the compiler does not resolve one before looking for its runtime

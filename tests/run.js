@@ -7118,6 +7118,84 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         noUnpack.status === 0 && stillWorks.status === 8,
         `exit ${stillWorks.status}, ${JSON.stringify(stillWorks.stdout + stillWorks.stderr)}`
       );
+      // The wrapper holds an ABSOLUTE path, so it does not survive the directory
+      // moving -- and the script stages the install in a temporary directory beside
+      // the destination and renames it into place, which moves it every time. Writing
+      // the wrapper only while staged produces an install whose `bin/nish` execs a
+      // path that has already been deleted:
+      //
+      //     bin/nish: exec: /.../.nish-install.XXXX/stage/libexec/nish: not found
+      //
+      // so the script calls this again at the final path. The staged copy is still
+      // what gets run for the version check, because that has to happen before the
+      // old install is touched -- through `libexec/nish` directly rather than through
+      // the wrapper, for this reason.
+      const moved = path.join(buildDir, "install-sh-moved");
+      fs.rmSync(moved, { recursive: true, force: true });
+      fs.renameSync(home, moved);
+      const stale = spawnSync(path.join(moved, "bin", "nish"), [], { encoding: "utf8" });
+      check(
+        "install.sh: a wrapper written before the directory moved is stale, which is why it is rewritten",
+        stale.status !== 8,
+        "the wrapper survived its directory being renamed, so this check no longer proves what it is for"
+      );
+      const rewritten = spawnSync(
+        "sh",
+        ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_write_wrapper "$2"`, "sh", installSh, moved],
+        { encoding: "utf8" }
+      );
+      const afterMove = spawnSync(path.join(moved, "bin", "nish"), [], { encoding: "utf8" });
+      check(
+        "install.sh: rewriting the wrapper at its final path makes the install work again",
+        rewritten.status === 0 && afterMove.status === 8,
+        `exit ${afterMove.status}, ${JSON.stringify(afterMove.stdout + afterMove.stderr)}`
+      );
+
+      // The command surface, which costs nothing to check and is what a person reads
+      // when the install did not do what they meant. All three exit before any
+      // network, so none of this needs a release to exist.
+      // `--dir build/nish` has to become an absolute path before the wrapper bakes it
+      // in, or the installed compiler runs only from the directory it was installed
+      // from -- a worse version of the argv[0] defect the wrapper exists to work
+      // around, and one a person is much more likely to hit, because `--dir` invites a
+      // relative path.
+      const abs = (arg, cwd) =>
+        spawnSync("sh", ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_abspath "$2"`, "sh", installSh, arg], {
+          cwd,
+          encoding: "utf8",
+        }).stdout.trim();
+      check(
+        "install.sh: a relative --dir is made absolute before the wrapper records it",
+        abs("some/where", root) === path.join(root, "some/where") &&
+          abs("./here", root) === path.join(root, "here") &&
+          abs("/already/absolute", root) === "/already/absolute",
+        `got ${JSON.stringify([abs("some/where", root), abs("./here", root), abs("/already/absolute", root)])}`
+      );
+      const help = spawnSync("sh", [installSh, "--help"], { encoding: "utf8" });
+      check(
+        "install.sh: --help explains the options and exits 0",
+        help.status === 0 && /--uninstall/.test(help.stdout) && /--dir/.test(help.stdout),
+        `exit ${help.status}, ${JSON.stringify(help.stdout.slice(0, 200))}`
+      );
+      // An unknown option is refused rather than taken for a version. Silently
+      // treating `--dry-run` as a release name would download nothing, find nothing,
+      // and blame the release.
+      const bogus = spawnSync("sh", [installSh, "--dry-run"], { encoding: "utf8" });
+      check(
+        "install.sh: an unknown option is refused, not read as a version",
+        bogus.status !== 0 && /unknown option/.test(bogus.stderr),
+        `exit ${bogus.status}, ${JSON.stringify(bogus.stderr)}`
+      );
+      const nothingThere = spawnSync(
+        "sh",
+        [installSh, "--uninstall", "--dir", path.join(buildDir, "install-sh-absent")],
+        { encoding: "utf8" }
+      );
+      check(
+        "install.sh: --uninstall on a directory with no install says so rather than removing something",
+        nothingThere.status !== 0 && /nothing installed/.test(nothingThere.stderr),
+        `exit ${nothingThere.status}, ${JSON.stringify(nothingThere.stderr)}`
+      );
     }
 
     // A platform with no row gets nothing rather than a guess: the script turns an empty

@@ -112,10 +112,28 @@ Or without npm and without node at all:
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 ```
 
-That unpacks into `~/.nish` (`NISH_INSTALL` changes it), takes an optional
-version (`sh install.sh v0.4.0`, latest otherwise), and prints the one line to
-add to your shell profile. On a platform it has no binary for it says so and
-names the npm route, which works anywhere node does.
+That unpacks into `~/.nish` and prints the one line to add to your shell
+profile. On a platform it has no binary for it says so and names the npm route,
+which works anywhere node does.
+
+**Upgrading is running it again.** There is no separate command: it installs
+over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and says
+`nothing to do` when the version already matches.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh          # latest
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh -s 0.4.0 # a version
+sh install.sh --dir /opt/nish     # somewhere other than ~/.nish (or NISH_INSTALL)
+sh install.sh --force             # reinstall the version already there
+sh install.sh --uninstall         # remove it
+sh install.sh --help              # all of the above
+```
+
+An upgrade cannot leave you without a compiler. The new one is unpacked beside
+the old, checked that it runs *and* that it reports the version that was asked
+for — which catches a truncated download, a tarball built for another
+architecture, and an asset whose name does not match what is inside it — and
+only then swapped in. If any of that fails the install you had is untouched.
 
 The npm route installs the **native** compiler, and it is a download rather than a
 build: nothing is compiled on your machine. The package declares one
