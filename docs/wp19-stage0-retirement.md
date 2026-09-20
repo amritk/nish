@@ -1663,10 +1663,44 @@ None of these needs anybody's permission. They need somebody's afternoon.
 
    Both installers work around it the same way, with a one-line `exec` of an
    absolute path (`scripts/postinstall.mjs`, `install.sh`'s
-   `nish_write_wrapper`), and `tests/run.js` now drives a bare `nish` on `PATH`
-   and asserts the `argv[0]` that arrives. So this item has a reproduction, a
-   user-visible shape and a guard against the workaround regressing — and is
-   still open, because the fix is in `self/`.
+   `nish_write_wrapper`), and `tests/run.js` drives a bare `nish` on `PATH` and
+   asserts the `argv[0]` that arrives.
+
+   **The `$PATH` half is fixed, 2026-09-20.** `packageRoot()` splits on whether
+   `argv[0]` is a path at all: one that carries a directory keeps the old
+   `<dirname>/..`, and a bare word is looked up on `$PATH` — which is where the
+   shell found it, so the first entry holding a file of that name is the one
+   that ran, and its parent is the root. Nothing new was needed from the
+   language: `getenv` and `splitByte` were already in the frozen surface, and
+   the rolling freeze was checked against the v0.4.0 seed before and after
+   (`IR(stage1) == IR(stage2)`, `stage3 == stage2` byte-identical).
+
+   The diagnostic is derived from the same candidate list rather than
+   re-spelling it, so it names where the compiler actually looked:
+
+   ```
+   --link: cannot find scripts/build.sh (looked in /somewhere/lonely/.. and .)
+   ```
+
+   Three checks pin it, and they are the first in the suite to drive a *real*
+   compiler by a bare name — everything else invokes one by a path, which is
+   precisely why nothing noticed for four releases. An install is staged the
+   way `release.yml` builds one, driven from a third directory, and the program
+   imports `nish/text`, so a wrongly-resolved root fails even if
+   `scripts/build.sh` were found some other way. All three were watched
+   failing with the fix reverted.
+
+   **The symlink half is still open, and is the reason this item does not
+   close.** npm links every command as a symlink
+   (`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`); `packageRoot()`
+   resolves no link, so the parent of the *link's* directory is searched and an
+   install laid out that way finds nothing. The language has no `realpath`, so
+   that fix is a **builtin** rather than an edit to the driver — and a builtin
+   `self/` cannot use until the release after the one that adds it, which is
+   the rolling freeze. Both installers keep their absolute-path `exec`, which
+   sidesteps both spellings. Adding `realpathSync` to both compilers in 0.5.0
+   would let `self/` use it in 0.6.0; that is the shape of the remaining work,
+   and it is one release long whatever else happens.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
    change that found it, and unmeasured.
@@ -1674,7 +1708,6 @@ None of these needs anybody's permission. They need somebody's afternoon.
    one, so a later field is reported as unknown when it is not. Still
    reproduces on this tree (2026-09-19); the corpus does not have the shape, so
    G1 cannot see it.
-
 Items 4, 5 and 6 share a property worth naming: **each is a defect the gate is
 green in spite of, because no corpus program poses the question.** That is
 §A5's first lesson and §A8's, and it is the honest qualification on every green

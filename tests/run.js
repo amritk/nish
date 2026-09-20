@@ -7148,14 +7148,111 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       `Linux/amd64 derived ${JSON.stringify(askScript("Linux", "amd64").stdout.trim())}`
     );
     // The wrapper, and the defect it exists for. Unpacking a release tarball onto `$PATH`
-    // is NOT an install: invoked as `$PATH` found it, argv[0] is a bare `nish` with no
-    // directory in it, the compiler resolves `./..` for scripts/build.sh and runtime/,
-    // and every `--link` fails against whatever the working directory happens to be --
-    // while `--version` and `-o` keep working (wp19 §5a item 4). `install.sh` moves the
-    // binary to libexec/ and leaves an `exec` of an absolute path at bin/nish.
+    // used not to be an install: invoked as `$PATH` found it, argv[0] is a bare `nish`
+    // with no directory in it, the compiler resolved `./..` for scripts/build.sh and
+    // runtime/, and every `--link` failed against whatever the working directory
+    // happened to be -- while `--version` and `-o` kept working (wp19 §5a item 4).
+    //
+    // **The compiler handles that spelling itself as of 2026-09-20**: a bare argv[0] is
+    // looked up on `$PATH`, which is where the shell found it, and the check below drives
+    // the real compiler that way end to end. So this wrapper is no longer what makes a
+    // tarball-on-PATH install work.
+    //
+    // It stays, and the reason is the half that is NOT fixed: npm links every command as
+    // a symlink (`node_modules/.bin/nish -> ../<pkg>/bin/nish`), the compiler resolves no
+    // link, and the parent of the *link's* directory is not the package. That needs a
+    // `realpath` the language does not have, so `install.sh` keeps moving the binary to
+    // libexec/ and leaving an `exec` of an absolute path at bin/nish, which sidesteps
+    // both spellings.
     //
     // Driven with a stub binary rather than a downloaded one, so this needs no network
     // and can say exactly what argv[0] arrived as -- which is the thing that was wrong.
+    // The compiler itself, driven the way `$PATH` drives it, end to end. The check above
+    // is about `install.sh`'s wrapper; this one is about the defect, and it is the only
+    // place a bare `nish` reaches a REAL compiler -- everything else in the suite invokes
+    // one by a path, which is precisely why nothing noticed for four releases (§A7: "the
+    // harness happens to invoke the spelling that agrees").
+    //
+    // An install is staged rather than assumed: `bin/nish` beside `scripts/`, `runtime/`
+    // and `std/` is the layout release.yml builds, so what runs here is the shape a user
+    // unpacks. It is driven from a third directory, so neither the checkout nor the
+    // staged directory can be what makes it work, and the program imports `nish/text` --
+    // a specifier resolved against the package root, so it fails if argv[0] was resolved
+    // wrongly even when `scripts/build.sh` was found some other way.
+    {
+      const stage1 = stage1ForCases();
+      if (stage1.error !== undefined) {
+        skip(`a bare \`nish\` on PATH could not be driven: ${stage1.error}`);
+      } else {
+        const inst = path.join(buildDir, "argv0-path-install");
+        fs.rmSync(inst, { recursive: true, force: true });
+        fs.mkdirSync(path.join(inst, "bin"), { recursive: true });
+        fs.mkdirSync(path.join(inst, "scripts"), { recursive: true });
+        fs.copyFileSync(stage1.cmd, path.join(inst, "bin", "nish"));
+        fs.chmodSync(path.join(inst, "bin", "nish"), 0o755);
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(inst, "scripts", "build.sh"));
+        fs.cpSync(path.join(root, "runtime"), path.join(inst, "runtime"), { recursive: true });
+        fs.cpSync(path.join(root, "std"), path.join(inst, "std"), { recursive: true });
+
+        const work = path.join(buildDir, "argv0-path-work");
+        fs.rmSync(work, { recursive: true, force: true });
+        fs.mkdirSync(work, { recursive: true });
+        fs.writeFileSync(
+          path.join(work, "prog.ts"),
+          'import { trim } from "nish/text";\n\nexport const main = (): number => {\n  write(`[${trim("  padded  ")}]\\n`);\n  return 0;\n};\n'
+        );
+        const onPath = (args) =>
+          spawnSync("nish", args, {
+            cwd: work,
+            encoding: "utf8",
+            env: { ...process.env, PATH: `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}` },
+          });
+
+        const linked = onPath(["prog.ts", "--link", "prog"]);
+        check(
+          "a bare `nish` on PATH links: argv[0] with no directory is looked up on PATH",
+          linked.status === 0,
+          `exit ${linked.status}\n${linked.stdout}${linked.stderr}`
+        );
+        if (linked.status === 0) {
+          const ran = spawnSync(path.join(work, "prog"), [], { cwd: work, encoding: "utf8" });
+          check(
+            "a bare `nish` on PATH resolves nish/<module> against the package, not the cwd",
+            ran.status === 0 && ran.stdout.trim() === "[padded]",
+            `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
+          );
+        }
+
+        // And the diagnostic when there genuinely is no package: it has to name where it
+        // looked, and `./..` is the answer that sent somebody looking in the wrong place.
+        // A copy of the binary alone on PATH is that state.
+        //
+        // With a program that imports nothing, deliberately. `prog.ts` above would fail
+        // on `nish/text` before `--link` was ever reached -- the standard library is
+        // resolved against the same package root -- and this check is about the link
+        // step's message, so it has to get there.
+        fs.writeFileSync(
+          path.join(work, "plain.ts"),
+          'export const main = (): number => {\n  write("plain\\n");\n  return 0;\n};\n'
+        );
+        const lonely = path.join(buildDir, "argv0-path-lonely");
+        fs.rmSync(lonely, { recursive: true, force: true });
+        fs.mkdirSync(lonely, { recursive: true });
+        fs.copyFileSync(stage1.cmd, path.join(lonely, "nish"));
+        fs.chmodSync(path.join(lonely, "nish"), 0o755);
+        const orphan = spawnSync("nish", ["plain.ts", "--link", "p2"], {
+          cwd: work,
+          encoding: "utf8",
+          env: { ...process.env, PATH: `${lonely}${path.delimiter}${process.env.PATH}` },
+        });
+        check(
+          "a bare `nish` with no package around it names the directory it searched, not `./..`",
+          orphan.status !== 0 && orphan.stderr.includes(`${lonely}/..`) && !orphan.stderr.includes("./.."),
+          `exit ${orphan.status}\n${orphan.stdout}${orphan.stderr}`
+        );
+      }
+    }
+
     {
       const home = path.join(buildDir, "install-sh-wrapper");
       fs.rmSync(home, { recursive: true, force: true });
