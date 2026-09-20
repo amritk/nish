@@ -1,0 +1,56 @@
+{
+  "version": "0.5.0",
+  "date": "2026-09-20",
+  "tag": "v0.5.0",
+  "range": {
+    "from": "v0.4.0",
+    "to": "690082d"
+  },
+  "entries": [
+    {
+      "id": "ship-the-standard-library-with-the-native-compiler",
+      "type": "fix",
+      "scope": "release",
+      "breaking": false,
+      "title": "ship the standard library with the native compiler",
+      "body": "Every native release from 0.1.1 to 0.4.0 staged `bin`, `runtime` and `scripts`\ninto the tarball and no `std/`, so the compiler they carry links `hello.ts` and\nanswers any program importing the standard library by its package specifier\nwith ``Module `nish/text` is not part of the standard library``. The sentence\nnames the module it refuses, because stage1's list is a literal and the file is\nwhat is absent. Both channels are fixed, and nothing had been published to npm,\nso it lands before the first publish.\n\nIt was found by `nish-cmp`, which this also wires into CI as a job sharing the\n`seeds` job with `bootstrap` -- WP19 §5a's \"single biggest unstarted piece of\nR6\". `cmpSince` in `.github/seed-targets.json` decides which releases it may\ncompare against, for the reason `attachedSince` exists: a release already\npublished cannot grow a file.\n\nAlso: `packageRoot()` resolves a bare `argv[0]` through `$PATH`, so unpacking a\nrelease tarball onto `$PATH` is an install again; the release bump moves the\nlockfile's platform pins, which it had been reading from the wrong place since\nthe installer landed; and §5a records measurements for items 5 and 6 and says\nwhich release R6 can land in, which is not 0.5.0 -- `nish-cmp` has no row until\n0.5.0 is out, so deleting the two largest oracles in it would do so during the\none window their successor cannot run.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "930b22d"
+      ],
+      "pr": 126,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-20"
+    },
+    {
+      "id": "realpathsync-the-path-resolution-a-symlinked-install-needs",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "realpathSync, the path resolution a symlinked install needs",
+      "body": "`packageRoot()` resolves no symbolic link, so a compiler reached through one\nlooks for `scripts/build.sh` and `std/` beside the LINK rather than beside the\npackage. npm links every command that way, and so does an admin's\n`ln -s /opt/nish/bin/nish /usr/local/bin/nish` -- measured, that second one\nfails `--link` in both spellings, by the link's absolute path as well as by the\nbare name, because a link IS a path and the `$PATH` lookup cannot reach it.\n\n`realpathSync(path: string): string | null` is `getenv`'s shape exactly: one\ncall, an `i8*` that may be null, read by the ordinary `T | null` narrowing. In\nboth compilers, the runtime and the Node shim, so the oracles compare them.\n\n`self/`'s own `packageRoot()` still cannot call it: `self/` compiles under the\nlast RELEASED compiler and no release has the builtin, which CI's `bootstrap`\njob checks. The call site is the next release's; the freeze was verified green\non all four platforms with the builtin added and unused.\n\n`realpath(p, NULL)` is the shorter spelling and the wrong one -- on Darwin the\n`__DARWIN_EXTSN` variant implements it and the binding depends on the\nfeature-macro level, while a caller-supplied PATH_MAX buffer is defined under\nboth. The declaration needs `_XOPEN_SOURCE 700`: `realpath` is XSI, and on\nglibc 2.39 the POSIX macro alone leaves it undeclared, with clang then\ninferring `int`.",
+      "metrics": [
+        "nish_realpath is 157 bytes of .text at -Oz; the portable spelling costs 8 of them. The runtime_os.c ceiling moves 1,280 -> 1,536, the move wp7 said the next OS-facing builtin would make."
+      ],
+      "refs": [
+        "docs/wp7-runtime.md#runtime-additions-and-budget",
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/cases/io_realpath",
+        "reject_realpath_arity",
+        "reject_realpath_type",
+        "docs/cookbook/builtin_realpath",
+        "and a tests/run.js check resolving a real file symlink and a directory symlink"
+      ],
+      "commits": [
+        "690082d"
+      ],
+      "pr": 128,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-20"
+    }
+  ]
+}

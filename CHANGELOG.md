@@ -26,6 +26,17 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-20
+
+### Added
+
+- runtime: RealpathSync, the path resolution a symlinked install needs ([#128](https://github.com/amritk/nish/pull/128))
+
+### Fixed
+
+- release: Ship the standard library with the native compiler ([#126](https://github.com/amritk/nish/pull/126))
+
+
 ## [0.4.0] - 2026-09-20
 
 ### Added
@@ -205,3 +216,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.2.0]: https://github.com/amritk/nish/releases/tag/v0.2.0
 [0.3.0]: https://github.com/amritk/nish/releases/tag/v0.3.0
 [0.4.0]: https://github.com/amritk/nish/releases/tag/v0.4.0
+[0.5.0]: https://github.com/amritk/nish/releases/tag/v0.5.0
