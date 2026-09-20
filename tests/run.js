@@ -6762,6 +6762,27 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       misversioned.length === 0,
       misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
     );
+    // And the lockfile's copy of that same list, which is a second file saying the same
+    // thing and therefore a second thing to go stale. It did: 0.4.0 shipped with
+    // package.json pinning 0.4.0 and the lockfile still pinning 0.3.0, because the
+    // release bump read `optionalDependencies` at the top level and a lockfile keeps the
+    // root package under `packages[""]`. Nothing was red -- `npm ci` tolerates it and
+    // `npm install` rewrites the file under whoever runs it next, which is how it stayed
+    // invisible. `release-pr.yml` moves both now, and this is the check that would have
+    // noticed whatever moved them apart.
+    const lockRoot = JSON.parse(
+      fs.readFileSync(path.join(root, "package-lock.json"), "utf8")
+    ).packages?.[""]?.optionalDependencies;
+    const lockDisagrees = Object.entries(optional).filter(([k, v]) => (lockRoot ?? {})[k] !== v);
+    check(
+      "package-lock.json pins the same platform packages at the same versions as package.json",
+      lockRoot !== undefined && lockDisagrees.length === 0,
+      lockRoot === undefined
+        ? 'package-lock.json has no packages[""].optionalDependencies'
+        : lockDisagrees
+            .map(([k, v]) => `${k}: package.json ${v}, lockfile ${JSON.stringify(lockRoot[k])}`)
+            .join("\n")
+    );
     // The three spellings of a platform -- node's, this project's and npm's -- converted
     // in one place, checked against the file that is the authority on the middle one.
     // A row `targetForAsset` cannot read is a platform the release attaches a binary for
@@ -7054,12 +7075,31 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       // release whose optionalDependencies were left behind installs a compiler that
       // resolves the previous release's binaries. It succeeds, it runs, and it is one
       // version stale in the half nobody looks at.
-      const pins = Object.entries(bumped.optionalDependencies ?? {});
-      const stale = pins.filter(([, v]) => v !== next);
+      //
+      // Both copies of that list, which is the half this check did not have. package.json
+      // keeps optionalDependencies at the top level and a lockfile keeps the root
+      // package under `packages[""]`, so a bump reading only the top level moves one and
+      // leaves the other -- and reading only the top level is what this check did too,
+      // so it passed while 0.4.0 shipped a lockfile still pinned to 0.3.0. `npm ci`
+      // tolerates the disagreement and `npm install` silently rewrites it, so nothing
+      // anywhere went red. A check that looks where the code looks cannot see the code
+      // looking in the wrong place: both places are named here.
+      const pinSets = [
+        ["package.json", bumped.optionalDependencies ?? {}],
+        ["package-lock.json packages[\"\"]", lock.packages?.[""]?.optionalDependencies ?? {}],
+      ];
+      const stale = pinSets.flatMap(([where, deps]) =>
+        Object.entries(deps)
+          .filter(([, v]) => v !== next)
+          .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
+      );
+      const pinCount = pinSets.reduce((n, [, deps]) => n + Object.keys(deps).length, 0);
       check(
-        `release-pr: the bump moves every platform package with it (${pins.length})`,
-        pins.length > 0 && stale.length === 0,
-        stale.map(([k, v]) => `${k} stayed at ${v}`).join("\n")
+        `release-pr: the bump moves every platform package in BOTH files (${pinCount})`,
+        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
+        stale.length > 0
+          ? stale.join("\n")
+          : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       );
       const branding = fs.readFileSync(path.join(work, "self", "branding.ts"), "utf8");
       check(

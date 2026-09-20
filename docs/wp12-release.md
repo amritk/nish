@@ -257,6 +257,34 @@ already checked against, and fails when any of the three gates omits a module �
 so the next module added to the library cannot ship in the compiler's list and
 not in the tarball. Each check was watched failing.
 
+## The lockfile's copy of the platform pins, and how it went stale
+
+`release-pr.yml` bumps the version in `package.json`, in `package-lock.json`
+(both of its copies), in `self/branding.ts`, and across the
+`optionalDependencies` entries that pin the per-platform compiler packages —
+which have to move with the version, or a release installs a compiler that
+resolves the *previous* release's binaries.
+
+It moved three of those four. The bump read `optionalDependencies` off the top
+of each file, and a lockfile does not keep the root package's dependencies
+there: they live under `packages[""]`. So `package.json` moved and the lockfile
+did not, and **v0.4.0 shipped with `package.json` pinning `0.4.0` and
+`package-lock.json` still pinning `0.3.0`**.
+
+Nothing was red, which is the part worth keeping. `npm ci` tolerates the
+disagreement, and `npm install` simply rewrites the file under whoever runs it
+next — so the drift repaired itself in every working tree and stayed in the
+commit. The check that existed for exactly this read `bumped.optionalDependencies`,
+the same top-level spelling the buggy code read: **a check that looks where the
+code looks cannot see the code looking in the wrong place.**
+
+Both are fixed. The bump walks both locations, the test that drives it asserts
+the pins in *both files*, and a standing check compares `package.json`'s pins
+against the lockfile's on every run — so a future drift from any other cause is
+caught where this one was not. Each was watched failing: the strengthened bump
+test goes red against the old script, and the standing check goes red against
+the lockfile v0.4.0 actually shipped.
+
 ## Release procedure
 
 Releases ride a train; nothing is published from a developer machine, and no

@@ -147,8 +147,19 @@ jobs:
               // this step first shipped, and it broke the release train on the
               // very commit that added it.
               // tests/run.js fails while the two disagree.
-              const deps=j.optionalDependencies;
-              if (deps) for (const k of Object.keys(deps)) if (k.startsWith(`${j.name??""}-`)) deps[k]=v;
+              // Two places, not one. package.json keeps optionalDependencies at
+              // the top level; a lockfile keeps the root package under
+              // packages[""], so a bump that reads only the top level moves
+              // package.json and leaves the lockfile pinned to the PREVIOUS
+              // release. That is exactly what 0.4.0 shipped with, and npm ci
+              // tolerates the disagreement, so nothing was red -- npm install
+              // simply rewrote the file under whoever ran it next.
+              const scope=`${j.name??""}-`;
+              const pinned=[j.optionalDependencies];
+              if (j.packages&&j.packages[""]) pinned.push(j.packages[""].optionalDependencies);
+              for (const deps of pinned) {
+                if (deps) for (const k of Object.keys(deps)) if (k.startsWith(scope)) deps[k]=v;
+              }
               fs.writeFileSync(f, JSON.stringify(j,null,2)+"\n");
             }
             // self/branding.ts carries the version too, and tests/run.js fails
