@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+// The `nish` command, before `scripts/postinstall.mjs` has had a look at it.
+//
+// This file is deliberately tiny and deliberately not the whole story. On a
+// machine that installed one of the prebuilt `@amritk/nish-<asset>` packages,
+// postinstall replaces this file with a one-line `/bin/sh` exec of that
+// package's native compiler, so nothing node-shaped is left in the path --
+// measured at 3.2 ms against 94 ms for this shim, which is almost entirely
+// node's own startup (docs/wp12-release.md, "What the launcher costs").
+//
+// It execs the binary in its own package rather than copying it here, because
+// npm links the command through a symlink and the native compiler resolves
+// `build.sh` and `runtime/` from argv[0] without following one. That section
+// has the failure a copy produces.
+//
+// It has to keep working anyway, because the swap is a postinstall and
+// `npm ci --ignore-scripts` is a normal thing for CI to do, as is a registry
+// proxy or a sandbox that disables scripts outright. So this is the path that
+// is always correct and sometimes slower, and the swap is the optimisation on
+// top of it. Everything it delegates to is in `dist/launcher.js`, including
+// the fallback to the Node compiler for a platform with no prebuilt binary.
+import "../dist/launcher.js";

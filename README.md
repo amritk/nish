@@ -48,11 +48,24 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-# not published yet: this compiler is `@amritk/nish`, and `nish` is an unrelated
-# package. Install the release tarball; the command it installs is `nish`.
-curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
-npm install -g ./nish-0.1.1.tgz
+# Once this is published, the whole install is:
+#   npm install -g @amritk/nish
+# `nish` on the registry is an unrelated package from 2014, so this one is
+# scoped; the command it installs is still `nish`. Nothing is published yet,
+# so take it from a release -- the npm tarball, plus the prebuilt native
+# compiler for your machine, which is what the scoped install would fetch.
+base=https://github.com/amritk/nish/releases/download/v0.4.0
+curl -LO $base/amritk-nish-0.4.0.tgz
+curl -LO $base/amritk-nish-x86_64-linux-0.4.0.tgz    # or the row for your machine
+npm install -g ./amritk-nish-0.4.0.tgz ./amritk-nish-x86_64-linux-0.4.0.tgz
 ```
+
+> [!NOTE]
+> Installing the npm tarball on its own also works and gives you the TypeScript
+> compiler running under Node — the same compiler, about eight times slower to
+> compile with, and no C toolchain needed to install it. That is also what a
+> platform with no prebuilt binary gets. [docs/INSTALL.md](docs/INSTALL.md) §2
+> has the table of what is built for what.
 
 > [!TIP]
 > Building from source works just as well: `git clone`, `npm install`,

@@ -124,6 +124,15 @@ const collect = () => {
     // already hold -- including the `${LANGUAGE}` templates, which the `table`
     // pattern would otherwise pick up as error rules.
     if (file === "src/checker/performance.ts") continue;
+    // The launcher is not a compiler phase. Its one message says that an
+    // installed prebuilt binary would not start, which has no source position,
+    // no `--json` object and no program that could provoke it -- and `self/`
+    // has no launcher at all, so a code minted here would be an entry
+    // `self/codes.ts` mirrors for a message stage1 can never print, and
+    // `tests/diagnostic_coverage.js` would then want a case reaching it or a
+    // line in `unreachable.txt` explaining a compiler rule that does not exist.
+    // It is `console.error`, which the `call` pattern sees as `.error(`.
+    if (file === "src/launcher.ts") continue;
     const text = fs.readFileSync(abs, "utf8");
     for (const m of [...text.matchAll(call), ...text.matchAll(table)]) {
       // `call` captures the sink in group 1 and the literal in group 2; `table`

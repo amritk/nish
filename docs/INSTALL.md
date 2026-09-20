@@ -92,8 +92,28 @@ the Ubuntu steps inside it.
 
 ## 2. Install the compiler
 
-**Not from npm yet**, though the name is now settled. `npm install -g nish`
-installs somebody else's package: `nish` on the public registry has belonged to
+```bash
+npm install -g @amritk/nish
+nish --version
+```
+
+That installs the **native** compiler, and it is a download rather than a
+build: nothing is compiled on your machine. The package declares one
+`nish-<os>-<arch>` package per supported platform as an `optionalDependencies`
+entry with `os` and `cpu` set, so npm fetches exactly the one that matches and
+skips the rest. Each of those carries the self-hosted compiler — `self/`
+compiled by itself — already built, `--verify`d and smoke-tested on a machine
+of its own architecture by the release workflow.
+
+A postinstall step then puts that binary on your PATH directly, so `nish` is
+the compiler rather than a node script that starts it — 3.2 ms per invocation
+instead of 94 ms, measured. If you install with `npm ci --ignore-scripts`, or
+in a sandbox that disables scripts, the step does not run and `nish` is a small
+node launcher that spawns the same binary: the same compiler and the same
+answers, about 91 ms slower to start. Nothing else changes, and the install
+never fails over it.
+
+**Do not install `nish`.** That name on the public registry has belonged to
 `stdarg`'s "A Node.js Interactive shell" since February 2014 — versions 0.0.0
 and 0.0.1, both deprecated by their author, nothing published since. **This
 compiler is `@amritk/nish`** (decided 2026-09-19,
@@ -101,9 +121,18 @@ compiler is `@amritk/nish`** (decided 2026-09-19,
 installs is still `nish` — the package name and the command are two different
 strings, and that is the one thing the scope costs.
 
-Nothing is published under it yet: which compiler the package ships is a
-separate open decision and the installer is not built. Until then, install from
-a release or from a checkout.
+On a platform this project attaches no binary for — the table below is the
+whole list, so musl, FreeBSD and 32-bit anything are outside it — `nish` runs
+the TypeScript compiler that ships in the same package, under Node. It is the
+same compiler by every test this repository runs and about eight times slower
+to compile with, and it needs no C toolchain to install. Nothing announces
+this, because there is nothing for you to do about it; `nish --version`
+answers either way.
+
+**Nothing is published to the registry yet.** The installer is built and
+tested, and what is left is a person publishing a release under it, which
+[docs/wp12-release.md](wp12-release.md#release-procedure) step 4 is about.
+Until that happens, install from a release.
 
 From a release tarball on GitHub — the same package `npm publish` would upload,
 carried by the release instead of the registry. The `Release` workflow attaches
@@ -116,6 +145,19 @@ example below is one of those:
 curl -LO https://github.com/amritk/nish/releases/download/v0.2.0/nish-0.2.0.tgz
 npm install -g ./nish-0.2.0.tgz
 nish --version
+```
+
+Installed on its own like that, the package finds no platform package next to
+it and runs the Node compiler — the fallback above, reached here because the
+binary was never fetched rather than because none exists for your machine. To
+get the native one, install the pair: a release from 0.4.0 on attaches the
+platform packages beside the npm tarball, under the name `npm pack` gave them.
+
+```bash
+base=https://github.com/amritk/nish/releases/download/v0.4.0
+curl -LO $base/amritk-nish-0.4.0.tgz
+curl -LO $base/amritk-nish-x86_64-linux-0.4.0.tgz     # the row matching your machine
+npm install -g ./amritk-nish-0.4.0.tgz ./amritk-nish-x86_64-linux-0.4.0.tgz
 ```
 
 As a native compiler, which needs no Node at all. A release also attaches the

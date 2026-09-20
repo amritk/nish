@@ -6542,6 +6542,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     const files = info.files.map((f) => f.path).sort();
     const allowed = [
       /^dist\//,
+      /^bin\//,
       /^runtime\//,
       /^scripts\//,
       /^std\//,
@@ -6674,6 +6675,86 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       stdModules.length > 0 && unshipped.length === 0,
       unshipped.join("\n")
     );
+    // ---- the installer ----------------------------------------------------------------
+    // `bin.nish` names the launcher, not a compiler. The native compiler reaches a
+    // machine as an `optionalDependencies` entry npm installs only where `os` and `cpu`
+    // match -- so something has to look at what landed and hand over to it, and npm
+    // cannot point a `bin` at a dependency that may not be there. If the launcher stops
+    // shipping, or `bin` goes back to naming a compiler directly, every install on every
+    // platform silently stops using the native binary it downloaded.
+    check(
+      "npm pack ships the launcher `bin.nish` names",
+      manifest.bin?.nish === "bin/nish" && files.includes("bin/nish") && files.includes("dist/launcher.js"),
+      `bin.nish is ${JSON.stringify(manifest.bin)}, and bin/nish ${
+        files.includes("bin/nish") ? "ships" : "does not ship"
+      }`
+    );
+    // `bin/nish` is a node shim in the tarball and a native binary after
+    // postinstall has run on a machine that got one. Packing the *binary* is a
+    // thing that can happen -- a developer who installed their own build over
+    // it and then packed -- and it would publish one platform's compiler to
+    // every platform, past `os`/`cpu` and past every check in this file that
+    // looks at paths rather than contents.
+    check(
+      "the bin `npm pack` ships is the shim, never a binary somebody swapped in",
+      fs.readFileSync(path.join(root, "bin", "nish"), "utf8").startsWith("#!/usr/bin/env node"),
+      "bin/nish does not begin with a node shebang, so what would be published is not the shim"
+    );
+    // The fallback is the Node compiler in this same tarball, so it has to be reachable
+    // from the launcher without a second package: `dist/index.js` is already required
+    // above, and this is the statement that the launcher is what reaches it.
+    check(
+      "the launcher falls back to a compiler the tarball carries",
+      fs.readFileSync(path.join(root, "src", "launcher.ts"), "utf8").includes('await import("./index.js")'),
+      "src/launcher.ts no longer imports ./index.js, so a platform with no prebuilt binary has nothing to fall back to"
+    );
+    // One row per attached seed, at exactly this version. Two ways this goes wrong and
+    // neither shows up in a build: a platform that gets a binary built and attached but
+    // no package published, so the install silently falls back to Node forever; and a
+    // version bump that moves package.json and leaves these behind, so every install
+    // resolves last release's binary against this release's compiler. `release-pr.yml`
+    // bumps them with the version for that second reason.
+    const seedAssets = JSON.parse(
+      fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
+    ).targets.map((t) => t.asset);
+    const optional = manifest.optionalDependencies ?? {};
+    const expectedOptional = seedAssets.map((a) => `${manifest.name}-${a}`).sort();
+    check(
+      `package.json declares one platform package per seed target (${seedAssets.length}: ${seedAssets.join(", ")})`,
+      JSON.stringify(Object.keys(optional).sort()) === JSON.stringify(expectedOptional),
+      `optionalDependencies is ${Object.keys(optional).sort().join(", ")}; expected ${expectedOptional.join(", ")}`
+    );
+    const misversioned = Object.entries(optional).filter(([, v]) => v !== manifest.version);
+    check(
+      `every platform package is pinned to this version (${manifest.version})`,
+      misversioned.length === 0,
+      misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
+    );
+    // The three spellings of a platform -- node's, this project's and npm's -- converted
+    // in one place, checked against the file that is the authority on the middle one.
+    // A row `targetForAsset` cannot read is a platform the release attaches a binary for
+    // and the launcher will never look for.
+    const { assetFor, targetForAsset } = await import(
+      pathToFileURL(path.join(root, "dist", "packaging.js")).href
+    );
+    const unmapped = seedAssets.filter((a) => {
+      const t = targetForAsset(a);
+      return t === null || assetFor(t.os, t.cpu) !== a;
+    });
+    check(
+      "every seed target round-trips through the launcher's platform table",
+      unmapped.length === 0,
+      unmapped.map((a) => `${a} does not round-trip: targetForAsset -> assetFor did not return it`).join("\n")
+    );
+    // A platform this project ships no binary for is a supported answer, not a failure:
+    // it is what sends the launcher to the Node compiler. If this ever returned an asset
+    // name, an Alpine or FreeBSD install would resolve a package that does not exist.
+    check(
+      "an unsupported platform maps to no asset at all",
+      assetFor("freebsd", "x64") === null && assetFor("linux", "riscv64") === null,
+      "assetFor answered an asset for a platform no release attaches a binary for"
+    );
+
     for (const f of [
       "src/index.ts",
       "tests/run.js",
@@ -6745,6 +6826,139 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
           ir.stderr
         );
+
+        // ---- the launcher hands over to a prebuilt binary, or does without one --------
+        // Everything above ran with no platform package installed, which is the fallback
+        // path: npm skipped four `optionalDependencies` whose `os`/`cpu` did not match or
+        // that do not exist yet, and `nish` answered out of `dist/`. That is the contract
+        // for a platform this project attaches no binary for, and it is worth saying that
+        // the checks above are what proves it rather than leaving it implied.
+        //
+        // The other path needs a platform package, so the checks below make one. A stub
+        // rather than a real compiler, deliberately: what is under test is whether the
+        // launcher finds the binary and gets out of its way -- argv through, status back,
+        // signal re-raised -- and a stub can answer that in milliseconds and say exactly
+        // what it was asked. Whether the binary it hands to is a correct compiler is the
+        // bootstrap section's question, and `npm run bootstrap` is what asks it.
+        const hostAsset = assetFor(process.platform, process.arch);
+        if (hostAsset === null) {
+          skip(`installed nish prefers a prebuilt binary (no asset for ${process.platform}/${process.arch})`);
+        } else {
+          const platformDir = path.join(prefix, "node_modules", ...`${manifest.name}-${hostAsset}`.split("/"));
+          fs.mkdirSync(path.join(platformDir, "bin"), { recursive: true });
+          fs.writeFileSync(
+            path.join(platformDir, "package.json"),
+            JSON.stringify({
+              name: `${manifest.name}-${hostAsset}`,
+              version: manifest.version,
+              exports: { "./package.json": "./package.json" },
+            })
+          );
+          const stub = path.join(platformDir, "bin", "nish");
+          fs.writeFileSync(stub, '#!/bin/sh\necho "stub $*"\nexit 42\n');
+          fs.chmodSync(stub, 0o755);
+          const handed = spawnSync(bin, ["--version", "x"], { cwd: work, encoding: "utf8" });
+          check(
+            "installed nish runs the prebuilt binary when one is installed, with argv and exit code intact",
+            handed.status === 42 && handed.stdout.trim() === "stub --version x",
+            `exit ${handed.status}, stdout ${JSON.stringify(handed.stdout)}`
+          );
+          // A signal is re-raised rather than folded into an exit code, so a crash or an
+          // interrupt reaches the shell as what it was. `process.exitCode` cannot carry
+          // one, so a launcher that forgot this would make `nish` the one command in a
+          // pipeline that turned SIGINT into an ordinary status.
+          fs.writeFileSync(stub, "#!/bin/sh\nkill -TERM $$\n");
+          fs.chmodSync(stub, 0o755);
+          const signalled = spawnSync(bin, [], { cwd: work, encoding: "utf8" });
+          check(
+            "a prebuilt binary killed by a signal reaches the caller as that signal",
+            signalled.signal === "SIGTERM",
+            `signal ${signalled.signal}, status ${signalled.status}`
+          );
+          // Installed but unstartable is a broken install, not an unsupported platform.
+          // Falling back keeps the user working; saying so on stderr is what keeps them
+          // from wondering why the compiler they installed for the speed is answering at
+          // the Node compiler's pace.
+          fs.writeFileSync(stub, "not a binary\n");
+          fs.chmodSync(stub, 0o644);
+          const broken = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+          check(
+            "a prebuilt binary that will not start falls back to the Node compiler, and says so",
+            broken.status === 0 &&
+              broken.stdout.trim() === `nish ${info.version}` &&
+              broken.stderr.includes("could not be started"),
+            `exit ${broken.status}, stdout ${JSON.stringify(broken.stdout)}, stderr ${JSON.stringify(broken.stderr)}`
+          );
+
+          // ---- the postinstall swap ---------------------------------------
+          // The shim above is correct and costs node's startup on every
+          // invocation -- 94 ms against the binary's own 2.7 ms, measured, so
+          // about 80 seconds across a suite that spawns a compiler per case.
+          // `scripts/postinstall.mjs` removes it by replacing `bin/nish` with
+          // the binary it would otherwise spawn. The install above ran with
+          // `--ignore-scripts`, which is why the shim was still there to test;
+          // this drives the script directly, which is also the honest way to
+          // test it, because what it has to do is the same whether npm ran it
+          // or a person did.
+          fs.writeFileSync(stub, '#!/bin/sh\necho "swapped $* from $0"\nexit 7\n');
+          fs.chmodSync(stub, 0o755);
+          const installed = path.join(prefix, "node_modules", ...manifest.name.split("/"));
+          const swap = spawnSync(process.execPath, [path.join(installed, "scripts", "postinstall.mjs")], {
+            cwd: work,
+            encoding: "utf8",
+          });
+          check(
+            "postinstall replaces the node shim with an exec of the prebuilt binary",
+            swap.status === 0 && fs.readFileSync(path.join(installed, "bin", "nish"), "utf8").startsWith("#!/bin/sh"),
+            swap.stdout + swap.stderr
+          );
+          const swapped = spawnSync(bin, ["a"], { cwd: work, encoding: "utf8" });
+          check(
+            "the swapped bin runs the binary with no node in front of it",
+            swapped.status === 7 && swapped.stdout.startsWith("swapped a from "),
+            `exit ${swapped.status}, stdout ${JSON.stringify(swapped.stdout)}`
+          );
+          // The regression this file did not have, and the reason the swap is an
+          // `exec` rather than a copy of the binary into the main package.
+          //
+          // npm links the command as `.bin/nish -> ../@amritk/nish/bin/nish`, so
+          // a user always invokes it through a symlink -- `bin` above is that
+          // symlink, deliberately. The native compiler resolves `build.sh` and
+          // `runtime/` from `argv[0]`'s directory and does not follow one
+          // (wp19 §5a item 4), so a binary *copied* next to the main package is
+          // reached as `node_modules/.bin/nish`, looks for them in
+          // `node_modules/`, and every `--link` fails -- while `--version` and
+          // `-o` keep working, which is what makes it a trap rather than an
+          // outage. Execing the binary where it was installed means `argv[0]`
+          // is a real path inside its own package, next to the `runtime/` and
+          // `scripts/` staged and smoke-tested beside it.
+          //
+          // The stub prints its own `$0`, so this asserts the thing the failure
+          // was about -- which directory the compiler will resolve from -- and
+          // not merely that something ran.
+          const ranFrom = (swapped.stdout.split(" from ")[1] ?? "").trim();
+          check(
+            "the swapped bin execs the binary inside its own platform package, not a copy beside the main one",
+            ranFrom.startsWith(platformDir + path.sep),
+            `the swapped bin ran ${JSON.stringify(ranFrom)}, which is not under ${platformDir}; ` +
+              "a compiler reached through npm's .bin symlink from there cannot find scripts/build.sh"
+          );
+          // Every way this can go wrong has to leave a working compiler, because
+          // the shim it replaces is one and npm fails an install on a non-zero
+          // postinstall. Removing the platform package is the reachable version
+          // of "there is nothing to swap in" -- the same answer a read-only
+          // node_modules or an unsupported platform gets.
+          fs.rmSync(platformDir, { recursive: true, force: true });
+          const nothing = spawnSync(process.execPath, [path.join(installed, "scripts", "postinstall.mjs")], {
+            cwd: work,
+            encoding: "utf8",
+          });
+          check(
+            "postinstall with no platform package to swap in succeeds rather than failing the install",
+            nothing.status === 0,
+            nothing.stdout + nothing.stderr
+          );
+        }
       }
     }
   }
