@@ -99,7 +99,11 @@ const worse = (a: i32, b: i32): i32 => a >= b ? a : b;
  * is a function here and the two are read side by side.
  */
 const isAllocatingBuiltin = (name: string): boolean => (
-    name === "readFileSync" || name === "readFileSyncOrNull" || name === "getenv" || name === "readdirSync"
+    name === "readFileSync" ||
+    name === "readFileSyncOrNull" ||
+    name === "getenv" ||
+    name === "readdirSync" ||
+    name === "realpathSync"
   );
 
 export class EscapeResult {

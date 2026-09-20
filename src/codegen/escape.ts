@@ -100,7 +100,13 @@ export type Flow = "local" | "returned" | "leaks";
  * use-after-free and not a missed optimisation, so the three `mem_*_scope` cases
  * pin one each.
  */
-const ALLOCATING_BUILTINS = new Set(["readFileSync", "readFileSyncOrNull", "getenv", "readdirSync"]);
+const ALLOCATING_BUILTINS = new Set([
+  "readFileSync",
+  "readFileSyncOrNull",
+  "getenv",
+  "readdirSync",
+  "realpathSync",
+]);
 
 /** What happens to the allocations a user callee returns, from the caller's side. */
 export interface CallSite {

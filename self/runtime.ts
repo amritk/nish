@@ -383,6 +383,20 @@ export class RuntimeTable {
     this.add(
       plain("nish_getenv", `declare noalias noundef align 8 i8* @nish_getenv(${STR_NOCAP})`, EFFECT_WRITE)
     );
+    // WP19 §5a item 4: `realpathSync`. The same shape as `nish_getenv` above
+    // and for the same reasons — it allocates, so it moves the arena;
+    // `noalias` because every call answers a fresh arena string; the path is
+    // read and never retained; the answer may be null, so no `nonnull`. The
+    // filesystem it reads is not memory LLVM tracks either, so `EFFECT_WRITE`
+    // is what stops a resolution folding across a `mkdirSync` that could
+    // create the component being resolved.
+    this.add(
+      plain(
+        "nish_realpath",
+        `declare noalias noundef align 8 i8* @nish_realpath(${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
+    );
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

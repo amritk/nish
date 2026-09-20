@@ -2969,16 +2969,27 @@ const RUNTIME_TEXT_BUDGET = 3584;
  * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. It
  * was 1,190 until WP21 S2 put the `fstat`/`S_ISDIR` guard in `nish_read_file_or_null`,
  * which is 61 of those bytes and is what makes reading a directory answer null rather
- * than ask the arena for `LONG_MAX`. The budget is the next 256-byte boundary above the
- * original measurement, so what is left is now **29 bytes** — less than a tenth of one
- * syscall wrapper, since `nish_readdir` alone is 294, so the next builtin that reaches
- * into the operating system raises this number in the commit that adds it, with the
- * measurement, and cannot borrow room from the arena to hide in.
+ * than ask the arena for `LONG_MAX`.
  *
- * The two together are 4,864 -- exactly the single budget they replace, which is a
- * coincidence and not a constraint.
+ * **Raised to 1,536 on 2026-09-20 by `nish_realpath`**, which is what the paragraph
+ * that used to stand here said would happen: 29 bytes were left, a syscall wrapper does
+ * not fit in 29 bytes, and the next one to reach into the operating system raises this
+ * number in the commit that adds it rather than borrowing room from the arena to hide
+ * in. Measured **1,347 bytes** (`.text` 1,312 plus `.text.unlikely.` 35) with clang 18
+ * on linux-x64, so `nish_realpath` is **157** of them and the budget is the next
+ * 256-byte boundary above the new measurement, leaving 189.
+ *
+ * 8 of those 157 are a portability choice worth its own number, because the cheaper
+ * spelling is the wrong one. `realpath(p, NULL)` measures 1,339 and allocates the
+ * result, which is POSIX 2008 -- but on Darwin it is the `__DARWIN_EXTSN` variant that
+ * implements it, and which variant a translation unit binds depends on its
+ * feature-macro level. A caller-supplied `PATH_MAX` buffer is defined for both, so it
+ * is the spelling that cannot depend on that, and 8 bytes is what it costs.
+ *
+ * The two together are 5,120; they were 4,864, which was exactly the single budget they
+ * replaced -- a coincidence then and not a constraint now.
  */
-const RUNTIME_OS_TEXT_BUDGET = 1280;
+const RUNTIME_OS_TEXT_BUDGET = 1536;
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
@@ -7289,6 +7300,66 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
           "a bare `nish` with no package around it names the directory it searched, not `./..`",
           orphan.status !== 0 && orphan.stderr.includes(`${lonely}/..`) && !orphan.stderr.includes("./.."),
           `exit ${orphan.status}\n${orphan.stdout}${orphan.stderr}`
+        );
+      }
+    }
+
+    // `realpathSync` against an actual symbolic link, which is the half
+    // `tests/cases/io_realpath` cannot state: a resolved path is absolute, so it is
+    // whatever machine this runs on, and a golden can only pin the shape. Here the
+    // link and its target are both resolved and compared to each other, which is
+    // machine-independent and is the property the builtin exists for.
+    //
+    // It is the answer to the symlink half of wp19 §5a item 4 -- `argv[0]` reaching
+    // the compiler through `node_modules/.bin/nish` or through an admin's
+    // `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. The builtin lands here; the
+    // rolling freeze is why `self/`'s own `packageRoot()` cannot call it until the
+    // release after this one.
+    if (!HAS_CLANG) {
+      skip("realpathSync against a real symlink (clang not found, and the program has to link)");
+    } else {
+      const rp = path.join(buildDir, "realpath-symlink");
+      fs.rmSync(rp, { recursive: true, force: true });
+      fs.mkdirSync(rp, { recursive: true });
+      fs.writeFileSync(path.join(rp, "target.txt"), "x\n");
+      fs.symlinkSync("target.txt", path.join(rp, "link.txt"));
+      fs.mkdirSync(path.join(rp, "sub"), { recursive: true });
+      fs.symlinkSync("..", path.join(rp, "sub", "up"));
+      fs.writeFileSync(
+        path.join(rp, "probe.ts"),
+        [
+          "export function main(): number {",
+          '  const target = realpathSync("target.txt");',
+          "  if (target === null) {",
+          '    console.log("target: <null>");',
+          "    return 1;",
+          "  }",
+          '  const link = realpathSync("link.txt");',
+          '  console.log(`same: ${link !== null && link === target}`);',
+          '  const viaDir = realpathSync("sub/up/target.txt");',
+          '  console.log(`viaDir: ${viaDir !== null && viaDir === target}`);',
+          '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
+          "  return 0;",
+          "}",
+          "",
+        ].join("\n")
+      );
+      const built = spawnSync(
+        "node",
+        [path.join(root, "dist", "index.js"), "probe.ts", "--link", "probe"],
+        { cwd: rp, encoding: "utf8" }
+      );
+      check(
+        "realpathSync: a program using it compiles and links",
+        built.status === 0,
+        `${built.stdout}${built.stderr}`
+      );
+      if (built.status === 0) {
+        const ran = spawnSync(path.join(rp, "probe"), [], { cwd: rp, encoding: "utf8" });
+        check(
+          "realpathSync: a symlink and its target resolve to one path, through a directory link too",
+          ran.status === 0 && ran.stdout === "same: true\nviaDir: true\nmissing: true\n",
+          `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
         );
       }
     }

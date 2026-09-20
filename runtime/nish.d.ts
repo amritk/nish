@@ -164,6 +164,11 @@ declare function isDirectorySync(path: string): boolean;
  * the null check is about the directory and not about its contents.
  */
 declare function readdirSync(path: string): string[] | null;
+/**
+ * `path` with every symbolic link resolved, as an absolute normalised path —
+ * or `null` when it does not resolve, a path that does not exist included.
+ */
+declare function realpathSync(path: string): string | null;
 /** Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure. */
 declare function spawnSync(argv: string[]): number;
 /**
@@ -204,6 +209,7 @@ declare module "nish:fs" {
    * `..`, or `null` when it cannot be read.
    */
   export function readdirSync(path: string): string[] | null;
+  export function realpathSync(path: string): string | null;
 }
 
 declare module "nish:process" {

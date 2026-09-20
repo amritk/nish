@@ -54,6 +54,7 @@ export const NISH_MODULES: Record<string, Record<string, BuiltinExport>> = {
     mkdirSync: call("mkdirSync"),
     isDirectorySync: call("isDirectorySync"),
     readdirSync: call("readdirSync"),
+    realpathSync: call("realpathSync"),
   },
   [`${BUILTIN_SCHEME}process`]: {
     exit: call("process.exit"),

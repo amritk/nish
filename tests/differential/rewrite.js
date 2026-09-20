@@ -237,6 +237,11 @@ const IDENTIFIER_BUILTINS = new Map([
   ["spawnSyncTo", "spawnSyncTo"],
   ["isDirectorySync", "isDirectorySync"],
   ["readdirSync", "readdirSync"],
+  // `realpathSync` answers null where Node's throws, so this is the shim's
+  // rather than Node's (`runtime/shim.mjs`). The resolved path is absolute and
+  // therefore machine-dependent, which is why `cases/io_realpath` prints the
+  // shape of the answer rather than the answer.
+  ["realpathSync", "realpathSync"],
   ["getenv", "getenv"],
   // `monotonicNanos()` is an `i64`, so the shim answers the BigInt this side
   // holds one in. It is also the one builtin here whose value is not a function

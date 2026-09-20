@@ -507,6 +507,24 @@ export function readdirSync(path) {
 }
 
 /**
+ * `realpathSync(path)` (WP19 §5a item 4): `path` with its symbolic links
+ * resolved, or `null` when it does not resolve.
+ *
+ * `fs.realpathSync` throws where the native `realpath` answers NULL — a
+ * missing path, a loop, a component that is not a directory — so the `catch`
+ * is what makes the two runtimes agree, exactly as it does for `readdirSync`
+ * above. Node's own answer is already absolute and already normalised, which
+ * is what POSIX `realpath` guarantees, so nothing here has to normalise it.
+ */
+export function realpathSync(path) {
+  try {
+    return fs.realpathSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * `process.platform` / `process.arch` (WP14 §7a). Node's spellings are the
  * ones `runtime_os.c` answers with, so on any machine this compiler has a
  * triple for the two runtimes give the same string; elsewhere the native build
