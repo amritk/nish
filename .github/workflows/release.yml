@@ -311,10 +311,45 @@ jobs:
           test "$code" = "49" || { echo "::error::the unpacked compiler linked examples/multi but it exited $code, not 49"; exit 1; }
           echo "native compiler works from an unrelated directory, on one module and on two"
 
+      # The same staged directory, packaged a second way. `npm pack` over it is
+      # the package the installer resolves: the binary this job just built,
+      # --verify'd and smoke-tested, with a package.json declaring the `os` and
+      # `cpu` npm matches a machine against. Nothing is rebuilt and nothing is
+      # copied -- the bytes a user downloads are the bytes the step above ran
+      # -- which is the property that makes `npm install` a download rather
+      # than a build (docs/wp12-release.md, "Which compiler the package ships").
+      #
+      # The layout needs no rearranging because the release tarball and the npm
+      # package want the same one: `bin/nish` beside the `runtime/` and
+      # `scripts/` it resolves one level up from itself.
+      - name: The platform package npm installs
+        id: platform
+        env:
+          ASSET: ${{ matrix.target.asset }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          stage="build/release/nish-$version-$ASSET"
+          node scripts/platform-package.mjs "$stage" "$ASSET" --version "$version"
+          file="$(npm pack "$stage" --pack-destination build/release | tail -n 1)"
+          echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
+          # A platform package whose binary did not ship is the worst outcome
+          # this workflow can produce: it installs without error on every
+          # machine it matches and silently answers at the Node compiler's pace
+          # forever, because falling back is exactly what the launcher does when
+          # it cannot find the binary. No smoke test of the unpacked tarball can
+          # see it, so the list is checked here.
+          tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
+          for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh package.json; do
+            grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
+          done
+          echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
+
       - uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.target.asset }}
-          path: ${{ steps.binary.outputs.asset }}
+          path: |
+            ${{ steps.binary.outputs.asset }}
+            ${{ steps.platform.outputs.tarball }}
           if-no-files-found: error
           retention-days: 1
 
@@ -437,14 +472,28 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           : > build/release/assets.txt
+          : > build/release/packages.txt
+          # `npm pack` names a tarball after the package: the leading `@` goes
+          # and every `/` becomes `-`, so `@<scope>/nish-<asset>` packs as
+          # `<scope>-nish-<asset>-<version>.tgz`. Both halves are derived --
+          # the scope from package.json#name and the asset from the matrix --
+          # for the reason this whole file names no platform: a contract
+          # written down twice is two strings that agree until one is edited,
+          # and tests/run.js fails on an asset spelled here
+          # (docs/wp12-release.md, "The npm name").
           while read -r asset; do
             [ -n "$asset" ] || continue
             path="build/release/nish-$version-$asset.tar.gz"
             test -s "$path" || { echo "::error::$path is missing or empty"; exit 1; }
             echo "$path" >> build/release/assets.txt
             echo "$(du -h "$path" | cut -f1)  $path"
+            pkg="build/release/$(node -p "\`\${require('./package.json').name}-$asset\`.replace(/^@/, '').replace(/\//g, '-')")-$version.tgz"
+            test -s "$pkg" || { echo "::error::$pkg is missing or empty; the $asset row built a compiler but not the package that installs it"; exit 1; }
+            echo "$pkg" >> build/release/packages.txt
+            echo "$(du -h "$pkg" | cut -f1)  $pkg"
           done < <(printf '%s' "$ROWS" | jq -r '.[].asset')
           test -s build/release/assets.txt || { echo "::error::no native compiler assets to attach"; exit 1; }
+          test -s build/release/packages.txt || { echo "::error::no platform packages to attach"; exit 1; }
 
       - name: Pack
         id: pack
@@ -496,6 +545,12 @@ jobs:
           # the check are one list rather than two.
           assets=()
           while IFS= read -r path; do assets+=("$path"); done < build/release/assets.txt
+          # The platform packages are attached as well as published, for the
+          # same reason the npm tarball always has been: until a registry
+          # publish happens the release *is* the distribution, and a user who
+          # wants the native compiler without waiting for one can install the
+          # pair by hand (docs/INSTALL.md, §2).
+          while IFS= read -r path; do assets+=("$path"); done < build/release/packages.txt
           gh release create "$GITHUB_REF_NAME" \
             "${{ steps.pack.outputs.tarball }}" \
             "${assets[@]}" \
@@ -503,11 +558,27 @@ jobs:
             --notes-file build/release/notes.md \
             --verify-tag
 
-      # npm publish is intentionally manual for now. To automate it: create an
-      # npm automation token, store it as the NPM_TOKEN repository secret, add
-      # `id-token: write` under permissions for provenance, then uncomment:
+      # npm publish stays manual, and is now the only step of the release it is
+      # not safe to automate without somebody deciding to: a publish cannot be
+      # taken back after 72 hours, and this one is N+1 packages rather than one.
+      #
+      # To automate it: create an npm automation token, store it as the
+      # NPM_TOKEN repository secret, add `id-token: write` under permissions
+      # for provenance, then uncomment:
       #
       # - name: Publish to npm
-      #   run: npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
+      #   run: |
+      #     # The platform packages first, then the one that depends on them.
+      #     # In this order a failure half way leaves a registry where the main
+      #     # package does not yet exist, so nobody can install a version whose
+      #     # binaries are missing; the other order publishes a compiler that
+      #     # resolves nothing and falls back to Node on every machine.
+      #     while IFS= read -r pkg; do
+      #       npm publish "$pkg" --provenance --access public
+      #     done < build/release/packages.txt
+      #     npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
       #   env:
       #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #
+      # `--access public` is not optional: a scoped package is private by
+      # default and a private publish on a free account fails at the registry.

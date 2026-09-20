@@ -9,7 +9,8 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 
 | Path | Why it ships |
 | --- | --- |
-| `dist/` | the compiled CLI (`dist/index.js` is the `nish` bin) |
+| `bin/` | `nish`, the command. A node shim in the tarball; the native compiler after postinstall (see "What the launcher costs") |
+| `dist/` | the compiled CLI. `dist/launcher.js` is what the shim delegates to; `dist/index.js` is the Node compiler it falls back to |
 | `runtime/` | `runtime.c` and `runtime_os.c` (the two translation units of the C runtime, both linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
@@ -21,20 +22,134 @@ the tarball. Check with `npm pack --dry-run`.
 
 `src/index.ts` resolves `scripts/build.sh` and `runtime/runtime.c` from the
 package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
-working directory, so a global install works from any directory — today
-`npm install -g ./nish-<version>.tgz` from the release, because nothing is
-published to the registry yet: the name is settled (see "The npm name") and the
-installer that would carry it is not built (see "Which compiler the package
-ships").
+working directory, so a global install works from any directory.
+
+**The package is an installer.** `bin.nish` is `bin/nish`, which looks
+for the prebuilt native compiler for this machine and hands over to it; the
+binary arrives as one of four `@amritk/nish-<asset>` packages declared as
+`optionalDependencies` with `os` and `cpu` set, so npm installs the matching
+one and skips the rest. **Nothing is compiled on a user's machine on any
+path** — each of those packages is the binary `release.yml` built, `--verify`d
+and smoke-tested on hardware of its own architecture, repackaged from the same
+staged directory the release tarball is made from, so installing is a download
+and an unpack. A machine with no prebuilt binary — musl, FreeBSD, a 32-bit
+anything — runs `dist/index.js`, the Node compiler already in the package,
+which needs no C toolchain and is the same compiler by every test here.
+
+That is one package published per release plus N platform ones, which the
+`binaries` matrix produces and `release.yml` attaches. Publishing them is the
+one manual step left (see "Release procedure" step 4).
+
+**npm is not the only way in.** `install.sh` at the repository root is the
+`curl | sh` route — it reads `uname`, downloads the release tarball for that
+platform and unpacks it into `~/.nish` — and it needs no new build machinery,
+because the tarballs it fetches are the ones `release.yml` has attached since
+0.1.1. The two channels are for two different users: npm pins a compiler
+version per project in a `package.json`, which is what an Nish program already
+has for its own dependencies ([wp21-packages.md](wp21-packages.md)), and the
+script puts one compiler on one machine with no node anywhere. `tests/run.js`
+drives the script's platform mapping against every row of
+`.github/seed-targets.json` rather than letting it hold a second copy of the
+asset names.
+
+Upgrading through that channel is running the script again — there is no
+`nish upgrade`, and there is a reason beyond nobody having written one. The
+compiler has no networking: `runtime/` has no sockets and no TLS, and it is
+under a `.text` budget this document's neighbours defend, so a compiler that
+downloaded its own replacement would have to grow one or shell out. The CLI
+also has no subcommand grammar — `main(argv)` reads a non-flag argument as an
+input file, so `nish upgrade` today asks for a file called `upgrade` — and it
+would have to answer for the npm channel too, where writing into
+`node_modules` is npm's business and gets undone by the next `npm ci`. So
+upgrading belongs to whatever installed the compiler, which is `npm update -g`
+on one side and this script on the other.
+
 The `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
-unrelated directory with the installed `nish`.
+unrelated directory with the installed `nish` — which, with no platform package
+beside it, is the fallback path end to end. It then synthesises a platform
+package in that prefix and checks the other one: that `nish` hands argv to the
+binary and gives its exit status back, that a binary killed by a signal reaches
+the caller as that signal rather than as a status, and that a binary which will
+not start falls back to the Node compiler and says so on stderr. A stub stands
+in for the compiler there on purpose — what is under test is whether the
+launcher gets out of the way, and whether the thing it hands to is a correct
+compiler is `npm run bootstrap`'s question.
 
 `--version` reads `version` from `package.json` at runtime
 (`src/version.ts`). There is no generated version file to keep in sync.
 
 `prepublishOnly` runs `npm run check && npm run build && npm test`, so a
 `npm publish` from a broken tree fails before anything is uploaded.
+
+## What the launcher costs
+
+`bin/nish` ships as a node shim: it resolves the prebuilt binary and spawns it.
+That is correct everywhere and it costs node's startup on every invocation.
+
+**Measured on this tree (0.3.0, x86_64-linux, 20 runs of `--version`):**
+
+| What is on PATH | Per invocation |
+| --- | ---: |
+| the native binary itself (`build/nish`) | 2.7 ms |
+| the node shim, spawning that binary | 94 ms |
+| the shim after `scripts/postinstall.mjs` has replaced it | 3.2 ms |
+
+The 91 ms is node starting, not the compiler doing anything, and it is charged
+once per `nish`. For a build that is noise. For this repository's own
+`npm run test:nish`, which spawns a compiler per case over about 900 cases, it
+is roughly 80 seconds of pure launcher.
+
+So `scripts/postinstall.mjs` replaces `bin/nish` with a one-line `/bin/sh`
+`exec` of the binary it would have spawned, and the thing npm linked into
+`.bin` reaches the compiler with no node in front of it — esbuild's trick, one
+indirection short of it. The three rows above are why it is worth a postinstall
+at all, and the first and third agreeing to within a shell's startup is the
+claim that the swap gives up nothing.
+
+**It execs the binary where it lies rather than copying it here, and that is
+not a preference.** Copying was the first attempt, it passed every check in
+this file, and it breaks `--link` on every npm install. npm links the command
+as `node_modules/.bin/nish -> ../@amritk/nish/bin/nish`, so a user always
+invokes it through a symlink; the native compiler resolves `build.sh` and
+`runtime/` from `argv[0]`'s directory and **does not follow one**. A copy at
+`@amritk/nish/bin/nish` reached through `.bin` therefore looks for them in
+`node_modules/` and finds neither:
+
+```
+--link: cannot find scripts/build.sh (looked in .../node_modules/.bin/.. and .)
+```
+
+`--version` and plain `-o` keep working throughout, which is what makes it a
+trap rather than an outage — and it is why `tests/run.js` now invokes the
+installed compiler through the `.bin` symlink and asserts *which directory* the
+swapped command resolves from, rather than only that something ran.
+
+The node shim never had this problem because node resolves `import.meta.url` to
+the realpath. This is **[wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
+item 4**, `packageRoot()`'s sensitivity to `argv[0]`, which that section records
+as "unmeasured by anything": it is measured now, and this is the shape it takes
+in front of a user. The `exec` is a workaround and is sound as one — the path it
+writes is a real path inside the platform package, never a link, so the compiler
+resolves from the `runtime/` and `scripts/` that were staged and smoke-tested
+beside it. The fix belongs in `self/` and is that item, not this one.
+
+**The shim is the mechanism and the swap is the optimisation, never the other
+way round.** `npm ci --ignore-scripts` is an ordinary thing for CI to do, and a
+sandbox or a proxy may disable scripts outright; each of those leaves the shim
+in place, which is a working compiler at the middle row's price. The script
+therefore **exits 0 whatever happens** — no binary for this platform, a
+read-only `node_modules`, `dist/` not built yet, a half-written package — and
+`tests/run.js` checks that the case it can reach (nothing to swap in) succeeds
+rather than failing the install. A postinstall that can break `npm ci` would be
+a worse bug than the startup cost it exists to remove.
+
+It also refuses to run in a checkout, which is not a nicety: this repository is
+its own package, so `npm ci` here installs this package's own
+`optionalDependencies`, and once those are published the first `npm ci` would
+otherwise overwrite the tracked `bin/nish` with a binary and leave the working
+tree dirty. The guard is the presence of `src/launcher.ts`, the same shape of
+check `scripts/bootstrap.sh` makes.
 
 ## Exit codes and failure modes
 
@@ -222,28 +337,42 @@ step below is done by hand.
    version dates the claim, so the workflow change and the file change land
    together and each release is judged against what it was due to attach.
 
-4. **npm publish is manual, and is blocked on the installer rather than on
-   the name.** `nish` on the public registry is somebody else's package, and
-   this one is `@amritk/nish` as of 2026-09-19 — see "The npm name" below —
-   so what is missing is no longer a name but the installer that would be
-   published under it. Once the installer exists, releasing to the registry is
+4. **npm publish is manual, and is now blocked on nothing but a person.** The
+   name was settled on 2026-09-19 (`@amritk/nish`, see "The npm name" below)
+   and the installer landed on 2026-09-20, so both of the things this step
+   used to wait on are done. It is **N+1 packages**, and the order matters:
 
    ```bash
-   git checkout v0.2.0
-   npm ci && npm publish --access public      # prepublishOnly re-runs check/build/test
+   git checkout v0.4.0
+   npm ci && npm run build
+   # the platform packages first, then the one that depends on them
+   while IFS= read -r pkg; do npm publish "$pkg" --provenance --access public; done \
+     < build/release/packages.txt
+   npm publish --access public                # prepublishOnly re-runs check/build/test
    ```
+
+   **Platform packages first.** In this order a failure half way leaves a
+   registry where the main package does not yet exist for that version, so
+   nobody can install one whose binaries are missing; the other order publishes
+   a compiler that resolves nothing and falls back to Node on every machine
+   that installs it until the loop is finished. That is the partial-publish
+   failure mode the decision below priced, and the ordering is the whole of the
+   answer to it.
 
    To automate it, add an `NPM_TOKEN` repository secret and uncomment the
    `Publish to npm` step at the end of `release.yml` (it uses
-   `NODE_AUTH_TOKEN` and `--provenance`). `--access public` is not optional
-   now that the name is scoped: a scoped package is private by default and a
-   private publish on a free account fails at the registry rather than in the
-   workflow.
+   `NODE_AUTH_TOKEN` and `--provenance`, and carries the same loop in the same
+   order). It stays commented until somebody turns it on deliberately: a
+   publish cannot be taken back after 72 hours, and this one is N+1 packages
+   rather than one. `--access public` is not optional now that the name is
+   scoped: a scoped package is private by default and a private publish on a
+   free account fails at the registry rather than in the workflow.
 
-   Until the installer exists the release is the distribution, and it already
-   works: `release.yml` attaches `nish-<version>.tgz` to every release, and
-   `npm install -g ./nish-<version>.tgz` installs exactly what `npm publish`
-   would have uploaded ([INSTALL.md](INSTALL.md), §2).
+   Until a publish happens the release is the distribution, and it already
+   works: `release.yml` attaches the npm tarball, the four seed tarballs *and*
+   the four platform packages to every release, so `npm install -g` over the
+   pair for your machine installs exactly what `npm publish` would have
+   uploaded ([INSTALL.md](INSTALL.md), §2).
 
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
@@ -423,9 +552,12 @@ the whole compiler reads its name from. The options, and what each costs:
 (a) is reversible into (b) or (c) and neither of the others is reversible into
 it; that ordering is the only thing this note claimed, and it is why (a) was
 taken. **`package.json#name` is `@amritk/nish` as of 2026-09-19.** `npm publish`
-still has not been run, for the reason the *next* section gives rather than this
-one: which compiler the package ships is a separate open decision, and G5's
-installer is not built. The name is settled; publishing is not.
+still has not been run, and as of 2026-09-20 the reason is no longer a missing
+piece of work: the next section's decision was made, the installer that carries
+it is written and tested, and what is left is a person running the publish (see
+"Release procedure" step 4). The scope also decides the platform packages'
+names, which are `@amritk/nish-<asset>` — derived from this one rather than
+written out, so the scope is still spelled in a single place.
 
 ## Which compiler the package ships
 
@@ -438,6 +570,30 @@ the machine as per-platform prebuilt packages, the (b) row below, and a
 platform with no binary of its own falls back to (a). The three rows were never
 alternatives: (c) says which binary is `nish`, (b) says how it arrives, and (a)
 is what (b) does when it has nothing to hand over.
+
+**Amended 2026-09-20, when the installer was written: the fallback is `dist/`,
+not (a).** (c) and (b) are unchanged and are what landed. What did not survive
+contact with the work is the third row, and the reason is that (a) was chosen
+as "what (b) does when it has nothing to hand over" without anybody pricing
+that sentence against the alternative sitting in the same tarball.
+
+(a) costs a user a clang and two compilations of `self/` before they have a
+compiler, and costs every tarball on every platform the 944,676 bytes of
+`self/` — all of it to serve musl, FreeBSD and 32-bit anything, which is who is
+left once `x86_64`/`aarch64` × `linux`/`darwin` is covered. `dist/` is already
+in the package for its own reasons, runs anywhere node does, needs no C
+toolchain, and is the same compiler by every test in this repository. It is
+slower to compile *with* and free to install; (a) is faster to compile with and
+expensive for everyone, including the overwhelming majority who never reach it.
+
+The sentence this amends is **"`dist/` stops being the thing a user runs"**, and
+it still holds where it was aimed: `dist/` is not what a user on a supported
+platform runs, and `bin.nish` is the native binary there. "Not the default" and
+"never, on any platform, even when there is no binary" are two claims, and the
+row below only ever argued the first. So `files` does not list `self/`, and the
+one thing (a) would have bought — a native compiler on an unsupported
+platform — is not bought at all, deliberately: a working compiler is, and
+nothing is compiled on a user's machine on any path.
 
 Two of the reasons this stayed open are gone, and one of them went stale
 without anybody editing it, which is worth naming.
@@ -481,20 +637,26 @@ What (b) honestly costs, now that its blocker is built:
   one `nish-<os>-<arch>` per attached target — so the publish step becomes a
   loop over the same `seed-targets.json` rows, and a partially published
   release is a new failure mode to answer for.
-- **A fallback for a platform with no binary**, and that fallback is (a). The
-  two are additive rather than exclusive, which is why (a) is recorded here as
-  the fallback rather than ruled out.
+- **A fallback for a platform with no binary.** Recorded here as (a), and
+  amended above on 2026-09-20 to `dist/` — the Node compiler already in the
+  package — for what (a) costs everyone to serve the few who would reach it.
+  The point this bullet was making stands either way: (b) needs *a* fallback,
+  which is why the row was never ruled out.
 
 **The rule: `bin.nish` is the native binary, `dist/` is the seed and the
 oracle, and a cost in the table below is re-measured before it is cited
 again.**
 
-None of this is implemented and this note is still not a plan. `package.json`
-still ships `dist/` and `files` still does not list `self/`, exactly as the note
-below describes; no `nish-<os>-<arch>` package exists; and the G5 installer
-that would carry the decision has not been designed, let alone written. What
-changed on 2026-09-19 is which of the three rows the work will follow, not that
-any of it was done.
+**Implemented on 2026-09-20**, which is what the amendment above came out of.
+`bin.nish` is `dist/launcher.js`; `package.json` declares one
+`@amritk/nish-<asset>` per row of `.github/seed-targets.json` as an
+`optionalDependencies` entry pinned to its own version;
+`scripts/platform-package.mjs` turns the directory `release.yml` already stages
+for the release tarball into one of those packages, so the binary a user
+downloads is the binary that job built and smoke-tested rather than a copy of
+it; and the WP12 block drives both paths. `files` does not list `self/`, for the
+reason the amendment gives. What is left of G5 is a person publishing, which is
+"Release procedure" step 4 and not work.
 
 The rest of this section is the record of why, and is left as it was written —
 including (b)'s stale cost, which is the point.
@@ -554,10 +716,14 @@ cost rather than what one did.
   ([wp10-ci.md](wp10-ci.md#ci-matrix))
   ([wp19 G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
   *Delivering* one through npm is option (b) of "which compiler the package
-  ships" above, which is decided and no longer waits on the name — it is work
-  now, and it is the one thing in this bullet that has not been done. The
-  bullet stays because it is the position the package was built under, and
-  because the `files` whitelist still reflects it.
+  ships" above, and it landed on 2026-09-20: the package is a launcher, the
+  binary arrives as an `optionalDependencies` entry per platform, and nothing
+  is compiled on a user's machine on any path. So the last unfinished thing in
+  this bullet is done, and what remains of G5 is a person publishing rather
+  than any work. The bullet stays because it is the position the package was
+  built under, and because the `files` whitelist still reflects it — `files`
+  lists neither `self/` nor a binary, which is exactly what (b) plus a `dist/`
+  fallback needs it to look like.
 
 Multi-error reporting and `--json` diagnostics were listed here as a WP10
 follow-up and have since landed in WP10 itself: every phase that can recover

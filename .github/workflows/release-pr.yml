@@ -133,6 +133,15 @@ jobs:
             for (const f of ["package.json","package-lock.json"]) {
               const j=JSON.parse(fs.readFileSync(f,"utf8"));
               j.version=v; if (j.packages&&j.packages[""]) j.packages[""].version=v;
+              // The per-platform packages carrying the native compiler are
+              // pinned to the exact version of the package that depends on
+              // them, so they move with it. A bump that left them behind would
+              // publish a compiler whose optionalDependencies resolve last
+              // release's binaries -- an install that succeeds, runs, and is
+              // one release stale in the half of itself nobody looks at.
+              // tests/run.js fails while the two disagree.
+              const deps=j.optionalDependencies;
+              if (deps) for (const k of Object.keys(deps)) if (k.startsWith(`${j.name??""}-`)) deps[k]=v;
               fs.writeFileSync(f, JSON.stringify(j,null,2)+"\n");
             }
             // self/branding.ts carries the version too, and tests/run.js fails
