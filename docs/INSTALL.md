@@ -92,12 +92,32 @@ the Ubuntu steps inside it.
 
 ## 2. Install the compiler
 
+**Two ways in, and they install the same compiler.** Neither compiles anything
+on your machine: the binary was built, `--verify`d and smoke-tested on hardware
+of its own architecture by the release workflow before the release existed, and
+installing is a download and an unpack.
+
+Through npm, which is also how an Nish *program* resolves its dependencies
+([wp21-packages.md](wp21-packages.md)), so this is the one to pick if you want
+the compiler pinned per project in a `package.json`:
+
 ```bash
 npm install -g @amritk/nish
 nish --version
 ```
 
-That installs the **native** compiler, and it is a download rather than a
+Or without npm and without node at all:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
+```
+
+That unpacks into `~/.nish` (`NISH_INSTALL` changes it), takes an optional
+version (`sh install.sh v0.4.0`, latest otherwise), and prints the one line to
+add to your shell profile. On a platform it has no binary for it says so and
+names the npm route, which works anywhere node does.
+
+The npm route installs the **native** compiler, and it is a download rather than a
 build: nothing is compiled on your machine. The package declares one
 `nish-<os>-<arch>` package per supported platform as an `optionalDependencies`
 entry with `os` and `cpu` set, so npm fetches exactly the one that matches and
@@ -112,6 +132,18 @@ in a sandbox that disables scripts, the step does not run and `nish` is a small
 node launcher that spawns the same binary: the same compiler and the same
 answers, about 91 ms slower to start. Nothing else changes, and the install
 never fails over it.
+
+> [!IMPORTANT]
+> **Unpacking a release tarball onto your `PATH` is not an install.** The
+> compiler resolves `scripts/build.sh` and `runtime/` from `argv[0]`'s
+> directory, and a bare `nish` found on `PATH` has no directory in it — so it
+> looks in `./..` and every `--link` fails against whatever your working
+> directory happens to be, while `--version` and `-o` keep working. Both
+> installers above handle it by running the binary through a one-line `exec` of
+> an absolute path. If you unpack a tarball by hand, invoke it by path
+> (`nish-<version>-<asset>/bin/nish`) or write that wrapper yourself. The
+> underlying defect is [wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
+> item 4.
 
 **Do not install `nish`.** That name on the public registry has belonged to
 `stdarg`'s "A Node.js Interactive shell" since February 2014 — versions 0.0.0

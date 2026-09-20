@@ -1577,8 +1577,33 @@ None of these needs anybody's permission. They need somebody's afternoon.
    while `--version` and `-o` keep working. The installer execs the binary
    inside its own package instead, which sidesteps it with a real path and does
    not fix it ([wp12-release.md](wp12-release.md#what-the-launcher-costs) has
-   the failure and the reasoning). So this item now has a reproduction and a
-   user-visible shape, and is still open.
+   the failure and the reasoning).
+
+   **The worse half of it, found the same day: a bare `nish` on `$PATH` cannot
+   link at all.** A command found on `$PATH` arrives with `argv[0]` as the bare
+   word — `nish`, no directory — so `packageRoot()` answers `./..` and
+   `--link` resolves `scripts/build.sh` against whatever the working directory
+   happens to be:
+
+   ```
+   --link: cannot find scripts/build.sh (looked in ./.. and .)
+   ```
+
+   So unpacking a release tarball onto `$PATH`, which is what an installed
+   native compiler *is*, does not work — and `--version` and `-o` keep working
+   throughout, which is why nothing noticed. Nothing noticed because nothing
+   invokes it that way: `release.yml`'s smoke step runs `"$unpack/.../bin/nish"`
+   and [INSTALL.md](INSTALL.md) showed `nish-<version>-<asset>/bin/nish`, both
+   path-shaped, both fine. That is §A7's sentence about this family — "the
+   harness happens to invoke the spelling that agrees" — holding for the
+   product as well as for the harness.
+
+   Both installers work around it the same way, with a one-line `exec` of an
+   absolute path (`scripts/postinstall.mjs`, `install.sh`'s
+   `nish_write_wrapper`), and `tests/run.js` now drives a bare `nish` on `PATH`
+   and asserts the `argv[0]` that arrives. So this item has a reproduction, a
+   user-visible shape and a guard against the workaround regressing — and is
+   still open, because the fix is in `self/`.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
    change that found it, and unmeasured.

@@ -40,6 +40,18 @@ That is one package published per release plus N platform ones, which the
 `binaries` matrix produces and `release.yml` attaches. Publishing them is the
 one manual step left (see "Release procedure" step 4).
 
+**npm is not the only way in.** `install.sh` at the repository root is the
+`curl | sh` route — it reads `uname`, downloads the release tarball for that
+platform and unpacks it into `~/.nish` — and it needs no new build machinery,
+because the tarballs it fetches are the ones `release.yml` has attached since
+0.1.1. The two channels are for two different users: npm pins a compiler
+version per project in a `package.json`, which is what an Nish program already
+has for its own dependencies ([wp21-packages.md](wp21-packages.md)), and the
+script puts one compiler on one machine with no node anywhere. `tests/run.js`
+drives the script's platform mapping against every row of
+`.github/seed-targets.json` rather than letting it hold a second copy of the
+asset names.
+
 The `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
 unrelated directory with the installed `nish` — which, with no platform package

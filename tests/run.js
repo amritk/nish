@@ -6995,6 +6995,144 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   const dueAt = (v) => rows.filter((t) => notAfter(t.attachedSince, v));
   const due = dueAt(pkgVersion);
 
+  // ---- install.sh, the other way in ---------------------------------------------------
+  // `curl | sh` has to name a release asset, and a release asset is spelled in
+  // seed-targets.json and nowhere else. The script cannot read that file -- it runs on a
+  // machine that has none of this repository -- so it derives the asset from `uname`,
+  // and the derivation is checked here against every row rather than trusted.
+  //
+  // The script is *run* for this, the way seed-matrix.sh and seed-due.sh are: sourced
+  // with NISH_INSTALL_SOURCE_ONLY=1, which returns before the install and leaves the one
+  // function behind. A copy of the mapping written out in JavaScript here would be a
+  // third spelling of the thing this check exists to stop there being two of.
+  //
+  // `uname -m` is why it is a mapping and not a concatenation: Linux on 64-bit ARM says
+  // `aarch64` and macOS on the same silicon says `arm64`, and the triple this project
+  // targets calls both `aarch64`. A row whose `host` stopped deriving its `asset` would
+  // hand a user the wrong tarball, or a 404, with nothing between them and it.
+  {
+    const installSh = path.join(root, "install.sh");
+    const askScript = (unameS, unameM) =>
+      spawnSync(
+        "sh",
+        ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_asset "$2" "$3" || true`, "sh", installSh, unameS, unameM],
+        { encoding: "utf8" }
+      );
+    check("install.sh: the script is valid POSIX sh", spawnSync("sh", ["-n", installSh], { encoding: "utf8" }).status === 0);
+    const wrong = [];
+    for (const row of rows) {
+      // `host` is `uname -s`-`uname -m` on that platform, which is exactly the pair the
+      // script reads, so the row is the input and the row is the expectation.
+      const dash = row.host.indexOf("-");
+      const answer = askScript(row.host.slice(0, dash), row.host.slice(dash + 1)).stdout.trim();
+      if (answer !== row.asset) wrong.push(`${row.host} -> ${JSON.stringify(answer)}, but the file says ${row.asset}`);
+    }
+    check(
+      `install.sh: every row's host derives that row's asset (${rows.length}: ${rows.map((t) => t.host).join(", ")})`,
+      wrong.length === 0,
+      wrong.join("\n")
+    );
+    // macOS on Intel reports `x86_64` and some Linux userlands report `amd64` for the
+    // same machine; both have to land on the same row, and neither is a platform of its
+    // own.
+    check(
+      "install.sh: amd64 is the same row as x86_64",
+      askScript("Linux", "amd64").stdout.trim() === "x86_64-linux",
+      `Linux/amd64 derived ${JSON.stringify(askScript("Linux", "amd64").stdout.trim())}`
+    );
+    // The wrapper, and the defect it exists for. Unpacking a release tarball onto `$PATH`
+    // is NOT an install: invoked as `$PATH` found it, argv[0] is a bare `nish` with no
+    // directory in it, the compiler resolves `./..` for scripts/build.sh and runtime/,
+    // and every `--link` fails against whatever the working directory happens to be --
+    // while `--version` and `-o` keep working (wp19 §5a item 4). `install.sh` moves the
+    // binary to libexec/ and leaves an `exec` of an absolute path at bin/nish.
+    //
+    // Driven with a stub binary rather than a downloaded one, so this needs no network
+    // and can say exactly what argv[0] arrived as -- which is the thing that was wrong.
+    {
+      const home = path.join(buildDir, "install-sh-wrapper");
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.mkdirSync(path.join(home, "bin"), { recursive: true });
+      const staged = path.join(home, "bin", "nish");
+      fs.writeFileSync(staged, '#!/bin/sh\necho "argv0=$0"\necho "args=$*"\nexit 9\n');
+      fs.chmodSync(staged, 0o755);
+      const wrote = spawnSync(
+        "sh",
+        ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_write_wrapper "$2"`, "sh", installSh, home],
+        { encoding: "utf8" }
+      );
+      check("install.sh: nish_write_wrapper succeeds", wrote.status === 0, wrote.stdout + wrote.stderr);
+      check(
+        "install.sh: the binary moves to libexec/, so bin/nish can take the command name",
+        fs.existsSync(path.join(home, "libexec", "nish")) &&
+          fs.readFileSync(path.join(home, "bin", "nish"), "utf8").startsWith("#!/bin/sh"),
+        "the wrapper did not replace the binary at bin/nish"
+      );
+      // Run it the way a user does: found on PATH, by bare name, from an unrelated
+      // directory. Both halves matter -- a wrapper that worked only when invoked by path
+      // would pass a weaker version of this and ship the bug.
+      const viaPath = spawnSync("sh", ["-c", 'cd / && PATH="$1:$PATH" nish one two', "sh", path.join(home, "bin")], {
+        encoding: "utf8",
+      });
+      const argv0 = (viaPath.stdout.match(/argv0=(.*)/) ?? [])[1] ?? "";
+      check(
+        "install.sh: a bare `nish` on PATH reaches the binary with an absolute argv[0]",
+        viaPath.status === 9 && argv0 === path.join(home, "libexec", "nish"),
+        `argv[0] was ${JSON.stringify(argv0)}; the compiler resolves its runtime from its dirname, ` +
+          "so anything without a directory in it makes --link fail against $PWD"
+      );
+      check(
+        "install.sh: the wrapper passes its arguments through",
+        /args=one two/.test(viaPath.stdout),
+        viaPath.stdout + viaPath.stderr
+      );
+      // Installing over an existing install has to replace the compiler, and the
+      // failure mode is silent: the caller has just unpacked a fresh `bin/nish`, so a
+      // guard that skipped the move when `libexec/nish` already existed would leave the
+      // OLD compiler in place and point a NEW wrapper at it. `nish --version` then
+      // answers the version you had before, and the only sign anything happened is that
+      // the script said it was installing.
+      fs.writeFileSync(staged, '#!/bin/sh\necho "second"\nexit 8\n');
+      fs.chmodSync(staged, 0o755);
+      const again = spawnSync(
+        "sh",
+        ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_write_wrapper "$2"`, "sh", installSh, home],
+        { encoding: "utf8" }
+      );
+      const upgraded = spawnSync(path.join(home, "bin", "nish"), [], { cwd: root, encoding: "utf8" });
+      check(
+        "install.sh: installing over an existing install replaces the compiler",
+        again.status === 0 && upgraded.status === 8 && upgraded.stdout.trim() === "second",
+        `the wrapper still runs the previous binary: exit ${upgraded.status}, ${JSON.stringify(upgraded.stdout)}`
+      );
+      // And the marker keeps a second call with no unpack in between from moving the
+      // wrapper on top of the compiler, which would leave bin/nish execing itself.
+      const noUnpack = spawnSync(
+        "sh",
+        ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_write_wrapper "$2"`, "sh", installSh, home],
+        { encoding: "utf8" }
+      );
+      const stillWorks = spawnSync(path.join(home, "bin", "nish"), [], { cwd: root, encoding: "utf8" });
+      check(
+        "install.sh: running the wrapper step twice over does not eat the compiler",
+        noUnpack.status === 0 && stillWorks.status === 8,
+        `exit ${stillWorks.status}, ${JSON.stringify(stillWorks.stdout + stillWorks.stderr)}`
+      );
+    }
+
+    // A platform with no row gets nothing rather than a guess: the script turns an empty
+    // answer into a message naming npm, which does work there. An invented asset name
+    // would be a 404 the user has to interpret.
+    const unsupported = ["FreeBSD x86_64", "Linux riscv64", "MINGW64_NT-10.0 x86_64"].filter(
+      (pair) => askScript(...pair.split(" ")).stdout.trim() !== ""
+    );
+    check(
+      "install.sh: a platform with no prebuilt binary derives no asset at all",
+      unsupported.length === 0,
+      unsupported.map((p) => `${p} derived an asset, and no release carries one`).join("\n")
+    );
+  }
+
   // Two versions to drive the scripts with, read out of the file rather than typed,
   // and each used BOTH as the tag and as the expected row count. Both halves matter:
   // a tag hardcoded as "v0.2.0" while the expectation counted `due` -- the targets due

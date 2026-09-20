@@ -48,8 +48,9 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-# Once this is published, the whole install is:
+# Once this is published, the whole install is either of:
 #   npm install -g @amritk/nish
+#   curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 # `nish` on the registry is an unrelated package from 2014, so this one is
 # scoped; the command it installs is still `nish`. Nothing is published yet,
 # so take it from a release -- the npm tarball, plus the prebuilt native
