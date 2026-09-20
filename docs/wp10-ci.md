@@ -16,6 +16,7 @@ comment above the `on:` block has the details.
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on three remaining measured failures rather than on cost; see below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
+| `nish-cmp (x86_64-linux)` | Ubuntu, LLVM 18 | WP19 G2.1: the corpus compiled with the **last released** compiler and with the one HEAD builds, every byte compared. One row per Linux seed a release carries, and no row at all until a release carries a seed that can compile the corpus — `cmpSince` in `.github/seed-targets.json` decides which, and its note says why that is not the first release |
 | `runner` | Ubuntu, LLVM 18 | the golden corpus again, through `tests/nish/run.ts` — the harness written in Nish (`npm run test:nish`). A compiler regression fails here and in `test`; a regression in the *runner*, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `batch-parity` | Ubuntu, LLVM 18 | `node tests/run.js --batch-gate-only`: every golden case compiled both through the in-process batch and through the CLI, compared byte for byte, then stopped. `npm test` gates one case per shape; this widens it to the whole corpus |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
@@ -23,6 +24,15 @@ comment above the `on:` block has the details.
 `.github/workflows/parity.yml` is the fourth job and does not run here: WP19
 G1's corpus half is nightly, on its own workflow, for the reasons under
 [the parity run](#the-parity-run-nightly) below.
+
+`nish-cmp` shares the `seeds` job with `bootstrap` and is a matrix for the same
+reason, so the table of conclusions under
+[the seeded build](#the-seeded-build-and-what-a-missing-seed-reports) reads for
+both: an absent row means no comparison happened, and never that one happened
+and passed. It is the successor to `tests/self/ir_oracle.js` and
+`tests/self/interop_oracle.js`, the two largest of the six oracles WP19 R6
+deletes with `src/`, and the axis it compares on is the one that survives that
+deletion — not stage0 against stage1, but the last release against HEAD.
 
 **The macOS `test` row was run for the first time on 2026-09-13, and it fails.**
 That is new information rather than a guess, and it replaces the cost argument

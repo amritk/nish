@@ -11,6 +11,14 @@
 #       which seed binaries it attaches; `bootstrap` is one row per seed that
 #       exists, so a platform with no seed has no row rather than a green one.
 #       The table above the pair says which conclusion means which.
+# nish-cmp: WP19 G2.1, the successor to the two largest oracles R6 deletes.
+#       `tests/nish-cmp.js` compiles the corpus with the last released compiler
+#       and with the one HEAD builds and requires every byte of every file to
+#       match -- Go's `toolstash -cmp`. It shares the `seeds` job with
+#       `bootstrap` and is a matrix for the same reason, so a row appears when
+#       a release carries a seed it can use and there is no row otherwise; the
+#       `cmpSince` note in .github/seed-targets.json says which releases those
+#       are and why it is not all of them.
 # parity-select + parity-changed: WP19 G1 on the push path, bounded by the
 #       diff, as a pair of jobs for the reason seeds/bootstrap is a pair --
 #       `parity-select` maps the diff onto corpus programs in seconds and with
@@ -302,6 +310,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rows: ${{ steps.pick.outputs.rows }}
+      cmp: ${{ steps.pick.outputs.cmp }}
     steps:
       - uses: actions/checkout@v4
 
@@ -428,6 +437,114 @@ jobs:
         run: |
           echo "::notice::self/ built and verified with $TAG's $ASSET seed ($TRIPLE). That is the rolling freeze checked on this platform, and it says nothing about any other."
           { echo "### The rolling freeze (WP19 G3)"; echo; echo "self/ built and verified with $TAG's \`$ASSET\` seed ($TRIPLE). That is this platform; the \`seeds\` job lists the platforms nothing checked."; } >> "$GITHUB_STEP_SUMMARY"
+
+
+  # WP19 G2.1 -- one corpus, two compilers, byte for byte.
+  #
+  # This is the check that has to exist before R6 can delete `src/`, and it is
+  # the reason the deletion is not simply a `git rm`. `tests/self/ir_oracle.js`
+  # and `tests/self/interop_oracle.js` are the two largest of the six oracles
+  # that die with stage0, and what they prove -- the IR of every module of
+  # every corpus program, and the four WP8 sidecars derived from the same
+  # checked program -- is proved by comparing two implementations. After R6
+  # there is only one, so the comparison has to change axis: not stage0
+  # against stage1, but the last RELEASED compiler against the one HEAD
+  # builds. A wrong lowering then shows up as a release that changed output
+  # nobody declared, which is the strongest thing a single-implementation
+  # compiler can say about itself (docs/wp19-stage0-retirement.md §2B, §6).
+  #
+  # It is a job rather than a step in `test` because it needs a seed, which
+  # `test` has no reason to download, and because it costs the corpus twice --
+  # about three minutes -- which should be a runner rather than wall-clock time
+  # on the critical path.
+  #
+  # An undeclared difference fails the job. The tool's `DECLARED` list is how a
+  # difference that is INTENDED goes green, and it deliberately costs
+  # something: an entry names the program, the file and the words `CHANGELOG.md`
+  # has to carry, and an entry whose words have gone fails the run too, so the
+  # release note and the tool cannot drift apart.
+  nish-cmp:
+    name: nish-cmp (${{ matrix.seed.asset }})
+    needs: seeds
+    # Empty for the two reasons the `cmpSince` note in seed-targets.json
+    # separates: no release has happened, or every release so far carries a
+    # seed that cannot compile the corpus. Either way this is grey rather than
+    # green, because a green check here would claim a comparison that nothing
+    # made -- and an empty matrix is an error GitHub refuses to evaluate rather
+    # than a job with no rows, which is why the `if` is on the job.
+    if: needs.seeds.outputs.cmp != '[]'
+    runs-on: ${{ matrix.seed.runner }}
+    strategy:
+      # x86_64 and aarch64 have different registers and different calling
+      # conventions, so one row failing must not cancel the row that would say
+      # whether it is the architecture or the change.
+      fail-fast: false
+      matrix:
+        seed: ${{ fromJSON(needs.seeds.outputs.cmp) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The candidate is built by the reference through `--link`
+      # (`buildCandidate` in tests/nish-cmp.js, the arrangement G3 puts in
+      # scripts/bootstrap.sh), so this job wants the toolchain for the same
+      # reason `bootstrap` does rather than only to read IR.
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The same download `bootstrap` makes, and the same rule about the
+      # matrix reaching bash through `env:` rather than spliced into the
+      # script.
+      - name: Download the seed
+        id: download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.seed.tag }}
+          TARBALL: ${{ matrix.seed.tarball }}
+        run: |
+          gh release download "$TAG" --pattern "$TARBALL" --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP"
+          echo "path=$RUNNER_TEMP/${TARBALL%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
+
+      # `NISH_BOOTSTRAP` rather than `--reference`, so the spelling is the one
+      # scripts/bootstrap.sh and the harness already read and there is one name
+      # for the seed across all three.
+      - name: The released compiler and HEAD write the same bytes
+        env:
+          SEED: ${{ steps.download.outputs.path }}
+        run: |
+          set -o pipefail
+          "$SEED" --version
+          NISH_BOOTSTRAP="$SEED" node tests/nish-cmp.js | tee "$RUNNER_TEMP/nish-cmp.log"
+
+      # Reached only when the comparison agreed, which is the point: this line
+      # is a claim about a run that happened. The summary line carries its own
+      # counts -- programs compared, files, IR lines, and what was refused by
+      # both or written by neither -- so the notice is the tool's number rather
+      # than a restatement of it.
+      - name: Say what this proved
+        env:
+          TAG: ${{ matrix.seed.tag }}
+          ASSET: ${{ matrix.seed.asset }}
+        run: |
+          summary="$(tail -n 1 "$RUNNER_TEMP/nish-cmp.log")"
+          echo "::notice::$TAG's $ASSET compiler and HEAD agree byte for byte. $summary"
+          { echo "### nish-cmp (WP19 G2.1)"; echo; echo "\`$TAG\`'s \`$ASSET\` compiler and HEAD write the same bytes over the corpus."; echo; echo "\`\`\`"; echo "$summary"; echo "\`\`\`"; } >> "$GITHUB_STEP_SUMMARY"
 
 
   # The golden cases again, through the harness written in the language rather

@@ -1534,11 +1534,74 @@ above and the nightly are the two things that produce it.
 
 None of these needs anybody's permission. They need somebody's afternoon.
 
-1. **`nish-cmp` green in CI as a required check** (G2 item 1). The tool exists
-   and agrees with `ir_oracle.js` over the corpus; what is missing is the job
-   and the rule that a difference must be named in `CHANGELOG.md`. This is the
-   successor to the two largest dying oracles and it is the single biggest
-   unstarted piece of R6.
+1. ~~**`nish-cmp` green in CI as a required check**~~ (G2 item 1).
+   **Done, 2026-09-20.** `ci.yml` has a `nish-cmp` job: it shares the `seeds`
+   job with `bootstrap`, takes a row per Linux seed the last release carries,
+   downloads that seed and runs `tests/nish-cmp.js` against it. Being a job in
+   `ci.yml` is what makes it required — `release.yml` reaches this workflow
+   through `workflow_call`, so a red row is a release that cannot be cut. The
+   CHANGELOG rule needed no work: `DECLARED` in the tool already refuses a
+   difference the release note does not name, in both directions.
+
+   **It found a defect on its first real run, and the defect is in what was
+   published rather than in the tree.** Against the v0.4.0 seed the corpus is
+   `433/435 programs agree ... 2 undeclared difference(s)`, and the two are
+   `tests/link/std_bare_specifier` and `tests/link/std_package_scope` — the
+   only corpus programs that reach the standard library by its **package
+   specifier** rather than by a relative path. The released compiler refuses
+   them:
+
+   ```
+   error: Module `nish/text` is not part of the standard library (it has: json, testing, text)
+   ```
+
+   That sentence names the module it is refusing, because the list in it is
+   the static table of module names and the **file** is what is absent:
+   `release.yml`'s `binaries` job staged `bin`, `runtime` and `scripts` and
+   never `std/`, so every release from 0.1.1 to 0.4.0 ships a compiler that
+   cannot import its own standard library. Copying `std/` into the unpacked
+   v0.4.0 tarball makes that same binary compile, link and run the program, so
+   the omission is the whole cause. Fixed for the next release in both
+   channels — the tarball stages it and `scripts/platform-package.mjs` lists
+   it, the npm platform package being `npm pack` over the same directory — and
+   nothing had been published to npm yet, so the fix lands before the first
+   publish rather than after it.
+
+   **Three things had to be true at once for four releases to carry it**, and
+   each is worth naming because each is a guard that existed and did not
+   cover this:
+
+   - the staging copied `runtime` and not `std`;
+   - the "the tarball carries a whole compiler" gate listed seven paths and
+     none under `std/` — a presence check written for exactly this class,
+     passing because the class was spelled as a list;
+   - both smoke programs, `hello.ts` and `examples/multi`, import nothing, so
+     a compiler with no standard library links them and reports success.
+
+   And the fourth, which is the instructive one: the pack-and-install round
+   trip in `tests/run.js` packs the **main** package, whose `files` has
+   carried `std` all along, and a main package with no platform package beside
+   it falls back to `dist/`. **The path the harness takes works and the path a
+   user gets does not** — §A7's sentence about `argv[0]`, "the harness happens
+   to invoke the spelling that agrees", holding for the product a second time
+   and in a second place. `tests/run.js` now asserts all four: the staging
+   line, a `std/` path in the presence gate, a smoke program that imports
+   `nish/text` and *runs* it, and `std` in the platform package's `files`.
+   Each was watched failing with its half of the fix reverted.
+
+   **What it costs the gate is one release of waiting, recorded rather than
+   allowlisted.** A seed that cannot compile the corpus cannot be compared
+   against it, and no edit to the tree changes what v0.4.0 published — so
+   `cmpSince` in `.github/seed-targets.json` says which releases `nish-cmp`
+   may use, the way `attachedSince` says which carry a seed and for the
+   identical reason. It is `0.5.0`, and until a release reaches it the job has
+   no row. Declaring the two programs in `DECLARED` was the other way and is
+   worse twice over: the difference is the seed's defect rather than a decided
+   change of output, and the mechanism cannot be satisfied between releases
+   anyway — it requires the words in `CHANGELOG.md`, which is generated at
+   release time with `[Unreleased]` deliberately empty. An absent row says no
+   comparison happened; a green row with those two allowlisted inside it would
+   say one happened and passed, which is §A5 exactly.
 2. ~~**The package becoming a thin installer**~~ (G5's last bullet, R4).
    **Done, 2026-09-20.** `bin.nish` is a launcher that hands over to the
    prebuilt native compiler for the host, which arrives as one
@@ -1628,7 +1691,23 @@ person one sentence. What it leaves behind is ordinary work: the package
 becoming a thin installer, which was in the list above and landed on
 2026-09-20.
 
-**A release that carries the darwin and `aarch64-linux` seeds** (G3, G5). The
+**~~A release that carries the darwin and `aarch64-linux` seeds~~ (G3, G5) —
+closed on 2026-09-20.** v0.4.0 is published and carries all four:
+`nish-0.4.0-x86_64-linux.tar.gz`, `nish-0.4.0-aarch64-linux.tar.gz`,
+`nish-0.4.0-aarch64-darwin.tar.gz` and `nish-0.4.0-x86_64-darwin.tar.gz`, plus
+the five npm tarballs. So this bucket holds **one** decision now, not two, and
+G3's macOS `bootstrap` row appears from `seed-targets.json` on its own as the
+note there promised — no edit to `ci.yml`. **What the release did not settle is
+the thing the seeds are for**: the compiler those four assets contain ships no
+`std/` (work item 1 above), so the rolling freeze they check is a freeze on a
+compiler that cannot import its own standard library. That is not a reason to
+re-cut v0.4.0 — `bootstrap` builds `self/`, which imports nothing from `std/`,
+so the freeze it checks is real — but it is the reason `cmpSince` is 0.5.0, and
+it is worth recording here that a gate can be green on a seed that is broken in
+a way the gate does not ask about. The paragraph below is the record of what
+this decision was, and stands.
+
+The
 measurement and the fix are done and merged — `acbca9f` (#114): all three
 previously unexercised rows run on their own hardware and green, and the Mach-O
 `stage3 == stage2` comparison holding as a raw `cmp` (see R2 and §G5). What is

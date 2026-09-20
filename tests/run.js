@@ -7732,7 +7732,18 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     });
     const written = fs.readFileSync(outFile, "utf8");
     const rowsLine = /^rows=(.*)$/m.exec(written);
-    return { ...r, rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined };
+    // `cmp` is read the same way and kept distinct from "the script did not
+    // write it": an output GitHub never receives is the empty string, and
+    // `!= '[]'` is true of it, so the job keyed on it would ask for an empty
+    // matrix -- an error rather than a skip. `undefined` here is what that
+    // state looks like from the harness, and the checks below assert it does
+    // not happen in any arm that exits 0.
+    const cmpLine = /^cmp=(.*)$/m.exec(written);
+    return {
+      ...r,
+      rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined,
+      cmp: cmpLine ? JSON.parse(cmpLine[1]) : undefined,
+    };
   };
 
   const first = rows[0];
@@ -7828,6 +7839,94 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       future.stdout + future.stderr
     );
 
+    // ---- WP19 G2.1: which releases nish-cmp may compare against ----------------------
+    //
+    // `cmpSince` is to G2.1 what `attachedSince` is to G3, and it is a version for the
+    // identical reason: a release already published cannot grow a file. The seeds 0.1.1
+    // through 0.4.0 ship no `std/`, so the compiler in them refuses every
+    // `nish/<module>` specifier -- against any of those, nish-cmp correctly reports two
+    // corpus programs on which HEAD is right and the seed is broken, and there is
+    // nothing anybody can edit in the tree to make that go away. So the gate gets no row
+    // until a release carries a seed that can compile the corpus.
+    //
+    // Which is the one thing in this pair that could quietly stop being true. An absent
+    // row is indistinguishable from a passing one in a summary, so each arm is asked for
+    // here rather than left to the workflow.
+    const cmpSince = seedTargets.cmpSince;
+    check(
+      `seed targets: cmpSince is a dotted-integer version (${cmpSince})`,
+      typeof cmpSince === "string" && /^[0-9]+(\.[0-9]+)*$/.test(cmpSince),
+      `cmpSince is ${JSON.stringify(cmpSince)}`
+    );
+
+    // Every arm that exits 0 writes BOTH outputs. An output the script never sets
+    // arrives at the workflow as the empty string, `!= '[]'` is true of it, and the job
+    // keyed on it asks GitHub for an empty matrix -- which is an error and not a skip.
+    // That is the same shape as the deadlock this file's header describes, and it would
+    // arrive as a red X on the first release rather than a grey square.
+    for (const [label, r] of [
+      ["no release at all", none],
+      ["a release before cmpSince", carried],
+      ["a release past every attachedSince", future],
+    ]) {
+      check(
+        `seed matrix: ${label} still writes a cmp output rather than leaving it unset`,
+        r.status !== 0 || r.cmp !== undefined,
+        `exit ${r.status}, cmp=${JSON.stringify(r.cmp)}\n${r.stdout}${r.stderr}`
+      );
+    }
+
+    // A seed older than cmpSince is no row and an explanation, not a red check and not a
+    // green one. `carried` is the oldest attachedSince in the file, which is necessarily
+    // before cmpSince while cmpSince is ahead of every shipped release.
+    //
+    // Counted rather than conditional when it cannot be posed. Lowering cmpSince to the
+    // oldest attachedSince leaves no release that is "before" it, so this question stops
+    // having an answer -- and a check that disappears when the thing it guards is
+    // weakened is the pathology this package has recorded five times. A skip says so in
+    // the summary; an `if` with no `else` says nothing.
+    if (!notAfter(cmpSince, early)) {
+      check(
+        `seed matrix: a release before cmpSince (${early} < ${cmpSince}) gives nish-cmp no row, and says why`,
+        carried.status === 0 &&
+          Array.isArray(carried.cmp) &&
+          carried.cmp.length === 0 &&
+          carried.stdout.includes("::notice::") &&
+          carried.stdout.includes("cmpSince"),
+        `exit ${carried.status}, cmp=${JSON.stringify(carried.cmp)}\n${carried.stdout}${carried.stderr}`
+      );
+    } else {
+      skip(
+        `cmpSince is ${cmpSince} and the oldest attachedSince is ${early}, so no release in this ` +
+          "file is before it: nothing here proves a pre-cmpSince release gets no nish-cmp row"
+      );
+    }
+
+    // And at a version past every attachedSince and past cmpSince: a row for each Linux
+    // seed and none for macOS. The Linux-only rule is a measurement rather than a
+    // preference -- the checks that keep `macos-latest` out of the `test` matrix encode
+    // an ELF assumption (wp19 §5a item 3) -- and it is derived from the row's own runner
+    // label, so a Linux platform added later is picked up with no edit to either file.
+    const linuxRows = rows.filter((t) => t.runner.startsWith("ubuntu"));
+    check(
+      `seed matrix: past cmpSince, nish-cmp gets a row per Linux seed and none for macOS (${linuxRows.map((t) => t.asset).join(", ")})`,
+      future.status === 0 &&
+        Array.isArray(future.cmp) &&
+        future.cmp.length === linuxRows.length &&
+        future.cmp.every((r, i) => r.asset === linuxRows[i].asset && r.runner === linuxRows[i].runner) &&
+        future.cmp.every((r) => r.tarball && r.tag),
+      `cmp=${JSON.stringify(future.cmp)}\n${future.stdout}${future.stderr}`
+    );
+
+    // Every nish-cmp row is one of the bootstrap rows. The two gates download the same
+    // asset from the same release, and a `cmp` row the release does not carry is a
+    // download that fails inside the job rather than a matrix that is empty before it.
+    check(
+      "seed matrix: every nish-cmp row is a seed the release actually carries",
+      Array.isArray(future.cmp) &&
+        future.cmp.every((c) => future.rows.some((r) => r.asset === c.asset && r.tarball === c.tarball)),
+      `cmp=${JSON.stringify(future.cmp)}\nrows=${JSON.stringify(future.rows)}`
+    );
   }
 }
 
