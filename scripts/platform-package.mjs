@@ -68,7 +68,18 @@ const manifest = {
   // manifest and joins `bin/nish` to its directory. Everything else is read by
   // the binary itself, relative to its own path, never through a specifier.
   exports: { "./package.json": "./package.json" },
-  files: ["bin", "runtime", "scripts", "LICENSE", "INSTALL.md"],
+  // `std` is in this list for the reason `runtime` is, and it was missing until
+  // 2026-09-20: the compiler resolves a `nish/<module>` specifier against its
+  // own package root, so a platform package without it answers every one of
+  // them with ``Module `nish/text` is not part of the standard library``, while
+  // naming `text` among the modules it has. The message is the static list of
+  // module names; what is absent is the file. Nothing caught it because every
+  // program the release smoke-tests imports by relative path or not at all,
+  // and because the pack-and-install round trip in `tests/run.js` packs the
+  // MAIN package, which has carried `std` in its own `files` all along --
+  // so the fallback to `dist/` worked and the path a user actually gets did
+  // not. See docs/wp12-release.md and wp19 §5a.
+  files: ["bin", "runtime", "scripts", "std", "LICENSE", "INSTALL.md"],
   repository: main.repository,
   bugs: main.bugs,
   homepage: main.homepage,

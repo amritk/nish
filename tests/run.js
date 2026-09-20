@@ -4777,6 +4777,38 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         .filter((l) => l.includes("stdModuleNames"))
         .join(" | ")
     );
+
+    // And the third party to that contract, added 2026-09-20: the release
+    // tarball's presence gate. `std/` was not staged at all for four releases,
+    // and the gate that exists to catch exactly that listed seven paths and
+    // none of them under `std/`. Naming the modules there fixes the case that
+    // happened; deriving the list from the same directory the two above read
+    // is what stops the NEXT module shipping in `self/`'s literal and not in
+    // the tarball -- three lists that agree until one is edited is the defect
+    // `.github/seed-targets.json` exists to prevent one level up.
+    const releaseYmlText = fs.readFileSync(
+      path.join(root, ".github", "workflows", "release.yml"),
+      "utf8"
+    );
+    //
+    // All THREE presence gates, not the first one found. release.yml has one per
+    // artefact -- the release tarball, the per-platform npm package, and the main npm
+    // package -- and the first two ship a native compiler from the same staged
+    // directory while the third ships `dist/`. Picking one by a `.find` would test
+    // whichever happened to come first in the file and say nothing about the others,
+    // which is the shape of the defect rather than a check on it.
+    const gateLines = releaseYmlText.split("\n").filter((l) => /^\s*for f in \S+ /.test(l));
+    const modules = actual.split(", ");
+    const holes = gateLines.flatMap((line) =>
+      modules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
+    );
+    check(
+      `release.yml's ${gateLines.length} presence gates each name every std module, so none can ship missing (${actual})`,
+      gateLines.length === 3 && holes.length === 0,
+      gateLines.length !== 3
+        ? `expected 3 \`for f in ...\` gates in release.yml, found ${gateLines.length}`
+        : `not named:\n${holes.join("\n")}`
+    );
   }
 
   // S1: the lexer built by stage0 runs natively, and its token stream agrees
@@ -7414,6 +7446,66 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   // file, by way of the `targets` job. A retired label is the retired-label check above,
   // which is where that defect belongs.
   const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
+
+  // ---- The tarball carries a standard library, not only a compiler ------------------
+  //
+  // Every release from 0.1.1 to 0.4.0 staged `bin`, `runtime` and `scripts` and no
+  // `std/`. The compiler in those tarballs links `hello.ts` and answers any
+  // `import { trim } from "nish/text"` with ``Module `nish/text` is not part of the
+  // standard library (it has: json, testing, text)`` -- a sentence that names the module
+  // it is refusing, because the list in it is the static table of module names and the
+  // FILE is what is absent. It reproduces on the published v0.4.0 asset, and it is the
+  // same omission in both channels the installer uses, since the npm platform package is
+  // `npm pack` over the same staged directory.
+  //
+  // Three things had to be true at once for four releases to ship it, and each gets a
+  // check here rather than a comment:
+  //
+  //   * the staging copied `runtime` and not `std`;
+  //   * the "carries a whole compiler" gate listed seven paths, none of them under
+  //     `std/`, so the presence check that exists for exactly this class passed;
+  //   * both smoke programs -- `hello.ts` and `examples/multi` -- import nothing, so a
+  //     compiler with no standard library links them and says so.
+  //
+  // The pack-and-install round trip in this file did not see it either, and that is the
+  // instructive one: it packs the MAIN package, whose `files` has listed `std` all
+  // along, and a main package with no platform package beside it falls back to `dist/`.
+  // The path that works is the one the harness takes; the path a user gets is the one
+  // that does not. That is wp19 §A7's sentence about `argv[0]` -- "the harness happens
+  // to invoke the spelling that agrees" -- holding for the product a second time.
+  check(
+    "release tarball: the staging copies std/ beside runtime/, or no released compiler can import nish/<module>",
+    /\bcp -r std "\$stage\/std"/.test(releaseYml),
+    "release.yml's binaries job does not stage std/ into the tarball"
+  );
+  // The presence gate names a std module, so a narrower copy is caught where `runtime`
+  // already is. It is a presence check and shares `runtime`'s limit: an empty text.ts
+  // would pass here and fail in the smoke step below, which is why both exist.
+  check(
+    "release tarball: the presence gate names a std module among the paths that must be there",
+    /for f in [^\n]*\bstd\/[a-z_]+\.ts\b/.test(releaseYml),
+    "release.yml's tarball gate lists no std/ path, so a staging that drops it passes"
+  );
+  // And a program that USES the library, run rather than compiled. A list is a claim
+  // about names; only running one of those modules says the library is whole. The
+  // specifier form matters: `nish/text` is the form resolved against the compiler's own
+  // package root, which is the only form the staging can break -- a relative import
+  // resolves against the program and would pass with no std/ shipped at all.
+  check(
+    "release tarball: the smoke test compiles and runs a program that imports nish/<module>",
+    /from "nish\/text"/.test(releaseYml) && /\.\/stdlib/.test(releaseYml),
+    "release.yml smokes no program that imports the standard library by its package specifier"
+  );
+  // The npm side of the same omission. `platform-package.mjs` writes the manifest for
+  // the per-platform package the launcher hands over to, and its `files` is the second
+  // place the library has to be listed -- the staged directory is shared, the two
+  // `files` lists are not.
+  const platformPackage = fs.readFileSync(path.join(root, "scripts", "platform-package.mjs"), "utf8");
+  check(
+    "platform package: its files list carries std, so npm ships what the tarball ships",
+    /files:\s*\[[^\]]*"std"[^\]]*\]/.test(platformPackage),
+    "scripts/platform-package.mjs omits std from the platform package's files"
+  );
   const spelled = rows.filter((t) => releaseYml.includes(t.asset));
   check(
     "seed targets: release.yml names no asset, because it reads them from the file",
@@ -7735,6 +7827,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         future.rows.every((r, i) => r.asset === rows[i].asset && r.runner === rows[i].runner),
       future.stdout + future.stderr
     );
+
   }
 }
 

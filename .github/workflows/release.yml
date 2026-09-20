@@ -247,6 +247,7 @@ jobs:
           mkdir -p "$stage/bin" "$stage/scripts"
           bash scripts/bootstrap.sh -o "$stage/bin/nish" --profile speed --verify
           cp -r runtime "$stage/runtime"
+          cp -r std "$stage/std"
           cp scripts/build.sh "$stage/scripts/build.sh"
           cp LICENSE docs/INSTALL.md "$stage/"
           tar -czf "build/release/$name.tar.gz" -C build/release "$name"
@@ -270,28 +271,50 @@ jobs:
       # caught, because clang then fails. Checking content would mean naming a
       # symbol the file must define, which is a second copy of the runtime's
       # ABI to keep in step; the hole is named here instead.
+      #
+      # `std/` is on the list as of 2026-09-20, and it is the case the comment
+      # above described happening for real one level up. Every release from
+      # 0.1.1 to 0.4.0 staged `bin`, `runtime` and `scripts` and no standard
+      # library, so the compiler they carry links `hello.ts` and answers any
+      # `import { trim } from "nish/text"` with ``Module `nish/text` is not
+      # part of the standard library (it has: json, testing, text)`` -- a
+      # sentence that lists the module it is refusing, because the list is
+      # static and the file is what is missing. The smoke step below grew a
+      # third program for it: a list is a claim about names, and only running
+      # one of those modules says the library is whole.
       - name: The tarball carries a whole compiler
         run: |
           tar -tzf "${{ steps.binary.outputs.asset }}" |
             sed 's#^${{ steps.binary.outputs.name }}/##' | sort > "$RUNNER_TEMP/files.txt"
-          for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh LICENSE INSTALL.md; do
+          for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
           done
-          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the seven that have to be there"
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the ten that have to be there"
 
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
       # somewhere unrelated and drive it from a third directory, so neither the
       # repository nor the unpack directory can be what makes it work.
       #
-      # Two programs, because one of them is not enough. `hello.ts` is a single
-      # module and exercises none of the layout the comment above spends six
-      # lines on: `examples/multi` is two modules, so the compiler has to plan
-      # `<exe>.modules/`, find `scripts/build.sh` relative to its own directory
-      # rather than to the working directory, and hand it several `.ll` files.
-      # A `--link` that resolved build.sh from the cwd on one path and from
-      # argv[0] on the other would pass on `hello.ts` and fail on every real
-      # program.
+      # Three programs, because two of them were not enough. `hello.ts` is a
+      # single module and exercises none of the layout the comment above spends
+      # six lines on: `examples/multi` is two modules, so the compiler has to
+      # plan `<exe>.modules/`, find `scripts/build.sh` relative to its own
+      # directory rather than to the working directory, and hand it several
+      # `.ll` files. A `--link` that resolved build.sh from the cwd on one path
+      # and from argv[0] on the other would pass on `hello.ts` and fail on
+      # every real program.
+      #
+      # Neither of those two imports the standard library, and that is exactly
+      # the hole four releases fell through: `std/` was never staged, so the
+      # compiler 0.1.1 through 0.4.0 shipped refuses every `nish/<module>`
+      # specifier while both programs here pass. The third program imports
+      # `nish/text` and RUNS it, because the refusal the omission produces
+      # names the module it is refusing -- a check that only read the message
+      # would have to know it was wrong to distrust it. The standard library
+      # is reached by its package specifier rather than by a path, since that
+      # is the form that goes through the compiler's own package root and so
+      # the only form the staging can break.
       - name: Smoke the native compiler
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -303,13 +326,23 @@ jobs:
           cp examples/hello.ts "$work/hello.ts"
           mkdir -p "$work/multi"
           cp examples/multi/main.ts examples/multi/math.ts "$work/multi/"
+          cat > "$work/stdlib.ts" <<'PROGRAM'
+          import { trim } from "nish/text";
+
+          export const main = (): number => {
+            write(`[${trim("  padded  ")}]\n`);
+            return 0;
+          };
+          PROGRAM
           cd "$work"
           "$nish" hello.ts --link hello
           test "$(./hello)" = "hello from Nish"
           "$nish" multi/main.ts --link multi-app
           set +e; ./multi-app; code=$?; set -e
           test "$code" = "49" || { echo "::error::the unpacked compiler linked examples/multi but it exited $code, not 49"; exit 1; }
-          echo "native compiler works from an unrelated directory, on one module and on two"
+          "$nish" stdlib.ts --link stdlib || { echo "::error::the unpacked compiler cannot compile a program that imports nish/text. The tarball is missing std/: see the staging step above."; exit 1; }
+          test "$(./stdlib)" = "[padded]" || { echo "::error::the unpacked compiler linked a nish/text program but it printed $(./stdlib), not [padded]"; exit 1; }
+          echo "native compiler works from an unrelated directory, on one module, on two, and on the standard library"
 
       # The same staged directory, packaged a second way. `npm pack` over it is
       # the package the installer resolves: the binary this job just built,
@@ -339,7 +372,7 @@ jobs:
           # it cannot find the binary. No smoke test of the unpacked tarball can
           # see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
-          for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh package.json; do
+          for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
@@ -508,7 +541,7 @@ jobs:
           # program printing a string and fails on any program that reads a file,
           # lists a directory, spawns a child or asks the clock -- the half of the
           # runtime whose absence a smoke test of `hello.ts` cannot see.
-          for f in dist/index.js runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh; do
+          for f in dist/index.js runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 

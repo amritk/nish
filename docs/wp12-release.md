@@ -204,6 +204,59 @@ comment. Any build, link, or unexpected-exit failure makes the script exit 1
 (3 when clang is missing). CI runs it right after `npm test` on both
 operating systems, so the table for each is in the job log.
 
+## What the release tarball carries, and the four releases that carried too little
+
+The staged directory `release.yml`'s `binaries` job builds is what both
+channels ship: the tarball is `tar -czf` over it and the npm platform package
+is `npm pack` over the same directory. It holds `bin/nish`, `runtime/`,
+`scripts/build.sh`, `std/`, `LICENSE` and `INSTALL.md`.
+
+`std/` joined that list on **2026-09-20**, and every release from 0.1.1 to
+0.4.0 went without it. The compiler in those tarballs links `hello.ts` and
+answers any program that imports the standard library by its package
+specifier with
+
+```
+error: Module `nish/text` is not part of the standard library (it has: json, testing, text)
+```
+
+which names the module it is refusing, because the list in that sentence is
+the static table of module names and the **file** is what is missing. The
+compiler resolves a `nish/<module>` specifier against its own package root,
+so that form — and only that form — depends on what the tarball staged; a
+relative import resolves against the program and works with no `std/` shipped
+at all, which is why the corpus noticed on exactly two programs.
+
+It was found by `nish-cmp` on its first run in CI
+([wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on), work item 1),
+and confirmed against the published v0.4.0 asset: copying `std/` into the
+unpacked tarball makes that same binary compile, link and run the program, so
+the omission is the whole cause and staging it is the whole fix.
+
+**Nothing had been published to npm when it was found**, so the fix lands
+before the first publish rather than after it. The release tarballs are a
+different matter: a release already published cannot grow a file, so 0.1.1
+through 0.4.0 keep the defect, and `cmpSince` in `.github/seed-targets.json` is
+what stops `nish-cmp` comparing against a seed that has it.
+
+Three guards existed and none covered it — the staging copied `runtime` and
+not `std`, the "the tarball carries a whole compiler" presence check listed
+seven paths and none under `std/`, and both smoke programs import nothing. All
+three are fixed, and the third is the one that matters most: the smoke step
+now compiles **and runs** a program that imports `nish/text`, because a list is
+a claim about names and only running one of those modules says the library is
+whole.
+
+`release.yml` has **three** presence gates, one per artefact — the release
+tarball, the per-platform npm package and the main npm package — and all three
+name every standard-library module now. The first two were missing it; the
+third ships `dist/` and has carried `std` through `package.json`'s `files` all
+along, with nothing asserting it. `tests/run.js` derives the list from the same
+directory `self/std_modules.ts`'s literal and stage0's directory read are
+already checked against, and fails when any of the three gates omits a module —
+so the next module added to the library cannot ship in the compiler's list and
+not in the tarball. Each check was watched failing.
+
 ## Release procedure
 
 Releases ride a train; nothing is published from a developer machine, and no
