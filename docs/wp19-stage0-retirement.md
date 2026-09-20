@@ -1534,11 +1534,74 @@ above and the nightly are the two things that produce it.
 
 None of these needs anybody's permission. They need somebody's afternoon.
 
-1. **`nish-cmp` green in CI as a required check** (G2 item 1). The tool exists
-   and agrees with `ir_oracle.js` over the corpus; what is missing is the job
-   and the rule that a difference must be named in `CHANGELOG.md`. This is the
-   successor to the two largest dying oracles and it is the single biggest
-   unstarted piece of R6.
+1. ~~**`nish-cmp` green in CI as a required check**~~ (G2 item 1).
+   **Done, 2026-09-20.** `ci.yml` has a `nish-cmp` job: it shares the `seeds`
+   job with `bootstrap`, takes a row per Linux seed the last release carries,
+   downloads that seed and runs `tests/nish-cmp.js` against it. Being a job in
+   `ci.yml` is what makes it required — `release.yml` reaches this workflow
+   through `workflow_call`, so a red row is a release that cannot be cut. The
+   CHANGELOG rule needed no work: `DECLARED` in the tool already refuses a
+   difference the release note does not name, in both directions.
+
+   **It found a defect on its first real run, and the defect is in what was
+   published rather than in the tree.** Against the v0.4.0 seed the corpus is
+   `433/435 programs agree ... 2 undeclared difference(s)`, and the two are
+   `tests/link/std_bare_specifier` and `tests/link/std_package_scope` — the
+   only corpus programs that reach the standard library by its **package
+   specifier** rather than by a relative path. The released compiler refuses
+   them:
+
+   ```
+   error: Module `nish/text` is not part of the standard library (it has: json, testing, text)
+   ```
+
+   That sentence names the module it is refusing, because the list in it is
+   the static table of module names and the **file** is what is absent:
+   `release.yml`'s `binaries` job staged `bin`, `runtime` and `scripts` and
+   never `std/`, so every release from 0.1.1 to 0.4.0 ships a compiler that
+   cannot import its own standard library. Copying `std/` into the unpacked
+   v0.4.0 tarball makes that same binary compile, link and run the program, so
+   the omission is the whole cause. Fixed for the next release in both
+   channels — the tarball stages it and `scripts/platform-package.mjs` lists
+   it, the npm platform package being `npm pack` over the same directory — and
+   nothing had been published to npm yet, so the fix lands before the first
+   publish rather than after it.
+
+   **Three things had to be true at once for four releases to carry it**, and
+   each is worth naming because each is a guard that existed and did not
+   cover this:
+
+   - the staging copied `runtime` and not `std`;
+   - the "the tarball carries a whole compiler" gate listed seven paths and
+     none under `std/` — a presence check written for exactly this class,
+     passing because the class was spelled as a list;
+   - both smoke programs, `hello.ts` and `examples/multi`, import nothing, so
+     a compiler with no standard library links them and reports success.
+
+   And the fourth, which is the instructive one: the pack-and-install round
+   trip in `tests/run.js` packs the **main** package, whose `files` has
+   carried `std` all along, and a main package with no platform package beside
+   it falls back to `dist/`. **The path the harness takes works and the path a
+   user gets does not** — §A7's sentence about `argv[0]`, "the harness happens
+   to invoke the spelling that agrees", holding for the product a second time
+   and in a second place. `tests/run.js` now asserts all four: the staging
+   line, a `std/` path in the presence gate, a smoke program that imports
+   `nish/text` and *runs* it, and `std` in the platform package's `files`.
+   Each was watched failing with its half of the fix reverted.
+
+   **What it costs the gate is one release of waiting, recorded rather than
+   allowlisted.** A seed that cannot compile the corpus cannot be compared
+   against it, and no edit to the tree changes what v0.4.0 published — so
+   `cmpSince` in `.github/seed-targets.json` says which releases `nish-cmp`
+   may use, the way `attachedSince` says which carry a seed and for the
+   identical reason. It is `0.5.0`, and until a release reaches it the job has
+   no row. Declaring the two programs in `DECLARED` was the other way and is
+   worse twice over: the difference is the seed's defect rather than a decided
+   change of output, and the mechanism cannot be satisfied between releases
+   anyway — it requires the words in `CHANGELOG.md`, which is generated at
+   release time with `[Unreleased]` deliberately empty. An absent row says no
+   comparison happened; a green row with those two allowlisted inside it would
+   say one happened and passed, which is §A5 exactly.
 2. ~~**The package becoming a thin installer**~~ (G5's last bullet, R4).
    **Done, 2026-09-20.** `bin.nish` is a launcher that hands over to the
    prebuilt native compiler for the host, which arrives as one
@@ -1600,22 +1663,126 @@ None of these needs anybody's permission. They need somebody's afternoon.
 
    Both installers work around it the same way, with a one-line `exec` of an
    absolute path (`scripts/postinstall.mjs`, `install.sh`'s
-   `nish_write_wrapper`), and `tests/run.js` now drives a bare `nish` on `PATH`
-   and asserts the `argv[0]` that arrives. So this item has a reproduction, a
-   user-visible shape and a guard against the workaround regressing — and is
-   still open, because the fix is in `self/`.
+   `nish_write_wrapper`), and `tests/run.js` drives a bare `nish` on `PATH` and
+   asserts the `argv[0]` that arrives.
+
+   **The `$PATH` half is fixed, 2026-09-20.** `packageRoot()` splits on whether
+   `argv[0]` is a path at all: one that carries a directory keeps the old
+   `<dirname>/..`, and a bare word is looked up on `$PATH` — which is where the
+   shell found it, so the first entry holding a file of that name is the one
+   that ran, and its parent is the root. Nothing new was needed from the
+   language: `getenv` and `splitByte` were already in the frozen surface, and
+   the rolling freeze was checked against the v0.4.0 seed before and after
+   (`IR(stage1) == IR(stage2)`, `stage3 == stage2` byte-identical).
+
+   The diagnostic is derived from the same candidate list rather than
+   re-spelling it, so it names where the compiler actually looked:
+
+   ```
+   --link: cannot find scripts/build.sh (looked in /somewhere/lonely/.. and .)
+   ```
+
+   Three checks pin it, and they are the first in the suite to drive a *real*
+   compiler by a bare name — everything else invokes one by a path, which is
+   precisely why nothing noticed for four releases. An install is staged the
+   way `release.yml` builds one, driven from a third directory, and the program
+   imports `nish/text`, so a wrongly-resolved root fails even if
+   `scripts/build.sh` were found some other way. All three were watched
+   failing with the fix reverted.
+
+   **The symlink half is still open, and is the reason this item does not
+   close.** npm links every command as a symlink
+   (`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`); `packageRoot()`
+   resolves no link, so the parent of the *link's* directory is searched and an
+   install laid out that way finds nothing. The language has no `realpath`, so
+   that fix is a **builtin** rather than an edit to the driver — and a builtin
+   `self/` cannot use until the release after the one that adds it, which is
+   the rolling freeze. Both installers keep their absolute-path `exec`, which
+   sidesteps both spellings. Adding `realpathSync` to both compilers in 0.5.0
+   would let `self/` use it in 0.6.0; that is the shape of the remaining work,
+   and it is one release long whatever else happens.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
-   change that found it, and unmeasured.
+   change that found it. **Still unmeasured on 2026-09-20, and an attempt is
+   recorded here so the next one starts further along.** The *adjacent* shape
+   agrees: two modules with the same basename in different directories
+   (`a/util.ts` and `b/util.ts`) make both compilers write `a_util.ll` and
+   `b_util.ll`, because `outputStems` disambiguates on the path relative to the
+   entry on both sides. What §A7 describes is narrower — two modules that are
+   *different files* carrying *one* `; ModuleID`, which needs `nish/<module>`
+   and a relative import to normalise to the same name. Every construction
+   tried collapsed instead into a single module, because a package root of `.`
+   means the working directory *is* the package, so `./std/text` and
+   `nish/text` resolve to one file rather than two. Not reproduced is not the
+   same as not there, and this stays open: what it needs is the invocation that
+   makes the two names collide while the files differ, and that is the piece
+   nobody has written down.
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
-   one, so a later field is reported as unknown when it is not. Still
-   reproduces on this tree (2026-09-19); the corpus does not have the shape, so
-   G1 cannot see it.
+   one, so a later field is reported as unknown when it is not. **Reproduced
+   again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``
+   for a field the class plainly has, stage1 prints the one correct diagnostic.
+   The corpus does not have the shape, so G1 cannot see it.
+
+   **This row is not a blocker for R6, and it is the only one of the three that
+   R6 *resolves* rather than survives.** The defect is in
+   `src/checker/classes.ts`, and R6 deletes `src/`; the compiler that is left
+   is the one already giving the right answer. Fixing it before the deletion
+   would be work thrown away with the file.
+
+   What does survive is the mechanism #94 records on the stage1 side, and it is
+   worth separating because the issue puts both in one place:
+   `self/context.ts`'s `error()` is a no-op once `errored` is set, and
+   `collectStructMembers` never resets it between fields, so an earlier
+   member's error can silence a later member's refusal. Measured on
+   2026-09-20: a class with two mistyped fields reports **one** diagnostic on
+   both compilers, and both still reject the program — so what survives R6 is a
+   completeness question about diagnostics, not a soundness one. Worth a case;
+   not worth holding the deletion for.
 
 Items 4, 5 and 6 share a property worth naming: **each is a defect the gate is
 green in spite of, because no corpus program poses the question.** That is
 §A5's first lesson and §A8's, and it is the honest qualification on every green
 number in the table above — the difference set is a lower bound.
+
+#### Which release R6 can land in, and why it is not 0.5.0
+
+Asked on 2026-09-20, with 0.5.0 named as the target. The gates allow it; the
+**order** does not, and the obstacle is the successor this package spent its
+effort building.
+
+`nish-cmp` compares the last RELEASED compiler with HEAD, so which releases it
+can use is `cmpSince`, and `cmpSince` is 0.5.0 because every seed before it
+ships no `std/` (work item 1). `.github/seed-matrix.sh` reads the **last
+release**, which gives:
+
+| While the tree is | the last release is | `nish-cmp` rows |
+| --- | --- | --- |
+| 0.5.0 in development | v0.4.0 | **0** |
+| 0.6.0 in development | v0.5.0 | 2 |
+
+Measured by driving the script against a stand-in for `gh` at both tags.
+
+So R6 landing *in* 0.5.0 deletes `ir_oracle.js` and `interop_oracle.js` — the
+two largest of the six — during the one window in which their successor
+provably cannot run. The IR of every module of every corpus program would go
+from "proved by two implementations agreeing" to "proved by nothing", not as a
+considered trade but as an accident of ordering, and the first run of the thing
+meant to replace them would happen after the code they checked was gone. **A
+gate that has never been green is not a successor; it is a plan.**
+
+The fix is not work, it is a release boundary. Ship 0.5.0 with everything R6
+needs — that is where this tree already is — and land the deletion once 0.5.0
+is out, so it rides 0.6.0. `nish-cmp` then has a full cycle of green runs
+against the 0.5.0 seed *before* anything is deleted, which is the evidence the
+deletion is supposed to rest on. The cost is one release; §6 says what the
+deletion costs when it is right, and none of that changes.
+
+The alternative — lowering `cmpSince` to 0.4.0 and declaring the two
+`nish/`-specifier programs — is the allowlist that item 1 turned down, and it
+fails on its own terms as well: `DECLARED` wants the words in `CHANGELOG.md`,
+which is generated at release time with `[Unreleased]` empty, so the
+declaration cannot be green on any pull request. There is no spelling of it
+that makes 0.5.0 work.
 
 #### A human's decision — two, and neither is a checkbox
 
@@ -1628,7 +1795,23 @@ person one sentence. What it leaves behind is ordinary work: the package
 becoming a thin installer, which was in the list above and landed on
 2026-09-20.
 
-**A release that carries the darwin and `aarch64-linux` seeds** (G3, G5). The
+**~~A release that carries the darwin and `aarch64-linux` seeds~~ (G3, G5) —
+closed on 2026-09-20.** v0.4.0 is published and carries all four:
+`nish-0.4.0-x86_64-linux.tar.gz`, `nish-0.4.0-aarch64-linux.tar.gz`,
+`nish-0.4.0-aarch64-darwin.tar.gz` and `nish-0.4.0-x86_64-darwin.tar.gz`, plus
+the five npm tarballs. So this bucket holds **one** decision now, not two, and
+G3's macOS `bootstrap` row appears from `seed-targets.json` on its own as the
+note there promised — no edit to `ci.yml`. **What the release did not settle is
+the thing the seeds are for**: the compiler those four assets contain ships no
+`std/` (work item 1 above), so the rolling freeze they check is a freeze on a
+compiler that cannot import its own standard library. That is not a reason to
+re-cut v0.4.0 — `bootstrap` builds `self/`, which imports nothing from `std/`,
+so the freeze it checks is real — but it is the reason `cmpSince` is 0.5.0, and
+it is worth recording here that a gate can be green on a seed that is broken in
+a way the gate does not ask about. The paragraph below is the record of what
+this decision was, and stands.
+
+The
 measurement and the fix are done and merged — `acbca9f` (#114): all three
 previously unexercised rows run on their own hardware and green, and the Mach-O
 `stage3 == stage2` comparison holding as a raw `cmp` (see R2 and §G5). What is

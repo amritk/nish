@@ -57,7 +57,7 @@ import { generateNapiShim } from "./interop_napi";
 import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
 import { dirname } from "./paths";
-import { jsonQuote } from "./strings";
+import { jsonQuote, splitByte } from "./strings";
 import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
@@ -509,25 +509,103 @@ export const main = (): number => {
   return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json);
 };
 
+/** `:`, the byte `$PATH` is cut on. */
+const COLON: i32 = 58;
+
+/**
+ * The directory `argv[0]` names, when `argv[0]` names none — a command found
+ * on `$PATH` arrives as the bare word the user typed, with no directory at
+ * all, so there is nothing to take the parent of.
+ *
+ * The shell ran the first executable of that name on `$PATH`, so the first
+ * entry holding a readable file of that name is the one that ran, and its
+ * parent is the package root. The file is read rather than stat'd because
+ * there is no `isFileSync` in the language and `isDirectorySync` answers the
+ * wrong question; the cost is one read of the compiler's own binary, on the
+ * one path that reaches here, and only until the first entry matches.
+ *
+ * An empty `$PATH` entry means the working directory, which is POSIX, and
+ * an unset `PATH` answers `""` so the caller falls through to `.`.
+ */
+const rootFromPath = (program: string): string => {
+  const pathVar = getenv("PATH");
+  if (pathVar === null) {
+    return "";
+  }
+  const entries = splitByte(pathVar, COLON);
+  let i = 0;
+  while (i < entries.length) {
+    const entry = entries[i];
+    const dir = entry.length === 0 ? "." : entry;
+    if (readFileSyncOrNull(`${dir}/${program}`) !== null) {
+      return `${dir}/..`;
+    }
+    i = i + 1;
+  }
+  return "";
+};
+
 /**
  * The package root: the directory holding `scripts/`, `runtime/` and `std/`.
  * stage0 reads it from `import.meta.dirname` (`src/version.ts`); this compiler
  * is a binary, so it derives it from the path it was invoked by —
  * `<prefix>/bin/nish` and `build/nish` both put it one level up — and falls
  * back to the working directory, which is what a checkout wants. Empty when
- * neither has the script, so the caller can say which two it looked in.
+ * nothing has the script, so the caller can say where it looked.
+ *
+ * **`argv[0]` is not always a path, and that is the whole of what this has to
+ * get right.** A command invoked by a path — `./build/nish`, `/usr/local/bin/nish`
+ * — carries its directory, and the parent of that directory is the root. A
+ * command found on `$PATH` carries the bare word instead, so `dirname` answers
+ * `.` and the parent of the *working directory* gets searched: `--link` then
+ * fails against wherever the user happened to be standing, while `--version`
+ * and `-o` keep working, because only `--link` needs a file from the package.
+ * That is what unpacking a release tarball onto `$PATH` is, and it did not
+ * work (wp19 §5a item 4). `rootFromPath` above is the answer for that spelling.
+ *
+ * The candidates are tried in order and the first with `scripts/build.sh` in
+ * it wins, so a checkout still beats a stale install: `.` is last, but the
+ * directory `argv[0]` came from is only a candidate at all when `argv[0]` said
+ * where it was.
+ *
+ * **Still open, and deliberately not worked around here: a symlink.** npm
+ * links every command as one (`node_modules/.bin/nish -> ../<pkg>/bin/nish`),
+ * and this resolves no link, so the parent of the *link's* directory is
+ * searched and an install laid out that way finds nothing. The language has no
+ * `realpath` to call, so the fix is a builtin rather than an edit here, and
+ * both installers exec an absolute path instead (`scripts/postinstall.mjs`,
+ * `install.sh`). Adding the builtin is a change `self/` could not use until
+ * the release after it lands, which is the rolling freeze.
  *
  * It lives in the driver rather than beside the path helpers because
  * `process.argv` is legal only in a program with an entry `main`, and every
  * `self/` module is compiled on its own by `tests/run.js`. Everything that
  * needs the root is handed it through `Options.packageRoot`.
  */
+const packageRootCandidates = (): string[] => {
+  const candidates: string[] = [];
+  const program = process.argv[0];
+  if (program.indexOf("/") < 0) {
+    const viaPath = rootFromPath(program);
+    if (viaPath.length > 0) {
+      candidates.push(viaPath);
+    }
+  } else {
+    candidates.push(`${dirname(program)}/..`);
+  }
+  candidates.push(".");
+  return candidates;
+};
+
 const packageRoot = (): string => {
-  const candidates: string[] = [`${dirname(process.argv[0])}/..`, "."];
-  for (const root of candidates) {
+  const candidates = packageRootCandidates();
+  let i = 0;
+  while (i < candidates.length) {
+    const root = candidates[i];
     if (readFileSyncOrNull(`${root}/scripts/build.sh`) !== null) {
       return root;
     }
+    i = i + 1;
   }
   return "";
 };
@@ -555,7 +633,7 @@ const linkProgram = (
   const root = packageRoot();
   if (root.length === 0) {
     reportToolchainFailure(
-      `--link: cannot find scripts/build.sh (looked in ${dirname(process.argv[0])}/.. and .); run the compiler from a checkout or an installed package`,
+      `--link: cannot find scripts/build.sh (looked in ${packageRootCandidates().join(" and ")}); run the compiler from a checkout or an installed package`,
       json
     );
     return 3;

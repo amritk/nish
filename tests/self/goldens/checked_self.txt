@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 406585 dump lines live, 64 distinct modules.
+# 64 programs, 406607 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -18007,12 +18007,14 @@ import wasmLoaderPath from "./interop_wasm" -> function @wasmLoaderPath
 import Options from "./options" -> struct Options
 import dirname from "./paths" -> function @dirname
 import jsonQuote from "./strings" -> function @jsonQuote
+import splitByte from "./strings" -> function @splitByte
 import codeFor from "./codes" -> function @codeFor
 import TOOLCHAIN from "./codes" -> const TOOLCHAIN
 import resolveTarget from "./target" -> function @resolveTarget
 import supportedTargets from "./target" -> function @supportedTargets
 const USAGE: string = "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       compile -v, --version | -h, --help"
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
+const COLON: i32 = 58
 function isProfile(name: string): boolean -> @isProfile
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -18134,50 +18136,70 @@ function main(): i32 -> @nish_main [exported entry]
   callee 494:10 makeDirectoryFor -> @makeDirectoryFor
   callee 503:8 writeSidecars -> @writeSidecars
   callee 509:10 linkProgram -> @linkProgram
+function rootFromPath(program: string): string -> @rootFromPath
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_getenv nish_read_file_or_null nish_str_concat splitByte
+  stackSites=0 stackLocals=0
+  local 531:9 pathVar: string | null (const)
+  local 535:9 entries: string[] (const)
+  callee 535:19 splitByte -> @splitByte
+  local 536:7 i: i32 (let)
+  local 538:11 entry: string (const)
+  local 539:11 dir: string (const)
+function packageRootCandidates(): string[] -> @packageRootCandidates
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: dirname nish_array_grow nish_panic_index nish_str_at nish_str_concat rootFromPath
+  stackSites=0 stackLocals=0
+  local 586:9 candidates: string[] (const)
+  local 587:9 program: string (const)
+  local 589:11 viaPath: string (const)
+  callee 589:21 rootFromPath -> @rootFromPath
+  callee 594:24 dirname -> @dirname
 function packageRoot(): string -> @packageRoot
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: dirname nish_panic_index nish_read_file_or_null nish_str_concat
-  stackSites=1 stackLocals=1
-  local 526:9 candidates: string[] (const)
-  callee 526:36 dirname -> @dirname
-  local 527:14 root: string (const)
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_read_file_or_null nish_str_concat packageRootCandidates
+  stackSites=0 stackLocals=0
+  local 601:9 candidates: string[] (const)
+  callee 601:22 packageRootCandidates -> @packageRootCandidates
+  local 602:7 i: i32 (let)
+  local 604:11 root: string (const)
 function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: json link profile
-  calls: dirname makeDirectoryFor nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot reportToolchainFailure
+  calls: makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot packageRootCandidates reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 555:9 root: string (const)
-  callee 555:16 packageRoot -> @packageRoot
-  callee 557:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 558:58 dirname -> @dirname
-  callee 563:8 makeDirectoryFor -> @makeDirectoryFor
-  local 566:9 script: string (const)
-  local 570:9 argv: string[] (const)
-  local 577:14 file: string (const)
-  local 597:9 status: i32 (const)
-  local 599:11 why: string (const)
-  callee 600:5 reportToolchainFailure -> @reportToolchainFailure
-  local 603:9 binary: string | null (const)
+  local 633:9 root: string (const)
+  callee 633:16 packageRoot -> @packageRoot
+  callee 635:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 636:58 packageRootCandidates -> @packageRootCandidates
+  callee 641:8 makeDirectoryFor -> @makeDirectoryFor
+  local 644:9 script: string (const)
+  local 648:9 argv: string[] (const)
+  local 655:14 file: string (const)
+  local 675:9 status: i32 (const)
+  local 677:11 why: string (const)
+  callee 678:5 reportToolchainFailure -> @reportToolchainFailure
+  local 681:9 binary: string | null (const)
 function writeSidecars(compilation: Compilation): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: externalFunctions generateDts generateHeader generateNapiShim generateWasmLoader makeDirectoryFor nish_str_concat nish_write nish_write_file wasmLoaderPath
   pointer compilation: size=88 writesThrough=false captured=false passedTo=externalFunctions#0 generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   stackSites=0 stackLocals=0
-  local 621:9 opts: Options (const)
-  local 630:9 fns: ExternalFunction[] (const)
-  callee 630:15 externalFunctions -> @externalFunctions
-  callee 632:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 635:36 generateHeader -> @generateHeader
-  callee 639:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 642:33 generateDts -> @generateDts
-  local 644:11 loader: string (const)
-  callee 644:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 645:27 generateWasmLoader -> @generateWasmLoader
-  callee 649:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 652:34 generateNapiShim -> @generateNapiShim
-  callee 656:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 659:39 generateNapiShim -> @generateNapiShim
+  local 699:9 opts: Options (const)
+  local 708:9 fns: ExternalFunction[] (const)
+  callee 708:15 externalFunctions -> @externalFunctions
+  callee 710:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 713:36 generateHeader -> @generateHeader
+  callee 717:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 720:33 generateDts -> @generateDts
+  local 722:11 loader: string (const)
+  callee 722:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 723:27 generateWasmLoader -> @generateWasmLoader
+  callee 727:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 730:34 generateNapiShim -> @generateNapiShim
+  callee 734:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 737:39 generateNapiShim -> @generateNapiShim
 module self/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts

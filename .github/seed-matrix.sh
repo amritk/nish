@@ -73,8 +73,15 @@ summary() {
 
 tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
 if [ -z "$tag" ]; then
-  echo "::notice::No release exists yet, so there is no seed on any platform and the rolling freeze is unchecked everywhere. Nothing is wrong: it starts being checked at the first release, and this job is green rather than red because a red CI is a release that cannot be cut. No bootstrap row runs, so nothing here claims the freeze held."
+  echo "::notice::No release exists yet, so there is no seed on any platform and the rolling freeze is unchecked everywhere. Nothing is wrong: it starts being checked at the first release, and this job is green rather than red because a red CI is a release that cannot be cut. No bootstrap row runs, so nothing here claims the freeze held. No nish-cmp row runs either, for the same reason and with the same consequence: there is no released compiler to compare HEAD against."
   echo "rows=[]" >> "$out"
+  # Both outputs are written in every arm that exits 0. An output this script
+  # never sets is the empty string rather than `[]`, and `!= '[]'` is true of
+  # it -- so a job keyed on the unset value asks GitHub to evaluate an empty
+  # matrix, which is an error and not a skip. That is the same shape as the
+  # deadlock the header describes, arriving as a red X on the first release
+  # instead of a grey square.
+  echo "cmp=[]" >> "$out"
   summary <<'EOF'
 ### Seeds
 
@@ -143,6 +150,59 @@ if [ -n "$missing" ]; then
 fi
 
 echo "rows=$rows" >> "$out"
+
+# Which of those rows `nish-cmp` runs on (WP19 G2.1), which is two questions.
+#
+# WHICH PLATFORM. The tool compiles the whole corpus twice on one host -- with
+# the last released `nish` and with the compiler HEAD builds -- and requires
+# every byte to match, so what it wants is a seed rather than a platform
+# sweep. It is the successor to `ir_oracle.js` and `interop_oracle.js`, which
+# run on Linux and die with stage0 (docs/wp19-stage0-retirement.md §2B), so
+# the Linux rows are the ones it inherits. macOS is left out on a measurement
+# rather than a preference: the checks that keep `macos-latest` out of the
+# `test` matrix encode an ELF assumption (§5a item 3), and a gate is the wrong
+# place to discover that. Derived from `rows` rather than named, so a Linux
+# platform whose first release lands later gets a `nish-cmp` row the day it
+# gets a `bootstrap` one, with no edit here or to ci.yml.
+#
+# WHICH RELEASE. `cmpSince` in .github/seed-targets.json, compared the way
+# `attachedSince` is and for the same reason -- a release already published
+# cannot grow a file. The seeds 0.1.1 through 0.4.0 ship no std/, so against
+# any of them the tool correctly reports two corpus programs on which HEAD is
+# right and the seed is broken. That is a defect in what was published, not a
+# difference anybody can fix in the tree, so this gate gets no row until a
+# release carries a seed that can compile the corpus -- an absent row saying
+# no comparison happened, where a green one with those two programs allowlisted
+# would say one happened and passed. The JSON's note has the reasoning at
+# length and the recovery.
+cmp_since="$(jq -r '.cmpSince // empty' "$targets")"
+if [ -z "$cmp_since" ]; then
+  echo "::error::.github/seed-targets.json has no cmpSince, so nothing decides which releases nish-cmp (WP19 G2.1) may compare against. Add it: it is a dotted-integer version, read the note beside it."
+  exit 1
+fi
+# Its shape is checked before it is compared, and separately, so that a
+# cmpSince nobody can order is RED rather than quietly "no row". Folded into
+# the comparison below it would be indistinguishable from a seed that is
+# simply too old -- the job would go grey and the notice would give the wrong
+# reason, which is worse than either colour on its own. This is seed-due.sh's
+# rule for `attachedSince` applied to the sibling field, and `tests/run.js`
+# asserts the same shape against the file so an edit is normally caught there
+# first; this is the arm for an edit that reaches a runner anyway.
+if ! printf '%s' "$cmp_since" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+  echo "::error::.github/seed-targets.json sets cmpSince to '$cmp_since', which is not a dotted-integer version, so nothing can decide whether $tag's seed may be compared against (WP19 G2.1). Fix the field: guessing an order is how a gate gets skipped for a reason nobody wrote down. This check is red until it is, and release.yml's release job is needs: ci."
+  exit 1
+fi
+# The same array-wise jq comparison seed-due.sh makes, for the same reason it
+# is not `sort -V`: that is GNU-only and this runs on macOS too.
+if jq -e -n --arg v "$version" --arg since "$cmp_since" \
+  'def semver: split(".") | map(tonumber);
+   ($since | semver) <= ($v | semver)' >/dev/null; then
+  cmp="$(printf '%s' "$rows" | jq -c '[.[] | select(.runner | startswith("ubuntu"))]')"
+else
+  cmp='[]'
+  echo "::notice::nish-cmp (WP19 G2.1) does not run against $tag: .github/seed-targets.json sets cmpSince to $cmp_since, and a seed older than that cannot compile the corpus -- the releases before it ship no std/, so every nish/<module> specifier is refused. No row runs, and nothing here claims the comparison passed. The first release at or after $cmp_since gives this gate a row with no edit to ci.yml."
+fi
+echo "cmp=$cmp" >> "$out"
 echo "::notice::Seeded from $tag. The rolling freeze is checked on:$checked. Not yet due at $tag, so it is NOT checked on:${unchecked:- (nothing)} -- each of those is written <asset>:<attachedSince>, and its row appears here on the first release at or after that version."
 
 {

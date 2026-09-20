@@ -4777,6 +4777,38 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         .filter((l) => l.includes("stdModuleNames"))
         .join(" | ")
     );
+
+    // And the third party to that contract, added 2026-09-20: the release
+    // tarball's presence gate. `std/` was not staged at all for four releases,
+    // and the gate that exists to catch exactly that listed seven paths and
+    // none of them under `std/`. Naming the modules there fixes the case that
+    // happened; deriving the list from the same directory the two above read
+    // is what stops the NEXT module shipping in `self/`'s literal and not in
+    // the tarball -- three lists that agree until one is edited is the defect
+    // `.github/seed-targets.json` exists to prevent one level up.
+    const releaseYmlText = fs.readFileSync(
+      path.join(root, ".github", "workflows", "release.yml"),
+      "utf8"
+    );
+    //
+    // All THREE presence gates, not the first one found. release.yml has one per
+    // artefact -- the release tarball, the per-platform npm package, and the main npm
+    // package -- and the first two ship a native compiler from the same staged
+    // directory while the third ships `dist/`. Picking one by a `.find` would test
+    // whichever happened to come first in the file and say nothing about the others,
+    // which is the shape of the defect rather than a check on it.
+    const gateLines = releaseYmlText.split("\n").filter((l) => /^\s*for f in \S+ /.test(l));
+    const modules = actual.split(", ");
+    const holes = gateLines.flatMap((line) =>
+      modules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
+    );
+    check(
+      `release.yml's ${gateLines.length} presence gates each name every std module, so none can ship missing (${actual})`,
+      gateLines.length === 3 && holes.length === 0,
+      gateLines.length !== 3
+        ? `expected 3 \`for f in ...\` gates in release.yml, found ${gateLines.length}`
+        : `not named:\n${holes.join("\n")}`
+    );
   }
 
   // S1: the lexer built by stage0 runs natively, and its token stream agrees
@@ -6730,6 +6762,27 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       misversioned.length === 0,
       misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
     );
+    // And the lockfile's copy of that same list, which is a second file saying the same
+    // thing and therefore a second thing to go stale. It did: 0.4.0 shipped with
+    // package.json pinning 0.4.0 and the lockfile still pinning 0.3.0, because the
+    // release bump read `optionalDependencies` at the top level and a lockfile keeps the
+    // root package under `packages[""]`. Nothing was red -- `npm ci` tolerates it and
+    // `npm install` rewrites the file under whoever runs it next, which is how it stayed
+    // invisible. `release-pr.yml` moves both now, and this is the check that would have
+    // noticed whatever moved them apart.
+    const lockRoot = JSON.parse(
+      fs.readFileSync(path.join(root, "package-lock.json"), "utf8")
+    ).packages?.[""]?.optionalDependencies;
+    const lockDisagrees = Object.entries(optional).filter(([k, v]) => (lockRoot ?? {})[k] !== v);
+    check(
+      "package-lock.json pins the same platform packages at the same versions as package.json",
+      lockRoot !== undefined && lockDisagrees.length === 0,
+      lockRoot === undefined
+        ? 'package-lock.json has no packages[""].optionalDependencies'
+        : lockDisagrees
+            .map(([k, v]) => `${k}: package.json ${v}, lockfile ${JSON.stringify(lockRoot[k])}`)
+            .join("\n")
+    );
     // The three spellings of a platform -- node's, this project's and npm's -- converted
     // in one place, checked against the file that is the authority on the middle one.
     // A row `targetForAsset` cannot read is a platform the release attaches a binary for
@@ -7022,12 +7075,31 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       // release whose optionalDependencies were left behind installs a compiler that
       // resolves the previous release's binaries. It succeeds, it runs, and it is one
       // version stale in the half nobody looks at.
-      const pins = Object.entries(bumped.optionalDependencies ?? {});
-      const stale = pins.filter(([, v]) => v !== next);
+      //
+      // Both copies of that list, which is the half this check did not have. package.json
+      // keeps optionalDependencies at the top level and a lockfile keeps the root
+      // package under `packages[""]`, so a bump reading only the top level moves one and
+      // leaves the other -- and reading only the top level is what this check did too,
+      // so it passed while 0.4.0 shipped a lockfile still pinned to 0.3.0. `npm ci`
+      // tolerates the disagreement and `npm install` silently rewrites it, so nothing
+      // anywhere went red. A check that looks where the code looks cannot see the code
+      // looking in the wrong place: both places are named here.
+      const pinSets = [
+        ["package.json", bumped.optionalDependencies ?? {}],
+        ["package-lock.json packages[\"\"]", lock.packages?.[""]?.optionalDependencies ?? {}],
+      ];
+      const stale = pinSets.flatMap(([where, deps]) =>
+        Object.entries(deps)
+          .filter(([, v]) => v !== next)
+          .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
+      );
+      const pinCount = pinSets.reduce((n, [, deps]) => n + Object.keys(deps).length, 0);
       check(
-        `release-pr: the bump moves every platform package with it (${pins.length})`,
-        pins.length > 0 && stale.length === 0,
-        stale.map(([k, v]) => `${k} stayed at ${v}`).join("\n")
+        `release-pr: the bump moves every platform package in BOTH files (${pinCount})`,
+        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
+        stale.length > 0
+          ? stale.join("\n")
+          : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       );
       const branding = fs.readFileSync(path.join(work, "self", "branding.ts"), "utf8");
       check(
@@ -7116,14 +7188,111 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       `Linux/amd64 derived ${JSON.stringify(askScript("Linux", "amd64").stdout.trim())}`
     );
     // The wrapper, and the defect it exists for. Unpacking a release tarball onto `$PATH`
-    // is NOT an install: invoked as `$PATH` found it, argv[0] is a bare `nish` with no
-    // directory in it, the compiler resolves `./..` for scripts/build.sh and runtime/,
-    // and every `--link` fails against whatever the working directory happens to be --
-    // while `--version` and `-o` keep working (wp19 §5a item 4). `install.sh` moves the
-    // binary to libexec/ and leaves an `exec` of an absolute path at bin/nish.
+    // used not to be an install: invoked as `$PATH` found it, argv[0] is a bare `nish`
+    // with no directory in it, the compiler resolved `./..` for scripts/build.sh and
+    // runtime/, and every `--link` failed against whatever the working directory
+    // happened to be -- while `--version` and `-o` kept working (wp19 §5a item 4).
+    //
+    // **The compiler handles that spelling itself as of 2026-09-20**: a bare argv[0] is
+    // looked up on `$PATH`, which is where the shell found it, and the check below drives
+    // the real compiler that way end to end. So this wrapper is no longer what makes a
+    // tarball-on-PATH install work.
+    //
+    // It stays, and the reason is the half that is NOT fixed: npm links every command as
+    // a symlink (`node_modules/.bin/nish -> ../<pkg>/bin/nish`), the compiler resolves no
+    // link, and the parent of the *link's* directory is not the package. That needs a
+    // `realpath` the language does not have, so `install.sh` keeps moving the binary to
+    // libexec/ and leaving an `exec` of an absolute path at bin/nish, which sidesteps
+    // both spellings.
     //
     // Driven with a stub binary rather than a downloaded one, so this needs no network
     // and can say exactly what argv[0] arrived as -- which is the thing that was wrong.
+    // The compiler itself, driven the way `$PATH` drives it, end to end. The check above
+    // is about `install.sh`'s wrapper; this one is about the defect, and it is the only
+    // place a bare `nish` reaches a REAL compiler -- everything else in the suite invokes
+    // one by a path, which is precisely why nothing noticed for four releases (§A7: "the
+    // harness happens to invoke the spelling that agrees").
+    //
+    // An install is staged rather than assumed: `bin/nish` beside `scripts/`, `runtime/`
+    // and `std/` is the layout release.yml builds, so what runs here is the shape a user
+    // unpacks. It is driven from a third directory, so neither the checkout nor the
+    // staged directory can be what makes it work, and the program imports `nish/text` --
+    // a specifier resolved against the package root, so it fails if argv[0] was resolved
+    // wrongly even when `scripts/build.sh` was found some other way.
+    {
+      const stage1 = stage1ForCases();
+      if (stage1.error !== undefined) {
+        skip(`a bare \`nish\` on PATH could not be driven: ${stage1.error}`);
+      } else {
+        const inst = path.join(buildDir, "argv0-path-install");
+        fs.rmSync(inst, { recursive: true, force: true });
+        fs.mkdirSync(path.join(inst, "bin"), { recursive: true });
+        fs.mkdirSync(path.join(inst, "scripts"), { recursive: true });
+        fs.copyFileSync(stage1.cmd, path.join(inst, "bin", "nish"));
+        fs.chmodSync(path.join(inst, "bin", "nish"), 0o755);
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(inst, "scripts", "build.sh"));
+        fs.cpSync(path.join(root, "runtime"), path.join(inst, "runtime"), { recursive: true });
+        fs.cpSync(path.join(root, "std"), path.join(inst, "std"), { recursive: true });
+
+        const work = path.join(buildDir, "argv0-path-work");
+        fs.rmSync(work, { recursive: true, force: true });
+        fs.mkdirSync(work, { recursive: true });
+        fs.writeFileSync(
+          path.join(work, "prog.ts"),
+          'import { trim } from "nish/text";\n\nexport const main = (): number => {\n  write(`[${trim("  padded  ")}]\\n`);\n  return 0;\n};\n'
+        );
+        const onPath = (args) =>
+          spawnSync("nish", args, {
+            cwd: work,
+            encoding: "utf8",
+            env: { ...process.env, PATH: `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}` },
+          });
+
+        const linked = onPath(["prog.ts", "--link", "prog"]);
+        check(
+          "a bare `nish` on PATH links: argv[0] with no directory is looked up on PATH",
+          linked.status === 0,
+          `exit ${linked.status}\n${linked.stdout}${linked.stderr}`
+        );
+        if (linked.status === 0) {
+          const ran = spawnSync(path.join(work, "prog"), [], { cwd: work, encoding: "utf8" });
+          check(
+            "a bare `nish` on PATH resolves nish/<module> against the package, not the cwd",
+            ran.status === 0 && ran.stdout.trim() === "[padded]",
+            `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
+          );
+        }
+
+        // And the diagnostic when there genuinely is no package: it has to name where it
+        // looked, and `./..` is the answer that sent somebody looking in the wrong place.
+        // A copy of the binary alone on PATH is that state.
+        //
+        // With a program that imports nothing, deliberately. `prog.ts` above would fail
+        // on `nish/text` before `--link` was ever reached -- the standard library is
+        // resolved against the same package root -- and this check is about the link
+        // step's message, so it has to get there.
+        fs.writeFileSync(
+          path.join(work, "plain.ts"),
+          'export const main = (): number => {\n  write("plain\\n");\n  return 0;\n};\n'
+        );
+        const lonely = path.join(buildDir, "argv0-path-lonely");
+        fs.rmSync(lonely, { recursive: true, force: true });
+        fs.mkdirSync(lonely, { recursive: true });
+        fs.copyFileSync(stage1.cmd, path.join(lonely, "nish"));
+        fs.chmodSync(path.join(lonely, "nish"), 0o755);
+        const orphan = spawnSync("nish", ["plain.ts", "--link", "p2"], {
+          cwd: work,
+          encoding: "utf8",
+          env: { ...process.env, PATH: `${lonely}${path.delimiter}${process.env.PATH}` },
+        });
+        check(
+          "a bare `nish` with no package around it names the directory it searched, not `./..`",
+          orphan.status !== 0 && orphan.stderr.includes(`${lonely}/..`) && !orphan.stderr.includes("./.."),
+          `exit ${orphan.status}\n${orphan.stdout}${orphan.stderr}`
+        );
+      }
+    }
+
     {
       const home = path.join(buildDir, "install-sh-wrapper");
       fs.rmSync(home, { recursive: true, force: true });
@@ -7414,6 +7583,66 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   // file, by way of the `targets` job. A retired label is the retired-label check above,
   // which is where that defect belongs.
   const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
+
+  // ---- The tarball carries a standard library, not only a compiler ------------------
+  //
+  // Every release from 0.1.1 to 0.4.0 staged `bin`, `runtime` and `scripts` and no
+  // `std/`. The compiler in those tarballs links `hello.ts` and answers any
+  // `import { trim } from "nish/text"` with ``Module `nish/text` is not part of the
+  // standard library (it has: json, testing, text)`` -- a sentence that names the module
+  // it is refusing, because the list in it is the static table of module names and the
+  // FILE is what is absent. It reproduces on the published v0.4.0 asset, and it is the
+  // same omission in both channels the installer uses, since the npm platform package is
+  // `npm pack` over the same staged directory.
+  //
+  // Three things had to be true at once for four releases to ship it, and each gets a
+  // check here rather than a comment:
+  //
+  //   * the staging copied `runtime` and not `std`;
+  //   * the "carries a whole compiler" gate listed seven paths, none of them under
+  //     `std/`, so the presence check that exists for exactly this class passed;
+  //   * both smoke programs -- `hello.ts` and `examples/multi` -- import nothing, so a
+  //     compiler with no standard library links them and says so.
+  //
+  // The pack-and-install round trip in this file did not see it either, and that is the
+  // instructive one: it packs the MAIN package, whose `files` has listed `std` all
+  // along, and a main package with no platform package beside it falls back to `dist/`.
+  // The path that works is the one the harness takes; the path a user gets is the one
+  // that does not. That is wp19 §A7's sentence about `argv[0]` -- "the harness happens
+  // to invoke the spelling that agrees" -- holding for the product a second time.
+  check(
+    "release tarball: the staging copies std/ beside runtime/, or no released compiler can import nish/<module>",
+    /\bcp -r std "\$stage\/std"/.test(releaseYml),
+    "release.yml's binaries job does not stage std/ into the tarball"
+  );
+  // The presence gate names a std module, so a narrower copy is caught where `runtime`
+  // already is. It is a presence check and shares `runtime`'s limit: an empty text.ts
+  // would pass here and fail in the smoke step below, which is why both exist.
+  check(
+    "release tarball: the presence gate names a std module among the paths that must be there",
+    /for f in [^\n]*\bstd\/[a-z_]+\.ts\b/.test(releaseYml),
+    "release.yml's tarball gate lists no std/ path, so a staging that drops it passes"
+  );
+  // And a program that USES the library, run rather than compiled. A list is a claim
+  // about names; only running one of those modules says the library is whole. The
+  // specifier form matters: `nish/text` is the form resolved against the compiler's own
+  // package root, which is the only form the staging can break -- a relative import
+  // resolves against the program and would pass with no std/ shipped at all.
+  check(
+    "release tarball: the smoke test compiles and runs a program that imports nish/<module>",
+    /from "nish\/text"/.test(releaseYml) && /\.\/stdlib/.test(releaseYml),
+    "release.yml smokes no program that imports the standard library by its package specifier"
+  );
+  // The npm side of the same omission. `platform-package.mjs` writes the manifest for
+  // the per-platform package the launcher hands over to, and its `files` is the second
+  // place the library has to be listed -- the staged directory is shared, the two
+  // `files` lists are not.
+  const platformPackage = fs.readFileSync(path.join(root, "scripts", "platform-package.mjs"), "utf8");
+  check(
+    "platform package: its files list carries std, so npm ships what the tarball ships",
+    /files:\s*\[[^\]]*"std"[^\]]*\]/.test(platformPackage),
+    "scripts/platform-package.mjs omits std from the platform package's files"
+  );
   const spelled = rows.filter((t) => releaseYml.includes(t.asset));
   check(
     "seed targets: release.yml names no asset, because it reads them from the file",
@@ -7640,7 +7869,18 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     });
     const written = fs.readFileSync(outFile, "utf8");
     const rowsLine = /^rows=(.*)$/m.exec(written);
-    return { ...r, rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined };
+    // `cmp` is read the same way and kept distinct from "the script did not
+    // write it": an output GitHub never receives is the empty string, and
+    // `!= '[]'` is true of it, so the job keyed on it would ask for an empty
+    // matrix -- an error rather than a skip. `undefined` here is what that
+    // state looks like from the harness, and the checks below assert it does
+    // not happen in any arm that exits 0.
+    const cmpLine = /^cmp=(.*)$/m.exec(written);
+    return {
+      ...r,
+      rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined,
+      cmp: cmpLine ? JSON.parse(cmpLine[1]) : undefined,
+    };
   };
 
   const first = rows[0];
@@ -7734,6 +7974,95 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         future.rows?.length === rows.length &&
         future.rows.every((r, i) => r.asset === rows[i].asset && r.runner === rows[i].runner),
       future.stdout + future.stderr
+    );
+
+    // ---- WP19 G2.1: which releases nish-cmp may compare against ----------------------
+    //
+    // `cmpSince` is to G2.1 what `attachedSince` is to G3, and it is a version for the
+    // identical reason: a release already published cannot grow a file. The seeds 0.1.1
+    // through 0.4.0 ship no `std/`, so the compiler in them refuses every
+    // `nish/<module>` specifier -- against any of those, nish-cmp correctly reports two
+    // corpus programs on which HEAD is right and the seed is broken, and there is
+    // nothing anybody can edit in the tree to make that go away. So the gate gets no row
+    // until a release carries a seed that can compile the corpus.
+    //
+    // Which is the one thing in this pair that could quietly stop being true. An absent
+    // row is indistinguishable from a passing one in a summary, so each arm is asked for
+    // here rather than left to the workflow.
+    const cmpSince = seedTargets.cmpSince;
+    check(
+      `seed targets: cmpSince is a dotted-integer version (${cmpSince})`,
+      typeof cmpSince === "string" && /^[0-9]+(\.[0-9]+)*$/.test(cmpSince),
+      `cmpSince is ${JSON.stringify(cmpSince)}`
+    );
+
+    // Every arm that exits 0 writes BOTH outputs. An output the script never sets
+    // arrives at the workflow as the empty string, `!= '[]'` is true of it, and the job
+    // keyed on it asks GitHub for an empty matrix -- which is an error and not a skip.
+    // That is the same shape as the deadlock this file's header describes, and it would
+    // arrive as a red X on the first release rather than a grey square.
+    for (const [label, r] of [
+      ["no release at all", none],
+      ["a release before cmpSince", carried],
+      ["a release past every attachedSince", future],
+    ]) {
+      check(
+        `seed matrix: ${label} still writes a cmp output rather than leaving it unset`,
+        r.status !== 0 || r.cmp !== undefined,
+        `exit ${r.status}, cmp=${JSON.stringify(r.cmp)}\n${r.stdout}${r.stderr}`
+      );
+    }
+
+    // A seed older than cmpSince is no row and an explanation, not a red check and not a
+    // green one. `carried` is the oldest attachedSince in the file, which is necessarily
+    // before cmpSince while cmpSince is ahead of every shipped release.
+    //
+    // Counted rather than conditional when it cannot be posed. Lowering cmpSince to the
+    // oldest attachedSince leaves no release that is "before" it, so this question stops
+    // having an answer -- and a check that disappears when the thing it guards is
+    // weakened is the pathology this package has recorded five times. A skip says so in
+    // the summary; an `if` with no `else` says nothing.
+    if (!notAfter(cmpSince, early)) {
+      check(
+        `seed matrix: a release before cmpSince (${early} < ${cmpSince}) gives nish-cmp no row, and says why`,
+        carried.status === 0 &&
+          Array.isArray(carried.cmp) &&
+          carried.cmp.length === 0 &&
+          carried.stdout.includes("::notice::") &&
+          carried.stdout.includes("cmpSince"),
+        `exit ${carried.status}, cmp=${JSON.stringify(carried.cmp)}\n${carried.stdout}${carried.stderr}`
+      );
+    } else {
+      skip(
+        `cmpSince is ${cmpSince} and the oldest attachedSince is ${early}, so no release in this ` +
+          "file is before it: nothing here proves a pre-cmpSince release gets no nish-cmp row"
+      );
+    }
+
+    // And at a version past every attachedSince and past cmpSince: a row for each Linux
+    // seed and none for macOS. The Linux-only rule is a measurement rather than a
+    // preference -- the checks that keep `macos-latest` out of the `test` matrix encode
+    // an ELF assumption (wp19 §5a item 3) -- and it is derived from the row's own runner
+    // label, so a Linux platform added later is picked up with no edit to either file.
+    const linuxRows = rows.filter((t) => t.runner.startsWith("ubuntu"));
+    check(
+      `seed matrix: past cmpSince, nish-cmp gets a row per Linux seed and none for macOS (${linuxRows.map((t) => t.asset).join(", ")})`,
+      future.status === 0 &&
+        Array.isArray(future.cmp) &&
+        future.cmp.length === linuxRows.length &&
+        future.cmp.every((r, i) => r.asset === linuxRows[i].asset && r.runner === linuxRows[i].runner) &&
+        future.cmp.every((r) => r.tarball && r.tag),
+      `cmp=${JSON.stringify(future.cmp)}\n${future.stdout}${future.stderr}`
+    );
+
+    // Every nish-cmp row is one of the bootstrap rows. The two gates download the same
+    // asset from the same release, and a `cmp` row the release does not carry is a
+    // download that fails inside the job rather than a matrix that is empty before it.
+    check(
+      "seed matrix: every nish-cmp row is a seed the release actually carries",
+      Array.isArray(future.cmp) &&
+        future.cmp.every((c) => future.rows.some((r) => r.asset === c.asset && r.tarball === c.tarball)),
+      `cmp=${JSON.stringify(future.cmp)}\nrows=${JSON.stringify(future.rows)}`
     );
   }
 }
