@@ -365,6 +365,20 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
+  {
+    // `realpathSync` (WP19 §5a item 4). The same shape as `nish_getenv` above
+    // and for the same reasons: the call allocates, so it moves the arena and
+    // `effect: "write"` is what stops two calls folding across one; `noalias`
+    // because every call answers a fresh arena string; the path is read and
+    // never retained (`STR_NOCAP`); and the answer may be null, so no
+    // `nonnull`. It reads the filesystem, which `effect: "write"` already
+    // covers — a resolution is not a value LLVM may cache across a `mkdirSync`
+    // that could create the very component being resolved.
+    name: "nish_realpath",
+    signature: `declare noalias noundef align 8 i8* @nish_realpath(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
   // ---- WP14 §7a: what machine this is. `--target host` composes its triple
   // from the two, and so does any program that wants to know where it is.
   ...["nish_platform", "nish_arch"].map((name) => ({

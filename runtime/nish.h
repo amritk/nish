@@ -265,6 +265,18 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
  * for every other path-like argument here. */
 nish_str *nish_getenv(const nish_str *name);
 
+/* ---- Symlinks (WP19 §5a item 4) -----------------------------------------
+ * `realpathSync(path)`: `path` with every symbolic link resolved and every
+ * `.`, `..` and repeated separator removed, as an absolute path copied into
+ * the arena — or NULL when it does not resolve, which the language reads as
+ * `string | null`. A path that does not exist is the ordinary NULL case and
+ * not an error: the caller is asking whether it resolves, and every component
+ * but the last must exist for POSIX `realpath` to answer at all.
+ *
+ * `path` is read and never retained. The answer is a fresh arena string, so
+ * it outlives the call the way every other string here does. */
+nish_str *nish_realpath(const nish_str *path);
+
 /* ---- What machine this is (WP14 §7a) ------------------------------------
  * `process.platform` and `process.arch`, spelled as Node spells them:
  * "linux" or "darwin", "x64" or "arm64", and "unknown" for anything this

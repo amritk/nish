@@ -26,7 +26,15 @@
  * from drifting from the contract it is published under.
  */
 #define _POSIX_C_SOURCE 200809L
+/* `realpath` is XSI rather than POSIX base, so _POSIX_C_SOURCE alone does not
+   declare it (measured on glibc 2.39: undeclared, and clang then infers
+   `int`, which is a pointer-truncating bug rather than a compile error before
+   C99). Declaring it here by hand would be worse than this line on Darwin,
+   where <stdlib.h> gives `realpath` an asm label -- a hand declaration binds
+   the LEGACY symbol, for which a NULL second argument is undefined. */
+#define _XOPEN_SOURCE 700
 #include <dirent.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -272,6 +280,36 @@ nish_str *nish_getenv(const nish_str *name) {
   nish_str *s = nish_alloc_struct(8 + len + 1);
   s->len = len;
   memcpy(s->data, v, len + 1);
+  return s;
+}
+
+/* ---- Symlinks (WP19 §5a item 4): `realpathSync(path)`, the one path
+   resolution the language has. A compiler that finds `scripts/build.sh` and
+   `std/` relative to its own `argv[0]` cannot do it through a symlink without
+   this: `ln -s /opt/nish/bin/nish /usr/local/bin/nish` is the ordinary way a
+   binary reaches `$PATH`, and npm links every command the same way, so the
+   directory `argv[0]` names is the link's rather than the package's.
+
+   A PATH_MAX buffer rather than `realpath(p, NULL)`, which is the shorter
+   spelling and the wrong one here. Allocating the result is POSIX 2008, and
+   on Darwin it is the `__DARWIN_EXTSN` variant that implements it -- the
+   legacy symbol of the same name leaves a NULL second argument undefined. A
+   caller-supplied buffer is defined for both, so it is the spelling that
+   cannot depend on which variant a given feature-macro level binds.
+
+   The result is copied into the arena, for the reason `nish_getenv` copies:
+   what the arena owns has the lifetime every other string in the program has,
+   and the stack buffer is gone at the return. NULL when the path does not
+   resolve -- a path that does not exist included -- which is the language's
+   `string | null` rather than an error, because the caller is asking whether
+   it resolves. Contract: nish.h. */
+nish_str *nish_realpath(const nish_str *path) {
+  char buf[PATH_MAX];
+  if (!realpath(path->data, buf)) return 0;
+  uint64_t len = strlen(buf);
+  nish_str *s = nish_alloc_struct(8 + len + 1);
+  s->len = len;
+  memcpy(s->data, buf, len + 1);
   return s;
 }
 

@@ -591,6 +591,25 @@ different:
   from the arena to hide in, and raising it says what it says: the OS-facing
   surface grew, and the core did not.
 
+  **That happened on 2026-09-20, and it is recorded here because the paragraph
+  above predicted it exactly.** `nish_realpath` (WP19 §5a item 4) is **157**
+  bytes, the file measures **1,347** (`.text` 1,312 plus `.text.unlikely.` 35),
+  and the ceiling moves to the next 256-byte boundary above that: **1,536**,
+  leaving 189. The core's 3,480 did not move, which is the distinction the
+  split was made to preserve.
+
+  8 of those 157 bytes are a portability choice, and they are worth their own
+  number because the cheaper spelling is the wrong one. `realpath(p, NULL)`
+  measures 1,339 and lets libc size the buffer, which is POSIX 2008 — but on
+  Darwin it is the `__DARWIN_EXTSN` variant that implements that, and which of
+  the two same-named symbols a translation unit binds depends on its
+  feature-macro level. A caller-supplied `PATH_MAX` buffer is defined under
+  both, so it is the spelling that cannot depend on which one a given build
+  gets, and 8 bytes is what that costs. The declaration needs `_XOPEN_SOURCE
+  700` beside the file's existing `_POSIX_C_SOURCE 200809L`: `realpath` is XSI
+  rather than POSIX base, and measured on glibc 2.39 the POSIX macro alone
+  leaves it undeclared.
+
 That the two sum to 4,864, the single budget they replace, is a coincidence of
 where the 256-byte boundaries fall and not a constraint on either.
 

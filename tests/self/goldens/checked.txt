@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 342 programs, 5967 dump lines.
+# 344 programs, 5981 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2781,6 +2781,14 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_mkdir nish_print nish_readdir nish_str_concat nish_write_file
   stackSites=0 stackLocals=0
+program tests/cases/io_realpath.ts
+module tests/cases/io_realpath.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_realpath nish_str_at nish_str_concat
+  stackSites=0 stackLocals=0
+  local 17:9 missing: string | null (const)
+  local 19:9 here: string | null (const)
 program tests/cases/io_spawn.ts
 module tests/cases/io_spawn.ts (entry)
 function run(argv: string[]): i32 -> @run
@@ -5046,6 +5054,14 @@ function coin(): boolean -> @coin
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_random
   stackSites=0 stackLocals=0
+program docs/cookbook/builtin_realpath.ts
+module docs/cookbook/builtin_realpath.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_realpath nish_str_concat
+  stackSites=0 stackLocals=0
+  local 2:9 here: string | null (const)
+  local 3:9 root: string (const)
 program docs/cookbook/builtin_streams.ts
 module docs/cookbook/builtin_streams.ts (entry)
 function report(problem: string): void -> @report

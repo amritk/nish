@@ -88,6 +88,7 @@ provide("appendFileSync", shim.appendFileSync);
 provide("mkdirSync", shim.mkdirSync);
 provide("isDirectorySync", shim.isDirectorySync);
 provide("readdirSync", shim.readdirSync);
+provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("getenv", shim.getenv);

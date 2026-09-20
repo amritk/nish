@@ -5867,6 +5867,88 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end builtin_env -->
 
+### Resolving a path
+
+`realpathSync` is the only path resolution the language has, and the lowering
+is the same shape as `getenv` above: one call answering an `i8*` that may be
+null, which the `T | null` narrowing reads with an ordinary `icmp eq ... null`.
+No tag, no unwrapping, and the `here === null ? "." : here` below is how a
+default is written — which is why the builtin takes no second argument.
+
+The declaration is `noalias` for `getenv`'s reason, that every call answers a
+fresh arena copy rather than one constant, and it is not `readnone`: it
+allocates, and the filesystem is not memory LLVM is tracking, so a resolution
+must not fold across a `mkdirSync` that could create the very component being
+resolved.
+
+**What it is for.** A compiler finds `scripts/build.sh` and `std/` relative to
+its own `argv[0]`, and `argv[0]` is a symbolic link whenever the binary reached
+`$PATH` the ordinary way — `ln -s /opt/nish/bin/nish /usr/local/bin/nish`, or
+npm, which links every command as `node_modules/.bin/<name>`. Without this the
+directory `argv[0]` names is the link's rather than the package's
+(`docs/wp19-stage0-retirement.md` §5a item 4).
+
+<!-- cookbook:begin builtin_realpath -->
+```ts
+export const main = (): number => {
+  const here = realpathSync(".");
+  const root = here === null ? "." : here;
+  console.log(`resolved to ${root}`);
+  return 0;
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c".\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"resolved to \00" }, align 8
+
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %here.addr = alloca i8*, align 8
+  %root.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_realpath(i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  store i8* %0, i8** %here.addr, align 8
+  %1 = load i8*, i8** %here.addr, align 8
+  %2 = icmp eq i8* %1, null
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  %3 = load i8*, i8** %here.addr, align 8
+  br label %cond.end
+
+cond.end:
+  %4 = phi i8* [ bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), %cond.true ], [ %3, %cond.false ]
+  store i8* %4, i8** %root.addr, align 8
+  %5 = load i8*, i8** %root.addr, align 8
+  %6 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.1 to i8*), i8* %5)
+  call void @nish_print(i8* %6)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end builtin_realpath -->
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather
@@ -6091,6 +6173,7 @@ declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, 
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2

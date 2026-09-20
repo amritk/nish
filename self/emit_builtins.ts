@@ -531,6 +531,11 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   }
   // WP19 R1: one call, and the runtime's null is already the language's — the
   // same shape as `readFileSyncOrNull` down to the LLVM type.
+  if (name === "realpathSync") {
+    return emitter.fn.emitValue(
+      `call i8* ${emitter.useRuntime("nish_realpath")}(${stringArgs(emitter, expr)})`
+    );
+  }
   if (name === "getenv") {
     return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_getenv")}(${stringArgs(emitter, expr)})`);
   }
@@ -643,6 +648,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "getenv") {
     out.push("nish_getenv");
+    return out;
+  }
+  if (name === "realpathSync") {
+    out.push("nish_realpath");
     return out;
   }
   if (name === "write" || name === "writeError") {

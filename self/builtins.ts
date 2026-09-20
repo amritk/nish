@@ -101,7 +101,8 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "readdirSync" ||
     name === "monotonicNanos" ||
     name === "isDirectorySync" ||
-    name === "getenv"
+    name === "getenv" ||
+    name === "realpathSync"
   );
 };
 
@@ -556,6 +557,16 @@ export const checkBuiltinFunctionNamed = (
   // `process.env.NAME`: member access on a key chosen at runtime is what
   // Phase 0 refuses.
   if (name === "getenv") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
+    }
+    return ctx.table.nullableOf(T_STRING);
+  }
+  // WP19 §5a item 4. The path with its symbolic links resolved, or null when
+  // it does not resolve — nullable for `getenv`'s reason, that "not there" is
+  // an answer the caller asked for rather than an error. It is what lets a
+  // compiler reached through a symlink find the package it was installed in.
+  if (name === "realpathSync") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
     }

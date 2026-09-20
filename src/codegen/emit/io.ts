@@ -13,6 +13,7 @@
  *   spawnSync(argv)             call i32 @nish_spawn(%struct.nish_array* argv)
  *   isDirectorySync(path)       call zeroext i1 @nish_is_dir(i8* path)
  *   getenv(name)                call i8* @nish_getenv(i8* name)
+ *   realpathSync(path)          call i8* @nish_realpath(i8* path)
  *   spawnSyncTo(argv, o, e)     call i32 @nish_spawn_to(%struct.nish_array* argv,
  *                                                        i8* o, i8* e)
  *   readdirSync(path)           call %struct.nish_array* @nish_readdir(i8* path)
@@ -151,6 +152,17 @@ const getenv: BuiltinCall = {
 };
 
 /**
+ * `realpathSync(path)` (WP19 §5a item 4): one call, the same shape as
+ * `getenv` above — an `i8*` that may be null, typed `string | null` by the
+ * checker and read with an ordinary null compare.
+ */
+const realpathSync: BuiltinCall = {
+  emit: (ctx, expr) =>
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_realpath")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["nish_realpath"],
+};
+
+/**
  * `spawnSync(argv)`: the array header goes straight to the runtime, which
  * builds the C vector from it. The status is an `i32`, so `--number-mode f64`
  * widens it the way `a.length` is widened.
@@ -243,6 +255,7 @@ export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   monotonicNanos,
   isDirectorySync,
   getenv,
+  realpathSync,
 };
 
 // ---- process.argv -------------------------------------------------------------------

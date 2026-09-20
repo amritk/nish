@@ -39,6 +39,11 @@
  *                                       and not `process.env.NAME`, because
  *                                       member access on a dynamic key is
  *                                       what Phase 0 forbids.
+ *   realpathSync(path): string | null   `path` with every symbolic link
+ *                                       resolved, absolute and normalised;
+ *                                       `null` when it does not resolve, a
+ *                                       path that does not exist included
+ *                                       (WP19 §5a item 4).
  *   readdirSync(path): string[] | null  the directory's entries, sorted by
  *                                       bytes and without `.` or `..`; `null`
  *                                       when it cannot be read, where an
@@ -173,6 +178,18 @@ const checkIsDirectorySync: BuiltinCallChecker = (ctx, expr, scope) => {
 const checkGetenv: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "getenv", 1);
   checkArgumentType(ctx, expr.arguments[0], scope, "getenv", STRING);
+  return nullableOf(STRING);
+};
+
+/**
+ * `realpathSync(path)` (WP19 §5a item 4): the path with its symbolic links
+ * resolved, or `null` when it does not resolve. `string | null` for the reason
+ * `getenv` is — the answer is absent rather than erroneous when the path is
+ * not there, and the caller is asking exactly that.
+ */
+const checkRealpathSync: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "realpathSync", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "realpathSync", STRING);
   return nullableOf(STRING);
 };
 
@@ -336,6 +353,7 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   monotonicNanos: checkMonotonicNanos,
   isDirectorySync: checkIsDirectorySync,
   getenv: checkGetenv,
+  realpathSync: checkRealpathSync,
 };
 
 /**

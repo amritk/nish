@@ -1690,17 +1690,34 @@ None of these needs anybody's permission. They need somebody's afternoon.
    `scripts/build.sh` were found some other way. All three were watched
    failing with the fix reverted.
 
-   **The symlink half is still open, and is the reason this item does not
-   close.** npm links every command as a symlink
-   (`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`); `packageRoot()`
-   resolves no link, so the parent of the *link's* directory is searched and an
-   install laid out that way finds nothing. The language has no `realpath`, so
-   that fix is a **builtin** rather than an edit to the driver — and a builtin
-   `self/` cannot use until the release after the one that adds it, which is
-   the rolling freeze. Both installers keep their absolute-path `exec`, which
-   sidesteps both spellings. Adding `realpathSync` to both compilers in 0.5.0
-   would let `self/` use it in 0.6.0; that is the shape of the remaining work,
-   and it is one release long whatever else happens.
+   **The symlink half: the builtin landed on 2026-09-20, and the call site is
+   one release behind it.** The defect is broader than npm, which is worth
+   stating because the npm case reads like a packaging quirk and this is not
+   one: `packageRoot()` resolves no symbolic link, so *any* install that puts a
+   link on `$PATH` misses. Measured on this tree, an admin's
+   `ln -s /opt/nish/bin/nish /usr/local/bin/nish` fails `--link` in **both**
+   spellings, by the link's absolute path as well as by the bare name — the
+   `$PATH` lookup above does not help, because the link *is* a path and the
+   parent of its directory is not the package. npm's
+   `node_modules/.bin/nish -> ../@amritk/nish/bin/nish` is the same shape.
+
+   `realpathSync(path): string | null` is now a builtin in both compilers, with
+   `nish_realpath` in `runtime_os.c`, the Node shim, a golden case, two
+   negative cases and a `tests/run.js` check that resolves a real symlink —
+   including one through a directory link — in a directory it makes. It is
+   `getenv`'s shape exactly: one call, an `i8*` that may be null, read by the
+   ordinary `T | null` narrowing.
+
+   **What it cost and what it cannot yet do.** The `runtime_os.c` ceiling moved
+   from 1,280 to 1,536, which is the move
+   [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget) said the next
+   OS-facing builtin would make; `nish_realpath` is 157 bytes of it. And
+   `self/`'s own `packageRoot()` still cannot call it, because `self/` has to
+   compile under the **last released** compiler and no released compiler has
+   the builtin — the rolling freeze, which CI's `bootstrap` job checks. So the
+   call site is 0.6.0's, the freeze held on all four platforms with the builtin
+   added and unused, and both installers keep their absolute-path `exec` until
+   then. That ordering is not a delay anybody chose; it is what the freeze is.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
    change that found it. **Still unmeasured on 2026-09-20, and an attempt is

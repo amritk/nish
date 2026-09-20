@@ -802,6 +802,8 @@ in half is possible.
 `isDirectorySync(path)`, `readdirSync(path)` (`string[] | null`, sorted by
 bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `getenv(name)` (`string | null` — unset and empty are different answers),
+`realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
+`null` when it does not resolve),
 `monotonicNanos()` (`i64`; elapsed time only, **there is no wall clock and no
 `Date`**).
 

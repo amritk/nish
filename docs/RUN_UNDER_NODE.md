@@ -47,6 +47,10 @@ the same commit.
   imports from `node:fs`
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
+- `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the
+  native `realpath` answers NULL (a missing path, a loop, a component that is
+  not a directory); Node's answer is already absolute and normalised, which is
+  what POSIX guarantees, so nothing has to normalise it
 - `toI32`, `toI64`, `toF32`, `toF64`, `toU8`…`toU64`, `f64ToBits`, `bitsToF64`
 - `Ok`, `Err`
 - `parseInt`, `parseFloat` — Nish's, whose deviations from JavaScript are
