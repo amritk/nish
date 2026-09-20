@@ -6964,6 +6964,81 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
   }
 }
 
+// ---- WP12: the release train's version bump ------------------------------------------
+// `release-pr.yml` bumps four things in one `node -e` script: package.json's version,
+// package-lock.json's two copies of it, every platform package pinned in
+// optionalDependencies, and VERSION in self/branding.ts. Nothing ran it. It is a
+// workflow step, so it executes exactly once per merge to main, in a place where a
+// failure stops the release train rather than a pull request -- and the person who finds
+// out is whoever wanted to cut a release.
+//
+// It broke on the commit that added the optionalDependencies half, and for a reason no
+// amount of reading the diff would have caught: the script lives inside `node -e '...'`,
+// and a comment in it said "release's binaries". That apostrophe closed the shell string
+// and handed node a truncated program, so the step died with `Unexpected end of input`
+// after changelog-gen had already written changelog/<version>.json. The YAML was valid,
+// the JavaScript was valid, and the shell quoting was not.
+//
+// So the step is RUN here, against copies, the way `.github/seed-matrix.sh` and
+// `.github/seed-due.sh` are run rather than read. Extracted from the workflow rather
+// than restated, because a second copy of the bump would agree with the first until one
+// of them was edited -- which is the whole failure this block exists for.
+if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
+  const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "release-pr.yml"), "utf8");
+  const open = workflow.indexOf("node -e '");
+  const close = workflow.indexOf("' \"$next\"", open);
+  check("release-pr: the version-bump step is where this expects it", open >= 0 && close > open);
+  if (open >= 0 && close > open) {
+    // The block as the shell receives it: the workflow indents it, and the indentation
+    // is inside the quoted string, so it is stripped the same way YAML does.
+    const raw = workflow.slice(open, close + "' \"$next\"".length);
+    const bump = raw
+      .split("\n")
+      .map((line) => (line.startsWith("          ") ? line.slice(10) : line))
+      .join("\n");
+    const work = path.join(buildDir, "release-pr-bump");
+    fs.rmSync(work, { recursive: true, force: true });
+    fs.mkdirSync(path.join(work, "self"), { recursive: true });
+    for (const f of ["package.json", "package-lock.json"]) {
+      fs.copyFileSync(path.join(root, f), path.join(work, f));
+    }
+    fs.copyFileSync(path.join(root, "self", "branding.ts"), path.join(work, "self", "branding.ts"));
+    const next = "9.9.9";
+    const ran = spawnSync("bash", ["-c", `set -e\nnext=${next}\n${bump}\n`], { cwd: work, encoding: "utf8" });
+    check(
+      "release-pr: the version-bump step runs (a quote in a comment truncates it, and did)",
+      ran.status === 0,
+      ran.stderr
+    );
+    if (ran.status === 0) {
+      const bumped = JSON.parse(fs.readFileSync(path.join(work, "package.json"), "utf8"));
+      const lock = JSON.parse(fs.readFileSync(path.join(work, "package-lock.json"), "utf8"));
+      check(
+        "release-pr: the bump moves package.json and both of package-lock.json's versions",
+        bumped.version === next && lock.version === next && lock.packages?.[""]?.version === next,
+        `package.json ${bumped.version}, lock ${lock.version}, lock.packages[""] ${lock.packages?.[""]?.version}`
+      );
+      // The half that was added with the installer, and the reason this block exists: a
+      // release whose optionalDependencies were left behind installs a compiler that
+      // resolves the previous release's binaries. It succeeds, it runs, and it is one
+      // version stale in the half nobody looks at.
+      const pins = Object.entries(bumped.optionalDependencies ?? {});
+      const stale = pins.filter(([, v]) => v !== next);
+      check(
+        `release-pr: the bump moves every platform package with it (${pins.length})`,
+        pins.length > 0 && stale.length === 0,
+        stale.map(([k, v]) => `${k} stayed at ${v}`).join("\n")
+      );
+      const branding = fs.readFileSync(path.join(work, "self", "branding.ts"), "utf8");
+      check(
+        "release-pr: the bump moves VERSION in self/branding.ts, which tests/run.js pins",
+        new RegExp(`VERSION: string = "${next}"`).test(branding),
+        (branding.match(/VERSION: string = "[^"]*"/) ?? ["not found"])[0]
+      );
+    }
+  }
+}
+
 // ---- WP19: the seed-target contract --------------------------------------------------
 // `.github/seed-targets.json` is the one place a seed asset is spelled. release.yml
 // attaches `nish-<version>-<asset>.tar.gz` and builds its `binaries` matrix from that

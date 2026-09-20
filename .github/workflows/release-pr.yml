@@ -136,9 +136,16 @@ jobs:
               // The per-platform packages carrying the native compiler are
               // pinned to the exact version of the package that depends on
               // them, so they move with it. A bump that left them behind would
-              // publish a compiler whose optionalDependencies resolve last
-              // release's binaries -- an install that succeeds, runs, and is
-              // one release stale in the half of itself nobody looks at.
+              // publish a compiler whose optionalDependencies still resolve
+              // the binaries of the PREVIOUS release -- an install that
+              // succeeds, runs, and is one release stale in the half of itself
+              // nobody looks at.
+              //
+              // No apostrophes in this comment block, deliberately: it sits
+              // inside `node -e '...'`, so one would close that string and hand
+              // node a truncated script. That is not hypothetical -- it is how
+              // this step first shipped, and it broke the release train on the
+              // very commit that added it.
               // tests/run.js fails while the two disagree.
               const deps=j.optionalDependencies;
               if (deps) for (const k of Object.keys(deps)) if (k.startsWith(`${j.name??""}-`)) deps[k]=v;
