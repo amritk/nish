@@ -1703,15 +1703,86 @@ None of these needs anybody's permission. They need somebody's afternoon.
    and it is one release long whatever else happens.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
-   change that found it, and unmeasured.
+   change that found it. **Still unmeasured on 2026-09-20, and an attempt is
+   recorded here so the next one starts further along.** The *adjacent* shape
+   agrees: two modules with the same basename in different directories
+   (`a/util.ts` and `b/util.ts`) make both compilers write `a_util.ll` and
+   `b_util.ll`, because `outputStems` disambiguates on the path relative to the
+   entry on both sides. What §A7 describes is narrower — two modules that are
+   *different files* carrying *one* `; ModuleID`, which needs `nish/<module>`
+   and a relative import to normalise to the same name. Every construction
+   tried collapsed instead into a single module, because a package root of `.`
+   means the working directory *is* the package, so `./std/text` and
+   `nish/text` resolve to one file rather than two. Not reproduced is not the
+   same as not there, and this stays open: what it needs is the invocation that
+   makes the two names collide while the files differ, and that is the piece
+   nobody has written down.
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
-   one, so a later field is reported as unknown when it is not. Still
-   reproduces on this tree (2026-09-19); the corpus does not have the shape, so
-   G1 cannot see it.
+   one, so a later field is reported as unknown when it is not. **Reproduced
+   again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``
+   for a field the class plainly has, stage1 prints the one correct diagnostic.
+   The corpus does not have the shape, so G1 cannot see it.
+
+   **This row is not a blocker for R6, and it is the only one of the three that
+   R6 *resolves* rather than survives.** The defect is in
+   `src/checker/classes.ts`, and R6 deletes `src/`; the compiler that is left
+   is the one already giving the right answer. Fixing it before the deletion
+   would be work thrown away with the file.
+
+   What does survive is the mechanism #94 records on the stage1 side, and it is
+   worth separating because the issue puts both in one place:
+   `self/context.ts`'s `error()` is a no-op once `errored` is set, and
+   `collectStructMembers` never resets it between fields, so an earlier
+   member's error can silence a later member's refusal. Measured on
+   2026-09-20: a class with two mistyped fields reports **one** diagnostic on
+   both compilers, and both still reject the program — so what survives R6 is a
+   completeness question about diagnostics, not a soundness one. Worth a case;
+   not worth holding the deletion for.
+
 Items 4, 5 and 6 share a property worth naming: **each is a defect the gate is
 green in spite of, because no corpus program poses the question.** That is
 §A5's first lesson and §A8's, and it is the honest qualification on every green
 number in the table above — the difference set is a lower bound.
+
+#### Which release R6 can land in, and why it is not 0.5.0
+
+Asked on 2026-09-20, with 0.5.0 named as the target. The gates allow it; the
+**order** does not, and the obstacle is the successor this package spent its
+effort building.
+
+`nish-cmp` compares the last RELEASED compiler with HEAD, so which releases it
+can use is `cmpSince`, and `cmpSince` is 0.5.0 because every seed before it
+ships no `std/` (work item 1). `.github/seed-matrix.sh` reads the **last
+release**, which gives:
+
+| While the tree is | the last release is | `nish-cmp` rows |
+| --- | --- | --- |
+| 0.5.0 in development | v0.4.0 | **0** |
+| 0.6.0 in development | v0.5.0 | 2 |
+
+Measured by driving the script against a stand-in for `gh` at both tags.
+
+So R6 landing *in* 0.5.0 deletes `ir_oracle.js` and `interop_oracle.js` — the
+two largest of the six — during the one window in which their successor
+provably cannot run. The IR of every module of every corpus program would go
+from "proved by two implementations agreeing" to "proved by nothing", not as a
+considered trade but as an accident of ordering, and the first run of the thing
+meant to replace them would happen after the code they checked was gone. **A
+gate that has never been green is not a successor; it is a plan.**
+
+The fix is not work, it is a release boundary. Ship 0.5.0 with everything R6
+needs — that is where this tree already is — and land the deletion once 0.5.0
+is out, so it rides 0.6.0. `nish-cmp` then has a full cycle of green runs
+against the 0.5.0 seed *before* anything is deleted, which is the evidence the
+deletion is supposed to rest on. The cost is one release; §6 says what the
+deletion costs when it is right, and none of that changes.
+
+The alternative — lowering `cmpSince` to 0.4.0 and declaring the two
+`nish/`-specifier programs — is the allowlist that item 1 turned down, and it
+fails on its own terms as well: `DECLARED` wants the words in `CHANGELOG.md`,
+which is generated at release time with `[Unreleased]` empty, so the
+declaration cannot be green on any pull request. There is no spelling of it
+that makes 0.5.0 work.
 
 #### A human's decision — two, and neither is a checkbox
 
