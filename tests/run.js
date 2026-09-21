@@ -36,6 +36,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { changedPrograms, corpus as parityCorpus, readPathList, removedPrograms } from "./self/parity.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
+import { packageRootOf, selfCheckRoots, withoutOwnRoot } from "./nish-cmp.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
 import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
@@ -5052,6 +5053,39 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // — and it runs, which is what CI does once 0.1.0 is out. Budget about
     // three minutes for it when it does: it is the whole corpus twice, which
     // is the same shape and the same cost as the oracle above.
+    // The gate's own comparison logic, driven here because the gate itself
+    // skips on any machine with no seed -- which is most of them, and is the
+    // shape `.claude/selfhost.md` warns about: a guard nothing exercises. It is
+    // the one piece of that tool that can make two DIFFERING files look equal,
+    // so it is the piece worth a stand-in (`reject_oracle.js`'s `selfCheck` and
+    // `scripts/verify-binaries.sh` are the precedent).
+    //
+    // Why the tool needs it at all: two compilers are never installed in one
+    // directory, and a module reached as `nish/<name>` is named by the path the
+    // compiler found it at, so the seed writes its own unpacked path where HEAD
+    // writes `std/text.ts`. Measured against the v0.5.0 seed, that is four
+    // undeclared differences over two programs and nothing else -- a red gate
+    // for a property no cross-install comparison can have.
+    check(
+      "nish-cmp: its own package-root normalisation is right (stand-in inputs, not the corpus)",
+      selfCheckRoots() === null,
+      String(selfCheckRoots())
+    );
+    check(
+      "nish-cmp: a compiler's own root is derived the way the compiler derives it",
+      packageRootOf(path.join(root, "dist", "index.js")) === root &&
+        packageRootOf(path.join(root, "build", "self", "compile")) === root,
+      `dist/index.js -> ${packageRootOf(path.join(root, "dist", "index.js"))}, ` +
+        `build/self/compile -> ${packageRootOf(path.join(root, "build", "self", "compile"))}, root is ${root}`
+    );
+    check(
+      "nish-cmp: removing a root leaves the module path, and a sibling directory alone",
+      withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish") === "; ModuleID = 'std/text.ts'" &&
+        withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish") === "/opt/nish-old/std/a.ts",
+      `${withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish")} | ` +
+        `${withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish")}`
+    );
+
     if (!process.env.NISH_BOOTSTRAP) {
       skip(
         "NISH_BOOTSTRAP is unset: there is no released nish to compare HEAD against, so " +
