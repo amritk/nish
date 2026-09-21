@@ -24,10 +24,15 @@
  * Execing an absolute path sidesteps it entirely and is better on its own
  * terms: the binary runs from inside its own package, next to the `runtime/`
  * and `scripts/` that were staged and smoke-tested beside it by `release.yml`,
- * rather than beside the main package's copies. That is `argv[0]` sensitivity
- * worked around rather than fixed -- the fix is
- * [wp19 §5a](../docs/wp19-stage0-retirement.md) item 4, in `self/` -- and the
- * workaround is sound because the path this writes is a real one, never a link.
+ * rather than beside the main package's copies.
+ *
+ * **The compiler resolves the link itself as of 0.6.0** -- the real path of
+ * whatever `argv[0]` named is a candidate for the package root
+ * ([wp19 §5a](../docs/wp19-stage0-retirement.md) item 4, in `self/`) -- so this
+ * `exec` is no longer what makes a copy work, and the reason it is still here is
+ * the 91 ms above rather than the defect. It also still carries whoever never
+ * ran this script: a shim npm linked and nothing swapped now finds its own
+ * package too.
  *
  * **This script may never fail an install.** It exits 0 whatever happens --
  * no prebuilt binary for this platform, a read-only `node_modules`, scripts

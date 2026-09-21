@@ -1511,6 +1511,7 @@ in the wrong bucket is how "we are nearly there" survives contact with a year.
 | **G2** | every registry code provoked by something that outlives stage0, or unreachable with a reason | `wordings: 126/126 cases pin their code, coverage 344/410 codes, 66 unreachable, uncoded=4` — `node tests/diagnostic_coverage.js --report`, 2026-09-19 |
 | **G2** | the four dying oracles' coverage recovered as goldens, built by the seed rather than by stage0 | `tests/self/goldens/`, numbers in §2B; watched green with `dist/` out of the tree |
 | **G3/G6** | the three IR equalities and the fixed point | green inside `npm test` on merged `main` at `862c7cc`, 2026-09-19 — [CI run 553](https://github.com/amritk/nish/actions/runs/35454091607), conclusion `success`. `node tests/self/bootstrap.js` is the check; the suite runs it |
+| **G2.1** | the successor itself, against a real seed | `nish-cmp: 437/437 programs agree (3582 files, 3253862 IR lines) … 4 equal after each compiler's own root, 0 undeclared difference(s)` — `NISH_BOOTSTRAP=<v0.5.0>/bin/nish node tests/nish-cmp.js`, exit 0, 2026-09-21. The first run of this gate against anything; §5a item 1 has what it took |
 | **G4** | the seed policy sentence | written, in `wp12-release.md`; nothing further is owed |
 | **G6** | the re-verification procedure, and the tag it checks out | procedure written in §G6 above, four commands, unchanged; the `ddc-<version>` tag is cut by `release.yml` rather than by somebody remembering, merged as `21a9381` (#116), with 19 checks driving every arm of `.github/ddc-tag.sh` against a git stand-in |
 
@@ -1602,6 +1603,48 @@ None of these needs anybody's permission. They need somebody's afternoon.
    release time with `[Unreleased]` deliberately empty. An absent row says no
    comparison happened; a green row with those two allowlisted inside it would
    say one happened and passed, which is §A5 exactly.
+
+   **The wait is over, and the gate's first green run is 2026-09-21:**
+   `nish-cmp: 437/437 programs agree (3582 files, 3253862 IR lines) — reference
+   <v0.5.0 seed>/bin/nish, candidate build/self/compile, 21 refused by both,
+   3 dumps (no artefact), 4 equal after each compiler's own root, 0 undeclared
+   difference(s)`, exit 0, with `NISH_BOOTSTRAP` pointing at the published
+   `nish-0.5.0-x86_64-linux` tarball. This is the first time the successor has
+   compared anything, which is the evidence R6 was told to wait for.
+
+   **It took a fix, and the fix is to the comparison rather than to either
+   compiler — which is the sentence to read carefully, because §A5 is about
+   exactly this move.** Run as it stood, against a seed that *can* compile the
+   corpus, the gate reported **4 undeclared differences over 2 programs**, all
+   one cause: `tests/link/std_bare_specifier` and `tests/link/std_package_scope`
+   reach the standard library as `nish/<name>`, which is resolved against the
+   compiler's **own** package root and then named by the path it was found at, so
+   the seed writes `; ModuleID = '<where the seed is unpacked>/std/text.ts'` (and
+   the same in `source_filename` and in the `.h`'s `/* <path>: class Suite */`)
+   where HEAD writes `std/text.ts`. It is §A7's third bullet — `packageRoot()`'s
+   sensitivity to how the compiler was invoked — in the one harness that cannot
+   arrange for the spellings to agree.
+
+   Three things make this a statement about what the comparison *can mean*
+   rather than an allowlist. It is not keyed on a program or a file: each side's
+   own root is removed from every file, symmetrically, leaving the module's path
+   relative to its own package, which is the identity being compared. It cannot
+   be satisfied by a difference anywhere else on those lines — a path not under
+   the compiler's own root is compared as it stands, and `selfCheckRoots` drives
+   the normalisation over fabricated inputs on every run, including a sibling
+   directory whose name merely begins with the root's. And the run **says** it:
+   a `note:` line names both roots and the number of files, and the summary
+   carries `4 equal after each compiler's own root`, so no reader has to know
+   the flag to find what was set aside. Two compilers are never installed in one
+   directory, so without this the gate could not be green for *any* tree,
+   including an empty diff — which is the difference between this and the
+   `DECLARED` entry the paragraph above turns down.
+
+   What is **not** fixed by it is the underlying defect: a standard-library
+   module's IR still carries wherever that compiler happens to be installed, so
+   two users with `nish` under different prefixes get different `; ModuleID` and
+   different `DIFile` paths for the same `std/` module. That is §A7's bullet and
+   it is still open; the gate now measures everything except it.
 2. ~~**The package becoming a thin installer**~~ (G5's last bullet, R4).
    **Done, 2026-09-20.** `bin.nish` is a launcher that hands over to the
    prebuilt native compiler for the host, which arrives as one
@@ -1690,8 +1733,9 @@ None of these needs anybody's permission. They need somebody's afternoon.
    `scripts/build.sh` were found some other way. All three were watched
    failing with the fix reverted.
 
-   **The symlink half: the builtin landed on 2026-09-20, and the call site is
-   one release behind it.** The defect is broader than npm, which is worth
+   **The symlink half is fixed, 2026-09-21** — the builtin on 2026-09-20 and
+   the call site one release later, which is what the rolling freeze costs
+   rather than a delay anybody chose. The defect is broader than npm, which is worth
    stating because the npm case reads like a packaging quirk and this is not
    one: `packageRoot()` resolves no symbolic link, so *any* install that puts a
    link on `$PATH` misses. Measured on this tree, an admin's
@@ -1708,16 +1752,49 @@ None of these needs anybody's permission. They need somebody's afternoon.
    `getenv`'s shape exactly: one call, an `i8*` that may be null, read by the
    ordinary `T | null` narrowing.
 
-   **What it cost and what it cannot yet do.** The `runtime_os.c` ceiling moved
+   **What the builtin cost.** The `runtime_os.c` ceiling moved
    from 1,280 to 1,536, which is the move
    [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget) said the next
-   OS-facing builtin would make; `nish_realpath` is 157 bytes of it. And
-   `self/`'s own `packageRoot()` still cannot call it, because `self/` has to
-   compile under the **last released** compiler and no released compiler has
-   the builtin — the rolling freeze, which CI's `bootstrap` job checks. So the
-   call site is 0.6.0's, the freeze held on all four platforms with the builtin
-   added and unused, and both installers keep their absolute-path `exec` until
-   then. That ordering is not a delay anybody chose; it is what the freeze is.
+   OS-facing builtin would make; `nish_realpath` is 157 bytes of it.
+
+   **What the call site is, and what it deliberately does not change.**
+   `packageRootCandidates()` in `self/compile.ts` adds the real path of whatever
+   `argv[0]` named — after the unresolved spelling, and only when the two differ.
+   Order is the whole of the care in it: a compiler that is *not* reached through
+   a link finds `scripts/build.sh` on the first candidate and therefore answers
+   exactly the root it answered before, spelled the way it was invoked, so no
+   ordinary install and no golden moves and the "looked in …" diagnostic still
+   names one directory. A link adds the second candidate and is the only thing
+   that does. `argv[0]`'s *spelling* sensitivity — `./build/nish` answering
+   `std/testing.ts` where `/abs/path/build/nish` answers the absolute path for
+   the same program — is untouched by that on purpose: resolving it would move
+   every standard-library path both compilers print, and it is §A7's third
+   bullet rather than this item.
+
+   **Measured 2026-09-21, and the seed is the point.** `self/` may only use what
+   the last release compiles, so the check is the v0.5.0 seed compiling this call
+   site: `NISH_BOOTSTRAP=<v0.5.0>/bin/nish scripts/bootstrap.sh --verify` gives
+   `IR(stage1) == IR(stage2): 61 modules identical` and `stage3 == stage2:
+   byte-identical binaries`. Before and after, through an absolute link into a
+   staged install: v0.5.0 answers ``Module `nish/text` is not part of the
+   standard library (it has: json, testing, text)`` for a program that imports it
+   and `--link: cannot find scripts/build.sh (looked in <link dir>/.. and .)`
+   (exit 3) for one that does not; the same binary through its real path
+   compiles both. That first sentence is worth keeping visible — the symlink
+   defect is not only a `--link` defect, and it prints the same misleading
+   "it has: json, testing, text" the missing-`std/` release did (work item 1),
+   for the same reason: the list is a literal and the *file* is what the root
+   never reached.
+
+   **Both installers keep their absolute-path `exec`, now for their own
+   reasons rather than for this.** `install.sh` installs a *released* compiler,
+   and every release up to 0.5.0 predates the fix, so its wrapper is about what
+   it downloads rather than about this tree; `scripts/postinstall.mjs` execs to
+   take node out from in front of the compiler, which is 3.2 ms against 94 ms
+   ([wp12-release.md](wp12-release.md#what-the-launcher-costs)). Neither is a
+   workaround for a defect any more, and both were kept rather than quietly
+   removed because a fix landing is not the same thing as every install on a
+   user's disk carrying it.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
    change that found it. **Still unmeasured on 2026-09-20, and an attempt is
@@ -1793,6 +1870,15 @@ is out, so it rides 0.6.0. `nish-cmp` then has a full cycle of green runs
 against the 0.5.0 seed *before* anything is deleted, which is the evidence the
 deletion is supposed to rest on. The cost is one release; §6 says what the
 deletion costs when it is right, and none of that changes.
+
+**0.5.0 is out, and the first of those runs is green: 437/437 programs,
+2026-09-21** (item 1 above has the line and what it took — a normalisation of
+each compiler's own package root, without which no cross-install comparison can
+be green). So the sentence above has stopped being a prediction: the successor
+has run, once, against a real seed. A cycle is more than one run, and what the
+cycle is for is the runs nobody arranged — every merge to `main` from here on
+has a `nish-cmp` row, and the deletion should rest on those rather than on this
+one.
 
 The alternative — lowering `cmpSince` to 0.4.0 and declaring the two
 `nish/`-specifier programs — is the allowlist that item 1 turned down, and it

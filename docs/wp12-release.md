@@ -127,12 +127,18 @@ swapped command resolves from, rather than only that something ran.
 
 The node shim never had this problem because node resolves `import.meta.url` to
 the realpath. This is **[wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
-item 4**, `packageRoot()`'s sensitivity to `argv[0]`, which that section records
-as "unmeasured by anything": it is measured now, and this is the shape it takes
-in front of a user. The `exec` is a workaround and is sound as one — the path it
-writes is a real path inside the platform package, never a link, so the compiler
-resolves from the `runtime/` and `scripts/` that were staged and smoke-tested
-beside it. The fix belongs in `self/` and is that item, not this one.
+item 4**, `packageRoot()`'s sensitivity to `argv[0]`, which that section recorded
+as "unmeasured by anything": it was measured here, and this is the shape it took
+in front of a user.
+
+**That defect is fixed in the compiler as of 2026-09-21** — the real path of
+whatever `argv[0]` named is a candidate for the package root, so a command
+reached through `.bin` finds the package it points into — and the `exec` stays
+anyway, because the three rows above are its actual reason. The swap is worth a
+postinstall for the 91 ms, not for the symlink; what changes is that it is no
+longer also holding a defect shut, and a `nish` that npm linked but never
+swapped (`--ignore-scripts`, a read-only `node_modules`) now resolves its own
+package as well.
 
 **The shim is the mechanism and the swap is the optimisation, never the other
 way round.** `npm ci --ignore-scripts` is an ordinary thing for CI to do, and a

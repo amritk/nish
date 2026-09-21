@@ -49,7 +49,23 @@
  *     stage0. A program compiled with `--emit-ast` or `--emit-checked` writes
  *     no artefact either, and its stdout is pinned by the `<name>.stdout`
  *     golden beside it. Both are counted in the summary rather than folded
- *     into a skip count.
+ *     into a skip count;
+ *   - not **where each compiler's own standard library lives**. A module
+ *     reached as `nish/<name>` is resolved against the compiler's own package
+ *     root and then named by the path it was found at, so the seed writes
+ *     `; ModuleID = '<where the seed is unpacked>/std/text.ts'` and HEAD writes
+ *     `std/text.ts` — the same module, named by each compiler's own install.
+ *     Two compilers are never installed in one place, so this is a property no
+ *     run of this tool can compare rather than a difference it may forgive:
+ *     each side's own root is removed before the bytes are compared, which
+ *     leaves the module's path *relative to its own package* on both sides, and
+ *     the summary says how many files needed it. `packageRootOf` derives each
+ *     root the way the compilers do, `withoutOwnRoot` removes it, and
+ *     `selfCheckRoots` drives both over fabricated inputs on every run, because
+ *     a comparison whose own logic nothing exercises is the gap
+ *     `docs/wp19-stage0-retirement.md` §5a records about every other oracle
+ *     here. What is *not* set aside is anything else on those lines: a path
+ *     that is not under the compiler's own root is compared as it stands.
  *
  * **A difference must be named in `CHANGELOG.md`.** `DECLARED` below is how:
  * an entry names the program and the file that may differ, the sentence saying
@@ -105,6 +121,83 @@ const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
 const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
 
 /**
+ * The package root a compiler will answer for itself: the directory holding
+ * `scripts/`, `runtime/` and `std/`.
+ *
+ * Derived the way the compilers derive it rather than guessed, because the
+ * point of removing it is that it is *their* answer: `<dirname(argv[0])>/..`,
+ * then the same for the real path — a compiler reached through a symlink
+ * resolves the link (`self/compile.ts`'s `packageRootCandidates`) — and then
+ * the working directory, which is where `compile` below spawns both of them.
+ * The first candidate holding `scripts/build.sh` wins, which is the predicate
+ * the compilers use, checked here against the filesystem instead of assumed.
+ *
+ * stage0 answers from `import.meta.dirname` (`src/version.ts`) and a Node entry
+ * point is `<root>/dist/index.js`, so `<dirname>/..` is its root as well and
+ * one rule covers both kinds of compiler.
+ */
+function packageRootOf(file) {
+  const candidates = [path.join(path.dirname(file), "..")];
+  try {
+    candidates.push(path.join(path.dirname(fs.realpathSync(file)), ".."));
+  } catch {
+    // A compiler that cannot be realpath'd is one `resolveCompiler` has already
+    // refused; there is simply no second candidate for it.
+  }
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) return path.resolve(candidate);
+  }
+  return path.resolve(root);
+}
+
+/**
+ * `text` with one compiler's own package root removed, so a path under it is
+ * left relative to that package — `<seed>/std/text.ts` becomes `std/text.ts`,
+ * which is what a compiler standing in its own root writes for the same module.
+ *
+ * The separator is part of what is removed, so a directory whose name merely
+ * begins with the root's — `/opt/nish` against `/opt/nish-old/std/a.ts` — is
+ * left alone. Nothing else is rewritten.
+ */
+function withoutOwnRoot(text, ownRoot) {
+  if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) return text;
+  const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`;
+  return text.split(prefix).join("");
+}
+
+/**
+ * `withoutOwnRoot` over inputs a corpus cannot produce, on every run.
+ *
+ * It is four lines of string handling standing between a real difference and a
+ * green summary, and §5a's last section names "no sibling oracle self-tests its
+ * comparison logic" as a stage of its own. This is that check for the one piece
+ * of comparison logic here that can *hide* something, and it costs microseconds.
+ * Returns the reason it failed, or null.
+ */
+function selfCheckRoots() {
+  const sep = path.sep;
+  const cases = [
+    [`; ModuleID = '${sep}opt${sep}nish${sep}std${sep}text.ts'`, `${sep}opt${sep}nish`, "; ModuleID = 'std/text.ts'".replace(/\//g, sep)],
+    // Already relative: a compiler standing in its own root writes this, and it
+    // is the form the other side is being brought to.
+    [`; ModuleID = 'std${sep}text.ts'`, `${sep}opt${sep}nish`, `; ModuleID = 'std${sep}text.ts'`],
+    // A neighbour whose name starts with the root's is not under it.
+    [`${sep}opt${sep}nish-old${sep}std${sep}a.ts`, `${sep}opt${sep}nish`, `${sep}opt${sep}nish-old${sep}std${sep}a.ts`],
+    // A trailing separator on the root must not remove one character more.
+    [`${sep}opt${sep}nish${sep}std${sep}a.ts`, `${sep}opt${sep}nish${sep}`, `std${sep}a.ts`],
+    // No root at all: every caller's fallback, and it must change nothing.
+    [`${sep}opt${sep}nish${sep}std${sep}a.ts`, null, `${sep}opt${sep}nish${sep}std${sep}a.ts`],
+  ];
+  for (const [text, ownRoot, want] of cases) {
+    const got = withoutOwnRoot(text, ownRoot);
+    if (got !== want) {
+      return `withoutOwnRoot(${JSON.stringify(text)}, ${JSON.stringify(ownRoot)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+    }
+  }
+  return null;
+}
+
+/**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
  * the program's own. `label` is what the report calls it — the path as the
  * caller spelled it rather than the absolute one, so a summary line stays
@@ -120,8 +213,8 @@ function resolveCompiler(spec, role) {
   if (!fs.existsSync(file)) return refuse("does not exist");
   if (!fs.statSync(file).isFile()) return refuse("is not a file");
   const compiler = NODE_ENTRY.test(file)
-    ? { label: spec, cmd: process.execPath, prefix: [file] }
-    : { label: spec, cmd: file, prefix: [] };
+    ? { label: spec, cmd: process.execPath, prefix: [file], packageRoot: packageRootOf(file) }
+    : { label: spec, cmd: file, prefix: [], packageRoot: packageRootOf(file) };
   if (compiler.prefix.length === 0) {
     try {
       fs.accessSync(file, fs.constants.X_OK);
@@ -304,6 +397,7 @@ function compare(pair, work, file, options = {}) {
   if (want.size === 0) return { refused: "the reference wrote no files" };
   const differences = [];
   let lines = 0;
+  let rooted = 0;
   for (const name of [...new Set([...want.keys(), ...got.keys()])].sort()) {
     const a = want.get(name);
     const b = got.get(name);
@@ -319,14 +413,30 @@ function compare(pair, work, file, options = {}) {
       if (name.endsWith(".ll")) lines += a.toString("utf8").split("\n").length;
       continue;
     }
-    const where = excerpt(a.toString("utf8"), b.toString("utf8"), limit);
+    // The two compilers are installed in different directories — they have to
+    // be — so a module either of them reached through its OWN package is named
+    // by a path only that install can spell. Removing each side's own root
+    // leaves the module's path relative to its own package, which is the
+    // identity the comparison is actually about. Counted rather than folded in:
+    // the summary says how many files agreed only this way, because a number
+    // that says a comparison happened must say what it set aside.
+    const wantText = a.toString("utf8");
+    const gotText = b.toString("utf8");
+    if (
+      withoutOwnRoot(wantText, pair.reference.packageRoot) === withoutOwnRoot(gotText, pair.candidate.packageRoot)
+    ) {
+      rooted++;
+      if (name.endsWith(".ll")) lines += wantText.split("\n").length;
+      continue;
+    }
+    const where = excerpt(wantText, gotText, limit);
     differences.push({
       surface: name,
       detail: `differs (${where.differing} of ${where.total} lines)\n${where.text}`,
     });
   }
   if (differences.length > 0) return { differences };
-  return { files: want.size, lines };
+  return { files: want.size, lines, rooted };
 }
 
 /**
@@ -438,6 +548,16 @@ function main(argv) {
     return 0;
   }
 
+  // Before anything is compiled: the one piece of comparison logic here that
+  // can make two differing files look equal, driven over inputs no corpus
+  // produces. A run whose own comparison is broken must say so instead of
+  // agreeing about three hundred programs.
+  const selfCheck = selfCheckRoots();
+  if (selfCheck !== null) {
+    process.stderr.write(`nish-cmp: its own package-root comparison is wrong: ${selfCheck}\n`);
+    return 2;
+  }
+
   // The corpus is settled before a compiler is built, so that a mistyped
   // program name costs a message rather than the link that precedes it.
   const inputs = named.length > 0 ? named.map((file) => path.resolve(file)) : corpus();
@@ -474,6 +594,7 @@ function main(argv) {
   let agreed = 0;
   let files = 0;
   let lines = 0;
+  let rooted = 0;
   for (const file of inputs) {
     const program = path.relative(root, file);
     const result = compare(pair, work, file, options);
@@ -493,6 +614,7 @@ function main(argv) {
       agreed++;
       files += result.files;
       lines += result.lines;
+      rooted += result.rooted ?? 0;
       if (verbose) process.stdout.write(`  ok   ${program} (${result.files} files)\n`);
     }
   }
@@ -553,6 +675,18 @@ function main(argv) {
     for (const row of stage1OnlyRows) process.stdout.write(`  stage1-only ${row}\n`);
   }
 
+  // Said on its own line rather than only inside the summary, because it is the
+  // one thing this run compared less than literally, and a reader deciding what
+  // a green line is worth should not have to know the flag names to find it.
+  if (rooted > 0) {
+    process.stdout.write(
+      `note: ${rooted} file(s) agree once each compiler's own package root is removed ` +
+        `(reference ${pair.reference.packageRoot}, candidate ${pair.candidate.packageRoot}): a module reached ` +
+        `as \`nish/<name>\` is named by where that compiler's own \`std/\` is, which two installs cannot agree ` +
+        `about. Every other byte of those files is compared as it stands.\n`
+    );
+  }
+
   const compared = inputs.length - refused.length - dumps.length - stage1OnlyRows.length;
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
@@ -561,15 +695,26 @@ function main(argv) {
   const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : "";
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
   const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
+  const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : "";
   const stage1OnlyNote =
     stage1OnlyRows.length > 0 ? `, ${stage1OnlyRows.length} stage1-only and newer than the seed` : "";
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${dumpNote}${stage1OnlyNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+      `${refusedNote}${dumpNote}${stage1OnlyNote}${rootedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   );
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
-export { buildCandidate, compare, corpus, resolveCompiler, resolvePair, seedFromEnvironment };
+export {
+  buildCandidate,
+  compare,
+  corpus,
+  packageRootOf,
+  resolveCompiler,
+  resolvePair,
+  seedFromEnvironment,
+  selfCheckRoots,
+  withoutOwnRoot,
+};
