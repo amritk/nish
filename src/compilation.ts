@@ -364,10 +364,14 @@ export class Compilation {
     // WP21 S1 clash check refuses the program. Node's resolver calls `realpath`
     // and gets one, which makes pnpm's store — and npm's nested layout — resolve
     // there and not here. Doing the same on this side alone would be worse than
-    // the limitation: `self/` has no `realpath` to call (the language has no
-    // such builtin), so stage0 would start compiling programs stage1 refuses.
-    // TODO(WP21 S3): close it on both sides, which needs the builtin or a rule
-    // that does without one. `tests/link/package_symlink` is the declared case,
+    // the limitation, because stage0 would start compiling programs stage1
+    // refuses — and `self/` can call one as of WP19 §5a item 4's `realpathSync`,
+    // so the two sides could now move together. What stops them is the decision
+    // rather than the builtin: identity from the real directory and identity
+    // from the manifest answer `docs/wp21-packages.md` §7's diamond differently,
+    // and they are the same question.
+    // TODO(WP21 S3): close it on both sides, deciding that question rather than
+    // implying it here. `tests/link/package_symlink` is the declared case,
     // and `docs/wp21-packages.md` §10d states it.
     const resolved = path.resolve(path.join(packageDir, target));
     // The manifest named a file that is not there, which is the package's own

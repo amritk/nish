@@ -617,8 +617,20 @@ disappeared and `packages.ts` says so.
   means the builtin (a `nish:fs` addition, and so another work package's call) or
   a rule that needs no path at all, such as deciding package identity from the
   manifest rather than from the directory — which is S3's question because it is
-  the same question diamond dependencies ask (§7). `tests/link/package_symlink`
-  is the case: both compilers run it and both must refuse it with the same
+  the same question diamond dependencies ask (§7).
+
+  **The builtin arrived on 2026-09-20 and both compilers have it** —
+  `realpathSync` (WP19 §5a item 4), and `self/`'s own `packageRoot()` calls it
+  as of 0.6.0 — so the reason above is no longer the reason. What is left is the
+  *decision*, and it is the one this bullet already named: resolving a package's
+  directory makes two copies of one version into one package and two versions of
+  one package into two, while deciding identity from the manifest answers §7's
+  diamond as well. They are the same question, so answering it here with a
+  `realpath` would settle §7 by accident. It stays S3's, and the case below stays
+  a refusal until that is decided rather than implied — the builtin removed the
+  excuse, not the question.
+
+  `tests/link/package_symlink` is the case: both compilers run it and both must refuse it with the same
   sentence, so the day either one stops refusing is a failing test rather than a
   surprise.
 - **No cache.** §3's stated cost — compile time grows with the dependency tree —

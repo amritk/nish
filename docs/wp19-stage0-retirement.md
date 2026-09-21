@@ -1690,8 +1690,9 @@ None of these needs anybody's permission. They need somebody's afternoon.
    `scripts/build.sh` were found some other way. All three were watched
    failing with the fix reverted.
 
-   **The symlink half: the builtin landed on 2026-09-20, and the call site is
-   one release behind it.** The defect is broader than npm, which is worth
+   **The symlink half is fixed, 2026-09-21** — the builtin on 2026-09-20 and
+   the call site one release later, which is what the rolling freeze costs
+   rather than a delay anybody chose. The defect is broader than npm, which is worth
    stating because the npm case reads like a packaging quirk and this is not
    one: `packageRoot()` resolves no symbolic link, so *any* install that puts a
    link on `$PATH` misses. Measured on this tree, an admin's
@@ -1708,16 +1709,49 @@ None of these needs anybody's permission. They need somebody's afternoon.
    `getenv`'s shape exactly: one call, an `i8*` that may be null, read by the
    ordinary `T | null` narrowing.
 
-   **What it cost and what it cannot yet do.** The `runtime_os.c` ceiling moved
+   **What the builtin cost.** The `runtime_os.c` ceiling moved
    from 1,280 to 1,536, which is the move
    [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget) said the next
-   OS-facing builtin would make; `nish_realpath` is 157 bytes of it. And
-   `self/`'s own `packageRoot()` still cannot call it, because `self/` has to
-   compile under the **last released** compiler and no released compiler has
-   the builtin — the rolling freeze, which CI's `bootstrap` job checks. So the
-   call site is 0.6.0's, the freeze held on all four platforms with the builtin
-   added and unused, and both installers keep their absolute-path `exec` until
-   then. That ordering is not a delay anybody chose; it is what the freeze is.
+   OS-facing builtin would make; `nish_realpath` is 157 bytes of it.
+
+   **What the call site is, and what it deliberately does not change.**
+   `packageRootCandidates()` in `self/compile.ts` adds the real path of whatever
+   `argv[0]` named — after the unresolved spelling, and only when the two differ.
+   Order is the whole of the care in it: a compiler that is *not* reached through
+   a link finds `scripts/build.sh` on the first candidate and therefore answers
+   exactly the root it answered before, spelled the way it was invoked, so no
+   ordinary install and no golden moves and the "looked in …" diagnostic still
+   names one directory. A link adds the second candidate and is the only thing
+   that does. `argv[0]`'s *spelling* sensitivity — `./build/nish` answering
+   `std/testing.ts` where `/abs/path/build/nish` answers the absolute path for
+   the same program — is untouched by that on purpose: resolving it would move
+   every standard-library path both compilers print, and it is §A7's third
+   bullet rather than this item.
+
+   **Measured 2026-09-21, and the seed is the point.** `self/` may only use what
+   the last release compiles, so the check is the v0.5.0 seed compiling this call
+   site: `NISH_BOOTSTRAP=<v0.5.0>/bin/nish scripts/bootstrap.sh --verify` gives
+   `IR(stage1) == IR(stage2): 61 modules identical` and `stage3 == stage2:
+   byte-identical binaries`. Before and after, through an absolute link into a
+   staged install: v0.5.0 answers ``Module `nish/text` is not part of the
+   standard library (it has: json, testing, text)`` for a program that imports it
+   and `--link: cannot find scripts/build.sh (looked in <link dir>/.. and .)`
+   (exit 3) for one that does not; the same binary through its real path
+   compiles both. That first sentence is worth keeping visible — the symlink
+   defect is not only a `--link` defect, and it prints the same misleading
+   "it has: json, testing, text" the missing-`std/` release did (work item 1),
+   for the same reason: the list is a literal and the *file* is what the root
+   never reached.
+
+   **Both installers keep their absolute-path `exec`, now for their own
+   reasons rather than for this.** `install.sh` installs a *released* compiler,
+   and every release up to 0.5.0 predates the fix, so its wrapper is about what
+   it downloads rather than about this tree; `scripts/postinstall.mjs` execs to
+   take node out from in front of the compiler, which is 3.2 ms against 94 ms
+   ([wp12-release.md](wp12-release.md#what-the-launcher-costs)). Neither is a
+   workaround for a defect any more, and both were kept rather than quietly
+   removed because a fix landing is not the same thing as every install on a
+   user's disk carrying it.
 5. **stage1 writing one file where stage0 writes two**, when two modules share
    a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
    change that found it. **Still unmeasured on 2026-09-20, and an attempt is

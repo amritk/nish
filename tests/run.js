@@ -7209,12 +7209,20 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // the real compiler that way end to end. So this wrapper is no longer what makes a
     // tarball-on-PATH install work.
     //
-    // It stays, and the reason is the half that is NOT fixed: npm links every command as
-    // a symlink (`node_modules/.bin/nish -> ../<pkg>/bin/nish`), the compiler resolves no
-    // link, and the parent of the *link's* directory is not the package. That needs a
-    // `realpath` the language does not have, so `install.sh` keeps moving the binary to
-    // libexec/ and leaving an `exec` of an absolute path at bin/nish, which sidesteps
-    // both spellings.
+    // **And the symlink spelling as of 2026-09-21**: the real path of whatever `argv[0]`
+    // named is a candidate for the package root as well, so `node_modules/.bin/nish ->
+    // ../<pkg>/bin/nish` and an admin's `ln -s /opt/nish/bin/nish /usr/local/bin/nish`
+    // both reach the package they point into. The checks below drive a real compiler
+    // through both link spellings.
+    //
+    // So the wrapper sidesteps nothing the compiler cannot now do, and it stays for two
+    // reasons that do not depend on the defect. `install.sh` installs a RELEASED
+    // compiler, and every release up to and including 0.5.0 predates the fix, so the
+    // script has to keep working for a binary that has it wrong -- which is a property of
+    // what it downloads rather than of this tree. And an `exec` of an absolute path is
+    // what makes the command the compiler itself rather than a launcher in front of it,
+    // measured at 3.2 ms against node's 94 ms (docs/wp12-release.md, "What the launcher
+    // costs").
     //
     // Driven with a stub binary rather than a downloaded one, so this needs no network
     // and can say exactly what argv[0] arrived as -- which is the thing that was wrong.
@@ -7301,6 +7309,74 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
           orphan.status !== 0 && orphan.stderr.includes(`${lonely}/..`) && !orphan.stderr.includes("./.."),
           `exit ${orphan.status}\n${orphan.stdout}${orphan.stderr}`
         );
+
+        // The other half of the same defect, and the compiler answers this one too as of
+        // 2026-09-21: `argv[0]` naming a **symbolic link** to the compiler rather than the
+        // compiler. npm writes exactly that shape
+        // (`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`), and so does an admin's
+        // `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. Neither the parent of the link's
+        // directory nor the `$PATH` lookup above finds the package, because a link is
+        // itself a perfectly good path -- so the real path of whatever was invoked is a
+        // candidate as well, through the `realpathSync` builtin 0.5.0 shipped (wp19 §5a
+        // item 4; the call site waited a release for the rolling freeze).
+        //
+        // Both spellings are driven, because they failed for different reasons: an
+        // absolute link never reached the `$PATH` code at all, and a bare name reached it
+        // and found the link. Each program imports `nish/text`, which is the half of this
+        // that is not about `--link`: `std/` is resolved against the same root, so a
+        // wrongly-resolved one fails before the link with ``Module `nish/text` is not part
+        // of the standard library``. Both link checks were watched failing with the fix
+        // reverted out of `self/compile.ts` and stage1 rebuilt, and the released 0.5.0
+        // compiler reproduces the same two failures by hand.
+        const symlinkInstall = (dir, target) => {
+          fs.rmSync(dir, { recursive: true, force: true });
+          fs.mkdirSync(dir, { recursive: true });
+          const link = path.join(dir, "nish");
+          fs.symlinkSync(target, link);
+          return link;
+        };
+        const binary = path.join(inst, "bin", "nish");
+
+        // An admin's link: absolute, and invoked by its own absolute path.
+        const absLink = symlinkInstall(path.join(buildDir, "argv0-symlink-abs"), binary);
+        const viaAbsLink = spawnSync(absLink, ["prog.ts", "--link", "prog-abs-link"], { cwd: work, encoding: "utf8" });
+        check(
+          "a symlink to the compiler links: the package is found through the link, not beside it",
+          viaAbsLink.status === 0,
+          `exit ${viaAbsLink.status}\n${viaAbsLink.stdout}${viaAbsLink.stderr}`
+        );
+        if (viaAbsLink.status === 0) {
+          const ran = spawnSync(path.join(work, "prog-abs-link"), [], { cwd: work, encoding: "utf8" });
+          check(
+            "a symlink to the compiler resolves nish/<module> against the package the link points into",
+            ran.status === 0 && ran.stdout.trim() === "[padded]",
+            `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
+          );
+        }
+
+        // npm's shape: a RELATIVE link in a directory on `$PATH`, invoked by bare name, so
+        // both fixes have to hold at once -- the lookup finds the link and the link is then
+        // resolved.
+        const binDir = path.join(buildDir, "argv0-symlink-bin");
+        symlinkInstall(binDir, path.relative(binDir, binary));
+        const viaBinLink = spawnSync("nish", ["prog.ts", "--link", "prog-bin-link"], {
+          cwd: work,
+          encoding: "utf8",
+          env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
+        });
+        check(
+          "npm's `.bin` shape links: a relative symlink found on PATH by bare name",
+          viaBinLink.status === 0,
+          `exit ${viaBinLink.status}\n${viaBinLink.stdout}${viaBinLink.stderr}`
+        );
+        if (viaBinLink.status === 0) {
+          const ran = spawnSync(path.join(work, "prog-bin-link"), [], { cwd: work, encoding: "utf8" });
+          check(
+            "npm's `.bin` shape resolves nish/<module> against the package, not `node_modules/`",
+            ran.status === 0 && ran.stdout.trim() === "[padded]",
+            `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
+          );
+        }
       }
     }
 
@@ -7310,11 +7386,12 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // link and its target are both resolved and compared to each other, which is
     // machine-independent and is the property the builtin exists for.
     //
-    // It is the answer to the symlink half of wp19 §5a item 4 -- `argv[0]` reaching
+    // It is the builtin under the symlink half of wp19 §5a item 4 -- `argv[0]` reaching
     // the compiler through `node_modules/.bin/nish` or through an admin's
-    // `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. The builtin lands here; the
-    // rolling freeze is why `self/`'s own `packageRoot()` cannot call it until the
-    // release after this one.
+    // `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. `packageRoot()` calls it as of
+    // 0.6.0, one release after the builtin, which is what the rolling freeze costs; the
+    // two `argv0-symlink-*` checks above are that call site driven end to end, and this
+    // one is the builtin itself, which is what they would fail through.
     if (!HAS_CLANG) {
       skip("realpathSync against a real symlink (clang not found, and the program has to link)");
     } else {

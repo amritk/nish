@@ -103,7 +103,8 @@ nish_write_wrapper() {
   {
     printf '#!/bin/sh\n'
     printf '# Written by install.sh. Execs the compiler by absolute path, so that it\n'
-    printf '# resolves its runtime from this install rather than from $PWD.\n'
+    printf '# resolves its runtime from this install rather than from $PWD -- which\n'
+    printf '# every release up to 0.5.0 needs, because it resolves no symlink.\n'
     printf "exec '%s' \"\$@\"\n" "$_dir/libexec/nish"
   } > "$_dir/bin/nish"
   chmod +x "$_dir/bin/nish"

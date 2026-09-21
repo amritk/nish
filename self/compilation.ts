@@ -462,15 +462,19 @@ export class Compilation {
     // own mistake and not the consumer's — but it is still a module that could
     // not be found, so the caller reports it as one.
     //
-    // The path is joined, never resolved through a symlink: this language has no
-    // `realpath` builtin, so one package reached through two links is two
-    // modules and the WP21 S1 clash check refuses the program. Node's resolver
-    // realpaths and gets one, which is why pnpm's store resolves there and not
-    // here. stage0 *could* call `fs.realpathSync` and is deliberately not
-    // allowed to, because a program stage0 compiles and stage1 refuses is the
-    // divergence the oracles exist to prevent.
-    // TODO(WP21 S3): close it on both sides. `tests/link/package_symlink` is the
-    // declared case and `docs/wp21-packages.md` §10d states it.
+    // The path is joined, never resolved through a symlink, so one package
+    // reached through two links is two modules and the WP21 S1 clash check
+    // refuses the program. Node's resolver realpaths and gets one, which is why
+    // pnpm's store resolves there and not here.
+    //
+    // The language *does* have `realpathSync` now, and the driver's own
+    // `packageRoot()` calls it (WP19 §5a item 4) — so what keeps this joined is
+    // no longer a missing builtin but an unmade decision: a package's identity
+    // being its real directory and a package's identity coming from its manifest
+    // answer WP21 §7's diamond differently, and they are one question.
+    // TODO(WP21 S3): close it on both sides, and decide that question rather
+    // than implying it with a `realpath` here. `tests/link/package_symlink` is
+    // the declared case and `docs/wp21-packages.md` §10d states it.
     const resolved: ResolvedModule = {
       path: joinPath([packageDir, target]),
       packageName: parsed.name,

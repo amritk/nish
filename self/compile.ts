@@ -513,21 +513,26 @@ export const main = (): number => {
 const COLON: i32 = 58;
 
 /**
- * The directory `argv[0]` names, when `argv[0]` names none — a command found
- * on `$PATH` arrives as the bare word the user typed, with no directory at
- * all, so there is nothing to take the parent of.
+ * The file `argv[0]` names, when `argv[0]` names no directory — a command found
+ * on `$PATH` arrives as the bare word the user typed, so there is nothing to
+ * take the parent of and nothing to hand `realpathSync`.
  *
  * The shell ran the first executable of that name on `$PATH`, so the first
- * entry holding a readable file of that name is the one that ran, and its
- * parent is the package root. The file is read rather than stat'd because
- * there is no `isFileSync` in the language and `isDirectorySync` answers the
- * wrong question; the cost is one read of the compiler's own binary, on the
- * one path that reaches here, and only until the first entry matches.
+ * entry holding a readable file of that name is the one that ran. The file is
+ * read rather than stat'd because there is no `isFileSync` in the language and
+ * `isDirectorySync` answers the wrong question; the cost is one read of the
+ * compiler's own binary, on the one path that reaches here, and only until the
+ * first entry matches.
  *
- * An empty `$PATH` entry means the working directory, which is POSIX, and
- * an unset `PATH` answers `""` so the caller falls through to `.`.
+ * It answers the file rather than the root because the caller needs both
+ * answers the file gives — the parent of its directory, and the parent of the
+ * directory its *real* path is in, which are different directories exactly when
+ * a link is what `$PATH` found. Empty when no entry has it, and when `PATH` is
+ * unset, so the caller falls through to `.`.
+ *
+ * An empty `$PATH` entry means the working directory, which is POSIX.
  */
-const rootFromPath = (program: string): string => {
+const programOnPath = (program: string): string => {
   const pathVar = getenv("PATH");
   if (pathVar === null) {
     return "";
@@ -537,8 +542,9 @@ const rootFromPath = (program: string): string => {
   while (i < entries.length) {
     const entry = entries[i];
     const dir = entry.length === 0 ? "." : entry;
-    if (readFileSyncOrNull(`${dir}/${program}`) !== null) {
-      return `${dir}/..`;
+    const candidate = `${dir}/${program}`;
+    if (readFileSyncOrNull(candidate) !== null) {
+      return candidate;
     }
     i = i + 1;
   }
@@ -553,29 +559,38 @@ const rootFromPath = (program: string): string => {
  * back to the working directory, which is what a checkout wants. Empty when
  * nothing has the script, so the caller can say where it looked.
  *
- * **`argv[0]` is not always a path, and that is the whole of what this has to
- * get right.** A command invoked by a path — `./build/nish`, `/usr/local/bin/nish`
- * — carries its directory, and the parent of that directory is the root. A
- * command found on `$PATH` carries the bare word instead, so `dirname` answers
- * `.` and the parent of the *working directory* gets searched: `--link` then
- * fails against wherever the user happened to be standing, while `--version`
- * and `-o` keep working, because only `--link` needs a file from the package.
- * That is what unpacking a release tarball onto `$PATH` is, and it did not
- * work (wp19 §5a item 4). `rootFromPath` above is the answer for that spelling.
+ * **`argv[0]` is not always a path, and it is not always the compiler's own
+ * path either. Those are the two things this has to get right**, and each was a
+ * release in which an ordinary install could not `--link` (wp19 §5a item 4).
  *
- * The candidates are tried in order and the first with `scripts/build.sh` in
- * it wins, so a checkout still beats a stale install: `.` is last, but the
- * directory `argv[0]` came from is only a candidate at all when `argv[0]` said
- * where it was.
+ * A command invoked by a path — `./build/nish`, `/usr/local/bin/nish` — carries
+ * its directory, and the parent of that directory is the root. A command found
+ * on `$PATH` carries the bare word instead, so `dirname` answers `.` and the
+ * parent of the *working directory* gets searched: `--link` then fails against
+ * wherever the user happened to be standing, while `--version` and `-o` keep
+ * working, because only `--link` needs a file from the package. That is what
+ * unpacking a release tarball onto `$PATH` is. `programOnPath` above is the
+ * answer for that spelling.
  *
- * **Still open, and deliberately not worked around here: a symlink.** npm
- * links every command as one (`node_modules/.bin/nish -> ../<pkg>/bin/nish`),
- * and this resolves no link, so the parent of the *link's* directory is
- * searched and an install laid out that way finds nothing. The language has no
- * `realpath` to call, so the fix is a builtin rather than an edit here, and
- * both installers exec an absolute path instead (`scripts/postinstall.mjs`,
- * `install.sh`). Adding the builtin is a change `self/` could not use until
- * the release after it lands, which is the rolling freeze.
+ * And either spelling may name a **symbolic link** rather than the compiler:
+ * npm links every command as one (`node_modules/.bin/nish -> ../<pkg>/bin/nish`),
+ * and so does an admin's `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. The
+ * parent of the *link's* directory is not the package, and a `$PATH` lookup
+ * does not help, because the link is itself a perfectly good path. So the real
+ * path of whatever was invoked is a candidate too, which is what `realpathSync`
+ * is for — the builtin landed one release ahead of this call site, because
+ * `self/` is compiled by the last released compiler and may only use what that
+ * compiler has (the rolling freeze, wp19 G3).
+ *
+ * The candidates are tried in order and the first with `scripts/build.sh` in it
+ * wins, and the order is where the care is. The unresolved spelling comes first,
+ * so a compiler that is *not* reached through a link answers exactly the root it
+ * answered before — spelled the way it was invoked rather than absolutely, which
+ * is what keeps every `std/` path and every diagnostic where it was — and a link
+ * is the only thing that adds a candidate at all. `.` is last and is the
+ * fallback for a compiler beside no package whatsoever, which is the checkout a
+ * developer is standing in; a symlinked install that *is* a package now wins
+ * over that cwd, exactly as a directly-invoked one always did.
  *
  * It lives in the driver rather than beside the path helpers because
  * `process.argv` is legal only in a program with an entry `main`, and every
@@ -585,13 +600,20 @@ const rootFromPath = (program: string): string => {
 const packageRootCandidates = (): string[] => {
   const candidates: string[] = [];
   const program = process.argv[0];
-  if (program.indexOf("/") < 0) {
-    const viaPath = rootFromPath(program);
-    if (viaPath.length > 0) {
-      candidates.push(viaPath);
+  const invoked = program.indexOf("/") < 0 ? programOnPath(program) : program;
+  if (invoked.length > 0) {
+    const asInvoked = `${dirname(invoked)}/..`;
+    candidates.push(asInvoked);
+    // Only when it differs, so the ordinary install — a real path, no link in
+    // it — keeps naming one directory in the diagnostic and keeps answering the
+    // relative spelling it was invoked with.
+    const real = realpathSync(invoked);
+    if (real !== null) {
+      const throughLink = `${dirname(real)}/..`;
+      if (throughLink !== asInvoked) {
+        candidates.push(throughLink);
+      }
     }
-  } else {
-    candidates.push(`${dirname(program)}/..`);
   }
   candidates.push(".");
   return candidates;
