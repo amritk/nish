@@ -255,8 +255,8 @@ const lineTableOf = (exe) => {
   const bundle = `${exe}.dSYM`;
   const inside = path.join(bundle, "Contents", "Resources", "DWARF", path.basename(exe));
   return fs.existsSync(inside)
-    ? { file: inside, where: `${path.basename(bundle)}, the debug bundle beside the binary` }
-    : { file: exe, where: `the linked binary, because ${path.basename(bundle)} was not written` };
+    ? { file: inside, where: `${path.basename(bundle)}, the bundle beside the linked binary` }
+    : { file: exe, where: `the linked binary, since no ${path.basename(bundle)} was written` };
 };
 
 /**
@@ -986,7 +986,7 @@ if (!only || "diagnostics".includes(only)) {
             ? /^0x[0-9a-f]+\s+[1-9]\d*\s+\d+/m.test(out)
             : /dbg_main\.ts\s+[1-9]\d*\s+0x/.test(out);
         check(
-          `${tool[0]}: the line table in ${table.where} names dbg_main.ts and has at least one row`,
+          `${tool[0]}: the line table names dbg_main.ts and has at least one row (read from ${table.where})`,
           dump.status === 0 && out.includes("dbg_main.ts") && hasRow,
           out.slice(0, 2000) + dump.stderr
         );
@@ -1008,7 +1008,8 @@ if (!only || "diagnostics".includes(only)) {
         ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], { encoding: "utf8" }).stdout
         : "";
     check(
-      `-g --link (speed profile) is not stripped: the line table survives in ${speedTable === null ? "the linked binary" : speedTable.where}`,
+      "-g --link (speed profile) is not stripped: the line table survives " +
+        `(read from ${speedTable === null ? "the linked binary" : speedTable.where})`,
       speed.status === 0 && (!has("llvm-dwarfdump") || symbols.includes("dbg_main.ts")),
       speed.stderr + symbols.slice(0, 500)
     );
