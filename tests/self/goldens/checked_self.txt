@@ -5144,51 +5144,51 @@ function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @col
   pointer ctx: size=136 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 instantiateWritten#0 CheckContext.error#0 CheckContext.error#0 collectField#0 collectMethod#0 collectConstructor#0 collectField#0 computeLayout#0 reportWastefulPadding#0
   pointer info: size=112 writesThrough=true captured=true passedTo=collectField#1 collectMethod#1 collectConstructor#1 collectField#1 computeLayout#1 reportWastefulPadding#1
   stackSites=0 stackLocals=0
-  local 456:9 decl: Node (const)
-  local 458:11 extendsName: Node (const)
-  callee 464:7 CheckContext.error -> @CheckContext.error
-  local 473:16 iface: Node (const)
-  callee 484:9 CheckContext.error -> @CheckContext.error
-  local 487:13 template: StructTemplateInfo | null (const)
-  callee 487:24 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local 488:11 target: StructInfo | null (let)
-  callee 490:18 instantiateWritten -> @instantiateWritten
-  callee 495:9 CheckContext.error -> @CheckContext.error
-  callee 498:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 501:9 CheckContext.error -> @CheckContext.error
-  local 506:16 member: Node (const)
-  callee 508:9 collectField -> @collectField
-  callee 510:9 collectMethod -> @collectMethod
-  callee 512:9 collectConstructor -> @collectConstructor
-  local 516:16 member: Node (const)
-  callee 518:9 collectField -> @collectField
-  local 522:9 floor: i32 (const)
-  callee 522:17 computeLayout -> @computeLayout
-  callee 524:3 reportWastefulPadding -> @reportWastefulPadding
+  local 495:9 decl: Node (const)
+  local 497:11 extendsName: Node (const)
+  callee 503:7 CheckContext.error -> @CheckContext.error
+  local 512:16 iface: Node (const)
+  callee 523:9 CheckContext.error -> @CheckContext.error
+  local 526:13 template: StructTemplateInfo | null (const)
+  callee 526:24 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local 527:11 target: StructInfo | null (let)
+  callee 529:18 instantiateWritten -> @instantiateWritten
+  callee 534:9 CheckContext.error -> @CheckContext.error
+  callee 537:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 540:9 CheckContext.error -> @CheckContext.error
+  local 545:16 member: Node (const)
+  callee 547:9 collectField -> @collectField
+  callee 549:9 collectMethod -> @collectMethod
+  callee 551:9 collectConstructor -> @collectConstructor
+  local 555:16 member: Node (const)
+  callee 557:9 collectField -> @collectField
+  local 561:9 floor: i32 (const)
+  callee 561:17 computeLayout -> @computeLayout
+  callee 563:3 reportWastefulPadding -> @reportWastefulPadding
 function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.struct describeField nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
   pointer ctx: size=136 writesThrough=true captured=false passedTo=CheckContext.error#0 describeField#0 describeField#0 CheckContext.error#0 describeField#0
   pointer cls: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 535:14 name: string (const)
-  local 536:11 iface: StructInfo | null (const)
-  callee 536:19 CheckedProgram.struct -> @CheckedProgram.struct
-  local 546:9 i: i32 (let)
-  local 548:13 want: FieldInfo (const)
-  local 550:15 got: FieldInfo (const)
-  callee 555:9 CheckContext.error -> @CheckContext.error
-  callee 557:92 describeField -> @describeField
-  callee 557:145 describeField -> @describeField
-  callee 561:7 CheckContext.error -> @CheckContext.error
-  callee 563:87 describeField -> @describeField
+  local 574:14 name: string (const)
+  local 575:11 iface: StructInfo | null (const)
+  callee 575:19 CheckedProgram.struct -> @CheckedProgram.struct
+  local 585:9 i: i32 (let)
+  local 587:13 want: FieldInfo (const)
+  local 589:15 got: FieldInfo (const)
+  callee 594:9 CheckContext.error -> @CheckContext.error
+  callee 596:92 describeField -> @describeField
+  callee 596:145 describeField -> @describeField
+  callee 600:7 CheckContext.error -> @CheckContext.error
+  callee 602:87 describeField -> @describeField
 function describeField(ctx: CheckContext, field: FieldInfo): string -> @describeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeTable.typeName nish_str_concat
   pointer ctx: size=136 writesThrough=false captured=false
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 570:92 TypeTable.typeName -> @TypeTable.typeName
+  callee 609:92 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
@@ -5196,17 +5196,17 @@ function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.isResult#0 noteStructNames#0 TypeTable.okOf#0 noteStructNames#0 TypeTable.errOf#0 TypeTable.refOf#0 noteStructNames#0
   pointer out: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 noteStructNames#2 noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
-  callee 578:7 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 579:5 StringSet.add -> @StringSet.add
-  callee 579:13 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 584:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 585:5 noteStructNames -> @noteStructNames
-  callee 585:28 TypeTable.okOf -> @TypeTable.okOf
-  callee 586:5 noteStructNames -> @noteStructNames
-  callee 586:28 TypeTable.errOf -> @TypeTable.errOf
-  local 589:9 inner: i32 (const)
-  callee 589:17 TypeTable.refOf -> @TypeTable.refOf
-  callee 591:5 noteStructNames -> @noteStructNames
+  callee 617:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 618:5 StringSet.add -> @StringSet.add
+  callee 618:13 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 623:7 TypeTable.isResult -> @TypeTable.isResult
+  callee 624:5 noteStructNames -> @noteStructNames
+  callee 624:28 TypeTable.okOf -> @TypeTable.okOf
+  callee 625:5 noteStructNames -> @noteStructNames
+  callee 625:28 TypeTable.errOf -> @TypeTable.errOf
+  local 628:9 inner: i32 (const)
+  callee 628:17 TypeTable.refOf -> @TypeTable.refOf
+  callee 630:5 noteStructNames -> @noteStructNames
 function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet): void -> @signatureStructNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_panic_index noteStructNames
@@ -5214,9 +5214,9 @@ function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet
   pointer sig: size=88 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
-  local 602:7 i: i32 (let)
-  callee 604:5 noteStructNames -> @noteStructNames
-  callee 607:3 noteStructNames -> @noteStructNames
+  local 641:7 i: i32 (let)
+  callee 643:5 noteStructNames -> @noteStructNames
+  callee 646:3 noteStructNames -> @noteStructNames
 function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSet): void -> @referencedStructNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: noteStructNames signatureStructNames
@@ -5224,29 +5224,29 @@ function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSe
   pointer info: size=112 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 signatureStructNames#2 signatureStructNames#2
   stackSites=0 stackLocals=0
-  local 615:14 field: FieldInfo (const)
-  callee 616:5 noteStructNames -> @noteStructNames
-  local 618:14 method: FunctionSig (const)
-  callee 619:5 signatureStructNames -> @signatureStructNames
-  local 621:9 ctor: FunctionSig | null (const)
-  callee 623:5 signatureStructNames -> @signatureStructNames
+  local 654:14 field: FieldInfo (const)
+  callee 655:5 noteStructNames -> @noteStructNames
+  local 657:14 method: FunctionSig (const)
+  callee 658:5 signatureStructNames -> @signatureStructNames
+  local 660:9 ctor: FunctionSig | null (const)
+  callee 662:5 signatureStructNames -> @signatureStructNames
 function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean -> @coercesTo [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: from want
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull nish_str_eq
   pointer ctx: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 634:20 TypeTable.isStruct -> @TypeTable.isStruct
-  local 637:9 target: i32 (const)
-  callee 637:18 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 638:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 641:9 source: StructInfo | null (const)
-  callee 641:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 641:37 TypeTable.nameOf -> @TypeTable.nameOf
-  local 642:9 wanted: StructInfo | null (const)
-  callee 642:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 642:37 TypeTable.nameOf -> @TypeTable.nameOf
-  local 649:14 name: string (const)
+  callee 673:20 TypeTable.isStruct -> @TypeTable.isStruct
+  local 676:9 target: i32 (const)
+  callee 676:18 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 677:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 680:9 source: StructInfo | null (const)
+  callee 680:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 680:37 TypeTable.nameOf -> @TypeTable.nameOf
+  local 681:9 wanted: StructInfo | null (const)
+  callee 681:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 681:37 TypeTable.nameOf -> @TypeTable.nameOf
+  local 688:14 name: string (const)
 module self/members.ts
 import checkArrayMethod from "./arrays" -> function @checkArrayMethod
 import checkArrayProperty from "./arrays" -> function @checkArrayProperty
