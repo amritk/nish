@@ -802,8 +802,12 @@ if (!only || "diagnostics".includes(only)) {
   // rejection happens to reach (WP19 G2.4). `tests/diagnostic_coverage.js`
   // compiles the negatives, the `perf_*` positives and its own
   // `tests/wordings/` corpus, reads the `code` out of every `--json` object,
-  // and requires each of the registry's codes to be either provoked or named
-  // in `tests/wordings/unreachable.txt` with a reason. It replaces the loop
+  // and requires each of the registry's codes to be either provoked, named in
+  // `tests/wordings/unreachable.txt` with a reason, or named in
+  // `tests/wordings/stage0_only.txt` with the programs that provoke it — the
+  // third state being the one the stage1 run below needs, and the one this run
+  // checks from the other side: every program such a line names must be exactly
+  // the ones stage0 found for that code. It replaces the loop
   // that used to live here, which spawned the same compilers one at a time and
   // could only report what the corpus already reached; this one is pooled and
   // says what it does *not* reach, which is the number the gate is about.
@@ -5610,6 +5614,17 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // line this check prints rather than in this comment, because it moves. `--strict-refusals` is what makes
       // both lists shrink-only: a case that starts agreeing fails until the
       // line naming it is deleted.
+      //
+      // `--require-coverage` is passed here too, which it could not be until
+      // `tests/wordings/stage0_only.txt` existed. G2's criterion is "every
+      // registry code provoked by something that outlives stage0, or
+      // unreachable with a reason", and asking it only of stage0 asks it of the
+      // compiler that is going away: stage1's parser refuses 80 codes' programs
+      // before the phase that owns the rule can state it, so the criterion
+      // answered with 80 findings whose reasons were already on file, per case,
+      // in three registers nothing joined to the codes. That join is the new
+      // file, and this is the run that makes the gate's own sentence true of
+      // the compiler R6 leaves behind rather than of the one it deletes.
       const stage1Wordings = spawnSync(
         "node",
         [
@@ -5617,12 +5632,13 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           "--compiler",
           path.relative(root, compiler),
           "--strict-refusals",
+          "--require-coverage",
         ],
         { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
       );
       const stage1WordingsSummary = stage1Wordings.stdout.trim().split("\n").pop() ?? "";
       check(
-        `the self-hosted compiler: the diagnostic wordings are stage1's too (${stage1WordingsSummary})`,
+        `the self-hosted compiler: every registry code is stage1's, declared, or explained (${stage1WordingsSummary})`,
         stage1Wordings.status === 0,
         `${stage1Wordings.stdout}${stage1Wordings.stderr}`
       );

@@ -768,21 +768,54 @@ has grown three more times while this branch waited. The left column is the
 measurement that opened the gap; the right is what the tool answers today, and
 the way to re-derive it is to run the tool rather than to read this table:
 
-| | When the gap was measured | 2026-09-19, this tree |
-| --- | --- | --- |
-| registry codes | 351 | 410 |
-| provoked by something that outlives stage0 | 175 | **344** |
-| provoked by nothing | 176 | 0 |
-| unreachable, each with a reason on file | — | 66 |
+| | When the gap was measured | 2026-09-19, stage0 | 2026-09-21, stage1 |
+| --- | --- | --- | --- |
+| registry codes | 351 | 410 | 410 |
+| provoked by something that outlives stage0 | 175 | **344** | **264** |
+| provoked by nothing | 176 | 0 | 0 |
+| unreachable, each with a reason on file | — | 66 | 66 |
+| stage0 only, each with its programs on file | — | — | 80 |
+
+**The third column is the one this gate is actually about, and it did not exist
+until 2026-09-21.** The criterion says "provoked by something that outlives
+stage0", and the two columns to its left were both measured with stage0, which
+does not. Asked of stage1 —
+`node tests/diagnostic_coverage.js --compiler build/nish --require-coverage` —
+the criterion answered with **80 findings**, each reading `is provoked by
+nothing: add a case to tests/wordings/, or a reason to unreachable.txt`. That
+advice was wrong eighty times over. Nothing had been overlooked: every one of
+the 80 is a code whose programs stage1 answers in its *parser*, and all 126
+of those programs — every program that provokes one of the 80 under stage0,
+not merely the first in corpus order — was already recorded, with the sentence
+stage1 answers instead, in `tests/self/parser_refusals.txt` (85 entries),
+`tests/wordings/parser_refusals.txt` (39) or `stage1_divergence.txt` (2). The
+registers are per **case** and the criterion is per **code**, and no file made
+the step from one to the other — so the tool could only print `(no reason on
+file)` for a reason that was on file, and the gate could only be asked of the
+compiler it is going to delete.
+
+`tests/wordings/stage0_only.txt` is that step and nothing else: one
+`CODE  case[,case...]` line per code, naming programs rather than repeating
+sentences, so it cannot drift from the registers without failing. It is checked
+from both sides while both compilers exist — against stage0 the named set must
+be **exactly** the set the run found, so a corpus that grows a case cannot
+leave a line stale; against stage1 under `--strict-refusals` a code the run
+provokes fails until its line is deleted. `npm test` now passes
+`--require-coverage` on the stage1 run as well as the stage0 one, which is what
+makes the gate's own sentence true of the compiler R6 leaves behind. The file
+empties into `unreachable.txt` at R6, where these wordings become retired codes
+because nothing prints them any more.
 
 What moved it is `tests/wordings/`, 126 cases: one small program per code,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
 message in its `.err`. A reword fails it twice — the message no longer matches, and the
 generator gives the new words a new number, so the code no longer matches
 either — and the tool refuses to go green while any registry code is neither
-provoked nor named in `tests/wordings/unreachable.txt`. That last rule is the
-part that keeps the gap closed: a diagnostic added next year arrives with a
-case or with a sentence saying why it cannot have one.
+provoked, nor named in `tests/wordings/unreachable.txt`, nor named in
+`tests/wordings/stage0_only.txt`. That last rule is the part that keeps the gap
+closed: a diagnostic added next year arrives with a case, with a sentence
+saying why it cannot have one, or with the programs that provoke it under the
+compiler that states the rule.
 
 **61 codes are unreachable, and that is a finding about the compiler rather
 than a test nobody wrote.** In six kinds, all listed with reasons in
@@ -1508,7 +1541,7 @@ in the wrong bucket is how "we are nearly there" survives contact with a year.
 | | What | The measurement |
 | --- | --- | --- |
 | **G1** | parity over the corpus, every flag variation | `parity: 14432 runs over 902 programs (2743.2 s); 0 undeclared difference(s), 2798 declared` — `node tests/run.js --parity`, exit 0, 2026-09-19, on merged `main` at `862c7cc` |
-| **G2** | every registry code provoked by something that outlives stage0, or unreachable with a reason | `wordings: 126/126 cases pin their code, coverage 344/410 codes, 66 unreachable, uncoded=4` — `node tests/diagnostic_coverage.js --report`, 2026-09-19 |
+| **G2** | every registry code provoked by something that outlives stage0, or unreachable with a reason | `wordings: 83/126 cases pin their code (41 refused by the parser, 2 answered differently), coverage 264/410 codes, 66 unreachable, 80 stage0-only, uncoded=5` — `node tests/diagnostic_coverage.js --compiler build/nish --require-coverage --strict-refusals`, exit 0, 2026-09-21. **Measured with stage1 rather than with stage0, which is what the criterion says and what this row did not do until now**: the stage0 figure (`coverage 344/410 codes, 66 unreachable, uncoded=4`, same command with `--compiler dist/index.js`, also exit 0) measures the compiler R6 deletes. Asked of stage1 the criterion had 80 findings, none of them an oversight — each had a reason on file, per case, in a register nothing joined to the codes; §2B has the join and what it checks |
 | **G2** | the four dying oracles' coverage recovered as goldens, built by the seed rather than by stage0 | `tests/self/goldens/`, numbers in §2B; watched green with `dist/` out of the tree |
 | **G3/G6** | the three IR equalities and the fixed point | green inside `npm test` on merged `main` at `862c7cc`, 2026-09-19 — [CI run 553](https://github.com/amritk/nish/actions/runs/35454091607), conclusion `success`. `node tests/self/bootstrap.js` is the check; the suite runs it |
 | **G2.1** | the successor itself, against a real seed | `nish-cmp: 437/437 programs agree (3582 files, 3253862 IR lines) … 4 equal after each compiler's own root, 0 undeclared difference(s)` — `NISH_BOOTSTRAP=<v0.5.0>/bin/nish node tests/nish-cmp.js`, exit 0, 2026-09-21. The first run of this gate against anything; §5a item 1 has what it took |
