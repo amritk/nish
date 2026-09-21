@@ -13,7 +13,7 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on three remaining measured failures rather than on cost; see below |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on six remaining measured failures rather than on cost. It is the one macOS gap in the file: `bootstrap` and `nish-cmp` have had darwin rows since the 0.4.0 seeds. See below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
 | `nish-cmp (x86_64-linux)` | Ubuntu, LLVM 18 | WP19 G2.1: the corpus compiled with the **last released** compiler and with the one HEAD builds, every byte compared. One row per Linux seed a release carries, and no row at all until a release carries a seed that can compile the corpus — `cmpSince` in `.github/seed-targets.json` decides which, and its note says why that is not the first release |
@@ -34,19 +34,37 @@ and passed. It is the successor to `tests/self/ir_oracle.js` and
 deletes with `src/`, and the axis it compares on is the one that survives that
 deletion — not stage0 against stage1, but the last release against HEAD.
 
-**The macOS `test` row was run for the first time on 2026-09-13, and it fails.**
-That is new information rather than a guess, and it replaces the cost argument
-that used to stand here: `npm test` on `macos-latest` reported **five failures in
-four families**, none of them a compiler bug and all of them checks that encode
-an ELF/Linux assumption. Three of the five are untouched; the `stage3 ==
-stage2` family is **settled** below, and it was the one that reached past this
-job.
+**The macOS `test` row has been run twice, and each run is a list of named
+checks rather than a verdict on the platform.** 2026-09-13 (WP19 R2) was the
+first: `npm test` on `macos-latest` reported **five failures in four
+families**. 2026-09-21 was the second, with the row in the matrix and three of
+those five ported first: `2125 passed, 6 failed, 4 skipped`
+([run 606](https://github.com/amritk/nish/actions/runs/35652075129)). Across
+the two runs that is nine distinct checks, and not one of them is a compiler
+bug — every one read an ELF fact out of a **linked binary** instead of the
+property it exists for, which is why the table below is by cause.
 
-| | What fails | Why |
+| | What failed | Why, and where it stands |
 | --- | --- | --- |
-| 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
-| 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
+| 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves the DWARF in the `.o` files and the executable keeps only a debug map naming them; the Darwin driver runs `dsymutil` at the end of a compile-and-link to turn that map into the `.dSYM` bundle that holds the table. **Ported, 2026-09-21** — `lineTableOf` in `tests/run.js` answers with the file the platform used, and both checks assert the same sentence about it on both platforms: the table names `dbg_main.ts` and has at least one row. Running `dsymutil` afterwards is deliberately *not* a fallback: by then clang has deleted the objects the map names, so the tool warns per object, writes an empty table and exits 0 |
+| 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS reference to a non-TLS definition and ld64 does not, so the safety net `build.sh`'s header describes is a fact about ELF. **Ported, 2026-09-21** — the property both platforms can be held to is that the mismatch is never quietly a working-looking program, and on Darwin it is not: `nm -m` shows `_nish_arena` as a plain `(__DATA,__common)` symbol where a thread-local descriptor should be, so the first allocation calls the arena's own `buf` field as the descriptor's thunk and the process dies with `Segmentation fault: 11`. The matched build of the same two inputs prints `alloc_smoke delta = 16` and exits 0, which is what makes the crash the mismatch's. The check's name says which mechanism caught it |
 | 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not. **Which bytes: settled** — `LC_UUID`, stable across two links to one output path and differing on a link to another, so two stages built at two paths could not agree. **What it varies with: not settled** — the output path is the leading explanation, not a finding. **The remedy: measured** — `scripts/bootstrap.sh` links them at one path now and both darwin rows come out byte-identical. `tests/self/bootstrap.js`, the other half of this family, still links at two — see below |
+| 6 | `runtime objects: a --threads module refuses to link against the default runtime` | Row 3's finding, in the gate on the prebuilt object cache. First seen on 2026-09-21 because the object cache is newer than the 2026-09-13 run; it wants row 3's treatment |
+| 7 | `the self-hosted compiler: -g reaches the compiler and the linked program carries DWARF` | Rows 1–2's cause, read through `.debug_info` rather than `.debug_line`. It wants `lineTableOf` |
+| 8, 9 | both `runtime objects: linking <case> against <runtime> gives the bytes the sources do` | Rows 4–5's cause: the two links being compared are made to two *different* output paths (`<stem>.src` and `<stem>.obj`), so `LC_UUID` differs and the binaries are the same size and not equal. The comment above those checks already names the honest narrowing — a counted skip — if the byte equality turned out to be platform-specific, which it now has |
+| 10 | `verify-binaries: NISH_UNAME_S says on stderr that it overrode the platform` | A check that drives `verify-binaries.sh`'s Darwin branch *from Linux* and reads the sentence saying the platform was overridden. On a mac there is no override to report, so this one is about the simulation rather than about the platform |
+
+Rows 1–3 are ported. Rows 4–5 are settled for `scripts/bootstrap.sh` and open
+for `tests/self/bootstrap.js`. Rows 6–10 are the six checks the `test` row is
+still held out by, and the comment beside `os:` in `ci.yml` lists them with the
+run that measured them so the two cannot drift.
+
+The macOS row also reports **4 skips** rather than Linux's 2, and both extras
+are counted facts about the platform written into the checks themselves: the
+runtime `.text` budgets are a ceiling measured on `linux-x64`, and
+`verify-binaries`'s Mach-O debug-map arms need a toolchain that produces two
+binaries of one size differing only in a debug section, which this one does
+not.
 
 The `stage3 == stage2` family reached further than this job:
 `scripts/bootstrap.sh --verify` asserted the same comparison, so it stood between the
@@ -166,14 +184,18 @@ IR(stage1) == IR(stage2): 61 modules identical
 stage3 == stage2: byte-identical binaries
 ```
 
-**The other half of that family is not fixed, and is now a one-line job.**
-`tests/self/bootstrap.js` is a second implementation of the same chain — the
-one `npm test` runs — and it links `<work>/stage2` and `<work>/stage3`, then
-compares them with no Mach-O narrowing at all. It passes on ELF and would still
-fail on a mac, for exactly the reason measured above. It wants the same
-treatment: link both at one path and move each into place. That is what rows 4
-and 5 of the table are, one check each, and settling the cause is what makes
-the second one mechanical.
+**The other half of that family is not fixed, is now a one-line job, and has
+been watched failing.** `tests/self/bootstrap.js` is a second implementation of
+the same chain — the one `npm test` runs — and it links `<work>/stage2` and
+`<work>/stage3`, then compares them with no Mach-O narrowing at all. It passes
+on ELF, and on 2026-09-21 it failed on a mac exactly as predicted: `stage3 is
+not byte-identical to stage2 (646792 vs 646792 bytes)`, the same size on both
+sides, in
+[run 606](https://github.com/amritk/nish/actions/runs/35652075129). It wants
+the same treatment: link both at one path and move each into place. That is
+what row 4 of the table is, and rows 8 and 9 are the identical mistake in two
+more checks — the two `runtime objects:` byte comparisons, which link `.src`
+and `.obj` — so settling the cause is what makes all three mechanical.
 
 The Darwin narrowing in `verify-binaries.sh` stays, as a net under a comparison
 that now holds rather than as the arm that decides a darwin row: it costs
@@ -185,15 +207,23 @@ that is now a statement about the script rather than about what a bootstrap
 produces. `NISH_UNAME_S` lets the suite drive both platforms' branches from one
 machine.
 
-Restoring the `test` row means porting the other **three** checks in the two
-families above against hardware that has to be iterated on, which is a package
-of its own rather than a line in the matrix. The install half is already
-written and was exercised by that run: both "Install LLVM 18 + lld" steps in
-the `test` job are guarded by `runner.os`, so restoring the row is one
-uncommented line plus those three fixes, plus the one-line shared-path change
-`tests/self/bootstrap.js` wants. The `stage3 == stage2` family, which that
-sentence used to end by deferring to an unmeasured question, is now that one
-known change.
+Restoring the `test` row means porting the **six** checks in rows 6–10 above,
+and what that costs is now known rather than estimated: each of the three
+causes has been measured on the platform, and two of the three already have a
+worked port in the tree to copy. Rows 6 and 7 are one check each, in the shape
+rows 1–3 took. Rows 8 and 9 are the `LC_UUID` cause in `tests/run.js` and row 4
+is the same cause in `tests/self/bootstrap.js`, which is the one-line
+shared-path change `scripts/bootstrap.sh` already made. Row 10 is a check about
+a simulation, and is the only one of the six that is not about a linked binary
+at all.
+
+The install half is written and has been exercised twice: both "Install LLVM 18
++ lld" steps in the `test` job are guarded by `runner.os`, so restoring the row
+is one uncommented line plus those six fixes. **The hardware is no longer
+something to arrange, either** — the row was iterated against by pushing to a
+branch and reading `test (macos-latest)`, which is how rows 1–3 were measured
+and then proved, and `fail-fast: false` is what keeps a red macOS row from
+cancelling the Linux one that says whether it is the platform or the change.
 
 The two defects the row was waiting for before this are both bash 3.2,
 which macOS ships as
@@ -288,13 +318,16 @@ each `asset` is that triple with the vendor and the ABI dropped
 other a contract, and two of them — `aarch64-darwin` and `x86_64-darwin` — were
 described as triples the compiler accepts, which it never has.
 
-G3 asks for this on **both** operating systems, and it runs on Linux alone.
-v0.2.0 attaches `x86_64-linux` and nothing else and a published release cannot
-grow an asset, so the earliest any second row could appear is the next release.
-The darwin pair's `attachedSince` is 0.4.0 and so is
-`aarch64-linux`, and **all three have now been exercised** on the hardware
-their rows name. Two things had to land before the second platform, and both
-have:
+G3 asks for this on **both** operating systems, and **it gets both.** That was
+not always true and the reason it reads as recent is that it is: v0.2.0
+attached `x86_64-linux` and nothing else, a published release cannot grow an
+asset, so the earliest any second row could appear was the next release. The
+darwin pair's `attachedSince` is 0.4.0 and so is `aarch64-linux`, v0.4.0 and
+v0.5.0 both carry them, and `bootstrap (aarch64-darwin)` and `bootstrap
+(x86_64-darwin)` are rows this workflow runs and passes. That is worth stating
+plainly because the `test` row being out has more than once been written down
+as "nothing here runs on macOS", which has not been the case since 0.4.0. Two
+things had to land before the second platform, and both have:
 
 - the darwin **seed**, which is
   [G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and
