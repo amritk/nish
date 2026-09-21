@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 410;
+export const RULE_COUNT: i32 = 411;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -139,6 +139,8 @@ export const diagnosticRules = (): string[] => [
   "NL2226",
   "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
   "NL2320",
+  "` specifier names a module inside it, so no segment may be empty or begin with a `.`",
+  "NL3016",
   "` under a type constructor instead of passing it on, so the chain has no end; name `",
   "NL2319",
   "` under a type constructor instead of passing it on, so the chain has no end; pass `",

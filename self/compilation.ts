@@ -23,6 +23,15 @@
 // For an entry named relatively — which is how every caller names it — the two
 // agree string for string, which is what lets the IR headers match.
 //
+// **The name is a second string, and it is the one in the IR.** For every
+// module reached by a path the two are equal, and this driver carries them
+// apart for the one kind that is not: a module reached by a *package*
+// specifier is found through the compiler's own package root — `<dir of
+// argv[0]>/..` — and is therefore named by how the compiler was invoked rather
+// than by anything about the program (WP19 §A7's third bullet). Its identity
+// stays the path, because a file still has to be opened; its name is its path
+// inside the package, which is what stage0 has always written.
+//
 // The one thing this driver does not do is decide where the output goes: it
 // answers with the IR text per module and the stem each module's file should
 // use, and `self/compile.ts` writes them. There is no `mkdir` here (D4).
@@ -56,7 +65,7 @@ import {
 } from "./paths";
 import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX } from "./branding";
 import { nishExportTarget } from "./manifest";
-import { stdModuleNames, stdModulePath } from "./std_modules";
+import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
 import { RuntimeTable } from "./runtime";
 import { splitByte } from "./strings";
 import { TypeTable } from "./types";
@@ -82,26 +91,41 @@ const SLASH: i32 = 47;
 const PACKAGE_WALK_LIMIT: i32 = 256;
 
 /**
- * What resolving one specifier answers: the file, the package it is in when the
- * specifier says, and the diagnostic when it says nothing that resolves
- * (WP21 S2).
+ * What resolving one specifier answers: the file, the name that file carries,
+ * the package it is in when the specifier says, and the diagnostic when it says
+ * nothing that resolves (WP21 S2).
  *
- * `packageName` is `""` when the specifier does not state a package — a
- * relative import stays wherever its path puts it — and `packages.ts` reads it
- * off the path for those. `error` is `""` when the resolution worked; an error
- * value rather than a throw, because the language has no exceptions and the
- * caller has a sink to report into either way.
+ * `name` differs from `path` only for a package specifier, where the path is
+ * the compiler's own install and the name is the module's place inside the
+ * package (WP19 §A7). `packageName` is `""` when the specifier does not state a
+ * package — a relative import stays wherever its path puts it — and
+ * `packages.ts` reads it off the path for those. `error` is `""` when the
+ * resolution worked; an error value rather than a throw, because the language
+ * has no exceptions and the caller has a sink to report into either way.
  */
 export interface ResolvedModule {
   path: string;
+  name: string;
   packageName: string;
   error: string;
 }
 
 /** One source module: its identity, its tree, and the checker that owns it. */
 export class ModuleUnit {
-  /** The resolved path, which is the module's identity and the name in its IR header. */
+  /**
+   * The resolved path: the module's identity, the string `byPath` is keyed on,
+   * and the file that was opened. It is the name as well for every module
+   * reached by a path — which is all of them but a package's.
+   */
   path: string;
+  /**
+   * The name in the IR header, the `DIFile`, the diagnostics and the output
+   * path when there is no `-o`: `path` for an ordinary module, and the module's
+   * place inside its package for one reached by a package specifier
+   * (`std/text.ts`). `source.path` is this string, which is how it reaches
+   * every one of those (WP19 §A7).
+   */
+  name: string;
   source: SourceFile;
   file: Node;
   nodeCount: i32;
@@ -110,9 +134,10 @@ export class ModuleUnit {
   /**
    * The package this module belongs to (WP21 S1, `self/packages.ts`); `""` for
    * the root package, which is where every module of a single-package program
-   * lives. Derived from `path`, which is the module's identity and the name in
-   * its IR header — the same string stage0 derives it from, so the two
-   * compilers put a module in the same package (WP19 §A3).
+   * lives. Derived from `name`, which is the same string stage0 derives it
+   * from, so the two compilers put a module in the same package (WP19 §A3) —
+   * and a package specifier states it outright anyway, which is every module
+   * whose name is not its path.
    */
   packageName: string;
   checker: Checker;
@@ -122,6 +147,7 @@ export class ModuleUnit {
 
   constructor(
     path: string,
+    name: string,
     source: SourceFile,
     file: Node,
     nodeCount: i32,
@@ -130,6 +156,7 @@ export class ModuleUnit {
     packageName: string
   ) {
     this.path = path;
+    this.name = name;
     this.source = source;
     this.file = file;
     this.nodeCount = nodeCount;
@@ -241,15 +268,19 @@ export class Compilation {
    * imports, and a path already loaded answers true without reparsing.
    */
   /**
-   * Read, parse and register one module. `packageOverride` is the package it
-   * belongs to when the specifier that reached it already says, and `""` when
-   * the path is what decides. Only a `nish/` import says: the standard library
-   * is package `nish` wherever the compiler was installed, and reading it off
-   * the path would answer `nish` from `node_modules/nish/std/` and the *root*
-   * package from a checkout — so one program would compile installed and
-   * collide in a checkout, which is the clash `packages.ts` exists to prevent.
+   * Read, parse and register one module. `name` is what the module is called
+   * in its IR header, its diagnostics and its output path — the path itself
+   * for everything but a package module, whose path is this compiler's install
+   * and whose name is its place inside the package (WP19 §A7).
+   * `packageOverride` is the package it belongs to when the specifier that
+   * reached it already says, and `""` when the path is what decides. Only a
+   * `nish/` import says: the standard library is package `nish` wherever the
+   * compiler was installed, and reading it off the path would answer `nish`
+   * from `node_modules/nish/std/` and the *root* package from a checkout — so
+   * one program would compile installed and collide in a checkout, which is
+   * the clash `packages.ts` exists to prevent.
    */
-  load(path: string, packageOverride: string): boolean {
+  load(path: string, name: string, packageOverride: string): boolean {
     const at = this.byPath.get(path, -1);
     if (at >= 0) {
       return true;
@@ -263,7 +294,7 @@ export class Compilation {
       this.unreadableRoot = path;
       return false;
     }
-    const source = new SourceFile(path, text);
+    const source = new SourceFile(name, text);
     const parser = new Parser(source);
     const file = parser.parseSourceFile();
     // Recorded rather than printed, because the stream and the shape are the
@@ -280,9 +311,9 @@ export class Compilation {
     }
     const isEntry = this.modules.length === 0;
     if (isEntry) {
-      this.rootPackageDir = packageDirOf(path);
+      this.rootPackageDir = packageDirOf(name);
     }
-    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(path);
+    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name);
     const checker = new Checker(
       this.table,
       source,
@@ -296,7 +327,7 @@ export class Compilation {
       this.opts.strictExports,
       packageName
     );
-    const unit = new ModuleUnit(path, source, file, parser.nodeCount, isEntry, checker, packageName);
+    const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName);
     this.byPath.set(path, this.modules.length);
     this.modules.push(unit);
 
@@ -364,7 +395,7 @@ export class Compilation {
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
-      if (!this.load(target, found.packageName)) {
+      if (!this.load(target, found.name, found.packageName)) {
         ok = false;
       } else {
         unit.resolved.set(imp.specifier, this.byPath.get(target, -1));
@@ -384,15 +415,39 @@ export class Compilation {
    */
   resolveSpecifier(dir: string, specifier: string): ResolvedModule {
     if (specifier.startsWith(STD_PREFIX)) {
+      const name = specifier.substring(STD_PREFIX.length);
+      if (name.length > 0 && !isStdModuleName(name)) {
+        // Refused before it is resolved, because what is wrong with it is the
+        // name rather than the file: a specifier that climbs out of the package
+        // is named by where that package happens to sit, so the same program
+        // would carry a different `; ModuleID` under every install (§A7).
+        const escaped: ResolvedModule = {
+          path: "",
+          name: "",
+          packageName: "",
+          error: `Module \`${specifier}\` climbs out of the standard library; a \`${STD_PREFIX}\` specifier names a module inside it, so no segment may be empty or begin with a \`.\``,
+        };
+        return escaped;
+      }
+      // Two strings, deliberately: the path says where the file is on *this*
+      // install and the name says where the module is in the package, and only
+      // the second one reaches the IR (§A7's third bullet).
       const std: ResolvedModule = {
         path: stdModulePath(this.opts.packageRoot, specifier),
+        name: stdModuleName(specifier),
         packageName: CLI,
         error: "",
       };
       return std;
     }
     if (specifier.startsWith("./") || specifier.startsWith("../")) {
-      const relative: ResolvedModule = { path: resolveModule(dir, specifier), packageName: "", error: "" };
+      const resolvedPath = resolveModule(dir, specifier);
+      const relative: ResolvedModule = {
+        path: resolvedPath,
+        name: resolvedPath,
+        packageName: "",
+        error: "",
+      };
       return relative;
     }
     return this.resolveBareSpecifier(dir, specifier);
@@ -414,7 +469,7 @@ export class Compilation {
    * which package the file is in.
    */
   resolveBareSpecifier(dir: string, specifier: string): ResolvedModule {
-    const failed: ResolvedModule = { path: "", packageName: "", error: "" };
+    const failed: ResolvedModule = { path: "", name: "", packageName: "", error: "" };
     const parsed = parseBareSpecifier(specifier);
     if (parsed === null) {
       // Pass 1 refuses a specifier that is neither relative nor a package name,
@@ -475,8 +530,17 @@ export class Compilation {
     // TODO(WP21 S3): close it on both sides, and decide that question rather
     // than implying it with a `realpath` here. `tests/link/package_symlink` is
     // the declared case and `docs/wp21-packages.md` §10d states it.
+    //
+    // The name is the path, unlike the standard library's: the walk that found
+    // this package started at the importing module's own name and never left
+    // the program being compiled, so the answer already says as much about the
+    // compiler's install as the importer's own name does, which is nothing
+    // (§A7's third bullet is about the compiler's package root, and this walk
+    // does not use it).
+    const resolvedPath = joinPath([packageDir, target]);
     const resolved: ResolvedModule = {
-      path: joinPath([packageDir, target]),
+      path: resolvedPath,
+      name: resolvedPath,
       packageName: parsed.name,
       error: "",
     };
@@ -650,7 +714,7 @@ export class Compilation {
         if (seen < 0) {
           owners.set(name, ownerPackages.length);
           ownerPackages.push(unit.packageName);
-          ownerPaths.push(unit.path);
+          ownerPaths.push(unit.name);
           continue;
         }
         // A template is one declaration in one module, so its module's path and
@@ -782,7 +846,7 @@ export class Compilation {
           unit.source,
           template.decl.children[0].start,
           template.decl.children[0].end,
-          `Generic function \`${template.sourceName}\` is also defined in ${ownerModules[at].path}; a function name must be unique across the program, and an instantiation is named after its template`
+          `Generic function \`${template.sourceName}\` is also defined in ${ownerModules[at].name}; a function name must be unique across the program, and an instantiation is named after its template`
         );
       }
       for (const sig of unit.checker.program.functions) {
@@ -800,9 +864,9 @@ export class Compilation {
         const previousModule = ownerModules[at];
         let message = "";
         if (previousSig === null) {
-          message = `Function \`main\` in ${unit.path} collides with the entry wrapper \`@main\` that ${previousModule.path} needs; rename it`;
+          message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`;
         } else {
-          message = clashMessage(sig, previousSig, previousModule.path, unit.packageName);
+          message = clashMessage(sig, previousSig, previousModule.name, unit.packageName);
         }
         // Reported, not thrown: every clash is listed.
         const at2 = nameNode(sig);
@@ -856,6 +920,17 @@ export class Compilation {
    * The file stem per module: its basename normally, and — when two modules
    * share one — its path relative to the entry's directory with the separators
    * turned into `_`, so `-o <dir>/` never overwrites a module.
+   *
+   * **The path, deliberately, and not the name.** A package module's name is
+   * package-relative now, so stemming from it would make `std/text.ts` answer
+   * `std_text` under every install instead of climbing out to wherever the
+   * compiler sits — which is the better answer and is *not* this change: the
+   * fallback drops every `.` and `..` segment before joining, on both sides,
+   * so it already collapses two modules onto one stem and silently writes one
+   * `.ll` for them (`tests/link/module_stem_clash`,
+   * `docs/wp19-stage0-retirement.md` §5a item 5). Moving what it reads and
+   * what it drops in one change would move two things at once over live
+   * output stems; the name is this change and the stem is that one.
    */
   outputStems(): string[] {
     const counts = new StringMap();

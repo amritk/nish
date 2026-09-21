@@ -950,7 +950,18 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has: json,
-  testing, text) `` (`reject_std_unknown_module`). Unlike a `nish:` builtin this is
+  testing, text) `` (`reject_std_unknown_module`), and one that would leave the
+  library — an empty segment, or a segment beginning with a `.` — is refused
+  rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
+  standard library; a `nish/` specifier names a module inside it, so no segment
+  may be empty or begin with a `.` `` (`reject_std_escaping_module`).
+  **The module is named by that specifier**, not by where the library is
+  installed: `nish/text` carries `std/text.ts` in its `; ModuleID`, its
+  `source_filename`, its `DIFile` and — with no `-o` — the path its `.ll` is
+  written to, whichever directory the compiler sits in and however the compiler
+  was invoked (`tests/link/std_bare_specifier`). Two installs of one compiler
+  therefore emit the same bytes for the same program, which is the reason the
+  specifier is refused when it could not be a name. Unlike a `nish:` builtin this is
   ordinary Nish source: it is compiled into the program that imports it and is
   subject to every rule in this document. What it costs is what you call —
   `speed` and `size` link with `--gc-sections`, and a module imported but never
@@ -3008,7 +3019,7 @@ messages are exact for the cases cited; other rows quote
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |
-| module errors | see [`export` and `import`](#export-and-import), [`main`](#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
+| module errors | see [`export` and `import`](#export-and-import), [`main`](#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_std_escaping_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
 | unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` | *(CLI only)* |
 
 ## Known inconsistencies

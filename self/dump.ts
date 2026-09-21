@@ -269,7 +269,7 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   // package has no name, so a single-package program's dump is the same text
   // it has always been.
   const pkg = program.packageName.length === 0 ? "" : ` [package ${program.packageName}]`;
-  out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}${pkg}`);
+  out.push(`module ${unit.name}${unit.isEntry ? " (entry)" : ""}${pkg}`);
   for (const imp of program.imports) {
     const struct = imp.struct;
     const constant = imp.constant;
