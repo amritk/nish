@@ -1,0 +1,3 @@
+Field `first` of class `Pair` is i32 but its initializer is string
+Field `a` of class `Trio` is i32 but its initializer is string
+2 errors
