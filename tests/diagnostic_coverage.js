@@ -8,7 +8,7 @@
  *   node tests/diagnostic_coverage.js --report           every uncovered code, named
  *   node tests/diagnostic_coverage.js --update           rewrite the `.err` pins
  *   node tests/diagnostic_coverage.js --require-coverage every code provoked or explained
- *   node tests/diagnostic_coverage.js --strict-refusals  the two lists must match exactly
+ *   node tests/diagnostic_coverage.js --strict-refusals  the registers must describe this compiler exactly
  *
  * **What this answers.** `src/codes.ts` / `self/codes.ts` is the registry of
  * stable diagnostic codes, and a code is a promise about a rule. The prose
@@ -29,12 +29,16 @@
  *      fails twice over: the `.err` no longer matches, and the generator gives
  *      the new words a new number, so the code no longer matches either.
  *   2. Under `--require-coverage`, every registry code is either provoked by
- *      the corpus or listed in `tests/wordings/unreachable.txt` with a reason.
- *      A new diagnostic therefore arrives with a case or with a sentence
- *      saying why it cannot have one — which is the property the gate wants,
- *      and the one that quietly stops holding otherwise.
+ *      the corpus, listed in `tests/wordings/unreachable.txt` with a reason, or
+ *      listed in `tests/wordings/stage0_only.txt` with the programs that
+ *      provoke it under stage0. A new diagnostic therefore arrives with a case
+ *      or with a sentence saying why it cannot have one — which is the property
+ *      the gate wants, and the one that quietly stops holding otherwise.
  *   3. A code listed as unreachable that turns out to be reachable fails, so
- *      the list can shrink but not rot.
+ *      the list can shrink but not rot. The same holds of `stage0_only.txt`
+ *      under `--strict-refusals`, and running the tool against a compiler that
+ *      *does* provoke those codes checks the other direction: the programs a
+ *      line names must be exactly the ones the run found.
  *
  * **The corpus.** The `reject_*` cases and the `tests/link/` negatives, which
  * `tests/self/reject_oracle.js` owns and which survive stage0; the `perf_*`
@@ -53,6 +57,22 @@
  * do not survive R6**, because after it nothing prints them; the summary
  * counts them apart for exactly that reason.
  *
+ * **The criterion, asked of the compiler that survives.** G2 reads "every
+ * registry code provoked by something that outlives stage0, or unreachable with
+ * a reason", and until `stage0_only.txt` existed the only compiler this tool
+ * could ask it of was stage0 — which does not outlive stage0. Asked of stage1,
+ * `--require-coverage` answered with 80 findings telling the reader to write a
+ * reason that was already written: every program provoking those 80 codes was
+ * recorded, with the sentence stage1 answers instead, in
+ * `tests/self/parser_refusals.txt`, `parser_refusals.txt` or
+ * `stage1_divergence.txt`. Those registers are per *case* and the criterion is
+ * per *code*, and nothing joined the two. `stage0_only.txt` is that join and
+ * nothing else — it names programs rather than repeating sentences, so it
+ * cannot drift from the registers without failing — and it is why `npm test`
+ * can now pass `--require-coverage` on the stage1 run as well as the stage0
+ * one. It empties into `unreachable.txt` at R6, when nothing prints those
+ * wordings any more.
+ *
  * `tests/wordings/stage1_divergence.txt` is the other list, and it is not a
  * declaration of anything: it names the programs the two compilers answer
  * differently — some of which stage1 *compiles* — found by writing this corpus
@@ -60,9 +80,9 @@
  * and rewording one retires the code. The summary line counts both lists; the
  * counts move, so read them there rather than here.
  *
- * `npm test` runs this tool over stage1 with `--strict-refusals`, so both
- * lists have to match what stage1 does exactly: they can shrink, and they
- * cannot grow by accident.
+ * `npm test` runs this tool over stage1 with `--strict-refusals` and
+ * `--require-coverage`, so all three registers have to match what stage1 does
+ * exactly: they can shrink, and they cannot grow by accident.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -77,6 +97,9 @@ const REGISTRY = path.join(root, "self", "codes.ts");
 const UNREACHABLE = path.join(WORDINGS, "unreachable.txt");
 const REFUSALS = path.join(WORDINGS, "parser_refusals.txt");
 const DIVERGENCE = path.join(WORDINGS, "stage1_divergence.txt");
+const STAGE0_ONLY = path.join(WORDINGS, "stage0_only.txt");
+/** The reject corpus's register, `tests/self/reject_oracle.js`'s, read here only to join against. */
+const SELF_REFUSALS = path.join(root, "tests", "self", "parser_refusals.txt");
 const BUILD = path.join(root, "build", "test", "wordings");
 
 /** `.js` / `.mjs` / `.cjs` is a Node entry point; anything else a native binary. */
@@ -291,14 +314,19 @@ const main = async (argv) => {
   const caseRuns = await pool(cases, jobs, (c) => compile(compiler, c));
   const otherRuns = await pool(others, jobs, (p) => compile(compiler, p));
 
-  // Which codes the whole corpus reached, and where. The first program to
-  // reach a code is the one the report names, and corpus order is stable, so
-  // two runs of this tool name the same file.
+  // Which codes the whole corpus reached, and where. Every program that reaches
+  // a code is recorded rather than the first alone, because `stage0_only.txt`
+  // is checked against the whole set: a line there names the programs that
+  // provoke its code, and "the first one in corpus order" would let a second
+  // program arrive without the line noticing. The report still names the first,
+  // and corpus order is stable, so two runs of this tool name the same file.
   const reached = new Map();
   const uncoded = new Map();
   const note = (stem, objects) => {
     for (const object of objects) {
-      if (!reached.has(object.code)) reached.set(object.code, stem);
+      const where = reached.get(object.code);
+      if (where === undefined) reached.set(object.code, [stem]);
+      else if (!where.includes(stem)) where.push(stem);
       if (object.code === "NL0000" && !uncoded.has(object.message)) uncoded.set(object.message, stem);
     }
   };
@@ -370,39 +398,123 @@ const main = async (argv) => {
   });
 
   // Coverage. A code is covered when some program in the corpus provoked it,
-  // and explained when `unreachable.txt` says why it cannot be.
+  // explained when `unreachable.txt` says why no program can, and explained the
+  // other way when `stage0_only.txt` names the programs that do provoke it and
+  // the compiler under test answers them in its parser instead.
   const covered = [...codes.keys()].filter((code) => reached.has(code));
-  // The coverage gate asks a question about the *corpus* — does some program
-  // provoke every rule? — so it is asked of the compiler that states the rules,
-  // which is stage0 today and the seed after R6. It is not asked of stage1:
-  // stage1's parser refuses a tranche of these programs before the phase that
-  // owns the rule can word it — the count is the one the summary line below
-  // prints — so its coverage is lower by construction and gating on it would be
-  // gating on §A3's declared class. `--require-coverage` is therefore
-  // opt-in, and `tests/run.js` passes it on exactly one of its two runs.
-  // A filtered run never gates either: with a handful of programs compiled,
+  const stage0Only = readList(STAGE0_ONLY);
+  const declaredBy = new Map();
+  for (const [file, label] of [
+    [SELF_REFUSALS, "tests/self/parser_refusals.txt"],
+    [REFUSALS, path.relative(root, REFUSALS)],
+    [DIVERGENCE, path.relative(root, DIVERGENCE)],
+  ]) {
+    for (const stem of readList(file).keys()) if (!declaredBy.has(stem)) declaredBy.set(stem, label);
+  }
+  const compiled = new Set([...cases, ...others].map((p) => p.stem));
+
+  // The criterion WP19 G2 states is "every registry code provoked by something
+  // that outlives stage0, or unreachable with a reason", and until this block
+  // existed it could only be asked of stage0 — which does not outlive stage0.
+  // Asked of stage1 it answered with 80 findings, every one of which had a
+  // reason on file in a register this tool did not read: the registers are per
+  // *case* and the criterion is per *code*, and nothing joined them.
+  // `stage0_only.txt` is that join, and these are the checks that keep it one.
+  //
+  // The two directions are not the same check and neither replaces the other.
+  // Run against a compiler that provokes the code — stage0 today — the named
+  // set must be exactly the set the run found, so the line cannot go stale as
+  // the corpus grows a case. Run against stage1, the code must not be provoked
+  // at all, and `--strict-refusals` is what says so: it is the flag that means
+  // "the registers describe this compiler exactly", which is what it already
+  // enforces for the other two. A line that stops being true fails until it is
+  // deleted, which is the rule every register in this directory follows.
+  //
+  // A filtered run gates nothing: with a handful of programs compiled,
   // "nothing provokes this code" would be a fact about the filter.
+  if ((options.coverage || options.strict) && options.names.length === 0) {
+    for (const [code, named] of stage0Only) {
+      const stems = named
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const where = reached.get(code);
+      if (stems.length === 0) {
+        failed.push(`${code} names no program in ${path.relative(root, STAGE0_ONLY)}`);
+        continue;
+      }
+      if (!codes.has(code)) {
+        failed.push(
+          `${code} is not in the registry any more — remove it from ${path.relative(root, STAGE0_ONLY)}`
+        );
+        continue;
+      }
+      if (unreachable.has(code)) {
+        failed.push(
+          `${code} is in ${path.relative(root, STAGE0_ONLY)} and ${path.relative(root, UNREACHABLE)} at once — a code a program provokes is not unreachable`
+        );
+      }
+      for (const stem of stems) {
+        if (!compiled.has(stem)) {
+          failed.push(
+            `${code}: ${path.relative(root, STAGE0_ONLY)} names ${stem}, which is not a program this corpus has`
+          );
+        } else if (!declaredBy.has(stem)) {
+          failed.push(
+            `${code}: nothing records what this compiler answers ${stem} with — declare it in tests/self/parser_refusals.txt, ${path.relative(root, REFUSALS)} or ${path.relative(root, DIVERGENCE)}`
+          );
+        }
+      }
+      if (where === undefined) continue;
+      if (options.strict) {
+        failed.push(
+          `${code} is provoked after all (${where.join(", ")}) — remove it from ${path.relative(root, STAGE0_ONLY)}`
+        );
+        continue;
+      }
+      const missing = where.filter((stem) => !stems.includes(stem));
+      const extra = stems.filter((stem) => !where.includes(stem));
+      if (missing.length > 0 || extra.length > 0) {
+        failed.push(
+          `${code}: ${path.relative(root, STAGE0_ONLY)} names ${stems.join(",")}, this run found ${where.join(",")}` +
+            `${missing.length > 0 ? ` (add ${missing.join(",")})` : ""}${extra.length > 0 ? ` (drop ${extra.join(",")})` : ""}`
+        );
+      }
+    }
+  }
+
   if (options.coverage && options.names.length === 0) {
     for (const code of codes.keys()) {
-      if (reached.has(code) || unreachable.has(code)) continue;
+      if (reached.has(code) || unreachable.has(code) || stage0Only.has(code)) continue;
       failed.push(
-        `${code} is provoked by nothing: add a case to tests/wordings/, or a reason to ${path.relative(root, UNREACHABLE)}`
+        `${code} is provoked by nothing: add a case to tests/wordings/, a reason to ${path.relative(root, UNREACHABLE)}, ` +
+          `or — if a program provokes it and this compiler answers that program in its parser — a line to ${path.relative(root, STAGE0_ONLY)}`
       );
     }
     for (const code of unreachable.keys()) {
       if (!reached.has(code)) continue;
       failed.push(
-        `${code} is reachable after all (${reached.get(code)}) — remove it from ${path.relative(root, UNREACHABLE)}`
+        `${code} is reachable after all (${reached.get(code).join(", ")}) — remove it from ${path.relative(root, UNREACHABLE)}`
       );
     }
   }
 
+  // Three states, and the third is the one this report used to call the second.
+  // A code no program provokes is `unreachable`; a code some program provokes
+  // that this compiler answers in its parser is `stage0 only`, and naming those
+  // "(no reason on file)" was what made 80 codes look like a gap in the corpus
+  // rather than the declared parity class they are.
   if (options.report) {
     for (const code of [...codes.keys()].sort()) {
       const where = reached.get(code);
       const why = unreachable.get(code);
+      const named = stage0Only.get(code);
       const state =
-        where !== undefined ? `covered by ${where}` : `unreachable: ${why ?? "(no reason on file)"}`;
+        where !== undefined
+          ? `covered by ${where[0]}`
+          : named !== undefined
+            ? `stage0 only: ${named} (${declaredBy.get(named.split(",")[0].trim()) ?? "no register"})`
+            : `unreachable: ${why ?? "(no reason on file)"}`;
       process.stdout.write(`  ${code} ${state}\n`);
     }
   }
@@ -417,10 +529,14 @@ const main = async (argv) => {
     refused.length + diverged.length > 0
       ? ` (${refused.length} refused by the parser, ${diverged.length} answered differently)`
       : "";
+  // `stage0 only` is counted apart from `unreachable` for the reason §2B gives
+  // about the 41: those wordings do not survive R6, and a count that folded
+  // them in would say the registry was better covered than it will be.
+  const stage0OnlyUnreached = [...stage0Only.keys()].filter((code) => !reached.has(code)).length;
   process.stdout.write(
     `wordings: ${pinned}/${cases.length} cases pin their code${aside}, ` +
       `coverage ${covered.length}/${codes.size} codes, ${unreachable.size} unreachable, ` +
-      `uncoded=${uncoded.size} (compiler ${compiler.label})\n`
+      `${stage0OnlyUnreached} stage0-only, uncoded=${uncoded.size} (compiler ${compiler.label})\n`
   );
   return failed.length === 0 ? 0 : 1;
 };

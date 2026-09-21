@@ -146,8 +146,10 @@ PR adding a construct is not finished without all of them:
 7. A case that *reaches* each new wording, not only a code for it.
    `tests/diagnostic_coverage.js` compiles the negatives, the `perf_*`
    positives and `tests/wordings/`, reads the code out of every `--json`
-   object, and requires each registry code to be provoked or named in
-   `tests/wordings/unreachable.txt` with a reason; `npm test` runs it. After
+   object, and requires each registry code to be provoked, named in
+   `tests/wordings/unreachable.txt` with a reason, or named in
+   `tests/wordings/stage0_only.txt` with the programs that provoke it under the
+   compiler that states the rule; `npm test` runs it over both compilers. After
    R6 a wording no case reaches is proved by nothing at all, since the
    comparison with stage0 is what proves it today
    (`docs/wp19-stage0-retirement.md` §2B).
@@ -403,25 +405,30 @@ gap was measured, 176 of the registry's 351 codes were reached by nothing that
 outlives stage0 (WP19 §2B, "The wording gap"). The registry grows, so the
 number to trust is the one the tool prints, not one written down here.
 `tests/diagnostic_coverage.js` runs it, and requires every registry code to be
-**either provoked by a program or named in `tests/wordings/unreachable.txt`
-with a reason**, so a new diagnostic arrives with a case or with a sentence
-saying why it cannot have one.
+**provoked by a program, named in `tests/wordings/unreachable.txt` with a
+reason, or named in `tests/wordings/stage0_only.txt` with the programs that
+provoke it**, so a new diagnostic arrives with a case, with a sentence saying
+why it cannot have one, or with the programs the surviving compiler answers in
+its parser instead.
 
 ```bash
 node tests/diagnostic_coverage.js                       # the default compiler
-node tests/diagnostic_coverage.js --compiler build/nish --strict-refusals
+node tests/diagnostic_coverage.js --compiler build/nish --strict-refusals --require-coverage
 node tests/diagnostic_coverage.js --report              # every code, covered or not
 node tests/diagnostic_coverage.js --update              # rewrite the .err pins
 ```
 
-Two lists sit beside the corpus and both shrink rather than grow:
+Three lists sit beside the corpus and all three shrink rather than grow:
 `parser_refusals.txt` names the cases whose wording is stage0's because
 stage1's parser refuses the syntax first (§A3's declared class, and those
-wordings do not survive R6), and `stage1_divergence.txt` names the ones where
-the two compilers do not agree at all. Take the counts from the summary line
-the tool prints rather than from here — they move, and they have. `npm test`
-runs the tool over both compilers, the second with `--strict-refusals`, so a
-case that starts agreeing fails until its line is deleted.
+wordings do not survive R6), `stage1_divergence.txt` names the ones where
+the two compilers do not agree at all, and `stage0_only.txt` carries those two
+per-case registers across to the per-code question the coverage gate asks —
+without it the gate can only be asked of stage0, which is not a compiler that
+outlives stage0 (WP19 §2B). Take the counts from the summary line the tool
+prints rather than from here — they move, and they have. `npm test` runs the
+tool over both compilers, the second with `--strict-refusals`, so a case that
+starts agreeing fails until its line is deleted.
 
 ## Example case
 
