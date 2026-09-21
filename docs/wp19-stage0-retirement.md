@@ -572,15 +572,23 @@ like it has no consequences and it has three.
 - **Two different modules can now carry one `; ModuleID`.** A program importing
   both `./std/text` and `nish/text`, compiled with a relative entry, names both
   `std/text.ts`; before, the `nish/` one was told apart by its absolute path.
-  Under `-o <dir>/` both files are still written, because `outputStems`
-  disambiguates on the absolute path rather than on the name — but under `-g` a
-  debugger sees one `DIFile` for two files, `clashMessage` would name both
-  modules identically in a symbol-clash diagnostic, and with **no** `-o` at all
-  the name *is* the output path, so the second module's IR overwrites the
-  first's. stage1 collides on the name in every one of those cases, and in one
-  more: it keys its output stems on the name, so it writes *one* file where
-  stage0 writes two. That last one is stage1's own defect, older than this
-  change and unmeasured by anything, and it is not fixed here.
+  Under `-o <dir>/` both files are **not** still written, and the draft of this
+  bullet that said they were is corrected here (measured 2026-09-21).
+  `outputStems` disambiguates *from* the absolute path rather than from the
+  name, which is not the same as being disambiguated *by* it: it drops every
+  `.` and `..` segment of the entry-relative path before joining, so a module
+  above the entry's directory collapses onto one below it with the same tail
+  and stage0 writes one `.ll` for the two. Under `-g` a debugger sees one
+  `DIFile` for two files, `clashMessage` would name both modules identically in
+  a symbol-clash diagnostic, and with **no** `-o` at all the name *is* the
+  output path, so the second module's IR overwrites the first's. The sentence
+  that used to close this bullet — that stage1 keys its output stems on the
+  name and therefore writes *one* file where stage0 writes two — was wrong in
+  both of its halves: a stage1 module's name *is* its identity, so stage1
+  cannot hold two modules under one name at all, and under a relative entry the
+  direction is the other one, stage0 writing one file where stage1 writes two.
+  [§5a](#5a-what-r6-is-waiting-on) item 5 has the invocations, the
+  measurements and what is actually broken.
 - **stage1 is still sensitive to how the *compiler* was invoked.** stage0's
   answer no longer depends on anything outside the package; stage1's
   `packageRoot()` is `<dirname(argv[0])>/..`, so `./build/nish` answers
@@ -1828,22 +1836,167 @@ None of these needs anybody's permission. They need somebody's afternoon.
    workaround for a defect any more, and both were kept rather than quietly
    removed because a fix landing is not the same thing as every install on a
    user's disk carrying it.
-5. **stage1 writing one file where stage0 writes two**, when two modules share
-   a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
-   change that found it. **Still unmeasured on 2026-09-20, and an attempt is
-   recorded here so the next one starts further along.** The *adjacent* shape
-   agrees: two modules with the same basename in different directories
-   (`a/util.ts` and `b/util.ts`) make both compilers write `a_util.ll` and
-   `b_util.ll`, because `outputStems` disambiguates on the path relative to the
-   entry on both sides. What §A7 describes is narrower — two modules that are
-   *different files* carrying *one* `; ModuleID`, which needs `nish/<module>`
-   and a relative import to normalise to the same name. Every construction
-   tried collapsed instead into a single module, because a package root of `.`
-   means the working directory *is* the package, so `./std/text` and
-   `nish/text` resolve to one file rather than two. Not reproduced is not the
-   same as not there, and this stays open: what it needs is the invocation that
-   makes the two names collide while the files differ, and that is the piece
-   nobody has written down.
+5. **`outputStems` dropping a module under `-o <dir>/`** — filed as *stage1
+   writing one file where stage0 writes two*, when two modules share a
+   `; ModuleID` (§A7), and renamed here because that is not what it is.
+   **Measured 2026-09-21, and the row was wrong in both of its halves. The
+   mechanism it names cannot happen. The outcome it names does happen, on an
+   ordinary invocation — and so does the opposite outcome, and the commonest
+   case is both compilers doing it together. So what was filed as stage1's own
+   defect is a shared one, and what it costs a user is a build that fails on a
+   symbol their program defines exactly once.**
+
+   **Why the mechanism cannot happen, which is the part worth keeping.** A
+   stage1 module's name *is* the path string it was opened at:
+   `ModuleUnit.path` in `self/compilation.ts` is declared as "the resolved
+   path, which is the module's identity and the name in its IR header", and
+   `Compilation.byPath` is keyed on that same string, so the second arrival of
+   a name returns early out of `load`. Two modules therefore never share a
+   name in stage1 — a duplicate name is a duplicate *identity*, deduplicated
+   at load rather than mis-written at emit — and `outputStems` cannot be
+   handed one twice under any invocation. The premise is stage0's: it keeps
+   the two apart in two fields, `path` (absolute, the identity) and
+   `fileName` (the name), so only stage0 can hold two modules that are
+   different files under one `; ModuleID`. That is also what every earlier
+   construction ran into. The "collapsed into a single module" of the previous
+   attempt was not the construction failing, it was this property — and it was
+   written down one file away the whole time, in `resolvePath`'s comment in
+   `self/paths.ts`: stage1 "keys module identity on the normalised path as
+   written".
+
+   **What is actually broken: the disambiguation is lossy, and on both
+   sides.** `outputStems` tells two modules of one basename apart by the
+   module's path relative to the entry's directory with the separators turned
+   into `_`, and both copies drop every `.` and `..` segment before joining.
+   A module *above* the entry's directory therefore collapses onto a module
+   with the same tail below it. The shortest reproduction needs no standard
+   library, no install, no `nish/` specifier and no absolute path — two
+   relative imports:
+
+   ```
+   $ cat src/main.ts
+   import { inner } from "./lib/util";     // src/lib/util.ts
+   import { outer } from "../lib/util";    // lib/util.ts
+   export const main = (): number => inner() + outer();
+
+   $ cd src && nish main.ts -o out/
+   wrote out/main.ll
+   wrote out/lib_util.ll
+   wrote out/lib_util.ll
+   ```
+
+   Two files in, one file out. `src/lib/util.ts` relativises to `lib/util.ts`
+   and `lib/util.ts` to `../lib/util.ts`; the `..` is filtered; both answer
+   `lib_util`. The survivor is whichever was emitted last, so `out/main.ll`
+   calls an `@inner` that no `.ll` in the directory defines. The two modules
+   carry *distinct* `; ModuleID`s throughout — `lib/util.ts` and
+   `../lib/util.ts` — which is why §A7 went looking for a shared name and did
+   not need one.
+
+   **The shape §A7 described does it too, and puts the shared name on top.** A
+   program inside the compiler's own package — a checkout, or a release
+   tarball with the program unpacked beside it — importing both `nish/text`
+   and its own `./std/text`. `nish/text` is `<install>/std/text.ts`, one
+   directory above the entry, so its entry-relative path is `../std/text.ts`
+   and its stem is `std_text`; the local `./std/text` is `std/text.ts` and its
+   stem is `std_text` as well. Compiled by absolute entry, **both compilers
+   drop a module, and they drop the same one**:
+
+   ```
+   $ nish <install>/prog/main.ts -o out/          # stage0 and stage1 alike
+   wrote out/main.ll
+   wrote out/std_text.ll
+   wrote out/std_text.ll
+   ```
+
+   The survivor is the local module, so the `@nish.trim` that `main.ll`
+   declares and calls is the one that went. `--link` is where a user meets it,
+   because the module list handed to `scripts/build.sh` names `std_text.ll`
+   twice — exit 3 on both compilers, on a symbol the program defines once:
+
+   ```
+   ld.lld: error: duplicate symbol: localTag
+   ```
+
+   **Both directions are reachable, which is the finding that replaces the
+   row.** Four invocations, one program each, `-o <dir>/` throughout, stage0
+   and stage1 from one staged install so that `nish/<name>` is the same file
+   for both:
+
+   | invocation | stage0 | stage1 |
+   | --- | --- | --- |
+   | `nish/text` + `./std/text`, **absolute** entry | 2 files, one module dropped | 2 files, one module dropped — byte for byte the same, header included |
+   | the same program, **relative** entry | 2 files, one module dropped | **3 files, nothing dropped** |
+   | an absolute root and a relative root spelling the same segments | 3 files | **2 files, one module dropped** |
+   | roots `std/text.ts` and `../std/text.ts` | 2 files, one dropped | 2 files, one dropped |
+
+   Row 2 is §A7's claim with the compilers the other way round: under a
+   relative entry stage0 names the `nish/` module package-relatively and stems
+   it from an absolute path that climbs, while stage1's is absolute in both
+   roles and keeps its own stem. Row 3 is §A7's claim as stated, reached by a
+   different mechanism — stage1's `outputStems` calls `relativePath` outside
+   its documented contract, "two paths rooted at the same base: both relative,
+   or both absolute, and neither climbing above that base", and
+   `pathSegments` drops the leading empty segment of an absolute path, so an
+   absolute module path is relativised as though it had been spelled without
+   its root. Rows 1 and 4 are the ordinary case and are symmetric, which is
+   exactly why no parity gate has ever seen any of this: G1 compares the two
+   compilers, and on the shape a user is likeliest to write they agree about
+   dropping a module.
+
+   **One more, found on the way and stage1's alone.** Two *spellings* of one
+   file as two roots — `nish main.ts std/text.ts ./std/text.ts` — are one
+   module to stage0, which canonicalises with `path.resolve`, and two modules
+   to stage1, which keys identity on the path as written. stage1 then refuses
+   the program stage0 compiles: ``error: Exported function `innerTag` is also
+   defined in std/text.ts; exported names must be unique across the program``.
+   It is the same property as the one above, running the other way: identity
+   as written can never merge two files into one name, and can split one file
+   into two.
+
+   **What a fix is, and why it is not this change.** The disambiguation has to
+   keep the climb instead of filtering it, because a `..` segment carries the
+   only information that tells the two modules apart. Three things make that
+   somebody's afternoon rather than a line. The two `outputStems` are one
+   lowering in two files (`src/compilation.ts`, `self/compilation.ts`), so it
+   is a two-sided change or it is a new parity difference where there is a
+   shared bug today. It moves a stem that is live: every corpus program that
+   reaches the standard library by `nish/<x>` reaches it through a climb, so
+   `std_text` is itself a product of the filter. And it lands on top of
+   whatever is decided about how a package module is *named*, because the
+   `nish/` side's stem is derived from that name — rows 2 and 3 move with that
+   decision, though the defect itself does not: the two-relative-imports
+   reproduction above reaches no package at all, and both compilers collapse
+   it into the same byte-identical `lib_util.ll`. `tests/run.js` already has
+   both halves of the check a fix wants: `llFilesIn` for the set of files
+   written, and `package_above`'s pattern for driving a compiler from a chosen
+   working directory with a relative entry — which is what rows 2 and 3 need
+   and what no `tests/link/` fixture can express, since the harness compiles
+   every such program by absolute path from the repository root.
+
+   **The branch had no coverage at all, which is the other half of why this
+   survived.** No `tests/link/` program has two modules of one basename — the
+   `nish/` cases reach `testing.ts` and `text.ts`, already unique, so
+   `outputStems` answers them from the basename and never takes the fallback.
+   `tests/link/module_stem_clash` takes it: two `text.ts` in one program,
+   answering `a_text` and `b_text`, with a line of `expected.ir` from each
+   module, so a regression that collided them drops one from the emitted set
+   rather than merely misnaming it.
+
+   **It reaches no package, and that is a constraint rather than a taste.** A
+   package module's stem is reached by climbing out to wherever the compiler is
+   installed, so a program that put one into this branch writes a different
+   file name under every install — measured, the same program answers
+   `std_text.ll` from a checkout and `<unpack path>_std_text.ll` from a staged
+   install. `tests/nish-cmp.js` pairs the two compilers' outputs **by file
+   name**, and the G2 gate it drives compares a *released* compiler with HEAD,
+   which are in different directories by construction; such a program would
+   therefore be two undeclared differences on every run of it — "the reference
+   wrote it and the candidate did not", and its mirror. `withoutOwnRoot`
+   cannot help, because it normalises what is *inside* a file and this is the
+   file's name. So the shape §A7 described is not merely undetected by the
+   gates: it cannot be put in front of them at all until the stem stops
+   depending on the climb, which is one more reason the fix is worth making.
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
    one, so a later field is reported as unknown when it is not. **Reproduced
    again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``
