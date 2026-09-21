@@ -448,7 +448,46 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   ctx.program.functions.push(sig);
 };
 
-/** The fields, layout, methods and constructor of a declared struct. */
+/**
+ * The fields, layout, methods and constructor of a declared struct.
+ *
+ * **One diagnostic per declaration, however many members are wrong**, and that
+ * is a decision rather than an oversight. The member loops below do not clear
+ * `errored`, so the first member to be refused silences the ones after it:
+ * `class Pair { first: i32 = "one"; second: i32 = "two"; }` names `first` and
+ * says nothing about `second` (#94, `tests/cases/reject_cls_field_init_type_twice`).
+ *
+ * Clearing it per member is two lines and would report both, which is the
+ * output a reader of the second field would rather have. It is not taken, for
+ * three reasons that are worth having written down where somebody would go
+ * looking for the missing sentence:
+ *
+ *   - `errored` is not a general cascade guard. It is stage0's `throw` in a
+ *     language that has none (`context.ts`), and it is cleared *exactly* where
+ *     stage0's `catch` is — per declaration in `checker.ts`, per statement in
+ *     `statements.ts` — and deliberately restored at the one site where stage0
+ *     reports and carries on rather than throwing (`instantiateStruct` in
+ *     `generics.ts`, which is why `reject_generic_expanding_field_twice` gets
+ *     two diagnostics out of one class body). stage0 refuses a field's
+ *     initializer with a `throw` (`collectField` in `src/checker/classes.ts`),
+ *     so the silence here is that throw and clearing the flag would be the
+ *     first place this compiler chose a granularity of its own.
+ *   - `docs/LANGUAGE.md` states the granularity normatively — pass 1 recovers
+ *     per declaration — so reporting the second member is a change to a
+ *     language rule, not a bug fix, and it is not one the self-hosted half
+ *     makes on its own while stage0 is still the oracle.
+ *   - measured on 2026-09-21, the reset changes the output of **none** of the
+ *     926 programs of the corpus: no program anybody has written here poses
+ *     the question, so every gate this repository owns would be blind to the
+ *     change. What it costs is one more true sentence about a program that is
+ *     refused either way, which makes this a completeness question about
+ *     diagnostics rather than a soundness one
+ *     (`docs/wp19-stage0-retirement.md` §5a, item 6).
+ *
+ * The reason has an expiry. At R6 stage0 goes, and with it the compiler whose
+ * `throw` this flag is imitating; the granularity becomes this compiler's own
+ * choice, and the case above is what will fail when somebody makes it.
+ */
 export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {
     return;
