@@ -3,8 +3,10 @@
 # test: typecheck + the full golden/native test suite on Linux with LLVM 18
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size table
 #       in the job summary, and the IR cookbook staleness check. The matrix is
-#       written for macOS too and that row is commented out; the comment
-#       beside it names the checks that fail there, and which are left.
+#       written for macOS too and that row is commented out; the comment beside
+#       it names the six checks that still fail there, with the run that
+#       measured them. It is the one macOS gap in this file -- `bootstrap` and
+#       `nish-cmp` below have had darwin rows since the 0.4.0 seeds.
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -86,50 +88,80 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest stays out of THIS job, and the reason is no longer a
-        # guess. The row was run for the first time on 2026-09-13 (WP19 R2) and
-        # `npm test` failed there with **five** failures in four families, none
-        # of which is a compiler bug and all of which are checks that encode an
-        # ELF/Linux assumption. Three of the five are untouched; 4,5 below are
-        # narrowed rather than fixed, and they were the pair that reached past
-        # this job:
+        # macos-latest stays out of THIS job, and what keeps it out is a list
+        # of named checks with a date on it rather than a guess or a cost. The
+        # row was run for the first time on 2026-09-13 (WP19 R2) and `npm test`
+        # failed there with five failures in four families; it was re-run on
+        # 2026-09-21 with the row in the matrix and reported
+        # `2125 passed, 6 failed, 4 skipped` -- run 606, job
+        # https://github.com/amritk/nish/actions/runs/35652075129. Not one of
+        # the nine failures across those two runs is a compiler bug. Every one
+        # is a check that read an ELF fact out of a *linked binary* instead of
+        # the property it exists for, which is why they are listed by cause:
+        # the cause is the shape of mistake a new check can still make.
         #
-        #   1,2. `llvm-dwarfdump` of the linked binary reports an empty
-        #        `.debug_line`. On Mach-O `clang -g` leaves DWARF in the .o
-        #        files and the executable carries only a debug map; `dsymutil`
-        #        is what produces a line table. Two checks read the executable.
-        #   3.   "--threads IR refuses to link against a runtime built without
-        #        -DNISH_THREADS" links fine and exits 0. ELF refuses a TLS
-        #        symbol against a non-TLS definition; ld64 does not. The safety
-        #        net build.sh's header describes does not exist on macOS --
-        #        which is a finding about the platform, not about the check.
-        #   4,5. `stage3 == stage2` as files failed at *identical size*
-        #        (597,048 bytes both). The IR equalities all pass, so the
-        #        compiler is deterministic and the linker is not -- but WHICH
-        #        bytes ld64 varies has not been measured. NARROWED, not fixed:
-        #        the comparison is scripts/verify-binaries.sh now, which on
-        #        Darwin asserts the size, strips what it can, and fails
-        #        anything left over as *unattributed* with the next step in the
-        #        message. That is better than the raw byte comparison and it is
-        #        not a pass: a darwin binary is as likely as not to trip it,
-        #        which is why seed-targets.json holds the darwin pair back.
+        # PORTED, and measured green on a mac in that run:
         #
-        # Restoring the row therefore means porting the remaining three checks
-        # in two families, on hardware that has to be iterated against, and
-        # that is a package of its own rather than a line in this matrix. So
-        # NOTHING in this file runs on macOS until a release attaches a darwin
-        # seed: the `bootstrap` job below has one row per seed the last release
-        # attaches, and v0.2.0 attaches x86_64-linux alone.
+        #   * `llvm-dwarfdump --debug-line` of the linked binary reported an
+        #     empty table. On Mach-O `clang -g` leaves the DWARF in the object
+        #     files and the executable keeps only a debug map naming them; the
+        #     Darwin driver runs `dsymutil` at the end of a compile-and-link to
+        #     turn that map into a `.dSYM` bundle, which is where the table is.
+        #     `lineTableOf` in tests/run.js answers with the file the platform
+        #     used and the two `-g` checks assert the same sentence about it on
+        #     both: it names dbg_main.ts and it has at least one row.
+        #   * "--threads IR refuses to link against a runtime built without
+        #     -DNISH_THREADS". ELF refuses a TLS reference to a non-TLS
+        #     definition; ld64 links it and clang exits 0. What the check can
+        #     hold both platforms to is not the link error but that the
+        #     mismatch is never quietly a working-looking program: on Darwin
+        #     `_nish_arena` resolves to a plain `(__DATA,__common)` symbol and
+        #     the binary segfaults on its first allocation, where the matched
+        #     build of the same inputs prints `alloc_smoke delta = 16`. The
+        #     check names which mechanism caught it.
         #
-        # The install half is already written and was exercised by that run:
-        # the two "Install LLVM 18 + lld" steps below are guarded by
-        # `runner.os`, so restoring the row is this line plus the three
-        # remaining fixes.
+        # STILL RED, six checks in three causes, and none of them is this line:
+        #
+        #   1. `runtime objects: a --threads module refuses to link against the
+        #      default runtime` -- the same ld64 finding as the ported one
+        #      above, in the gate on the prebuilt object cache. It wants the
+        #      same treatment and is a check somebody else owns this wave.
+        #   2. `the self-hosted compiler: -g reaches the compiler and the
+        #      linked program carries DWARF` -- the same Mach-O debug map, read
+        #      through `.debug_info` rather than `.debug_line`. It wants
+        #      `lineTableOf`.
+        #   3,4,5. `stage3 == stage2` in tests/self/bootstrap.js, and both
+        #      `runtime objects: linking <case> ... gives the bytes the sources
+        #      do` checks. All three compare two links of one input made to two
+        #      *different output paths*, and LC_UUID is what ld64 varies with
+        #      the path -- measured on both darwin rows,
+        #      docs/wp10-ci.md#what-ld64-varies-measured. That is why each
+        #      fails at identical size. scripts/bootstrap.sh already links its
+        #      comparable stages at one path; these three do not.
+        #   6. `verify-binaries: NISH_UNAME_S says on stderr that it overrode
+        #      the platform` -- a check that drives the script's Darwin branch
+        #      from Linux and reads the sentence saying so. On a mac there is
+        #      no override to report, so the check is about the simulation
+        #      rather than about the platform.
+        #
+        # WHAT IS NOT WAITING ON THIS LINE, because this comment claimed the
+        # opposite until 2026-09-21: macOS is not absent from the file. The
+        # `bootstrap` and `nish-cmp` jobs below take their rows from the seed
+        # assets of the last release, `attachedSince` for the darwin pair is
+        # 0.4.0, and v0.4.0 and v0.5.0 both carry them -- so `bootstrap
+        # (aarch64-darwin)` and `bootstrap (x86_64-darwin)` have been running,
+        # and passing, since 0.4.0. They are the reason the LC_UUID cause above
+        # is known rather than suspected. This row is the one macOS gap left in
+        # the file, not the whole of macOS.
+        #
+        # The install half is written and has now been exercised twice: the two
+        # "Install LLVM 18 + lld" steps below are guarded by `runner.os`, so
+        # restoring the row is this line plus the six checks above.
         #
         # `fail-fast: false` above is what would keep a macOS-only failure from
         # cancelling the Linux row that says whether it is the platform or the
         # change.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest] # , macos-latest -- see the six checks above
     steps:
       - uses: actions/checkout@v4
 
@@ -283,28 +315,29 @@ jobs:
   # breaks here and nowhere else: `npm test` bootstraps with stage0, which
   # always knows every construct the working tree does.
   #
-  # G3 asks for this on **both** operating systems and it runs on Linux alone,
-  # because v0.2.0 attaches x86_64-linux and nothing else. What kept the second
-  # one out was two things. One has landed and one is narrowed but open:
+  # G3 asks for this on **both** operating systems and it gets both. That is
+  # newer than it reads and it took two things, and neither was a line in this
+  # file -- which is the point of the matrix being the release's answer:
   #
-  #   * the darwin **seed**, which is WP19 G5, and which release.yml now
-  #     builds -- one per target, from .github/seed-targets.json. Until a
-  #     release carries it macOS is the second state above: no row, and the
-  #     `seeds` summary saying which version it is waiting for.
+  #   * the darwin **seed**, which is WP19 G5. release.yml builds one per
+  #     target from .github/seed-targets.json, the darwin pair's
+  #     `attachedSince` is 0.4.0, and v0.4.0 was the first release to carry
+  #     them. Before that macOS was the second state in the table above -- no
+  #     row, and the `seeds` summary saying which version it was waiting for.
   #   * the **ld64 fixed point**, which was the `stage3 == stage2` family in
-  #     the `test` matrix comment above, and which is **narrowed rather than
-  #     settled**. scripts/verify-binaries.sh asserts the size on Darwin,
-  #     strips what it can, and fails the remainder as *unattributed* -- which
-  #     no longer misreports a benign difference as a compiler difference, but
-  #     also does not yet let one through. Until someone measures which bytes
-  #     ld64 varies, a macOS row could still be red on the day its seed
-  #     arrived, which is the other way a gate lies about itself -- so the
-  #     darwin pair's attachedSince is held past the next release rather than
-  #     this being called done.
+  #     the `test` matrix comment above, and which is settled for the two
+  #     comparable stages this job builds: LC_UUID is what ld64 varies, it
+  #     varies with the output path, and scripts/bootstrap.sh links both at one
+  #     path and moves each into place afterwards
+  #     (docs/wp10-ci.md#what-ld64-varies-measured). The Darwin narrowing in
+  #     scripts/verify-binaries.sh stays as a net under a comparison that holds
+  #     rather than as the arm that decides a row.
   #
-  # Neither is a line in this file, and that is the point of the matrix being
-  # the release's answer: the row appears when the seed does, on the runner
-  # seed-targets.json names for it, with no edit here.
+  # So `bootstrap (aarch64-darwin)` and `bootstrap (x86_64-darwin)` are rows
+  # this workflow runs, and the `test` row above is the one macOS gap left in
+  # the file. The `stage3 == stage2` comparison that tests/self/bootstrap.js
+  # makes is *not* the one settled here -- it links its two stages at two
+  # paths and is one of the six checks named up there.
   seeds:
     name: which seeds the last release attaches
     runs-on: ubuntu-latest
