@@ -63,7 +63,13 @@ is **data, not code**: a source file next to the output it must produce.
   --count 200` a larger random batch, printing the seed so a failure
   reproduces with `--seed <s> --count 1`. A discrepancy that is a deliberate
   semantic difference (documented in `docs/wp13-differential.md`) goes in
-  `known-failures.txt`; anything else is a bug.
+  `known-failures.txt`; anything else is a bug. **The rewrite is stage0's**, so
+  the JavaScript is also checked in — `tests/differential/goldens/rewrites.txt`,
+  written by `npm run test:update` and verified on every run — and
+  `node tests/differential/run.js --frozen` is the same comparison with no
+  rewriter in it. A program whose source has changed since its rewrite was
+  frozen fails as `STALE` rather than being compared against the old one, and
+  `known-failures.txt` cannot excuse that.
 - **Minimize mocking.** There is nothing to mock: the compiler is a pure
   function from source to IR, and the runtime is exercised by running real
   binaries. Prefer a smaller golden to a stub.
@@ -308,10 +314,11 @@ under test is not a Node entry point.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
-npm run test:update                 # write missing .ll goldens, and tests/self/goldens/
+npm run test:update                 # write missing .ll goldens, tests/self/goldens/ and the rewrites
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --count 200
 node tests/self/goldens.js          # the stage1 goldens alone, ~13 s
+node tests/differential/goldens.js  # the frozen WP13 rewrites alone, ~2 s
 npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
@@ -397,7 +404,16 @@ along with the `.ll` goldens, and `node tests/self/goldens.js --update` alone;
 read `.claude/selfhost.md` before regenerating one, because regenerating from
 the wrong compiler is how a golden records a bug as the specification.
 
-`tests/wordings/` is the third: one small program per **diagnostic code**,
+`tests/differential/goldens/` is the third: the JavaScript every whole program
+rewrites to, which the WP13 oracle compares against Node. It exists for the
+same reason and dies of the same cause — `tests/differential/rewrite.js` types
+its output with stage0's `Compilation` — and it is the one golden in the
+repository whose reference is stage0 rather than stage1, which
+`.claude/selfhost.md` states as the exception it is. `node
+tests/differential/goldens.js` verifies it in about two seconds and
+`--fresh` checks the staleness hashes alone, with no compiler at all.
+
+`tests/wordings/` is the fourth: one small program per **diagnostic code**,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
 message in its `.err`. It exists because a `reject_*` case proves a rule and a
 wording gets proved only where somebody happened to write one down — when the
