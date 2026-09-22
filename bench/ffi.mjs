@@ -20,7 +20,7 @@ import { compilerFrom } from "./compiler.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, "build", "bench");
-const nishc = compilerFrom(process.argv, root);
+const nishc = compilerFrom(process.argv);
 const N = Number(nishc.rest[2] ?? 1e6);
 const REPEAT = 5;
 

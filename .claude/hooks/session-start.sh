@@ -51,10 +51,12 @@ fi
 # Non-fatal, because nothing this session does today needs it -- stage0 is
 # still every tool's default -- and a network that is down or a proxy that
 # refuses github.com must not stop the session from starting. It is a no-op
-# once a seed is there. A session that wants one points a tool at it with
-# NISH_BOOTSTRAP=build/seed/bin/nish, or builds build/nish from it.
-if bash scripts/fetch-seed.sh >/dev/null 2>&1; then
-  seed="$(build/seed/bin/nish --version) in build/seed"
+# once a seed is there, and bounded, so a network that hangs rather than
+# refuses costs a minute and not the session. A session that wants the seed
+# points a tool at it with NISH_BOOTSTRAP=build/seed/bin/nish, or builds
+# build/nish from it.
+if fetched="$(timeout 60 bash scripts/fetch-seed.sh 2>/dev/null)"; then
+  seed="${fetched#fetch-seed: }"
 else
   seed="MISSING (bash scripts/fetch-seed.sh failed; stage0 stays the fallback)"
 fi

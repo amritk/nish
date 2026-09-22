@@ -11,9 +11,10 @@
 # `NISH=<compiler>` compiles them with another compiler instead -- a native
 # `nish` run directly, a Node entry point (.js, .mjs, .cjs) under node:
 #
-#   NISH=build/nish docs/cookbook/regen.sh --check The module
-# header (`; ModuleID`, `source_filename`) is stripped exactly as tests/run.js
-# does for the goldens, and the result replaces everything between
+#   NISH=build/nish docs/cookbook/regen.sh --check
+#
+# The module header (`; ModuleID`, `source_filename`) is stripped exactly as
+# tests/run.js does for the goldens, and the result replaces everything between
 #
 #   <!-- cookbook:begin <name> -->
 #   <!-- cookbook:end <name> -->

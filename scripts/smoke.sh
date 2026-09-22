@@ -9,6 +9,7 @@
 # NISH names the compiler: a native `nish` is run directly and a Node entry
 # point (.js, .mjs, .cjs) under node -- the rule NISH_BOOTSTRAP follows in
 # scripts/bootstrap.sh. Unset, it is stage0, dist/index.js.
+#
 # A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
 # `// smoke: argv <args>` comment passes those arguments on its command line

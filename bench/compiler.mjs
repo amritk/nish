@@ -3,29 +3,33 @@
 //
 //   node bench/run.mjs --compiler build/nish --validate
 //
-// A native `nish` is run directly and a Node entry point (.js, .mjs, .cjs)
-// under `node` -- the rule `NISH_BOOTSTRAP` follows in scripts/bootstrap.sh and
-// tests/self/seed.js, so one path names a compiler the same way everywhere.
+// Resolved by `tests/self/seed.js`, the suite's one reader of a compiler path:
+// a native `nish` is run directly and a Node entry point (.js, .mjs, .cjs)
+// under node, and one that is missing or does not answer `--version` is
+// refused here rather than at the first benchmark.
 import path from "node:path";
 
-const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
+import { resolveSeed } from "../tests/self/seed.js";
 
 /**
- * `{ file, cmd, prefix, rest }`: the compiler's absolute path, the command and
- * the arguments that come before a program's own, and `argv` with
- * `--compiler <path>` taken out, so a script reading positionals does not read
- * the path as one. A path is relative to the working directory, like any other
- * path on a command line; the default is relative to the repository.
+ * `{ cmd, prefix, rest }`: the command and the arguments that come before a
+ * program's own, and `argv` with `--compiler <path>` taken out, so a script
+ * reading its own options and positionals never sees the path. A path is
+ * relative to the working directory, like any other path on a command line.
  */
-export const compilerFrom = (argv, root) => {
+export const compilerFrom = (argv) => {
   const at = argv.indexOf("--compiler");
   if (at >= 0 && argv[at + 1] === undefined) {
     console.error("--compiler needs a path");
     process.exit(2);
   }
-  const file = at >= 0 ? path.resolve(argv[at + 1]) : path.join(root, "dist", "index.js");
+  const spec = at >= 0 ? path.resolve(argv[at + 1]) : path.join("dist", "index.js");
+  const compiler = resolveSeed(spec);
+  if (compiler.error !== undefined) {
+    const hint = at >= 0 ? "" : "; run `npm run build` first, or pass --compiler <nish>";
+    console.error(`${compiler.error.replace(/^seed/, "compiler")}${hint}`);
+    process.exit(2);
+  }
   const rest = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
-  return NODE_ENTRY.test(file)
-    ? { file, cmd: "node", prefix: [file], rest }
-    : { file, cmd: file, prefix: [], rest };
+  return { cmd: compiler.cmd, prefix: compiler.prefix, rest };
 };

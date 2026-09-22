@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$version" ] && [ -z "$force" ] && have="$("$dir/bin/nish" --version 2>/dev/null)"; then
-  printf 'fetch-seed: %s is already in %s\n' "$have" "$dir"
+  printf 'fetch-seed: %s in %s (already there)\n' "$have" "$dir"
   exit 0
 fi
 

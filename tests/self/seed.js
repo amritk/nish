@@ -27,7 +27,7 @@
  *      download is only ever the default.
  *
  * `tests/self/goldens.js` stops there and refuses: it is the tool whose whole
- * point is that stage0 is nowhere in it, so a fourth answer would be the
+ * point is that stage0 is nowhere in it, so one more answer would be the
  * dependency the gate exists to remove. The four oracles above are not that
  * tool — they still compare against stage0's own parser, scanner and escapes
  * while it lives — so `seedForOracle` has a fifth answer, `dist/index.js`,

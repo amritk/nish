@@ -47,7 +47,7 @@ if (spawnSync("clang", ["-print-prog-name=wasm-ld"]).status !== 0) {
   console.error("bench/worker.mjs needs wasm-ld (install lld; see docs/INSTALL.md)");
   process.exit(2);
 }
-const nishc = compilerFrom(process.argv, root);
+const nishc = compilerFrom(process.argv);
 run(nishc.cmd, [...nishc.prefix, "bench/scan.ts", "-o", `${out}/scan.ll`]);
 run("bash", [
   "scripts/build.sh",

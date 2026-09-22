@@ -30,7 +30,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const benchDir = path.join(root, "bench");
 const outDir = path.join(root, "build", "bench");
 const srcDir = path.join(outDir, "src");
-const nishc = compilerFrom(process.argv, root);
+const nishc = compilerFrom(process.argv);
 
 // ---- Benchmarks -------------------------------------------------------------------
 
@@ -63,10 +63,11 @@ function sourceArgs(name) {
 // ---- Options ------------------------------------------------------------------------
 
 const opts = { runs: 5, warmup: 1, only: null, sizes: new Map(), validate: false, rust: true, go: true, out: path.join(root, "docs", "BENCHMARKS.md") };
-for (let i = 2; i < process.argv.length; i++) {
-  const a = process.argv[i];
+const argv = nishc.rest;
+for (let i = 2; i < argv.length; i++) {
+  const a = argv[i];
   const next = () => {
-    const v = process.argv[++i];
+    const v = argv[++i];
     if (v === undefined) fail(`${a} needs a value`);
     return v;
   };
@@ -83,7 +84,6 @@ for (let i = 2; i < process.argv.length; i++) {
   else if (a === "--no-rust") opts.rust = false;
   else if (a === "--no-go") opts.go = false;
   else if (a === "--out") opts.out = path.resolve(next());
-  else if (a === "--compiler") next(); // read by compilerFrom above
   else if (a === "-h" || a === "--help") {
     // The banner is this file's leading comment block, minus the shebang: it
     // ends at the first line that is not a comment, so adding an option above
@@ -118,7 +118,6 @@ function version(cmd, args = ["--version"]) {
   return r.status === 0 ? r.stdout.split("\n")[0].trim() : `${cmd}: not found`;
 }
 
-if (!fs.existsSync(nishc.file)) fail(`${path.relative(root, nishc.file)} is missing; run \`npm run build\` first, or pass --compiler <nish>`);
 const CC = process.env.CC || which("clang") || fail("clang not found (set CC)");
 const RUSTC = opts.rust ? process.env.RUSTC || which("rustc", [path.join(os.homedir(), ".cargo", "bin")]) : null;
 const GO = opts.go ? process.env.GO || which("go", ["/usr/local/go/bin", path.join(os.homedir(), "go", "bin")]) : null;
