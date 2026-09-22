@@ -8394,8 +8394,13 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // through 0.4.0 ship no `std/`, so the compiler in them refuses every
     // `nish/<module>` specifier -- against any of those, nish-cmp correctly reports two
     // corpus programs on which HEAD is right and the seed is broken, and there is
-    // nothing anybody can edit in the tree to make that go away. So the gate gets no row
-    // until a release carries a seed that can compile the corpus.
+    // nothing anybody can edit in the tree to make that go away. A release that predates
+    // a *decided* change of output is out of reach for a second reason: it disagrees with
+    // HEAD on purpose, and DECLARED cannot say so between releases because it wants words
+    // in a CHANGELOG.md that is generated at release time. So the gate gets no row until
+    // a release exists that it may be asked about, for whichever of the two reasons
+    // applies -- `.github/seed-targets.json`'s note says which, and what the dark window
+    // costs while the field is ahead of every shipped release.
     //
     // Which is the one thing in this pair that could quietly stop being true. An absent
     // row is indistinguishable from a passing one in a summary, so each arm is asked for
