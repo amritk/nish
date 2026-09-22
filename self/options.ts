@@ -88,6 +88,15 @@ export class Options {
    * report itself as a module the library does not have.
    */
   packageRoot: string;
+  /**
+   * `--json`: every diagnostic is one object on stdout. Kept here, beside the
+   * flags that change the IR, for one reader rather than for the IR: a broken
+   * invariant is reported where it is found (`internalErrorFor` in
+   * `self/ice.ts`), deep in the emitter, and under `--json` that report has to
+   * be an object too -- the language has no exceptions to carry it back to
+   * the driver that parsed the flag.
+   */
+  json: boolean;
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32;
@@ -105,5 +114,6 @@ export class Options {
     this.emitNapi = "";
     this.emitNapiAsync = "";
     this.packageRoot = "";
+    this.json = false;
   }
 }

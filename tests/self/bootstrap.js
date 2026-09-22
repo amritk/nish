@@ -2,49 +2,44 @@
  * The bootstrap: milestone S5, and the claim the whole work package exists for
  * (docs/wp14-selfhost.md §1).
  *
- *   node tests/self/bootstrap.js            run the stages and compare
- *   node tests/self/bootstrap.js --verbose  name every module as it is compared
- *   node tests/self/bootstrap.js --keep     leave the stage outputs on disk
+ *   node tests/self/bootstrap.js                 run the stages and compare
+ *   node tests/self/bootstrap.js --seed <nish>   name the seed (seed.js's order otherwise)
+ *   node tests/self/bootstrap.js --verbose       name every module as it is compared
+ *   node tests/self/bootstrap.js --keep          leave the stage outputs on disk
  *
- * Four compilers, three equalities:
+ * Four compilers, two equalities:
  *
- *   stage0  `src/`, TypeScript on Node, built by tsc          the bootstrap seed
- *   stage1  `self/`, built by stage0
+ *   seed    the last released `nish`, or whatever `tests/self/seed.js` resolves
+ *   stage1  `self/`, built by the seed
  *   stage2  `self/`, built by stage1
  *   stage3  `self/`, built by stage2
  *
- *   IR(stage0, self/) == IR(stage1, self/)   the two implementations agree
  *   IR(stage1, self/) == IR(stage2, self/)   *the self-hosting proof*
  *   stage3 == stage2                          byte for byte, as files
  *
- * The middle one is the one that matters: if the compiler stage0 built and the
+ * The first is the one that matters: if the compiler the seed built and the
  * compiler stage1 built emit the same text for the same input, the source has
- * reached a fixed point and nothing about stage0 leaks into the result any
- * more. The first is the stronger equality §1 said was worth aiming at and not
- * worth blocking on; it holds, so it is checked. The third exists so the
- * binaries are compared as well as the IR.
+ * reached a fixed point and nothing about the seed leaks into the result any
+ * more. The second exists so the binaries are compared as well as the IR.
  *
- * The seed here is stage0 and only stage0, which is what makes the first
- * equality assertable: it says two independently written implementations of
- * *this* revision emit the same IR for it, which is diverse double-compiling.
- * `scripts/bootstrap.sh` takes its seed from `NISH_BOOTSTRAP` and therefore
- * asserts that equality only when the seed is stage0 — with a released binary
- * the same comparison is a codegen freeze between releases rather than a claim
- * about the bootstrap, so it is reported there instead
- * (`docs/wp19-stage0-retirement.md` G3). This file has no such branch and must
- * not grow one.
+ * What is deliberately *not* asserted is `IR(seed, self/) == IR(stage1,
+ * self/)`. While stage0 was the seed that equality said two independently
+ * written implementations of this revision agree, which is diverse
+ * double-compiling; with a released seed it asks whether codegen has changed
+ * since that release, which forbids every improvement a release cycle exists to
+ * carry and says nothing about the bootstrap (`docs/wp19-stage0-retirement.md`
+ * G3, and the header of `scripts/bootstrap.sh`, which reports it as a note).
  *
  * Everything is compared **byte for byte**, module by module. A single
  * attribute out of place fails, which is the point.
  */
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { linkWith, seedForOracle } from "./seed.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
-const cli = path.join(root, "dist", "index.js");
 const buildSh = path.join(root, "scripts", "build.sh");
 const runtimeC = path.join(root, "runtime", "runtime.c");
 
@@ -55,12 +50,6 @@ function fresh(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   return dir;
-}
-
-/** stage0 compiles `self/` into `dir`, one `.ll` per module. */
-function compileWithStage0(dir) {
-  const r = spawnSync("node", [cli, ENTRY, "-o", `${dir}/`], { cwd: root, encoding: "utf8" });
-  return r.status === 0 ? null : `stage0: ${r.stderr || r.stdout}`;
 }
 
 /** A stage1-or-later compiler compiles `self/` into `dir`. */
@@ -119,7 +108,6 @@ function main(argv) {
   const verbose = argv.includes("--verbose");
   const keep = argv.includes("--keep");
   const work = fresh(path.join(root, "build", "bootstrap"));
-  const stage0Dir = fresh(path.join(work, "ir0"));
   const stage1Dir = fresh(path.join(work, "ir1"));
   const stage2Dir = fresh(path.join(work, "ir2"));
   const stage1 = path.join(work, "stage1");
@@ -131,20 +119,15 @@ function main(argv) {
     return 1;
   };
 
-  // stage1: `self/` built by stage0.
-  const built = spawnSync("node", [cli, ENTRY, "--link", stage1], { cwd: root, encoding: "utf8" });
-  if (built.status !== 0) return fail(`stage0 could not build stage1: ${built.stderr || built.stdout}`);
+  // stage1: `self/` built by the seed. A seed that cannot build it is the
+  // rolling freeze broken -- `self/` using something the last release does
+  // not have -- and `linkWith` has already printed the seed's report.
+  const seed = seedForOracle(argv);
+  if (seed.error !== undefined) return fail(seed.error);
+  if (linkWith(seed, ENTRY, stage1) === null) return fail(`the seed (${seed.label}) could not build stage1`);
 
-  const e0 = compileWithStage0(stage0Dir);
-  if (e0 !== null) return fail(e0);
   const e1 = compileWithStage(stage1, stage1Dir);
   if (e1 !== null) return fail(e1);
-
-  // The stronger equality of §1: the TypeScript implementation and the
-  // Nish one emit the same module for the same source.
-  const agree01 = compareIR(stage0Dir, stage1Dir, "stage0", "stage1", verbose);
-  if (agree01.error !== undefined) return fail(`IR(stage0) != IR(stage1): ${agree01.error}`);
-
   const l2 = link(stage1Dir, stage2);
   if (l2 !== null) return fail(l2);
   const e2 = compileWithStage(stage2, stage2Dir);
@@ -165,7 +148,7 @@ function main(argv) {
   if (!keep) fs.rmSync(work, { recursive: true, force: true });
   process.stdout.write(
     `${agree12.modules} modules, ${agree12.bytes} bytes of IR: ` +
-      `IR(stage0)==IR(stage1)==IR(stage2), stage3 == stage2 (${binary2.length} bytes)\n`
+      `IR(stage1)==IR(stage2), stage3 == stage2 (${binary2.length} bytes), seed ${seed.label}\n`
   );
   return 0;
 }

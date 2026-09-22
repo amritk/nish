@@ -1,1 +1,1 @@
-Unsupported statement in Phase 1: FunctionDeclaration
+expected an expression, found `function`

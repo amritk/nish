@@ -5,7 +5,7 @@
  *   node scripts/ci-profile.mjs                          profile `node tests/run.js`
  *   node scripts/ci-profile.mjs --top 60                 more rows in each table
  *   node scripts/ci-profile.mjs --json                    the same numbers, machine-readable
- *   node scripts/ci-profile.mjs -- node tests/run.js --verify-batch
+ *   node scripts/ci-profile.mjs -- node tests/run.js --seed <nish>
  *   node scripts/ci-profile.mjs -- npm run test:nish
  *
  * Why this exists. `tests/run.js` is one process printing about nineteen
