@@ -672,14 +672,21 @@ jobs:
       # The runner is built by the compiler under test and handed it: as the
       # argument after the filter (empty here, which is the whole corpus) and as
       # `NISH`, the override `tests/nish/run.ts` takes in place of its default.
-      # Until that override lands (R6.2) the default is stage0's `dist/`, which
-      # is why this still builds it; the deletion stage removes the build.
+      # Until that override lands (R6.2) the runner spawns `node dist/index.js`
+      # whatever it is told, so `dist/index.js` here is a shim that hands every
+      # argument to `build/nish` and answers its status: the goldens are
+      # stage1's, and stage0 is not the compiler this job is asking.
       - name: The corpus, through the Nish runner
         env:
           NISH: build/nish
         run: |
           set -o pipefail
-          npm run build
+          mkdir -p dist
+          cat > dist/index.js <<'SHIM'
+          import { spawnSync } from "node:child_process";
+          const r = spawnSync("build/nish", process.argv.slice(2), { stdio: "inherit" });
+          process.exit(r.status ?? 70);
+          SHIM
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
           build/nish-runner "" build/nish | tee "$RUNNER_TEMP/nish-runner.log"
 
