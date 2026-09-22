@@ -1,0 +1,299 @@
+{
+  "version": "0.6.0",
+  "date": "2026-09-22",
+  "tag": "v0.6.0",
+  "range": {
+    "from": "v0.5.0",
+    "to": "d54ea7c"
+  },
+  "entries": [
+    {
+      "id": "follow-a-symlink-to-find-the-package-root",
+      "type": "fix",
+      "scope": "self",
+      "breaking": false,
+      "title": "follow a symlink to find the package root",
+      "body": "`packageRoot()` derived the package from the directory `argv[0]` named and\nresolved no symbolic link, so a compiler reached through one looked for\n`scripts/build.sh` and `std/` beside the LINK rather than beside the package.\nnpm links every command that way\n(`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`), and so does an admin's\n`ln -s /opt/nish/bin/nish /usr/local/bin/nish`.\n\nMeasured against the released 0.5.0 compiler, reached through an absolute link\ninto a staged install: a program importing `nish/text` is refused with ``Module\n`nish/text` is not part of the standard library (it has: json, testing, text)``\n-- so this is not only a `--link` defect, and it prints the same misleading\nsentence the missing-`std/` releases did, for the same reason: the list is a\nliteral and the file is what the root never reached. A program importing nothing\ngets `--link: cannot find scripts/build.sh (looked in <link dir>/.. and .)`,\nexit 3. The same binary by its real path compiles both.\n\nThe real path of whatever `argv[0]` named is now a candidate for the root, which\nis what the `realpathSync` builtin shipped for. Order is where the care is: the\nunresolved spelling is tried first, so a compiler that is not reached through a\nlink answers exactly the root it answered before, spelled the way it was\ninvoked, and a link is the only thing that adds a candidate at all -- no\nordinary install moves, no golden moves, and the \"looked in ...\" diagnostic\nstill names one directory. `argv[0]`'s *spelling* sensitivity (wp19 §A7) is left\nalone on purpose: resolving that would move every standard-library path both\ncompilers print, and it is that bullet's rather than this one's.\n\nThe call site waited a release because `self/` compiles under the last RELEASED\ncompiler, which is the rolling freeze CI's `bootstrap` job checks. Both\ninstallers keep their absolute-path `exec`, now for their own reasons rather\nthan for this: `install.sh` installs a released compiler that may predate the\nfix, and `scripts/postinstall.mjs` execs to take node out from in front of the\ncompiler. WP21's symlinked-*package* limitation stays declared and its comments\nare corrected to say why: the builtin removed the excuse, but package identity\nfrom the real directory and from the manifest answer wp21 §7's diamond\ndifferently, and that is one decision, S3's.\n\n**It carries a second fix, to `nish-cmp` rather than to a compiler.** 0.5.0 gave\nthat gate the first seed it can use, and the first run against it was red: 4\nundeclared differences over 2 programs, all one cause -- a module reached as\n`nish/<name>` is resolved against the compiler's own package root and then named\nby the path it was found at, so the seed writes its own unpacked path where HEAD\nwrites `std/text.ts`. Two compilers are never installed in one directory, so\nthat is a property no run of the tool can compare rather than a difference it\nmay forgive, and without removing it the gate could not be green for any tree.\n`packageRootOf` derives each side's root the way the compilers do and\n`withoutOwnRoot` removes it from both sides before the bytes are compared; it is\nkeyed on no program and no file, it reaches nothing else on those lines,\n`selfCheckRoots` drives it over fabricated inputs on every run, and the run\nreports what it set aside. The gate's first green run is\n`437/437 programs agree (3582 files, 3253862 IR lines) ... 4 equal after each\ncompiler's own root, 0 undeclared difference(s)`, on both Linux seeds -- which is\nthe evidence R6 was told to wait for.",
+      "metrics": [
+        "the v0.5.0 seed compiles `self/` with the call site -- `IR(stage1) == IR(stage2)` over 61 modules, `stage3 == stage2` byte-identical; 0 of 2 link spellings worked before, 2 of 2 after; nish-cmp 437/437 against 435/437"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md#5a-what-r6-is-waiting-on",
+        "docs/wp12-release.md#what-the-launcher-costs",
+        "docs/wp21-packages.md"
+      ],
+      "tests": [
+        "tests/run.js wp19 -- an absolute link and npm's relative `.bin` link",
+        "each linking then running a program that imports `nish/text`",
+        "both watched failing with the fix reverted; and three checks over nish-cmp's own normalisation"
+      ],
+      "commits": [
+        "2695807"
+      ],
+      "pr": 129,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "ask-the-diagnostic-coverage-gate-of-stage1-not",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "ask the diagnostic-coverage gate of stage1, not of stage0",
+      "body": "WP19 gate G2 reads \"every registry code provoked by something that\noutlives stage0, or unreachable with a reason\", and the number in §5a\nthat called it closed was measured with stage0 — which does not outlive\nstage0. Asked of the compiler R6 leaves behind,\n`node tests/diagnostic_coverage.js --compiler build/nish\n--require-coverage` answered with 80 findings, each advising the reader\nto write a reason that was already written.\n\n**Nothing had been overlooked.** Every one of the 126 programs that\nprovoke those 80 codes — every program, not merely the first in corpus\norder — was already recorded, with the sentence stage1 answers instead,\nin `tests/self/parser_refusals.txt` (85 entries),\n`tests/wordings/parser_refusals.txt` (39) or `stage1_divergence.txt`\n(2). Those registers are per *case* and the criterion is per *code*, and\nno file made the step from one to the other. So the tool printed\n`(no reason on file)` eighty times for reasons that were on file, and\nthe gate could only be asked of the compiler R6 deletes.\n\n`tests/wordings/stage0_only.txt` is that step and nothing else: one\n`CODE  case[,case...]` line per code, naming programs rather than\nrepeating sentences, so it cannot drift from the registers without\nfailing. It is checked from both sides while both compilers exist.\nAgainst stage0 the named set must be **exactly** the set the run found,\nso a corpus that grows a case cannot leave a line stale; against stage1\nunder `--strict-refusals` a code the run provokes fails until its line\nis deleted; and every program a line names must be one the corpus has\nand one a register declares. A code dropped from the registry, or listed\nas unreachable at the same time, fails too. All seven failure modes were\nwatched firing against a perturbed register before this landed.\n\n`npm test` now passes `--require-coverage` on the stage1 run as well as\nthe stage0 one, which is what makes the gate's own sentence true of the\ncompiler that survives. `--report` gains the third state as well: a code\nsome program provokes that this compiler answers in its parser reads\n`stage0 only: <programs> (<register>)` rather than `unreachable: (no\nreason on file)`, which was what made a declared parity class look like\na hole in the corpus.\n\nThe file empties into `unreachable.txt` at R6, where these wordings\nbecome retired codes because nothing prints them any more.",
+      "metrics": [
+        "stage1 264/410 provoked, 66 unreachable, 80 stage0-only, 0 unexplained (was 80)"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md#the-wording-gap-and-what-closing-it-turned-up"
+      ],
+      "tests": [
+        "tests/wordings/stage0_only.txt"
+      ],
+      "commits": [
+        "da3eaec"
+      ],
+      "pr": 131,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "pin-one-diagnostic-per-declaration-when-a-class",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "pin one diagnostic per declaration when a class body has two bad members",
+      "body": "A class whose first field is refused says nothing about its second. `errored`\nin `self/context.ts` is set by the first diagnostic and `collectStructMembers`\nnever clears it between members, so `class Pair { first: i32 = \"one\"; second:\ni32 = \"two\"; }` names `first` and stops. stage0, the self-hosted compiler and\nthe released 0.5.0 binary all print that one sentence and all exit 1, so what\nwas at stake was how complete the diagnostics are, not whether the program is\ncaught.\n\nThat is now a decision with its reasoning next to the code instead of an\naccident nobody had written down. `errored` is stage0's `throw` in a language\nthat has none, and it is cleared exactly where stage0's `catch` is — per\ndeclaration in `self/checker.ts`, per statement in `self/statements.ts`, and\ndeliberately restored at the one site where stage0 reports and carries on\nrather than throwing. `docs/LANGUAGE.md` states the granularity normatively,\npass 1 recovering per declaration, so naming the second member would be a\nchange to a language rule rather than a bug fix. The reason carries an expiry:\nat R6 the compiler this flag imitates is deleted and the granularity becomes\nthis compiler's own choice.\n\nThe alternative was built before being rejected. A stage1 that clears the flag\nper member compiles, resurrects no cascade of derived nonsense, and changes the\noutput of none of the 926 programs in the corpus, so no gate here can see the\ndifference either way.\n\n`tests/cases/reject_cls_field_init_type_twice` is what stops it drifting in\nsilence: two classes with two mistyped fields each, so the count is two rather\nthan four and rather than one. The `.err` pins that count through the `2 errors`\nsummary line, because a fragment list can require a sentence and cannot forbid\none; under the per-member reset the count is four and the case is red.\n\n`tests/self/goldens/checked_self.txt` moves because the explanation adds lines\nto `self/structs.ts` and the checked dump records line:column; it was\nregenerated from stage1, seeded with the released 0.5.0 binary, which\nre-checked the rolling freeze in the same run.",
+      "metrics": [
+        "926 corpus programs compiled by both stage1 binaries, 0 differ with the per-member reset applied"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/cases/reject_cls_field_init_type_twice"
+      ],
+      "commits": [
+        "7d7fa9d"
+      ],
+      "pr": 134,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "port-the-three-elf-assuming-checks-that-keep",
+      "type": "test",
+      "breaking": false,
+      "title": "port the three ELF-assuming checks that keep macos-latest out of the test matrix",
+      "body": "Three checks in `tests/run.js` asserted an ELF fact about a linked binary\nrather than the property they exist for, so each failed on a mac without\nanything being wrong with the compiler.\n\nTwo read `.debug_line` out of the executable. On Mach-O that section is empty\nby design: `clang -g` leaves the DWARF in the object files and the executable\nkeeps only a debug map naming them, and the Darwin driver runs `dsymutil` at\nthe end of a compile-and-link to turn that map into a `.dSYM` bundle.\n`lineTableOf` answers with the file the platform actually used, and both\nchecks assert what they always asserted about it: the table names\n`dbg_main.ts` and has at least one row. Running `dsymutil` afterwards is\ndeliberately not a fallback — by then clang has deleted the objects the map\nnames, and the tool writes an empty table and exits 0.\n\nThe third asserted that a `--threads` module *refuses to link* against a\nruntime built without `-DNISH_THREADS`. That is ELF's rule about a TLS\nreference to a non-TLS definition, and ld64 does not have it: measured on\n`macos-latest`, clang exits 0, `nm -m` shows `_nish_arena` as a plain\n`(__DATA,__common)` symbol where a thread-local descriptor should be, and the\nbinary segfaults on its first allocation while the matched build of the same\ninputs prints `alloc_smoke delta = 16` and exits 0. The property both\nplatforms can be held to is therefore not the link error but that the\nmismatch is never quietly a working-looking program with two arenas, and the\ncheck's name says which mechanism caught it.\n\nThe `macos-latest` row stays out of the matrix, because a re-run with these\nthree ported reports six other failures in three causes. The comment beside\n`os:` and the CI matrix section of `docs/wp10-ci.md` now name those six with\nthe run that measured them, and both drop the claim that nothing in the file\nruns on macOS: the darwin pair's `attachedSince` is 0.4.0, so `bootstrap\n(aarch64-darwin)` and `bootstrap (x86_64-darwin)` have been green for two\nreleases.",
+      "metrics": [],
+      "refs": [
+        "docs/wp10-ci.md#ci-matrix"
+      ],
+      "tests": [
+        "tests/run.js"
+      ],
+      "commits": [
+        "f0cbd50"
+      ],
+      "pr": 133,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "measure-the-o-dir-stem-collision-which-both",
+      "type": "docs",
+      "scope": "cli",
+      "breaking": false,
+      "title": "measure the `-o dir/` stem collision, which both compilers have",
+      "body": "WP19 §A7 recorded that stage1 writes one `.ll` where stage0 writes two when\ntwo modules share a `; ModuleID` under `-o <dir>/`, and filed it as stage1's\nown defect, older than the change that found it and unmeasured by anything.\nMeasured now, the row is wrong in both of its halves, and what is underneath\nit is worse than what it described.\n\nThe mechanism cannot happen. A stage1 module's name *is* the path string it\nwas opened at, and `Compilation.byPath` is keyed on that same string, so two\nmodules never share a name: a duplicate name is a duplicate identity and is\ndeduplicated at load rather than mis-written at emit. Only stage0, which keeps\nthe identity and the name in two fields, can hold two different files under\none `; ModuleID`. That is also what every earlier attempt at a reproduction\nran into, and it was written down one file away the whole time, in\n`resolvePath`'s comment in `self/paths.ts`.\n\nThe outcome does happen, and to both compilers, because `outputStems` drops\nevery `.` and `..` segment of the entry-relative path before joining it — so a\nmodule above the entry's directory collapses onto one below it with the same\ntail and the second overwrites the first. Two relative imports are enough:\n`./lib/util` and `../lib/util` from `src/main.ts` writes `out/lib_util.ll`\ntwice and leaves `out/main.ll` calling a function that no `.ll` in the\ndirectory defines. Through `--link` a user meets it as `ld.lld: error:\nduplicate symbol` on a symbol their program defines exactly once. The two\ncompilers agree byte for byte while doing it, which is why no parity gate has\never seen it — and once the entry's spelling varies both directions are\nreachable, including stage0 dropping a module where stage1 keeps it.\n\nNothing is fixed here, on purpose. The two `outputStems` are one lowering in\ntwo files, so a one-sided fix would turn a shared bug into a parity\ndifference, and the fix moves a stem that is live. §5a item 5 carries the four\ninvocations, their measurements and what a fix takes.\n\nThe disambiguating branch turned out to have no coverage at all — every\n`tests/link/` program reaches modules whose basenames are already unique, so\nthe fallback is never taken. `tests/link/module_stem_clash` takes it: two\n`text.ts` in one program, answering `a_text` and `b_text`, with a line of\n`expected.ir` from each module, so a regression that collided them drops one\nfrom the emitted set rather than merely misnaming it. It reaches no package on\npurpose, because a package module's stem is reached by climbing out to\nwherever the compiler is installed: such a program writes a different file\nname under every install, and `tests/nish-cmp.js` pairs the two compilers'\noutputs by file name, so it could never be green on the G2 gate — which is one\nmore reason the fix is worth making.",
+      "metrics": [],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/link/module_stem_clash"
+      ],
+      "commits": [
+        "2274097"
+      ],
+      "pr": 135,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "name-a-package-module-by-its-package-relative",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "name a package module by its package-relative specifier, in both compilers",
+      "body": "A module imported as `nish/<name>` is resolved against the compiler's own\npackage root — `<dirname(argv[0])>/..` — and stage1 then *named* it by the path\nit was found at, so one program's IR was a fact about the install rather than\nabout the program:\n\n```\n./build/nish prog.ts -o out/        ; ModuleID = 'std/text.ts'\n/abs/build/nish prog.ts -o out/     ; ModuleID = '/abs/.../std/text.ts'\n```\n\nTwo installs of one compiler gave one program a different `; ModuleID`, a\ndifferent `source_filename` and different `DIFile` paths. The harness happened\nto invoke the spelling that agreed, which is the whole reason this family read\nas closed (`docs/wp19-stage0-retirement.md` §A7's third bullet).\n\nA package module's **identity** is still the path it was opened at — a file has\nto be opened — and its **name** is now its package-relative specifier,\n`std/text.ts`, on both sides: `ModuleUnit.name` in `self/compilation.ts` carries\nit and `SourceFile` is built from it, so the IR header, the `DIFile`, the\ndiagnostics, the interop sidecars and the no-`-o` output path all read one\nstring that no install can move. stage0 already answered that for `nish/` and\nneeded no naming change; what it gains here is the language rule underneath it.\n\"Package-relative\" had been a description of the specifiers people write rather\nthan a property of the name — `nish/../../escape/lib` resolved if a file\nhappened to sit there, and was then named from wherever the compiler was\ninstalled. Both compilers refuse it now, in the same sentence and at the same\nspan, so no segment of a `nish/` specifier may be empty or begin with a `.`.\n\nA bare-specifier package needed no move, and that was measured rather than\nassumed: `findPackageDir` walks up from the importing module's own name and\nnever asks `packageRoot()`, so `tests/link/package_bare` names its modules\n`node_modules/pkg_bare/src/index.ts` under every spelling of `argv[0]` and\nidentically in both compilers. The standard library was the exception because it\nalone resolves against the compiler's install.\n\n**What a released seed now reports through `nish-cmp`, and why this is a decided\noutput change.** The gate's summary carries `4 equal after each compiler's own\nroot`: the v0.5.0 seed writes `<unpack path>/std/text.ts` where HEAD writes\n`std/text.ts`, and `withoutOwnRoot` removes each compiler's own root\nsymmetrically so the two compare equal. That was a prediction and this\nrepository has five recorded instances of a prediction about a gate being wrong,\nso it was run: `438/438 programs agree … 4 equal after each compiler's own root,\n0 undeclared difference(s)`, before this change and after it, with the same four\nfiles. Nothing moves while the seed predates the fix. Once a release carrying it\nis the seed, those four files are equal *as they stand* and that count goes to\n0 — which a reader should take as the normalisation having nothing left to do\nrather than as four files having stopped being compared, because every byte of\nthem is compared either way. The output change behind it is the intended one: a\nstandard-library module's IR is now byte-identical between two installs of one\ncompiler, measured on two staged installs.\n\nTwo consequences, both of them stage1 moving onto stage0's answer. With no `-o`\nat all, stage1 wrote the module into its own installation —\n`<install>/std/text.ll`, which is `EACCES` under a root-owned install and a\nsilent edit of the compiler's tree otherwise — and writes `std/text.ll` under\nthe user's working directory now. And stage1 can now hold two modules under one\n`; ModuleID`, exactly as stage0 can, because the name is no longer the identity;\n`byPath` is still keyed on the identity, so they are still two modules and still\ntwo files. `outputStems` is deliberately untouched on both sides, so a package\nmodule's output *stem* still climbs out to the install: one program writes\n`…_install-a_std_text.ll` and `…_install-b_std_text.ll` from two installs whose\nIR for that module is byte-identical. That is the two-sided fix §5a item 5\ncarries, and a package-relative name is what makes it a small one.",
+      "metrics": [
+        "nish-cmp 438/438 programs, 4 equal after each compiler's own root, before and after; three spellings of argv[0] agree on one `; ModuleID`; IR(stage1) == IR(stage2) over 61 modules and stage3 == stage2 against the v0.5.0 seed"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md §A7",
+        "§5a items 4 and 5; docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/cases/reject_std_escaping_module",
+        "tests/run.js (\"a nish/<module> is named package-relatively under every spelling of argv[0]\")"
+      ],
+      "commits": [
+        "3927242"
+      ],
+      "pr": 136,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "re-derive-g1-on-the-deletion-head-and",
+      "type": "docs",
+      "scope": "wp19",
+      "breaking": false,
+      "title": "re-derive G1 on the deletion head, and tally the nish-cmp cycle",
+      "body": "Two rows of §5a carried a measurement taken on `862c7cc` on 2026-09-19, and\nfour pull requests have landed since. A row that states a number without\nre-deriving it is the pathology this document has recorded five times, so both\nare re-derived here rather than re-asserted.\n\n**G1, on the head R6's deletion would land on.** `node tests/run.js --parity`\non merged `main` at `3927242`: `parity: 14544 runs over 909 programs\n(2663.3 s); 0 undeclared difference(s), 2808 declared`, exit 0. The deltas\nagainst the 2026-09-19 row decompose rather than needing to be trusted: seven\nentry programs arrived between the two runs — `io_realpath`,\n`reject_realpath_arity`, `reject_realpath_type`, `builtin_realpath`,\n`reject_cls_field_init_type_twice`, `reject_std_escaping_module` and\n`module_stem_clash/main.ts`, whose two imported `text.ts` are modules rather\nthan programs — and seven programs across the sixteen variations is exactly the\n112 new runs. The ten new declared rows are those programs meeting declaration\nclasses that already existed; no `DECLARED` entry names any of them, which is\nthe difference between a corpus that grew and a gate that was widened.\n\n**G2.1 as a cycle rather than as one run.** Item 1 said the deletion should\nrest on the `nish-cmp` runs nobody arranged, and twelve of them now exist: two\narchitectures across six `ci.yml` runs on `main` since 2026-09-21. No red row,\nand every row that printed a summary reports `4 equal after each compiler's own\nroot` and `0 undeclared difference(s)`. That the normalisation count has not\nmoved off 4 is the part worth reading: `withoutOwnRoot` was allowed into the\ngate on the ground that it is keyed on no program and no file, so a fifth\nnormalised file would be the gate forgiving more than was argued for it, and a\ntally is how that is noticed instead of assumed. #136 is the case in point — it\nchanged how a package module is named, predicted the count would stay at 4\nwhile the seed predates the fix, and CI agreed to the byte on both rows.\n\nTwo of the twelve are `cancelled` rather than green, and the cause is this\nworkflow rather than the gate: `cancel-in-progress: true` killed run 614 when\n#135's merge arrived fifty-one seconds after #133's. Nothing is unproven by it,\nbut a green-row tally on `main` has a hole wherever two merges land inside a\nminute, and that is written down so the next reader does not have to rediscover\nit.\n\nItem 3 is restated as what it now is. Three of its checks are ported and assert\none property on both object formats (#133); six remain red, named with the run\nthat measured them, and the `LC_UUID` cause behind three of those is settled —\nld64 varies it with the output path, so a comparison that links two copies of\none input to two paths fails at identical size. The row is still out of the\nmatrix, so this item stays open. The claim that nothing in the file runs on\nmacOS is gone from here as well as from `ci.yml`: the darwin `bootstrap` rows\nhave been green for two releases, and they are where the `LC_UUID` finding came\nfrom.\n\n`.claude/selfhost.md`'s R1 row carried the same stale number and is re-derived\nwith it. Its standing qualification gains the sharper example: `outputStems` is\na defect both compilers have, which no parity run can ever see, because the two\nagree byte for byte while committing it.",
+      "metrics": [
+        "parity 14544 runs over 909 programs, 0 undeclared, 2808 declared, exit 0, on 3927242; twelve nish-cmp rows on main since 2026-09-21, 0 red, 4 equal after each compiler's own root throughout"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md",
+        ".claude/selfhost.md"
+      ],
+      "tests": [
+        "node tests/run.js --parity (the measurement this records)"
+      ],
+      "commits": [
+        "a6ef1d7"
+      ],
+      "pr": 137,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "refuse-on-a-platform-with-no-prebuilt-compiler",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": true,
+      "title": "refuse on a platform with no prebuilt compiler instead of falling back to Node",
+      "body": "`bin/nish` was `import \"../dist/launcher.js\"`, so the shipped package's entry\npoint was itself built from `src/` — and WP19 R6 deletes `src/`. The launcher\nand its packaging helper are now plain ESM under `bin/`, needing no build step,\nand `package.json` no longer ships `dist`.\n\nThat removes the Node fallback, which is a decided output change rather than a\nconsequence nobody weighed. A platform with no prebuilt binary is refused with\na diagnostic naming all four supported targets, the package npm should have\ninstalled, and a remedy, and it exits 3; under `--json` it is one object on\nstdout carrying `NL0002`, the code the registry already defines for a toolchain\nthat could not be run. musl, FreeBSD and every 32-bit platform lose\n`npm install`, which `docs/wp19-stage0-retirement.md` §6 records as a cost of\nretirement rather than leaving to be discovered.\n\nNothing is compiled on a user's machine on any path, which is what the\ninstaller was for; supported platforms still download and unpack.",
+      "metrics": [
+        "the tarball goes 588,943 bytes / 179 files to 160,817 / 35, both packed the same way from clean checkouts. That is the tarball and not the install — node_modules/typescript is 23,452 KiB, and removing that dependency is R6's."
+      ],
+      "refs": [
+        "docs/wp12-release.md",
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/run.js WP12 round trip",
+        "which now runs scripts/platform-package.mjs",
+        "npm pack and npm install rather than copying files into node_modules"
+      ],
+      "commits": [
+        "5c56ef3"
+      ],
+      "pr": 139,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-21"
+    },
+    {
+      "id": "let-the-unsigned-widths-cross-as-arrays-138",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "let the unsigned widths cross as arrays",
+      "body": "`u8[]`, `u16[]`, `u32[]` and `u64[]` now reach a host as `Uint8Array`,\n`Uint16Array`, `Uint32Array` and `BigUint64Array`, across the wasm loader and\nthe N-API shim (WP30, `docs/wp30-bytes-interop.md`). The package is four rows\nin `typedView` plus `elemSize` widening to `1 | 2 | 4 | 8`, because the scoping\nfound the rest already existed: the language has `u8[]` and lowers it like\nevery other array, `nish_alloc_array(1, n)` is a byte buffer the runtime\nalready makes, the generated loader already takes `elemSize` as an argument,\nand both N-API helpers already take the typed-array tag and the element size.\nOne row produces the declaration, the loader entry and the C header's element\ncomment together.\n\nAn array of an unsigned width needs none of the masking its scalar twin needs,\nand that is what the tests pin. A scalar `u32` result travels in an i32 value\ntype and reaches JavaScript negative above 2^31 unless the loader restores it;\nan element never travels in a value type at all -- it is a byte in `data` that\n`Uint32Array` reads unsigned, and a store through one truncates exactly as the\nlanguage wraps, so a mask there would be wrong rather than redundant.\n`fillU8(xs: u8[], v: u8)` puts both rules in one generated call: `arrayIn`\nhands the array over untouched, `v & 0xff` masks the scalar, and `copyBack`\nreturns the arena bytes because the fixpoint proved the callee writes through.\n\nThe new rows exposed a wrong indefinite article. `withArticle` and the\ngenerated loader's `TypeError` both tested `/^[AEIOU]/`, so a host read `must\nbe an Uint8Array`; the rule had held by accident while `Int32Array` was the\nonly vowel-initial constructor in the table. `u` is out of the set now in all\nfour places, because the article follows the vowel sound.\n\n`docs/LANGUAGE.md` said there was \"no `Uint8Array` / `Float32Array`\", which was\nalready wrong about `Float32Array` and became misleading about `Uint8Array`.\nThe alias names are exactly four, an unsigned array has none, and that\nasymmetry is a spelling rather than a capability.\n\n`cmpSince` moves 0.5.0 -> 0.6.0, so `nish-cmp` (WP19 G2.1) gets no row until\n0.6.0 ships. WP30 changes generated output on purpose, so HEAD and the 0.5.0\nseed disagree about eleven files -- eight loaders sharing the article line, and\nthree sidecars of `bench/scan.ts` where 0.5.0 declines a `u8[]` HEAD exports.\n`DECLARED` cannot cover them because it wants words in a `CHANGELOG.md`\ngenerated at release time; reverting the article fix reaches green on none of\nthe three that are the feature; and keeping `bench/scan.ts` out of the corpus\nwould go green by arranging for the comparison not to see the change. An absent\nrow says the true thing instead. The cost is in the field's note: G2.1 is dark\nfor every change until 0.6.0, so an unintended output change in that window is\ncaught by nothing. It rides in this change rather than following it because\n`release.yml`'s `release` job is `needs: ci` -- a red `main` cuts no release,\nand only a release carrying WP30 clears the difference.\n\nAlso here: `bench/scan.ts`, `web/bytes-worker.mjs` and `bench/worker.mjs`,\nwhich measured the worker boundary. An empty worker round trip is ~61 us\nagainst ~0.8 us of work, so a worker answering one document per message is\n~99% `postMessage`; the worker takes a list and exports `scanBatch` for callers\nbelow the break-even of ~74 documents or ~12 KB.",
+      "metrics": [
+        "17/17 programs agree, 85 sidecars, 470104 bytes byte-identical between stage0 and stage1; u32 element 4294967295 not -1, u64 element 2^63+1 positive, u8 elements 200 and 255 unsigned; JSON.parse 1.6 us against 0.8 us to copy and scan the same 164 bytes"
+      ],
+      "refs": [
+        "docs/wp30-bytes-interop.md",
+        "docs/wp8-interop.md",
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/cases/arr_u8; tests/self/interop_unsigned_arrays.ts; node tests/run.js seed"
+      ],
+      "commits": [
+        "7fa36eb"
+      ],
+      "pr": 138,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "freeze-the-wp13-differential-rewrite-as-goldens-with",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "freeze the WP13 differential rewrite as goldens, with a staleness guard",
+      "body": "§2B listed the WP13 differential suite as surviving R6 and it does not: the\ncomparison needs no second *compiler*, but the JavaScript it compares against is\ntyped by stage0's own `Compilation`, which `tests/differential/rewrite.js`\ndrives in process because `i32`, `u8`, `f32` and `i64` are all just `number` to\n`tsc`'s checker. Deleting `src/` would take the reference generator with it, and\nthis is the only oracle in the repository about **runtime semantics** rather\nthan emitted text.\n\nSo the reference is frozen while stage0 exists (G2.4).\n`tests/differential/goldens/rewrites.txt` holds the rewritten `.mjs` of all 176\nprograms — 358 modules, 354 distinct bodies, 235 KiB — and\n`tests/differential/run.js --frozen` runs the comparison from it, automatically\nwhen there is no rewriter to load. Neither half of the harness names stage0 any\nmore: the native side takes `--compiler` or the seed protocol's answer.\nMeasured, the freeze costs nothing it was meant to keep: `164/176 programs agree\nwith Node` from the live rewriter and `164/176` from the store, the same 176\nverdicts in the same order.\n\nThe staleness guard is the engineering content. Each record carries the SHA-256\nof the bytes of every module the program loads and its `.args` verbatim, so a\nprogram whose source has moved fails as `STALE` — ahead of\n`known-failures.txt`, which records decisions about the language and not\nreferences that have rotted. `goldens.js` rebuilds the whole store from the live\nrewriter and requires byte equality, which is the only form that leaves no\ncolumn uncompared; freshness alone survives R6 and asks four questions rather\nthan one. It fired for real while the branch was open: #138 landed a corpus\nprogram with an entry point, and the verify said `175/176 programs fresh, the\nstore differs from the live rewrite` instead of comparing the 175 it held.\n\nWhat could not be frozen is priced in §6 as the sixth cost rather than left to\nbe discovered: the fuzz differential against Node, whose programs come from a\nseed and so have no reference to freeze; `arrow-parity.js`, whose subject *is*\nthe rewriter; the store's own fidelity half; and every corpus program added\nafter R6, which gets no differential coverage until somebody ports the rewrite\nonto stage1's `--emit-checked` dump. One finding is recorded with it: pointing\nthe native half at the seed stops two corpus programs compiling, on `-1 / z`\nwith `z: f64`, and the reason no gate saw it is that `CORPUS_DIRS` does not\ninclude `tests/differential/corpus`.",
+      "metrics": [
+        "164/176 live and 164/176 frozen, verdict-identical row by row"
+      ],
+      "refs": [
+        "docs/wp13-differential.md"
+      ],
+      "tests": [
+        "node tests/differential/goldens.js"
+      ],
+      "commits": [
+        "51327cd"
+      ],
+      "pr": 141,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "type-a-signed-or-parenthesised-numeric-literal-from",
+      "type": "fix",
+      "scope": "self",
+      "breaking": false,
+      "title": "type a signed or parenthesised numeric literal from the other operand",
+      "body": "`docs/LANGUAGE.md` says a numeric literal takes the type of the other operand\nof a binary operator, and that \"`-5` and `(5)` count as the literal\". stage1\nmatched only the bare spelling on the left-hand side, so `-1 / z` with\n`z: f64` was refused with ``Operator `/` requires two operands of the same\nnumeric type, got i32 and f64`` on a program stage0 compiles. The reach was\nwider than the sign: `(1) / z` was refused identically, because\n`checkOperator` in `self/expressions.ts` tested `leftNode.kind === N_NUMBER`\nand both `N_UNARY` and `N_PAREN` are nodes in their own right. It held for\nevery operator, against every typed right operand — a variable, a field, an\nelement, a user call, a conversion call — and for `f64`, `f32` and `i64`\nalike. The right-hand side was never affected, because the wanted type is\nthreaded into it either way: `z / -1` has always worked. `literalOperand`\nunwraps the two spellings, which is the same list `peekable` walks and the\nsame list stage0's `contextType` climbs out of.\n\nIt was found by compiling `tests/differential/corpus` with stage1 for the\nfirst time, and the reason that was the first time is the larger half of this\nchange. `CORPUS_DIRS` in `tests/self/corpus.js` did not name that directory,\nso its 71 whole programs — WP13's differential set, the one corpus here built\nto hold a compiled program's behaviour against the same program run under Node\n— were compiled by stage1 by no oracle, by `goldens.js`, by `nish-cmp.js` or\nunder any of `--parity`'s sixteen variations. `.claude/selfhost.md` listed the\ndirectory as part of the corpus and `scripts/arrow-verify.mjs` carried a\nprivate enumerator whose header said the opposite. The directory is in\n`CORPUS_DIRS` now, `programs()` counts a subdirectory holding a `main.ts` as\none program — which brings in the three multi-module differential programs and\n`examples/multi/`, absent for as long as it has existed — and the private\nenumerator is gone, so there is one rule again.\n\nTwo of the 71 were the compile errors above; the other 69 agreed byte for byte\non their IR and on their `--emit-checked` dump before any fix.\n`checked_oracle.js` would not have failed on the two: it printed `N rejected by\nstage1` and exited 0. It fails now, and prints the rejection whether or not\n`--verbose` was asked for; both oracles were watched exiting 1 on the two\nprograms with the checker fix reverted.\n\n`docs/wp19-stage0-retirement.md` gains §A9, the sixth entry in §A5's series of\noccasions on which a green gate meant less than it looked — the first that is\nabout the corpus's own definition rather than about a stale measurement or an\nunwritten variation. G1's standing qualification gains a second clause: the\ndifference set is a lower bound over the corpus somebody enumerated as well as\nover the programs and the variations somebody wrote. The G1 rows in §3, §5 and\n§5a and `.claude/selfhost.md`'s R1 row now say which corpus their number\ncovered, because the cross product is 986 programs where that number was 909,\nand the full re-derivation is named as owed rather than guessed at. §6 item 6,\nwhich #141 wrote from the differential side, records that both halves of its\nfinding are closed.",
+      "metrics": [
+        "71/71 programs agree on IR and on the checked dump, against 69/69 with 2 rejected by stage1 before; parity 1136 runs over 71 programs, 0 undeclared, 142 declared, every declaration a class that already existed; npm test 2177 passed, 0 failed, 2 skipped"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#numeric-literals",
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/cases/math_literal_operand_forms",
+        "tests/cases/reject_neg_literal_unpeekable",
+        "tests/self/ir_oracle.js",
+        "tests/self/checked_oracle.js"
+      ],
+      "commits": [
+        "1e95aac"
+      ],
+      "pr": 142,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "pay-the-parity-figure-a9-left-owed-over",
+      "type": "docs",
+      "scope": "wp19",
+      "breaking": false,
+      "title": "pay the parity figure §A9 left owed, over the whole 986-program corpus",
+      "body": "§A9 put `tests/differential/corpus` and the directory programs into\n`CORPUS_DIRS`, taking the cross product from 909 programs to 986. It wrote\nevery row that quoted the old number to say which corpus it had covered, and\nleft the full figure explicitly owed rather than guessed at. This pays it:\n\n    parity: 15776 runs over 986 programs (2938.5 s); 0 undeclared difference(s), 2961 declared\n\nexit 0, on merged `main` at 1e95aac, from `node tests/run.js --parity` — zero\nundeclared over the widened corpus, including the 71 programs no parity run had\never touched.\n\nIt took three attempts and only the third is quoted. The first was killed when\n`main` moved under it, which is §A7's own lesson about a number with a one-day\nshelf life; the second was SIGTERMed by a neighbour on a shared four-core box at\nload 13; the third ran on an idle box with `npm ci` and `npm run build` chained\nbefore the mode so they could not overlap, because a parity run overlapping a\nrebuild once reported 749 undeclared differences where the same run alone\nreported 0. A run that prints no summary line says nothing, and neither of the\nfirst two printed one.\n\nThe declared count moved 2808 to 2961, and that delta is left undecomposed on\npurpose. 142 of the 153 are §A9's 74 programs meeting declaration classes that\nalready existed; the remaining 11 belong to the `multi` selection and to the\nprograms WP30 brought. Attributing them needs the mode's own program set rather\nthan the corpus module's — `parity.js` counts 986 where `programs()` and\n`linkPrograms()` enumerate 538, because the mode compares refusals too — and\nderiving a breakdown from the wrong set is how this paragraph would have stated\nsomething false.\n\nThe G1 rows in §3, §5 and §5a and R1 in `.claude/selfhost.md` carry the new\nfigure and name the head it was taken on; the corpus-growth series gains its\neighth term.",
+      "metrics": [
+        "parity 15776 runs over 986 programs, 0 undeclared, 2961 declared, exit 0, on 1e95aac at load 0.24"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md",
+        ".claude/selfhost.md"
+      ],
+      "tests": [
+        "node tests/run.js --parity (the measurement this records)"
+      ],
+      "commits": [
+        "d54ea7c"
+      ],
+      "pr": 143,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    }
+  ]
+}
