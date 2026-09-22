@@ -7427,6 +7427,49 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
           );
         }
 
+        // WP19 §A7's third bullet: the same program, the same install, three spellings of
+        // `argv[0]`, and one `; ModuleID` for the standard-library module.
+        //
+        // `packageRoot()` is `<dirname(argv[0])>/..`, so the three spellings answer three
+        // different roots -- and a package module used to be *named* by the path the
+        // compiler found it at, which made a program's IR a fact about the install rather
+        // than about the program. It is named by its package-relative specifier now, on
+        // both sides. The bare name is the one that matters most and reads the least: it
+        // is what `$PATH` hands a compiler, and before this it wrote the install's whole
+        // path into the header of a module the user never named.
+        //
+        // The comparison is between the three spellings rather than against one string
+        // that could be rewritten to whatever the compiler happens to say, and the
+        // expectation is spelled as well, so a change that made all three agree on the
+        // wrong answer still fails.
+        {
+          const spellings = [
+            ["absolute", path.join(inst, "bin", "nish"), undefined],
+            ["relative", path.join("..", "argv0-path-install", "bin", "nish"), undefined],
+            ["bare, found on PATH", "nish", `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}`],
+          ];
+          const headers = spellings.map(([label, cmd, PATH]) => {
+            const out = path.join(work, `out-${label.split(",")[0]}`);
+            fs.rmSync(out, { recursive: true, force: true });
+            const r = spawnSync(cmd, ["prog.ts", "-o", `${out}${path.sep}`], {
+              cwd: work,
+              encoding: "utf8",
+              env: PATH === undefined ? process.env : { ...process.env, PATH },
+            });
+            const ll = path.join(out, "text.ll");
+            return {
+              label,
+              header: r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8").split("\n")[0] : `exit ${r.status}: ${r.stderr}`,
+            };
+          });
+          const want = "; ModuleID = 'std/text.ts'";
+          check(
+            "a nish/<module> is named package-relatively under every spelling of argv[0]",
+            headers.every((h) => h.header === want),
+            headers.map((h) => `${h.label}: ${h.header}`).join("\n")
+          );
+        }
+
         // And the diagnostic when there genuinely is no package: it has to name where it
         // looked, and `./..` is the answer that sent somebody looking in the wrong place.
         // A copy of the binary alone on PATH is that state.

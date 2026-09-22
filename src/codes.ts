@@ -133,6 +133,8 @@ const RULES: string[] = [
     "NL2226",
     "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
     "NL2320",
+    "` specifier names a module inside it, so no segment may be empty or begin with a `.`",
+    "NL3016",
     "` under a type constructor instead of passing it on, so the chain has no end; name `",
     "NL2319",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
@@ -878,7 +880,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 410;
+export const RULE_COUNT = 411;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

@@ -100,7 +100,7 @@ const structDefinitions = (compilation: Compilation): string[] => {
     for (const info of unit.checker.program.structList) {
       if (info.origin === unit.source) {
         structs.push(info);
-        files.push(unit.path);
+        files.push(unit.name);
       }
     }
   }
@@ -192,10 +192,10 @@ export const generateHeader = (compilation: Compilation, fns: ExternalFunction[]
   let lastPath = "";
   let anyModule = false;
   for (const fn of fns) {
-    if (!anyModule || fn.unit.path !== lastPath) {
+    if (!anyModule || fn.unit.name !== lastPath) {
       lines.push("");
-      lines.push(`/* ${fn.unit.path} */`);
-      lastPath = fn.unit.path;
+      lines.push(`/* ${fn.unit.name} */`);
+      lastPath = fn.unit.name;
       anyModule = true;
     }
     const source = tsSignature(table, fn.sig);

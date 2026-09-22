@@ -419,7 +419,9 @@ export const main = (): number => {
   compilation.dumpOnly = emitAst;
   let loaded = true;
   for (const root of roots) {
-    if (!compilation.load(root, "")) {
+    // A root is named by the path it was given, which is its identity as
+    // well: only a package specifier makes those two different strings.
+    if (!compilation.load(root, root, "")) {
       loaded = false;
       break;
     }
@@ -450,7 +452,7 @@ export const main = (): number => {
   // compiling one (WP19 §A3, `tests/cases/dump_ast_reject`).
   if (emitAst) {
     for (const unit of compilation.modules) {
-      write(astText(unit.file, unit.path));
+      write(astText(unit.file, unit.name));
     }
     return 0;
   }
@@ -470,7 +472,7 @@ export const main = (): number => {
   // main` two steps later.
   if (link.length > 0 && compilation.entry().checker.program.entryMain === null) {
     console.error(
-      `--link: the entry module ${compilation.entry().path} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
+      `--link: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
     );
     return 1;
   }
@@ -481,7 +483,7 @@ export const main = (): number => {
     stems.push(module.stem);
   }
   for (const unit of compilation.modules) {
-    paths.push(unit.path);
+    paths.push(unit.name);
   }
   const outputs = planOutputs(stems, paths, output, link);
   if (outputs.length === 0) {

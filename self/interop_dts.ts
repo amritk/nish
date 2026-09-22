@@ -88,7 +88,7 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
       i = i + 1;
     }
     count = count + 1;
-    lines.push(`  /** ${fn.unit.path}: ${source} */`);
+    lines.push(`  /** ${fn.unit.name}: ${source} */`);
     lines.push(
       `  ${fn.sig.name}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
     );

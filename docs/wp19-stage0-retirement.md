@@ -584,19 +584,73 @@ like it has no consequences and it has three.
   output path, so the second module's IR overwrites the first's. The sentence
   that used to close this bullet — that stage1 keys its output stems on the
   name and therefore writes *one* file where stage0 writes two — was wrong in
-  both of its halves: a stage1 module's name *is* its identity, so stage1
-  cannot hold two modules under one name at all, and under a relative entry the
-  direction is the other one, stage0 writing one file where stage1 writes two.
-  [§5a](#5a-what-r6-is-waiting-on) item 5 has the invocations, the
+  both of its halves: a stage1 module's name *was* its identity, so stage1
+  could not hold two modules under one name at all, and under a relative entry
+  the direction is the other one, stage0 writing one file where stage1 writes
+  two. [§5a](#5a-what-r6-is-waiting-on) item 5 has the invocations, the
   measurements and what is actually broken.
-- **stage1 is still sensitive to how the *compiler* was invoked.** stage0's
-  answer no longer depends on anything outside the package; stage1's
-  `packageRoot()` is `<dirname(argv[0])>/..`, so `./build/nish` answers
-  `std/testing.ts` and `/abs/path/build/nish` answers `/abs/path/std/testing.ts`
-  for the same program. The harness happens to invoke it in the spelling that
-  agrees, which is the *whole* reason this family reads as closed. It is the
-  other half of the rule, unchanged by this branch, and the next thing to close
-  in it.
+
+  **The first half stopped being true on 2026-09-21**, which is the third
+  bullet below: stage1 carries a module's name apart from its identity now, so
+  it can print one `; ModuleID` for two modules exactly as stage0 can. `byPath`
+  is still keyed on the identity, so they are still two modules and still two
+  files; what they share is the name.
+- **stage1 was still sensitive to how the *compiler* was invoked — closed on
+  2026-09-21.** stage0's answer had not depended on anything outside the
+  package since this branch; stage1's `packageRoot()` is
+  `<dirname(argv[0])>/..`, and a package module was *named* by the path the
+  compiler found it at, so `./build/nish` answered `std/text.ts` and
+  `/abs/path/build/nish` answered `/abs/path/std/text.ts` for one program:
+
+  ```
+  ./build/nish  prog.ts -o out/     ; ModuleID = 'std/text.ts'                  before
+  /abs/build/nish prog.ts -o out/   ; ModuleID = '/abs/.../std/text.ts'         before
+  either spelling                   ; ModuleID = 'std/text.ts'                  after
+  ```
+
+  The harness happened to invoke the spelling that agreed, which was the
+  *whole* reason this family read as closed. What closes it is the distinction
+  the rest of this section is about, made in stage1 too: a module's **identity**
+  is still the path it was opened at — a file has to be opened — and its
+  **name** is its package-relative specifier, `std/text.ts`, which is what
+  stage0 has written since this branch. `ModuleUnit.name` in
+  `self/compilation.ts` carries it, `SourceFile` is constructed with it, so the
+  `; ModuleID`, the `source_filename`, the `DIFile`, the diagnostics, the
+  interop sidecars' `/* <module>: */` lines and the no-`-o` output path all read
+  it. `tests/run.js` drives a staged install by an absolute `argv[0]`, by a
+  relative one and by a bare name on `$PATH` and asserts the three agree —
+  watched failing with the fix reverted, because the harness's own spelling is
+  what hid this for four releases.
+
+  **A bare-specifier package is already under the rule, and was measured rather
+  than assumed** (`tests/link/package_bare`, both compilers, three spellings of
+  `argv[0]`): its module names are `node_modules/pkg_bare/src/index.ts` and
+  friends in every one of them, because `findPackageDir` walks up from the
+  *importing module's own name* and never asks `packageRoot()`. Such a module's
+  name tracks the entry's spelling exactly as a relative import's does, which is
+  a fact about the program being compiled rather than about the compiler, and it
+  is `nish/`'s resolution against the compiler's own install that made the
+  standard library the exception. So the two kinds of package are named by one
+  rule again, and only one of them needed moving.
+
+  Two consequences it carries, both measured on 2026-09-21 and both moving
+  stage1 onto stage0's answer:
+
+  - **With no `-o`, stage1 wrote the module into the compiler's installation.**
+    `nish p.ts` on a program importing `nish/text` wrote
+    `<install>/std/text.ll` — `EACCES` under a root-owned install, and a
+    silent edit of the compiler's own tree otherwise. It writes `std/text.ll`
+    under the user's working directory now, which is the first bullet above,
+    for both compilers rather than for one.
+  - **stage1 can now hold two modules under one name**, exactly as stage0 can,
+    which is the second bullet above. The sentence in §5a item 5 that a
+    duplicate name is a duplicate identity in stage1 was true of the tree that
+    measured it and is not true of this one: `byPath` is keyed on the identity,
+    which is still the path, so the two modules still load as two — and they
+    can now print one `; ModuleID`. What has *not* changed is `outputStems`,
+    which still stems from the path on both sides, so neither the file counts
+    in §5a item 5's table nor the install-dependence of a package module's
+    stem moves with this. That is the fix carried separately there.
 
 #### A8. The fifth way this gate lied: a surface `VARIATIONS` had never named
 
@@ -1808,9 +1862,13 @@ None of these needs anybody's permission. They need somebody's afternoon.
    names one directory. A link adds the second candidate and is the only thing
    that does. `argv[0]`'s *spelling* sensitivity — `./build/nish` answering
    `std/testing.ts` where `/abs/path/build/nish` answers the absolute path for
-   the same program — is untouched by that on purpose: resolving it would move
-   every standard-library path both compilers print, and it is §A7's third
-   bullet rather than this item.
+   the same program — was untouched by that on purpose: it is §A7's third
+   bullet rather than this item, and it closed there on 2026-09-21. Not by
+   resolving the spelling, which would indeed have moved every path both
+   compilers print, but by taking the spelling out of the answer: the path is
+   still whatever `argv[0]` implies and the *name* is the package-relative
+   specifier, so the three spellings this item is about now write one
+   `; ModuleID`, one `DIFile` and one output path.
 
    **Measured 2026-09-21, and the seed is the point.** `self/` may only use what
    the last release compiles, so the check is the v0.5.0 seed compiling this call
@@ -1846,23 +1904,37 @@ None of these needs anybody's permission. They need somebody's afternoon.
    defect is a shared one, and what it costs a user is a build that fails on a
    symbol their program defines exactly once.**
 
-   **Why the mechanism cannot happen, which is the part worth keeping.** A
-   stage1 module's name *is* the path string it was opened at:
-   `ModuleUnit.path` in `self/compilation.ts` is declared as "the resolved
-   path, which is the module's identity and the name in its IR header", and
-   `Compilation.byPath` is keyed on that same string, so the second arrival of
-   a name returns early out of `load`. Two modules therefore never share a
-   name in stage1 — a duplicate name is a duplicate *identity*, deduplicated
-   at load rather than mis-written at emit — and `outputStems` cannot be
-   handed one twice under any invocation. The premise is stage0's: it keeps
-   the two apart in two fields, `path` (absolute, the identity) and
-   `fileName` (the name), so only stage0 can hold two modules that are
-   different files under one `; ModuleID`. That is also what every earlier
-   construction ran into. The "collapsed into a single module" of the previous
-   attempt was not the construction failing, it was this property — and it was
-   written down one file away the whole time, in `resolvePath`'s comment in
-   `self/paths.ts`: stage1 "keys module identity on the normalised path as
-   written".
+   **Why the mechanism could not happen when this was measured, which is the
+   part worth keeping — and what changed under it since.** A stage1 module's
+   name *was* the path string it was opened at: `ModuleUnit.path` in
+   `self/compilation.ts` was declared as "the resolved path, which is the
+   module's identity and the name in its IR header", and `Compilation.byPath`
+   is keyed on that same string, so the second arrival of a name returned
+   early out of `load`. Two modules therefore never shared a name in stage1 —
+   a duplicate name was a duplicate *identity*, deduplicated at load rather
+   than mis-written at emit — and `outputStems` could not be handed one twice
+   under any invocation. The premise was stage0's: it keeps the two apart in
+   two fields, `path` (absolute, the identity) and `fileName` (the name), so
+   only stage0 could hold two modules that are different files under one
+   `; ModuleID`. That is also what every earlier construction ran into. The
+   "collapsed into a single module" of the previous attempt was not the
+   construction failing, it was this property — and it was written down one
+   file away the whole time, in `resolvePath`'s comment in `self/paths.ts`:
+   stage1 "keys module identity on the normalised path as written".
+
+   **On 2026-09-21 stage1 grew the second field**, because naming a package
+   module by the path it was found at is §A7's third bullet and that had to
+   close: `ModuleUnit.name` is the name and `ModuleUnit.path` is still the
+   identity. So the premise above is now both compilers', and stage1 can print
+   one `; ModuleID` for two modules the way stage0 does. Nothing in the table
+   below moves with it: `byPath` is still keyed on the identity, so the modules
+   are still counted the same way, and `outputStems` still reads the *path* on
+   both sides — deliberately, and said so beside the code — so every file count
+   in the four rows was re-measured unchanged on that tree. What did move is
+   inside the files: under a relative entry (row 2) the `nish/` module's header
+   is `std/text.ts` where it used to be the install's absolute path, so the two
+   compilers now agree about every module's *name* in every row while still
+   disagreeing about how many files they write in two of them.
 
    **What is actually broken: the disambiguation is lossy, and on both
    sides.** `outputStems` tells two modules of one basename apart by the
@@ -1997,6 +2069,18 @@ None of these needs anybody's permission. They need somebody's afternoon.
    file's name. So the shape §A7 described is not merely undetected by the
    gates: it cannot be put in front of them at all until the stem stops
    depending on the climb, which is one more reason the fix is worth making.
+
+   **Still true after the naming change of 2026-09-21, and re-measured there.**
+   A package module's *name* is install-independent now (`std/text.ts` under
+   every install and every spelling of `argv[0]`), and its **stem** is not: both
+   compilers still stem from the path, so a staged install still answers
+   `<unpack path>_std_text.ll` where a checkout answers `std_text.ll`. That was
+   left alone on purpose — moving what `outputStems` reads *and* what it drops
+   in one change would move two things at once over live output stems — and it
+   is what the fix now has to do: with the name package-relative, a package
+   module's stem can be taken from the name instead of from a climb, which is
+   both halves of this item in one edit. `tests/link/module_stem_clash` stays
+   package-free until it is made.
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
    one, so a later field is reported as unknown when it is not. **Reproduced
    again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``

@@ -957,7 +957,7 @@ export const generateNapiShim = (
   const plans: Plan[] = [];
   const skipped: string[] = [];
   for (const fn of fns) {
-    const source = `${fn.unit.path}: ${tsSignature(table, fn.sig)}`;
+    const source = `${fn.unit.name}: ${tsSignature(table, fn.sig)}`;
     if (fn.sig.name === "main") {
       skipped.push(`${source} -- not bridged: \`main\` is reserved for a process entry`);
       continue;
@@ -979,7 +979,7 @@ export const generateNapiShim = (
   const asyncSkipped: string[] = [];
   if (asyncExports) {
     for (const p of plans) {
-      const source = `${p.fn.unit.path}: ${tsSignature(table, p.fn.sig)}`;
+      const source = `${p.fn.unit.name}: ${tsSignature(table, p.fn.sig)}`;
       const jsName = `${p.fn.sig.sourceName}Async`;
       // `<name>Async` is a name in the same export namespace, so a program that
       // already exports it wins: an export the program asked for is not
@@ -1256,7 +1256,7 @@ export const generateNapiShim = (
     lines.push("");
   }
   for (const p of plans) {
-    lines.push(`/* ${p.fn.unit.path}: ${tsSignature(table, p.fn.sig)} */`);
+    lines.push(`/* ${p.fn.unit.name}: ${tsSignature(table, p.fn.sig)} */`);
     pushAll(lines, napiWrapper(table, p));
   }
   // Every function that asked for an asynchronous export and did not get one is
@@ -1276,7 +1276,7 @@ export const generateNapiShim = (
   }
   for (const p of asyncPlans) {
     const shown = tsSignature(table, p.fn.sig);
-    lines.push(`/* ${p.fn.unit.path}: ${shown} -- asynchronously, as \`${p.fn.sig.sourceName}Async\` */`);
+    lines.push(`/* ${p.fn.unit.name}: ${shown} -- asynchronously, as \`${p.fn.sig.sourceName}Async\` */`);
     pushAll(lines, napiAsyncWrapper(table, p));
   }
 
