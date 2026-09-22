@@ -214,10 +214,23 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
-`tests/differential/corpus/`, `tests/parser/` and `tests/link/`;
-`tests/self/corpus.js` enumerates it and answers what flags each program is
-compiled with, so that a program needing `--number-mode f64` is not refused by
-stage0 and then counted as though the *port* could not reach it. The fuzzer's
+`tests/parser/`, `tests/differential/corpus/` and `tests/link/`, plus the
+`main.ts` of any directory inside one of those — the multi-module shape, which
+is `examples/multi/` and the three `modules_*` / `const_modules` programs of
+the differential corpus. `tests/self/corpus.js` enumerates it and answers what
+flags each program is compiled with, so that a program needing
+`--number-mode f64` is not refused by stage0 and then counted as though the
+*port* could not reach it.
+
+**`tests/differential/corpus/` and the directory programs joined it on
+2026-09-22, and this sentence claimed them for weeks before they were in it**
+(wp19 §A5, the sixth entry). 71 whole programs — the set that pins the
+language's *runtime* behaviour — had never been compiled by stage1 by any
+oracle or by `--parity`, and two of them did not compile at all
+(``-1 / z`` with ``z: f64``, `docs/LANGUAGE.md`'s "`-5` and `(5)` count as the
+literal"). Both the corpus list here and the sentence in §5a's G1 row read
+green over a set that silently excluded them. When this list changes, re-derive
+the numbers that quote it rather than editing the list alone. The fuzzer's
 `--stage1` mode has no corpus at all: it generates its programs from a seed, so
 the only thing that reproduces a failure is the seed it prints
 (`--stage1 --seed <s> --count 1`) and the program it saves under

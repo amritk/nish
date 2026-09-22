@@ -433,7 +433,10 @@ function corpus() {
  * when it reached `main` on a green pull request.
  *
  * A file selects a program when it is one of that program's own files. A
- * `tests/link/<name>/` program owns everything under its directory; everywhere
+ * program whose entry is a `main.ts` owns everything under its directory --
+ * `tests/link/<name>/`, and since WP19 §A5's sixth entry the multi-module
+ * programs of `tests/differential/corpus/` and `examples/multi/`, which are
+ * written the same way; everywhere
  * else a program owns its entry and its sidecars -- `foo.ts`, `foo.args`,
  * `foo.err`, `foo.ll`, `foo.out` and the rest -- which is the `foo.` prefix.
  * The trailing dot is what keeps `arr_pop.` from selecting `arr_pop_empty.ts`,
@@ -467,9 +470,10 @@ function changedPrograms(rows, paths) {
   const slash = (p) => p.split(path.sep).join("/");
   const owners = rows.map((row) => ({
     name: row.name,
-    prefix: row.name.startsWith("link/")
-      ? `${slash(path.relative(root, path.dirname(row.entry)))}/`
-      : `${slash(path.relative(root, row.entry)).replace(/\.ts$/, "")}.`,
+    prefix:
+      path.basename(row.entry) === "main.ts"
+        ? `${slash(path.relative(root, path.dirname(row.entry)))}/`
+        : `${slash(path.relative(root, row.entry)).replace(/\.ts$/, "")}.`,
   }));
   // `readPathList` has already trimmed and dropped the empty lines, and
   // `git diff --name-only` spells a path with `/` on every platform, so the
@@ -494,11 +498,12 @@ function changedPrograms(rows, paths) {
  * job summary next to the count it compared.
  *
  * A path is one of these when it is a `.ts` that is no longer in the tree and
- * sits exactly where a program lives: directly in one of `CORPUS_DIRS`, or as
- * the `main.ts` of a `tests/link/<name>/` directory. Those are the two rules
- * `programs()` and `linkPrograms()` apply in `corpus.js`, read backwards and
- * from the same constant, so the two cannot drift apart into different ideas
- * of what a corpus program is.
+ * sits exactly where a program lives: directly in one of `CORPUS_DIRS`, as the
+ * `main.ts` of a directory *inside* one of them, or as the `main.ts` of a
+ * `tests/link/<name>/` directory. Those are the three rules `programs()` and
+ * `linkPrograms()` apply in `corpus.js`, read backwards and from the same
+ * constant, so the two cannot drift apart into different ideas of what a
+ * corpus program is.
  */
 const removedPrograms = (paths) => {
   const gone = [];
@@ -506,8 +511,10 @@ const removedPrograms = (paths) => {
     if (!file.endsWith(".ts")) continue;
     if (fs.existsSync(path.join(root, file))) continue;
     const dir = path.posix.dirname(file);
-    const isLinkMain = path.posix.basename(file) === "main.ts" && /^tests\/link\/[^/]+$/.test(dir);
-    if (CORPUS_DIRS.includes(dir) || isLinkMain) gone.push(file);
+    const isMain = path.posix.basename(file) === "main.ts";
+    const isLinkMain = isMain && /^tests\/link\/[^/]+$/.test(dir);
+    const isCorpusMain = isMain && CORPUS_DIRS.includes(path.posix.dirname(dir));
+    if (CORPUS_DIRS.includes(dir) || isCorpusMain || isLinkMain) gone.push(file);
   }
   return gone;
 };

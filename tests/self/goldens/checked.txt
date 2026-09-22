@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 344 programs, 5981 dump lines.
+# 417 programs, 7536 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2890,6 +2890,14 @@ function test(): i32 -> @test [exported]
   stackSites=0 stackLocals=0
   callee 12:15 hypot -> @hypot
   callee 25:15 trig -> @trig
+program tests/cases/math_literal_operand_forms.ts
+module tests/cases/math_literal_operand_forms.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 7:9 z: f64 (const)
+  local 8:9 big: i64 (const)
 program tests/cases/math_random.ts
 module tests/cases/math_random.ts (entry)
 function bad(): i32 -> @bad
@@ -4779,6 +4787,18 @@ function polynomial(x: i32, k: i32): i32 -> @polynomial
 function isPositive(n: i32): boolean -> @isPositive
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
+program examples/multi/main.ts
+module examples/multi/main.ts (entry)
+import square from "./math" -> function @square
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: square
+  stackSites=0 stackLocals=0
+  callee 6:35 square -> @square
+module examples/multi/math.ts
+function square(n: i32): i32 -> @square [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
 program examples/nbody.ts --number-mode f64
 module examples/nbody.ts (entry)
 struct Body (class) size=56 align=8
@@ -6334,3 +6354,1611 @@ function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.construc
   escaping: x y
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+program tests/differential/corpus/argv_words.ts
+module tests/differential/corpus/argv_words.ts (entry)
+function longest(words: string[]): string -> @longest
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer words: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 6:7 best: string (let)
+  local 7:7 first: boolean (let)
+  local 8:14 w: string (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: longest nish_arena_mark nish_arena_release nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 16:9 args: string[] (const)
+  local 19:7 total: i32 (let)
+  local 20:12 i: i32 (let)
+  callee 24:27 longest -> @longest
+program tests/differential/corpus/arr_2d.ts
+module tests/differential/corpus/arr_2d.ts (entry)
+function multiply(a: i32[][], b: i32[][]): i32[][] -> @multiply
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_array_grow nish_panic_index
+  pointer a: size=0 writesThrough=false captured=false
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 3:9 out: i32[][] (const)
+  local 4:12 i: i32 (let)
+  local 5:11 row: i32[] (const)
+  local 6:14 j: i32 (let)
+  local 7:11 s: i32 (let)
+  local 8:16 k: i32 (let)
+function show(m: i32[][]): void -> @show
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_str_concat nish_str_from_i32
+  pointer m: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 19:14 row: i32[] (const)
+  local 20:9 line: string (let)
+  local 21:16 v: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: multiply nish_array_grow nish_panic_index nish_print nish_str_from_i32 show
+  stackSites=6 stackLocals=6
+  local 29:9 a: i32[][] (const)
+  local 33:9 b: i32[][] (const)
+  callee 38:3 show -> @show
+  callee 38:8 multiply -> @multiply
+  callee 39:3 show -> @show
+  callee 39:8 multiply -> @multiply
+  local 40:9 big: i32[][] (const)
+  callee 44:3 show -> @show
+  callee 44:8 multiply -> @multiply
+  local 45:9 pascal: i32[][] (const)
+  local 46:12 n: i32 (let)
+  local 47:11 row: i32[] (const)
+  local 48:14 k: i32 (let)
+  callee 53:3 show -> @show
+  local 57:9 jagged: i32[][] (const)
+  local 58:7 total: i32 (let)
+  local 59:14 row: i32[] (const)
+  local 66:9 grid: boolean[][] (const)
+  local 67:12 i: i32 (let)
+program tests/differential/corpus/arr_bounds_edge.ts
+module tests/differential/corpus/arr_bounds_edge.ts (entry)
+function last(xs: i32[]): i32 -> @last
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function rotate(xs: i32[]): void -> @rotate
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 7:9 first: i32 (const)
+  local 8:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: last llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_i32 rotate
+  stackSites=4 stackLocals=4
+  local 15:9 xs: i32[] (const)
+  callee 17:15 last -> @last
+  callee 21:3 rotate -> @rotate
+  callee 24:15 last -> @last
+  local 25:9 one: i32[] (const)
+  callee 26:15 last -> @last
+  callee 28:3 rotate -> @rotate
+  local 30:9 fill: i32[] (const)
+  local 31:12 i: i32 (let)
+  local 35:7 k: i32 (let)
+  local 36:9 seen: i32[] (const)
+  local 42:9 idx: f64 (const)
+program tests/differential/corpus/arr_for_of.ts
+module tests/differential/corpus/arr_for_of.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_array_grow nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=6 stackLocals=6
+  local 3:9 xs: i32[] (const)
+  local 4:7 sum: i32 (let)
+  local 5:14 x: i32 (const)
+  local 15:9 grow: i32[] (const)
+  local 16:7 seen: i32 (let)
+  local 17:14 g: i32 (const)
+  local 26:9 words: string[] (const)
+  local 27:7 joined: string (let)
+  local 28:14 w: string (const)
+  local 29:16 x: i32 (const)
+  local 38:7 doubled: string (let)
+  local 39:12 v: i32 (let)
+  local 45:9 flags: boolean[] (const)
+  local 46:7 count: i32 (let)
+  local 47:14 f: boolean (const)
+  local 53:9 empty: i32[] (const)
+  local 54:7 ran: boolean (let)
+  local 55:14 e: i32 (const)
+  local 59:9 rows: i32[][] (const)
+  local 64:7 product: i32 (let)
+  local 65:14 row: i32[] (const)
+  local 66:16 v: i32 (const)
+program tests/differential/corpus/arr_methods.ts
+module tests/differential/corpus/arr_methods.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_alloc_struct nish_array_grow nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64
+  stackSites=5 stackLocals=5
+  local 5:9 parts: string[] (const)
+  local 6:12 i: i32 (let)
+  local 15:9 nums: i32[] (const)
+  local 17:9 wide: i64[] (const)
+  local 20:9 single: string[] (const)
+  local 22:9 none: string[] (const)
+program tests/differential/corpus/arr_oob_exit.ts
+module tests/differential/corpus/arr_oob_exit.ts (entry)
+function at(xs: i32[], i: i32): i32 -> @at
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: at nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 7:9 xs: i32[] (const)
+  callee 8:15 at -> @at
+  callee 9:15 at -> @at
+  callee 11:15 at -> @at
+program tests/differential/corpus/arr_oob_negative.ts
+module tests/differential/corpus/arr_oob_negative.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 3:9 xs: i32[] (const)
+  local 4:7 i: i32 (let)
+program tests/differential/corpus/arr_push_growth.ts
+module tests/differential/corpus/arr_push_growth.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_array_grow nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32
+  stackSites=6 stackLocals=6
+  local 3:9 xs: i32[] (const)
+  local 4:7 checkpoints: string (let)
+  local 5:12 i: i32 (let)
+  local 6:11 n: i32 (const)
+  local 13:7 sum: i32 (let)
+  local 14:14 x: i32 (const)
+  local 21:9 flags: boolean[] (const)
+  local 22:12 i: i32 (let)
+  local 25:7 trues: i32 (let)
+  local 26:14 f: boolean (const)
+  local 32:9 words: string[] (const)
+  local 33:12 i: i32 (let)
+  local 38:9 fs: f64[] (const)
+  local 39:12 i: i32 (let)
+  local 44:9 zeros: i32[] (const)
+  local 50:9 literal: i32[] (const)
+program tests/differential/corpus/arr_sort_reverse.ts
+module tests/differential/corpus/arr_sort_reverse.ts (entry)
+function bubbleSort(xs: i32[]): i32 -> @bubbleSort
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 3:7 swaps: i32 (let)
+  local 4:12 i: i32 (let)
+  local 5:14 j: i32 (let)
+  local 7:15 t: i32 (const)
+function reverse(xs: i32[]): void -> @reverse
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 lo: i32 (let)
+  local 19:7 hi: i32 (let)
+  local 21:11 t: i32 (const)
+function show(xs: i32[]): string -> @show
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat nish_str_from_i32
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 30:7 s: string (let)
+  local 31:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: bubbleSort nish_array_grow nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_i32 reverse show
+  stackSites=4 stackLocals=4
+  local 38:9 xs: i32[] (const)
+  callee 39:15 show -> @show
+  callee 40:15 bubbleSort -> @bubbleSort
+  callee 41:15 show -> @show
+  callee 42:3 reverse -> @reverse
+  callee 43:15 show -> @show
+  local 44:9 one: i32[] (const)
+  callee 45:3 reverse -> @reverse
+  callee 46:15 show -> @show
+  local 47:9 none: i32[] (const)
+  callee 48:3 reverse -> @reverse
+  callee 49:15 show -> @show
+  callee 50:15 bubbleSort -> @bubbleSort
+  local 51:9 seq: i32[] (const)
+  local 52:7 v: i32 (let)
+  local 53:12 i: i32 (let)
+  callee 57:15 bubbleSort -> @bubbleSort
+  callee 59:3 reverse -> @reverse
+program tests/differential/corpus/bit_compound_target.ts
+module tests/differential/corpus/bit_compound_target.ts (entry)
+struct Flags (class) size=8 align=4
+  field bits: i32 index=0 offset=0
+  field count: i32 index=1 offset=4
+  constructor -> @Flags.constructor
+  method next -> @Flags.next
+function Flags.constructor(this: Flags): void -> @Flags.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Flags.next(this: Flags): i32 -> @Flags.next [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: Flags.constructor Flags.next nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=3 stackLocals=3
+  local 24:9 f: Flags (const)
+  callee 24:13 new Flags -> @Flags.constructor
+  local 41:12 n: i32 (let)
+  local 42:11 b: i32[] (const)
+  local 48:9 a: i32[] (const)
+  callee 49:5 Flags.next -> @Flags.next
+  callee 50:5 Flags.next -> @Flags.next
+  callee 51:5 Flags.next -> @Flags.next
+program tests/differential/corpus/bit_fnv1a.ts --wrapping
+module tests/differential/corpus/bit_fnv1a.ts (entry)
+function fnv1a(bytes: i32[]): i32 -> @fnv1a
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 5:7 hash: i32 (let)
+  local 6:14 b: i32 (const)
+function bucket(bytes: i32[], size: i32): i32 -> @bucket
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: fnv1a
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=fnv1a#0
+  stackSites=0 stackLocals=0
+  callee 15:10 fnv1a -> @fnv1a
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: bucket fnv1a nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_concat nish_str_from_i32
+  stackSites=4 stackLocals=4
+  local 19:9 hello: i32[] (const)
+  local 20:9 world: i32[] (const)
+  local 21:9 empty: i32[] (const)
+  callee 22:15 fnv1a -> @fnv1a
+  callee 23:15 fnv1a -> @fnv1a
+  callee 24:15 fnv1a -> @fnv1a
+  callee 25:15 bucket -> @bucket
+  callee 26:15 bucket -> @bucket
+  callee 27:15 bucket -> @bucket
+  local 28:9 bytes: i32[] (const)
+  local 29:12 i: i32 (let)
+  callee 31:20 fnv1a -> @fnv1a
+  callee 31:36 fnv1a -> @fnv1a
+  callee 31:59 bucket -> @bucket
+program tests/differential/corpus/bit_i64.ts
+module tests/differential/corpus/bit_i64.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 5:9 one: i64 (const)
+  local 6:9 neg: i64 (const)
+  local 7:12 n: i64 (let)
+  local 14:9 big: i64 (const)
+  local 20:7 acc: i64 (let)
+  local 21:12 i: i64 (let)
+  local 26:7 bits: i64 (let)
+program tests/differential/corpus/bit_ops.ts
+module tests/differential/corpus/bit_ops.ts (entry)
+function show(a: i32, b: i32): void -> @show
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 show
+  stackSites=0 stackLocals=0
+  callee 10:3 show -> @show
+  callee 11:3 show -> @show
+  callee 12:3 show -> @show
+  callee 13:3 show -> @show
+  callee 14:3 show -> @show
+  callee 15:3 show -> @show
+  local 21:7 x: i32 (let)
+  local 28:7 mask: i32 (let)
+  local 29:12 i: i32 (let)
+program tests/differential/corpus/bit_shifts.ts
+module tests/differential/corpus/bit_shifts.ts (entry)
+function row(a: i32, n: i32): void -> @row
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 row
+  stackSites=0 stackLocals=0
+  local 11:12 n: i32 (let)
+  callee 12:5 row -> @row
+  callee 14:3 row -> @row
+  callee 15:3 row -> @row
+  callee 16:3 row -> @row
+  callee 17:3 row -> @row
+  callee 18:3 row -> @row
+  callee 19:3 row -> @row
+  callee 20:3 row -> @row
+  callee 21:3 row -> @row
+  callee 22:3 row -> @row
+  local 26:7 x: i32 (let)
+program tests/differential/corpus/bool_logic.ts --wrapping
+module tests/differential/corpus/bool_logic.ts (entry)
+function xor(a: boolean, b: boolean): boolean -> @xor
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function implies(a: boolean, b: boolean): boolean -> @implies
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: implies nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_eq xor
+  stackSites=1 stackLocals=1
+  local 11:9 vals: boolean[] (const)
+  local 12:14 a: boolean (const)
+  local 13:16 b: boolean (const)
+  callee 14:64 xor -> @xor
+  callee 14:85 implies -> @implies
+  local 20:9 tenth: f64 (const)
+  local 21:9 f: f64 (const)
+  local 25:9 z: f64 (const)
+  local 26:9 nan: f64 (const)
+  local 32:9 big: i64 (const)
+  local 36:9 min: i32 (const)
+program tests/differential/corpus/cf_switch.ts
+module tests/differential/corpus/cf_switch.ts (entry)
+const KIND_SKIP: i32 = 3
+function classify(n: i32): string -> @classify
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: n
+  stackSites=0 stackLocals=0
+function widen(w: i64): i64 -> @widen
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: w
+  stackSites=0 stackLocals=0
+  local 21:7 out: i64 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: classify nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 widen
+  stackSites=0 stackLocals=0
+  local 34:12 i: i32 (let)
+  callee 35:17 classify -> @classify
+  local 37:7 total: i32 (let)
+  local 38:12 i: i32 (let)
+  callee 51:18 widen -> @widen
+  callee 51:30 widen -> @widen
+  callee 51:42 widen -> @widen
+program tests/differential/corpus/class_prefix.ts
+module tests/differential/corpus/class_prefix.ts (entry)
+struct Account (interface) size=16 align=8
+  field owner: string index=0 offset=0
+  field balance: i32 index=1 offset=8
+  field ops: i32 index=2 offset=12
+struct Savings (class) size=24 align=8
+  implements Account
+  field owner: string index=0 offset=0
+  field balance: i32 index=1 offset=8
+  field ops: i32 index=2 offset=12 initialized
+  field rate: i32 index=3 offset=16
+  constructor -> @Savings.constructor
+  method deposit -> @Savings.deposit
+  method accrue -> @Savings.accrue
+  method summary -> @Savings.summary
+struct Trust (class) size=24 align=8
+  implements Account
+  field owner: string index=0 offset=0 initialized
+  field balance: i32 index=1 offset=8 initialized
+  field ops: i32 index=2 offset=12 initialized
+  field beneficiaries: i32 index=3 offset=16
+  field until: i32 index=4 offset=20 initialized
+  constructor -> @Trust.constructor
+  method remaining -> @Trust.remaining
+function Savings.constructor(this: Savings, owner: string, balance: i32, rate: i32): void -> @Savings.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: balance owner rate
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Savings.deposit(this: Savings, amount: i32): i32 -> @Savings.deposit [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: amount
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Savings.accrue(this: Savings): i32 -> @Savings.accrue [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: Savings.deposit nish_panic_div
+  pointer this: size=24 writesThrough=true captured=false passedTo=Savings.deposit#0
+  stackSites=0 stackLocals=0
+  callee 31:12 Savings.deposit -> @Savings.deposit
+function Savings.summary(this: Savings): string -> @Savings.summary [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat nish_str_from_i32
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Trust.constructor(this: Trust, beneficiaries: i32): void -> @Trust.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: beneficiaries
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Trust.remaining(this: Trust, month: i32): i32 -> @Trust.remaining [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function total(accounts: Account[]): i32 -> @total
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer accounts: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 56:7 sum: i32 (let)
+  local 57:14 a: Account (const)
+function richer(a: Account, b: Account): Account -> @richer
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=16
+  escaping: a b
+  pointer a: size=16 writesThrough=true captured=true
+  pointer b: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function charge(a: Account, amount: i32): i32 -> @charge
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: amount
+  pointer a: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Savings.accrue Savings.constructor Savings.deposit Savings.summary Trust.constructor Trust.remaining charge nish_alloc_struct nish_array_grow nish_panic_index nish_print nish_str_from_i32 richer total
+  stackSites=1 stackLocals=1
+  local 75:9 s: Savings (const)
+  callee 75:13 new Savings -> @Savings.constructor
+  callee 76:15 Savings.deposit -> @Savings.deposit
+  callee 77:15 Savings.accrue -> @Savings.accrue
+  callee 78:15 Savings.summary -> @Savings.summary
+  local 79:9 t: Trust (const)
+  callee 79:13 new Trust -> @Trust.constructor
+  callee 80:15 Trust.remaining -> @Trust.remaining
+  local 81:9 all: Account[] (const)
+  callee 82:12 new Savings -> @Savings.constructor
+  callee 83:12 new Savings -> @Savings.constructor
+  callee 84:15 total -> @total
+  callee 85:15 richer -> @richer
+  callee 86:15 charge -> @charge
+  local 88:7 best: Account (let)
+  callee 91:15 Savings.summary -> @Savings.summary
+program tests/differential/corpus/collatz.ts
+module tests/differential/corpus/collatz.ts (entry)
+function steps(n: i32): i32 -> @steps
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+  local 3:7 x: i32 (let)
+  local 4:7 count: i32 (let)
+function peak(n: i32): i32 -> @peak
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+  local 17:7 x: i32 (let)
+  local 18:7 best: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 peak steps
+  stackSites=0 stackLocals=0
+  local 29:7 longest: i32 (let)
+  local 30:7 arg: i32 (let)
+  local 31:12 n: i32 (let)
+  local 32:11 s: i32 (const)
+  callee 32:15 steps -> @steps
+  callee 33:43 peak -> @peak
+program tests/differential/corpus/const_module.ts --wrapping
+module tests/differential/corpus/const_module.ts (entry)
+const LIMIT: i32 = 10
+const STEP: i32 = 2
+const WRAPPED: i32 = -2147483648
+const LABEL: string = "step size"
+const ENABLED: boolean = true
+const RATIO: f64 = 0.25
+const BIG: i64 = 4000000000
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 14:7 total: i32 (let)
+  local 16:14 i: i32 (let)
+program tests/differential/corpus/const_modules/main.ts
+module tests/differential/corpus/const_modules/main.ts (entry)
+import TOKEN_NUMBER from "./kinds" -> const TOKEN_NUMBER
+import TOKEN_END from "./kinds" -> const TOKEN_END
+import PROMPT from "./kinds" -> const PROMPT
+import describe from "./kinds" -> function @describe
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: describe nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 4:12 t: i32 (let)
+  callee 5:34 describe -> @describe
+module tests/differential/corpus/const_modules/kinds.ts
+const TOKEN_NUMBER: i32 = 1 [exported]
+const TOKEN_NAME: i32 = 2 [exported]
+const TOKEN_END: i32 = 3 [exported]
+const PROMPT: string = "> " [exported]
+function describe(token: i32): string -> @describe [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+program tests/differential/corpus/conv_bit_patterns.ts
+module tests/differential/corpus/conv_bit_patterns.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i64
+  stackSites=1 stackLocals=1
+  local 2:9 values: f64[] (const)
+  local 3:14 v: f64 (const)
+  local 4:11 bits: i64 (const)
+program tests/differential/corpus/conversions_roundtrip.ts --wrapping
+module tests/differential/corpus/conversions_roundtrip.ts (entry)
+function roundTrip32(x: i32): boolean -> @roundTrip32
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function roundTrip64(x: i64): boolean -> @roundTrip64
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.fptosi.sat.i64.f64
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fptosi.sat.i32.f64 llvm.fptosi.sat.i64.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 roundTrip32 roundTrip64
+  stackSites=0 stackLocals=0
+  local 11:9 max: i32 (const)
+  local 12:9 min: i32 (const)
+  callee 13:15 roundTrip32 -> @roundTrip32
+  callee 14:15 roundTrip32 -> @roundTrip32
+  callee 15:15 roundTrip32 -> @roundTrip32
+  callee 16:15 roundTrip32 -> @roundTrip32
+  local 17:7 big: i64 (let)
+  callee 19:15 roundTrip64 -> @roundTrip64
+  callee 20:15 roundTrip64 -> @roundTrip64
+  callee 21:15 roundTrip64 -> @roundTrip64
+  local 30:9 f: f64 (const)
+  local 39:9 z: f64 (const)
+  local 49:9 nearMax: f64 (const)
+  local 52:9 i64max: f64 (const)
+  local 55:9 e19: f64 (const)
+  local 57:7 acc: i64 (let)
+  local 58:12 i: i32 (let)
+program tests/differential/corpus/digits.ts --wrapping
+module tests/differential/corpus/digits.ts (entry)
+function digitSum(n: i32): i32 -> @digitSum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+  local 3:7 s: i32 (let)
+  local 4:7 r: i32 (let)
+function reverse(n: i32): i32 -> @reverse
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+  local 13:7 r: i32 (let)
+  local 14:7 x: i32 (let)
+function isPalindrome(n: i32): boolean -> @isPalindrome
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: reverse
+  stackSites=0 stackLocals=0
+  callee 23:16 reverse -> @reverse
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: digitSum isPalindrome nish_arena_mark nish_arena_release nish_print nish_str_from_i32 reverse
+  stackSites=0 stackLocals=0
+  callee 27:15 digitSum -> @digitSum
+  callee 28:15 digitSum -> @digitSum
+  callee 29:15 digitSum -> @digitSum
+  callee 30:15 reverse -> @reverse
+  callee 31:15 reverse -> @reverse
+  callee 32:15 reverse -> @reverse
+  callee 33:15 reverse -> @reverse
+  local 34:7 count: i32 (let)
+  local 35:12 i: i32 (let)
+  callee 36:9 isPalindrome -> @isPalindrome
+  callee 41:15 isPalindrome -> @isPalindrome
+  callee 42:15 isPalindrome -> @isPalindrome
+program tests/differential/corpus/exit_code.ts
+module tests/differential/corpus/exit_code.ts (entry)
+function finish(code: i32): i32 -> @finish
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_exit nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: finish nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 8:7 total: i32 (let)
+  local 9:12 i: i32 (let)
+  callee 13:7 finish -> @finish
+program tests/differential/corpus/exit_code_large.ts
+module tests/differential/corpus/exit_code_large.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_exit nish_print
+  stackSites=0 stackLocals=0
+program tests/differential/corpus/f32_round.ts
+module tests/differential/corpus/f32_round.ts (entry)
+function scale(x: f32, k: f32): f32 -> @scale
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fabs.f32 llvm.fptosi.sat.i32.f32 llvm.fptoui.sat.i32.f32 llvm.maxnum.f32 llvm.minnum.f32 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 scale
+  stackSites=1 stackLocals=1
+  local 10:9 tenth: f32 (const)
+  local 11:9 third: f32 (const)
+  local 12:9 e: f32 (const)
+  callee 15:18 scale -> @scale
+  callee 15:39 scale -> @scale
+  local 19:9 dTenth: f64 (const)
+  local 23:7 acc: f32 (let)
+  local 24:12 i: i32 (let)
+  local 29:7 counter: f32 (let)
+  local 37:9 negative: f32 (const)
+  local 39:9 huge: f32 (const)
+  local 48:9 xs: f32[] (const)
+program tests/differential/corpus/f64_arith.ts --number-mode f64
+module tests/differential/corpus/f64_arith.ts (entry)
+function mean(a: f64, b: f64, c: f64): f64 -> @mean
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: mean nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64
+  stackSites=0 stackLocals=0
+  callee 16:15 mean -> @mean
+  callee 17:15 mean -> @mean
+  callee 18:15 mean -> @mean
+  local 19:7 x: f64 (let)
+  local 20:12 i: f64 (let)
+  local 25:7 y: f64 (let)
+  local 26:12 i: f64 (let)
+  local 30:7 h: f64 (let)
+  local 31:12 i: f64 (let)
+  local 35:7 d: f64 (let)
+  local 36:7 n: f64 (let)
+  local 42:9 big: f64 (const)
+program tests/differential/corpus/f64_format.ts --number-mode f64
+module tests/differential/corpus/f64_format.ts (entry)
+function nan(): f64 -> @nan
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 3:9 z: f64 (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fabs.f64 llvm.pow.f64 nan nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64
+  stackSites=0 stackLocals=0
+  local 16:9 negZero: f64 (const)
+  callee 29:15 nan -> @nan
+  local 42:7 x: f64 (let)
+  local 43:12 i: f64 (let)
+  callee 50:40 nan -> @nan
+program tests/differential/corpus/f64_i32_mixed.ts --number-mode f64
+module tests/differential/corpus/f64_i32_mixed.ts (entry)
+function wrapping(n: i32): i32 -> @wrapping
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fptosi.sat.i32.f64 llvm.fptosi.sat.i64.f64 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 wrapping
+  stackSites=0 stackLocals=0
+  local 7:9 big: i32 (const)
+  callee 8:15 wrapping -> @wrapping
+  local 10:7 counter: i32 (let)
+  local 11:12 i: f64 (let)
+  local 21:9 zero: f64 (const)
+  local 26:9 half: f64 (const)
+  local 33:9 k: i32 (const)
+program tests/differential/corpus/f64_libm.ts --number-mode f64
+module tests/differential/corpus/f64_libm.ts (entry)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.cos.f64 llvm.exp.f64 llvm.fabs.f64 llvm.log.f64 llvm.pow.f64 llvm.sin.f64 llvm.sqrt.f64 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64
+  stackSites=1 stackLocals=1
+  local 5:9 xs: f64[] (const)
+  local 6:14 x: f64 (const)
+program tests/differential/corpus/f64_math.ts --number-mode f64
+module tests/differential/corpus/f64_math.ts (entry)
+function roundAll(x: f64): string -> @roundAll
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: llvm.ceil.f64 llvm.floor.f64 llvm.trunc.f64 nish_str_concat nish_str_from_f64
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.ceil.f64 llvm.cos.f64 llvm.exp.f64 llvm.fabs.f64 llvm.floor.f64 llvm.log.f64 llvm.maxnum.f64 llvm.minnum.f64 llvm.pow.f64 llvm.sin.f64 llvm.sqrt.f64 llvm.trunc.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64 roundAll
+  stackSites=0 stackLocals=0
+  callee 7:15 roundAll -> @roundAll
+  callee 8:15 roundAll -> @roundAll
+  callee 9:15 roundAll -> @roundAll
+  callee 10:15 roundAll -> @roundAll
+  callee 11:15 roundAll -> @roundAll
+  callee 12:15 roundAll -> @roundAll
+  callee 13:15 roundAll -> @roundAll
+  callee 14:15 roundAll -> @roundAll
+  callee 15:15 roundAll -> @roundAll
+  callee 16:15 roundAll -> @roundAll
+  callee 17:15 roundAll -> @roundAll
+  callee 18:15 roundAll -> @roundAll
+  callee 19:15 roundAll -> @roundAll
+  callee 20:15 roundAll -> @roundAll
+  callee 21:15 roundAll -> @roundAll
+  local 45:7 acc: f64 (let)
+  local 46:12 i: f64 (let)
+program tests/differential/corpus/f64_minmax_nan.ts --number-mode f64
+module tests/differential/corpus/f64_minmax_nan.ts (entry)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.maxnum.f64 llvm.minnum.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
+  stackSites=0 stackLocals=0
+  local 4:9 z: f64 (const)
+  local 5:9 nan: f64 (const)
+program tests/differential/corpus/f64_pow_spec.ts --number-mode f64
+module tests/differential/corpus/f64_pow_spec.ts (entry)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fabs.f64 llvm.pow.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
+  stackSites=0 stackLocals=0
+  local 5:9 z: f64 (const)
+  local 6:9 inf: f64 (const)
+  local 7:9 nan: f64 (const)
+program tests/differential/corpus/f64_round_negzero.ts --number-mode f64
+module tests/differential/corpus/f64_round_negzero.ts (entry)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.ceil.f64 llvm.floor.f64 llvm.trunc.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
+  stackSites=0 stackLocals=0
+  local 4:9 x: f64 (const)
+program tests/differential/corpus/i64_arith.ts --wrapping
+module tests/differential/corpus/i64_arith.ts (entry)
+function square(x: i64): i64 -> @square
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function pow2(n: i32): i64 -> @pow2
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 7:7 r: i64 (let)
+  local 8:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: llvm.abs.i64 llvm.fptosi.sat.i64.f64 llvm.smax.i64 llvm.smin.i64 nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 pow2 square
+  stackSites=0 stackLocals=0
+  local 15:9 big: i64 (const)
+  callee 17:15 square -> @square
+  callee 18:15 square -> @square
+  callee 19:15 square -> @square
+  callee 19:22 square -> @square
+  local 27:9 max: i64 (const)
+  callee 27:15 pow2 -> @pow2
+  callee 27:30 pow2 -> @pow2
+  local 28:9 min: i64 (const)
+  callee 44:23 square -> @square
+  local 53:9 e18: f64 (const)
+  local 55:9 mid: f64 (const)
+  callee 57:15 pow2 -> @pow2
+  callee 58:15 pow2 -> @pow2
+  callee 59:15 pow2 -> @pow2
+  callee 59:26 pow2 -> @pow2
+  local 60:7 n: i64 (let)
+  local 61:12 i: i32 (let)
+  callee 65:33 square -> @square
+  local 66:7 x: i64 (let)
+  local 73:9 y: i64 (const)
+program tests/differential/corpus/int_abs_minmax.ts
+module tests/differential/corpus/int_abs_minmax.ts (entry)
+function clamp(x: i32, lo: i32, hi: i32): i32 -> @clamp
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.smax.i32 llvm.smin.i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: clamp llvm.abs.i32 llvm.smax.i32 llvm.smin.i32 nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 7:9 min: i32 (const)
+  callee 18:15 clamp -> @clamp
+  callee 19:15 clamp -> @clamp
+  callee 20:15 clamp -> @clamp
+  callee 21:15 clamp -> @clamp
+  local 22:7 best: i32 (let)
+  local 23:7 worst: i32 (let)
+  local 24:12 i: i32 (let)
+  local 25:11 v: i32 (const)
+program tests/differential/corpus/int_compound.ts --wrapping
+module tests/differential/corpus/int_compound.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 3:7 x: i32 (let)
+  local 14:9 xs: i32[] (const)
+  local 15:12 i: i32 (let)
+  local 23:7 line: string (let)
+  local 24:14 v: i32 (const)
+  local 28:7 k: i32 (let)
+  local 29:9 ys: i32[] (const)
+program tests/differential/corpus/int_div_overflow.ts
+module tests/differential/corpus/int_div_overflow.ts (entry)
+function div(a: i32, b: i32): i32 -> @div
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function rem(a: i32, b: i32): i32 -> @rem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: div llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_print nish_random nish_str_concat nish_str_from_i32 rem
+  stackSites=0 stackLocals=0
+  local 14:9 min: i32 (const)
+  local 15:9 d: i32 (const)
+  callee 17:15 div -> @div
+  callee 18:15 rem -> @rem
+program tests/differential/corpus/int_div_zero.ts
+module tests/differential/corpus/int_div_zero.ts (entry)
+function div(a: i32, b: i32): i32 -> @div
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function rem(a: i32, b: i32): i32 -> @rem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: div llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_print nish_random nish_str_concat nish_str_from_i32 rem
+  stackSites=0 stackLocals=0
+  local 14:9 z: i32 (const)
+  callee 16:15 div -> @div
+  callee 17:15 rem -> @rem
+program tests/differential/corpus/int_divmod.ts
+module tests/differential/corpus/int_divmod.ts (entry)
+function div(a: i32, b: i32): i32 -> @div
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function mod(a: i32, b: i32): i32 -> @mod
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: div mod nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 11:9 min: i32 (const)
+  callee 12:15 div -> @div
+  callee 13:15 div -> @div
+  callee 14:15 div -> @div
+  callee 15:15 div -> @div
+  callee 16:15 mod -> @mod
+  callee 17:15 mod -> @mod
+  callee 18:15 mod -> @mod
+  callee 19:15 mod -> @mod
+  callee 20:15 div -> @div
+  callee 21:15 mod -> @mod
+  callee 22:15 div -> @div
+  callee 23:15 div -> @div
+  callee 24:15 mod -> @mod
+  callee 25:15 div -> @div
+  callee 26:15 div -> @div
+  callee 27:15 mod -> @mod
+  callee 28:15 div -> @div
+  callee 29:15 mod -> @mod
+  local 30:7 x: i32 (let)
+  local 35:7 y: i32 (let)
+  local 40:12 a: i32 (let)
+  local 41:14 b: i32 (let)
+program tests/differential/corpus/int_incdec.ts --wrapping
+module tests/differential/corpus/int_incdec.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:7 x: i32 (let)
+  local 4:9 a: i32 (const)
+  local 5:9 b: i32 (const)
+  local 6:9 c: i32 (const)
+  local 7:9 d: i32 (const)
+  local 9:7 m: i32 (let)
+  local 12:9 old: i32 (const)
+  local 15:7 n: i32 (let)
+  local 19:7 i: i32 (let)
+  local 20:7 sum: i32 (let)
+  local 26:7 j: i32 (let)
+  local 27:7 steps: i32 (let)
+  local 33:7 k: i32 (let)
+  local 34:9 v: i32 (const)
+  local 37:9 w: i32 (const)
+program tests/differential/corpus/int_literal_edges.ts --wrapping
+module tests/differential/corpus/int_literal_edges.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+program tests/differential/corpus/int_wrap.ts --wrapping
+module tests/differential/corpus/int_wrap.ts (entry)
+function times(a: i32, b: i32): i32 -> @times
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 times
+  stackSites=0 stackLocals=0
+  local 7:9 max: i32 (const)
+  local 8:9 min: i32 (const)
+  callee 14:15 times -> @times
+  callee 15:15 times -> @times
+  callee 16:15 times -> @times
+  callee 17:15 times -> @times
+  callee 18:15 times -> @times
+  local 21:7 acc: i32 (let)
+  local 22:12 i: i32 (let)
+  local 26:7 p: i32 (let)
+  local 27:12 i: i32 (let)
+  local 31:7 s: i32 (let)
+  local 32:12 i: i32 (let)
+program tests/differential/corpus/io_missing_file.ts
+module tests/differential/corpus/io_missing_file.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_read_file nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 4:9 text: string (const)
+program tests/differential/corpus/io_panic.ts
+module tests/differential/corpus/io_panic.ts (entry)
+function checked(n: i32): i32 -> @checked
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: checked nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 11:18 checked -> @checked
+  callee 12:18 checked -> @checked
+program tests/differential/corpus/io_roundtrip.ts
+module tests/differential/corpus/io_roundtrip.ts (entry)
+function lines(n: i32): string -> @lines
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:7 s: string (let)
+  local 4:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: lines nish_append_file nish_print nish_read_file nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
+  stackSites=0 stackLocals=0
+  local 11:9 path: string (const)
+  local 14:9 text: string (const)
+  callee 18:23 lines -> @lines
+  local 19:9 again: string (const)
+  callee 21:25 lines -> @lines
+  local 22:12 i: i32 (let)
+  local 29:9 utf: string (const)
+program tests/differential/corpus/io_streams.ts
+module tests/differential/corpus/io_streams.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_read_file_or_null nish_str_at nish_str_concat nish_write
+  stackSites=0 stackLocals=0
+  local 12:9 missing: string | null (const)
+  local 14:9 here: string | null (const)
+program tests/differential/corpus/loops_break_continue.ts
+module tests/differential/corpus/loops_break_continue.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_div nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:7 log: string (let)
+  local 4:12 i: i32 (let)
+  local 14:7 i: i32 (let)
+  local 15:7 out: string (let)
+  local 28:7 n: i32 (let)
+  local 29:7 iterations: i32 (let)
+  local 38:7 found: i32 (let)
+  local 39:12 a: i32 (let)
+  local 40:14 b: i32 (let)
+  local 51:7 count: i32 (let)
+  local 59:7 k: i32 (let)
+program tests/differential/corpus/loops_nested.ts
+module tests/differential/corpus/loops_nested.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:9 limit: i32 (const)
+  local 4:9 composite: boolean[] (const)
+  local 5:12 i: i32 (let)
+  local 9:14 j: i32 (let)
+  local 13:7 primes: string (let)
+  local 14:12 i: i32 (let)
+  local 20:12 i: i32 (let)
+  local 21:9 row: string (let)
+  local 22:14 j: i32 (let)
+  local 30:7 found: i32 (let)
+  local 31:7 checks: i32 (let)
+  local 32:12 a: i32 (let)
+  local 33:14 b: i32 (let)
+  local 45:7 n: i32 (let)
+  local 47:9 m: i32 (let)
+  local 57:7 w: i32 (let)
+program tests/differential/corpus/main_return_code.ts
+module tests/differential/corpus/main_return_code.ts (entry)
+function compute(): i32 -> @compute
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 3:7 x: i32 (let)
+  local 4:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: compute nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 11:9 c: i32 (const)
+  callee 11:13 compute -> @compute
+program tests/differential/corpus/main_return_negative.ts
+module tests/differential/corpus/main_return_negative.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 3:9 xs: i32[] (const)
+  local 8:9 ys: string[] (const)
+  local 10:14 y: string (const)
+program tests/differential/corpus/modules_basic/main.ts
+module tests/differential/corpus/modules_basic/main.ts (entry)
+import square from "./math" -> function @square
+import pow3 from "./math" -> function @cube
+import wrapMul from "./math" -> function @wrapMul
+import shout from "./text" -> function @shout
+import join from "./text" -> function @join
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: cube join nish_arena_mark nish_arena_release nish_print nish_str_from_i32 shout square wrapMul
+  stackSites=0 stackLocals=0
+  callee 6:15 square -> @square
+  callee 7:15 cube -> @cube
+  callee 8:15 wrapMul -> @wrapMul
+  callee 9:15 wrapMul -> @wrapMul
+  callee 10:15 shout -> @shout
+  callee 11:15 join -> @join
+  callee 11:20 shout -> @shout
+  callee 11:32 shout -> @shout
+  local 12:7 total: i32 (let)
+  local 13:12 i: i32 (let)
+  callee 14:14 square -> @square
+  callee 14:26 cube -> @cube
+  callee 17:15 join -> @join
+  callee 17:23 square -> @square
+  callee 17:39 cube -> @cube
+  callee 18:10 square -> @square
+module tests/differential/corpus/modules_basic/math.ts
+function square(n: i32): i32 -> @square [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function cube(n: i32): i32 -> @cube [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: square
+  stackSites=0 stackLocals=0
+  callee 6:10 square -> @square
+function wrapMul(a: i32, b: i32): i32 -> @wrapMul [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+module tests/differential/corpus/modules_basic/text.ts
+import square from "./math" -> function @square
+function shout(s: string): string -> @shout [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function join(a: string, b: string): string -> @join [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat nish_str_from_i32 square
+  stackSites=0 stackLocals=0
+  callee 8:24 square -> @square
+program tests/differential/corpus/modules_diamond/main.ts
+module tests/differential/corpus/modules_diamond/main.ts (entry)
+import leftValue from "./left" -> function @leftValue
+import rightValue from "./right" -> function @rightValue
+import base from "./common" -> function @base
+function mainConstant(): i32 -> @mainConstant [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: base leftValue nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 rightValue
+  stackSites=0 stackLocals=0
+  callee 11:15 base -> @base
+  callee 12:15 leftValue -> @leftValue
+  callee 13:15 rightValue -> @rightValue
+  callee 14:15 leftValue -> @leftValue
+  callee 14:29 rightValue -> @rightValue
+  callee 14:44 base -> @base
+  local 15:12 i: i32 (let)
+  callee 16:26 leftValue -> @leftValue
+module tests/differential/corpus/modules_diamond/left.ts
+import base from "./common" -> function @base
+import twice from "./common" -> function @twice
+function leftValue(): i32 -> @leftValue [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: base twice
+  stackSites=0 stackLocals=0
+  callee 4:10 twice -> @twice
+  callee 4:16 base -> @base
+module tests/differential/corpus/modules_diamond/common.ts
+function base(): i32 -> @base [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function twice(n: i32): i32 -> @twice [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+module tests/differential/corpus/modules_diamond/right.ts
+import base from "./common" -> function @base
+import mainConstant from "./main" -> function @mainConstant
+function rightValue(): i32 -> @rightValue [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: base mainConstant
+  stackSites=0 stackLocals=0
+  callee 5:10 base -> @base
+  callee 5:23 mainConstant -> @mainConstant
+program tests/differential/corpus/parse_argv_sum.ts
+module tests/differential/corpus/parse_argv_sum.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_index nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 6:9 args: string[] (const)
+  local 7:7 ints: i32 (let)
+  local 8:7 floats: f64 (let)
+  local 9:7 numbers: f64 (let)
+  local 10:12 i: i32 (let)
+  local 11:11 p: i32 (const)
+  local 12:11 f: f64 (const)
+  local 13:11 n: f64 (const)
+program tests/differential/corpus/parse_strings.ts
+module tests/differential/corpus/parse_strings.ts (entry)
+function report(s: string): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number nish_print nish_str_concat nish_str_from_f64 report
+  stackSites=0 stackLocals=0
+  callee 9:3 report -> @report
+  callee 10:3 report -> @report
+  callee 11:3 report -> @report
+  callee 12:3 report -> @report
+  callee 13:3 report -> @report
+  callee 14:3 report -> @report
+  callee 15:3 report -> @report
+  callee 16:3 report -> @report
+  callee 17:3 report -> @report
+  callee 18:3 report -> @report
+  callee 19:3 report -> @report
+  callee 20:3 report -> @report
+  callee 21:3 report -> @report
+  callee 22:3 report -> @report
+  callee 23:3 report -> @report
+  local 24:9 flag: boolean (const)
+  local 25:9 n: i32 (const)
+  local 26:9 big: i64 (const)
+  local 27:9 x: f64 (const)
+program tests/differential/corpus/prng_lcg.ts --wrapping
+module tests/differential/corpus/prng_lcg.ts (entry)
+function next(seed: i32): i32 -> @next
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: next nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 7:7 s: i32 (let)
+  local 8:12 i: i32 (let)
+  callee 9:9 next -> @next
+  local 12:7 hist0: i32 (let)
+  local 13:7 hist1: i32 (let)
+  local 14:7 hist2: i32 (let)
+  local 15:7 hist3: i32 (let)
+  local 16:12 i: i32 (let)
+  callee 17:9 next -> @next
+  local 18:9 bucket: i32 (let)
+program tests/differential/corpus/recursion.ts --wrapping
+module tests/differential/corpus/recursion.ts (entry)
+function fib(n: i32): i32 -> @fib
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: fib
+  stackSites=0 stackLocals=0
+  callee 3:22 fib -> @fib
+  callee 3:35 fib -> @fib
+function ackermann(m: i32, n: i32): i32 -> @ackermann
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: m
+  calls: ackermann
+  stackSites=0 stackLocals=0
+  callee 11:12 ackermann -> @ackermann
+  callee 13:10 ackermann -> @ackermann
+  callee 13:27 ackermann -> @ackermann
+function factorial(n: i32): i32 -> @factorial
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: factorial
+  stackSites=0 stackLocals=0
+  callee 17:27 factorial -> @factorial
+function gcd(a: i32, b: i32): i32 -> @gcd
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  calls: gcd nish_panic_div
+  stackSites=0 stackLocals=0
+  callee 21:24 gcd -> @gcd
+function isEven(n: i32): boolean -> @isEven
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: isOdd
+  stackSites=0 stackLocals=0
+  callee 25:27 isOdd -> @isOdd
+function isOdd(n: i32): boolean -> @isOdd
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: isEven
+  stackSites=0 stackLocals=0
+  callee 29:28 isEven -> @isEven
+function power(base: i32, exp: i32): i32 -> @power
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: base
+  calls: nish_panic_div power
+  stackSites=0 stackLocals=0
+  local 36:9 half: i32 (const)
+  callee 36:16 power -> @power
+function sumTo(n: i32): i32 -> @sumTo
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: sumTo
+  stackSites=0 stackLocals=0
+  callee 44:14 sumTo -> @sumTo
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: ackermann factorial fib gcd isEven isOdd nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 power sumTo
+  stackSites=0 stackLocals=0
+  local 48:12 i: i32 (let)
+  callee 49:32 fib -> @fib
+  callee 51:15 fib -> @fib
+  callee 52:15 ackermann -> @ackermann
+  callee 53:15 ackermann -> @ackermann
+  callee 54:15 ackermann -> @ackermann
+  local 55:12 i: i32 (let)
+  callee 56:28 factorial -> @factorial
+  callee 58:15 gcd -> @gcd
+  callee 59:15 gcd -> @gcd
+  callee 60:15 gcd -> @gcd
+  callee 61:15 isEven -> @isEven
+  callee 62:15 isOdd -> @isOdd
+  callee 63:15 isEven -> @isEven
+  callee 64:15 power -> @power
+  callee 65:15 power -> @power
+  callee 66:15 power -> @power
+  callee 67:15 power -> @power
+  callee 68:15 sumTo -> @sumTo
+program tests/differential/corpus/scopes_shadow.ts
+module tests/differential/corpus/scopes_shadow.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:7 x: i32 (let)
+  local 5:9 x: i32 (let)
+  local 9:13 x: string (const)
+  local 15:12 x: i32 (let)
+  local 19:7 total: i32 (let)
+  local 20:12 i: i32 (let)
+  local 21:9 i2: i32 (let)
+  local 22:14 j: i32 (let)
+  local 23:13 i2: i32 (const)
+  local 30:11 x: i32 (const)
+  local 33:11 x: i32 (const)
+  local 36:7 s: string (let)
+  local 38:11 s: string (const)
+program tests/differential/corpus/short_circuit.ts
+module tests/differential/corpus/short_circuit.ts (entry)
+function positive(x: i32): boolean -> @positive
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 positive
+  stackSites=0 stackLocals=0
+  local 7:7 calls: i32 (let)
+  local 8:9 a: boolean (const)
+  local 10:9 b: boolean (const)
+  local 12:9 c: boolean (const)
+  local 14:9 d: boolean (const)
+  local 16:7 hits: i32 (let)
+  local 17:12 i: i32 (let)
+  callee 18:9 positive -> @positive
+  callee 21:10 positive -> @positive
+  local 26:7 n: i32 (let)
+  local 27:9 chain: boolean (const)
+  local 29:7 m: i32 (let)
+  local 30:9 mixed: boolean (const)
+  local 32:7 k: i32 (let)
+  local 33:7 steps: i32 (let)
+  local 38:9 notFirst: boolean (const)
+program tests/differential/corpus/str_basic.ts
+module tests/differential/corpus/str_basic.ts (entry)
+function repeat(s: string, n: i32): string -> @repeat
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 3:7 out: string (let)
+  local 4:12 i: i32 (let)
+function same(a: string, b: string): boolean -> @same
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_str_concat nish_str_eq nish_str_from_i32 repeat same
+  stackSites=0 stackLocals=0
+  local 15:9 hello: string (const)
+  local 16:9 world: string (const)
+  local 17:9 hw: string (const)
+  callee 22:15 same -> @same
+  callee 23:15 same -> @same
+  callee 24:15 same -> @same
+  callee 25:15 same -> @same
+  callee 28:15 repeat -> @repeat
+  callee 29:15 repeat -> @repeat
+  callee 30:15 repeat -> @repeat
+  local 31:7 s: string (let)
+  local 32:12 i: i32 (let)
+  local 37:9 q: string (const)
+  local 44:9 picked: string (const)
+program tests/differential/corpus/str_build_loop.ts
+module tests/differential/corpus/str_build_loop.ts (entry)
+function bar(n: i32): string -> @bar
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 3:7 s: string (let)
+  local 4:12 i: i32 (let)
+function pad(s: string, width: i32): string -> @pad
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: s
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 11:7 out: string (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: bar nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 pad
+  stackSites=1 stackLocals=1
+  local 19:12 i: i32 (let)
+  callee 20:20 pad -> @pad
+  callee 20:40 bar -> @bar
+  local 22:7 pattern: string (let)
+  local 23:12 run: i32 (let)
+  local 24:14 k: i32 (let)
+  local 31:7 words: string (let)
+  local 32:9 parts: string[] (const)
+  local 33:12 i: i32 (let)
+  callee 37:15 pad -> @pad
+  callee 38:15 pad -> @pad
+program tests/differential/corpus/str_large.ts
+module tests/differential/corpus/str_large.ts (entry)
+function checksum(s: string): i32 -> @checksum
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: checksum nish_array_grow nish_panic_div nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 7:7 s: string (let)
+  local 8:7 doublings: i32 (let)
+  callee 15:15 checksum -> @checksum
+  local 17:7 t: string (let)
+  local 18:12 i: i32 (let)
+  local 23:9 xs: i32[] (const)
+  local 24:12 i: i32 (let)
+  local 29:7 sum: i32 (let)
+  local 30:14 x: i32 (const)
+  local 34:9 strs: string[] (const)
+  local 35:12 i: i32 (let)
+  local 38:7 total: i32 (let)
+  local 39:14 w: string (const)
+program tests/differential/corpus/str_methods.ts
+module tests/differential/corpus/str_methods.ts (entry)
+function show(s: string, cut: i32): void -> @show
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_at nish_str_concat nish_str_from_i32 nish_str_new
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_str_at nish_str_concat nish_str_from_i32 nish_str_new show
+  stackSites=0 stackLocals=0
+  callee 13:3 show -> @show
+  callee 14:3 show -> @show
+  local 16:7 acc: string (let)
+  local 17:12 i: i32 (let)
+  local 21:9 text: string (const)
+  local 22:7 start: i32 (let)
+  local 24:11 rest: string (const)
+  local 25:11 at: i32 (const)
+program tests/differential/corpus/str_nul_escapes.ts
+module tests/differential/corpus/str_nul_escapes.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_str_concat nish_str_eq nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:9 withNul: string (const)
+  local 20:7 s: string (let)
+  local 21:12 i: i32 (let)
+program tests/differential/corpus/str_slice.ts
+module tests/differential/corpus/str_slice.ts (entry)
+function show(s: string, cut: i32): void -> @show
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_concat nish_str_new
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_at nish_str_new show
+  stackSites=0 stackLocals=0
+  callee 11:3 show -> @show
+  callee 12:3 show -> @show
+  callee 13:3 show -> @show
+  local 14:9 text: string (const)
+  local 15:7 start: i32 (let)
+  local 17:11 at: i32 (const)
+program tests/differential/corpus/str_template.ts
+module tests/differential/corpus/str_template.ts (entry)
+function describe(name: string, n: i32, ok: boolean): string -> @describe
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: describe nish_panic_div nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
+  stackSites=0 stackLocals=0
+  callee 7:15 describe -> @describe
+  callee 8:15 describe -> @describe
+  local 9:9 tenth: f64 (const)
+  local 10:9 f: f64 (const)
+  local 11:9 big: i64 (const)
+  local 12:9 flag: boolean (const)
+  local 28:7 line: string (let)
+  local 29:12 i: i32 (let)
+  local 34:9 e21: f64 (const)
+  local 35:9 e7: f64 (const)
+  local 36:9 half: f64 (const)
+  local 38:9 z: f64 (const)
+program tests/differential/corpus/str_unicode.ts
+module tests/differential/corpus/str_unicode.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_str_concat nish_str_eq nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 3:9 accented: string (const)
+  local 4:9 kanji: string (const)
+  local 5:9 emoji: string (const)
+  local 6:9 arrow: string (const)
+  local 14:9 mixed: string (const)
+  local 21:7 s: string (let)
+  local 22:12 i: i32 (let)
+program tests/differential/corpus/ternary_chain.ts
+module tests/differential/corpus/ternary_chain.ts (entry)
+function sign(x: i32): i32 -> @sign
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function grade(score: i32): string -> @grade
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function fizzbuzz(n: i32): string -> @fizzbuzz
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_div nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: fizzbuzz grade nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 sign
+  stackSites=2 stackLocals=0
+  callee 15:15 sign -> @sign
+  callee 16:15 sign -> @sign
+  callee 17:15 sign -> @sign
+  callee 18:15 grade -> @grade
+  callee 19:15 grade -> @grade
+  callee 20:15 grade -> @grade
+  callee 21:15 grade -> @grade
+  callee 22:15 grade -> @grade
+  local 23:7 line: string (let)
+  local 24:12 i: i32 (let)
+  callee 25:22 fizzbuzz -> @fizzbuzz
+  local 28:9 a: i32 (const)
+  local 29:9 b: i32 (const)
+  local 30:9 bigger: i32 (const)
+  local 31:9 smaller: i32 (const)
+  local 33:9 flag: boolean (const)
+  local 36:9 onePointFive: f64 (const)
+  local 37:9 f: f64 (const)
+  local 39:9 one: i64 (const)
+  local 40:9 three: i64 (const)
+  local 41:9 big: i64 (const)
+  callee 43:15 sign -> @sign
+  callee 43:38 sign -> @sign
+  local 44:9 xs: i32[] (const)
+  local 46:9 t: i32 (const)
+program tests/differential/corpus/u_convert_shift.ts
+module tests/differential/corpus/u_convert_shift.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: llvm.fptoui.sat.i32.f64 llvm.fptoui.sat.i8.f64 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_from_u64
+  stackSites=0 stackLocals=0
+  local 5:9 w: u32 (const)
+  local 13:9 b: u8 (const)
+  local 16:9 h: u16 (const)
+  local 19:9 neg: i32 (const)
+  local 22:9 q: u64 (const)
+  local 26:9 over: f64 (const)
+  local 27:9 under: f64 (const)
+  local 28:9 huge: f64 (const)
+  local 29:9 inRange: f64 (const)
+  local 30:9 wide: f64 (const)
+  local 45:9 s: i32 (const)
+  local 48:9 l: i64 (const)
+program tests/differential/corpus/u_div_cmp.ts
+module tests/differential/corpus/u_div_cmp.ts (entry)
+function divU32(a: u32, b: u32): u32 -> @divU32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function ltU32(a: u32, b: u32): boolean -> @ltU32
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: divU32 ltU32 nish_arena_mark nish_arena_release nish_panic_div nish_print nish_str_concat nish_str_from_u64
+  stackSites=0 stackLocals=0
+  local 13:9 big: u32 (const)
+  local 14:9 small: u32 (const)
+  callee 15:18 divU32 -> @divU32
+  callee 17:18 divU32 -> @divU32
+  callee 18:18 divU32 -> @divU32
+  callee 21:18 ltU32 -> @ltU32
+  callee 22:18 ltU32 -> @ltU32
+  local 27:9 b: u8 (const)
+  local 28:9 d: u8 (const)
+  local 33:9 h: u16 (const)
+  local 38:9 q: u64 (const)
+  local 39:9 three: u64 (const)
+  local 45:7 n: u32 (let)
+  local 46:7 steps: u32 (let)
+program tests/differential/corpus/u_wrap.ts
+module tests/differential/corpus/u_wrap.ts (entry)
+function mulU32(a: u32, b: u32): u32 -> @mulU32
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: mulU32 nish_arena_mark nish_arena_release nish_print nish_str_from_u64
+  stackSites=0 stackLocals=0
+  local 8:9 b0: u8 (const)
+  local 12:9 b1: u8 (const)
+  local 16:9 h0: u16 (const)
+  local 19:9 h1: u16 (const)
+  local 22:9 w0: u32 (const)
+  local 26:9 w1: u32 (const)
+  callee 28:18 mulU32 -> @mulU32
+  callee 29:18 mulU32 -> @mulU32
+  callee 30:18 mulU32 -> @mulU32
+  local 32:9 q0: u64 (const)
+  local 33:9 one: u64 (const)
+  local 36:9 q1: u64 (const)
+  local 39:7 acc: u32 (let)
+  local 40:12 i: i32 (let)
+  local 45:7 byte: u8 (let)
+  local 46:12 i: i32 (let)
