@@ -5,26 +5,31 @@
  *
  *   node tests/self/support_oracle.js             build, run, diff
  *   node tests/self/support_oracle.js --verbose   print every differing line
+ *   node tests/self/support_oracle.js --update    rewrite goldens/support.txt
  *
  * The support library is the part of `self/` with no counterpart in `src/` to
  * diff against phase by phase, so each function is matched with the thing it
  * has to agree with instead:
  *
- *   - `irEscape` and `f64Hex` / `f32Hex` against **stage0 itself**
- *     (`dist/codegen/emit/strings.js`, `dist/codegen/emit/builtins.js`). These
- *     write bytes into the IR; a disagreement is stage1 emitting a different
- *     module for the same program, which is exactly what §1's equality is
- *     about. This is the one part of the oracle that does not survive R6, and
- *     wp19 §2B's row saying the whole file survives was wrong about it: the
- *     lines are counted and named as skipped when there is no `dist/` to read
- *     rather than quietly not compared, and recovering them as a golden is
- *     G2.4 work that has not been done.
+ *   - `irEscape` and `f64Hex` / `f32Hex`, and WP21's `nishExportTarget` and
+ *     `parseBareSpecifier`, against **stage0's answers, recorded** in
+ *     `tests/self/goldens/support.txt` (R6). These write bytes into the IR or
+ *     pick the file a specifier loads, and there is no third implementation
+ *     to ask — the rule is this project's — so stage0 was the oracle, and its
+ *     answers were written down while it was still in the tree. When `dist/`
+ *     is there the golden is checked against stage0 too, so it cannot have
+ *     been recorded wrong; when it is not, the golden is the whole answer.
  *   - the path functions against **`node:path`'s POSIX side**, because module
  *     identity is the resolved path and §3a D3 is the note that says a
  *     `..` normalised differently from Node's loads one file twice.
  *   - `jsonQuote` against `JSON.stringify`, `compareStrings` against
  *     `Buffer.compare`, and `StringMap` against a JavaScript `Map` driven
  *     through the same script — insertion order included.
+ *
+ * The golden holds the whole expected output, not only stage0's lines, so a
+ * reader sees each recorded answer beside the case that produced it. Its
+ * other lines are checked against Node on every run, which is what makes an
+ * edit to `cases.txt` without a matching `--update` fail rather than pass.
  *
  * The cases are `tests/self/cases.txt`, read by both sides, so the two can
  * never drift onto different inputs.
@@ -39,10 +44,12 @@ const root = path.resolve(import.meta.dirname, "..", "..");
 
 const CASES = path.join(root, "tests", "self", "cases.txt");
 
+/** stage0's answers, recorded while it was in the tree (R6). */
+const GOLDEN = path.join(root, "tests", "self", "goldens", "support.txt");
+
 /**
- * The lines whose expected value comes out of stage0. They are dropped from
- * both sides when stage0 is not in the tree, so the rest of the oracle still
- * runs; the summary says how many went.
+ * The lines whose expected value came out of stage0. Everything else in the
+ * golden is recomputed from Node on every run; these are read from it.
  */
 const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ |pkg |spec )/;
 
@@ -50,7 +57,7 @@ const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ |pkg |spec )/;
  * stage0's IR escape and float-hex, or null when `dist/` is not there — a
  * tree where `src/` has been deleted (R6), or one where nobody has run
  * `npm run build`. Imported here rather than at the top of the module so that
- * a missing stage0 is a named skip instead of a file that will not load.
+ * a missing stage0 means "read the golden" instead of a file that will not load.
  */
 async function stage0Escapes() {
   const strings = path.join(root, "dist", "codegen", "emit", "strings.js");
@@ -64,8 +71,7 @@ async function stage0Escapes() {
   // WP21 S2: the manifest reader and the specifier split, whose stage1 twins
   // must answer the same file for the same `package.json`. Unlike `node:path`
   // there is no third implementation to compare against — the rule is this
-  // project's — so stage0 is the oracle and these lines go with it when `dist/`
-  // is not in the tree.
+  // project's — so stage0 is the oracle, and the golden is what it said.
   const { nishExportTarget } = await import(pathToFileURL(manifest).href);
   const { parseBareSpecifier } = await import(pathToFileURL(packages).href);
   return { escapeBytes, f32Constant, f64Constant, nishExportTarget, parseBareSpecifier };
@@ -254,8 +260,34 @@ function build(seed) {
   return linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));
 }
 
+/** `want` against `got` line by line: the differing lines, as a report prints them. */
+const differences = (want, got) => {
+  const differing = [];
+  for (let i = 0; i < Math.max(want.length, got.length); i++) {
+    if (want[i] !== got[i]) differing.push(`  line ${i + 1}: want ${want[i]} / got ${got[i]}`);
+  }
+  return differing;
+};
+
+/**
+ * The golden's own staleness check: its lines that do not come from stage0
+ * must be exactly what Node says today. A case added to `cases.txt` without an
+ * `--update` fails here, naming the line, instead of comparing the driver
+ * against an answer recorded for different input.
+ */
+const staleLines = (golden, caseText) =>
+  differences(
+    expected(caseText, null).split("\n"),
+    golden.split("\n").filter((line) => !STAGE0_LINE.test(line))
+  );
+
+const report = (differing, verbose) => {
+  for (const line of verbose ? differing : differing.slice(0, 10)) process.stdout.write(`${line}\n`);
+};
+
 async function main(argv) {
   const verbose = argv.includes("--verbose");
+  const update = argv.includes("--update");
   const seed = seedForOracle(argv);
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
@@ -268,25 +300,61 @@ async function main(argv) {
     process.stderr.write(`support exited ${run.status}\n${run.stderr}`);
     return 1;
   }
+  const caseText = fs.readFileSync(CASES, "utf8");
   const stage0 = await stage0Escapes();
-  const want = expected(fs.readFileSync(CASES, "utf8"), stage0).split("\n");
-  // The driver prints its IR-escape lines whatever is in `dist/`; with no
-  // stage0 to say what they should be, they come out of the comparison on both
-  // sides rather than out of the run.
-  const got = (stage0 === null ? run.stdout.split("\n").filter((line) => !STAGE0_LINE.test(line)) : run.stdout.split("\n"));
-  const differing = [];
-  for (let i = 0; i < Math.max(want.length, got.length); i++) {
-    if (want[i] !== got[i]) differing.push(`  line ${i + 1}: want ${want[i]} / got ${got[i]}`);
+
+  if (update) {
+    // With stage0 in the tree the golden is stage0's answer. Without it, the
+    // only thing left to record is stage1's own output, which is a golden in
+    // the ordinary sense — reviewed as a diff — and is only written when every
+    // line Node can still answer agrees with it.
+    const recorded = stage0 !== null ? expected(caseText, stage0) : run.stdout;
+    const stale = staleLines(recorded, caseText);
+    if (stale.length > 0) {
+      report(stale, verbose);
+      process.stdout.write("support: stage1 disagrees with Node, so there is nothing trustworthy to record\n");
+      return 1;
+    }
+    fs.mkdirSync(path.dirname(GOLDEN), { recursive: true });
+    fs.writeFileSync(GOLDEN, recorded);
+    const from = stage0 !== null ? "stage0" : "stage1 (no stage0 in the tree)";
+    process.stdout.write(`wrote ${path.relative(root, GOLDEN)} from ${from}\n`);
+    return 0;
   }
-  if (differing.length > 0) {
-    for (const line of verbose ? differing : differing.slice(0, 10)) process.stdout.write(`${line}\n`);
+
+  if (!fs.existsSync(GOLDEN)) {
+    process.stdout.write(`${path.relative(root, GOLDEN)} is missing; run with --update\n`);
+    return 1;
   }
-  const escapes = stage0 === null ? ", the IR-escape lines skipped (no stage0 in the tree)" : "";
+  const golden = fs.readFileSync(GOLDEN, "utf8");
+  const stale = staleLines(golden, caseText);
+  if (stale.length > 0) {
+    report(stale, verbose);
+    process.stdout.write(
+      `${path.relative(root, GOLDEN)} is stale against tests/self/cases.txt (${stale.length} lines); run with --update\n`
+    );
+    return 1;
+  }
+  // While stage0 lives, the recorded answers are held to it as well: a golden
+  // that stage0 no longer agrees with was recorded from something else.
+  if (stage0 !== null) {
+    const drift = differences(expected(caseText, stage0).split("\n"), golden.split("\n"));
+    if (drift.length > 0) {
+      report(drift, verbose);
+      process.stdout.write(`${path.relative(root, GOLDEN)} disagrees with stage0 (${drift.length} lines); run with --update\n`);
+      return 1;
+    }
+  }
+  const want = golden.split("\n");
+  const differing = differences(want, run.stdout.split("\n"));
+  report(differing, verbose);
+  const recorded = want.filter((line) => STAGE0_LINE.test(line)).length;
+  const against = stage0 !== null ? "the golden and stage0" : "the golden";
   process.stdout.write(
-    `${want.length - differing.length}/${want.length} lines agree, seed ${seed.label}${escapes}\n`
+    `${want.length - differing.length}/${want.length} lines agree (${recorded} recorded from stage0, checked against ${against}), seed ${seed.label}\n`
   );
   return differing.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(await main(process.argv.slice(2)));
-export { expected, build };
+export { expected, build, GOLDEN };

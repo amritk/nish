@@ -1,0 +1,980 @@
+# text "hello"
+json "hello"
+ir hello
+hash 1335831723
+split "hello"
+repeat "hellohellohello"
+# text ""
+json ""
+ir 
+hash -2128831035
+split ""
+repeat ""
+# text "a\"b\\c"
+json "a\"b\\c"
+ir a\22b\5Cc
+hash -713852643
+split "a\"b\\c"
+repeat "a\"b\\ca\"b\\ca\"b\\c"
+# text "/leading/and/trailing/"
+json "/leading/and/trailing/"
+ir /leading/and/trailing/
+hash 1299513188
+split "|leading|and|trailing|"
+repeat "/leading/and/trailing//leading/and/trailing//leading/and/trailing/"
+# text "a//b"
+json "a//b"
+ir a//b
+hash -828862528
+split "a||b"
+repeat "a//ba//ba//b"
+# text "héllo wörld"
+json "héllo wörld"
+ir h\C3\A9llo w\C3\B6rld
+hash -736214622
+split "héllo wörld"
+repeat "héllo wörldhéllo wörldhéllo wörld"
+# text "日本語"
+json "日本語"
+ir \E6\97\A5\E6\9C\AC\E8\AA\9E
+hash -2141233945
+split "日本語"
+repeat "日本語日本語日本語"
+# text "the quick brown fox jumps over the lazy dog"
+json "the quick brown fox jumps over the lazy dog"
+ir the quick brown fox jumps over the lazy dog
+hash -278315024
+split "the quick brown fox jumps over the lazy dog"
+repeat "the quick brown fox jumps over the lazy dogthe quick brown fox jumps over the lazy dogthe quick brown fox jumps over the lazy dog"
+# text "0"
+json "0"
+ir 0
+hash 890022063
+split "0"
+repeat "000"
+# text "-1"
+json "-1"
+ir -1
+hash 348981803
+split "-1"
+repeat "-1-1-1"
+# text "x"
+json "x"
+ir x
+hash -49524601
+split "x"
+repeat "xxx"
+# path "/a/b/c.ts" "./d"
+normalize "/a/b/c.ts"
+dirname "/a/b"
+basename "c.ts"
+stem "c"
+resolve "/a/b/c.ts/d"
+module "/a/b/c.ts/d.ts"
+# path "/a/b/c.ts" "../d/e"
+normalize "/a/b/c.ts"
+dirname "/a/b"
+basename "c.ts"
+stem "c"
+resolve "/a/b/d/e"
+module "/a/b/d/e.ts"
+# path "/a/b/c.ts" "../../../../up"
+normalize "/a/b/c.ts"
+dirname "/a/b"
+basename "c.ts"
+stem "c"
+resolve "/up"
+module "/up.ts"
+# path "/a/b/c.ts" "/abs/olute"
+normalize "/a/b/c.ts"
+dirname "/a/b"
+basename "c.ts"
+stem "c"
+resolve "/abs/olute"
+module "/abs/olute.ts"
+# path "." "./x"
+normalize "."
+dirname "."
+basename "."
+stem "."
+resolve "x"
+module "x.ts"
+# path ".." "./x"
+normalize ".."
+dirname "."
+basename ".."
+stem ".."
+resolve "../x"
+module "../x.ts"
+# path "a/b" "../../../c"
+normalize "a/b"
+dirname "a"
+basename "b"
+stem "b"
+resolve "../c"
+module "../c.ts"
+# path "/" "./x"
+normalize "/"
+dirname "/"
+basename ""
+stem ""
+resolve "/x"
+module "/x.ts"
+# path "/a//b///c" ".././d"
+normalize "/a/b/c"
+dirname "/a//b//"
+basename "c"
+stem "c"
+resolve "/a/b/d"
+module "/a/b/d.ts"
+# path "a/b/c.ts" "./sibling.js"
+normalize "a/b/c.ts"
+dirname "a/b"
+basename "c.ts"
+stem "c"
+resolve "a/b/c.ts/sibling.js"
+module "a/b/c.ts/sibling.ts"
+# path "relative/dir" "nested/deep/../file"
+normalize "relative/dir"
+dirname "relative"
+basename "dir"
+stem "dir"
+resolve "relative/dir/nested/file"
+module "relative/dir/nested/file.ts"
+# rel "self" "self/nodes.ts"
+relative "nodes.ts"
+# rel "tests/link/dup" "tests/link/dup/sub/x.ts"
+relative "sub/x.ts"
+# rel "a/b" "a/c"
+relative "../c"
+# rel "a/b/c" "a"
+relative "../.."
+# rel "." "a/b"
+relative "a/b"
+# rel "a" "a"
+relative ""
+# rel "/a/b" "/a/b/c/d.ts"
+relative "c/d.ts"
+# rel "/a/b/c" "/a/x"
+relative "../../x"
+# path "/x" "."
+normalize "/x"
+dirname "/"
+basename "x"
+stem "x"
+resolve "/x"
+module "/x.ts"
+# path "trailing/" "./f"
+normalize "trailing"
+dirname "."
+basename "trailing"
+stem "trailing"
+resolve "trailing/f"
+module "trailing/f.ts"
+# path "/only/dir/" "../g"
+normalize "/only/dir"
+dirname "/only"
+basename "dir"
+stem "dir"
+resolve "/only/g"
+module "/only/g.ts"
+# num 0
+f64 0x0000000000000000
+f32 0x0000000000000000
+# num 1
+f64 0x3FF0000000000000
+f32 0x3FF0000000000000
+# num -1
+f64 0xBFF0000000000000
+f32 0xBFF0000000000000
+# num 0.1
+f64 0x3FB999999999999A
+f32 0x3FB99999A0000000
+# num -0.5
+f64 0xBFE0000000000000
+f32 0xBFE0000000000000
+# num 3.141592653589793
+f64 0x400921FB54442D18
+f32 0x400921FB60000000
+# num 1e21
+f64 0x444B1AE4D6E2EF50
+f32 0x444B1AE4E0000000
+# num 1e-7
+f64 0x3E7AD7F29ABCAF48
+f32 0x3E7AD7F2A0000000
+# num 2.5
+f64 0x4004000000000000
+f32 0x4004000000000000
+# num 1234567.75
+f64 0x4132D687C0000000
+f32 0x4132D687C0000000
+# num -0
+f64 0x8000000000000000
+f32 0x8000000000000000
+# path "/a//b" "./x"
+normalize "/a/b"
+dirname "/a/"
+basename "b"
+stem "b"
+resolve "/a/b/x"
+module "/a/b/x.ts"
+# path "//" "./x"
+normalize "/"
+dirname "/"
+basename ""
+stem ""
+resolve "/x"
+module "/x.ts"
+# path "///" "./x"
+normalize "/"
+dirname "/"
+basename ""
+stem ""
+resolve "/x"
+module "/x.ts"
+# path "a/b//" "./x"
+normalize "a/b"
+dirname "a"
+basename "b"
+stem "b"
+resolve "a/b/x"
+module "a/b/x.ts"
+# path "/a/" "./x"
+normalize "/a"
+dirname "/"
+basename "a"
+stem "a"
+resolve "/a/x"
+module "/a/x.ts"
+# path "/a/b.ts" "./c.js"
+normalize "/a/b.ts"
+dirname "/a"
+basename "b.ts"
+stem "b"
+resolve "/a/b.ts/c.js"
+module "/a/b.ts/c.ts"
+# path "/a/b.ts" "../lib/util.ts"
+normalize "/a/b.ts"
+dirname "/a"
+basename "b.ts"
+stem "b"
+resolve "/a/lib/util.ts"
+module "/a/lib/util.ts"
+# path "x" ".ts"
+normalize "x"
+dirname "."
+basename "x"
+stem "x"
+resolve "x/.ts"
+module "x/.ts"
+# path "/a" ".ts"
+normalize "/a"
+dirname "/"
+basename "a"
+stem "a"
+resolve "/a/.ts"
+module "/a/.ts"
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"./src/index.ts\"}}}"
+pkg "./src/index.ts"
+# pkg "." nish-f64 nish "{\"exports\":{\".\":{\"nish-f64\":\"./f.ts\",\"nish\":\"./a.ts\"}}}"
+pkg "./f.ts"
+# pkg "." nish-f64 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\",\"nish-f64\":\"./f.ts\"}}}"
+pkg "./f.ts"
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\",\"nish-i32\":\"./i.ts\"}}}"
+pkg "./i.ts"
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish-f64\":\"./f.ts\"}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\"nish\":\"./a.ts\"}}"
+pkg "./a.ts"
+# pkg "./util" nish-i32 nish "{\"exports\":{\"nish\":\"./a.ts\"}}"
+pkg null
+# pkg "./util" nish-i32 nish "{\"exports\":{\"./util\":{\"nish\":\"./u.ts\"},\".\":{\"nish\":\"./i.ts\"}}}"
+pkg "./u.ts"
+# pkg "." nish-i32 nish "{\"exports\":{\".\":\"./dist/index.js\"}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"default\":\"./d.js\",\"import\":\"./m.mjs\"}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\"./*\":\"./std/*.ts\"}}"
+pkg null
+# pkg "." nish-i32 nish "{\"name\":\"x\",\"version\":\"1.0.0\"}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"../escape.ts\"}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"./a/../../b.ts\"}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"a.ts\"}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":{\"node\":\"./n.ts\"}}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":[\"./a.ts\"]}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"name\":\"a\",\"types\":{\"nested\":{\"deep\":[1,2,{\"x\":\"}\"}]}},\"exports\":{\".\":{\"nish\":\"./a.ts\"}}}"
+pkg "./a.ts"
+# pkg "." nish-i32 nish "  {  \"exports\" : { \".\" : { \"nish\" : \"./a.ts\" } } }"
+pkg "./a.ts"
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\"}}"
+pkg "./a.ts"
+# pkg "." nish-i32 nish "not json at all"
+pkg null
+# pkg "." nish-i32 nish ""
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\"}}}"
+pkg "./a.ts"
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"./a\\\"b.ts\"}}}"
+pkg null
+# pkg "." nish-i32 nish "{\"exports\":{\".\":{\"nish\":\"\"}}}"
+pkg null
+# pkg "." nish-f64 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\",\"nish-i32\":\"./i.ts\"}}}"
+pkg "./a.ts"
+# pkg "." nish-f64 nish "{\"exports\":{\".\":{\"nish-i32\":\"./i.ts\",\"nish\":\"./a.ts\",\"nish-f64\":\"./f.ts\"}}}"
+pkg "./f.ts"
+# pkg "./util" nish-f64 nish "{\"exports\":{\"./util\":{\"nish\":\"./u.ts\",\"nish-f64\":\"./uf.ts\"}}}"
+pkg "./uf.ts"
+# pkg "." nish-f64 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\",\"nish-f64\":[\"./f.ts\"]}}}"
+pkg null
+# pkg "." nish-f64 nish "{\"exports\":{\".\":{\"nish\":\"./a.ts\",\"nish-f64\":\"../f.ts\"}}}"
+pkg null
+# spec "hash"
+spec "hash" "."
+# spec "@scope/hash"
+spec "@scope/hash" "."
+# spec "@scope/hash/blake3"
+spec "@scope/hash" "./blake3"
+# spec "hash/deep/nested"
+spec "hash" "./deep/nested"
+# spec "@scope"
+spec null
+# spec "@"
+spec null
+# spec "@/hash"
+spec null
+# spec ""
+spec null
+# spec "/absolute/path"
+spec null
+# spec "./relative"
+spec null
+# spec "../relative"
+spec null
+# spec ".."
+spec null
+# spec ".hidden"
+spec null
+# spec "hash/"
+spec null
+# spec "hash//deep"
+spec null
+# spec "hash/../escape"
+spec null
+# spec "node:fs"
+spec null
+# spec "http://example.com/x"
+spec null
+# spec "back\\slash"
+spec null
+# spec "UPPER/Case"
+spec "UPPER" "./Case"
+# spec "hash/.hidden"
+spec null
+compare "hello" "hello" 0
+compare "hello" "" 1
+compare "hello" "a\"b\\c" 1
+compare "hello" "/leading/and/trailing/" 1
+compare "hello" "a//b" 1
+compare "hello" "héllo wörld" -1
+compare "hello" "日本語" -1
+compare "hello" "the quick brown fox jumps over the lazy dog" -1
+compare "hello" "0" 1
+compare "hello" "-1" 1
+compare "hello" "x" -1
+compare "" "hello" -1
+compare "" "" 0
+compare "" "a\"b\\c" -1
+compare "" "/leading/and/trailing/" -1
+compare "" "a//b" -1
+compare "" "héllo wörld" -1
+compare "" "日本語" -1
+compare "" "the quick brown fox jumps over the lazy dog" -1
+compare "" "0" -1
+compare "" "-1" -1
+compare "" "x" -1
+compare "a\"b\\c" "hello" -1
+compare "a\"b\\c" "" 1
+compare "a\"b\\c" "a\"b\\c" 0
+compare "a\"b\\c" "/leading/and/trailing/" 1
+compare "a\"b\\c" "a//b" -1
+compare "a\"b\\c" "héllo wörld" -1
+compare "a\"b\\c" "日本語" -1
+compare "a\"b\\c" "the quick brown fox jumps over the lazy dog" -1
+compare "a\"b\\c" "0" 1
+compare "a\"b\\c" "-1" 1
+compare "a\"b\\c" "x" -1
+compare "/leading/and/trailing/" "hello" -1
+compare "/leading/and/trailing/" "" 1
+compare "/leading/and/trailing/" "a\"b\\c" -1
+compare "/leading/and/trailing/" "/leading/and/trailing/" 0
+compare "/leading/and/trailing/" "a//b" -1
+compare "/leading/and/trailing/" "héllo wörld" -1
+compare "/leading/and/trailing/" "日本語" -1
+compare "/leading/and/trailing/" "the quick brown fox jumps over the lazy dog" -1
+compare "/leading/and/trailing/" "0" -1
+compare "/leading/and/trailing/" "-1" 1
+compare "/leading/and/trailing/" "x" -1
+compare "a//b" "hello" -1
+compare "a//b" "" 1
+compare "a//b" "a\"b\\c" 1
+compare "a//b" "/leading/and/trailing/" 1
+compare "a//b" "a//b" 0
+compare "a//b" "héllo wörld" -1
+compare "a//b" "日本語" -1
+compare "a//b" "the quick brown fox jumps over the lazy dog" -1
+compare "a//b" "0" 1
+compare "a//b" "-1" 1
+compare "a//b" "x" -1
+compare "héllo wörld" "hello" 1
+compare "héllo wörld" "" 1
+compare "héllo wörld" "a\"b\\c" 1
+compare "héllo wörld" "/leading/and/trailing/" 1
+compare "héllo wörld" "a//b" 1
+compare "héllo wörld" "héllo wörld" 0
+compare "héllo wörld" "日本語" -1
+compare "héllo wörld" "the quick brown fox jumps over the lazy dog" -1
+compare "héllo wörld" "0" 1
+compare "héllo wörld" "-1" 1
+compare "héllo wörld" "x" -1
+compare "日本語" "hello" 1
+compare "日本語" "" 1
+compare "日本語" "a\"b\\c" 1
+compare "日本語" "/leading/and/trailing/" 1
+compare "日本語" "a//b" 1
+compare "日本語" "héllo wörld" 1
+compare "日本語" "日本語" 0
+compare "日本語" "the quick brown fox jumps over the lazy dog" 1
+compare "日本語" "0" 1
+compare "日本語" "-1" 1
+compare "日本語" "x" 1
+compare "the quick brown fox jumps over the lazy dog" "hello" 1
+compare "the quick brown fox jumps over the lazy dog" "" 1
+compare "the quick brown fox jumps over the lazy dog" "a\"b\\c" 1
+compare "the quick brown fox jumps over the lazy dog" "/leading/and/trailing/" 1
+compare "the quick brown fox jumps over the lazy dog" "a//b" 1
+compare "the quick brown fox jumps over the lazy dog" "héllo wörld" 1
+compare "the quick brown fox jumps over the lazy dog" "日本語" -1
+compare "the quick brown fox jumps over the lazy dog" "the quick brown fox jumps over the lazy dog" 0
+compare "the quick brown fox jumps over the lazy dog" "0" 1
+compare "the quick brown fox jumps over the lazy dog" "-1" 1
+compare "the quick brown fox jumps over the lazy dog" "x" -1
+compare "0" "hello" -1
+compare "0" "" 1
+compare "0" "a\"b\\c" -1
+compare "0" "/leading/and/trailing/" 1
+compare "0" "a//b" -1
+compare "0" "héllo wörld" -1
+compare "0" "日本語" -1
+compare "0" "the quick brown fox jumps over the lazy dog" -1
+compare "0" "0" 0
+compare "0" "-1" 1
+compare "0" "x" -1
+compare "-1" "hello" -1
+compare "-1" "" 1
+compare "-1" "a\"b\\c" -1
+compare "-1" "/leading/and/trailing/" -1
+compare "-1" "a//b" -1
+compare "-1" "héllo wörld" -1
+compare "-1" "日本語" -1
+compare "-1" "the quick brown fox jumps over the lazy dog" -1
+compare "-1" "0" -1
+compare "-1" "-1" 0
+compare "-1" "x" -1
+compare "x" "hello" 1
+compare "x" "" 1
+compare "x" "a\"b\\c" 1
+compare "x" "/leading/and/trailing/" 1
+compare "x" "a//b" 1
+compare "x" "héllo wörld" 1
+compare "x" "日本語" -1
+compare "x" "the quick brown fox jumps over the lazy dog" 1
+compare "x" "0" 1
+compare "x" "-1" 1
+compare "x" "x" 0
+byte 0 \00
+byte json 0 "\u0000"
+byte 1 \01
+byte json 1 "\u0001"
+byte 2 \02
+byte json 2 "\u0002"
+byte 3 \03
+byte json 3 "\u0003"
+byte 4 \04
+byte json 4 "\u0004"
+byte 5 \05
+byte json 5 "\u0005"
+byte 6 \06
+byte json 6 "\u0006"
+byte 7 \07
+byte json 7 "\u0007"
+byte 8 \08
+byte json 8 "\b"
+byte 9 \09
+byte json 9 "\t"
+byte 10 \0A
+byte json 10 "\n"
+byte 11 \0B
+byte json 11 "\u000b"
+byte 12 \0C
+byte json 12 "\f"
+byte 13 \0D
+byte json 13 "\r"
+byte 14 \0E
+byte json 14 "\u000e"
+byte 15 \0F
+byte json 15 "\u000f"
+byte 16 \10
+byte json 16 "\u0010"
+byte 17 \11
+byte json 17 "\u0011"
+byte 18 \12
+byte json 18 "\u0012"
+byte 19 \13
+byte json 19 "\u0013"
+byte 20 \14
+byte json 20 "\u0014"
+byte 21 \15
+byte json 21 "\u0015"
+byte 22 \16
+byte json 22 "\u0016"
+byte 23 \17
+byte json 23 "\u0017"
+byte 24 \18
+byte json 24 "\u0018"
+byte 25 \19
+byte json 25 "\u0019"
+byte 26 \1A
+byte json 26 "\u001a"
+byte 27 \1B
+byte json 27 "\u001b"
+byte 28 \1C
+byte json 28 "\u001c"
+byte 29 \1D
+byte json 29 "\u001d"
+byte 30 \1E
+byte json 30 "\u001e"
+byte 31 \1F
+byte json 31 "\u001f"
+byte 32  
+byte json 32 " "
+byte 33 !
+byte json 33 "!"
+byte 34 \22
+byte json 34 "\""
+byte 35 #
+byte json 35 "#"
+byte 36 $
+byte json 36 "$"
+byte 37 %
+byte json 37 "%"
+byte 38 &
+byte json 38 "&"
+byte 39 '
+byte json 39 "'"
+byte 40 (
+byte json 40 "("
+byte 41 )
+byte json 41 ")"
+byte 42 *
+byte json 42 "*"
+byte 43 +
+byte json 43 "+"
+byte 44 ,
+byte json 44 ","
+byte 45 -
+byte json 45 "-"
+byte 46 .
+byte json 46 "."
+byte 47 /
+byte json 47 "/"
+byte 48 0
+byte json 48 "0"
+byte 49 1
+byte json 49 "1"
+byte 50 2
+byte json 50 "2"
+byte 51 3
+byte json 51 "3"
+byte 52 4
+byte json 52 "4"
+byte 53 5
+byte json 53 "5"
+byte 54 6
+byte json 54 "6"
+byte 55 7
+byte json 55 "7"
+byte 56 8
+byte json 56 "8"
+byte 57 9
+byte json 57 "9"
+byte 58 :
+byte json 58 ":"
+byte 59 ;
+byte json 59 ";"
+byte 60 <
+byte json 60 "<"
+byte 61 =
+byte json 61 "="
+byte 62 >
+byte json 62 ">"
+byte 63 ?
+byte json 63 "?"
+byte 64 @
+byte json 64 "@"
+byte 65 A
+byte json 65 "A"
+byte 66 B
+byte json 66 "B"
+byte 67 C
+byte json 67 "C"
+byte 68 D
+byte json 68 "D"
+byte 69 E
+byte json 69 "E"
+byte 70 F
+byte json 70 "F"
+byte 71 G
+byte json 71 "G"
+byte 72 H
+byte json 72 "H"
+byte 73 I
+byte json 73 "I"
+byte 74 J
+byte json 74 "J"
+byte 75 K
+byte json 75 "K"
+byte 76 L
+byte json 76 "L"
+byte 77 M
+byte json 77 "M"
+byte 78 N
+byte json 78 "N"
+byte 79 O
+byte json 79 "O"
+byte 80 P
+byte json 80 "P"
+byte 81 Q
+byte json 81 "Q"
+byte 82 R
+byte json 82 "R"
+byte 83 S
+byte json 83 "S"
+byte 84 T
+byte json 84 "T"
+byte 85 U
+byte json 85 "U"
+byte 86 V
+byte json 86 "V"
+byte 87 W
+byte json 87 "W"
+byte 88 X
+byte json 88 "X"
+byte 89 Y
+byte json 89 "Y"
+byte 90 Z
+byte json 90 "Z"
+byte 91 [
+byte json 91 "["
+byte 92 \5C
+byte json 92 "\\"
+byte 93 ]
+byte json 93 "]"
+byte 94 ^
+byte json 94 "^"
+byte 95 _
+byte json 95 "_"
+byte 96 `
+byte json 96 "`"
+byte 97 a
+byte json 97 "a"
+byte 98 b
+byte json 98 "b"
+byte 99 c
+byte json 99 "c"
+byte 100 d
+byte json 100 "d"
+byte 101 e
+byte json 101 "e"
+byte 102 f
+byte json 102 "f"
+byte 103 g
+byte json 103 "g"
+byte 104 h
+byte json 104 "h"
+byte 105 i
+byte json 105 "i"
+byte 106 j
+byte json 106 "j"
+byte 107 k
+byte json 107 "k"
+byte 108 l
+byte json 108 "l"
+byte 109 m
+byte json 109 "m"
+byte 110 n
+byte json 110 "n"
+byte 111 o
+byte json 111 "o"
+byte 112 p
+byte json 112 "p"
+byte 113 q
+byte json 113 "q"
+byte 114 r
+byte json 114 "r"
+byte 115 s
+byte json 115 "s"
+byte 116 t
+byte json 116 "t"
+byte 117 u
+byte json 117 "u"
+byte 118 v
+byte json 118 "v"
+byte 119 w
+byte json 119 "w"
+byte 120 x
+byte json 120 "x"
+byte 121 y
+byte json 121 "y"
+byte 122 z
+byte json 122 "z"
+byte 123 {
+byte json 123 "{"
+byte 124 |
+byte json 124 "|"
+byte 125 }
+byte json 125 "}"
+byte 126 ~
+byte json 126 "~"
+byte 127 \7F
+byte json 127 ""
+byte 128 \80
+byte 129 \81
+byte 130 \82
+byte 131 \83
+byte 132 \84
+byte 133 \85
+byte 134 \86
+byte 135 \87
+byte 136 \88
+byte 137 \89
+byte 138 \8A
+byte 139 \8B
+byte 140 \8C
+byte 141 \8D
+byte 142 \8E
+byte 143 \8F
+byte 144 \90
+byte 145 \91
+byte 146 \92
+byte 147 \93
+byte 148 \94
+byte 149 \95
+byte 150 \96
+byte 151 \97
+byte 152 \98
+byte 153 \99
+byte 154 \9A
+byte 155 \9B
+byte 156 \9C
+byte 157 \9D
+byte 158 \9E
+byte 159 \9F
+byte 160 \A0
+byte 161 \A1
+byte 162 \A2
+byte 163 \A3
+byte 164 \A4
+byte 165 \A5
+byte 166 \A6
+byte 167 \A7
+byte 168 \A8
+byte 169 \A9
+byte 170 \AA
+byte 171 \AB
+byte 172 \AC
+byte 173 \AD
+byte 174 \AE
+byte 175 \AF
+byte 176 \B0
+byte 177 \B1
+byte 178 \B2
+byte 179 \B3
+byte 180 \B4
+byte 181 \B5
+byte 182 \B6
+byte 183 \B7
+byte 184 \B8
+byte 185 \B9
+byte 186 \BA
+byte 187 \BB
+byte 188 \BC
+byte 189 \BD
+byte 190 \BE
+byte 191 \BF
+byte 192 \C0
+byte 193 \C1
+byte 194 \C2
+byte 195 \C3
+byte 196 \C4
+byte 197 \C5
+byte 198 \C6
+byte 199 \C7
+byte 200 \C8
+byte 201 \C9
+byte 202 \CA
+byte 203 \CB
+byte 204 \CC
+byte 205 \CD
+byte 206 \CE
+byte 207 \CF
+byte 208 \D0
+byte 209 \D1
+byte 210 \D2
+byte 211 \D3
+byte 212 \D4
+byte 213 \D5
+byte 214 \D6
+byte 215 \D7
+byte 216 \D8
+byte 217 \D9
+byte 218 \DA
+byte 219 \DB
+byte 220 \DC
+byte 221 \DD
+byte 222 \DE
+byte 223 \DF
+byte 224 \E0
+byte 225 \E1
+byte 226 \E2
+byte 227 \E3
+byte 228 \E4
+byte 229 \E5
+byte 230 \E6
+byte 231 \E7
+byte 232 \E8
+byte 233 \E9
+byte 234 \EA
+byte 235 \EB
+byte 236 \EC
+byte 237 \ED
+byte 238 \EE
+byte 239 \EF
+byte 240 \F0
+byte 241 \F1
+byte 242 \F2
+byte 243 \F3
+byte 244 \F4
+byte 245 \F5
+byte 246 \F6
+byte 247 \F7
+byte 248 \F8
+byte 249 \F9
+byte 250 \FA
+byte 251 \FB
+byte 252 \FC
+byte 253 \FD
+byte 254 \FE
+byte 255 \FF
+bit 0 0000000000000001
+bit 1 0000000000000002
+bit 2 0000000000000004
+bit 3 0000000000000008
+bit 4 0000000000000010
+bit 5 0000000000000020
+bit 6 0000000000000040
+bit 7 0000000000000080
+bit 8 0000000000000100
+bit 9 0000000000000200
+bit 10 0000000000000400
+bit 11 0000000000000800
+bit 12 0000000000001000
+bit 13 0000000000002000
+bit 14 0000000000004000
+bit 15 0000000000008000
+bit 16 0000000000010000
+bit 17 0000000000020000
+bit 18 0000000000040000
+bit 19 0000000000080000
+bit 20 0000000000100000
+bit 21 0000000000200000
+bit 22 0000000000400000
+bit 23 0000000000800000
+bit 24 0000000001000000
+bit 25 0000000002000000
+bit 26 0000000004000000
+bit 27 0000000008000000
+bit 28 0000000010000000
+bit 29 0000000020000000
+bit 30 0000000040000000
+bit 31 0000000080000000
+bit 32 0000000100000000
+bit 33 0000000200000000
+bit 34 0000000400000000
+bit 35 0000000800000000
+bit 36 0000001000000000
+bit 37 0000002000000000
+bit 38 0000004000000000
+bit 39 0000008000000000
+bit 40 0000010000000000
+bit 41 0000020000000000
+bit 42 0000040000000000
+bit 43 0000080000000000
+bit 44 0000100000000000
+bit 45 0000200000000000
+bit 46 0000400000000000
+bit 47 0000800000000000
+bit 48 0001000000000000
+bit 49 0002000000000000
+bit 50 0004000000000000
+bit 51 0008000000000000
+bit 52 0010000000000000
+bit 53 0020000000000000
+bit 54 0040000000000000
+bit 55 0080000000000000
+bit 56 0100000000000000
+bit 57 0200000000000000
+bit 58 0400000000000000
+bit 59 0800000000000000
+bit 60 1000000000000000
+bit 61 2000000000000000
+bit 62 4000000000000000
+bit 63 8000000000000000
+join "a/c"
+builder empty 1 0
+builder "abc" 3 0
+builder reset "" 1
+map size 11
+map entry 0 "hello" 0
+map entry 1 "" 1
+map entry 2 "a\"b\\c" 2
+map entry 3 "/leading/and/trailing/" 3
+map entry 4 "a//b" 4
+map entry 5 "héllo wörld" 5
+map entry 6 "日本語" 6
+map entry 7 "the quick brown fox jumps over the lazy dog" 7
+map entry 8 "0" 8
+map entry 9 "-1" 9
+map entry 10 "x" 10
+map get "hello" 0
+map get "" 1
+map get "a\"b\\c" 2
+map get "/leading/and/trailing/" 3
+map get "a//b" 4
+map get "héllo wörld" 5
+map get "日本語" 6
+map get "the quick brown fox jumps over the lazy dog" 7
+map get "0" 8
+map get "-1" 9
+map get "x" 10
+map missing -1 0
+map size after overwrite 11
+map first after overwrite "hello" 1000
+set size 11 added 11
+grow size 300 sum 313950 slots 512
+grow order "key0" "key299"
