@@ -5877,12 +5877,17 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   const badFlag = run(["--bogus", entry]);
   check(
     "unknown flag: names it, exit 2",
-    badFlag.status === 2 && badFlag.stderr.includes("unknown option: --bogus"),
+    badFlag.status === 2 && badFlag.stderr.includes("unknown flag `--bogus`"),
     badFlag.stderr
   );
   const noValue = run([entry, "-o"]);
   check("-o without a value: exit 2", noValue.status === 2, noValue.stderr);
 
+  // An unreadable input names the file. stage0 passed Node's errno through
+  // (`ENOENT`); stage1's runtime read answers null without saying why, so the
+  // sentence is `cannot open <file>` -- the wording `tests/nish/cli.ts` already
+  // holds both compilers to, and what the two checks below pin.
+  //
   // Under `--json` every failure is a parseable line, not just the ones with a
   // source span. A wrapper that asked for JSON and got an empty stdout plus a
   // non-zero exit has to scrape stderr to find out what happened, which is the
@@ -5931,15 +5936,15 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     missingJson.status === 1 &&
       missingObj !== null &&
       /^NL\d{4}$/.test(missingObj.code) &&
-      missingObj.message.includes("ENOENT"),
+      missingObj.message === "cannot open does-not-exist.ts",
     missingJson.stdout + missingJson.stderr
   );
 
   const missing = run(["does-not-exist.ts"]);
   check(
-    "missing input file: one-line ENOENT message, exit 1",
+    "missing input file: one-line `cannot open` message, exit 1",
     missing.status === 1 &&
-      missing.stderr.includes("ENOENT") &&
+      missing.stderr === "error: cannot open does-not-exist.ts\n" &&
       !missing.stderr.includes("internal compiler error"),
     missing.stderr
   );
