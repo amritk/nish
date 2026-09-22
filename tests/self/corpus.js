@@ -23,8 +23,28 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 
-/** Every directory of positive programs, in the order the oracles report them. */
-const CORPUS_DIRS = ["tests/cases", "examples", "self", "docs/cookbook", "bench", "tests/parser"];
+/**
+ * Every directory of positive programs, in the order the oracles report them.
+ *
+ * `tests/differential/corpus` is in it since WP19 §A5's sixth entry, and was
+ * not before: 71 whole programs — the WP13 differential set, which is where
+ * the *runtime* behaviour of the language is pinned — had never been compiled
+ * by stage1 by any oracle or by `--parity`, while `.claude/selfhost.md` said
+ * the corpus held them and `scripts/arrow-verify.mjs` carried a
+ * `differentialPrograms()` of its own precisely because it did not. Two of
+ * the 71 were compile errors on the stage1 side when they were first run
+ * (`-1 / z` with `z: f64`, `docs/LANGUAGE.md`'s "`-5` and `(5)` count as the
+ * literal"), which is what a corpus nobody compares is worth.
+ */
+const CORPUS_DIRS = [
+  "tests/cases",
+  "examples",
+  "self",
+  "docs/cookbook",
+  "bench",
+  "tests/parser",
+  "tests/differential/corpus",
+];
 
 /**
  * The extra CLI flags this program is compiled with, exactly as written where
@@ -66,6 +86,17 @@ function checkerArgs(file) {
 /**
  * Every positive whole program of the corpus. A source with a `.err` sidecar
  * is a rejection and belongs to `reject_oracle.js`, so it is left out here.
+ *
+ * A **subdirectory holding a `main.ts`** is one program too, which is how the
+ * multi-module shapes are written everywhere in this repository that is not
+ * `tests/link/`: `tests/differential/corpus/modules_diamond/`,
+ * `const_modules/`, `modules_basic/` and `examples/multi/`. Enumerating only
+ * the files directly in a directory left those four out of every oracle —
+ * three of them arriving with the directory above, and `examples/multi` for
+ * as long as it has existed — so the rule is one level deep rather than one
+ * directory wide. It is deliberately *one* level: a corpus program is a file
+ * a reader can point at, and `docs/cookbook/node_modules/` is a package
+ * fixture rather than a program.
  */
 function programs() {
   const files = [];
@@ -73,8 +104,16 @@ function programs() {
     const full = path.join(root, dir);
     if (!fs.existsSync(full)) continue;
     for (const name of fs.readdirSync(full).sort()) {
-      if (!name.endsWith(".ts")) continue;
       const file = path.join(full, name);
+      if (!name.endsWith(".ts")) {
+        // `<entry>/main.ts` existing is the whole test: it is false for a file
+        // and for a directory that is not a program, so nothing here has to
+        // `stat` an entry — which would throw on a dangling symlink the tree
+        // is entitled to hold (`tests/link/package_symlink` is one).
+        const main = path.join(file, "main.ts");
+        if (fs.existsSync(main)) files.push(main);
+        continue;
+      }
       if (fs.existsSync(file.replace(/\.ts$/, ".err"))) continue;
       files.push(file);
     }

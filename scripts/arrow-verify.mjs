@@ -59,9 +59,10 @@
  *     allowed to move a caret pointed at the function's own name.
  *
  * **What is rewritten is what is compared, and the set is derived rather than
- * declared.** The sweep compiles every whole program of the corpus — the six
- * directories `tests/self/corpus.js` enumerates, the multi-module programs of
- * `tests/link/`, and `tests/differential/corpus/` — diagnoses every rejection
+ * declared.** The sweep compiles every whole program of the corpus — the seven
+ * directories `tests/self/corpus.js` enumerates, `tests/differential/corpus/`
+ * among them since WP19 §A5's sixth entry, and the multi-module programs of
+ * `tests/link/` — diagnoses every rejection
  * beside them, and rewrites exactly those files plus the modules they import,
  * computed by following the import graph. A file outside that closure is never
  * touched, because nothing here would compile it afterwards, and a summary
@@ -182,34 +183,22 @@ const copyTree = () => {
 };
 
 /**
- * The whole programs of `tests/differential/corpus/`: one per file, plus the
- * `main.ts` of each directory, which is how the multi-module ones are written
- * (`tests/differential/lib.js`). They are not in `CORPUS_DIRS` because the
- * stage1 oracles do not read them; they are here because the rewrite reaches
- * them, and a file this sweep rewrites is a file it has to compile.
+ * Every positive whole program the sweep compiles, as a path relative to the repo.
+ *
+ * This used to carry a `differentialPrograms()` of its own, because
+ * `tests/differential/corpus/` was not in `CORPUS_DIRS` and the rewrite
+ * reaches a file whether an oracle compiles it or not — a function whose
+ * existence was the standing evidence that the stage1 oracles were not
+ * reading 71 whole programs (WP19 §A5, the sixth entry). `programs()`
+ * enumerates them now, directory programs included, so there is one rule
+ * again and the sweep and the oracles cannot come to disagree about what the
+ * corpus is.
  */
-const differentialPrograms = () => {
-  const dir = path.join(root, "tests", "differential", "corpus");
-  if (!fs.existsSync(dir)) return [];
-  const out = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (fs.existsSync(path.join(full, "main.ts"))) out.push(path.relative(root, path.join(full, "main.ts")));
-    } else if (entry.name.endsWith(".ts")) {
-      out.push(path.relative(root, full));
-    }
-  }
-  return out;
-};
-
-/** Every positive whole program the sweep compiles, as a path relative to the repo. */
 const sweepPrograms = () => {
   const out = programs().map((file) => path.relative(root, file));
   for (const program of linkPrograms()) {
     if (program.expectedErr === null) out.push(path.relative(root, program.main));
   }
-  out.push(...differentialPrograms());
   return [...new Set(out)].sort();
 };
 

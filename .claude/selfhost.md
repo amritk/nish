@@ -35,10 +35,10 @@ source until the seed compiles it, which is the next release.
 | --- | --- | --- |
 | S1 | `self/lexer.ts` tokenises Nish-0 | **done** — `tests/lexer_oracle.js`, 612/612 files |
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 574/574 files |
-| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 314/314 whole programs; `reject_oracle.js`, 222/222 cases |
-| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 324/324 programs byte for byte, and `interop_oracle.js`, 60 sidecars |
+| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 480/480 whole programs (414,853 dump lines); `reject_oracle.js`, 378/378 cases. Both re-derived 2026-09-22 (`node tests/run.js self`). They replace 314/314 and 222/222, and **only part of the first delta is the corpus widening** of wp19 §A9: 73 of the 480 are programs no oracle read before, and the rest of both numbers is a row nobody had re-derived |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 509/509 programs byte for byte (1,914 modules, 3,277,218 IR lines), and `interop_oracle.js`, 16/16 programs over 80 sidecars. Re-derived 2026-09-22; they replace 324/324 and 60 sidecars, and the interop number moved for no reason but drift — that oracle reads its own corpus and the widening does not reach it |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
-| R1 | parity: no program and no flag is stage0's | **green as of 2026-09-22, and a row without a date is not a measurement.** `parity: 14544 runs over 909 programs (2663.3 s); 0 undeclared difference(s), 2808 declared`, exit 0, from `node tests/run.js --parity` on merged `main` at `3927242`. It replaces the 2026-09-19 run at `862c7cc` (`14432` / `902` / `2798`), which the new counts exceed by exactly the seven entry programs that landed between them, sixteen variations each. The nightly `Parity` workflow is what keeps that number fresh on the default branch. **Re-run the mode before citing this row.** Five times now a number in this row has turned out to be false, or to mean less than it looked, and the corpus growing is only one of the five reasons — the newest is that the cross product did not name `--json` at all, which was worth 180 undeclared differences on an otherwise-green corpus, 178 of them stage1 answering a syntax error with an empty stdout (wp19 §A8). The mode is not part of `npm test`; what watches it now is the nightly `Parity` workflow, which opens an issue on a red or unmeasured full run and closes it on a green one, and `ci.yml`'s `parity-select` / `parity-changed` pair, which runs the corpus half over the programs each pull request touches. G1's check is `tests/self/parity.js`, in two halves: the flag sets each `--help` names, and the corpus under every flag variation — **sixteen** of them, a list somebody wrote rather than a property of the compilers, which is the thing to read before believing a green number covers a surface. The standing qualification is that the difference set is a lower bound over the corpus *and* that list, and it has not been retired by a green number: #94's stage0 half still reproduces on a tree this gate calls green, because no corpus program has the shape, and its stage1 half is a decision on file rather than a defect since #134. `outputStems` is the sharper example — a defect **both** compilers have, which no parity run can ever see because the two agree byte for byte while committing it (wp19 §5a item 5) |
+| R1 | parity: no program and no flag is stage0's | **Green as of 2026-09-22 over the corpus of that day, and that is not the corpus of this one.** `parity: 14544 runs over 909 programs (2663.3 s); 0 undeclared difference(s), 2808 declared`, exit 0, from `node tests/run.js --parity` on merged `main` at `3927242` — over **909 of the 986** programs `CORPUS_DIRS` enumerates now. `tests/differential/corpus` and the directory programs joined it on 2026-09-22 (wp19 §A9) and no part of that number covers them; the 74 that widening adds are green under all sixteen variations where they are attributable (`parity: 1136 runs over 71 programs (346.6 s); 0 undeclared difference(s), 142 declared`, every declaration in a class that already existed, plus three smaller selections), and the full figure on the widened corpus is **owed**, from `node tests/run.js --parity` or the nightly. It replaces the 2026-09-19 run at `862c7cc` (`14432` / `902` / `2798`), which the new counts exceed by exactly the seven entry programs that landed between them, sixteen variations each. The nightly `Parity` workflow is what keeps that number fresh on the default branch. **Re-run the mode before citing this row.** Five times now a number in this row has turned out to be false, or to mean less than it looked, and the corpus growing is only one of the five reasons — the newest is that the cross product did not name `--json` at all, which was worth 180 undeclared differences on an otherwise-green corpus, 178 of them stage1 answering a syntax error with an empty stdout (wp19 §A8). The mode is not part of `npm test`; what watches it now is the nightly `Parity` workflow, which opens an issue on a red or unmeasured full run and closes it on a green one, and `ci.yml`'s `parity-select` / `parity-changed` pair, which runs the corpus half over the programs each pull request touches. G1's check is `tests/self/parity.js`, in two halves: the flag sets each `--help` names, and the corpus under every flag variation — **sixteen** of them, a list somebody wrote rather than a property of the compilers, which is the thing to read before believing a green number covers a surface. The standing qualification is that the difference set is a lower bound over the corpus *and* that list, and it has not been retired by a green number: #94's stage0 half still reproduces on a tree this gate calls green, because no corpus program has the shape, and its stage1 half is a decision on file rather than a defect since #134. `outputStems` is the sharper example — a defect **both** compilers have, which no parity run can ever see because the two agree byte for byte while committing it (wp19 §5a item 5) |
 | R2–R6 | stage0 retired rather than frozen | **R2–R5 are each partly done and R6 is not started** — the gates are in [`docs/wp19-stage0-retirement.md`](../docs/wp19-stage0-retirement.md), and [§5a](../docs/wp19-stage0-retirement.md#5a-what-r6-is-waiting-on) sorts what is left into what is closed, what is work, and what is a human's decision. Four gates carry a dated green measurement, re-derived on 2026-09-22: G1 on the head R6 would land on, and G2.1 as twelve `nish-cmp` rows on `main` rather than one run. **One decision is left** — whether the second implementation still earns its keep — and this week's evidence says it does, which is the answer that matters for every rule below. The other two closed: the npm registry name on 2026-09-19, and a release carrying every seed on 2026-09-20, when v0.4.0 was published with all four |
 
 **stage0 is frozen, not retired, and that is a decision with an expiry.** Until
@@ -214,16 +214,27 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
-`tests/parser/` and `tests/link/`; `tests/self/corpus.js` enumerates it and
-answers what flags each program is compiled with, so that a program needing
+`tests/parser/`, `tests/differential/corpus/` and `tests/link/`, plus the
+`main.ts` of any directory inside one of those — the multi-module shape, which
+is `examples/multi/` and the three `modules_*` / `const_modules` programs of
+the differential corpus. `tests/self/corpus.js` enumerates it and answers what
+flags each program is compiled with, so that a program needing
 `--number-mode f64` is not refused by stage0 and then counted as though the
-*port* could not reach it. **`tests/differential/corpus/` is not in it**, which
-this sentence used to say it was: those 71 whole programs are compiled by
-stage1 nowhere in the suite, and when WP19 G2.4 pointed the differential
-harness's native half at the seed, two of them turned out not to compile at all
-(`docs/wp19-stage0-retirement.md` §6 item 6). A sixth instance of G1's standing
-qualification, that the difference set is a lower bound over a corpus somebody
-wrote.
+*port* could not reach it.
+
+**`tests/differential/corpus/` and the directory programs joined it on
+2026-09-22, and this sentence claimed them for weeks before they were in it**
+(wp19 §A9, the sixth entry in §A5's series). 71 whole programs — the set that
+pins the language's *runtime* behaviour — had never been compiled by stage1 by
+any oracle or by `--parity`, and two of them did not compile at all
+(``-1 / z`` with ``z: f64``, against `docs/LANGUAGE.md`'s "`-5` and `(5)` count
+as the literal"; fixed in `self/expressions.ts`). WP19 G2.4 found the same two
+from the other side, by pointing the differential harness's native half at the
+seed — `docs/wp19-stage0-retirement.md` §6 item 6 — which is what it takes to
+notice a program nothing compares: two independent routes to one defect, and
+neither of them this list. Both the corpus list here and §5a's G1 row read
+green over a set that silently excluded them. When this list changes, re-derive
+the numbers that quote it rather than editing the list alone.
 
 The fuzzer's `--stage1` mode has no corpus at all: it generates its programs
 from a seed, so the only thing that reproduces a failure is the seed it prints
@@ -238,13 +249,18 @@ decision.
 A skip in an oracle summary is a fact about how far the port has got, not a
 file that is allowed to disagree — which is why every other outcome is counted
 and named apart from it: a stage1 rejection, a parser refusal whose wording
-differs by design, a program the reject oracle owns. Three skips are left, one
-per oracle and two files between them, and none of them is about `self/`:
+differs by design, a program the reject oracle owns. Four skips are left, over
+three files, and none of them is about `self/`:
 `tests/parser/precedence.ts` is a parser fixture no checker accepts, which
-`checked_oracle.js` and `ir_oracle.js` both pass over, and `tests/link/no_main`
+`checked_oracle.js` and `ir_oracle.js` both pass over; `tests/link/no_main`
 is refused by `--link`, which is stage0's, so `reject_oracle.js` passes over
-that. The three cases that ask for a dump flag are counted apart from the
-skips, as dumps: they write no IR on either side. `checked_oracle.js` compares
+that; and `tests/link/tail_call_depth_debug` asks for `--profile debug`, which
+is not in `ir_oracle.js`'s `SHARED_FLAGS`, so that oracle passes over it. **The
+third of those is not in the sentence this one replaces**, which said three
+skips over two files and had done since #86 added the case — the drift the next
+paragraph is about, measured rather than re-stated (`node tests/self/ir_oracle.js
+--verbose`, 2026-09-22). The three cases that ask for a dump flag are counted
+apart from the skips, as dumps: they write no IR on either side. `checked_oracle.js` compares
 `--emit-checked` over the whole corpus; `--emit-ast` has no oracle because each
 compiler dumps its own tree, and is pinned by a golden per compiler instead.
 

@@ -31,6 +31,10 @@
  * summary line otherwise. Every skip is a fact about the corpus rather than a
  * file that is allowed to disagree.
  *
+ * A program *stage1* rejects is not a skip and fails the run, the way it fails
+ * `ir_oracle.js` — a fact about stage1 rather than about the corpus. It did not
+ * until 2026-09-22 (WP19 §A9).
+ *
  * The lines stage0 prints that the checker is not responsible for — the
  * attribute pass's facts, escape sets and stack sites — used to be dropped
  * here rather than left out of the format, so that they would start being
@@ -150,8 +154,13 @@ async function main(argv) {
     }
   }
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
-  if (verbose) {
+  // A rejection is printed whether or not `--verbose` was asked for, because it
+  // fails the run: an exit status with no line naming the program is the shape
+  // of a green summary nobody can act on.
+  if (verbose || rejected.length > 0) {
     for (const r of rejected) process.stdout.write(`  reject ${r}\n`);
+  }
+  if (verbose) {
     for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
     for (const d of declared) process.stdout.write(`  stage1-only ${d}\n`);
   }
@@ -167,7 +176,14 @@ async function main(argv) {
       `${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs), ` +
       `${skipped.length} skipped${declaredNote}${note}\n`
   );
-  return failed.length === 0 ? 0 : 1;
+  // A program stage0 accepts and stage1 refuses fails this oracle, the way it
+  // fails `ir_oracle.js`. It did not until 2026-09-22: this returned 0 with
+  // `N rejected by stage1` in its summary and the names behind `--verbose`, so
+  // the two programs of `tests/differential/corpus` that stage1's checker
+  // refused would have read green here (WP19 §A9). There is nothing to compare
+  // when stage1 wrote no dump, which is exactly why it is a failure and not a
+  // skip: a skip is a fact about the corpus, and this is a fact about stage1.
+  return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

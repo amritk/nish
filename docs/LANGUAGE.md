@@ -179,7 +179,13 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 | a field or element assignment target | `p.b = 255`, `bytes[i] = 255` | the field's / element's type |
 | a ternary arm, from the conditional's own context | `const x: f64 = c ? 1.5 : 2.5` | `f64` (`tests/cases/f64_ternary_literal`) |
 
-`-5` and `(5)` count as the literal. **The table is the whole list**, so a
+`-5` and `(5)` count as the literal, on **either** side of a binary operator:
+`-1 / z` and `(1) / z` with `z: f64` type their literal from `z` exactly as
+`1 / z` does, and so do `-1 * big` on an `i64` and `-1 < z`
+(`tests/cases/math_literal_operand_forms`). The other operand still has to be
+one of the shapes "known type" names below, so `-1 * (cp >> 6)` in f64 mode is
+refused for the same reason `0xc0 | (cp >> 6)` is
+(`tests/cases/reject_neg_literal_unpeekable`). **The table is the whole list**, so a
 position that is not on it leaves the literal at the mode's default however
 obvious the intended type looks: an object literal's property value is not on
 it, so `const p: Pixel = { b: 255 }` is `` Field `b` of `Pixel` expects a value
