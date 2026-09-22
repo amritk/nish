@@ -123,7 +123,10 @@ async function main(argv) {
       result = r.verdict.toUpperCase();
       failures++;
     }
-    if (r.verdict !== "match") mismatches.push(r.prog.name);
+    // `--update-known` writes this list, and `known-failures.txt` holds
+    // decisions about the language rather than references that have rotted, so
+    // a STALE program must not be able to arrive in it.
+    if (r.verdict !== "match" && r.verdict !== "stale-golden") mismatches.push(r.prog.name);
     console.log(
       `${pad(r.prog.name, width)}  ${pad(lib.summarize(r.native), 18)}  ${pad(lib.summarize(r.node), 18)}  ${pad(`${r.ms} ms`, 7)}  ${result}`
     );

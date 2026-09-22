@@ -452,9 +452,9 @@ to `tsc`'s own checker. Delete `src/` and the reference generator goes with it.
 So the reference is written down while stage0 exists:
 
 ```
-node tests/differential/goldens.js            # fidelity + freshness, ~2 s
-node tests/differential/goldens.js corpus/i64 # one subject
-node tests/differential/goldens.js --fresh    # the hashes alone, no rewriter
+node tests/differential/goldens.js            # both halves, ~2 s
+node tests/differential/goldens.js corpus/i64 # one subject, freshness only
+node tests/differential/goldens.js --fresh    # the half that outlives stage0, no rewriter
 node tests/differential/goldens.js --update   # regenerate (npm run test:update does too)
 node tests/differential/run.js --frozen       # the whole comparison, from the store
 ```
@@ -478,25 +478,62 @@ decisions about the language and not references that have rotted:
 ```
 $ printf '\n// perturbed\n' >> tests/differential/corpus/collatz.ts
 $ node tests/differential/run.js --frozen --only corpus/collatz
-corpus/collatz  exit 0, 658 B       -                   892 ms   STALE
-      corpus/collatz's frozen rewrite is stale: tests/differential/corpus/collatz.ts
-      changed since the rewrite was frozen (6720fc741f5e96da -> 7d74d71154bc6fff)
+native: dist/index.js    node: frozen rewrite
+program         native              node                time     result
+---------------------------------------------------------------------------
+corpus/collatz  exit 0, 658 B       -                   991 ms   STALE
+      corpus/collatz's frozen rewrite is stale: tests/differential/corpus/collatz.ts changed since the rewrite was frozen (6720fc741f5e96da -> 13021f1210e7f73f)
+      run `npm run test:update` while stage0 exists, or read wp19 §6 for what it costs
+
+0/1 programs agree with Node (1.0 s, 4 jobs); 1 unexpected failure(s).
+1 program(s) compared against nothing: their frozen rewrite is stale and was not used.
 ```
+
+That block is a paste rather than a retelling, which is the point of it: the
+first version of this section carried a hash no command produces — it was the
+hash of a *different* perturbation, copied across from an earlier run — in a
+section whose whole subject is a reference that has to be reproducible. Run the
+two lines and read the output rather than trusting either.
 
 A content hash rather than an mtime or a git blob id: an mtime is not
 reproducible across two checkouts of the same commit, a blob id needs git and a
-committed file, and the bytes of the file are what the rewrite was a function
-of. `<name>.argv` and `<name>.env` are deliberately not hashed — both sides of
-the comparison are handed them live, so changing one moves the native run and
-the Node run together.
+committed file, and the bytes of the file — `readFileSync` with no encoding —
+are what the rewrite was a function of. `<name>.argv` and `<name>.env` are
+deliberately not hashed: both sides of the comparison are handed them live, so
+changing one moves the native run and the Node run together. Neither is
+`runtime/shim.mjs`, which every rewritten module imports, and that one is worth
+saying out loud: an edit there changes what Node *does* rather than what the
+rewrite *says*, so it surfaces as a mismatch on the next run rather than as a
+stale reference — loudly, and exactly as it would with a live rewriter.
 
-**Two claims, and only one of them outlives stage0.** *Fidelity* — the store is
-byte identical to what the live rewriter produces today — is what catches an
-edit to `rewrite.js`, and it needs the rewriter, so it dies exactly as
-`checked_oracle.js` does. *Freshness* — the hashes above — is what is left.
-`npm test` makes both claims for as long as there is a stage0 to make the first
-one with, which is why the store records what this oracle actually compares
-rather than what somebody thought it compared.
+**Two claims, and only one of them outlives stage0.**
+
+*Fidelity* rebuilds the whole store from the live rewriter and compares it to
+the file **byte for byte**, the way `tests/self/goldens.js` compares its four.
+The form matters more than it looks: comparing record fields one at a time is a
+comparison of the fields somebody remembered, and the first version of this
+check compared the output name and the body id while leaving `source` and
+`srcHash` compared by nothing — so a record could name a module the rewrite
+never came from, with that module's own hash beside it so freshness agreed, and
+pass both halves. Rebuilding the text leaves no column to forget. It needs the
+rewriter, so it dies exactly as `checked_oracle.js` does.
+
+*Freshness* is what is left afterwards, and it is four questions rather than
+one: every program has a record, each record's sources still hash to what they
+hashed, no record is left over from a program that is gone — deleting a corpus
+program would otherwise take its coverage from 175 to 174 with nothing named —
+and the header's own counts are recomputed from what was parsed, so the file's
+description of itself is a claim with a check behind it. What freshness cannot
+see is a record that names the wrong file while holding that file's hash;
+nothing short of the rewriter can, which is why the byte comparison runs on
+every `npm test` while there is a stage0 to run it, and why after R6 the store
+is trusted the way `tests/cases/*.ll` is.
+
+`npm test` makes both claims for as long as it can make the first one, which is
+what keeps the store recording what this oracle actually compares rather than
+what somebody thought it compared. The summary line says which of the two ran —
+`the store is byte-identical to the live rewrite` or `store comparison skipped
+(no rewriter)` — and the suite puts that line in the check's name.
 
 **What the freeze does not save** is in §6 item 6 of the retirement document
 and is short: the fuzz differential against Node, whose programs are generated

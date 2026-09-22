@@ -3,7 +3,7 @@
  * The JavaScript every differential program rewrites to, checked in
  * (WP19 gate G2.4, `docs/wp19-stage0-retirement.md` §2B and §3).
  *
- *   node tests/differential/goldens.js              verify the store against the live rewrite
+ *   node tests/differential/goldens.js              the store against the live rewrite, byte for byte
  *   node tests/differential/goldens.js corpus/i64   only the programs whose name contains that
  *   node tests/differential/goldens.js --update     rewrite the store from the live rewriter
  *   node tests/differential/goldens.js --fresh      check the hashes alone, with no rewriter
@@ -54,19 +54,35 @@
  * Why a content hash and not something cheaper: an mtime is not reproducible
  * across two checkouts of the same commit and a git blob id needs git and a
  * committed file, whereas the bytes of the file are what the rewrite was a
- * function of. Truncation to 64 bits is safe here because the failure this
- * guards against is a forgotten regeneration, not a forged file. `<name>.argv`
- * and `<name>.env` are deliberately *not* hashed: they are read live and handed
- * to both sides of the comparison, so changing one moves the native run and the
- * Node run together and neither side goes stale.
+ * function of. Truncation to 64 bits is enough for the failure freshness is
+ * against, which is a forgotten regeneration. `<name>.argv` and `<name>.env`
+ * are deliberately *not* hashed: they are read live and handed to both sides of
+ * the comparison, so changing one moves the native run and the Node run
+ * together and neither side goes stale. Neither is `runtime/shim.mjs`, which
+ * every rewritten module imports: an edit there changes what Node *does* rather
+ * than what the rewrite *says*, so the comparison catches it loudly on the next
+ * run — the same way it would with a live rewriter, and the safe direction.
  *
- * **Two checks, and only one of them outlives stage0.** Freshness — the hashes
- * above — is cheap and runs wherever the store is read, including after R6.
- * Fidelity is this tool's verify mode: it re-runs the live rewriter over every
- * program and requires the store to be byte identical, which is what catches an
- * edit to `rewrite.js` itself. That half dies with stage0 by construction, the
- * same way `checked_oracle.js` does, which is why it runs on every `npm test`
- * for as long as there is a stage0 to run it.
+ * **Two checks, and only one of them outlives stage0.**
+ *
+ *   - **Fidelity**, in verify mode: the whole store is rebuilt from the live
+ *     rewriter and compared to the file **byte for byte**, the way
+ *     `tests/self/goldens.js` compares its four. That is deliberate rather than
+ *     convenient. A comparison field by field is a comparison of the fields
+ *     somebody remembered: this one compared `out` and the body id and left
+ *     `source` and `srcHash` checked by nothing, so a record could name a
+ *     module the rewrite never came from — with that module's own hash beside
+ *     it, so freshness agreed — and both halves passed. Rebuilding the text
+ *     leaves no column to forget, and it is also what makes an orphan record
+ *     and a fabricated one visible.
+ *   - **Freshness**, everywhere the store is read, including after R6: every
+ *     program has a record, each record's sources still hash to what they
+ *     hashed, no record is left over from a program that is gone, and the
+ *     header's counts are the store's own. What it cannot do is notice that a
+ *     record names the wrong file while holding that file's hash; nothing
+ *     short of the rewriter can, which is why the byte comparison runs on every
+ *     `npm test` for as long as there is a stage0 to run it. After that the
+ *     store is trusted the way `tests/cases/*.ll` is trusted.
  *
  * Regenerate with `npm run test:update`, the command that also writes a missing
  * `.ll` and `tests/self/goldens/`, or with `--update` here.
@@ -181,12 +197,10 @@ const produceOne = (rewriteProgram, prog) => {
     if (source.includes(" ") || out.includes(" ")) {
       return { error: `${prog.name}: \`${source}\` has a space in its path, which the store cannot hold` };
     }
-    modules.push({
-      id,
-      out,
-      source,
-      srcHash: digest(fs.readFileSync(rewritten.sources[i], "utf8")),
-    });
+    // The bytes, not the UTF-8 decode re-encoded: the guard is about the file
+    // on disk, and `readFileSync` with an encoding would answer for a lossy
+    // round trip of it instead.
+    modules.push({ id, out, source, srcHash: digest(fs.readFileSync(rewritten.sources[i])) });
     bodies.set(id, text);
   }
   const entryRaw = fs.readFileSync(rewritten.entry, "utf8");
@@ -218,10 +232,17 @@ const readStore = () => {
   const lines = fs.readFileSync(STORE, "utf8").split("\n");
   const programs = new Map();
   const bodies = new Map();
+  const heading = [];
   let current = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (line.startsWith("#") || line.length === 0) continue;
+    if (line.startsWith("#")) {
+      // Only the lines before the first record: a `#` inside a body is
+      // JavaScript, and a body's lines are consumed by count below.
+      if (programs.size === 0) heading.push(line);
+      continue;
+    }
+    if (line.length === 0) continue;
     if (line.startsWith("program ")) {
       current = { name: line.slice("program ".length), flags: [], modules: [], entry: null };
       programs.set(current.name, current);
@@ -267,7 +288,7 @@ const readStore = () => {
     }
     return { error: `${relative(STORE)}:${i + 1}: unexpected line \`${line.slice(0, 60)}\`` };
   }
-  return { programs, bodies };
+  return { programs, bodies, heading };
 };
 
 /**
@@ -286,7 +307,7 @@ const staleness = (record, prog, bodies) => {
   for (const module of record.modules) {
     const file = path.join(root, module.source);
     if (!fs.existsSync(file)) return `${module.source} is gone`;
-    const now = digest(fs.readFileSync(file, "utf8"));
+    const now = digest(fs.readFileSync(file));
     if (now !== module.srcHash) {
       return `${module.source} changed since the rewrite was frozen (${module.srcHash} -> ${now})`;
     }
@@ -313,35 +334,57 @@ const materialize = (record, bodies, outDir) => {
   return { entry, modules, frozen: true };
 };
 
+/**
+ * The lines one record occupies in the store. Factored out because a verify has
+ * to be able to rebuild them: comparing a record field by field is how the
+ * `source` and `srcHash` columns came to be compared by nothing at all, and a
+ * record whose text is rebuilt has no columns to forget.
+ */
+const recordLines = (record) => {
+  const lines = [`program ${record.name}`];
+  if (record.flags.length > 0) lines.push(`  flags ${record.flags.join(" ")}`);
+  for (const module of record.modules) {
+    lines.push(`  module ${module.srcHash} ${module.source} ${module.id} ${module.out}`);
+  }
+  lines.push(`  entry ${record.entry.id} ${record.entry.out}`);
+  return lines;
+};
+
+/**
+ * The header's own count of what the store holds, derived from the store rather
+ * than written beside it. A verify recomputes this from what it parsed and
+ * requires the line to match, so the summary at the top of the file is a claim
+ * with a check behind it instead of a decoration a hand edit can rewrite.
+ */
+const storeNote = (records, bodies) => {
+  let live = 0;
+  let moduleCount = 0;
+  for (const record of records) {
+    for (const module of record.modules) live += Buffer.byteLength(bodies.get(module.id) ?? "");
+    live += Buffer.byteLength(bodies.get(record.entry.id) ?? "");
+    moduleCount += record.modules.length + 1;
+  }
+  let stored = 0;
+  for (const text of bodies.values()) stored += Buffer.byteLength(text);
+  return (
+    `${records.length} programs, ${moduleCount} modules, ${bodies.size} distinct ` +
+    `(${(live / 1024).toFixed(1)} KiB live, ${(stored / 1024).toFixed(1)} KiB stored)`
+  );
+};
+
 /** The store's text for every program, in corpus order. */
 const produceStore = (rewriteProgram, programs) => {
   const records = [];
   const bodies = new Map();
-  let live = 0;
   for (const prog of programs) {
     const produced = produceOne(rewriteProgram, prog);
     if (produced.error !== undefined) return { error: produced.error };
     records.push(produced.record);
-    for (const [id, text] of produced.bodies) {
-      live += Buffer.byteLength(text);
-      bodies.set(id, text);
-    }
+    for (const [id, text] of produced.bodies) bodies.set(id, text);
   }
-  let stored = 0;
-  for (const text of bodies.values()) stored += Buffer.byteLength(text);
-  const moduleCount = records.reduce((n, r) => n + r.modules.length + 1, 0);
-  const note =
-    `${records.length} programs, ${moduleCount} modules, ${bodies.size} distinct ` +
-    `(${(live / 1024).toFixed(1)} KiB live, ${(stored / 1024).toFixed(1)} KiB stored)`;
+  const note = storeNote(records, bodies);
   const lines = [...header(note)];
-  for (const record of records) {
-    lines.push(`program ${record.name}`);
-    if (record.flags.length > 0) lines.push(`  flags ${record.flags.join(" ")}`);
-    for (const module of record.modules) {
-      lines.push(`  module ${module.srcHash} ${module.source} ${module.id} ${module.out}`);
-    }
-    lines.push(`  entry ${record.entry.id} ${record.entry.out}`);
-  }
+  for (const record of records) lines.push(...recordLines(record));
   for (const [id, text] of bodies) {
     const count = text.split("\n").length;
     lines.push(`body ${id} ${count} ${Buffer.byteLength(text)}`, text);
@@ -450,7 +493,11 @@ const main = async (argv) => {
   let failed = 0;
   let stale = 0;
   let modules = 0;
-  let agreed = 0;
+  let checked = 0;
+
+  // ---- Freshness: the half that outlives stage0 ----------------------------
+  // Every selected program has a record, that record's sources still hash to
+  // what they hashed, and nothing is stored for a program that is not there.
   for (const prog of programs) {
     const record = store.programs.get(prog.name);
     if (record === undefined) {
@@ -473,56 +520,82 @@ const main = async (argv) => {
       stale++;
       continue;
     }
-    if (rewriteProgram === undefined) {
-      modules += record.modules.length + 1;
-      agreed++;
-      if (verbose) process.stdout.write(`  fresh ${prog.name} (${record.modules.length + 1} modules)\n`);
-      continue;
-    }
-    const produced = produceOne(rewriteProgram, prog);
-    if (produced.error !== undefined) {
-      process.stdout.write(`  FAIL ${produced.error}\n`);
+    checked++;
+    modules += record.modules.length + 1;
+    if (verbose) process.stdout.write(`  fresh ${prog.name} (${record.modules.length + 1} modules)\n`);
+  }
+
+  // A record with no program is the other direction of the same question, and
+  // the one a loop over the corpus cannot see: deleting a corpus program would
+  // otherwise take its coverage away with nothing named and exit 0.
+  if (only === undefined) {
+    const live = new Set(programs.map((p) => p.name));
+    for (const name of store.programs.keys()) {
+      if (live.has(name)) continue;
+      process.stdout.write(`  FAIL the store holds ${name}, which is not a program any more\n`);
       failed++;
-      continue;
     }
-    const want = [...record.modules, record.entry];
-    const got = [...produced.record.modules, produced.record.entry];
-    let differed = false;
-    if (want.length !== got.length) {
+  }
+
+  // The header's counts, recomputed from what was parsed. Cheap, and it is the
+  // only thing standing behind the store's own description of itself once the
+  // comparison below cannot run.
+  const want = `# ${storeNote([...store.programs.values()], store.bodies)}`;
+  const heading = store.heading.at(-1) ?? "";
+  if (only === undefined && heading !== want) {
+    process.stdout.write(`  FAIL the store's header does not describe the store\n`);
+    process.stdout.write(`      header: ${heading}\n      actual: ${want}\n`);
+    failed++;
+  }
+
+  // ---- Fidelity: the half that dies with stage0 ----------------------------
+  // The whole file, rebuilt from the live rewriter and compared byte for byte,
+  // which is what `tests/self/goldens.js` does and the only form that leaves no
+  // column uncompared: a field-by-field comparison had `source` and `srcHash`
+  // checked by nothing, so a record could name a module the rewrite never came
+  // from and both halves would pass.
+  // What the summary says about this half, so that a check name carrying the
+  // summary says which of the two runs happened rather than asserting the
+  // stronger one. A run that proved something weaker than its summary line
+  // suggests is worse than a run that refused.
+  let fidelity =
+    rewriteProgram === undefined
+      ? "store comparison skipped (no rewriter)"
+      : "store comparison skipped (filtered)";
+  if (rewriteProgram !== undefined) {
+    if (only !== undefined) {
       process.stdout.write(
-        `  FAIL ${prog.name} rewrites to ${got.length} modules and the store holds ${want.length}\n`
+        `  note: the store is one file, so the byte comparison needs the whole corpus; \`${only}\` ran the freshness half only\n`
       );
-      differed = true;
-    }
-    for (let i = 0; i < Math.min(want.length, got.length); i++) {
-      modules++;
-      if (want[i].out !== got[i].out) {
-        process.stdout.write(
-          `  FAIL ${prog.name}: module ${i + 1} is ${got[i].out}, stored as ${want[i].out}\n`
-        );
-        differed = true;
-        continue;
+    } else {
+      const produced = produceStore(rewriteProgram, programs);
+      if (produced.error !== undefined) {
+        process.stdout.write(`  FAIL ${produced.error}\n`);
+        failed++;
+      } else {
+        fidelity = "the store is byte-identical to the live rewrite";
+        const have = fs.readFileSync(STORE, "utf8");
+        if (have !== produced.text) {
+          fidelity = "the store differs from the live rewrite";
+          const d = diff(have, produced.text, limit);
+          process.stdout.write(
+            `  FAIL ${relative(STORE)} is not what the rewriter produces now (${d.total} line(s) differ)\n`
+          );
+          for (const line of d.out) process.stdout.write(`${line}\n`);
+          if (d.shown < d.total) {
+            process.stdout.write(
+              `      ... and ${d.total - d.shown} more differing lines (--verbose for all)\n`
+            );
+          }
+          failed++;
+        }
       }
-      if (want[i].id === got[i].id) continue;
-      const d = diff(store.bodies.get(want[i].id), produced.bodies.get(got[i].id), limit);
-      process.stdout.write(
-        `  FAIL ${prog.name}: ${got[i].out} rewrites differently now (${d.total} line(s) differ)\n`
-      );
-      for (const line of d.out) process.stdout.write(`${line}\n`);
-      if (d.shown < d.total) {
-        process.stdout.write(`      ... and ${d.total - d.shown} more differing lines (--verbose for all)\n`);
-      }
-      differed = true;
     }
-    if (differed) failed++;
-    else agreed++;
-    if (verbose && !differed) process.stdout.write(`  ok ${prog.name} (${got.length} modules)\n`);
   }
 
   const bytes = fs.statSync(STORE).size;
-  const what = rewriteProgram === undefined ? "have a fresh frozen rewrite" : "agree with the live rewrite";
   process.stdout.write(
-    `rewrites: ${agreed}/${programs.length} programs ${what}, ` +
+    `rewrites: ${checked}/${programs.length} programs fresh, ${fidelity}, ` +
       `${modules} modules, ${stale} stale, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB stored\n`
   );
   return failed === 0 ? 0 : 1;

@@ -770,10 +770,13 @@ decision and a leap:
 | `bootstrap.js`, first equality | `IR(stage0, self/) == IR(stage1, self/)` | **dies** |
 | `bootstrap.js`, second and third | the fixed point, stage3 == stage2 | **survive** — they never involved stage0's output |
 
-Six oracles and one fuzzer mode die, and the row above them is the one that had
-to be re-read: a *semantic* oracle needs no second compiler and still needs
-stage0 to produce the JavaScript it compares against. The replacement for the
-six is Go's `toolstash -cmp`:
+Six oracles and **both** fuzzer modes die, and the row above them is the one
+that had to be re-read: a *semantic* oracle needs no second compiler and still
+needs stage0 to produce the JavaScript it compares against. `--stage1` is the
+mode this table named; the default mode, which compares a generated program
+with Node, goes for the same reason the row above it nearly did — the reference
+is `rewrite.js`, and a program invented from a seed has no frozen one to fall
+back on (§6 item 6). The replacement for the six is Go's `toolstash -cmp`:
 compare **the seed release against HEAD** over the same corpus, byte for byte,
 and require a named reason for every file that differs. That is a weaker
 property — it catches regressions rather than disagreements, and it cannot find
@@ -2489,11 +2492,14 @@ is one commit that does nothing else.
      carries the risk instead of the check is the store: its text was generated
      while that guard was green, and it cannot drift without the staleness
      guard or the per-body hash failing on read.
-   - **The store's fidelity check**, which is the other half of
-     `goldens.js`. Freshness — the source hashes — is cheap and survives;
-     comparing the store with a live rewrite needs the rewriter, so after R6
-     the store is trusted the way `tests/cases/*.ll` is trusted, and is weaker
-     for exactly the reason cost 2 gives.
+   - **The store's fidelity check**, which is the other half of `goldens.js`:
+     the whole file rebuilt from the live rewriter and compared byte for byte.
+     Freshness survives it — every program has a record, its sources still
+     hash, no record is orphaned, the header's counts are the store's own — but
+     freshness cannot see a record that names the wrong module while holding
+     that module's hash, and nothing short of the rewriter can. So after R6 the
+     store is trusted the way `tests/cases/*.ll` is trusted, and is weaker for
+     exactly the reason cost 2 gives.
    - **A corpus program added after R6 gets no differential coverage.** Until
      then a new program is one `npm run test:update` away from a frozen
      rewrite; afterwards `goldens.js` fails it by name, and the only honest

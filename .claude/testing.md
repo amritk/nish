@@ -410,8 +410,10 @@ same reason and dies of the same cause — `tests/differential/rewrite.js` types
 its output with stage0's `Compilation` — and it is the one golden in the
 repository whose reference is stage0 rather than stage1, which
 `.claude/selfhost.md` states as the exception it is. `node
-tests/differential/goldens.js` verifies it in about two seconds and
-`--fresh` checks the staleness hashes alone, with no compiler at all.
+tests/differential/goldens.js` rebuilds the whole store from the live rewriter
+and requires byte equality — about two seconds — and `--fresh` asks the half
+that outlives stage0 in under a tenth of one: the source hashes, the orphan
+records and the header's own counts, with no compiler at all.
 
 `tests/wordings/` is the fourth: one small program per **diagnostic code**,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole

@@ -9532,9 +9532,14 @@ if (!only || "differential".includes(only) || "goldens".includes(only)) {
     ],
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
   );
+  // The tool's own last line, whole: it names which of the two halves ran --
+  // `the store is byte-identical to the live rewrite` or `store comparison
+  // skipped (no rewriter)` -- and a check name that asserted the stronger one
+  // in fixed text would read the same either way. That is the failure mode
+  // `lib.js` refuses for the runs themselves.
   const summary = rewrites.stdout.trim().split("\n").pop() ?? "";
   check(
-    `differential: the frozen rewrites are what the rewriter produces today (${summary || "no summary"})`,
+    `differential: the frozen rewrites (${summary || "no summary"})`,
     rewrites.status === 0,
     rewrites.stdout + rewrites.stderr
   );
@@ -9984,6 +9989,11 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
 if ((!only || "differential".includes(only)) && HAS_CLANG) {
   const diffRunner = path.join(import.meta.dirname, "differential", "run.js");
   const d = spawnSync("node", [diffRunner, "--quick"], { cwd: root, encoding: "utf8" });
+  // `run.js`'s first line is `native: <compiler>    node: <live|frozen rewrite>`,
+  // and it belongs in the check name: after R6 the same summary line is printed
+  // whether the reference was today's rewrite or a recording of it, and a check
+  // that cannot tell the reader which proved less than the line suggests.
+  const mode = (d.stdout.split("\n").find((l) => l.startsWith("native:")) ?? "").trim();
   const summary = (
     d.stdout
       .trim()
@@ -9992,7 +10002,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
       .pop() ?? ""
   ).trim();
   check(
-    `differential: native and Node agree on every corpus program not in known-failures.txt (${summary || "no summary"})`,
+    `differential: native and Node agree on every corpus program not in known-failures.txt (${mode ? `${mode}; ` : ""}${summary || "no summary"})`,
     d.status === 0,
     d.stdout + d.stderr
   );
@@ -10025,6 +10035,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     [path.join(import.meta.dirname, "differential", "run.js"), "--frozen", "--only", "corpus/modules_"],
     { cwd: root, encoding: "utf8" }
   );
+  const frozenMode = (frozen.stdout.split("\n").find((l) => l.startsWith("native:")) ?? "").trim();
   const frozenSummary = (
     frozen.stdout
       .trim()
@@ -10033,7 +10044,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
       .pop() ?? ""
   ).trim();
   check(
-    `differential: the frozen rewrites run against Node with no rewriter in the picture (${frozenSummary || "no summary"})`,
+    `differential: the frozen rewrites run against Node with no rewriter in the picture (${frozenMode ? `${frozenMode}; ` : ""}${frozenSummary || "no summary"})`,
     frozen.status === 0,
     frozen.stdout + frozen.stderr
   );
