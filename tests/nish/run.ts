@@ -1,7 +1,12 @@
 /**
  * The golden-case runner, in Nish.
  *
- *     build/nish-runner [substring]
+ *     build/nish-runner [substring] [--compiler <nish>]
+ *
+ * The compiler under test defaults to stage0 (`dist/index.js`, under `node`);
+ * `--compiler build/nish` runs the same cases through a native one. A Node entry
+ * point (`.js`, `.mjs`, `.cjs`) runs under `node` and anything else directly,
+ * the rule `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`.
  *
  * `tests/run.js` is the suite of record and this is not a replacement for it: it
  * covers section A, the golden cases in `tests/cases/`, and the `tests/link/`
@@ -67,7 +72,8 @@ const WORK: string = "build/nish-cases";
 /** `tests/run.js`'s own build directory, which some cases write into by that literal path. */
 const CASE_WORK: string = "build/test";
 const LINK_WORK: string = "build/nish-link";
-const CLI: string = "dist/index.js";
+/** The compiler nobody named: stage0, the one `npm run build` leaves behind. */
+const DEFAULT_CLI: string = "dist/index.js";
 /** How many of the slowest cases the closing report names. */
 const SLOWEST: i32 = 5;
 
@@ -79,19 +85,37 @@ const SLOWEST: i32 = 5;
  * that cannot change while the run is in progress.
  */
 class Tools {
+  /** The argv prefix that runs the compiler under test: `["node", "dist/index.js"]`, or just a binary. */
+  compiler: string[];
   clang: boolean;
   llvmAs: boolean;
   opt: boolean;
   /** `env(1)`, and specifically an `env` that honours `-u`. See `hasEnvTool`. */
   env: boolean;
+  /** Whether that compiler is a Node entry point, which today means stage0. */
+  node: boolean;
 
-  constructor(clang: boolean, llvmAs: boolean, opt: boolean, env: boolean) {
+  constructor(clang: boolean, llvmAs: boolean, opt: boolean, env: boolean, compiler: string) {
     this.clang = clang;
     this.llvmAs = llvmAs;
     this.opt = opt;
     this.env = env;
+    this.node = compiler.endsWith(".js") || compiler.endsWith(".mjs") || compiler.endsWith(".cjs");
+    this.compiler = this.node ? ["node", compiler] : [compiler];
   }
 }
+
+/** The compiler's argv prefix followed by `args`: one compile's whole command line. */
+const compilerArgv = (tools: Tools, args: string[]): string[] => {
+  const argv: string[] = [];
+  for (const part of tools.compiler) {
+    argv.push(part);
+  }
+  for (const arg of args) {
+    argv.push(arg);
+  }
+  return argv;
+};
 
 /**
  * The slowest cases, kept as an insertion-sorted top `SLOWEST` rather than by
@@ -230,10 +254,10 @@ const hasEntry = (source: string): boolean =>
 
 /**
  * The case names of the stage1-only register (`tests/self/stage1_only.txt`,
- * WP19 §1a). This runner spawns stage0, and a registered case is one stage0
- * has no implementation of, so it is skipped by name here rather than failed:
- * `tests/run.js` compiles those with a stage1 binary, which this runner has no
- * way to build.
+ * WP19 §1a). A registered case is one stage0 has no implementation of, so when
+ * this runner spawns stage0 it is skipped by name rather than failed:
+ * `tests/run.js` compiles those with a stage1 binary, and so does this runner
+ * when `--compiler` names one.
  */
 const stage1OnlyNames = (): string[] => {
   const names: string[] = [];
@@ -397,7 +421,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   const irPath = `${WORK}/${name}.ll`;
   const compileOut = `${WORK}/${name}.compile.out`;
   const compileErr = `${WORK}/${name}.compile.err`;
-  const argv: string[] = ["node", CLI, `${CASES}/${name}.ts`, "-o", irPath];
+  const argv = compilerArgv(tools, [`${CASES}/${name}.ts`, "-o", irPath]);
   // `--threads` is the one compiler flag that also changes how the case is
   // *linked*: the IR then reaches for a `_Thread_local` arena, which only
   // `runtime.c` compiled with `-DNISH_THREADS=1` defines (WP20 T0). Reading it
@@ -559,7 +583,7 @@ const runLinkCase = (t: Suite, tools: Tools, name: string): void => {
     return;
   }
   const exe = `${outDir}/app`;
-  const argv: string[] = ["node", CLI, `${dir}/main.ts`, "-o", `${outDir}/`];
+  const argv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${outDir}/`]);
   if (tools.clang) {
     argv.push("--link");
     argv.push(exe);
@@ -640,8 +664,26 @@ const runLinkCase = (t: Suite, tools: Tools, name: string): void => {
 };
 
 export const main = (): number => {
-  // One filter argument, matched as a substring, the way `node tests/run.js <sub>` does.
-  const filter = process.argv.length > 1 ? process.argv[1] : "";
+  // One filter argument, matched as a substring, the way `node tests/run.js <sub>` does,
+  // and `--compiler <nish>` anywhere around it.
+  let filter = "";
+  let compiler = DEFAULT_CLI;
+  let i = 1;
+  while (i < process.argv.length) {
+    if (process.argv[i] === "--compiler") {
+      if (i + 1 >= process.argv.length) {
+        panic("--compiler needs a path");
+      }
+      compiler = process.argv[i + 1];
+      i = i + 2;
+    } else {
+      filter = process.argv[i];
+      i = i + 1;
+    }
+  }
+  if (readFileSyncOrNull(compiler) === null) {
+    panic(`cannot read the compiler ${compiler} (run this from the repository root, after \`npm run build\`)`);
+  }
   mkdirSync("build");
   if (!mkdirSync(WORK)) {
     panic(`cannot create ${WORK}`);
@@ -663,7 +705,7 @@ export const main = (): number => {
   const cleaned = spawnSyncTo(["rm", "-rf", LINK_WORK], `${WORK}/rm.out`, `${WORK}/rm.err`) === 0;
   const linkReady = cleaned && mkdirSync(LINK_WORK);
 
-  const tools = new Tools(probe("clang"), probe("llvm-as"), probe("opt"), hasEnvTool());
+  const tools = new Tools(probe("clang"), probe("llvm-as"), probe("opt"), hasEnvTool(), compiler);
 
   const started = monotonicNanos();
   const t = new Suite("golden cases");
@@ -683,7 +725,7 @@ export const main = (): number => {
     if (filter.length > 0 && name.indexOf(filter) < 0) {
       continue;
     }
-    if (includesName(stage1OnlyCases, name)) {
+    if (tools.node && includesName(stage1OnlyCases, name)) {
       t.skip(name, "stage1-only (tests/self/stage1_only.txt): this runner spawns stage0");
       continue;
     }
