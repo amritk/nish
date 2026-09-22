@@ -203,48 +203,29 @@ jobs:
         run: npm run check
 
       # The seed: the last release's compiler for this runner's platform,
-      # `.github/seed-targets.json`'s asset for `uname -s`-`uname -m`. Every
-      # compile `npm test` makes is stage1's, and stage1 is `self/` built by
-      # this binary -- the rolling freeze (WP19 G3) asked on the platform the
-      # suite runs on, before the suite has run a check. The same download the
-      # `bootstrap` job makes, from the same release, by the same name.
+      # unpacked into build/seed by `scripts/fetch-seed.sh` (install.sh's
+      # download, asset name and version check). Every compile `npm test`
+      # makes is stage1's, and stage1 is `self/` built by this binary -- the
+      # rolling freeze (WP19 G3) asked on the platform the suite runs on.
       - name: Fetch the seed
-        id: seed
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
-          asset="$(jq -r --arg host "$(uname -s)-$(uname -m)" '.targets[] | select(.host == $host) | .asset' .github/seed-targets.json)"
-          if [ -z "$asset" ]; then
-            echo "::error::.github/seed-targets.json names no seed for $(uname -s)-$(uname -m), so there is nothing to build the compiler under test with."
-            exit 1
-          fi
-          tarball="nish-${tag#v}-$asset.tar.gz"
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$tarball" --dir "$RUNNER_TEMP"
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
-          seed="$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish"
-          "$seed" --version
-          echo "path=$seed" >> "$GITHUB_OUTPUT"
+          bash scripts/fetch-seed.sh
+          build/seed/bin/nish --version
 
       # `build/nish` is what the steps after the suite drive: stage1, one
       # directory below the repository root, which is where its package root is
       # found from (`packageRoot` in self/compile.ts).
       - name: Build the compiler with the seed
-        env:
-          SEED: ${{ steps.seed.outputs.path }}
-        run: '"$SEED" self/compile.ts --link build/nish'
+        run: build/seed/bin/nish self/compile.ts --link build/nish
 
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
       # row per seed, and whose `cmpSince` rule that job's matrix states.
       - name: Test
-        env:
-          SEED: ${{ steps.seed.outputs.path }}
-        run: npm test -- --seed "$SEED"
+        run: npm test -- --seed build/seed/bin/nish
 
-      # `NISH` is the override R6.2 gives scripts/smoke.sh and
-      # docs/cookbook/regen.sh; until it lands both still run their default,
-      # the stage0 `npm test` just built.
+      # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
+      # run, in place of their stage0 default.
       - name: Smoke (build + run every example with a main, size profile)
         env:
           NISH: build/nish
@@ -650,27 +631,10 @@ jobs:
 
       # The same seed and the same build the `test` job makes; see there.
       - name: Fetch the seed
-        id: seed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
-          asset="$(jq -r --arg host "$(uname -s)-$(uname -m)" '.targets[] | select(.host == $host) | .asset' .github/seed-targets.json)"
-          if [ -z "$asset" ]; then
-            echo "::error::.github/seed-targets.json names no seed for $(uname -s)-$(uname -m), so there is nothing to build the compiler under test with."
-            exit 1
-          fi
-          tarball="nish-${tag#v}-$asset.tar.gz"
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$tarball" --dir "$RUNNER_TEMP"
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
-          seed="$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish"
-          "$seed" --version
-          echo "path=$seed" >> "$GITHUB_OUTPUT"
+        run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler with the seed
-        env:
-          SEED: ${{ steps.seed.outputs.path }}
-        run: '"$SEED" self/compile.ts --link build/nish'
+        run: build/seed/bin/nish self/compile.ts --link build/nish
 
       # The runner answers 1 when any check failed, so the step's own exit status
       # is the gate. Its last line is the summary, which is what a reader wants
@@ -678,30 +642,14 @@ jobs:
       # `set -o pipefail` is load-bearing: the default shell for a `run:` step is
       # `bash -e`, without it, so the exit status of a pipeline would be `tee`'s
       # and a runner that answered 1 would still be a green step.
-      # The runner is built by the compiler under test and handed it: as the
-      # argument after the filter (empty here, which is the whole corpus) and as
-      # `NISH`, the override `tests/nish/run.ts` takes in place of its default.
-      # Until that override lands (R6.2) the runner spawns `node dist/index.js`
-      # whatever it is told, so `dist/index.js` here is a shim that hands every
-      # argument to `build/nish` and answers its status: the goldens are
-      # stage1's, and stage0 is not the compiler this job is asking.
+      # The runner is built by the compiler under test and handed it with
+      # `--compiler`, in place of its stage0 default; with no filter it walks the
+      # whole corpus.
       - name: The corpus, through the Nish runner
-        env:
-          NISH: build/nish
         run: |
           set -o pipefail
-          if grep -q 'getenv("NISH")' tests/nish/run.ts; then
-            echo "::error::tests/nish/run.ts reads NISH now: delete the dist/index.js shim below and pass the compiler the way it asks."
-            exit 1
-          fi
-          mkdir -p dist
-          cat > dist/index.js <<'SHIM'
-          import { spawnSync } from "node:child_process";
-          const r = spawnSync("build/nish", process.argv.slice(2), { stdio: "inherit" });
-          process.exit(r.status ?? 70);
-          SHIM
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          build/nish-runner "" build/nish | tee "$RUNNER_TEMP/nish-runner.log"
+          build/nish-runner --compiler build/nish | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()

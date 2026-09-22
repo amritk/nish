@@ -3114,15 +3114,9 @@ if (!only || "nish-runner".includes(only)) {
       // cwd is the repository root because the runner addresses `tests/cases` and
       // the compiler by relative path: there is no `cwd` builtin for it to build
       // an absolute one from, which is also why it folds `<root>/` out of a
-      // golden rather than into its own output. The compiler under test is named
-      // after the filter and in `NISH`, the override R6.2 gives
-      // `tests/nish/run.ts`; until that lands the runner ignores both and
-      // spawns its default, `node dist/index.js`.
-      const compilerArg = path.relative(root, NISH);
-      const ran = spawnSync(runnerExe, ["pop", compilerArg], {
-        cwd: root,
-        env: { ...process.env, NISH: compilerArg },
-      });
+      // golden rather than into its own output. `--compiler` names the compiler
+      // under test, where the runner's own default is stage0.
+      const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH)], { cwd: root });
       const report = String(ran.stdout);
       check(
         "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
@@ -5685,17 +5679,14 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // every user-level integer add/sub/mul but nothing else.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
   if (HAS_CLANG) {
-    // The Nish side is built by the compiler under test. `--compiler` is the
-    // override the seed-plumbing stage of R6 gives `bench/run.mjs`; a tree that
-    // predates it has only its stage0 default to offer, and says so by not
-    // naming the flag.
-    const benchSource = fs.readFileSync(path.join(root, "bench", "run.mjs"), "utf8");
-    const benchCompiler = /a === "--compiler"/.test(benchSource) ? ["--compiler", path.relative(root, NISH)] : [];
+    // The Nish side is built by the compiler under test, where the bench's own
+    // default is stage0.
     const v = spawnSync(
       "node",
       [
         path.join(root, "bench", "run.mjs"),
-        ...benchCompiler,
+        "--compiler",
+        path.relative(root, NISH),
         "--validate",
         "--only",
         "fib,sieve",
@@ -7140,6 +7131,22 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       );
     }
   }
+}
+
+// ---- The seed fetch -------------------------------------------------------------------
+// `scripts/fetch-seed.sh` is how a fresh clone, the session hook and CI get the
+// released compiler every stage1 here is built with. `tests/fetch_seed.js` drives
+// it against a stand-in installer -- which arguments reach `install.sh`, when it
+// is not called at all, what is refused -- with no network and nothing touched in
+// the real `build/seed/`, so it runs in every `npm test`, a degraded one included.
+if (!only || "fetch-seed".includes(only) || "seed".includes(only)) {
+  const fetched = spawnSync("node", [path.join(root, "tests", "fetch_seed.js")], { cwd: root, encoding: "utf8" });
+  const fetchSummary = fetched.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `scripts/fetch-seed.sh passes its own checks (${fetchSummary})`,
+    fetched.status === 0 && /^fetch-seed: \d+ passed, 0 failed/.test(fetchSummary),
+    `${fetched.stdout}${fetched.stderr}`
+  );
 }
 
 // ---- WP19: the seed-target contract --------------------------------------------------
