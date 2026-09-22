@@ -113,8 +113,9 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 ```
 
 That unpacks into `~/.nish` and prints the one line to add to your shell
-profile. On a platform it has no binary for it says so and names the npm route,
-which works anywhere node does.
+profile. On a platform it has no binary for it says so and names the four it
+does build — the npm route covers exactly the same four and no more, because
+since 0.6.0 there is no compiler inside that package to fall back to either.
 
 **Upgrading is running it again.** There is no separate command: it installs
 over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and says
@@ -171,13 +172,65 @@ compiler is `@amritk/nish`** (decided 2026-09-19,
 installs is still `nish` — the package name and the command are two different
 strings, and that is the one thing the scope costs.
 
-On a platform this project attaches no binary for — the table below is the
-whole list, so musl, FreeBSD and 32-bit anything are outside it — `nish` runs
-the TypeScript compiler that ships in the same package, under Node. It is the
-same compiler by every test this repository runs and about eight times slower
-to compile with, and it needs no C toolchain to install. Nothing announces
-this, because there is nothing for you to do about it; `nish --version`
-answers either way.
+**On a platform this project attaches no binary for, `npm install` gets you a
+command that refuses.** The table below is the whole list, so musl, FreeBSD and
+32-bit anything are outside it, and outside it `nish` prints what happened,
+names the four platforms that do have a binary, and exits 3:
+
+```
+$ nish --version
+nish: no prebuilt compiler for freebsd/x64
+
+  This package installs a prebuilt native compiler. One is published for:
+    aarch64-darwin  aarch64-linux  x86_64-darwin  x86_64-linux
+
+  There is no compiler inside the package to fall back to, and nothing is
+  compiled on your machine on any path.
+
+  To get a compiler for this machine, build one from a released `nish` in a
+  checkout of the repository:
+    NISH_BOOTSTRAP=<a released nish that runs here> scripts/bootstrap.sh
+  docs/INSTALL.md has the detail, including what to do when no released
+  binary runs on this platform at all.
+```
+
+Until 0.6.0 it ran the TypeScript compiler that shipped in the same package
+instead — the same compiler by every test here, about eight times slower, and
+no C toolchain needed. That compiler was `src/`, which is being deleted
+([wp19](wp19-stage0-retirement.md)), so there is nothing left in the package to
+fall back to. The cost is stated where the rest of that deletion's costs are,
+in [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
+and it is a real one: **musl, FreeBSD and 32-bit platforms have no `npm
+install` route to a compiler any more.**
+
+What is left for those platforms is the bootstrap, and it needs one thing this
+page cannot hand you: a compiler that already runs on the machine. The seed does
+not have to be *for* the machine — it has to run *on* it — so the practical
+routes are
+
+- a glibc container or host to build in, when the target is musl. Build
+  `build/nish` there with `NISH_BOOTSTRAP=<released nish> scripts/bootstrap.sh`,
+  and then **emit the IR in the container and link it on the musl host**:
+
+  ```bash
+  # in the glibc container, where build/nish runs
+  build/nish app.ts -o app.ll
+  # on the musl host, with its own clang and the runtime from this repository
+  clang app.ll runtime/runtime.c runtime/runtime_os.c -lm -o app
+  ```
+
+  `--link`ing inside the container is the mistake to avoid: it shells out to the
+  container's `clang` and hands you a glibc binary, which is the one thing the
+  musl host cannot run. The split works because the compiler's output is
+  target-neutral text — the C toolchain that compiles `runtime.c` and links is
+  what decides the libc, not the compiler that wrote the IR;
+- `--profile wasi`, which compiles the compiler itself into a single WASI module
+  that runs anywhere Node does (`web/compile.mjs` drives one). This is not a
+  shipped artefact and there is no supported install path for it;
+- a target this project does build, if one will do.
+
+If you need one of these to be a first-class install, that is the conversation
+to have on the issue tracker rather than a workaround to discover here.
 
 **Nothing is published to the registry yet.** The installer is built and
 tested, and what is left is a person publishing a release under it, which
@@ -198,10 +251,11 @@ nish --version
 ```
 
 Installed on its own like that, the package finds no platform package next to
-it and runs the Node compiler — the fallback above, reached here because the
-binary was never fetched rather than because none exists for your machine. To
-get the native one, install the pair: a release from 0.4.0 on attaches the
-platform packages beside the npm tarball, under the name `npm pack` gave them.
+it and refuses — the same refusal as above, but for the other reason: the binary
+was never fetched rather than none existing for your machine. The message says
+which of the two it is, because the remedy differs. **So install the pair**: a
+release from 0.4.0 on attaches the platform packages beside the npm tarball,
+under the name `npm pack` gave them.
 
 ```bash
 base=https://github.com/amritk/nish/releases/download/v0.4.0
@@ -290,10 +344,15 @@ npm link            # optional: puts `nish` on PATH
 # or run it in place: node dist/index.js ...
 ```
 
-The package ships `dist/` (the compiler), `runtime/` (the C runtime — two
-translation units and their header), and `scripts/build.sh` (the link
-pipeline). `nish` locates the runtime and the script relative to its own
-install directory, so a global install works from any working directory.
+The published package ships `bin/` (the `nish` command, which is a launcher),
+`runtime/` (the C runtime — two translation units and their header),
+`scripts/build.sh` (the link pipeline) and `std/` (the standard library). The
+compiler itself is not in it: it arrives as one prebuilt
+`@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
+whichever one npm installed. `nish` locates the runtime, the script and `std/`
+relative to its own install directory, so a global install works from any
+working directory — and the binary runs from inside its own platform package
+for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
 on the `clang` line, and it is two files:
@@ -384,7 +443,7 @@ see the [README](../README.md) for the language subset.
 | 0 | success |
 | 1 | the program was rejected: compile error (`file:line:col: error: ...`), missing input file, or an `-o` layout that does not fit the module count |
 | 2 | usage error: unknown flag, missing argument, no input files |
-| 3 | toolchain error: `--link` found no `clang` (`CC` overrides), or `scripts/build.sh` failed (its output is shown; the `.ll` files are still written) |
+| 3 | toolchain error: `--link` found no `clang` (`CC` overrides), or `scripts/build.sh` failed (its output is shown; the `.ll` files are still written) — or the `nish` command found no prebuilt compiler for this platform, or one that would not start. Under `--json` all of these are one `NL0002` object |
 | 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/nish/issues> with the input and command line; `NISH_DEBUG=1` prints the stack trace |
 
 ## Troubleshooting

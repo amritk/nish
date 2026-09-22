@@ -8,6 +8,7 @@
   "files": {
     "includes": [
       "src/**",
+      "bin/**/*.js",
       "self/**/*.ts",
       "std/**/*.ts",
       "tests/self/**/*.ts",

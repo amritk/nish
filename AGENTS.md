@@ -87,8 +87,10 @@ Every `--json` object is flat:
   to find out why a run failed.
 
 Exit codes (`docs/wp12-release.md`): **0** ok, **1** the program was rejected,
-**2** usage, **3** toolchain (clang or `scripts/build.sh`), **70** internal
-compiler error — a bug in `nish`, not in the input.
+**2** usage, **3** toolchain (clang, `scripts/build.sh`, or the prebuilt
+compiler the `nish` command hands over to), **70** internal compiler error — a
+bug in `nish`, not in the input. All three of 3's causes are one `NL0002`
+object under `--json`; the `message` is what tells them apart.
 
 ## Trusting a test run
 

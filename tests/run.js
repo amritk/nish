@@ -6713,8 +6713,16 @@ if (!only || "docs".includes(only) || "ai".includes(only)) {
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
 // and drive the installed `nish` from an unrelated directory. That proves the `files`
 // whitelist ships both runtime translation units, runtime/nish.h and scripts/build.sh,
-// and that the
-// CLI resolves them from its own package root rather than from the cwd.
+// and that the CLI resolves them from its own package root rather than from the cwd.
+//
+// **The package is an installer and carries no compiler of its own.** `bin.nish` is the
+// launcher in `bin/`, plain JavaScript that needs no build step; the compiler arrives as
+// one `@amritk/nish-<asset>` platform package per supported platform. So this block has
+// two halves and they are different claims: with a platform package the round trip above
+// has to work end to end, and with none the command has to say so and exit non-zero. The
+// second half used to be a fallback to the Node compiler in `dist/`, which `files` no
+// longer ships (docs/wp12-release.md, "Which compiler the package ships"; the cost to
+// musl and FreeBSD is priced in docs/wp19-stage0-retirement.md §6).
 if (!only || "package".includes(only) || "wp12".includes(only)) {
   const pkgDir = path.join(buildDir, "wp12-package");
   fs.rmSync(pkgDir, { recursive: true, force: true });
@@ -6729,7 +6737,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     const info = JSON.parse(pack.stdout)[0];
     const files = info.files.map((f) => f.path).sort();
     const allowed = [
-      /^dist\//,
+      // No `/^dist\//`, and its absence is the check. Until 0.6.0 the tarball
+      // carried the TypeScript compiler as well as the launcher, because that
+      // was the fallback for a platform with no prebuilt binary; the fallback
+      // is gone (docs/wp12-release.md, "Which compiler the package ships"), so
+      // a `dist/` path reaching the tarball means `files` grew it back.
       /^bin\//,
       /^runtime\//,
       /^scripts\//,
@@ -6749,8 +6761,13 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       stray.join("\n")
     );
     const required = [
-      "dist/index.js",
-      "dist/version.js",
+      // The command, and the two files behind it. They are plain JavaScript
+      // under `bin/` rather than `tsc` output under `dist/` because the command
+      // may not be a build artifact of the compiler it installs -- and because
+      // there is no longer a `dist/` to build it into.
+      "bin/nish",
+      "bin/launcher.js",
+      "bin/packaging.js",
       "runtime/runtime.c",
       // The runtime is two translation units since the operating-system half was
       // split out for its own size budget, and `--link` compiles both. A tarball
@@ -6828,7 +6845,16 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // should fail this one check rather than throw and take the whole packaging block
     // with it.
     const deps = new Set(Object.keys(manifest.dependencies ?? {}));
-    const shippedScripts = files.filter((f) => f.startsWith("scripts/") && /\.(mjs|js)$/.test(f));
+    // `bin/` as well as `scripts/`, and `bin/nish` by name because it carries no
+    // extension. This gate is what caught `platform-package.mjs` importing a path
+    // the tarball does not ship, and in 0.6.0 the command itself moved into `bin/`
+    // -- the one shipped directory of JavaScript it was not watching. `bin/nish`
+    // imports `./launcher.js`, which imports `./packaging.js`, so a `files` that
+    // shipped the command without the two files behind it would install a `nish`
+    // that throws `ERR_MODULE_NOT_FOUND` on every invocation.
+    const shippedScripts = files.filter(
+      (f) => (f.startsWith("scripts/") || f.startsWith("bin/")) && (/\.(mjs|js)$/.test(f) || f === "bin/nish")
+    );
     const unresolved = [];
     for (const rel of shippedScripts) {
       for (const spec of specifiersOf(fs.readFileSync(path.join(root, rel), "utf8"), rel)) {
@@ -6872,10 +6898,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // platform silently stops using the native binary it downloaded.
     check(
       "npm pack ships the launcher `bin.nish` names",
-      manifest.bin?.nish === "bin/nish" && files.includes("bin/nish") && files.includes("dist/launcher.js"),
-      `bin.nish is ${JSON.stringify(manifest.bin)}, and bin/nish ${
+      manifest.bin?.nish === "bin/nish" && files.includes("bin/nish") && files.includes("bin/launcher.js"),
+      `bin.nish is ${JSON.stringify(manifest.bin)}, bin/nish ${
         files.includes("bin/nish") ? "ships" : "does not ship"
-      }`
+      }, and bin/launcher.js ${files.includes("bin/launcher.js") ? "ships" : "does not ship"}`
     );
     // `bin/nish` is a node shim in the tarball and a native binary after
     // postinstall has run on a machine that got one. Packing the *binary* is a
@@ -6888,20 +6914,33 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       fs.readFileSync(path.join(root, "bin", "nish"), "utf8").startsWith("#!/usr/bin/env node"),
       "bin/nish does not begin with a node shebang, so what would be published is not the shim"
     );
-    // The fallback is the Node compiler in this same tarball, so it has to be reachable
-    // from the launcher without a second package: `dist/index.js` is already required
-    // above, and this is the statement that the launcher is what reaches it.
+    // There is no compiler in the tarball to fall back to, and that is the
+    // decision this check pins rather than an omission it tolerates
+    // (docs/wp12-release.md, "Which compiler the package ships"; the cost is
+    // priced in docs/wp19-stage0-retirement.md §6). A launcher that grew an
+    // `import` of a compiler back would be shipping one of two things: `dist/`,
+    // which `files` no longer carries, or a compile on the user's machine,
+    // which is the property every path in this package is held to. The
+    // behaviour this implies -- a diagnostic and a non-zero exit -- is asserted
+    // from outside, on the installed command, further down.
+    // The predicate is a *dynamic* import, which is what a fallback needs and what
+    // the old launcher used (`await import("../dist/index.js")`): the file's static
+    // imports are node built-ins and `./packaging.js`, and neither can be a
+    // compiler. Matching the string "dist/" instead would fail on the comment that
+    // explains why the fallback went, which is the wrong thing to make unwritable.
+    const launcherText = fs.readFileSync(path.join(root, "bin", "launcher.js"), "utf8");
     check(
-      "the launcher falls back to a compiler the tarball carries",
-      fs.readFileSync(path.join(root, "src", "launcher.ts"), "utf8").includes('await import("./index.js")'),
-      "src/launcher.ts no longer imports ./index.js, so a platform with no prebuilt binary has nothing to fall back to"
+      "the launcher has no compiler to fall back to, and does not pretend otherwise",
+      !/\bimport\s*\(/.test(launcherText) && launcherText.includes("NO_COMPILER"),
+      "bin/launcher.js reaches for a compiler of its own instead of refusing; " +
+        "a platform with no prebuilt binary must be told, not quietly served something else"
     );
     // One row per attached seed, at exactly this version. Two ways this goes wrong and
     // neither shows up in a build: a platform that gets a binary built and attached but
-    // no package published, so the install silently falls back to Node forever; and a
-    // version bump that moves package.json and leaves these behind, so every install
-    // resolves last release's binary against this release's compiler. `release-pr.yml`
-    // bumps them with the version for that second reason.
+    // no package published, so every install on it refuses for want of a package that
+    // was never uploaded; and a version bump that moves package.json and leaves these
+    // behind, so every install resolves last release's binary against this release's
+    // compiler. `release-pr.yml` bumps them with the version for that second reason.
     const seedAssets = JSON.parse(
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset);
@@ -6943,8 +6982,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // in one place, checked against the file that is the authority on the middle one.
     // A row `targetForAsset` cannot read is a platform the release attaches a binary for
     // and the launcher will never look for.
-    const { assetFor, targetForAsset } = await import(
-      pathToFileURL(path.join(root, "dist", "packaging.js")).href
+    const { assetFor, targetForAsset, SUPPORTED_ASSETS, noCompilerMessage } = await import(
+      pathToFileURL(path.join(root, "bin", "packaging.js")).href
     );
     const unmapped = seedAssets.filter((a) => {
       const t = targetForAsset(a);
@@ -6955,13 +6994,69 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       unmapped.length === 0,
       unmapped.map((a) => `${a} does not round-trip: targetForAsset -> assetFor did not return it`).join("\n")
     );
-    // A platform this project ships no binary for is a supported answer, not a failure:
-    // it is what sends the launcher to the Node compiler. If this ever returned an asset
-    // name, an Alpine or FreeBSD install would resolve a package that does not exist.
+    // A platform this project ships no binary for answers `null`, and since 0.6.0
+    // that answer is what makes the launcher refuse rather than what sends it to a
+    // Node compiler. If it ever returned an asset name, an Alpine or FreeBSD
+    // install would resolve a package that does not exist and report a missing
+    // install where the honest answer is an unsupported platform.
     check(
       "an unsupported platform maps to no asset at all",
       assetFor("freebsd", "x64") === null && assetFor("linux", "riscv64") === null,
       "assetFor answered an asset for a platform no release attaches a binary for"
+    );
+    // The list the launcher *prints* against the list the workflows *read*. The
+    // diagnostic names the supported platforms, so a user on musl is told what the
+    // whole list is; `seed-targets.json` is the authority on that list, and this is
+    // what stops the shipped table saying something else. It is the same move the
+    // `seed targets:` checks make for `release.yml`'s asset names.
+    check(
+      `the launcher's diagnostic names every platform seed-targets.json carries (${SUPPORTED_ASSETS.join(", ")})`,
+      SUPPORTED_ASSETS.join(",") === [...seedAssets].sort().join(","),
+      `bin/packaging.js says ${SUPPORTED_ASSETS.join(", ")}; ` +
+        `.github/seed-targets.json says ${[...seedAssets].sort().join(", ")}`
+    );
+    // What a user on musl or FreeBSD is told, asked for by name because no runner
+    // this project uses can reach that branch: every one of them is one of the four
+    // supported platforms, so an end-to-end check would assert the *other* message
+    // and the advice here would go stale unread. It has to say three things -- that
+    // there is no compiler for this machine, which machines do have one, and what to
+    // do instead -- and "what to do instead" is a real instruction rather than a
+    // shrug, because this is the whole of what a user gets (wp19 §6).
+    const why = noCompilerMessage({ platform: "freebsd", arch: "x64", packageName: manifest.name });
+    const unsupported = why.report;
+    check(
+      "a platform with no prebuilt binary is told so, told which platforms have one, and told what to do",
+      unsupported.includes("no prebuilt compiler for freebsd/x64") &&
+        seedAssets.every((a) => unsupported.includes(a)) &&
+        unsupported.includes("no compiler inside the package to fall back to") &&
+        unsupported.includes("NISH_BOOTSTRAP") &&
+        unsupported.includes("scripts/bootstrap.sh") &&
+        unsupported.includes("docs/INSTALL.md"),
+      JSON.stringify(unsupported)
+    );
+    // The same branch's machine-readable form. This is the half no runner can reach
+    // end to end -- every one of them is a supported platform -- so it is asked for
+    // by name here, and it has to carry the code a tool keys on and say the same
+    // thing the report says rather than being a second, shorter opinion.
+    check(
+      "that branch's --json message carries NL0002 and the same remedy as its report",
+      why.code === "NL0002" &&
+        why.summary.includes("no prebuilt compiler for freebsd/x64") &&
+        why.summary.includes("NISH_BOOTSTRAP") &&
+        why.summary.includes("docs/INSTALL.md") &&
+        !why.summary.includes("\n"),
+      JSON.stringify(why)
+    );
+    // And it says outright that nothing is compiled locally. This is the property
+    // the whole installer is held to -- nothing is compiled on a user's machine on
+    // any path -- and the refusal is the one place where implying otherwise would
+    // be an easy kindness and a lie. The negative half of this check used to
+    // assert the absence of the string "will be built", which no version of the
+    // message has ever contained: an assertion no edit could fail.
+    check(
+      "the refusal says outright that nothing is compiled on the user's machine",
+      unsupported.includes("nothing is\n  compiled on your machine on any path"),
+      JSON.stringify(unsupported)
     );
 
     for (const f of [
@@ -7006,63 +7101,278 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           path.join(work, "hello.ts"),
           'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n'
         );
-        const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+
+        // ---- no platform package: the refusal ----------------------------------------
+        // Nothing was installed beside the main package -- npm skipped four
+        // `optionalDependencies` whose `os`/`cpu` did not match or that the registry does
+        // not carry yet -- so this is the state a user on musl, FreeBSD or a 32-bit
+        // anything installs into. Until 0.6.0 it was the *fallback* path, and every check
+        // below ran through it: this block proved the tarball's Node compiler rather than
+        // the compiler a user on a supported platform gets, which is wp19 §5a item 1's
+        // sentence about this very harness -- "the path the harness takes works and the
+        // path a user gets does not". The fallback is gone by decision
+        // (docs/wp12-release.md, "Which compiler the package ships"), so what has to be
+        // true here is that the command says what happened, names the platforms that do
+        // have a binary, and exits non-zero. Watched failing against the old launcher,
+        // which answered `nish <version>` and exited 0.
+        const refused = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+        const namesEvery = seedAssets.every((a) => refused.stderr.includes(a));
         check(
-          "installed nish --version works from an unrelated cwd",
-          ver.status === 0 && ver.stdout.trim() === `nish ${info.version}`,
-          ver.stdout + ver.stderr
+          "with no prebuilt binary installed, nish refuses, names every supported platform, and exits 3",
+          refused.status === 3 && namesEvery && refused.stdout.trim() === "",
+          `exit ${refused.status}, stdout ${JSON.stringify(refused.stdout)}, stderr ${JSON.stringify(refused.stderr)}`
         );
-        const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
+        // And it says where to go next rather than only that it will not work. This is
+        // the *installed but missing* branch, whose remedy is a reinstall; the
+        // unsupported-platform branch is a different sentence and is asserted above,
+        // by name, because no runner here is an unsupported platform.
         check(
-          "installed nish hello.ts --link works from an unrelated cwd",
-          link.status === 0 && fs.existsSync(path.join(work, "hello")),
-          link.stderr
+          "the refusal names the package npm should have installed, and a remedy",
+          refused.stderr.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`) &&
+            refused.stderr.includes("Reinstall") &&
+            refused.stderr.includes("docs/INSTALL.md"),
+          JSON.stringify(refused.stderr)
         );
-        if (link.status === 0) {
-          const hello = spawnSync(path.join(work, "hello"), [], { cwd: work, encoding: "utf8" });
-          check(
-            "the binary linked by the installed package runs",
-            hello.status === 0 && hello.stdout.trim() === "hello from a global install",
-            hello.stdout + hello.stderr
-          );
+        // The machine-readable half of the same refusal, and it is a contract rather
+        // than a nicety: AGENTS.md's "Machine-readable surfaces" says a failure with no
+        // source position is still one JSON line and that under `--json` you never have
+        // to read stderr to find out why a run failed. The first version of this change
+        // broke that -- the refusal was prose on stderr on every path -- and it is
+        // reachable on a fully supported platform, because this is the state
+        // `--no-optional` or a lockfile without the optional entries installs into. The
+        // shape is `self/compile.ts`'s own for the same code: the object on stdout,
+        // nothing on stderr, so a tool reading stdout gets objects and nothing else.
+        const refusedJson = spawnSync(bin, ["--json", "hello.ts"], { cwd: work, encoding: "utf8" });
+        let refusedObj = null;
+        try {
+          const lines = refusedJson.stdout.trim().split("\n").filter(Boolean);
+          refusedObj = lines.length === 1 ? JSON.parse(lines[0]) : null;
+        } catch {
+          refusedObj = null;
         }
-        const ir = spawnSync(bin, [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")], {
+        check(
+          "with no prebuilt binary installed, `nish --json` is still one NL0002 object on stdout, exit 3",
+          refusedJson.status === 3 &&
+            refusedObj !== null &&
+            refusedObj.severity === "error" &&
+            refusedObj.code === "NL0002" &&
+            typeof refusedObj.message === "string" &&
+            refusedObj.message.length > 0 &&
+            refusedJson.stderr === "",
+          `exit ${refusedJson.status}, stdout ${JSON.stringify(refusedJson.stdout)}, ` +
+            `stderr ${JSON.stringify(refusedJson.stderr)}`
+        );
+        // And the object says which of the three situations it is, in the field a tool
+        // keys on plus the prose it carries -- the code is shared with a missing clang,
+        // deliberately (one band for "a program that had to run would not"), so the
+        // message is what separates them.
+        check(
+          "the --json refusal names the missing platform package in its message",
+          refusedObj !== null &&
+            typeof refusedObj.message === "string" &&
+            refusedObj.message.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`),
+          refusedObj === null ? "no object" : JSON.stringify(refusedObj.message)
+        );
+        // Nothing is compiled on the way to either refusal: the message is the whole of
+        // what happens, so a machine with no C toolchain gets the same answer. Asked of
+        // a command line that *would* write -- an explicit `-o` and a `--link` -- rather
+        // than of an empty directory, because "no files appeared" is only an assertion
+        // when something was asked for.
+        const askedToWrite = spawnSync(bin, ["hello.ts", "-o", "out.ll", "--link", "outbin"], {
           cwd: work,
           encoding: "utf8",
         });
         check(
-          "installed nish compiles examples/add.ts to IR from an unrelated cwd",
-          ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
-          ir.stderr
+          "a refusal writes nothing, even asked for an -o and a --link",
+          askedToWrite.status === 3 &&
+            !fs.existsSync(path.join(work, "out.ll")) &&
+            !fs.existsSync(path.join(work, "outbin")),
+          `exit ${askedToWrite.status}, directory now holds ${fs.readdirSync(work).join(", ")}`
         );
 
-        // ---- the launcher hands over to a prebuilt binary, or does without one --------
-        // Everything above ran with no platform package installed, which is the fallback
-        // path: npm skipped four `optionalDependencies` whose `os`/`cpu` did not match or
-        // that do not exist yet, and `nish` answered out of `dist/`. That is the contract
-        // for a platform this project attaches no binary for, and it is worth saying that
-        // the checks above are what proves it rather than leaving it implied.
+        // ---- the launcher hands over to a prebuilt binary ----------------------------
+        // The path a user on a supported platform actually gets, and the one G5's round
+        // trip is about: pack, install into a temporary prefix, and link a hello-world
+        // from an unrelated directory. It needs a platform package, so the checks below
+        // make one -- twice over, because the two halves want different things from it.
         //
-        // The other path needs a platform package, so the checks below make one. A stub
-        // rather than a real compiler, deliberately: what is under test is whether the
-        // launcher finds the binary and gets out of its way -- argv through, status back,
-        // signal re-raised -- and a stub can answer that in milliseconds and say exactly
-        // what it was asked. Whether the binary it hands to is a correct compiler is the
-        // bootstrap section's question, and `npm run bootstrap` is what asks it.
+        // First a REAL compiler, staged the way `release.yml` stages one: the binary at
+        // `bin/nish` with `runtime/`, `scripts/` and `std/` beside it. That layout is the
+        // whole reason the postinstall swap execs the binary where it lies, and it is
+        // what lets `--link` find `build.sh` and both runtime translation units one level
+        // up from `argv[0]`. This is the half that used to run on the fallback and now
+        // runs on the product.
+        //
+        // Then a STUB, for the launcher's own contract -- argv through, status back,
+        // signal re-raised, a broken install named. A stub answers those in milliseconds
+        // and says exactly what it was asked; whether the binary it hands to is a correct
+        // compiler is the bootstrap section's question, and `npm run bootstrap` asks it.
         const hostAsset = assetFor(process.platform, process.arch);
-        if (hostAsset === null) {
-          skip(`installed nish prefers a prebuilt binary (no asset for ${process.platform}/${process.arch})`);
+        const staged = hostAsset === null ? { error: `no asset for ${process.platform}/${process.arch}` } : stage1ForCases();
+        if (staged.error !== undefined) {
+          // Counted, and counted once: everything from here to the end of this
+          // block is the supported-platform path, and a run that could not build
+          // a compiler to stage has not tested it. The `skip` names the reason so
+          // a green summary cannot be read as this having been exercised.
+          skip(`the installed package hands over to a prebuilt compiler (${staged.error})`);
         } else {
-          const platformDir = path.join(prefix, "node_modules", ...`${manifest.name}-${hostAsset}`.split("/"));
-          fs.mkdirSync(path.join(platformDir, "bin"), { recursive: true });
-          fs.writeFileSync(
-            path.join(platformDir, "package.json"),
-            JSON.stringify({
-              name: `${manifest.name}-${hostAsset}`,
-              version: manifest.version,
-              exports: { "./package.json": "./package.json" },
-            })
+          // ---- a platform package built the way `release.yml` builds one ------------
+          // The staging is `release.yml`'s `binaries` job, line for line: `bin/nish`,
+          // `runtime/`, `std/`, and **`scripts/build.sh` alone** rather than the whole
+          // of `scripts/` -- copying the directory would be a harness that stages more
+          // than a release does, and the whole point of this block is that it stops
+          // approximating the product.
+          //
+          // Then `scripts/platform-package.mjs` writes the manifest, and `npm pack`
+          // makes the tarball, and `npm install` installs it. That matters for one
+          // reason above all: the generator's own `files` list is what shipped without
+          // `std` from 0.1.1 to 0.4.0, so every release carried a compiler that could
+          // not import its own standard library (wp19 §5a item 1). Hand-writing the
+          // manifest and copying into `node_modules` -- which is what this block did
+          // when it was first written -- exercises neither the generator nor `files`,
+          // and a check that reads the generator's source for the string "std" passes
+          // while `"scripts"` is deleted from the same list. Packing is what makes
+          // `files` load-bearing here.
+          const stage = path.join(pkgDir, "stage");
+          fs.rmSync(stage, { recursive: true, force: true });
+          fs.mkdirSync(path.join(stage, "bin"), { recursive: true });
+          fs.mkdirSync(path.join(stage, "scripts"), { recursive: true });
+          for (const dir of ["runtime", "std"]) {
+            fs.cpSync(path.join(root, dir), path.join(stage, dir), { recursive: true });
+          }
+          fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(stage, "scripts", "build.sh"));
+          fs.copyFileSync(path.join(root, "LICENSE"), path.join(stage, "LICENSE"));
+          fs.copyFileSync(path.join(root, "docs", "INSTALL.md"), path.join(stage, "INSTALL.md"));
+          const stagedBinary = path.join(stage, "bin", "nish");
+          fs.copyFileSync(staged.cmd, stagedBinary);
+          fs.chmodSync(stagedBinary, 0o755);
+          const generated = spawnSync(
+            process.execPath,
+            [path.join(root, "scripts", "platform-package.mjs"), stage, hostAsset],
+            { cwd: root, encoding: "utf8" }
           );
+          check(
+            `scripts/platform-package.mjs writes the manifest for ${hostAsset}`,
+            generated.status === 0 && fs.existsSync(path.join(stage, "package.json")),
+            generated.stdout + generated.stderr
+          );
+          const platformTar = spawnSync(npm, ["pack", "--json", "--pack-destination", pkgDir], {
+            cwd: stage,
+            encoding: "utf8",
+          });
+          check(
+            "npm pack turns that stage directory into a platform package",
+            platformTar.status === 0,
+            platformTar.stdout + platformTar.stderr
+          );
+          // What the generator's `files` actually shipped, rather than what its
+          // source text mentions. `std/` is the entry four releases went without.
+          const packed = platformTar.status === 0 ? JSON.parse(platformTar.stdout)[0] : { files: [] };
+          const packedPaths = packed.files.map((f) => f.path);
+          const wantedInPlatform = [
+            "bin/nish",
+            "runtime/runtime.c",
+            "runtime/runtime_os.c",
+            "runtime/nish.h",
+            "scripts/build.sh",
+            ...fs
+              .readdirSync(path.join(root, "std"))
+              .filter((f) => f.endsWith(".ts"))
+              .map((f) => `std/${f}`),
+          ];
+          const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f));
+          check(
+            `the platform package ships a whole compiler (${packedPaths.length} files, ${wantedInPlatform.length} required)`,
+            platformTar.status === 0 && missingFromPlatform.length === 0,
+            missingFromPlatform.join("\n")
+          );
+          const addPlatform =
+            platformTar.status === 0
+              ? spawnSync(
+                  npm,
+                  [
+                    "install",
+                    "--prefix",
+                    prefix,
+                    "--no-audit",
+                    "--no-fund",
+                    "--no-save",
+                    "--prefer-offline",
+                    "--ignore-scripts",
+                    path.join(pkgDir, packed.filename),
+                  ],
+                  { cwd: pkgDir, encoding: "utf8" }
+                )
+              : { status: 1, stdout: "", stderr: "nothing to install" };
+          check(
+            "npm install <platform tarball> into the same prefix succeeds",
+            addPlatform.status === 0,
+            addPlatform.stdout + addPlatform.stderr
+          );
+          const platformDir = path.join(prefix, "node_modules", ...`${manifest.name}-${hostAsset}`.split("/"));
+          {
+            const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+            check(
+              "installed nish --version works from an unrelated cwd",
+              ver.status === 0 && ver.stdout.trim() === `nish ${info.version}`,
+              ver.stdout + ver.stderr
+            );
+            const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
+            check(
+              "installed nish hello.ts --link works from an unrelated cwd",
+              link.status === 0 && fs.existsSync(path.join(work, "hello")),
+              link.stderr
+            );
+            if (link.status === 0) {
+              const hello = spawnSync(path.join(work, "hello"), [], { cwd: work, encoding: "utf8" });
+              check(
+                "the binary linked by the installed package runs",
+                hello.status === 0 && hello.stdout.trim() === "hello from a global install",
+                hello.stdout + hello.stderr
+              );
+            }
+            const ir = spawnSync(
+              bin,
+              [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")],
+              { cwd: work, encoding: "utf8" }
+            );
+            check(
+              "installed nish compiles examples/add.ts to IR from an unrelated cwd",
+              ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
+              ir.stderr
+            );
+            // A program that imports the standard library, through the installed package,
+            // by its package specifier. `std/` travels in the platform package as well as
+            // in the main one -- four releases shipped a compiler that could not import
+            // its own standard library (wp19 §5a item 1) -- and the specifier resolves
+            // against the compiler's own root, which here is inside that package rather
+            // than inside a checkout. With the Node fallback gone this is the only path
+            // that answers it, so it is asserted rather than assumed.
+            fs.writeFileSync(
+              path.join(work, "std.ts"),
+              'import { trim } from "nish/text";\n' +
+                "export function main(): number {\n" +
+                '  console.log(trim("  ok  "));\n' +
+                "  return 0;\n}\n"
+            );
+            const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" });
+            const stdRan =
+              stdLink.status === 0
+                ? spawnSync(path.join(work, "stdhello"), [], { cwd: work, encoding: "utf8" })
+                : null;
+            check(
+              "installed nish compiles and links a program importing nish/text",
+              stdLink.status === 0 && stdRan !== null && stdRan.status === 0 && stdRan.stdout.trim() === "ok",
+              stdLink.stderr + (stdRan === null ? "" : stdRan.stdout + stdRan.stderr)
+            );
+          }
+
+          // ---- the launcher's own contract, on a stub --------------------------------
+          // The real compiler above answered "is the product correct". These answer
+          // "does the launcher get out of the way", which wants a program that says
+          // exactly what it was handed and costs milliseconds. It replaces the binary
+          // inside the package npm just installed, so everything the launcher resolves
+          // is still resolved the way a user's install resolves it.
           const stub = path.join(platformDir, "bin", "nish");
           fs.writeFileSync(stub, '#!/bin/sh\necho "stub $*"\nexit 42\n');
           fs.chmodSync(stub, 0o755);
@@ -7084,18 +7394,20 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
             signalled.signal === "SIGTERM",
             `signal ${signalled.signal}, status ${signalled.status}`
           );
-          // Installed but unstartable is a broken install, not an unsupported platform.
-          // Falling back keeps the user working; saying so on stderr is what keeps them
-          // from wondering why the compiler they installed for the speed is answering at
-          // the Node compiler's pace.
+          // Installed but unstartable is a broken install, not an unsupported platform,
+          // and the two get different advice: reinstall the package, rather than "this
+          // machine has no compiler and will not have one". There is nothing to fall
+          // back to any more -- this used to answer `nish <version>` out of `dist/` with
+          // a warning above it -- so the reason has to be in the refusal itself.
           fs.writeFileSync(stub, "not a binary\n");
           fs.chmodSync(stub, 0o644);
           const broken = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
           check(
-            "a prebuilt binary that will not start falls back to the Node compiler, and says so",
-            broken.status === 0 &&
-              broken.stdout.trim() === `nish ${info.version}` &&
-              broken.stderr.includes("could not be started"),
+            "a prebuilt binary that will not start is refused with the reason, and exits 3",
+            broken.status === 3 &&
+              broken.stdout.trim() === "" &&
+              broken.stderr.includes("could not be started") &&
+              broken.stderr.includes("Reinstall"),
             `exit ${broken.status}, stdout ${JSON.stringify(broken.stdout)}, stderr ${JSON.stringify(broken.stderr)}`
           );
 
@@ -7941,11 +8253,16 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   //     compiler with no standard library links them and says so.
   //
   // The pack-and-install round trip in this file did not see it either, and that is the
-  // instructive one: it packs the MAIN package, whose `files` has listed `std` all
-  // along, and a main package with no platform package beside it falls back to `dist/`.
-  // The path that works is the one the harness takes; the path a user gets is the one
-  // that does not. That is wp19 §A7's sentence about `argv[0]` -- "the harness happens
-  // to invoke the spelling that agrees" -- holding for the product a second time.
+  // instructive one: it packed the MAIN package, whose `files` has listed `std` all
+  // along, and a main package with no platform package beside it fell back to `dist/`.
+  // The path that worked was the one the harness took; the path a user gets was the one
+  // that did not. That is wp19 §A7's sentence about `argv[0]` -- "the harness happens to
+  // invoke the spelling that agrees" -- holding for the product a second time.
+  //
+  // **That hole is closed as of 0.6.0**, and by construction rather than by a check
+  // added beside it: there is no `dist/` to fall back to, so the round trip stages a
+  // real compiler into a platform package and drives `--link` and `nish/text` through
+  // it. The harness now takes the path a user gets because it is the only path there is.
   check(
     "release tarball: the staging copies std/ beside runtime/, or no released compiler can import nish/<module>",
     /\bcp -r std "\$stage\/std"/.test(releaseYml),

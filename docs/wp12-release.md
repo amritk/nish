@@ -9,8 +9,7 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 
 | Path | Why it ships |
 | --- | --- |
-| `bin/` | `nish`, the command. A node shim in the tarball; the native compiler after postinstall (see "What the launcher costs") |
-| `dist/` | the compiled CLI. `dist/launcher.js` is what the shim delegates to; `dist/index.js` is the Node compiler it falls back to |
+| `bin/` | `nish`, the command, and the launcher behind it — `bin/launcher.js` and `bin/packaging.js`, plain JavaScript that needs no build step. A node shim in the tarball; the native compiler after postinstall (see "What the launcher costs") |
 | `runtime/` | `runtime.c` and `runtime_os.c` (the two translation units of the C runtime, both linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
@@ -33,8 +32,12 @@ path** — each of those packages is the binary `release.yml` built, `--verify`d
 and smoke-tested on hardware of its own architecture, repackaged from the same
 staged directory the release tarball is made from, so installing is a download
 and an unpack. A machine with no prebuilt binary — musl, FreeBSD, a 32-bit
-anything — runs `dist/index.js`, the Node compiler already in the package,
-which needs no C toolchain and is the same compiler by every test here.
+anything — gets a diagnostic naming the four platforms that have one and exit
+3. It used to get `dist/index.js`, the Node compiler that shipped in the same
+package; that compiler is `src/`, which R6 deletes, so there is nothing left to
+fall back to (see "Which compiler the package ships", amended 2026-09-22, and
+[wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly) for
+what it costs whom).
 
 That is one package published per release plus N platform ones, which the
 `binaries` matrix produces and `release.yml` attaches. Publishing them is the
@@ -143,9 +146,13 @@ package as well.
 **The shim is the mechanism and the swap is the optimisation, never the other
 way round.** `npm ci --ignore-scripts` is an ordinary thing for CI to do, and a
 sandbox or a proxy may disable scripts outright; each of those leaves the shim
-in place, which is a working compiler at the middle row's price. The script
-therefore **exits 0 whatever happens** — no binary for this platform, a
-read-only `node_modules`, `dist/` not built yet, a half-written package — and
+in place, which still reaches the prebuilt compiler — at the middle row's price
+rather than the bottom row's. **What the shim is not, since 0.6.0, is a compiler
+of its own**: on a platform with no prebuilt binary it refuses and exits 3,
+because `dist/` is no longer in the package to fall back to (see "Which compiler
+the package ships"). The script therefore **exits 0 whatever happens** — no
+binary for this platform, a read-only `node_modules`, a missing
+`bin/packaging.js`, a half-written package — and
 `tests/run.js` checks that the case it can reach (nothing to swap in) succeeds
 rather than failing the install. A postinstall that can break `npm ci` would be
 a worse bug than the startup cost it exists to remove.
@@ -154,17 +161,27 @@ It also refuses to run in a checkout, which is not a nicety: this repository is
 its own package, so `npm ci` here installs this package's own
 `optionalDependencies`, and once those are published the first `npm ci` would
 otherwise overwrite the tracked `bin/nish` with a binary and leave the working
-tree dirty. The guard is the presence of `src/launcher.ts`, the same shape of
-check `scripts/bootstrap.sh` makes.
+tree dirty. The guard is the presence of `self/compile.ts` — it was
+`src/launcher.ts` until the launcher moved into `bin/` and started shipping,
+which made it useless as a landmark — and it is now literally the same check
+`scripts/bootstrap.sh` makes rather than the same shape of one.
 
 ## Exit codes and failure modes
+
+**3 covers two things and deliberately does not split**, which is worth stating
+because a wrapper cannot tell them apart by status: a C toolchain that could not
+be run, and — since 0.6.0 — the prebuilt compiler itself. They are one shape of
+failure, "a program that had to run would not", with no source position and
+nothing wrong with the input, and the code under `--json` is `NL0002` for both.
+What separates them is that object's `message`, which is why the launcher's
+refusal is machine-readable rather than prose only.
 
 | Code | When | Message shape |
 | ---: | --- | --- |
 | 0 | success, and `--help` / `--version`: a request that was answered | `wrote <file.ll>` / `linked <exe>: <bytes> bytes (<profile>)` on stderr; the usage text or the version line on **stdout** |
 | 1 | `CompileError` from the validator, parser or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); a Node system error on an input or output path | `file:line:col: error: ...` with caret excerpt, or one line |
 | 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr |
-| 3 | toolchain: `--link` requested but `clang` (or `$CC`) is not runnable; or `scripts/build.sh` exited non-zero / could not be spawned | the per-platform install hint; or build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...` |
+| 3 | toolchain: the C toolchain, or the prebuilt compiler itself, could not be run. `--link` requested but `clang` (or `$CC`) is not runnable; `scripts/build.sh` exited non-zero or could not be spawned; or `bin/nish` found no prebuilt compiler for this platform, or one that would not start | the per-platform install hint; build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...`; or the launcher's refusal naming the platforms a release carries |
 | 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `nish <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `NISH_DEBUG=1` |
 
 `--help` is the answer to a question, not a refusal, so it prints on stdout and
@@ -256,8 +273,8 @@ whole.
 `release.yml` has **three** presence gates, one per artefact — the release
 tarball, the per-platform npm package and the main npm package — and all three
 name every standard-library module now. The first two were missing it; the
-third ships `dist/` and has carried `std` through `package.json`'s `files` all
-along, with nothing asserting it. `tests/run.js` derives the list from the same
+third carried `std` through `package.json`'s `files` all along, with nothing
+asserting it. `tests/run.js` derives the list from the same
 directory `self/std_modules.ts`'s literal and stage0's directory read are
 already checked against, and fails when any of the three gates omits a module —
 so the next module added to the library cannot ship in the compiler's list and
@@ -364,9 +381,11 @@ step below is done by hand.
      `package.json#version` — the ref type first, because a dispatch can be
      aimed at any ref and a run started on `main` would otherwise report a
      version mismatch rather than the mis-aimed run it is;
-   - `npm ci && npm run build && npm pack`, and checks the tarball contains
-     `dist/index.js`, `runtime/runtime.c`, `runtime/nish.h` and
-     `scripts/build.sh`;
+   - `npm ci && npm pack`, and checks the tarball contains `bin/nish`,
+     `bin/launcher.js`, `bin/packaging.js`, `runtime/runtime.c`,
+     `runtime/nish.h`, `scripts/build.sh` and every `std/` module. No
+     `npm run build` before it since 0.6.0: nothing in the tarball is `tsc`
+     output;
    - runs the `binaries` matrix — one job per supported target, each on a
      runner of that architecture (`ubuntu-latest`, `ubuntu-24.04-arm`,
      `macos-15-intel`, `macos-latest`) — which bootstraps the native compiler
@@ -475,7 +494,7 @@ To preview what the train would produce, without pushing anything:
 npm run changelog -- --next             # the version the commits imply
 npm run changelog -- --version 0.2.0    # those notes, on stdout
 npm run check && npm run lint && npm test && npm run smoke
-npm pack --dry-run   # only dist/, runtime/, scripts/, README.md, LICENSE, docs/INSTALL.md
+npm pack --dry-run   # only bin/, runtime/, scripts/, std/, README.md, LICENSE, llms.txt, docs/
 ```
 
 ## The bootstrap seed
@@ -658,6 +677,40 @@ platform with no binary of its own falls back to (a). The three rows were never
 alternatives: (c) says which binary is `nish`, (b) says how it arrives, and (a)
 is what (b) does when it has nothing to hand over.
 
+**Amended again 2026-09-22: there is no fallback at all.** (c) and (b) still
+stand and are still what landed. The third row is now empty: a platform with no
+prebuilt binary gets a diagnostic naming the four that have one, and exit 3.
+
+The reason is not a re-pricing — the 2026-09-20 amendment below is arithmetic
+and it is still correct — it is that the thing it priced stopped existing.
+`dist/` was the cheap fallback because it was *already in the package for its
+own reasons*: the bootstrap seed and the differential oracle. R6 deletes `src/`
+([wp19](wp19-stage0-retirement.md)), so `dist/` has no other reasons, and
+keeping it for the fallback alone would mean shipping — and therefore
+maintaining, and therefore keeping buildable — a second implementation of the
+compiler for musl, FreeBSD and 32-bit anything. That is the doubling wp19 §1
+spent its whole length pricing, bought back at the end for the smallest
+constituency in the table.
+
+So the honest answer is the one the launcher gives. **What it costs is real and
+is stated rather than discovered**: musl, FreeBSD and 32-bit platforms lose
+their `npm install` route to a compiler, and it is priced in
+[wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly)
+beside the rest of R6's costs.
+[INSTALL.md](INSTALL.md) says what is left for them — a glibc host or container
+to bootstrap in, `--profile wasi`, or a target this project does build — and
+says plainly that none of the three is a supported install.
+
+Two things this does *not* change, because both were the point of (b):
+**nothing is compiled on a user's machine on any path**, and a supported
+platform still gets its compiler as a download and an unpack. What a user on an
+unsupported platform gets is a sentence instead of a slow compiler, and the
+reason the sentence is worth writing down is that the alternative was a command
+that exits 0 having done nothing.
+
+The 2026-09-20 amendment, which this one supersedes and which is left standing
+because its arithmetic is what made `dist/` the answer for two releases:
+
 **Amended 2026-09-20, when the installer was written: the fallback is `dist/`,
 not (a).** (c) and (b) are unchanged and are what landed. What did not survive
 contact with the work is the third row, and the reason is that (a) was chosen
@@ -734,8 +787,10 @@ What (b) honestly costs, now that its blocker is built:
 oracle, and a cost in the table below is re-measured before it is cited
 again.**
 
-**Implemented on 2026-09-20**, which is what the amendment above came out of.
-`bin.nish` is `dist/launcher.js`; `package.json` declares one
+**Implemented on 2026-09-20**, which is what the first amendment above came out
+of. `bin.nish` is the launcher — `dist/launcher.js` then, `bin/launcher.js`
+since 0.6.0, because a command may not be a build artifact of the compiler it
+installs; `package.json` declares one
 `@amritk/nish-<asset>` per row of `.github/seed-targets.json` as an
 `optionalDependencies` entry pinned to its own version;
 `scripts/platform-package.mjs` turns the directory `release.yml` already stages
@@ -808,9 +863,10 @@ cost rather than what one did.
   is compiled on a user's machine on any path. So the last unfinished thing in
   this bullet is done, and what remains of G5 is a person publishing rather
   than any work. The bullet stays because it is the position the package was
-  built under, and because the `files` whitelist still reflects it — `files`
-  lists neither `self/` nor a binary, which is exactly what (b) plus a `dist/`
-  fallback needs it to look like.
+  built under. What no longer reflects it is the `files` whitelist: it lists
+  neither `self/` nor a binary *nor `dist/`*, which is what (b) with no
+  fallback at all looks like — the compiler is in the platform packages and the
+  tarball is the launcher (amended 2026-09-22, above).
 
 Multi-error reporting and `--json` diagnostics were listed here as a WP10
 follow-up and have since landed in WP10 itself: every phase that can recover

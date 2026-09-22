@@ -17,6 +17,7 @@
 // `npm ci --ignore-scripts` is a normal thing for CI to do, as is a registry
 // proxy or a sandbox that disables scripts outright. So this is the path that
 // is always correct and sometimes slower, and the swap is the optimisation on
-// top of it. Everything it delegates to is in `dist/launcher.js`, including
-// the fallback to the Node compiler for a platform with no prebuilt binary.
-import "../dist/launcher.js";
+// top of it. Everything it delegates to is in `./launcher.js`, beside this
+// file rather than in `dist/`: the command may not be a build artifact of the
+// compiler it installs, and since 0.6.0 there is no `dist/` to build it into.
+import "./launcher.js";
