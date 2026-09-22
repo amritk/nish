@@ -77,6 +77,25 @@ import { CORPUS_DIRS, extraArgs, linkPrograms, programs, root } from "../tests/s
 import { rewrite } from "./arrowify.mjs";
 
 const work = path.join(root, "build", "arrowify");
+
+/**
+ * The compiler both sides of the sweep run, `--compiler` or `build/nish` --
+ * what `npm run bootstrap` leaves in the tree. It used to be stage0's
+ * `dist/index.js` and nothing else, which R6 deletes; the question this tool
+ * asks, "did the rewrite move a byte?", is one any compiler can answer, as
+ * long as the same one answers both sides. A `.js` / `.mjs` / `.cjs` path is
+ * run under node, the rule `scripts/bootstrap.sh` applies to `NISH_BOOTSTRAP`.
+ * Set once by `main` before anything is compiled.
+ */
+let compiler = { cmd: "", prefix: [] };
+
+const DEFAULT_COMPILER = path.join("build", "nish");
+
+const compilerFor = (spec) => {
+  const file = path.resolve(root, spec);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return null;
+  return /\.(?:js|mjs|cjs)$/.test(file) ? { cmd: process.execPath, prefix: [file] } : { cmd: file, prefix: [] };
+};
 const tree = path.join(work, "tree");
 const lock = path.join(root, "build", "arrowify.lock");
 
@@ -295,9 +314,9 @@ const diagnose = (rel) => {
   // a case which stops being one does not land its IR on top of the last.
   const out = path.join(work, "diagnose");
   fs.mkdirSync(out, { recursive: true });
-  const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "--json", "-o", `${out}/`];
+  const args = [...compiler.prefix, path.join(tree, rel), "--json", "-o", `${out}/`];
   args.push(...extraArgs(path.join(tree, rel)));
-  const run = spawnSync(process.execPath, args, { encoding: "utf8" });
+  const run = spawnSync(compiler.cmd, args, { encoding: "utf8" });
   return { status: run.status, said: (run.stdout ?? "").trim() };
 };
 
@@ -374,14 +393,14 @@ const compileAll = (relPrograms, out, debug) => {
       results.set(rel, { status: null, absent: true, stdout: "", stderr: "", dir });
       continue;
     }
-    const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "-o", `${dir}/`];
+    const args = [...compiler.prefix, path.join(tree, rel), "-o", `${dir}/`];
     // The flags come out of the *copy*, not out of the working tree, so that each
     // side is compiled the way its own `.args` sidecar says. Reading them from the
     // working tree made `--applied` hand the before side the after side's flags,
     // and a changed `.args` then verified as clean.
     args.push(...intoDir(extraArgs(path.join(tree, rel)), dir));
     if (debug) args.push("-g");
-    const run = spawnSync(process.execPath, args, { encoding: "utf8" });
+    const run = spawnSync(compiler.cmd, args, { encoding: "utf8" });
     results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir });
   }
   return results;
@@ -637,8 +656,9 @@ const put = (rel, content) => {
   fs.writeFileSync(file, content);
 };
 
-const usage = `usage: node scripts/arrow-verify.mjs [--concise] [--debug] [--applied [--rev <ref>]] [--verbose] [<filter>...]
+const usage = `usage: node scripts/arrow-verify.mjs [--compiler <nish>] [--concise] [--debug] [--applied [--rev <ref>]] [--verbose] [<filter>...]
 
+  --compiler the compiler both sides run (default build/nish; .js is run under node)
   --concise  derive the rewrite with concise bodies collapsed too
   --debug    compile everything with -g, so a moved position is a moved byte
   --applied  compare the working tree against --rev instead of deriving a rewrite
@@ -653,18 +673,32 @@ const usage = `usage: node scripts/arrow-verify.mjs [--concise] [--debug] [--app
  * token from `--rev`, so the guard that checks the revision never saw it and the
  * run quietly compared against `HEAD`. A verifier is worth what its flags are.
  */
-const FLAGS = new Set(["--concise", "--debug", "--applied", "--verbose", "--help", "--rev"]);
+const FLAGS = new Set(["--concise", "--debug", "--applied", "--verbose", "--help", "--rev", "--compiler"]);
+
+/** The flags that take a value, as `--flag <value>` or `--flag=<value>`. */
+const VALUED = ["--rev", "--compiler"];
+
+/** `--flag=value` spelled as the flag it is. */
+const flagName = (word) => VALUED.find((name) => word.startsWith(`${name}=`)) ?? word;
+
+/** The value a valued flag was given, or undefined when it is absent or last. */
+const valueOf = (argv, name) => {
+  const inline = argv.find((a) => a.startsWith(`${name}=`));
+  if (inline !== undefined) return inline.slice(name.length + 1);
+  const at = argv.indexOf(name);
+  return at >= 0 ? argv[at + 1] : undefined;
+};
 
 const main = (argv) => {
   const words = argv.filter((a) => a.startsWith("-"));
-  const flags = new Set(words.map((a) => (a.startsWith("--rev=") ? "--rev" : a)));
-  const rest = argv.filter((a) => !a.startsWith("-"));
-  const inline = argv.find((a) => a.startsWith("--rev="));
-  const revAt = argv.indexOf("--rev");
-  const revArg = inline !== undefined ? inline.slice("--rev=".length) : revAt >= 0 ? argv[revAt + 1] : undefined;
+  const flags = new Set(words.map(flagName));
+  const revArg = valueOf(argv, "--rev");
+  const compilerArg = valueOf(argv, "--compiler");
   const rev = flags.has("--rev") ? revArg : "HEAD";
-  const filters = revAt >= 0 ? rest.filter((a) => a !== rev) : rest;
-  const unknown = words.filter((a) => !FLAGS.has(a.startsWith("--rev=") ? "--rev" : a) && a !== revArg);
+  // A separated value is a word after its flag, not a filter.
+  const values = new Set(VALUED.filter((name) => argv.includes(name)).map((name) => argv[argv.indexOf(name) + 1]));
+  const filters = argv.filter((a) => !a.startsWith("-") && !values.has(a));
+  const unknown = words.filter((a) => !FLAGS.has(flagName(a)) && !values.has(a));
   if (unknown.length > 0) {
     process.stderr.write(`arrow-verify: unknown flag ${unknown.join(", ")}\n${usage}`);
     return 2;
@@ -677,10 +711,19 @@ const main = (argv) => {
     process.stdout.write(usage);
     return 0;
   }
-  if (!fs.existsSync(path.join(root, "dist", "index.js"))) {
-    process.stderr.write("arrow-verify: dist/index.js is missing; run `npm run build` first\n");
+  if (flags.has("--compiler") && (compilerArg === undefined || compilerArg.length === 0 || compilerArg.startsWith("-"))) {
+    process.stderr.write(`arrow-verify: --compiler needs a path, not ${compilerArg ?? "the end of the command"}\n`);
     return 2;
   }
+  const spec = flags.has("--compiler") ? compilerArg : DEFAULT_COMPILER;
+  const resolved = compilerFor(spec);
+  if (resolved === null) {
+    process.stderr.write(
+      `arrow-verify: no compiler at ${spec}; pass --compiler <nish>, or run \`npm run bootstrap\` to leave one in ${DEFAULT_COMPILER}\n`
+    );
+    return 2;
+  }
+  compiler = resolved;
   // A `--rev` that swallowed the next flag would compare the working tree with
   // the index and go on printing the revision's name in the banner.
   if (flags.has("--rev") && (revArg === undefined || revArg.length === 0 || revArg.startsWith("-"))) {

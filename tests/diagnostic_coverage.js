@@ -219,17 +219,15 @@ const resolveCompiler = (spec) => {
 /**
  * The compiler nobody named. `NISH_BOOTSTRAP` first, because that is the seed
  * `scripts/bootstrap.sh` and CI already agree on (G3), then what
- * `npm run bootstrap` leaves behind, and stage0 last — which is the order that
- * keeps this runnable in a tree where `dist/` is all there is *and* in the one
- * after R6 where it is not.
+ * `npm run bootstrap` leaves behind. There used to be a third answer, stage0's
+ * `dist/index.js`; R6 deletes it, and `tests/run.js` names its compiler with
+ * `--compiler` anyway.
  */
 const defaultCompiler = () => {
   const seed = process.env.NISH_BOOTSTRAP;
   if (seed !== undefined && seed !== "") return seed;
-  for (const candidate of [path.join("build", "nish"), path.join("dist", "index.js")]) {
-    if (fs.existsSync(path.join(root, candidate))) return candidate;
-  }
-  return null;
+  const bootstrapped = path.join("build", "nish");
+  return fs.existsSync(path.join(root, bootstrapped)) ? bootstrapped : null;
 };
 
 /**
@@ -293,7 +291,9 @@ const main = async (argv) => {
   const options = parse(argv);
   const spec = options.compiler ?? defaultCompiler();
   if (spec === null) {
-    process.stderr.write("no compiler: pass --compiler <nish>, set NISH_BOOTSTRAP, or run `npm run build`\n");
+    process.stderr.write(
+      "no compiler: pass --compiler <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap`\n"
+    );
     return 2;
   }
   const compiler = resolveCompiler(spec);

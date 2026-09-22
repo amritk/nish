@@ -38,7 +38,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { linkWith, seedForOracle } from "./seed.js";
+import { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed } from "./seed.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 
@@ -260,6 +260,24 @@ function build(seed) {
   return linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));
 }
 
+/**
+ * The compiler that links the driver: `--seed`, then `NISH_BOOTSTRAP`, then
+ * `build/nish` -- `tests/self/seed.js`'s order -- and nothing after it. This
+ * oracle used to fall back to stage0's `dist/index.js` when no seed was named;
+ * it compares against something that outlives `src/`, so the compiler that
+ * builds its subject has to outlive it too, and R6 took the fallback out.
+ */
+const seedWithoutStage0 = (argv) => {
+  const spec = namedSeedSpec(argv) ?? defaultSeedSpec();
+  if (spec === null) {
+    return {
+      error:
+        "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` to leave one in build/nish",
+    };
+  }
+  return resolveSeed(spec);
+};
+
 /** `want` against `got` line by line: the differing lines, as a report prints them. */
 const differences = (want, got) => {
   const differing = [];
@@ -288,7 +306,7 @@ const report = (differing, verbose) => {
 async function main(argv) {
   const verbose = argv.includes("--verbose");
   const update = argv.includes("--update");
-  const seed = seedForOracle(argv);
+  const seed = seedWithoutStage0(argv);
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
     return 1;

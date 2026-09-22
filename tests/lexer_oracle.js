@@ -29,7 +29,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
-import { linkWith, seedForOracle, withoutSeed } from "./self/seed.js";
+import { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed, withoutSeed } from "./self/seed.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -266,17 +266,34 @@ function corpus() {
  *
  * The seed rather than stage0 (WP19 G2.3): this oracle compares stage1 with
  * the `typescript` package and outlives `src/`, so the compiler that links its
- * subject must outlive `src/` too. `tests/self/seed.js` has the order and the
- * one case where stage0 is still the answer.
+ * subject must outlive `src/` too; `seedWithoutStage0` below is the order.
  */
 function build(seed) {
   return linkWith(seed, path.join("self", "dump_tokens.ts"), path.join(root, "build", "self", "dump_tokens"));
 }
 
+/**
+ * The compiler that links the driver: `--seed`, then `NISH_BOOTSTRAP`, then
+ * `build/nish` -- `tests/self/seed.js`'s order -- and nothing after it. This
+ * oracle used to fall back to stage0's `dist/index.js` when no seed was named;
+ * it compares against something that outlives `src/`, so the compiler that
+ * builds its subject has to outlive it too, and R6 took the fallback out.
+ */
+const seedWithoutStage0 = (argv) => {
+  const spec = namedSeedSpec(argv) ?? defaultSeedSpec();
+  if (spec === null) {
+    return {
+      error:
+        "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` to leave one in build/nish",
+    };
+  }
+  return resolveSeed(spec);
+};
+
 function main(argv) {
   const verbose = argv.includes("--verbose");
   const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
-  const seed = seedForOracle(argv);
+  const seed = seedWithoutStage0(argv);
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
     return 1;
