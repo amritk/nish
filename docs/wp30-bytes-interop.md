@@ -1,8 +1,16 @@
 # WP30 — Bytes across the boundary: `u8[]` interop
 
-**Status:** Proposed. Nothing in `src/` or `self/` has changed. The measurements
-below were taken on Linux x64, Node 22, with `bench/worker.mjs` and the
-freestanding wasm profile; read them as ratios rather than as absolutes.
+**Status:** B1 is built, with the corpus case B2 asks for; B2's golden `.ll`
+and negative case and all of B3 remain. The measurements below were taken on
+Linux x64, Node 22, with `bench/worker.mjs` and the freestanding wasm profile;
+read them as ratios rather than as absolutes.
+
+B1 grew by two rows while it was being built, and the reason is worth keeping:
+the package was scoped as `u8` plus `u16`, but `u32` and `u64` have exact
+typed arrays too (`Uint32Array`, `BigUint64Array`) and are the same one line
+each. Leaving them out would have left `u32[]` declining with the same wrong
+reason this package exists to delete, so all four unsigned widths landed
+together.
 
 A host that wants to hand a Nish module a document — JSON, UTF-8 text, a frame,
 anything that is a run of bytes — has no way to do it. Every other array shape
@@ -61,9 +69,12 @@ builds to a 1,463-byte module under `--profile wasm` with
 
 ## 3. What is missing, exactly
 
-`typedView` in `src/interop/abi.ts` has four cases and none of them is `u8`, so
-`wasmSkipReason` declines the function and `--emit-dts` writes a comment
-instead of a declaration and no loader entry:
+*This section describes the state B1 changed; it is kept because the reasoning
+is what sized the package.*
+
+`typedView` in `src/interop/abi.ts` had four cases and none of them was `u8`,
+so `wasmSkipReason` declined the function and `--emit-dts` wrote a comment
+instead of a declaration, and no loader entry:
 
 ```ts
 // countQuotes(bytes: u8[]): number  -- not exported to JS: argument 1 (bytes) is
@@ -93,11 +104,29 @@ cookbook, because it reads like an omission otherwise.
 
 | | |
 | --- | --- |
-| B1 | the `u8` and `u16` rows in `typedView`, `elemSize` widened, the skip reason corrected; `src/` and `self/` both, byte-identical through `tests/self/interop_oracle.js` |
-| B2 | a `u8[]` case in the interop corpus — `tests/self/interop_payloads.ts` is where the widths already live — plus the golden `.ll`, an `llvm-as` pass, a native round trip, and a negative test for a `u8[]` the generator must still decline |
+| B1 | **done** — the four unsigned rows in `typedView`, `elemSize` widened to `1 \| 2 \| 4 \| 8`; `src/` and `self/` both, byte-identical through `tests/self/interop_oracle.js` (17/17 programs, 85 sidecars) |
+| B2 | **partly done** — `tests/self/interop_unsigned_arrays.ts` is in the oracle corpus; the golden `.ll`, the `llvm-as` pass, the native round trip and a negative test for an element type that must still be declined remain |
 | B3 | the `docs/LANGUAGE.md` rule and the `docs/IR_COOKBOOK.md` entry, including the no-masking note above |
 
-B1 is the change; B2 and B3 are the definition of done applied to it.
+B1 is the change; B2 and B3 are the definition of done applied to it, and this
+package is not finished until they are.
+
+Two things B1 turned up that were not in the plan.
+
+**The skip reason needed no correction after all.** Adding the rows made `u8[]`
+cross, so the sentence that blamed a missing runtime is no longer reached for
+it. What remains behind that sentence — `boolean[]`, `string[]`, nested arrays,
+classes — is a separate question about whether each one's reason is accurate,
+and it is left open rather than quietly folded in here.
+
+**The indefinite article was wrong, and only the new rows could show it.**
+`withArticle` and the generated loader's `TypeError` both tested `/^[AEIOU]/`,
+which is right for `Int32Array` and wrong for `Uint8Array`: a host read
+`must be an Uint8Array`. The rule had held by accident while `Int32Array` was
+the only vowel-initial constructor in the table. `u` is now out of the set in
+all four places (both compilers, both generators) on the grounds that the
+article follows the vowel *sound* — "a user", "a Uint8Array" — and every
+`u`-initial noun these reach is a `Uint*Array`.
 
 ## 5. Two findings next door
 

@@ -77,6 +77,10 @@ const CORPUS = [
   // loader's masks live; the WP8 section of tests/run.js builds this one to
   // wasm and calls it.
   { file: "tests/self/interop_unsigned.ts" },
+  // WP30: the same widths as arrays, where the masks have no counterpart --
+  // an element is a byte in `data` that the typed array reads unsigned, so a
+  // generated mask would be wrong rather than redundant.
+  { file: "tests/self/interop_unsigned_arrays.ts" },
   // WP24 A1: the shapes that get an asynchronous export and the string and
   // borrowed-array ones that are named with a reason instead.
   { file: "tests/self/interop_async.ts" },

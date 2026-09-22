@@ -36,7 +36,15 @@ import { Compilation } from "../compilation.js";
 import { LANGUAGE } from "../branding.js";
 import { FunctionSig } from "../checker/index.js";
 import { ResultType, StaticType, resultByValue } from "../types.js";
-import { banner, ExternalFunction, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi.js";
+import {
+  banner,
+  ExternalFunction,
+  externalFunctions,
+  kindOf,
+  tsKeyword,
+  tsSignature,
+  typedView,
+} from "./abi.js";
 
 /** `x.d.ts` -> `x.mjs`. */
 export function wasmLoaderPath(dtsFile: string): string {
@@ -292,12 +300,25 @@ function hasPackedResult(fns: readonly ExternalFunction[]): boolean {
 
 export function wasmBridged(fns: ExternalFunction[]): WasmBridge {
   const bridged = fns.filter((fn) => wasmSkipReason(fn.sig) === undefined);
-  const needsRuntime = bridged.some((fn) => typedView(fn.sig.returnType) || fn.sig.params.some((p) => typedView(p.type)));
+  const needsRuntime = bridged.some(
+    (fn) => typedView(fn.sig.returnType) || fn.sig.params.some((p) => typedView(p.type))
+  );
   return { bridged, needsRuntime };
 }
 
 /** Names the loader's own locals use; a parameter spelled the same gets an underscore. */
-const LOADER_LOCALS = new Set(["raw", "memory", "header", "arrayIn", "arrayOut", "copyBack", "scoped", "result", "instance", "bytes"]);
+const LOADER_LOCALS = new Set([
+  "raw",
+  "memory",
+  "header",
+  "arrayIn",
+  "arrayOut",
+  "copyBack",
+  "scoped",
+  "result",
+  "instance",
+  "bytes",
+]);
 const jsParam = (name: string): string => (LOADER_LOCALS.has(name) ? `${name}_` : name);
 
 function wrapper(fn: ExternalFunction): string[] {
@@ -336,14 +357,23 @@ function wrapper(fn: ExternalFunction): string[] {
   const args = sig.params.map((p, i) => {
     const v = views[i];
     if (!v) return operand(i);
-    body.push(`const ${p.name}$ = arrayIn(${jsParam(p.name)}, ${v.ctor}, ${v.elemSize}, "${sig.sourceName}: argument ${i + 1} (${p.name})");`);
+    body.push(
+      `const ${p.name}$ = arrayIn(${jsParam(p.name)}, ${v.ctor}, ${v.elemSize}, "${sig.sourceName}: argument ${i + 1} (${p.name})");`
+    );
     return `${p.name}$`;
   });
   const isVoid = kindOf(sig.returnType) === "void";
   const value = returned(`raw.${sig.name}(${args.join(", ")})`);
-  const copyBacks = sig.params.filter((p, i) => views[i] && fn.writtenParams.has(p.name)).map((p) => `copyBack(${p.name}$, ${jsParam(p.name)});`);
+  const copyBacks = sig.params
+    .filter((p, i) => views[i] && fn.writtenParams.has(p.name))
+    .map((p) => `copyBack(${p.name}$, ${jsParam(p.name)});`);
   if (copyBacks.length === 0) body.push(isVoid ? `${value};` : `return ${value};`);
-  else body.push(isVoid ? `${value};` : `const result = ${value};`, ...copyBacks, ...(isVoid ? [] : ["return result;"]));
+  else
+    body.push(
+      isVoid ? `${value};` : `const result = ${value};`,
+      ...copyBacks,
+      ...(isVoid ? [] : ["return result;"])
+    );
   return [`${sig.name}: (${params.join(", ")}) => scoped(() => {`, ...body.map((l) => `  ${l}`), "}),"];
 }
 
@@ -413,7 +443,9 @@ export function generateWasmLoader(compilation: Compilation, dtsFile: string): s
       "  };",
       "  /** Copy a typed array into a fresh arena array; returns the header pointer. */",
       "  const arrayIn = (value, Ctor, elemSize, what) => {",
-      '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIOU]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);',
+      // `u` is left out of the vowel set on purpose; `withArticle` in napi.ts
+      // carries the reason. `Uint8Array` takes `a`, the way "a user" does.
+      '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);',
       "    const hdr = raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length));",
       "    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);",
       "    return hdr;",
@@ -447,7 +479,10 @@ export function generateWasmLoader(compilation: Compilation, dtsFile: string): s
     lines.push(...resultHelpers(bridged), "  return {", "    memory: raw.memory,");
   }
   for (const fn of bridged) {
-    lines.push(`    /** ${fn.unit.fileName}: ${tsSignature(fn.sig, tsKeyword)} */`, ...wrapper(fn).map((l) => `    ${l}`));
+    lines.push(
+      `    /** ${fn.unit.fileName}: ${tsSignature(fn.sig, tsKeyword)} */`,
+      ...wrapper(fn).map((l) => `    ${l}`)
+    );
   }
   lines.push("  };", "}", "");
   return lines.join("\n");
