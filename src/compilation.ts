@@ -49,7 +49,7 @@ import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
 import { CLI, LANGUAGE, PACKAGE_CONDITION, STD_PREFIX, packageConditionFor } from "./branding.js";
 import { nishExportTarget } from "./manifest.js";
-import { stdModuleName, stdModuleNames, stdModulePath } from "./std-modules.js";
+import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std-modules.js";
 
 export interface ModuleUnit {
   /** Absolute path: the module's identity. */
@@ -448,6 +448,11 @@ export class Compilation {
    */
   private resolveStdSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
     const name = imp.specifier.slice(STD_PREFIX.length);
+    // Refused before it is resolved, because what is wrong with it is the name
+    // rather than the file: a specifier that climbs out of the package is
+    // named by where that package happens to sit, so the same program would
+    // carry a different `; ModuleID` under every install (WP19 §A7).
+    if (name.length > 0 && !isStdModuleName(name)) throw escapesStandardLibrary(importer, imp);
     const resolved = stdModulePath(name);
     if (name.length > 0 && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
     throw notStandardLibrary(importer, imp);
@@ -736,6 +741,16 @@ export class Compilation {
    * Output stem per module (`<basename>` normally). When two modules share a
    * basename, those use their path relative to the entry's directory with
    * separators turned into `_`, so `-o dir/` never overwrites a module.
+   *
+   * **The path, deliberately, and not `fileName`.** A `nish/` module's name is
+   * package-relative, so stemming from it would answer `std_text` under every
+   * install instead of climbing out to wherever the compiler sits — which is
+   * the better answer and is not this change: the fallback drops every `.` and
+   * `..` segment before joining, here and in `self/compilation.ts` alike, so it
+   * already collapses two modules onto one stem and writes one `.ll` for them
+   * (`tests/link/module_stem_clash`, `docs/wp19-stage0-retirement.md` §5a
+   * item 5). Those are one lowering in two files and one decision; the name is
+   * this change and the stem is that one.
    */
   outputStems(): Map<ModuleUnit, string> {
     const counts = new Map<string, number>();
@@ -794,6 +809,25 @@ function importedName(importer: ModuleUnit, target: string): string {
 const notStandardLibrary = (importer: ModuleUnit, imp: ImportBinding): CompileError =>
   new CompileError(
     `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames().join(", ")})`,
+    imp.node.moduleSpecifier,
+    importer.sourceFile
+  );
+
+/**
+ * A `nish/<name>` that would leave the package it names — `nish/../../x/lib`,
+ * or a `//` that joins to nothing.
+ *
+ * It is refused rather than resolved because a standard-library module is
+ * *named* by its path inside the package, and a name that climbs out of the
+ * package is not one: it would be spelled from wherever the compiler was
+ * installed, so the same program would carry a different `; ModuleID`, a
+ * different `source_filename` and a different `DIFile` on two machines. The
+ * rule is `isStdModuleName`, in `std-modules.ts` beside the name it protects,
+ * and `self/std_modules.ts` states it for stage1 in the same words.
+ */
+const escapesStandardLibrary = (importer: ModuleUnit, imp: ImportBinding): CompileError =>
+  new CompileError(
+    `Module \`${imp.specifier}\` climbs out of the standard library; a \`${STD_PREFIX}\` specifier names a module inside it, so no segment may be empty or begin with a \`.\``,
     imp.node.moduleSpecifier,
     importer.sourceFile
   );

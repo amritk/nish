@@ -1,0 +1,4 @@
+define noundef nonnull align 8 i8* @tagA()
+define noundef nonnull align 8 i8* @tagB()
+declare noundef nonnull align 8 i8* @tagA()
+declare noundef nonnull align 8 i8* @tagB()

@@ -213,6 +213,53 @@ const HAS_CLANG = has("clang");
 const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump");
 
 /**
+ * Whether this host's object format is Mach-O rather than ELF.
+ *
+ * Named once because two checks below differ by it, and both for the same
+ * underlying reason: what a *linker* leaves behind is the platform's business,
+ * so a check that reads a linked binary has to ask where the thing it wants
+ * ended up, and a check about a link being refused has to ask which linker
+ * refuses it. Neither is a fact about the compiler -- the IR is the same on
+ * both -- which is why neither branches on the platform for what it asserts,
+ * only for where it looks and for what did the refusing.
+ */
+const IS_MACHO = process.platform === "darwin";
+
+/**
+ * The file that holds a linked program's DWARF line table, which is not the
+ * same file on both platforms.
+ *
+ * On ELF the executable carries `.debug_line` itself. On Mach-O it does not:
+ * `clang -g` leaves the DWARF in the object files and the executable keeps only
+ * a debug map naming them, so `llvm-dwarfdump --debug-line <exe>` prints the
+ * section header with no table under it and says nothing at all about whether
+ * `-g` worked. What holds the table is the `.dSYM` bundle `dsymutil` builds out
+ * of that map, and the Darwin clang driver runs `dsymutil` itself whenever it
+ * compiles and links in one step -- which is every link this suite makes --
+ * precisely because the objects the map names are its own temporaries and it is
+ * about to delete them.
+ *
+ * So the bundle beside the binary is the answer, and **running `dsymutil`
+ * afterwards is not a fallback.** Measured on `macos-latest`: by then the
+ * temporaries are gone, the tool warns `unable to open object file` once per
+ * missing object, writes a bundle whose `.debug_line` is empty -- and exits 0.
+ * Reaching for it would turn "there is no line table here" into "the line table
+ * has no rows", which is the same failure wearing a worse message.
+ *
+ * Answering with the file rather than branching at each call site is what keeps
+ * the two `-g` checks below asserting one property on both platforms: the table
+ * names the `.ts` file it was compiled from, and it has at least one row.
+ */
+const lineTableOf = (exe) => {
+  if (!IS_MACHO) return { file: exe, where: "the linked binary" };
+  const bundle = `${exe}.dSYM`;
+  const inside = path.join(bundle, "Contents", "Resources", "DWARF", path.basename(exe));
+  return fs.existsSync(inside)
+    ? { file: inside, where: `${path.basename(bundle)}, the bundle beside the linked binary` }
+    : { file: exe, where: `the linked binary, since no ${path.basename(bundle)} was written` };
+};
+
+/**
  * Print the run's accounting and exit with its verdict.
  *
  * It is a function because there are now two places a run can end: the last
@@ -919,9 +966,13 @@ if (!only || "diagnostics".includes(only)) {
       link.stderr
     );
     if (link.status === 0) {
+      // `lineTableOf` is what makes this one check on two object formats: it
+      // answers with the file the platform put the table in, and the assertion
+      // under it is the same sentence either way.
+      const table = lineTableOf(exe);
       const dumpers = [
-        ["llvm-dwarfdump", ["--debug-line", exe]],
-        ["objdump", ["--dwarf=decodedline", exe]],
+        ["llvm-dwarfdump", ["--debug-line", table.file]],
+        ["objdump", ["--dwarf=decodedline", table.file]],
       ];
       const tool = dumpers.find(([t]) => has(t));
       if (!tool) {
@@ -935,23 +986,30 @@ if (!only || "diagnostics".includes(only)) {
             ? /^0x[0-9a-f]+\s+[1-9]\d*\s+\d+/m.test(out)
             : /dbg_main\.ts\s+[1-9]\d*\s+0x/.test(out);
         check(
-          `${tool[0]}: the linked binary's line table names dbg_main.ts and has at least one row`,
+          `${tool[0]}: the line table names dbg_main.ts and has at least one row (read from ${table.where})`,
           dump.status === 0 && out.includes("dbg_main.ts") && hasRow,
           out.slice(0, 2000) + dump.stderr
         );
       }
     }
-    // The speed profile keeps the DWARF too: -g disables the strip step of build.sh.
+    // The speed profile keeps the DWARF too: -g disables the strip step of
+    // build.sh. Read through `lineTableOf` for the reason the check above does:
+    // on Mach-O the stripping the profile would have done is `-Wl,-x` on the
+    // executable, and the table `-g` produced is in the bundle next to it, so
+    // looking only at the executable would report every Darwin build as
+    // stripped whether or not it was.
     const speed = spawnSync("node", [cli, dbgSrc, "-g", "--link", `${exe}.speed`], {
       cwd: root,
       encoding: "utf8",
     });
+    const speedTable = speed.status === 0 ? lineTableOf(`${exe}.speed`) : null;
     const symbols =
-      speed.status === 0 && has("llvm-dwarfdump")
-        ? spawnSync("llvm-dwarfdump", ["--debug-line", `${exe}.speed`], { encoding: "utf8" }).stdout
+      speedTable !== null && has("llvm-dwarfdump")
+        ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], { encoding: "utf8" }).stdout
         : "";
     check(
-      "-g --link (speed profile) is not stripped: the line table survives",
+      "-g --link (speed profile) is not stripped: the line table survives " +
+        `(read from ${speedTable === null ? "the linked binary" : speedTable.where})`,
       speed.status === 0 && (!has("llvm-dwarfdump") || symbols.includes("dbg_main.ts")),
       speed.stderr + symbols.slice(0, 500)
     );
@@ -2763,10 +2821,36 @@ if (!only && HAS_CLANG) {
   }
 
   // The negative half, and the reason the two flags never have to be kept in
-  // step by hand: thread-local IR linked against a runtime that was built
-  // without -DNISH_THREADS is a *link* error on every ELF target, not a program
-  // with two arenas. A silent mismatch is the one failure mode this design
-  // could have had, so it is pinned rather than assumed.
+  // step by hand: thread-local IR linked against a runtime built without
+  // -DNISH_THREADS must never be a program that *looks* like it works. A silent
+  // mismatch -- the compiled code bumping one arena, the runtime owning
+  // another, exit 0 and a plausible number -- is the one failure mode this
+  // design could have had, so it is pinned rather than assumed.
+  //
+  // That property holds on both object formats and the *mechanism* is the
+  // platform's. Both were measured rather than reasoned about, on
+  // `macos-latest`, 2026-09-21:
+  //
+  //   ELF     `ld` refuses the link -- "TLS reference ... mismatches non-TLS
+  //           definition" -- so there is no binary to run. This is the safety
+  //           net scripts/build.sh's header describes.
+  //   Mach-O  ld64 links it and clang exits 0, so the net build.sh describes
+  //           is not there. It is not silent either: a thread-local read on
+  //           Darwin goes through a TLV descriptor carrying the symbol's name,
+  //           and `nm -m` on the result shows `_nish_arena` as
+  //           `(__DATA,__common) external` -- a plain struct where the
+  //           descriptor should be. The first allocation therefore calls the
+  //           arena's own `buf` field as if it were the descriptor's thunk and
+  //           the process dies: `Segmentation fault: 11`, exit 139. Linking
+  //           the same two inputs with the macro on *both* sides prints
+  //           `alloc_smoke delta = 16` and exits 0, which is what makes the
+  //           crash the mismatch's rather than the fixture's.
+  //
+  // So what differs between the platforms is only how late the mismatch is
+  // caught, and the check's name says which of the two caught it here. The
+  // assertion accepts either, because a toolchain that started refusing the
+  // link would be strengthening the net rather than breaking this claim.
+  const mismatchExe = path.join(buildDir, "alloc_smoke_mismatch");
   const mismatch = spawnSync(
     "clang",
     [
@@ -2777,14 +2861,25 @@ if (!only && HAS_CLANG) {
       "tests/ir/alloc_smoke_main.c",
       "-lm",
       "-o",
-      path.join(buildDir, "alloc_smoke_mismatch"),
+      mismatchExe,
     ],
     { cwd: root }
   );
+  const refusedAtLink = mismatch.status !== 0 && /TLS|thread.local/i.test(String(mismatch.stderr));
+  // Only reachable where the linker let it through; on ELF there is no file here.
+  const ranMismatch = mismatch.status === 0 ? spawnSync(mismatchExe, [], { encoding: "utf8" }) : null;
   check(
-    "--threads IR refuses to link against a runtime built without -DNISH_THREADS",
-    mismatch.status !== 0 && /TLS|thread.local/i.test(String(mismatch.stderr)),
-    `exit ${mismatch.status}\n${mismatch.stderr}`
+    IS_MACHO
+      ? "--threads IR against a runtime built without -DNISH_THREADS is never a working program (ld64 links it; the binary dies on its first allocation)"
+      : "--threads IR refuses to link against a runtime built without -DNISH_THREADS (ld refuses the TLS reference)",
+    refusedAtLink || (ranMismatch !== null && ranMismatch.status !== 0),
+    mismatch.status === 0
+      ? `it linked, and the binary it produced exited ${ranMismatch.status} on signal ${ranMismatch.signal}\n` +
+        `with stdout ${JSON.stringify(ranMismatch.stdout)}. A --threads module against a runtime built\n` +
+        "without the macro is then a program that looks like it works, with the compiled code bumping\n" +
+        "one arena and the runtime owning another."
+      : `the link failed, but over something other than the arena's storage class:\n` +
+        `exit ${mismatch.status}\n${mismatch.stderr}`
   );
 
   // The check above links for the host, so it only ever proved the layout on a 64-bit
@@ -7329,6 +7424,49 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
             "a bare `nish` on PATH resolves nish/<module> against the package, not the cwd",
             ran.status === 0 && ran.stdout.trim() === "[padded]",
             `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
+          );
+        }
+
+        // WP19 §A7's third bullet: the same program, the same install, three spellings of
+        // `argv[0]`, and one `; ModuleID` for the standard-library module.
+        //
+        // `packageRoot()` is `<dirname(argv[0])>/..`, so the three spellings answer three
+        // different roots -- and a package module used to be *named* by the path the
+        // compiler found it at, which made a program's IR a fact about the install rather
+        // than about the program. It is named by its package-relative specifier now, on
+        // both sides. The bare name is the one that matters most and reads the least: it
+        // is what `$PATH` hands a compiler, and before this it wrote the install's whole
+        // path into the header of a module the user never named.
+        //
+        // The comparison is between the three spellings rather than against one string
+        // that could be rewritten to whatever the compiler happens to say, and the
+        // expectation is spelled as well, so a change that made all three agree on the
+        // wrong answer still fails.
+        {
+          const spellings = [
+            ["absolute", path.join(inst, "bin", "nish"), undefined],
+            ["relative", path.join("..", "argv0-path-install", "bin", "nish"), undefined],
+            ["bare, found on PATH", "nish", `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}`],
+          ];
+          const headers = spellings.map(([label, cmd, PATH]) => {
+            const out = path.join(work, `out-${label.split(",")[0]}`);
+            fs.rmSync(out, { recursive: true, force: true });
+            const r = spawnSync(cmd, ["prog.ts", "-o", `${out}${path.sep}`], {
+              cwd: work,
+              encoding: "utf8",
+              env: PATH === undefined ? process.env : { ...process.env, PATH },
+            });
+            const ll = path.join(out, "text.ll");
+            return {
+              label,
+              header: r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8").split("\n")[0] : `exit ${r.status}: ${r.stderr}`,
+            };
+          });
+          const want = "; ModuleID = 'std/text.ts'";
+          check(
+            "a nish/<module> is named package-relatively under every spelling of argv[0]",
+            headers.every((h) => h.header === want),
+            headers.map((h) => `${h.label}: ${h.header}`).join("\n")
           );
         }
 

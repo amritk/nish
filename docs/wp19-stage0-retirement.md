@@ -572,23 +572,85 @@ like it has no consequences and it has three.
 - **Two different modules can now carry one `; ModuleID`.** A program importing
   both `./std/text` and `nish/text`, compiled with a relative entry, names both
   `std/text.ts`; before, the `nish/` one was told apart by its absolute path.
-  Under `-o <dir>/` both files are still written, because `outputStems`
-  disambiguates on the absolute path rather than on the name — but under `-g` a
-  debugger sees one `DIFile` for two files, `clashMessage` would name both
-  modules identically in a symbol-clash diagnostic, and with **no** `-o` at all
-  the name *is* the output path, so the second module's IR overwrites the
-  first's. stage1 collides on the name in every one of those cases, and in one
-  more: it keys its output stems on the name, so it writes *one* file where
-  stage0 writes two. That last one is stage1's own defect, older than this
-  change and unmeasured by anything, and it is not fixed here.
-- **stage1 is still sensitive to how the *compiler* was invoked.** stage0's
-  answer no longer depends on anything outside the package; stage1's
-  `packageRoot()` is `<dirname(argv[0])>/..`, so `./build/nish` answers
-  `std/testing.ts` and `/abs/path/build/nish` answers `/abs/path/std/testing.ts`
-  for the same program. The harness happens to invoke it in the spelling that
-  agrees, which is the *whole* reason this family reads as closed. It is the
-  other half of the rule, unchanged by this branch, and the next thing to close
-  in it.
+  Under `-o <dir>/` both files are **not** still written, and the draft of this
+  bullet that said they were is corrected here (measured 2026-09-21).
+  `outputStems` disambiguates *from* the absolute path rather than from the
+  name, which is not the same as being disambiguated *by* it: it drops every
+  `.` and `..` segment of the entry-relative path before joining, so a module
+  above the entry's directory collapses onto one below it with the same tail
+  and stage0 writes one `.ll` for the two. Under `-g` a debugger sees one
+  `DIFile` for two files, `clashMessage` would name both modules identically in
+  a symbol-clash diagnostic, and with **no** `-o` at all the name *is* the
+  output path, so the second module's IR overwrites the first's. The sentence
+  that used to close this bullet — that stage1 keys its output stems on the
+  name and therefore writes *one* file where stage0 writes two — was wrong in
+  both of its halves: a stage1 module's name *was* its identity, so stage1
+  could not hold two modules under one name at all, and under a relative entry
+  the direction is the other one, stage0 writing one file where stage1 writes
+  two. [§5a](#5a-what-r6-is-waiting-on) item 5 has the invocations, the
+  measurements and what is actually broken.
+
+  **The first half stopped being true on 2026-09-21**, which is the third
+  bullet below: stage1 carries a module's name apart from its identity now, so
+  it can print one `; ModuleID` for two modules exactly as stage0 can. `byPath`
+  is still keyed on the identity, so they are still two modules and still two
+  files; what they share is the name.
+- **stage1 was still sensitive to how the *compiler* was invoked — closed on
+  2026-09-21.** stage0's answer had not depended on anything outside the
+  package since this branch; stage1's `packageRoot()` is
+  `<dirname(argv[0])>/..`, and a package module was *named* by the path the
+  compiler found it at, so `./build/nish` answered `std/text.ts` and
+  `/abs/path/build/nish` answered `/abs/path/std/text.ts` for one program:
+
+  ```
+  ./build/nish  prog.ts -o out/     ; ModuleID = 'std/text.ts'                  before
+  /abs/build/nish prog.ts -o out/   ; ModuleID = '/abs/.../std/text.ts'         before
+  either spelling                   ; ModuleID = 'std/text.ts'                  after
+  ```
+
+  The harness happened to invoke the spelling that agreed, which was the
+  *whole* reason this family read as closed. What closes it is the distinction
+  the rest of this section is about, made in stage1 too: a module's **identity**
+  is still the path it was opened at — a file has to be opened — and its
+  **name** is its package-relative specifier, `std/text.ts`, which is what
+  stage0 has written since this branch. `ModuleUnit.name` in
+  `self/compilation.ts` carries it, `SourceFile` is constructed with it, so the
+  `; ModuleID`, the `source_filename`, the `DIFile`, the diagnostics, the
+  interop sidecars' `/* <module>: */` lines and the no-`-o` output path all read
+  it. `tests/run.js` drives a staged install by an absolute `argv[0]`, by a
+  relative one and by a bare name on `$PATH` and asserts the three agree —
+  watched failing with the fix reverted, because the harness's own spelling is
+  what hid this for four releases.
+
+  **A bare-specifier package is already under the rule, and was measured rather
+  than assumed** (`tests/link/package_bare`, both compilers, three spellings of
+  `argv[0]`): its module names are `node_modules/pkg_bare/src/index.ts` and
+  friends in every one of them, because `findPackageDir` walks up from the
+  *importing module's own name* and never asks `packageRoot()`. Such a module's
+  name tracks the entry's spelling exactly as a relative import's does, which is
+  a fact about the program being compiled rather than about the compiler, and it
+  is `nish/`'s resolution against the compiler's own install that made the
+  standard library the exception. So the two kinds of package are named by one
+  rule again, and only one of them needed moving.
+
+  Two consequences it carries, both measured on 2026-09-21 and both moving
+  stage1 onto stage0's answer:
+
+  - **With no `-o`, stage1 wrote the module into the compiler's installation.**
+    `nish p.ts` on a program importing `nish/text` wrote
+    `<install>/std/text.ll` — `EACCES` under a root-owned install, and a
+    silent edit of the compiler's own tree otherwise. It writes `std/text.ll`
+    under the user's working directory now, which is the first bullet above,
+    for both compilers rather than for one.
+  - **stage1 can now hold two modules under one name**, exactly as stage0 can,
+    which is the second bullet above. The sentence in §5a item 5 that a
+    duplicate name is a duplicate identity in stage1 was true of the tree that
+    measured it and is not true of this one: `byPath` is keyed on the identity,
+    which is still the path, so the two modules still load as two — and they
+    can now print one `; ModuleID`. What has *not* changed is `outputStems`,
+    which still stems from the path on both sides, so neither the file counts
+    in §5a item 5's table nor the install-dependence of a package module's
+    stem moves with this. That is the fix carried separately there.
 
 #### A8. The fifth way this gate lied: a surface `VARIATIONS` had never named
 
@@ -970,11 +1032,11 @@ one, because the record may not read green on a day nothing was measured.
 workflow's first issue was the backlog rather than a regression — eighteen
 differences belonging to WP18 and WP27, one of them an internal compiler error,
 red on `main` precisely because no nightly existed to say so (§A7). #93 was
-opened for the red run of 2026-09-18 and closed by a green full run. **State, 2026-09-19**, from
-`node tests/run.js --parity` on merged `main` at `862c7cc`:
+opened for the red run of 2026-09-18 and closed by a green full run. **State, 2026-09-22**, from
+`node tests/run.js --parity` on merged `main` at `3927242`:
 
 ```
-parity: 14432 runs over 902 programs (2743.2 s); 0 undeclared difference(s), 2798 declared
+parity: 14544 runs over 909 programs (2663.3 s); 0 undeclared difference(s), 2808 declared
 ```
 
 exit 0. The seconds are a shared four-core box and measure the neighbours as
@@ -1519,7 +1581,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | **green as of 2026-09-19, and a row that does not carry a date is not a measurement.** In the mode's own words: `parity: 14432 runs over 902 programs (2743.2 s); 0 undeclared difference(s), 2798 declared`, exit 0, from `node tests/run.js --parity` on **merged `main` at `862c7cc`** — not on the branch that produced the fix. #117's own figure was taken on `ae6b45b` with that branch on top and lands on the same counts; re-running it after the merge is what makes this row a statement about the tree anybody has rather than about somebody's branch, which is the distinction §A7 was written about. `862c7cc` also carries a green `npm test` ([CI run 553](https://github.com/amritk/nish/actions/runs/35454091607)), covering G1's flag-set half; the corpus half is not in `npm test` by design. **Read the next two sentences before quoting the first.** Five times now a number in this row has turned out to be false, or to mean less than it looked (§A5, §A6, §A7, §A8), and the reason has never twice been the same: the corpus grew (764 → 815 → 868 → 884 → 888 → 902 programs), a fix was compared against a cached binary, a caveat was retired against the test directory — and, most recently, **the cross product did not name the surface**. §A8 is that fifth way, and it is the one the first four could not have found: `--json`, the compiler's one machine-readable contract, was not in `VARIATIONS` and had never been compared on any program. It was worth **180 undeclared differences on an otherwise-green corpus**, 178 of them one defect — stage1 answering a syntax error with an empty stdout where stage0 printed the object — plus two narrowed spans, one on each side. No miscompile: every `.ll` was byte-identical under every variation, before and after. A fourth class reported **zero rows** and is the one to carry forward, because zero was a fact about the corpus rather than about the compilers: a diagnostic column counted bytes in stage1 where stage0 counts UTF-16 code units, in the default mode under no flag, invisible because no corpus program put a non-ASCII character in front of a caret (`tests/cases/reject_diag_utf8` now asks). What remains true from the earlier record: §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), §A3's five classes closed or declared, and §A7's two — the `CPtr` internal compiler error under `-g` and the cascading second diagnostic — closed by #90 and #91. The nightly `Parity` workflow opened #93 for the red run of 2026-09-18 and closed it on a green full run; `ci.yml`'s `parity-select` / `parity-changed` pair runs the corpus half over the programs each pull request touches, so the next time this row goes red it is red on the pull request that did it. **The standing qualification, which no green number retires**: the difference set is a lower bound over the corpus and the variation list, and both are things somebody wrote — #94 still reproduces on this tree and G1 cannot see it, because no corpus program has the shape |
+| **R1** | Parity | **green as of 2026-09-22, and a row that does not carry a date is not a measurement.** In the mode's own words: `parity: 14544 runs over 909 programs (2663.3 s); 0 undeclared difference(s), 2808 declared`, exit 0, from `node tests/run.js --parity` on **merged `main` at `3927242`** — re-derived on the head R6 would land on rather than quoted from the 2026-09-19 run at `862c7cc`, whose `14432` / `902` / `2798` the new counts exceed by exactly the seven entry programs that arrived between them, sixteen variations each. #117's own figure was taken on `ae6b45b` with that branch on top and lands on the same counts; re-running it after the merge is what makes this row a statement about the tree anybody has rather than about somebody's branch, which is the distinction §A7 was written about. `862c7cc` also carries a green `npm test` ([CI run 553](https://github.com/amritk/nish/actions/runs/35454091607)), covering G1's flag-set half; the corpus half is not in `npm test` by design. **Read the next two sentences before quoting the first.** Five times now a number in this row has turned out to be false, or to mean less than it looked (§A5, §A6, §A7, §A8), and the reason has never twice been the same: the corpus grew (764 → 815 → 868 → 884 → 888 → 902 → 909 programs), a fix was compared against a cached binary, a caveat was retired against the test directory — and, most recently, **the cross product did not name the surface**. §A8 is that fifth way, and it is the one the first four could not have found: `--json`, the compiler's one machine-readable contract, was not in `VARIATIONS` and had never been compared on any program. It was worth **180 undeclared differences on an otherwise-green corpus**, 178 of them one defect — stage1 answering a syntax error with an empty stdout where stage0 printed the object — plus two narrowed spans, one on each side. No miscompile: every `.ll` was byte-identical under every variation, before and after. A fourth class reported **zero rows** and is the one to carry forward, because zero was a fact about the corpus rather than about the compilers: a diagnostic column counted bytes in stage1 where stage0 counts UTF-16 code units, in the default mode under no flag, invisible because no corpus program put a non-ASCII character in front of a caret (`tests/cases/reject_diag_utf8` now asks). What remains true from the earlier record: §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), §A3's five classes closed or declared, and §A7's two — the `CPtr` internal compiler error under `-g` and the cascading second diagnostic — closed by #90 and #91. The nightly `Parity` workflow opened #93 for the red run of 2026-09-18 and closed it on a green full run; `ci.yml`'s `parity-select` / `parity-changed` pair runs the corpus half over the programs each pull request touches, so the next time this row goes red it is red on the pull request that did it. **The standing qualification, which no green number retires**: the difference set is a lower bound over the corpus and the variation list, and both are things somebody wrote — #94 still reproduces on this tree and G1 cannot see it, because no corpus program has the shape |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS failed five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, attributed at the time to Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row needs two things and not one. The darwin **seed** has landed: `release.yml` builds one per target (G5). **The fixed point has now been measured on a mac and holds outright**, merged as `acbca9f` (#114). The failure was the harness's rather than the toolchain's: `bootstrap.sh` linked the two comparable stages at two different output paths, guaranteeing different `LC_UUID`s for compilers that agreed on every other byte. Both link at one path now and `stage3 == stage2` holds on Darwin as a raw `cmp`, with nothing relaxed and nothing masked — the narrowing in `scripts/verify-binaries.sh` is not what carries it. Stated exactly, because the distinction is the finding: the UUID is stable across two links to one path and differs on a link to another, which rules out a hash of the output's own content but does **not** separate path-identity from invocation-order, since the probe never returned to the first path. The output path is the leading explanation rather than a finding; the remedy holds either way, because run 4 measured the full `--verify` end to end. `-Wl,-no_uuid` is closed off with evidence — it links, then arm64 dyld refuses the image. All three unexercised seed rows were run on their own hardware and all three passed, so `attachedSince: 0.4.0` is proved rather than assumed and #92 can attach all three. What is left is a release that carries the assets, not work: until one does, the macOS `bootstrap` row does not appear, and the other failures in the `test` row keep `macos-latest` out of the test matrix regardless. Anywhere this document calls the Mach-O difference unmeasured, or attributes it to ld64's debug map, is stale as of `acbca9f`. **Checked on this tree on 2026-09-19 (`7ff7ce1`): `node tests/run.js seed` 38 passed, `node tests/run.js bootstrap` 12 passed, 0 failed either, both inside `npm test`** — which the acceptance run measured on this same merged tree at `2073 passed, 0 failed, 2 skipped`, no `DEGRADED:` banner, the two skips the environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset). The darwin half of this row is the exception and has no command on this tree by construction: it needs a mac, and its measurement is #114's, on its own hardware |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is 0. **That sentence was true and proved by nothing between WP22 stage C and 2026-09-18**, which is the same defect as R1's in a smaller frame: the tool reads the registry out of `self/codes.ts` with a pattern that was keyed on four literal spaces, stage C rewrote those tables as arrows with concise bodies and they lost an indentation level, and the tool therefore parsed **0 of 408** codes — `--require-coverage` iterated an empty map, the per-case registry-fragment cross-check found no fragment for any case, and the run printed `coverage 0/0 codes` and exited 0. An empty registry reads exactly like a covered one. Re-measured on 2026-09-18 with the parser reading any indentation and an empty registry made a failure rather than a pass: **344 of 408 codes provoked, 64 unreachable with a reason on file**. **Re-derived on 2026-09-19 on the merged tree at `7ff7ce1`, `node tests/diagnostic_coverage.js --report` answers `wordings: 126/126 cases pin their code, coverage 344/410 codes, 66 unreachable, uncoded=4`** — the registry grew by two and both went to the unreachable list. **That is a weaker thing than the defects this document collects, and the difference is the whole discipline**: the 2026-09-18 figure carried its date and was never false, it was *overtaken* — an accurate record of one day sitting in a table a reader takes for the tree's current state. §A5's pathology is a claim that was wrong; this is a claim that stopped being current. The remedy is the same and cheaper: re-derive rather than re-read, which is why both numbers here name the command. Nothing was provoked by nothing on either date, and the gate is demonstrably able to fail again — dropping one line of `tests/wordings/unreachable.txt` reports ``NL2001 is provoked by nothing`` and exits 1 (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. **What the move costs is the limit worth stating rather than discovering: a rule the checker owns is a rule the member has to parse to reach.** Eight shapes do not reach it — `m?()` with no return type, `x? = 5` with no annotation, `static x;`, `static` alone, `static x: i32 = 0` with no `;` before the `}`, `static m(): i32;`, `static m() { }` and `static { }` — and each is a stage1 syntax error about the *other* defect where stage0 names the member and its rule. Those sentences moved out of stage1's reach rather than into it, which is §A3's declared class seen from the inside, counted by `reject_oracle.js` and declared by `--parity` (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`, `reject_cls_static_field_untyped`, `reject_cls_static_block`, and `self/parser.ts`'s `parseMemberModifiers` for the rest). Putting a copy of the rule back in the parser would restore an uncoded sentence in the phase that cannot name the member, which is the duplication the change removes; the shapes are named here and there instead. **That caveat is closed, and the closure is the shape to copy.** It used to read: the two lists are shrink-only under `--strict-refusals`, but the reject oracle's parser bucket is a count in a summary line with no ceiling beside it, so the next rule that leaves the parser's reach migrates a case into the bucket silently — read the bucket's number before and after. Reading a number is a discipline, and this document's whole subject is that a discipline nothing checks is a comment. So the bucket has a ceiling now: [`tests/self/parser_refusals.txt`](../tests/self/parser_refusals.txt) names each case **and the sentence stage1 answers with**, 89 entries as of 2026-09-19, and `reject_oracle.js` compares the register against the run **in both directions** — a case in the bucket that the file does not name fails, and a case the file names that no longer lands in the bucket fails too. A rule leaving the parser's reach is now an edit to that file rather than a tally nobody re-read, and a rule *returning* to it cannot pass silently either. The comparison is itself exercised: a `selfCheck` inside the oracle drives the register logic over fabricated inputs on every run and its `<n>/<n>` count prints in the summary line, so the ceiling is not a check that has never been watched failing (#115). The modifiers themselves now agree in full: `readonly` on a method or a constructor is ``unsupported modifier `readonly` `` from both compilers rather than accepted by stage1 (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`, `reject_cls_method_readonly_optional`), and because stage0 reports the first modifier in *source* order the parser records which of `static` and `readonly` came first, so `static readonly m()` and `readonly static m()` get different sentences and each gets the same one from both (`reject_cls_method_static_readonly`, `reject_cls_method_readonly_static`). An *interface* field takes the same modifiers, for the reason the checker takes one function for both: `readonly x: i32` compiles on both where stage1's parser used to refuse it, and `static x: i32` is ``Field `x` of interface `I`: `static` members are not supported`` on both. What is still one-sided and older than this work is `class C { constructor: i32 = 0; }`, which stage1 compiles and the `typescript` package calls a syntax error — the direction `stage1_divergence.txt` calls serious, recorded in `parseMember` because no corpus program has the shape and nothing measures it. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **2, from 13** — one of which stage1 compiles — and what is left is not more of the same: one is WP18's (`<T, T>`) and belongs to that package rather than to this one, and the other is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
 | **R4** | Distribution | **the workflow is done, the installer is done, and nothing has been published.** One native compiler per supported target is built and smoke-tested by `release.yml` — each on a runner of its own architecture, so nothing is cross-compiled and "built" and "smoke-tested" mean the same thing on every row — and `INSTALL.md` and `wp12-release.md` are rewritten around them; `--version` already has a source that is not `package.json`. Which targets a given release carries is `attachedSince` in `.github/seed-targets.json`, compared against that release's version by `.github/seed-due.sh`: `x86_64-linux` from 0.1.1 and the other three from 0.4.0 — v0.2.0 was published before this landed and a release already published cannot grow an asset, and the three new rows had never run. **All three have now been run, on their own hardware, and all three passed**, merged as `acbca9f` (#114). That closes the reason each was waiting: `attachedSince: 0.4.0` was an assumption about rows nobody had exercised and is now a proved claim, and #92 can attach all three. The darwin pair's second blocker is closed with them, the fixed point holding as a raw `cmp` once `bootstrap.sh` stops linking the two comparable stages at different paths (R2 above). What is left is a release that carries the assets, since a release already published cannot grow one. So G3's macOS row gets its seed on the first release at or after 0.4.0, not the next one. The package becoming an installer was the last piece of work here and **landed on 2026-09-20**: `bin.nish` is a launcher, the native compiler arrives as one `@amritk/nish-<asset>` `optionalDependencies` entry per platform, and `release.yml` packages each from the directory it already stages for that platform's tarball (G5). The registry name it waited on was settled on 2026-09-19 ([wp12-release.md](wp12-release.md#the-npm-name)). So what is outstanding in this row is **a person publishing**, twice over and for the same reason each time — a release that carries the three new seed assets, and a `npm publish` of the N+1 packages — neither of which is work. **Checked on this tree on 2026-09-20: `node tests/run.js seed` (38 passed) and `node tests/run.js wp12` (64 passed), 0 failed either — the `seed-targets.json` rows against the compiler's own target table and against `release.yml`'s text, and the pack-and-install round trip.** What that cannot check is which assets a *published* release carries, which is the decision in §5a rather than a state of the tree |
@@ -1540,7 +1602,7 @@ in the wrong bucket is how "we are nearly there" survives contact with a year.
 
 | | What | The measurement |
 | --- | --- | --- |
-| **G1** | parity over the corpus, every flag variation | `parity: 14432 runs over 902 programs (2743.2 s); 0 undeclared difference(s), 2798 declared` — `node tests/run.js --parity`, exit 0, 2026-09-19, on merged `main` at `862c7cc` |
+| **G1** | parity over the corpus, every flag variation | `parity: 14544 runs over 909 programs (2663.3 s); 0 undeclared difference(s), 2808 declared` — `node tests/run.js --parity`, exit 0, **2026-09-22**, on merged `main` at `3927242`, the head R6's deletion would land on. It replaces `14432 runs over 902 programs … 2798 declared` at `862c7cc`, and the deltas **decompose rather than needing to be trusted**: seven entry programs arrived between the two runs — `io_realpath`, `reject_realpath_arity`, `reject_realpath_type`, `builtin_realpath`, `reject_cls_field_init_type_twice`, `reject_std_escaping_module` and `module_stem_clash/main.ts`, the clash case's two imported `text.ts` being modules rather than programs — and seven programs across the sixteen variations is exactly the 112 new runs. The ten new declared rows are those programs meeting declaration classes that already existed: no `DECLARED` entry names any of them, which is the difference between a corpus that grew and a gate that was widened |
 | **G2** | every registry code provoked by something that outlives stage0, or unreachable with a reason | `wordings: 83/126 cases pin their code (41 refused by the parser, 2 answered differently), coverage 264/410 codes, 66 unreachable, 80 stage0-only, uncoded=5` — `node tests/diagnostic_coverage.js --compiler build/nish --require-coverage --strict-refusals`, exit 0, 2026-09-21. **Measured with stage1 rather than with stage0, which is what the criterion says and what this row did not do until now**: the stage0 figure (`coverage 344/410 codes, 66 unreachable, uncoded=4`, same command with `--compiler dist/index.js`, also exit 0) measures the compiler R6 deletes. Asked of stage1 the criterion had 80 findings, none of them an oversight — each had a reason on file, per case, in a register nothing joined to the codes; §2B has the join and what it checks |
 | **G2** | the four dying oracles' coverage recovered as goldens, built by the seed rather than by stage0 | `tests/self/goldens/`, numbers in §2B; watched green with `dist/` out of the tree |
 | **G3/G6** | the three IR equalities and the fixed point | green inside `npm test` on merged `main` at `862c7cc`, 2026-09-19 — [CI run 553](https://github.com/amritk/nish/actions/runs/35454091607), conclusion `success`. `node tests/self/bootstrap.js` is the check; the suite runs it |
@@ -1678,6 +1740,42 @@ None of these needs anybody's permission. They need somebody's afternoon.
    two users with `nish` under different prefixes get different `; ModuleID` and
    different `DIFile` paths for the same `std/` module. That is §A7's bullet and
    it is still open; the gate now measures everything except it.
+
+   **The cycle this item asked for, tallied 2026-09-22.** The paragraph above
+   says a cycle is more than one run and that the deletion should rest on the
+   runs nobody arranged. Those runs now exist: **twelve `nish-cmp` rows on
+   `main` since 2026-09-21**, two architectures across six `ci.yml` runs —
+   `2695807` (#129), `da3eaec` (#131), `7d7fa9d` (#134), `f0cbd50` (#133),
+   `2274097` (#135) and `3927242` (#136). **No red row, and every row that
+   printed a summary reports `4 equal after each compiler's own root` and `0
+   undeclared difference(s)`**: 437/437 programs over the first three heads and
+   438/438 from #135 onward, the single rise being
+   `tests/link/module_stem_clash`, because a `reject_` case is not a program
+   this gate enumerates — `tests/self/corpus.js` leaves a rejection out, as
+   "it belongs to `reject_oracle.js`". #136 moved the IR line count
+   (3253922 → 3255945) and no program count, which is what a renaming that
+   changes emitted text without adding a program should do.
+
+   **The count not moving off 4 is the part to read.** `withoutOwnRoot` was
+   allowed into the gate on the ground that it is keyed on no program and no
+   file, so a fifth normalised file would be the gate forgiving more than was
+   argued for it rather than the corpus growing — and a tally is how that gets
+   noticed instead of assumed. #136 is the case in point: it changed how a
+   package module is named, predicted the count would stay at 4 while the seed
+   predates the fix, and CI agreed to the byte (`438/438 … 3589 files,
+   3255945 IR lines, 4, 0`) on both architectures. Against five recorded
+   instances of a prediction about this gate being wrong, that one was run.
+
+   Two of the twelve rows are `cancelled` rather than green, and the cause is
+   this workflow rather than the gate: `ci.yml`'s `concurrency` group carries
+   `cancel-in-progress: true`, and run 614 (`f0cbd50`, #133) was created at
+   22:37:52Z with run 616 (`2274097`, #135) fifty-one seconds behind it on the
+   same ref, so the first was killed mid-comparison. Nothing is unproven by it
+   — that head's own pull-request run is green with both rows, and it is a
+   direct ancestor of run 616's head, which is green — but it is worth writing
+   down that **a green-row tally on `main` has a hole wherever two merges land
+   inside a minute**, so "every row since <date> was green" has to be read as a
+   claim about the rows that ran.
 2. ~~**The package becoming a thin installer**~~ (G5's last bullet, R4).
    **Done, 2026-09-20.** `bin.nish` is a launcher that hands over to the
    prebuilt native compiler for the host, which arrives as one
@@ -1697,13 +1795,49 @@ None of these needs anybody's permission. They need somebody's afternoon.
    Node compiler already in the package. **Nothing is compiled on a user's
    machine on any path**, which is what this item was for and what its own
    wording never said.
-3. **The macOS `test` failures that are not the fixed point** (G3). Measured
-   2026-09-13 and still open: an empty `.debug_line` in a Mach-O executable —
-   DWARF lives in the `.o` files until `dsymutil` runs — and a `--threads` link
-   ld64 accepts where ELF refuses it. Each encodes an ELF/Linux assumption in
-   the check rather than a compiler bug, and together they keep `macos-latest`
-   out of the test matrix independently of the seed
-   ([wp10-ci.md](wp10-ci.md#ci-matrix)).
+3. **The macOS `test` row** (G3). **Three checks ported, six still red, the row
+   still out — measured 2026-09-21** (#133). Each of the three encoded an
+   ELF/Linux assumption in the *check* rather than a compiler bug, and each now
+   asserts the same sentence on both object formats. Two read `.debug_line` out
+   of a linked binary, which on Mach-O is empty by design: `clang -g` leaves the
+   DWARF in the object files and the executable keeps only a debug map naming
+   them, and the Darwin driver runs `dsymutil` at the end of a compile-and-link
+   to build the `.dSYM` bundle that holds the table. `lineTableOf` in
+   `tests/run.js` answers with the file the platform used, so both checks assert
+   what they always asserted: the table names `dbg_main.ts` and has at least one
+   row. **Reaching for `dsymutil` afterwards is deliberately not a fallback** —
+   by then clang has deleted the objects the map names, so the tool warns once
+   per object, writes a bundle whose `.debug_line` is empty, and exits 0, which
+   would turn "there is no line table here" into "the line table has no rows".
+   The third asserted that a `--threads` module refuses to link against a runtime
+   built without `-DNISH_THREADS`; that is ELF's rule about a TLS reference to a
+   non-TLS definition and ld64 does not have it. Measured: clang exits 0, `nm -m`
+   shows `_nish_arena` as a plain `(__DATA,__common)` symbol where a thread-local
+   descriptor should be, the first allocation calls the arena's own `buf` as if
+   it were the descriptor's thunk, and the process takes SIGSEGV — while the
+   matched build of the same two inputs prints `alloc_smoke delta = 16` and exits
+   0, which is what makes the crash the mismatch's rather than the fixture's. So
+   the property both platforms are held to is not the link error but that the
+   mismatch is **never quietly a working-looking program with two arenas**, and
+   the check's name says which mechanism caught it.
+
+   **What keeps the row out is now six named checks with the run that measured
+   them, rather than a count somebody remembered**: `2125 passed, 6 failed, 4
+   skipped` with the row in the matrix
+   ([run 606](https://github.com/amritk/nish/actions/runs/35652075129)). Three of
+   the six repeat a cause just ported, in checks the 2026-09-13 run never reached
+   — the prebuilt object cache and the stage1 `-g` check are both newer than that
+   run, and each arrived carrying a mistake its own family had already made. The
+   other three share a cause that is now **settled**: `LC_UUID`, which ld64
+   varies with the *output path*, so `tests/self/bootstrap.js` and the two
+   `runtime objects:` byte comparisons each link two copies of one input to two
+   different paths and therefore fail at identical size. `scripts/bootstrap.sh`
+   already links its comparable stages at one path; those three do not.
+   `ci.yml`'s matrix comment and [wp10-ci.md](wp10-ci.md#ci-matrix) name all six
+   with that run, and both drop the claim that nothing in this file runs on
+   macOS: the darwin pair's `attachedSince` is 0.4.0, so both `bootstrap` darwin
+   rows have been green for two releases — and they are where the `LC_UUID`
+   finding came from, so the file had been disowning its own evidence.
 4. **stage1's `packageRoot()` sensitivity to `argv[0]`** (§A7's third bullet).
    `./build/nish` and `/abs/path/build/nish` answer differently for one
    program, and the harness happens to invoke the spelling that agrees — which
@@ -1800,9 +1934,13 @@ None of these needs anybody's permission. They need somebody's afternoon.
    names one directory. A link adds the second candidate and is the only thing
    that does. `argv[0]`'s *spelling* sensitivity — `./build/nish` answering
    `std/testing.ts` where `/abs/path/build/nish` answers the absolute path for
-   the same program — is untouched by that on purpose: resolving it would move
-   every standard-library path both compilers print, and it is §A7's third
-   bullet rather than this item.
+   the same program — was untouched by that on purpose: it is §A7's third
+   bullet rather than this item, and it closed there on 2026-09-21. Not by
+   resolving the spelling, which would indeed have moved every path both
+   compilers print, but by taking the spelling out of the answer: the path is
+   still whatever `argv[0]` implies and the *name* is the package-relative
+   specifier, so the three spellings this item is about now write one
+   `; ModuleID`, one `DIFile` and one output path.
 
    **Measured 2026-09-21, and the seed is the point.** `self/` may only use what
    the last release compiles, so the check is the v0.5.0 seed compiling this call
@@ -1828,22 +1966,193 @@ None of these needs anybody's permission. They need somebody's afternoon.
    workaround for a defect any more, and both were kept rather than quietly
    removed because a fix landing is not the same thing as every install on a
    user's disk carrying it.
-5. **stage1 writing one file where stage0 writes two**, when two modules share
-   a `; ModuleID` under `-o <dir>/` (§A7). stage1's own defect, older than the
-   change that found it. **Still unmeasured on 2026-09-20, and an attempt is
-   recorded here so the next one starts further along.** The *adjacent* shape
-   agrees: two modules with the same basename in different directories
-   (`a/util.ts` and `b/util.ts`) make both compilers write `a_util.ll` and
-   `b_util.ll`, because `outputStems` disambiguates on the path relative to the
-   entry on both sides. What §A7 describes is narrower — two modules that are
-   *different files* carrying *one* `; ModuleID`, which needs `nish/<module>`
-   and a relative import to normalise to the same name. Every construction
-   tried collapsed instead into a single module, because a package root of `.`
-   means the working directory *is* the package, so `./std/text` and
-   `nish/text` resolve to one file rather than two. Not reproduced is not the
-   same as not there, and this stays open: what it needs is the invocation that
-   makes the two names collide while the files differ, and that is the piece
-   nobody has written down.
+5. **`outputStems` dropping a module under `-o <dir>/`** — filed as *stage1
+   writing one file where stage0 writes two*, when two modules share a
+   `; ModuleID` (§A7), and renamed here because that is not what it is.
+   **Measured 2026-09-21, and the row was wrong in both of its halves. The
+   mechanism it names cannot happen. The outcome it names does happen, on an
+   ordinary invocation — and so does the opposite outcome, and the commonest
+   case is both compilers doing it together. So what was filed as stage1's own
+   defect is a shared one, and what it costs a user is a build that fails on a
+   symbol their program defines exactly once.**
+
+   **Why the mechanism could not happen when this was measured, which is the
+   part worth keeping — and what changed under it since.** A stage1 module's
+   name *was* the path string it was opened at: `ModuleUnit.path` in
+   `self/compilation.ts` was declared as "the resolved path, which is the
+   module's identity and the name in its IR header", and `Compilation.byPath`
+   is keyed on that same string, so the second arrival of a name returned
+   early out of `load`. Two modules therefore never shared a name in stage1 —
+   a duplicate name was a duplicate *identity*, deduplicated at load rather
+   than mis-written at emit — and `outputStems` could not be handed one twice
+   under any invocation. The premise was stage0's: it keeps the two apart in
+   two fields, `path` (absolute, the identity) and `fileName` (the name), so
+   only stage0 could hold two modules that are different files under one
+   `; ModuleID`. That is also what every earlier construction ran into. The
+   "collapsed into a single module" of the previous attempt was not the
+   construction failing, it was this property — and it was written down one
+   file away the whole time, in `resolvePath`'s comment in `self/paths.ts`:
+   stage1 "keys module identity on the normalised path as written".
+
+   **On 2026-09-21 stage1 grew the second field**, because naming a package
+   module by the path it was found at is §A7's third bullet and that had to
+   close: `ModuleUnit.name` is the name and `ModuleUnit.path` is still the
+   identity. So the premise above is now both compilers', and stage1 can print
+   one `; ModuleID` for two modules the way stage0 does. Nothing in the table
+   below moves with it: `byPath` is still keyed on the identity, so the modules
+   are still counted the same way, and `outputStems` still reads the *path* on
+   both sides — deliberately, and said so beside the code — so every file count
+   in the four rows was re-measured unchanged on that tree. What did move is
+   inside the files: under a relative entry (row 2) the `nish/` module's header
+   is `std/text.ts` where it used to be the install's absolute path, so the two
+   compilers now agree about every module's *name* in every row while still
+   disagreeing about how many files they write in two of them.
+
+   **What is actually broken: the disambiguation is lossy, and on both
+   sides.** `outputStems` tells two modules of one basename apart by the
+   module's path relative to the entry's directory with the separators turned
+   into `_`, and both copies drop every `.` and `..` segment before joining.
+   A module *above* the entry's directory therefore collapses onto a module
+   with the same tail below it. The shortest reproduction needs no standard
+   library, no install, no `nish/` specifier and no absolute path — two
+   relative imports:
+
+   ```
+   $ cat src/main.ts
+   import { inner } from "./lib/util";     // src/lib/util.ts
+   import { outer } from "../lib/util";    // lib/util.ts
+   export const main = (): number => inner() + outer();
+
+   $ cd src && nish main.ts -o out/
+   wrote out/main.ll
+   wrote out/lib_util.ll
+   wrote out/lib_util.ll
+   ```
+
+   Two files in, one file out. `src/lib/util.ts` relativises to `lib/util.ts`
+   and `lib/util.ts` to `../lib/util.ts`; the `..` is filtered; both answer
+   `lib_util`. The survivor is whichever was emitted last, so `out/main.ll`
+   calls an `@inner` that no `.ll` in the directory defines. The two modules
+   carry *distinct* `; ModuleID`s throughout — `lib/util.ts` and
+   `../lib/util.ts` — which is why §A7 went looking for a shared name and did
+   not need one.
+
+   **The shape §A7 described does it too, and puts the shared name on top.** A
+   program inside the compiler's own package — a checkout, or a release
+   tarball with the program unpacked beside it — importing both `nish/text`
+   and its own `./std/text`. `nish/text` is `<install>/std/text.ts`, one
+   directory above the entry, so its entry-relative path is `../std/text.ts`
+   and its stem is `std_text`; the local `./std/text` is `std/text.ts` and its
+   stem is `std_text` as well. Compiled by absolute entry, **both compilers
+   drop a module, and they drop the same one**:
+
+   ```
+   $ nish <install>/prog/main.ts -o out/          # stage0 and stage1 alike
+   wrote out/main.ll
+   wrote out/std_text.ll
+   wrote out/std_text.ll
+   ```
+
+   The survivor is the local module, so the `@nish.trim` that `main.ll`
+   declares and calls is the one that went. `--link` is where a user meets it,
+   because the module list handed to `scripts/build.sh` names `std_text.ll`
+   twice — exit 3 on both compilers, on a symbol the program defines once:
+
+   ```
+   ld.lld: error: duplicate symbol: localTag
+   ```
+
+   **Both directions are reachable, which is the finding that replaces the
+   row.** Four invocations, one program each, `-o <dir>/` throughout, stage0
+   and stage1 from one staged install so that `nish/<name>` is the same file
+   for both:
+
+   | invocation | stage0 | stage1 |
+   | --- | --- | --- |
+   | `nish/text` + `./std/text`, **absolute** entry | 2 files, one module dropped | 2 files, one module dropped — byte for byte the same, header included |
+   | the same program, **relative** entry | 2 files, one module dropped | **3 files, nothing dropped** |
+   | an absolute root and a relative root spelling the same segments | 3 files | **2 files, one module dropped** |
+   | roots `std/text.ts` and `../std/text.ts` | 2 files, one dropped | 2 files, one dropped |
+
+   Row 2 is §A7's claim with the compilers the other way round: under a
+   relative entry stage0 names the `nish/` module package-relatively and stems
+   it from an absolute path that climbs, while stage1's is absolute in both
+   roles and keeps its own stem. Row 3 is §A7's claim as stated, reached by a
+   different mechanism — stage1's `outputStems` calls `relativePath` outside
+   its documented contract, "two paths rooted at the same base: both relative,
+   or both absolute, and neither climbing above that base", and
+   `pathSegments` drops the leading empty segment of an absolute path, so an
+   absolute module path is relativised as though it had been spelled without
+   its root. Rows 1 and 4 are the ordinary case and are symmetric, which is
+   exactly why no parity gate has ever seen any of this: G1 compares the two
+   compilers, and on the shape a user is likeliest to write they agree about
+   dropping a module.
+
+   **One more, found on the way and stage1's alone.** Two *spellings* of one
+   file as two roots — `nish main.ts std/text.ts ./std/text.ts` — are one
+   module to stage0, which canonicalises with `path.resolve`, and two modules
+   to stage1, which keys identity on the path as written. stage1 then refuses
+   the program stage0 compiles: ``error: Exported function `innerTag` is also
+   defined in std/text.ts; exported names must be unique across the program``.
+   It is the same property as the one above, running the other way: identity
+   as written can never merge two files into one name, and can split one file
+   into two.
+
+   **What a fix is, and why it is not this change.** The disambiguation has to
+   keep the climb instead of filtering it, because a `..` segment carries the
+   only information that tells the two modules apart. Three things make that
+   somebody's afternoon rather than a line. The two `outputStems` are one
+   lowering in two files (`src/compilation.ts`, `self/compilation.ts`), so it
+   is a two-sided change or it is a new parity difference where there is a
+   shared bug today. It moves a stem that is live: every corpus program that
+   reaches the standard library by `nish/<x>` reaches it through a climb, so
+   `std_text` is itself a product of the filter. And it lands on top of
+   whatever is decided about how a package module is *named*, because the
+   `nish/` side's stem is derived from that name — rows 2 and 3 move with that
+   decision, though the defect itself does not: the two-relative-imports
+   reproduction above reaches no package at all, and both compilers collapse
+   it into the same byte-identical `lib_util.ll`. `tests/run.js` already has
+   both halves of the check a fix wants: `llFilesIn` for the set of files
+   written, and `package_above`'s pattern for driving a compiler from a chosen
+   working directory with a relative entry — which is what rows 2 and 3 need
+   and what no `tests/link/` fixture can express, since the harness compiles
+   every such program by absolute path from the repository root.
+
+   **The branch had no coverage at all, which is the other half of why this
+   survived.** No `tests/link/` program has two modules of one basename — the
+   `nish/` cases reach `testing.ts` and `text.ts`, already unique, so
+   `outputStems` answers them from the basename and never takes the fallback.
+   `tests/link/module_stem_clash` takes it: two `text.ts` in one program,
+   answering `a_text` and `b_text`, with a line of `expected.ir` from each
+   module, so a regression that collided them drops one from the emitted set
+   rather than merely misnaming it.
+
+   **It reaches no package, and that is a constraint rather than a taste.** A
+   package module's stem is reached by climbing out to wherever the compiler is
+   installed, so a program that put one into this branch writes a different
+   file name under every install — measured, the same program answers
+   `std_text.ll` from a checkout and `<unpack path>_std_text.ll` from a staged
+   install. `tests/nish-cmp.js` pairs the two compilers' outputs **by file
+   name**, and the G2 gate it drives compares a *released* compiler with HEAD,
+   which are in different directories by construction; such a program would
+   therefore be two undeclared differences on every run of it — "the reference
+   wrote it and the candidate did not", and its mirror. `withoutOwnRoot`
+   cannot help, because it normalises what is *inside* a file and this is the
+   file's name. So the shape §A7 described is not merely undetected by the
+   gates: it cannot be put in front of them at all until the stem stops
+   depending on the climb, which is one more reason the fix is worth making.
+
+   **Still true after the naming change of 2026-09-21, and re-measured there.**
+   A package module's *name* is install-independent now (`std/text.ts` under
+   every install and every spelling of `argv[0]`), and its **stem** is not: both
+   compilers still stem from the path, so a staged install still answers
+   `<unpack path>_std_text.ll` where a checkout answers `std_text.ll`. That was
+   left alone on purpose — moving what `outputStems` reads *and* what it drops
+   in one change would move two things at once over live output stems — and it
+   is what the fix now has to do: with the name package-relative, a package
+   module's stem can be taken from the name instead of from a climb, which is
+   both halves of this item in one edit. `tests/link/module_stem_clash` stays
+   package-free until it is made.
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
    one, so a later field is reported as unknown when it is not. **Reproduced
    again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``

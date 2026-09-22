@@ -36,19 +36,39 @@ export const STD_DIR = "std";
  * stage0 writes `std/text.ts`". This is what makes that sentence true under
  * every spelling of the entry rather than only under one.
  *
- * **The name is not validated, and "package-relative" is therefore a
- * description of every specifier anyone writes rather than a guarantee.**
- * `nish/../../escape2/lib` resolves — `stdModulePath` joins it and the file is
- * there — and answers `../escape2/lib.ts`, which begins with neither `std/`
- * nor anything fixed: it depends on where the compiler is installed. Refusing
- * it is a *language rule*, not a tidy-up: a new refusal needs a diagnostic
- * code, a negative case, a `docs/LANGUAGE.md` line and the same rule in
- * `self/std_modules.ts`, because stage0 refusing what stage1 compiles is the
- * divergence this file exists to close. Both compilers answer the same string
- * today, so it is a latent wart rather than a parity defect, and it is left
- * for the change that can state the rule on both sides at once.
+ * **The name is package-relative because the specifier is refused when it
+ * would not be**, which it was not until WP19 §A7's third bullet was closed.
+ * `nish/../../escape2/lib` used to resolve — the join is only a join, and the
+ * file was there — and to answer `../escape2/lib.ts`, which begins with
+ * neither `std/` nor anything fixed: it depended on where the compiler was
+ * installed. `isStdModuleName` below is the rule, `resolveStdSpecifier` in
+ * `compilation.ts` is where it is applied, and `self/std_modules.ts` states
+ * the same rule for stage1 — because stage0 refusing what stage1 compiles is
+ * the divergence this file exists to close.
  */
 export const stdModuleName = (name: string): string => path.posix.join(STD_DIR, `${name}.ts`);
+
+/**
+ * Whether `nish/<name>` names a module *inside* the library.
+ *
+ * The rule is `parseBareSpecifier`'s, one package along: no segment may be
+ * empty or begin with a `.`, which is what rules out a `..` climbing out of
+ * the package and a `//` that would join to nothing. It is what makes
+ * "package-relative" a property of the name rather than a description of the
+ * specifiers people happen to write — the name goes into the `; ModuleID`,
+ * the `source_filename`, the `DIFile` and, with no `-o`, the path the `.ll`
+ * is written to, and every one of those has to mean the same thing under
+ * every install of the compiler.
+ *
+ * The empty name is left to the caller: `nish/` is answered by the sentence
+ * that lists the library, which is the more useful of the two.
+ */
+export const isStdModuleName = (name: string): boolean => {
+  for (const segment of name.split("/")) {
+    if (segment.length === 0 || segment.startsWith(".")) return false;
+  }
+  return true;
+};
 
 /**
  * `text` -> `<package root>/std/text.ts`: the file the name above names.

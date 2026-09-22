@@ -651,7 +651,7 @@ export const generateWasmLoader = (
     lines.push("    memory: raw.memory,");
   }
   for (const fn of bridge.bridged) {
-    lines.push(`    /** ${fn.unit.path}: ${tsSignature(table, fn.sig)} */`);
+    lines.push(`    /** ${fn.unit.name}: ${tsSignature(table, fn.sig)} */`);
     for (const line of wasmWrapper(table, fn)) {
       lines.push(`    ${line}`);
     }
