@@ -6,9 +6,9 @@
 #   npm run smoke                        (builds dist/ first)
 #   NISH=build/nish scripts/smoke.sh     with that compiler instead of stage0
 #
-# NISH names the compiler: a native `nish` is run directly and a Node entry
-# point (.js, .mjs, .cjs) under node -- the rule NISH_BOOTSTRAP follows in
-# scripts/bootstrap.sh. Unset, it is stage0, dist/index.js.
+# NISH names the compiler, run as scripts/nish-compiler.sh says: a native
+# `nish` directly and a Node entry point under node. Unset, it is stage0,
+# dist/index.js.
 #
 # A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
@@ -23,11 +23,9 @@ examples=${1:-examples}
 out=build/smoke
 mkdir -p "$out"
 
-nish=${NISH:-dist/index.js}
-case "$nish" in
-  *.js | *.mjs | *.cjs) compiler=(node "$nish") ;;
-  *) compiler=("$nish") ;;
-esac
+# shellcheck source=scripts/nish-compiler.sh
+. scripts/nish-compiler.sh
+nish_compiler "${NISH:-dist/index.js}"
 
 if ! command -v clang >/dev/null 2>&1 && [ -z "${CC:-}" ]; then
   echo "error: smoke test needs clang on PATH (see docs/INSTALL.md)" >&2

@@ -8,8 +8,8 @@
 # Every snippet `docs/cookbook/<name>.ts` is compiled with
 # `node dist/index.js <name>.ts -o build/cookbook/<name>/ [flags]`, where the
 # flags come from `docs/cookbook/<name>.args` when that file exists.
-# `NISH=<compiler>` compiles them with another compiler instead -- a native
-# `nish` run directly, a Node entry point (.js, .mjs, .cjs) under node:
+# `NISH=<compiler>` compiles them with another compiler instead, run as
+# scripts/nish-compiler.sh says (a native `nish` directly, a .js under node):
 #
 #   NISH=build/nish docs/cookbook/regen.sh --check
 #
@@ -31,11 +31,9 @@ check=0
 doc=docs/IR_COOKBOOK.md
 out=build/cookbook
 mkdir -p "$out"
-nish=${NISH:-dist/index.js}
-case "$nish" in
-  *.js | *.mjs | *.cjs) compiler=(node "$nish") ;;
-  *) compiler=("$nish") ;;
-esac
+# shellcheck source=scripts/nish-compiler.sh
+. scripts/nish-compiler.sh
+nish_compiler "${NISH:-dist/index.js}"
 # Only stage0 is built here: a compiler named in NISH is the caller's to provide.
 [ -n "${NISH:-}" ] || [ -f dist/index.js ] || npm run build >/dev/null
 
