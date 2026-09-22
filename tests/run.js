@@ -31,7 +31,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { parseCodesRegistry } from "../scripts/codes-registry.js";
-import { linkWith, seedForOracle, withoutSeed } from "./self/seed.js";
+import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js";
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js";
 import { packageRootOf, selfCheckRoots, withoutOwnRoot } from "./nish-cmp.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
@@ -313,6 +313,24 @@ function stripHeader(ir) {
     .join("\n")
     .trim();
 }
+
+/** A dotted version as numbers, for ordering releases. */
+const semver = (v) => v.split(".").map(Number);
+
+/** Whether dotted version `a` is at or before `b` (`0.4.0` is not after `0.5.0`). */
+const notAfter = (a, b) => {
+  const [x, y] = [semver(a), semver(b)];
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+  }
+  return true;
+};
+
+/** The canonical triple `--target host` resolves to on this machine, or undefined where there is none. */
+const HOST_TRIPLE = {
+  linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
+  darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
+}[process.platform]?.[process.arch];
 
 // The modes stage0 retired with it. Refused rather than ignored: a flag the
 // suite no longer reads would run the whole suite and print a green summary
@@ -4907,19 +4925,12 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       const cmpSince = JSON.parse(
         fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
       ).cmpSince;
-      const seedVersion = (
-        /^nish (\S+)$/m.exec(
-          spawnSync(process.env.NISH_BOOTSTRAP, ["--version"], { cwd: root, encoding: "utf8" }).stdout ?? ""
-        ) ?? []
-      )[1];
-      const olderThan = (a, b) => {
-        const [x, y] = [a.split(".").map(Number), b.split(".").map(Number)];
-        for (let i = 0; i < Math.max(x.length, y.length); i++) {
-          if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
-        }
-        return false;
-      };
-      if (seedVersion !== undefined && olderThan(seedVersion, cmpSince)) {
+      const released = resolveSeed(process.env.NISH_BOOTSTRAP);
+      const seedVersion =
+        released.error === undefined
+          ? /^nish (\S+)$/m.exec(spawnSeed(released, ["--version"]).stdout ?? "")?.[1]
+          : undefined;
+      if (seedVersion !== undefined && !notAfter(cmpSince, seedVersion)) {
         skip(
           `NISH_BOOTSTRAP is nish ${seedVersion}, older than cmpSince ${cmpSince} in .github/seed-targets.json, ` +
             "so tests/nish-cmp.js (WP19 G2) and tests/differential/fuzz.js --stage1 did not run"
@@ -5575,10 +5586,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // the whole module rather than the triple line, which keeps the check
       // honest about the layout string too. A host with no triple of its own is
       // refused with the list, and the WP9 block pins which one that is.
-      const hostTripleHere = {
-        linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
-        darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
-      }[process.platform]?.[process.arch];
+      const hostTripleHere = HOST_TRIPLE;
       const ourHost = path.join(shipDir, "host.ll");
       const namedHost = path.join(shipDir, "host_named.ll");
       const hostOurs = spawnSync(compiler, ["examples/hello.ts", "--target", "host", "-o", ourHost], {
@@ -5728,10 +5736,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     [path.join(casesDir, "opt_target_triple.ts"), "--target", "host", "-o", hostLl],
     { cwd: root, encoding: "utf8" }
   );
-  const hostTriple = {
-    linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
-    darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
-  }[process.platform]?.[process.arch];
+  const hostTriple = HOST_TRIPLE;
   if (hostTriple) {
     check(
       `--target host resolves to ${hostTriple} here`,
@@ -6767,13 +6772,12 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         // and says exactly what it was asked; whether the binary it hands to is a correct
         // compiler is the bootstrap section's question, and `npm run bootstrap` asks it.
         const hostAsset = assetFor(process.platform, process.arch);
-        const staged = hostAsset === null ? { error: `no asset for ${process.platform}/${process.arch}` } : {};
-        if (staged.error !== undefined) {
+        if (hostAsset === null) {
           // Counted, and counted once: everything from here to the end of this
           // block is the supported-platform path, and a run that could not build
           // a compiler to stage has not tested it. The `skip` names the reason so
           // a green summary cannot be read as this having been exercised.
-          skip(`the installed package hands over to a prebuilt compiler (${staged.error})`);
+          skip(`the installed package hands over to a prebuilt compiler (no asset for ${process.platform}/${process.arch})`);
         } else {
           // ---- a platform package built the way `release.yml` builds one ------------
           // The staging is `release.yml`'s `binaries` job, line for line: `bin/nish`,
@@ -7172,14 +7176,6 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   };
   const rows = seedTargets.targets;
   const pkgVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
-  const semver = (v) => v.split(".").map(Number);
-  const notAfter = (a, b) => {
-    const [x, y] = [semver(a), semver(b)];
-    for (let i = 0; i < Math.max(x.length, y.length); i++) {
-      if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
-    }
-    return true;
-  };
   const dueAt = (v) => rows.filter((t) => notAfter(t.attachedSince, v));
   const due = dueAt(pkgVersion);
 

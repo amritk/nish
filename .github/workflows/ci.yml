@@ -690,6 +690,10 @@ jobs:
           NISH: build/nish
         run: |
           set -o pipefail
+          if grep -q 'getenv("NISH")' tests/nish/run.ts; then
+            echo "::error::tests/nish/run.ts reads NISH now: delete the dist/index.js shim below and pass the compiler the way it asks."
+            exit 1
+          fi
           mkdir -p dist
           cat > dist/index.js <<'SHIM'
           import { spawnSync } from "node:child_process";

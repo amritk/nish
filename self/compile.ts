@@ -58,7 +58,7 @@ import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
 import { dirname } from "./paths";
 import { jsonQuote, splitByte } from "./strings";
-import { codeFor, INTERNAL, TOOLCHAIN } from "./codes";
+import { codeFor, TOOLCHAIN } from "./codes";
 import { internalError, simulatedInternalError } from "./ice";
 import { resolveTarget, supportedTargets } from "./target";
 
@@ -415,15 +415,12 @@ export const main = (): number => {
   }
 
   // The exit-70 path on demand (`self/ice.ts`), at the point stage0 raised
-  // its own: the command line is valid and nothing is compiled yet. Under
-  // `--json` the crash is an object as well, the one stage0's top-level catch
-  // printed, so a reader that asked for JSON never has to scrape stderr for it.
+  // its own: the command line is valid and nothing is compiled yet. It is the
+  // real report and nothing more -- including the `--json` object a real
+  // internal error cannot print (`internalError` says why) -- so what the hook
+  // shows is what a broken invariant would.
   if (simulatedInternalError()) {
-    const message = `simulated internal compiler error while compiling ${roots[0]}`;
-    if (json) {
-      console.log(`{"severity":"error","code":"${INTERNAL}","message":${jsonQuote(`internal compiler error: ${message}`)}}`);
-    }
-    return internalError(message);
+    return internalError(`simulated internal compiler error while compiling ${roots[0]}`);
   }
 
   const compilation = new Compilation(opts);
