@@ -47,7 +47,7 @@
 //
 // Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
 
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { CLI, LANGUAGE, RUNTIME_HEADER } from "./branding";
 import { Compilation } from "./compilation";
 import {
@@ -355,13 +355,13 @@ const napiFailCall = (mode: i32, message: string): string => {
  * Declaration and conversion lines for parameter `c` read from `argv[i]`.
  * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
  */
-const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32): string[] => {
+const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, json: boolean): string[] => {
   const lines: string[] = [];
   switch (r.kind) {
     case READ_SCALAR: {
       const scalar = r.scalar;
       if (scalar === null) {
-        process.exit(internalError("napi: scalar reader without a scalar"));
+        process.exit(internalErrorFor(json, "napi: scalar reader without a scalar"));
       }
       // The getter writes the parameter itself unless its width is not one
       // N-API has a getter for, and then a temporary carries the raw value.
@@ -389,7 +389,7 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32):
       const shape = `${what} must be { ok: true, value } or { ok: false, error }`;
       const errScalar = r.errScalar;
       if (errScalar === null) {
-        process.exit(internalError("napi: result reader without an error arm"));
+        process.exit(internalErrorFor(json, "napi: result reader without an error arm"));
       }
       // Each arm reads into its union member, or into a temporary the
       // narrowing below turns into that member's own type.
@@ -446,7 +446,7 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32):
     default: {
       const view = r.view;
       if (view === null) {
-        process.exit(internalError("napi: view reader without a view"));
+        process.exit(internalErrorFor(json, "napi: view reader without a view"));
       }
       lines.push(`nish_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
       lines.push(`if (!nish_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
@@ -572,7 +572,7 @@ const napiResultBoxer = (table: TypeTable, t: i32): Boxer | null => {
 };
 
 /** The napi call that puts the value in `&out`. */
-const napiBoxerCall = (box: Boxer, value: string): string => {
+const napiBoxerCall = (box: Boxer, value: string, json: boolean): string => {
   switch (box.kind) {
     case BOX_SCALAR:
       return napiScalarBoxCall(box.scalar, value, "&out");
@@ -583,7 +583,7 @@ const napiBoxerCall = (box: Boxer, value: string): string => {
     default: {
       const view = box.view;
       if (view === null) {
-        process.exit(internalError("napi: view boxer without a view"));
+        process.exit(internalErrorFor(json, "napi: view boxer without a view"));
       }
       return `nish_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
     }
@@ -787,7 +787,7 @@ const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   lines.push("  napi_value out;");
   lines.push("  if (status != napi_ok)");
   lines.push(`    nish_napi_reject_at(env, nish_w->deferred, "${jsName}: the call did not run");`);
-  lines.push(`  else if (${napiBoxerCall(p.box, isVoid ? "0" : "nish_w->result")} != napi_ok)`);
+  lines.push(`  else if (${napiBoxerCall(p.box, isVoid ? "0" : "nish_w->result", table.json)} != napi_ok)`);
   lines.push(`    nish_napi_reject_at(env, nish_w->deferred, "${jsName}: cannot create the result");`);
   lines.push("  else");
   lines.push("    napi_resolve_deferred(env, nish_w->deferred, out);");
@@ -836,7 +836,7 @@ const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   i = 0;
   while (i < p.readers.length) {
     const what = `${jsName}: argument ${i + 1} (${sig.paramNames[i]})`;
-    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, FAIL_REJECT)) {
+    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, FAIL_REJECT, table.json)) {
       lines.push(`  ${line}`);
     }
     i = i + 1;
@@ -917,7 +917,7 @@ const napiWrapper = (table: TypeTable, p: Plan): string[] => {
   let i = 0;
   while (i < p.readers.length) {
     const what = `${name}: argument ${i + 1} (${sig.paramNames[i]})`;
-    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, mode)) {
+    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, mode, table.json)) {
       lines.push(`  ${line}`);
     }
     i = i + 1;
@@ -944,7 +944,7 @@ const napiWrapper = (table: TypeTable, p: Plan): string[] => {
     }
     lines.push(`    return ${napiFailCall(mode, `${name}: cannot create the result`)};`);
   }
-  lines.push(`  if (${napiBoxerCall(p.box, "result")} != napi_ok)`);
+  lines.push(`  if (${napiBoxerCall(p.box, "result", table.json)} != napi_ok)`);
   lines.push(`    return ${napiFailCall(mode, `${name}: cannot create the result`)};`);
   if (scoped) {
     lines.push("  nish_arena_release(mark);");

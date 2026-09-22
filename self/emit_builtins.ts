@@ -21,7 +21,7 @@ import { isBuiltinFunction } from "./builtins";
 import { Emitter } from "./emit";
 import { emitIndex } from "./emit_arrays";
 import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } from "./emit_strings";
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { N_IDENT, Node } from "./nodes";
 import { CheckedProgram } from "./program";
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime";
@@ -321,7 +321,7 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Arena.used") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_used")}()`);
   }
-  process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
+  process.exit(internalErrorFor(emitter.opts.json, `emitter: unexpected builtin \`${name}\``));
 };
 
 /**
@@ -548,7 +548,7 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "panic") {
     return emitPanic(emitter, expr);
   }
-  process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
+  process.exit(internalErrorFor(emitter.opts.json, `emitter: unexpected builtin \`${name}\``));
 };
 
 /** The other half of the pair above, in the same order. */
@@ -692,5 +692,5 @@ export const emitNamespaceProperty = (emitter: Emitter, expr: Node, name: string
   if (name === "process.arch") {
     return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_arch")}()`);
   }
-  process.exit(internalError(`emitter: unexpected builtin property \`${name}\``));
+  process.exit(internalErrorFor(emitter.opts.json, `emitter: unexpected builtin property \`${name}\``));
 };

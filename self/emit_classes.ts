@@ -38,7 +38,7 @@ import {
 import { parseIntegerLiteral } from "./constants";
 import { emitStringLength, emitStringMethodCall } from "./emit_strings";
 import { intrinsicType } from "./emit_util";
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import {
   N_FALSE,
   N_NULL,
@@ -61,7 +61,7 @@ export const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
   if (info !== null) {
     return info;
   }
-  process.exit(internalError(`emitter: unknown struct \`${emitter.table.nameOf(type)}\``));
+  process.exit(internalErrorFor(emitter.opts.json, `emitter: unknown struct \`${emitter.table.nameOf(type)}\``));
 };
 
 /** `%struct.<name>` without the trailing `*`. */
@@ -119,7 +119,7 @@ const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
 const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer;
   if (init === null) {
-    process.exit(internalError("emitter: a field initializer that is not there"));
+    process.exit(internalErrorFor(emitter.opts.json, "emitter: a field initializer that is not there"));
   }
   const negated = init.kind === N_UNARY;
   const literal = negated ? init.children[0] : init;
@@ -182,7 +182,7 @@ const constructObject = (
 export const emitConstructorPrologue = (emitter: Emitter, sig: FunctionSig): void => {
   const info = sig.owner;
   if (info === null) {
-    process.exit(internalError("emitter: a constructor with no owning class"));
+    process.exit(internalErrorFor(emitter.opts.json, "emitter: a constructor with no owning class"));
   }
   emitFieldInitializers(emitter, info, "%this");
 };
@@ -195,7 +195,7 @@ export const emitObjectLiteral = (emitter: Emitter, expr: Node): string => {
   for (const prop of expr.children) {
     const field = info.field(prop.text);
     if (field === null) {
-      process.exit(internalError(`emitter: unknown field \`${prop.text}\` on \`${info.name}\``));
+      process.exit(internalErrorFor(emitter.opts.json, `emitter: unknown field \`${prop.text}\` on \`${info.name}\``));
     } else {
       storeField(emitter, info, obj, field, emitter.emitExpression(prop.children[0]));
     }
@@ -231,7 +231,7 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
   if (field !== null) {
     return loadField(emitter, info, emitter.emitExpression(expr.children[0]), field);
   }
-  process.exit(internalError(`emitter: unknown field \`${expr.text}\` on \`${info.name}\``));
+  process.exit(internalErrorFor(emitter.opts.json, `emitter: unknown field \`${expr.text}\` on \`${info.name}\``));
 };
 
 /** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
@@ -282,7 +282,7 @@ export const emitMethodCall = (emitter: Emitter, expr: Node): string => {
   }
   const callee = emitter.program.nodeCallees[expr.id];
   if (callee === null) {
-    process.exit(internalError(`emitter: no method recorded for \`${access.text}\``));
+    process.exit(internalErrorFor(emitter.opts.json, `emitter: no method recorded for \`${access.text}\``));
   }
   const receiver = emitter.emitExpression(access.children[0]);
   return emitCall(emitter, callee, receiver, expr.children[1].children, expr);
@@ -294,7 +294,7 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   const info = structInfoOf(emitter, emitter.typeOf(target.children[0]));
   const field = info.field(target.text);
   if (field === null) {
-    process.exit(internalError(`emitter: unknown field \`${target.text}\` on \`${info.name}\``));
+    process.exit(internalErrorFor(emitter.opts.json, `emitter: unknown field \`${target.text}\` on \`${info.name}\``));
   }
   const receiver = emitter.emitExpression(target.children[0]);
   if (expr.text === "=") {
@@ -313,8 +313,8 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   } else {
     const rhs = emitter.emitExpression(expr.children[1]);
     value = isFloat(field.type)
-      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
-      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), field.type, old, rhs);
+      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), field.type, old, rhs);
   }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
   return value;

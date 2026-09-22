@@ -377,8 +377,8 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
   const old = loadLocal(emitter, local);
   const rhs = emitter.emitExpression(expr.children[1]);
   const value = isFloat(local.type)
-    ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${emitter.llvm(local.type)} ${old}, ${rhs}`)
-    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), local.type, old, rhs);
+    ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${emitter.llvm(local.type)} ${old}, ${rhs}`)
+    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs);
   storeLocal(emitter, local, value);
   return value;
 };

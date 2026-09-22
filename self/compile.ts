@@ -59,7 +59,7 @@ import { Options } from "./options";
 import { dirname } from "./paths";
 import { jsonQuote, splitByte } from "./strings";
 import { codeFor, TOOLCHAIN } from "./codes";
-import { internalError, simulatedInternalError } from "./ice";
+import { internalErrorFor, simulatedInternalError } from "./ice";
 import { resolveTarget, supportedTargets } from "./target";
 
 const usageText = (): string =>
@@ -414,6 +414,7 @@ export const main = (): number => {
       opts.debugInfo = true;
     } else if (value === "--json") {
       json = true;
+      opts.json = true;
     } else if (value === "--emit-checked") {
       emitChecked = true;
     } else if (value === "--emit-ast") {
@@ -473,11 +474,10 @@ export const main = (): number => {
 
   // The exit-70 path on demand (`self/ice.ts`), at the point stage0 raised
   // its own: the command line is valid and nothing is compiled yet. It is the
-  // real report and nothing more -- including the `--json` object a real
-  // internal error cannot print (`internalError` says why) -- so what the hook
-  // shows is what a broken invariant would.
+  // real report, `--json` object included, so what the hook shows is what a
+  // broken invariant would.
   if (simulatedInternalError()) {
-    return internalError(`simulated internal compiler error while compiling ${roots[0]}`);
+    return internalErrorFor(json, `simulated internal compiler error while compiling ${roots[0]}`);
   }
 
   const compilation = new Compilation(opts);

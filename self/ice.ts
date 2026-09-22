@@ -22,7 +22,7 @@
 // The shape at each site is one statement rather than a report call followed by
 // an exit:
 //
-//     process.exit(internalError("emitter: no callee recorded for `f`"));
+//     process.exit(internalErrorFor(this.opts.json, "emitter: no callee recorded for `f`"));
 //
 // because the pair can be half-written and this cannot. `process.exit(...)` is
 // what the definite-return analysis reads as a terminator, so a site that kept
@@ -35,13 +35,17 @@
 // so the report is made at the site instead of at the top: there is no stack to
 // unwind, and no `process.argv` to read either, because that builtin needs an
 // entry `main` and the modules that report internal errors are compiled on
-// their own as well (`tests/self/corpus.js`). Rather than print a line
+// their own as well (`tests/self/corpus.js`). The one thing the command line
+// decides that the report needs -- whether `--json` owes it as an object -- is
+// handed down to the site instead, as `Options.json`. Rather than print a line
 // promising a stack that a rerun would not produce, the report names
 // `NISH_DEBUG` and says there is nothing behind it here — and then asks, as
 // stage0 does, for the input file and the command line, which is the half
 // stage0 was echoing anyway.
 
 import { CLI, VERSION } from "./branding";
+import { INTERNAL } from "./codes";
+import { jsonQuote } from "./strings";
 
 /**
  * `EX_SOFTWARE` from `sysexits.h`, which is what stage0 exits with for an
@@ -77,16 +81,20 @@ export const simulatedInternalError = (): boolean => {
 
 /**
  * Report a broken compiler invariant and answer the exit status for it. Every
- * caller is `process.exit(internalError(...))`, which ends the path.
+ * caller is `process.exit(internalErrorFor(json, ...))`, which ends the path.
+ *
+ * `json` is `Options.json`, handed down by the site because the site is where
+ * the report is made: under `--json` the crash is also one `NL0003` object on
+ * stdout, as stage0 printed it from its top-level catch, so a reader that asked
+ * for JSON never has to scrape stderr for a failure. The human report goes to
+ * stderr either way.
  */
-export const internalError = (message: string): i32 => {
-  // stage0 also prints the crash as a `--json` object (`NL0003`), and this does
-  // not. It cannot: `process.argv` needs an `export function main` and this is
-  // a library module, the language has no mutable module state to stash the
-  // flag in, and threading it through all 39 callers would put a diagnostics
-  // flag in the signature of every broken invariant in the compiler. The
-  // difference is recorded in `docs/wp14-selfhost.md` §7 with the other
-  // deliberate ones; the human report below is identical either way.
+export const internalErrorFor = (json: boolean, message: string): i32 => {
+  if (json) {
+    console.log(
+      `{"severity":"error","code":"${INTERNAL}","message":${jsonQuote(`internal compiler error: ${message}`)}}`
+    );
+  }
   console.error(`${CLI} ${VERSION}: internal compiler error`);
   console.error(`  ${message}`);
   console.error(`  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`);
@@ -94,3 +102,6 @@ export const internalError = (message: string): i32 => {
   console.error("the command line at https://github.com/amritk/nish/issues");
   return EXIT_INTERNAL;
 };
+
+/** `internalErrorFor` with no `--json` to answer to: the human report alone. */
+export const internalError = (message: string): i32 => internalErrorFor(false, message);

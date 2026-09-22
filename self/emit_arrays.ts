@@ -37,7 +37,7 @@ import {
   isBitwiseAssignment,
 } from "./emit_ops";
 import { arrayMethodName, isAssignmentOperator, unwrapParens } from "./emit_util";
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import {
   N_BINARY,
   N_CALL,
@@ -754,7 +754,7 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   // site from the same literal, so ask it the same question.
   const count = emitter.isStackSite(expr) ? literalLength(expr.children[2].children[0]) : -1;
   if (count < 0 && emitter.isStackSite(expr)) {
-    process.exit(internalError("emitter: a stack array whose length is not a literal"));
+    process.exit(internalErrorFor(emitter.opts.json, "emitter: a stack array whose length is not a literal"));
   }
   const data = emitData(emitter, expr, elem, count, bytes);
   emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
@@ -807,8 +807,8 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   } else {
     const rhs = emitter.emitExpression(expr.children[1]);
     value = isFloat(elem)
-      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
-      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), elem, old, rhs);
+      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs);
   }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
   return value;
@@ -1065,7 +1065,7 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const decl = stmt.children[0].children[0].children[0];
   const local = emitter.program.nodeLocals[decl.id];
   if (local === null) {
-    process.exit(internalError("emitter: a `for...of` variable with no local recorded"));
+    process.exit(internalErrorFor(emitter.opts.json, "emitter: a `for...of` variable with no local recorded"));
   }
   const elem = local.type;
   const ty = emitter.llvm(elem);

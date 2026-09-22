@@ -58,7 +58,7 @@
 
 import { CLI, VERSION } from "./branding";
 import { SourceFile } from "./diagnostics";
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { IRFunction, IRModule } from "./ir";
 import { StringMap } from "./map";
 import { Node } from "./nodes";
@@ -92,7 +92,7 @@ const DEBUG_COMPILATION_DIR: string = ".";
  * so a debugger prints 4294967295 rather than -1, which is the whole point of
  * having them (WP15).
  */
-const basicType = (type: i32): string => {
+const basicType = (type: i32, json: boolean): string => {
   switch (type) {
     case T_I32:
       return '!DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)';
@@ -113,7 +113,7 @@ const basicType = (type: i32): string => {
     case T_BOOL:
       return '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)';
     default:
-      process.exit(internalError(`debug: no DWARF basic type for type id ${type}`));
+      process.exit(internalErrorFor(json, `debug: no DWARF basic type for type id ${type}`));
   }
 };
 
@@ -271,7 +271,7 @@ export class DebugInfo {
     } else if (this.table.isStruct(type)) {
       const info = this.program.struct(this.table.nameOf(type));
       if (info === null) {
-        process.exit(internalError(`debug: no struct recorded for \`${this.table.nameOf(type)}\``));
+        process.exit(internalErrorFor(this.table.json, `debug: no struct recorded for \`${this.table.nameOf(type)}\``));
       } else {
         ref = this.pointerTo(this.composite(info));
       }
@@ -282,7 +282,7 @@ export class DebugInfo {
       // debugger.
       const declared = this.program.enumNamed(this.table.nameOf(type));
       if (declared === null) {
-        process.exit(internalError(`debug: no enum recorded for \`${this.table.nameOf(type)}\``));
+        process.exit(internalErrorFor(this.table.json, `debug: no enum recorded for \`${this.table.nameOf(type)}\``));
       } else {
         ref = this.enumeration(declared);
       }
@@ -294,7 +294,7 @@ export class DebugInfo {
       // whatever the construction left there (WP16 does not zero it).
       ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)));
     } else {
-      ref = this.module.addMetadata(basicType(type));
+      ref = this.module.addMetadata(basicType(type, this.table.json));
     }
     this.setTypeRef(key, ref);
     return ref;

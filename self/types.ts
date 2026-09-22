@@ -19,7 +19,7 @@
 // members of `src/types.ts` in order, and `tests/self/types_oracle.js` checks
 // this file against that one over every type either can build.
 
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { StringMap } from "./map";
 
 // The scalar types, which are their own kind and have fixed ids so that a
@@ -198,8 +198,15 @@ export class TypeTable {
   readonlys: boolean[];
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap;
+  /**
+   * `Options.json`, copied here by `Compilation` because the table is what
+   * `llvmType` and the N-API generator can reach when an invariant breaks, and
+   * the report they make has to know whether it is owed as a `--json` object.
+   */
+  json: boolean;
 
   constructor() {
+    this.json = false;
     this.kinds = [];
     this.refs = [];
     this.names = [];
@@ -513,7 +520,7 @@ export class TypeTable {
       case K_RESULT:
         return `%struct.${this.resultStructName(type)}*`;
       default:
-        process.exit(internalError(`internal error: llvmType of kind ${this.kinds[type]}`));
+        process.exit(internalErrorFor(this.json, `internal error: llvmType of kind ${this.kinds[type]}`));
     }
   }
 
