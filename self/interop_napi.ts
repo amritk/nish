@@ -84,7 +84,16 @@ import {
   TypeTable,
 } from "./types";
 
-/** `a Float64Array`, `an Int32Array`. */
+/**
+ * `a Float64Array`, `an Int32Array`, `a Uint8Array`.
+ *
+ * WP30: `u` is deliberately not in the set. The article follows the vowel
+ * *sound*, not the letter, and every `u`-initial noun this reaches is a
+ * `Uint8Array` / `Uint16Array` / `Uint32Array` — "you-int", which takes `a`
+ * the way "a user" does. The rule held by accident while `Int32Array` was the
+ * only vowel-initial constructor in the table, and the unsigned rows are what
+ * made it observable: `must be an Uint8Array` is what a host used to read.
+ */
 export const withArticle = (noun: string): string => `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`;
 
 const napiStartsWithVowel = (noun: string): boolean => {
@@ -97,12 +106,10 @@ const napiStartsWithVowel = (noun: string): boolean => {
     first === "e" ||
     first === "i" ||
     first === "o" ||
-    first === "u" ||
     first === "A" ||
     first === "E" ||
     first === "I" ||
-    first === "O" ||
-    first === "U"
+    first === "O"
   );
 };
 

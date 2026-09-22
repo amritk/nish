@@ -4303,16 +4303,91 @@ if (!only || "interop".includes(only)) {
   const skipSrc = path.join(interopDir, "skip_reasons.ts");
   fs.writeFileSync(
     skipSrc,
-    ["export function spell(n: i32): string {", "  return `${n}`;", "}", ""].join("\n")
+    [
+      "export function spell(n: i32): string {",
+      "  return `${n}`;",
+      "}",
+      // WP30's negative half. Adding the unsigned widths to the typed-view
+      // table moved the line between an element type that crosses and one that
+      // does not, and these two are what must stay on the far side of it: a
+      // `boolean` element would need 0/1 validation per element rather than a
+      // view, and a `string` element is a pointer into the arena. Without this,
+      // a future row added to `typedView` by pattern-matching on the others
+      // could let either through and nothing would notice.
+      "export function countTrue(flags: boolean[]): i32 {",
+      "  let n = 0;",
+      "  for (let i = 0; i < flags.length; i++) {",
+      "    if (flags[i]) {",
+      "      n = n + 1;",
+      "    }",
+      "  }",
+      "  return n;",
+      "}",
+      "export function widest(names: string[]): i32 {",
+      "  return names.length;",
+      "}",
+      "",
+    ].join("\n")
   );
   const skipped = emit(skipSrc, ["--emit-dts", sidecar("skip_reasons", "d.ts")]);
   const skipDts = skipped.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "d.ts"), "utf8") : "";
+  const skipMjs = skipped.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "mjs"), "utf8") : "";
   check(
     "a skipped function names the argument or the result, and the type, that stopped it",
     stringsDts.includes(
       "  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`,"
     ) && skipDts.includes("  // spell(n: number): string  -- not exported to JS: the result is `string`,"),
     stringsDts + skipDts
+  );
+  check(
+    "an element type with no typed array is still declined, and named (boolean[], string[])",
+    skipDts.includes(
+      "  // countTrue(flags: boolean[]): number  -- not exported to JS: argument 1 (flags) is `boolean[]`,"
+    ) &&
+      skipDts.includes(
+        "  // widest(names: string[]): number  -- not exported to JS: argument 1 (names) is `string[]`,"
+      ) &&
+      // And they are absent from the loader, not merely commented in the
+      // declarations: the two files come from one predicate and this is the
+      // half that would notice if they stopped doing so.
+      skipMjs.length > 0 &&
+      !skipMjs.includes("countTrue") &&
+      !skipMjs.includes("widest"),
+    skipDts + skipMjs
+  );
+  // WP30: the same widths as arrays, where the masks above have no
+  // counterpart. An element never travels in a wasm value type -- it is a byte
+  // in `data` that the typed array reads unsigned -- so a mask here would be
+  // wrong rather than redundant, and `& 0xff` appearing in this loader would
+  // mean a generator had copied the scalar rule into a place it does not hold.
+  const unsignedArrays = emit("tests/self/interop_unsigned_arrays.ts", [
+    "--emit-dts",
+    sidecar("interop_unsigned_arrays", "d.ts"),
+  ]);
+  const unsignedArraysMjs =
+    unsignedArrays.status === 0 ? fs.readFileSync(sidecar("interop_unsigned_arrays", "mjs"), "utf8") : "";
+  check(
+    "interop_unsigned_arrays.mjs marshals an unsigned element by view and masks only the scalars",
+    // Arrays: the constructor and the element size, and nothing else.
+    unsignedArraysMjs.includes('arrayIn(xs, Uint8Array, 1, "sumU8: argument 1 (xs)")') &&
+      unsignedArraysMjs.includes('arrayIn(xs, Uint16Array, 2, "sumU16: argument 1 (xs)")') &&
+      unsignedArraysMjs.includes('arrayIn(xs, BigUint64Array, 8, "sumU64: argument 1 (xs)")') &&
+      unsignedArraysMjs.includes("arrayOut(raw.highU8(), Uint8Array)") &&
+      unsignedArraysMjs.includes("arrayOut(raw.maxU32(), Uint32Array)") &&
+      // `fillU8` is the whole rule in one call: the `u8[]` crosses in memory
+      // and is handed over untouched, the scalar `u8` crosses in an i32 value
+      // type and is masked, and the arena bytes come back to the caller.
+      unsignedArraysMjs.includes("raw.fillU8(xs$, v & 0xff)") &&
+      unsignedArraysMjs.includes("copyBack(xs$, xs)") &&
+      unsignedArraysMjs.includes("raw.countU8(xs$, needle & 0xff)") &&
+      // A scalar `u64` *result* still needs its reading restored, so the two
+      // rules coexist in this file rather than one having replaced the other.
+      unsignedArraysMjs.includes("BigInt.asUintN(64, raw.sumU64(xs$))") &&
+      // And no mask is ever applied to a marshalled array: a `>>> 0` on a
+      // `Uint32Array` result would be the scalar rule copied where it is wrong.
+      !unsignedArraysMjs.includes("arrayOut(raw.maxU32(), Uint32Array) >>>") &&
+      !unsignedArraysMjs.includes("arrayOut(raw.highU8(), Uint8Array) &"),
+    unsignedArraysMjs
   );
   check(
     "interop_unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
@@ -8636,8 +8711,13 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // through 0.4.0 ship no `std/`, so the compiler in them refuses every
     // `nish/<module>` specifier -- against any of those, nish-cmp correctly reports two
     // corpus programs on which HEAD is right and the seed is broken, and there is
-    // nothing anybody can edit in the tree to make that go away. So the gate gets no row
-    // until a release carries a seed that can compile the corpus.
+    // nothing anybody can edit in the tree to make that go away. A release that predates
+    // a *decided* change of output is out of reach for a second reason: it disagrees with
+    // HEAD on purpose, and DECLARED cannot say so between releases because it wants words
+    // in a CHANGELOG.md that is generated at release time. So the gate gets no row until
+    // a release exists that it may be asked about, for whichever of the two reasons
+    // applies -- `.github/seed-targets.json`'s note says which, and what the dark window
+    // costs while the field is ahead of every shipped release.
     //
     // Which is the one thing in this pair that could quietly stop being true. An absent
     // row is indistinguishable from a passing one in a summary, so each arm is asked for

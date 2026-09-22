@@ -3015,6 +3015,89 @@ attributes #1 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end arr_index -->
 
+### A byte element: the same lowering at width 1
+
+`u8[]` is the array lowering with `sizeof(T)` equal to 1, and that is the whole
+of it: the `getelementptr` strides by one byte, the `load` and `store` are `i8`
+at `align 1`, and the bounds check is the one every other width gets. There is
+no packing and no shifting, because a byte is already the unit `data` is a
+block of.
+
+Two things follow that matter outside the IR. A host can hand this array over
+without marshalling — the bytes in `data` *are* the bytes a `Uint8Array` holds,
+which is what lets `u8[]` cross the interop boundary as a view rather than a
+copy per element ([wp30-bytes-interop.md](wp30-bytes-interop.md)). And the
+parameter is a bare `i8` with no `zeroext`, so a narrow value's range is the
+caller's obligation at a *scalar* boundary; at this one there is nothing to
+restore, because the element never travels in a value type at all.
+
+<!-- cookbook:begin arr_u8_elements -->
+```ts
+const get = (bytes: u8[], i: number): u8 => bytes[i];
+
+const set = (bytes: u8[], i: number, v: u8): void => {
+  bytes[i] = v;
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish_panic_index(i64 noundef, i64 noundef) #1
+
+define internal noundef i8 @get(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes, i32 noundef %i) #0 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %5 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 %0
+  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3
+  ret i8 %8
+}
+
+define internal void @set(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes, i32 noundef %i, i8 noundef %v) #0 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %5 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 %0
+  store i8 %v, i8* %7, align 1, !alias.scope !4, !noalias !3
+  ret void
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end arr_u8_elements -->
+
 ### A proven index: the check the checker removed
 
 The same lowering with no compare, no branch and no panic block, and with the

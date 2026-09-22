@@ -59,9 +59,18 @@ import {
   typedView,
 } from "./abi.js";
 
-/** `a Float64Array`, `an Int32Array`. */
+/**
+ * `a Float64Array`, `an Int32Array`, `a Uint8Array`.
+ *
+ * WP30: `u` is deliberately not in the set. The article follows the vowel
+ * *sound*, not the letter, and every `u`-initial noun this reaches is a
+ * `Uint8Array` / `Uint16Array` / `Uint32Array` — "you-int", which takes `a`
+ * the way "a user" does. The rule held by accident while `Int32Array` was the
+ * only vowel-initial constructor in the table, and the unsigned rows are what
+ * made it observable: `must be an Uint8Array` is what a host used to read.
+ */
 export function withArticle(noun: string): string {
-  return `${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`;
+  return `${/^[aeio]/i.test(noun) ? "an" : "a"} ${noun}`;
 }
 
 /** How a JS value becomes a parameter of this type: check, getter, C declaration. */
@@ -118,7 +127,13 @@ type ScalarReader = {
 /** The double-to-float conversion: a call rather than a cast, defined by the shim itself. */
 const F32_HELPER = "nish_napi_f32";
 
-const directReader = (jsType: string, tag: string, getter: string, c: string, lossless = false): ScalarReader => ({
+const directReader = (
+  jsType: string,
+  tag: string,
+  getter: string,
+  c: string,
+  lossless = false
+): ScalarReader => ({
   jsType,
   tag,
   getter,
@@ -278,9 +293,14 @@ function boxer(t: StaticType): Boxer | undefined {
   const k = kindOf(t);
   const scalar = scalarBox(t);
   if (scalar) return { call: (v) => scalar(v, "&out"), arena: false };
-  if (k === "string") return { call: (v) => `napi_create_string_utf8(env, ${v}->data, ${v}->len, &out)`, arena: true };
+  if (k === "string")
+    return { call: (v) => `napi_create_string_utf8(env, ${v}->data, ${v}->len, &out)`, arena: true };
   const view = typedView(t);
-  if (view) return { call: (v) => `nish_napi_array_result(env, ${v}, ${view.napiType}, ${view.elemSize}, &out)`, arena: true };
+  if (view)
+    return {
+      call: (v) => `nish_napi_array_result(env, ${v}, ${view.napiType}, ${view.elemSize}, &out)`,
+      arena: true,
+    };
   // WP17: a `Result` returned in a register becomes the tagged object JS
   // already models — `{ ok: true, value }` or `{ ok: false, error }`. Only the
   // arm the discriminant selects is boxed, because only that one was written.
@@ -334,9 +354,10 @@ function resultReader(t: ResultType): Reader | undefined {
     usesF32: kindOf(t.ok) === "f32" || kindOf(t.err) === "f32",
     lines: (c, i, fail) => {
       // `napi_ok` is the no-op arm for `Result<void, E>`: there is nothing to read.
-      const readOk = value === undefined
-        ? "napi_ok"
-        : scalarGet(value, `${c}_arm`, okNarrow ? `&${c}_value_raw` : `&${c}.as.value`);
+      const readOk =
+        value === undefined
+          ? "napi_ok"
+          : scalarGet(value, `${c}_arm`, okNarrow ? `&${c}_value_raw` : `&${c}.as.value`);
       const readErr = scalarGet(error, `${c}_arm`, errNarrow ? `&${c}_error_raw` : `&${c}.as.error`);
       const shape = "must be { ok: true, value } or { ok: false, error }";
       const lines = [
@@ -354,9 +375,14 @@ function resultReader(t: ResultType): Reader | undefined {
       // other one is never written: give both a value so neither is read cold.
       if (okNarrow) lines.push(`${okNarrow.raw} ${c}_value_raw = 0;`);
       if (errNarrow) lines.push(`${errNarrow.raw} ${c}_error_raw = 0;`);
-      lines.push(`if ((${c}_flag ? ${readOk} : ${readErr}) != napi_ok)`, `  return ${fail("could not be converted")};`);
-      if (okNarrow) lines.push(`if (${c}_flag) ${c}.as.value = ${okNarrow.open}${c}_value_raw${okNarrow.close};`);
-      if (errNarrow) lines.push(`if (!${c}_flag) ${c}.as.error = ${errNarrow.open}${c}_error_raw${errNarrow.close};`);
+      lines.push(
+        `if ((${c}_flag ? ${readOk} : ${readErr}) != napi_ok)`,
+        `  return ${fail("could not be converted")};`
+      );
+      if (okNarrow)
+        lines.push(`if (${c}_flag) ${c}.as.value = ${okNarrow.open}${c}_value_raw${okNarrow.close};`);
+      if (errNarrow)
+        lines.push(`if (!${c}_flag) ${c}.as.error = ${errNarrow.open}${c}_error_raw${errNarrow.close};`);
       return lines;
     },
   };
@@ -426,11 +452,13 @@ const asyncSkipReason = ({ fn, readers, box }: Plan): string | undefined => {
     const p = fn.sig.params[i];
     return `parameter ${i + 1} (${p.name}) is ${tsKeyword(p.type)}, which the call would borrow across threads`;
   }
-  if (box.arena) return `it returns ${tsKeyword(fn.sig.returnType)}, which lives in the worker thread's arena`;
+  if (box.arena)
+    return `it returns ${tsKeyword(fn.sig.returnType)}, which lives in the worker thread's arena`;
   // A by-value `Result` could cross -- it is scalars in a register -- but its
   // boxing is several `napi_*` calls deep, so it waits for a second cut rather
   // than being the one untested shape in the first.
-  if (box.pre !== undefined) return `it returns ${tsKeyword(fn.sig.returnType)}, and a by-value \`Result\` is not bridged asynchronously yet`;
+  if (box.pre !== undefined)
+    return `it returns ${tsKeyword(fn.sig.returnType)}, and a by-value \`Result\` is not bridged asynchronously yet`;
   return undefined;
 };
 
@@ -438,7 +466,8 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   const { sig } = fn;
   const name = sig.name;
   const n = sig.params.length;
-  const fail = (msg: string) => (scoped ? `nish_napi_fail_at(env, mark, "${msg}")` : `nish_napi_fail(env, "${msg}")`);
+  const fail = (msg: string) =>
+    scoped ? `nish_napi_fail_at(env, mark, "${msg}")` : `nish_napi_fail(env, "${msg}")`;
   const lines: string[] = [`static napi_value nish_napi_${name}(napi_env env, napi_callback_info info) {`];
   if (n === 0) {
     lines.push("  (void)info;");
@@ -454,7 +483,10 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
     if (readers.some((r) => r.usesTypeof)) lines.push("  napi_valuetype type;");
     if (sig.params.some((p) => needsLossless(p.type))) lines.push("  bool lossless;");
   }
-  if (scoped) lines.push("  uint64_t mark = nish_arena_mark(); /* arena strings/arrays made for this call are released on return */");
+  if (scoped)
+    lines.push(
+      "  uint64_t mark = nish_arena_mark(); /* arena strings/arrays made for this call are released on return */"
+    );
   readers.forEach((r, i) => {
     const p = sig.params[i];
     const what = `${name}: argument ${i + 1} (${p.name})`;
@@ -464,13 +496,19 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   const call = `${cFunctionName(name).ident}(${sig.params.map((p) => cParamName(p.name)).join(", ")})`;
   lines.push("  napi_value out;");
   if (kindOf(sig.returnType) === "void") lines.push(`  ${call};`);
-  else lines.push(`  ${cType(sig.returnType, "return")}${cType(sig.returnType, "return")!.endsWith("*") ? "" : " "}result = ${call};`);
+  else
+    lines.push(
+      `  ${cType(sig.returnType, "return")}${cType(sig.returnType, "return")!.endsWith("*") ? "" : " "}result = ${call};`
+    );
   if (box.pre)
     lines.push(
       ...box.pre("result").map((l) => `  ${l}`),
       `    return ${fail(`${name}: cannot create the result`)};`
     );
-  lines.push(`  if (${box.call("result")} != napi_ok)`, `    return ${fail(`${name}: cannot create the result`)};`);
+  lines.push(
+    `  if (${box.call("result")} != napi_ok)`,
+    `    return ${fail(`${name}: cannot create the result`)};`
+  );
   if (scoped) lines.push("  nish_arena_release(mark);");
   lines.push("  return out;", "}", "");
   return lines;
@@ -624,7 +662,9 @@ export function generateNapiShim(compilation: Compilation, asyncExports = false)
     for (const p of plans) {
       const source = `${p.fn.unit.fileName}: ${tsSignature(p.fn.sig, tsKeyword)}`;
       const jsName = `${p.fn.sig.sourceName}Async`;
-      const why = taken.has(jsName) ? `\`${jsName}\` is already an export of this module` : asyncSkipReason(p);
+      const why = taken.has(jsName)
+        ? `\`${jsName}\` is already an export of this module`
+        : asyncSkipReason(p);
       if (why === undefined) asyncPlans.push(p);
       else asyncSkipped.push(`${source} -- no \`${jsName}\`: ${why}`);
     }
@@ -644,7 +684,7 @@ export function generateNapiShim(compilation: Compilation, asyncExports = false)
     " *",
     " * Build it into an addon together with the compiled module(s) and the runtime:",
     " *   scripts/build.sh <modules.ll> runtime/runtime.c <this file> -o <name>.node --profile napi",
-    " * Then `require(\"./<name>.node\")` (or createRequire in ESM) and call the",
+    ' * Then `require("./<name>.node")` (or createRequire in ESM) and call the',
     " * functions below. Numbers convert with ToInt32 (`x | 0`) in i32 mode; typed",
     " * arrays are borrowed for the call (writes through them are visible to JS);",
     " * strings and array results are copied, and the arena is released per call.",
@@ -669,7 +709,7 @@ export function generateNapiShim(compilation: Compilation, asyncExports = false)
           " * instead. `scripts/build.sh --threads` (from `nish --threads`) sets the macro",
           " * on every input, which is what keeps this file and runtime.c in step. */",
           "#if !defined(NISH_THREADS)",
-          "#error \"--emit-napi-async needs the thread-local arena: build with scripts/build.sh --threads\"",
+          '#error "--emit-napi-async needs the thread-local arena: build with scripts/build.sh --threads"',
           "#endif",
           "",
         ]

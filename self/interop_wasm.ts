@@ -611,8 +611,11 @@ export const generateWasmLoader = (
     lines.push("  };");
     lines.push("  /** Copy a typed array into a fresh arena array; returns the header pointer. */");
     lines.push("  const arrayIn = (value, Ctor, elemSize, what) => {");
+    // `u` is left out of the vowel set on purpose; `withArticle` in
+    // interop_napi.ts carries the reason. `Uint8Array` takes `a`, the way
+    // "a user" does.
     lines.push(
-      '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIOU]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);'
+      '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);'
     );
     lines.push("    const hdr = raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length));");
     lines.push("    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);");
