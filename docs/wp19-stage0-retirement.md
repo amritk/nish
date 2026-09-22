@@ -817,6 +817,25 @@ be read as agreeing.
 `tests/differential/corpus` is in `CORPUS_DIRS`, `arrow-verify.mjs`'s private
 enumerator is deleted so there is one rule again, and the corpus sentence in
 `.claude/selfhost.md` now carries what it cost to find out that it was wrong.
+**What widening the corpus does to `nish-cmp`, and why it needs nothing.**
+Its corpus is `programs() + linkPrograms()`, so it grows by the same 74
+programs — and its reference is the *last released* compiler, which for these
+two programs means a compiler without the fix. A program the reference refuses
+and the candidate compiles is a difference this tool reports rather than
+forgives, and its `DECLARED` list cannot express the exception between releases
+(it wants words in `CHANGELOG.md`, which is generated at release time with
+`[Unreleased]` empty), while `tests/self/stage1_only.txt` — which nish-cmp does
+read for exactly this reading — is keyed by `tests/cases` stems and means
+"implemented in `self/` alone", which a checker fix on a program both compilers
+own is not. **The gap closes on its own here**, because `cmpSince` in
+`.github/seed-targets.json` is `0.6.0` as of WP30: the gate has no row until
+0.6.0 ships, and the 0.6.0 seed carries this fix, so there is no release in
+which a reference refuses one of these two. Measured against the v0.5.0 seed
+the difference is real and is two rows of the `exit` surface. Worth writing
+down because the *shape* recurs: any fix that widens what the compiler accepts
+is invisible to G2.1 for one cycle and then compared normally, and only a
+`cmpSince` lowered while such a fix is unreleased would need a register for it.
+
 And one thing found on the way out: **`checked_oracle.js` returned 0 when
 stage1 rejected a corpus program.** It printed `N rejected by stage1` in its
 summary, kept the names behind `--verbose`, and exited green — so of the two

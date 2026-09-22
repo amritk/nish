@@ -41,10 +41,7 @@
  *   - whether the program compiles at all. A program the reference accepts and
  *     the candidate refuses is the regression this tool exists to catch, and a
  *     program the reference refuses and the candidate accepts is a language
- *     change or a fix, which is a line somebody writes rather than a silent
- *     improvement: `tests/self/stage1_only.txt` for a construct `self/` has
- *     alone, and `FIXED_SINCE_SEED` below for a fix on a program both
- *     compilers own;
+ *     change, which is a CHANGELOG line rather than a silent improvement;
  *   - not the wording of diagnostics, and not the dumps. A program both
  *     compilers refuse is counted and named apart (there is no artefact on
  *     either side); its message is pinned by the `.err` fragments checked in
@@ -105,48 +102,6 @@ import { stage1Only, stage1OnlyFor } from "./self/stage1_only.js";
  * to write than five narrow ones, because it is.
  */
 const DECLARED = [];
-
-/**
- * Corpus programs the **reference** refuses and the candidate compiles, because
- * a fix landed after the reference was released. The rolling freeze seen from
- * the other side (WP19 G4): the seed is a release older than the fix.
- *
- * `tests/self/stage1_only.txt` already says this for a construct `self/` has
- * and the seed does not, and `compare` reads it — but the register is keyed by
- * `tests/cases` stems and means "implemented in `self/` alone", which a
- * *checker fix* on a program both compilers own is not. So this is the same
- * statement for a program anywhere in the corpus, and it carries the same
- * costs: the entry says what the fix was, which reference refuses it, and it
- * is checked rather than trusted — a reference that **accepts** a listed
- * program fails the run and names the entry, so the list shrinks by going red
- * one release later rather than by somebody remembering to prune it. That is
- * the property `DECLARED` above cannot have between releases, because
- * `CHANGELOG.md` is generated at release time with `[Unreleased]` empty
- * (`.github/seed-targets.json`, the `cmpSince` note).
- *
- * It is a record for one release cycle, not an allowlist to grow. A program
- * here is compared for nothing at all by this gate, so the entry is worth
- * exactly what the fix it names is.
- */
-const FIXED_SINCE_SEED = [
-  {
-    program: "tests/differential/corpus/str_template.ts",
-    refusedBy: "0.5.0",
-    why:
-      "`-1 / z` with `z: f64`: the released compiler reads only a bare numeric literal as the " +
-      "literal on the left of an operator, where `docs/LANGUAGE.md` says “`-5` and `(5)` count as " +
-      "the literal”. Fixed in `self/expressions.ts` (`literalOperand`); the seed retires this " +
-      "entry one release later.",
-  },
-  {
-    program: "tests/differential/corpus/conversions_roundtrip.ts",
-    refusedBy: "0.5.0",
-    why: "the same refusal on the same shape, under `--wrapping`.",
-  },
-];
-
-/** The `FIXED_SINCE_SEED` entry covering this program, or null. */
-const fixedSinceSeedFor = (program) => FIXED_SINCE_SEED.find((entry) => entry.program === program) ?? null;
 
 /** Differing files printed in full before the rest are only counted. */
 const MAX_ROWS = 20;
@@ -415,10 +370,6 @@ function compare(pair, work, file, options = {}) {
     // own accord one release later, when the seed has the construct and the
     // two are compared like everything else (WP19 §1a, G4).
     if (registered !== null) return { newSince: registered.why };
-    // The same statement for a program the register cannot name: a fix that
-    // landed after the reference was released. `FIXED_SINCE_SEED` above.
-    const fixed = fixedSinceSeedFor(named);
-    if (fixed !== null) return { fixedSince: fixed };
     return {
       differences: [
         {
@@ -426,22 +377,6 @@ function compare(pair, work, file, options = {}) {
           detail:
             `the candidate compiles it and the reference refuses it ` +
             `(reference: ${firstLine(reference.stderr) || `exit ${reference.status}`})`,
-        },
-      ],
-    };
-  }
-  // The other direction of the same entry, and the half that makes the list
-  // shrink: the reference compiles it, so whatever it was waiting for has
-  // arrived and the entry is stating something false about this seed.
-  const stale = fixedSinceSeedFor(named);
-  if (stale !== null) {
-    return {
-      differences: [
-        {
-          surface: "exit",
-          detail:
-            `the reference compiles it, so its FIXED_SINCE_SEED entry in tests/nish-cmp.js is ` +
-            `stale and the program belongs in the comparison again (the entry says: ${stale.why})`,
         },
       ],
     };
@@ -656,7 +591,6 @@ function main(argv) {
   const dumps = [];
   const refused = [];
   const stage1OnlyRows = [];
-  const fixedRows = [];
   let agreed = 0;
   let files = 0;
   let lines = 0;
@@ -668,11 +602,6 @@ function main(argv) {
       dumps.push(`${program}: ${result.dump}`);
     } else if (result.newSince !== undefined) {
       stage1OnlyRows.push(`${program}: stage1-only, and older than the seed: ${result.newSince}`);
-    } else if (result.fixedSince !== undefined) {
-      fixedRows.push(
-        `${program}: the reference (${result.fixedSince.refusedBy}) refuses it and HEAD fixed it: ` +
-          `${result.fixedSince.why}`
-      );
     } else if (result.refused !== undefined) {
       refused.push(`${program}: both refuse it: ${result.refused}`);
     } else if (result.differences !== undefined) {
@@ -745,10 +674,6 @@ function main(argv) {
     for (const row of dumps) process.stdout.write(`  dump ${row}\n`);
     for (const row of stage1OnlyRows) process.stdout.write(`  stage1-only ${row}\n`);
   }
-  // Printed whether or not `--verbose` was asked for: a program this gate
-  // compared for nothing at all is the one outcome a reader has to see, and the
-  // entry names the fix it is waiting on the seed to carry.
-  for (const row of fixedRows) process.stdout.write(`  fixed-since-seed ${row}\n`);
 
   // Said on its own line rather than only inside the summary, because it is the
   // one thing this run compared less than literally, and a reader deciding what
@@ -762,7 +687,7 @@ function main(argv) {
     );
   }
 
-  const compared = inputs.length - refused.length - dumps.length - stage1OnlyRows.length - fixedRows.length;
+  const compared = inputs.length - refused.length - dumps.length - stage1OnlyRows.length;
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
   // compiles proves nothing about either, and must not be able to hide inside
@@ -773,12 +698,10 @@ function main(argv) {
   const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : "";
   const stage1OnlyNote =
     stage1OnlyRows.length > 0 ? `, ${stage1OnlyRows.length} stage1-only and newer than the seed` : "";
-  const fixedNote =
-    fixedRows.length > 0 ? `, ${fixedRows.length} fixed since the seed (FIXED_SINCE_SEED)` : "";
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${dumpNote}${stage1OnlyNote}${fixedNote}${rootedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+      `${refusedNote}${dumpNote}${stage1OnlyNote}${rootedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   );
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
 }
