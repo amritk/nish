@@ -214,12 +214,19 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
-`tests/differential/corpus/`, `tests/parser/` and `tests/link/`;
-`tests/self/corpus.js` enumerates it and answers what flags each program is
-compiled with, so that a program needing `--number-mode f64` is not refused by
-stage0 and then counted as though the *port* could not reach it. The fuzzer's
-`--stage1` mode has no corpus at all: it generates its programs from a seed, so
-the only thing that reproduces a failure is the seed it prints
+`tests/parser/` and `tests/link/`; `tests/self/corpus.js` enumerates it and
+answers what flags each program is compiled with, so that a program needing
+`--number-mode f64` is not refused by stage0 and then counted as though the
+*port* could not reach it. **`tests/differential/corpus/` is not in it**, which
+this sentence used to say it was: those 71 whole programs are compiled by
+stage1 nowhere in the suite, and when WP19 G2.4 pointed the differential
+harness's native half at the seed, two of them turned out not to compile at all
+(`docs/wp19-stage0-retirement.md` §6 item 6). A sixth instance of G1's standing
+qualification, that the difference set is a lower bound over a corpus somebody
+wrote.
+
+The fuzzer's `--stage1` mode has no corpus at all: it generates its programs
+from a seed, so the only thing that reproduces a failure is the seed it prints
 (`--stage1 --seed <s> --count 1`) and the program it saves under
 `build/test/differential/`.
 
@@ -288,10 +295,17 @@ node tests/self/goldens.js --update         # regenerate these alone
 ```
 
 Regenerate from **stage1**, never from stage0: stage1 is what survives, and the
-four oracles are what say the two agree. The seed that builds stage1 is
-`--seed`, then `NISH_BOOTSTRAP`, then `build/nish`; there is deliberately no
-fourth answer, because reaching for stage0 is the dependency the gate exists to
-remove. `self/`'s dump is stored deduplicated by module — 19.9 MB of live text,
+four oracles are what say the two agree. **One store in the repository is the
+exception, on purpose**: `tests/differential/goldens/rewrites.txt`, the WP13
+oracle's JavaScript, whose reference genuinely is stage0's *checker* — the
+rewrite needs the static type of every expression and stage1 has no rewriter to
+ask — which is exactly why it had to be frozen before stage0 went rather than
+repointed (`tests/differential/goldens.js`, and wp19 §6 item 6 for what the
+freeze does not save).
+
+The seed that builds stage1 is `--seed`, then `NISH_BOOTSTRAP`, then
+`build/nish`; there is deliberately no fourth answer, because reaching for
+stage0 is the dependency the gate exists to remove. `self/`'s dump is stored deduplicated by module — 19.9 MB of live text,
 1.0 MB of distinct text — and the comparison still reads every byte of it.
 
 ## Habits that have paid off

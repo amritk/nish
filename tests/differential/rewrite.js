@@ -655,8 +655,14 @@ function makeTransformer(unit, stems) {
 
 /**
  * Rewrite the program rooted at `entry` into `outDir/<stem>.mjs` files plus
- * `outDir/__entry.mjs`. Returns `{ entry, modules }` with absolute paths.
- * Throws if the compiler rejects the program (the checker is what types it).
+ * `outDir/__entry.mjs`. Returns `{ entry, modules, sources, hasMain }` with
+ * absolute paths, `sources[i]` being the Nish module `modules[i]` was rewritten
+ * from. Throws if the compiler rejects the program (the checker is what types
+ * it).
+ *
+ * `sources` is what `goldens.js` keys its staleness guard on: the frozen rewrite
+ * of a program is only usable while every module it was made from still hashes
+ * the same, and the entry alone does not answer that for a program with imports.
  */
 function rewriteProgram(entry, opts, outDir) {
   const compilation = new Compilation({
@@ -676,6 +682,7 @@ function rewriteProgram(entry, opts, outDir) {
 
   const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
   const modules = [];
+  const sources = [];
   for (const unit of compilation.modules) {
     const result = ts.transform(unit.sourceFile, [makeTransformer(unit, stems)]);
     const rewrittenTs = `import * as ${SHIM_NS} from ${JSON.stringify(SHIM)};\n${printer.printFile(result.transformed[0])}`;
@@ -694,6 +701,7 @@ function rewriteProgram(entry, opts, outDir) {
     const out = path.join(outDir, `${stem}.mjs`);
     fs.writeFileSync(out, js);
     modules.push(out);
+    sources.push(unit.sourceFile.fileName);
   }
 
   const entryUnit = compilation.entry;
@@ -709,7 +717,7 @@ function rewriteProgram(entry, opts, outDir) {
       "",
     ].join("\n")
   );
-  return { entry: entryJs, modules, hasMain };
+  return { entry: entryJs, modules, sources, hasMain };
 }
 
 export { rewriteProgram, SHIM };

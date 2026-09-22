@@ -14,6 +14,8 @@ node tests/differential/fuzz.js --count 200        # random seed, printed
 node tests/differential/fuzz.js --seed 20260906 --count 1
 node tests/differential/fuzz.js --stage1 --count 300   # stage0 vs stage1 IR, not Node
 node tests/differential/rewrite.js prog.ts         # show the JavaScript
+node tests/differential/goldens.js                 # the frozen rewrites, verified
+node tests/differential/run.js --frozen            # the comparison, from the store
 ```
 
 `npm test` runs the same corpus (`--quick`) plus a 10-program fuzz batch with
@@ -32,8 +34,10 @@ both compilers", below).
 | `tests/differential/rewrite.js` | Nish -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
 | `runtime/shim.mjs` | The Node side of the runtime: `toI32`/`toI64`/`toF64`, wrapping helpers, byte length, bounds-checked indexing, `console.log`, file I/O, `process.exit`, trap. |
 | `tests/differential/fuzz.js` | Random integer/boolean program generator and driver: `fuzzRun` compares the binary with Node, `stage1Run` (`--stage1`) compares stage0's IR with stage1's through `tests/self/ir_oracle.js`. |
-| `tests/differential/corpus/` | 50 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`). |
+| `tests/differential/corpus/` | 71 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`), which with the 105 entry-point cases of `tests/cases/` make the 176 the runner compares. |
 | `tests/differential/known-failures.txt` | Programs whose native behaviour is known to differ; each is explained below. |
+| `tests/differential/goldens.js` | The frozen rewrites: generates the store from the live rewriter, verifies it against the live rewriter, and checks every program's sources against the hashes the store holds ("Freezing the rewrite", below). |
+| `tests/differential/goldens/rewrites.txt` | The rewritten `.mjs` of all 176 programs, which is what the comparison runs from once stage0 is gone. |
 
 Build products live in `build/test/differential/<program>/`: `ir/` (the
 `.ll` modules), `app` (the binary), `js/<module>.rewritten.ts` (the
@@ -41,10 +45,13 @@ transformed TypeScript, for reading), `js/<module>.mjs`, and `js/__entry.mjs`.
 
 ## How a program is compared
 
-1. **Native.** `node dist/index.js <entry> -o <work>/ir/ --link <work>/app
-   [args]`, i.e. the normal `--link` path (`scripts/build.sh`, speed profile,
-   `-O3 -flto`). The binary runs from the repository root; stdout, stderr,
-   exit status, and signal are captured. `.args` files are honoured, so
+1. **Native.** `<compiler> <entry> -o <work>/ir/ --link <work>/app [args]`,
+   i.e. the normal `--link` path (`scripts/build.sh`, speed profile,
+   `-O3 -flto`). The compiler is `--compiler <path>` if given, then
+   `dist/index.js` while there is one, then the seed — `NISH_BOOTSTRAP`, then
+   `build/nish` — which is the resolution `tests/self/seed.js` performs for the
+   WP14 oracles (WP19 G2.3). The binary runs from the repository root; stdout,
+   stderr, exit status, and signal are captured. `.args` files are honoured, so
    `--number-mode f64` cases are compiled and rewritten as f64 programs.
 2. **Node.** `rewrite.js` loads the same program through `dist/compiler.js`
    (`Compilation.addRoot` + `check`), so the checker records the `StaticType`
@@ -432,8 +439,118 @@ command with its seed and the first differing line. Results:
 `tests/run.js` runs 16 programs from the same seed (about 20 s, most of it the
 one link), sized so `npm test` keeps its shape; see `docs/wp14-selfhost.md` §4.
 
+## Freezing the rewrite (WP19 G2.4)
+
+Step 2 above is the reason this oracle does not survive stage0's retirement,
+and §2B of [wp19-stage0-retirement.md](wp19-stage0-retirement.md) said it did.
+The comparison needs no second *compiler* — it holds a binary against the same
+program under Node — but the JavaScript it holds it against is produced by
+`rewrite.js`, and `rewrite.js` asks stage0's `Compilation` for the type of
+every expression, because `i32`, `u8`, `f32` and `i64` are all just `number`
+to `tsc`'s own checker. Delete `src/` and the reference generator goes with it.
+
+So the reference is written down while stage0 exists:
+
+```
+node tests/differential/goldens.js            # both halves, ~2 s
+node tests/differential/goldens.js corpus/i64 # one subject, freshness only
+node tests/differential/goldens.js --fresh    # the half that outlives stage0, no rewriter
+node tests/differential/goldens.js --update   # regenerate (npm run test:update does too)
+node tests/differential/run.js --frozen       # the whole comparison, from the store
+```
+
+`tests/differential/goldens/rewrites.txt` holds one record per program — its
+`.args` verbatim, and one line per module naming the source, that source's
+hash, and the id of the JavaScript it rewrote to — followed by every distinct
+body, framed by a line count so no line of JavaScript needs escaping and named
+by its own hash so a hand edit is caught on read. The shim's absolute path is
+stored as `<root>`; nothing else in a rewritten module is absolute. 176
+programs, 358 modules, 354 distinct bodies, 235 KiB — and those are the
+header's own numbers, which a verify recomputes rather than reads.
+
+**The staleness guard is the point of the exercise.** A frozen reference is
+only a reference while the program it was made from has not changed, so every
+record carries the SHA-256 of every module the program loads — the entry alone
+would not notice an edit to `modules_basic/math.ts` — and every reader checks
+them before comparing anything. A program whose source has moved is reported
+`STALE` and fails the run *ahead of* `known-failures.txt`, which records
+decisions about the language and not references that have rotted:
+
+```
+$ printf '\n// perturbed\n' >> tests/differential/corpus/collatz.ts
+$ node tests/differential/run.js --frozen --only corpus/collatz
+native: dist/index.js    node: frozen rewrite
+program         native              node                time     result
+---------------------------------------------------------------------------
+corpus/collatz  exit 0, 658 B       -                   991 ms   STALE
+      corpus/collatz's frozen rewrite is stale: tests/differential/corpus/collatz.ts changed since the rewrite was frozen (6720fc741f5e96da -> 13021f1210e7f73f)
+      run `npm run test:update` while stage0 exists, or read wp19 §6 for what it costs
+
+0/1 programs agree with Node (1.0 s, 4 jobs); 1 unexpected failure(s).
+1 program(s) compared against nothing: their frozen rewrite is stale and was not used.
+```
+
+That block is a paste rather than a retelling, which is the point of it: the
+first version of this section carried a hash no command produces — it was the
+hash of a *different* perturbation, copied across from an earlier run — in a
+section whose whole subject is a reference that has to be reproducible. Run the
+two lines and read the output rather than trusting either.
+
+A content hash rather than an mtime or a git blob id: an mtime is not
+reproducible across two checkouts of the same commit, a blob id needs git and a
+committed file, and the bytes of the file — `readFileSync` with no encoding —
+are what the rewrite was a function of. `<name>.argv` and `<name>.env` are
+deliberately not hashed: both sides of the comparison are handed them live, so
+changing one moves the native run and the Node run together. Neither is
+`runtime/shim.mjs`, which every rewritten module imports, and that one is worth
+saying out loud: an edit there changes what Node *does* rather than what the
+rewrite *says*, so it surfaces as a mismatch on the next run rather than as a
+stale reference — loudly, and exactly as it would with a live rewriter.
+
+**Two claims, and only one of them outlives stage0.**
+
+*Fidelity* rebuilds the whole store from the live rewriter and compares it to
+the file **byte for byte**, the way `tests/self/goldens.js` compares its four.
+The form matters more than it looks: comparing record fields one at a time is a
+comparison of the fields somebody remembered, and the first version of this
+check compared the output name and the body id while leaving `source` and
+`srcHash` compared by nothing — so a record could name a module the rewrite
+never came from, with that module's own hash beside it so freshness agreed, and
+pass both halves. Rebuilding the text leaves no column to forget. It needs the
+rewriter, so it dies exactly as `checked_oracle.js` does.
+
+*Freshness* is what is left afterwards, and it is four questions rather than
+one: every program has a record, each record's sources still hash to what they
+hashed, no record is left over from a program that is gone — deleting a corpus
+program would otherwise take its coverage from 176 to 175 with nothing named —
+and the header's own counts are recomputed from what was parsed, so the file's
+description of itself is a claim with a check behind it. What freshness cannot
+see is a record that names the wrong file while holding that file's hash;
+nothing short of the rewriter can, which is why the byte comparison runs on
+every `npm test` while there is a stage0 to run it, and why after R6 the store
+is trusted the way `tests/cases/*.ll` is.
+
+`npm test` makes both claims for as long as it can make the first one, which is
+what keeps the store recording what this oracle actually compares rather than
+what somebody thought it compared. The summary line says which of the two ran —
+`the store is byte-identical to the live rewrite` or `store comparison skipped
+(no rewriter)` — and the suite puts that line in the check's name.
+
+**What the freeze does not save** is in §6 item 6 of the retirement document
+and is short: the fuzz differential against Node, whose programs are generated
+from a seed and so have no reference to freeze; `arrow-parity.js`, whose
+subject *is* the rewriter; and every corpus program added after R6, which gets
+no differential coverage until somebody ports the rewrite onto stage1's
+`--emit-checked` dump. That port is the way out of the freeze, and it is a
+project of its own.
+
 ## Runner options and conventions
 
+- `--frozen` takes the JavaScript from `goldens/rewrites.txt` rather than from
+  the rewriter and `--live` demands the rewriter; with neither, the rewriter is
+  used while it can be loaded and the store when it cannot, with a note on
+  stderr saying which. `--compiler <path>` names the compiler the native half
+  is built with.
 - `--only <s>` runs programs whose name contains `<s>` (`cases/arr_`,
   `corpus/i64`, ...); `--corpus-only` / `--cases-only` narrow the set;
   `--jobs N` sets the pool size (default: CPU count, at most 8);

@@ -9590,6 +9590,41 @@ if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
   );
 }
 
+// ---- WP19 G2.4: the frozen rewrites the WP13 oracle keeps once stage0 is gone -------
+// `tests/differential/rewrite.js` types its rewrite with stage0's own `Compilation`, so
+// the differential comparison against Node -- the only oracle here about runtime
+// semantics rather than emitted text -- is one of the things `src/` takes with it.
+// `tests/differential/goldens/rewrites.txt` is that rewrite written down while stage0
+// exists, and this check makes two claims about it. **Fidelity**: the store is byte
+// identical to what the live rewriter produces today, which is what catches an edit to
+// `rewrite.js`, and which dies with stage0 exactly as `checked_oracle.js` does.
+// **Freshness**: every program's sources still hash to what they hashed when it was
+// frozen, which is the half that outlives `src/` and the reason a stale golden reads as
+// a failure rather than as a verdict. `UPDATE_GOLDENS=1` regenerates it, the same way
+// the `.ll` goldens and `tests/self/goldens/` are written. Nothing here is compiled or
+// run, so it needs no toolchain.
+if (!only || "differential".includes(only) || "goldens".includes(only)) {
+  const rewrites = spawnSync(
+    "node",
+    [
+      path.join(import.meta.dirname, "differential", "goldens.js"),
+      ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  // The tool's own last line, whole: it names which of the two halves ran --
+  // `the store is byte-identical to the live rewrite` or `store comparison
+  // skipped (no rewriter)` -- and a check name that asserted the stronger one
+  // in fixed text would read the same either way. That is the failure mode
+  // `lib.js` refuses for the runs themselves.
+  const summary = rewrites.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `differential: the frozen rewrites (${summary || "no summary"})`,
+    rewrites.status === 0,
+    rewrites.stdout + rewrites.stderr
+  );
+}
+
 // ---- WP22 §2: the two spellings, and the codemod that rewrites one into the other ----
 // Stage A was declared done on "the two spellings of one program emit byte-identical IR",
 // and until now nothing in `npm test` asked. The claim is structural rather than lucky --
@@ -10034,6 +10069,11 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
 if ((!only || "differential".includes(only)) && HAS_CLANG) {
   const diffRunner = path.join(import.meta.dirname, "differential", "run.js");
   const d = spawnSync("node", [diffRunner, "--quick"], { cwd: root, encoding: "utf8" });
+  // `run.js`'s first line is `native: <compiler>    node: <live|frozen rewrite>`,
+  // and it belongs in the check name: after R6 the same summary line is printed
+  // whether the reference was today's rewrite or a recording of it, and a check
+  // that cannot tell the reader which proved less than the line suggests.
+  const mode = (d.stdout.split("\n").find((l) => l.startsWith("native:")) ?? "").trim();
   const summary = (
     d.stdout
       .trim()
@@ -10042,7 +10082,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
       .pop() ?? ""
   ).trim();
   check(
-    `differential: native and Node agree on every corpus program not in known-failures.txt (${summary || "no summary"})`,
+    `differential: native and Node agree on every corpus program not in known-failures.txt (${mode ? `${mode}; ` : ""}${summary || "no summary"})`,
     d.status === 0,
     d.stdout + d.stderr
   );
@@ -10061,6 +10101,32 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     `differential: f64 programs agree with unmodified Node (${u.stdout.trim() || "no summary"})`,
     u.status === 0,
     u.stdout + u.stderr
+  );
+
+  // The store driven the way R6 will drive it: the JavaScript comes out of the
+  // goldens rather than out of stage0's checker, and the programs are compiled,
+  // linked and run for real. Two programs rather than 176, because what this
+  // adds over the check above is only that the frozen path still works end to
+  // end -- `node tests/differential/run.js --frozen` is the whole corpus, and
+  // reproduces this run's verdicts -- and the pair is the multi-module shape,
+  // where materialising a rewrite has more to get wrong than one file.
+  const frozen = spawnSync(
+    "node",
+    [path.join(import.meta.dirname, "differential", "run.js"), "--frozen", "--only", "corpus/modules_"],
+    { cwd: root, encoding: "utf8" }
+  );
+  const frozenMode = (frozen.stdout.split("\n").find((l) => l.startsWith("native:")) ?? "").trim();
+  const frozenSummary = (
+    frozen.stdout
+      .trim()
+      .split("\n")
+      .filter((l) => l.includes("programs agree with Node"))
+      .pop() ?? ""
+  ).trim();
+  check(
+    `differential: the frozen rewrites run against Node with no rewriter in the picture (${frozenMode ? `${frozenMode}; ` : ""}${frozenSummary || "no summary"})`,
+    frozen.status === 0,
+    frozen.stdout + frozen.stderr
   );
 
   const fuzzSeed = 20260906;
