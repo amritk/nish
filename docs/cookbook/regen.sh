@@ -7,9 +7,14 @@
 #
 # Every snippet `docs/cookbook/<name>.ts` is compiled with
 # `node dist/index.js <name>.ts -o build/cookbook/<name>/ [flags]`, where the
-# flags come from `docs/cookbook/<name>.args` when that file exists. The module
-# header (`; ModuleID`, `source_filename`) is stripped exactly as tests/run.js
-# does for the goldens, and the result replaces everything between
+# flags come from `docs/cookbook/<name>.args` when that file exists.
+# `NISH=<compiler>` compiles them with another compiler instead, run as
+# scripts/nish-compiler.sh says (a native `nish` directly, a .js under node):
+#
+#   NISH=build/nish docs/cookbook/regen.sh --check
+#
+# The module header (`; ModuleID`, `source_filename`) is stripped exactly as
+# tests/run.js does for the goldens, and the result replaces everything between
 #
 #   <!-- cookbook:begin <name> -->
 #   <!-- cookbook:end <name> -->
@@ -26,7 +31,11 @@ check=0
 doc=docs/IR_COOKBOOK.md
 out=build/cookbook
 mkdir -p "$out"
-[ -f dist/index.js ] || npm run build >/dev/null
+# shellcheck source=scripts/nish-compiler.sh
+. scripts/nish-compiler.sh
+nish_compiler "${NISH:-dist/index.js}"
+# Only stage0 is built here: a compiler named in NISH is the caller's to provide.
+[ -n "${NISH:-}" ] || [ -f dist/index.js ] || npm run build >/dev/null
 
 tmp="$out/IR_COOKBOOK.md.new"
 cp "$doc" "$tmp"
@@ -39,7 +48,7 @@ for src in docs/cookbook/*.ts; do
     read -ra args < "docs/cookbook/$name.args"
   fi
   mkdir -p "$out/$name"
-  if ! node dist/index.js "$src" -o "$out/$name/" "${args[@]}" >"$out/$name.log" 2>&1; then
+  if ! "${compiler[@]}" "$src" -o "$out/$name/" "${args[@]}" >"$out/$name.log" 2>&1; then
     echo "error: $src does not compile:" >&2
     sed 's/^/  /' "$out/$name.log" >&2
     exit 1

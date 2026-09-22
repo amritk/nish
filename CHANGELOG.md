@@ -26,6 +26,36 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-22
+
+### Breaking changes
+
+- cli: Refuse on a platform with no prebuilt compiler instead of falling back to Node ([#139](https://github.com/amritk/nish/pull/139))
+
+### Added
+
+- interop: Let the unsigned widths cross as arrays ([#138](https://github.com/amritk/nish/pull/138))
+
+### Fixed
+
+- self: Follow a symlink to find the package root ([#129](https://github.com/amritk/nish/pull/129))
+- cli: Name a package module by its package-relative specifier, in both compilers ([#136](https://github.com/amritk/nish/pull/136))
+- self: Type a signed or parenthesised numeric literal from the other operand ([#142](https://github.com/amritk/nish/pull/142))
+
+### Documentation
+
+- cli: Measure the `-o dir/` stem collision, which both compilers have ([#135](https://github.com/amritk/nish/pull/135))
+- wp19: Re-derive G1 on the deletion head, and tally the nish-cmp cycle ([#137](https://github.com/amritk/nish/pull/137))
+- wp19: Pay the parity figure §A9 left owed, over the whole 986-program corpus ([#143](https://github.com/amritk/nish/pull/143))
+
+### Tests
+
+- self: Ask the diagnostic-coverage gate of stage1, not of stage0 ([#131](https://github.com/amritk/nish/pull/131))
+- self: Pin one diagnostic per declaration when a class body has two bad members ([#134](https://github.com/amritk/nish/pull/134))
+- Port the three ELF-assuming checks that keep macos-latest out of the test matrix ([#133](https://github.com/amritk/nish/pull/133))
+- self: Freeze the WP13 differential rewrite as goldens, with a staleness guard ([#141](https://github.com/amritk/nish/pull/141))
+
+
 ## [0.5.0] - 2026-09-20
 
 ### Added
@@ -217,3 +247,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.3.0]: https://github.com/amritk/nish/releases/tag/v0.3.0
 [0.4.0]: https://github.com/amritk/nish/releases/tag/v0.4.0
 [0.5.0]: https://github.com/amritk/nish/releases/tag/v0.5.0
+[0.6.0]: https://github.com/amritk/nish/releases/tag/v0.6.0

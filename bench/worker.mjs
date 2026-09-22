@@ -9,7 +9,7 @@
 // plus the two ways an ArrayBuffer crosses a worker boundary (structured clone
 // against a transfer), and a JSON.parse row for scale.
 //
-//   npm run build && node bench/worker.mjs [--docs N] [--size BYTES]
+//   npm run build && node bench/worker.mjs [--docs N] [--size BYTES] [--compiler <nish>]
 //
 // The headline this was written to settle: a worker round trip is tens of
 // microseconds and the scan is a fraction of one, so a worker that answers one
@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { scanBatch } from "../web/bytes-worker.mjs";
+import { compilerFrom } from "./compiler.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, "build", "bench");
@@ -46,7 +47,8 @@ if (spawnSync("clang", ["-print-prog-name=wasm-ld"]).status !== 0) {
   console.error("bench/worker.mjs needs wasm-ld (install lld; see docs/INSTALL.md)");
   process.exit(2);
 }
-run("node", ["dist/index.js", "bench/scan.ts", "-o", `${out}/scan.ll`]);
+const nishc = compilerFrom(process.argv);
+run(nishc.cmd, [...nishc.prefix, "bench/scan.ts", "-o", `${out}/scan.ll`]);
 run("bash", [
   "scripts/build.sh",
   `${out}/scan.ll`,
