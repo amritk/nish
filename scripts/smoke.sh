@@ -4,7 +4,11 @@
 #
 #   scripts/smoke.sh [examples-dir]      (default: examples/)
 #   npm run smoke                        (builds dist/ first)
+#   NISH=build/nish scripts/smoke.sh     with that compiler instead of stage0
 #
+# NISH names the compiler: a native `nish` is run directly and a Node entry
+# point (.js, .mjs, .cjs) under node -- the rule NISH_BOOTSTRAP follows in
+# scripts/bootstrap.sh. Unset, it is stage0, dist/index.js.
 # A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
 # `// smoke: argv <args>` comment passes those arguments on its command line
@@ -17,6 +21,12 @@ cd "$(dirname "$0")/.."
 examples=${1:-examples}
 out=build/smoke
 mkdir -p "$out"
+
+nish=${NISH:-dist/index.js}
+case "$nish" in
+  *.js | *.mjs | *.cjs) compiler=(node "$nish") ;;
+  *) compiler=("$nish") ;;
+esac
 
 if ! command -v clang >/dev/null 2>&1 && [ -z "${CC:-}" ]; then
   echo "error: smoke test needs clang on PATH (see docs/INSTALL.md)" >&2
@@ -52,7 +62,7 @@ for src in "${programs[@]}"; do
   # `// smoke: args <flags>` passes extra compiler flags (e.g. --number-mode f64).
   extra=$(sed -n 's#^// smoke: args \(.*\)#\1#p' "$src" | head -n 1)
   # shellcheck disable=SC2086
-  if ! node dist/index.js "$src" $extra --link "$exe" --profile size >"$out/$name.log" 2>&1; then
+  if ! "${compiler[@]}" "$src" $extra --link "$exe" --profile size >"$out/$name.log" 2>&1; then
     status="BUILD FAIL"
     failed=1
     sed 's/^/    /' "$out/$name.log" >&2

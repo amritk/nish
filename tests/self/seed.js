@@ -20,15 +20,20 @@
  *      "the seed" across the scripts, the suite and the workflow.
  *   3. `build/nish`, what `npm run bootstrap` leaves in the tree, so a
  *      workstation that has bootstrapped once needs no environment at all.
+ *   4. `build/seed/bin/nish`, the released compiler `scripts/fetch-seed.sh`
+ *      unpacks (and the session hook fetches), so a fresh clone is one
+ *      command from a seed. After `build/nish` rather than before it: a
+ *      compiler this tree built was asked for by whoever built it, and the
+ *      download is only ever the default.
  *
  * `tests/self/goldens.js` stops there and refuses: it is the tool whose whole
  * point is that stage0 is nowhere in it, so a fourth answer would be the
  * dependency the gate exists to remove. The four oracles above are not that
  * tool — they still compare against stage0's own parser, scanner and escapes
- * while it lives — so `seedForOracle` has a fourth answer, `dist/index.js`,
+ * while it lives — so `seedForOracle` has a fifth answer, `dist/index.js`,
  * and *says so on stderr* when it uses it. A hand-run oracle in a fresh clone
  * keeps working; a run that quietly proved something weaker than it looks does
- * not exist. After R6 the fourth answer has nothing to point at and goes.
+ * not exist. After R6 the fifth answer has nothing to point at and goes.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -67,16 +72,21 @@ function resolveSeed(spec) {
   return seed;
 }
 
+/** Where `scripts/fetch-seed.sh` leaves the released compiler. */
+const FETCHED = path.join("build", "seed", "bin", "nish");
+
 /**
  * The seed nobody named: `NISH_BOOTSTRAP` first, then a compiler left in the
- * tree by `npm run bootstrap`. An empty `NISH_BOOTSTRAP` counts as unset, the
- * way `NISH_BOOTSTRAP= npm test` turns the seed off for one run.
+ * tree by `npm run bootstrap`, then the release `scripts/fetch-seed.sh`
+ * fetched. An empty `NISH_BOOTSTRAP` counts as unset, the way
+ * `NISH_BOOTSTRAP= npm test` turns the seed off for one run.
  */
 function defaultSeedSpec() {
   const fromEnvironment = process.env.NISH_BOOTSTRAP;
   if (fromEnvironment !== undefined && fromEnvironment !== "") return fromEnvironment;
-  const bootstrapped = path.join("build", "nish");
-  if (fs.existsSync(path.join(root, bootstrapped))) return bootstrapped;
+  for (const inTree of [path.join("build", "nish"), FETCHED]) {
+    if (fs.existsSync(path.join(root, inTree))) return inTree;
+  }
   return null;
 }
 
@@ -109,13 +119,15 @@ function seedForOracle(argv) {
   if (!fs.existsSync(path.join(root, STAGE0))) {
     return {
       error:
-        "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` " +
-        "to leave one in build/nish (and there is no dist/index.js to fall back to)",
+        "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, run `bash scripts/fetch-seed.sh` " +
+        "to fetch the last release into build/seed, or run `npm run bootstrap` to leave " +
+        "one in build/nish (and there is no dist/index.js to fall back to)",
     };
   }
   process.stderr.write(
     `note: no seed named, so stage0 (${STAGE0}) built the binary under test. ` +
-      "Pass --seed <nish> or set NISH_BOOTSTRAP for the run WP19 G2.3 asks for.\n"
+      "Pass --seed <nish>, set NISH_BOOTSTRAP or run `bash scripts/fetch-seed.sh` " +
+      "for the run WP19 G2.3 asks for.\n"
   );
   return resolveSeed(STAGE0);
 }

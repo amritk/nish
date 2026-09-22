@@ -47,6 +47,18 @@ if [ "$missing" -eq 1 ]; then
   fi
 fi
 
+# The seed: the last released compiler, in build/seed (scripts/fetch-seed.sh).
+# Non-fatal, because nothing this session does today needs it -- stage0 is
+# still every tool's default -- and a network that is down or a proxy that
+# refuses github.com must not stop the session from starting. It is a no-op
+# once a seed is there. A session that wants one points a tool at it with
+# NISH_BOOTSTRAP=build/seed/bin/nish, or builds build/nish from it.
+if bash scripts/fetch-seed.sh >/dev/null 2>&1; then
+  seed="$(build/seed/bin/nish --version) in build/seed"
+else
+  seed="MISSING (bash scripts/fetch-seed.sh failed; stage0 stays the fallback)"
+fi
+
 # Say what the session actually got, so the agent can see at a glance whether
 # `npm test` will run the real suite or the degraded one.
 echo "session-start: node $(node --version), npm $(npm --version)"
@@ -57,3 +69,4 @@ for tool in "${TOOLS[@]}"; do
     printf 'session-start: %-8s MISSING (toolchain-dependent checks will skip)\n' "$tool"
   fi
 done
+printf 'session-start: %-8s %s\n' seed "$seed"

@@ -9,16 +9,19 @@
 //      into the arena first, so that row includes a 8N-byte memcpy)
 //   4. a plain JS loop, for scale
 //
-//   npm run build && node bench/ffi.mjs [N]
+//   npm run build && node bench/ffi.mjs [N] [--compiler <nish>]
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { compilerFrom } from "./compiler.mjs";
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, "build", "bench");
-const N = Number(process.argv[2] ?? 1e6);
+const nishc = compilerFrom(process.argv, root);
+const N = Number(nishc.rest[2] ?? 1e6);
 const REPEAT = 5;
 
 function run(cmd, args) {
@@ -31,8 +34,8 @@ function run(cmd, args) {
 }
 
 // Compile once: IR + N-API shim + wasm typings and loader from the same signatures.
-run("node", [
-  "dist/index.js", "bench/sum.ts", "--number-mode", "f64",
+run(nishc.cmd, [
+  ...nishc.prefix, "bench/sum.ts", "--number-mode", "f64",
   "-o", `${out}/sum.ll`, "--emit-napi", `${out}/sum_napi.c`, "--emit-dts", `${out}/sum.d.ts`,
 ]);
 run("bash", ["scripts/build.sh", `${out}/sum.ll`, "runtime/runtime.c", `${out}/sum_napi.c`, "-o", `${out}/sum.node`, "--profile", "napi"]);
