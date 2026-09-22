@@ -39,7 +39,7 @@ plan, with the conventions every agent follows in §7 and a brief template in §
 ```bash
 npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
-npm run build               # self/, built by the seed, into build/nish
+npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
 npm test                    # the full suite (goldens, llvm-as, native, runtime, differential)
 node tests/run.js <sub>     # only cases whose name contains <sub>

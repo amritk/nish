@@ -49,7 +49,7 @@ keep:
 ```bash
 bash scripts/fetch-seed.sh          # the last release, into build/seed/
 npm run build                       # build/nish (stage2, speed)
-scripts/bootstrap.sh --verify       # the two equalities, with cmp
+scripts/bootstrap.sh --verify       # the same, plus the two equalities, with cmp
 NISH_BOOTSTRAP=<released nish> scripts/bootstrap.sh --verify   # another seed
 build/nish hello.ts --link hello    # -o, --link, --profile, its own directories
 ```
@@ -83,11 +83,9 @@ drives that path with.
    `reject_*` case and its cookbook entry. Wanting it for the compiler's own
    source is not a reason to skip either, and the compiler's own source may not
    use it until the seed compiles it, one release later.
-2. **`self/` is an Nish program**, and since WP22 stage C it declares a
-   function as a `const` bound to an arrow, with a concise body where there is
-   one `return`. `interface` for structs and no `type` aliases still hold,
-   because an Nish struct is a `class` or an `interface`. `biome.json` does not
-   exempt `self/` from the arrow rule — the plugin reads it, so a new
+2. **`self/` is an Nish-0 program**: a function is a `const` bound to an
+   arrow, with a concise body where there is one `return`, and a struct is a
+   `class` or an `interface`. The `biome.json` plugin reads `self/`, so a new
    `function` declaration there is a lint warning rather than a convention
    somebody has to remember.
 3. **A golden is regenerated from the compiler and then read.** With no second
@@ -196,9 +194,8 @@ from a seed, so the only thing that reproduces a failure is the seed it prints
 A skip in a tool's summary is a fact about what was not compared, not a file
 that is allowed to disagree, and a skip prints only under `--verbose`: a new
 corpus file whose `.args` names a flag a tool does not know is dropped from
-the comparison in silence. That happened once already, when the WP15
-`--wrapping` cases took the IR oracle from one skip to seven without failing
-anything. Run the tools with `--verbose` and read the reasons before believing
+the comparison in silence — the WP15 `--wrapping` cases once took a tool from
+one skip to seven without failing anything. Run the tools with `--verbose` and read the reasons before believing
 a count.
 
 ### Running one

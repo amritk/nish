@@ -528,7 +528,7 @@ node tests/differential/fuzz.js --stage1 --count 200   # random integer programs
 npm run check            # tsc --noEmit: an ambient type-check of self/, std/ and tests/nish/
 npm run lint             # Biome style lint (advisory, never a compile gate)
 npm run smoke            # build and run every example with a main
-scripts/bootstrap.sh --verify   # the whole chain, with stage2 == stage1 and stage3 == stage2 asserted
+scripts/bootstrap.sh --verify   # the whole chain, with IR(stage1) == IR(stage2) and stage3 == stage2 asserted
 node bench/run.mjs       # the benchmark suite; rewrites docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks the links
 ```

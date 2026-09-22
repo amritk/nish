@@ -37,7 +37,7 @@ commands a user would.
 ```bash
 npm install              # install (npm ci in CI)
 bash scripts/fetch-seed.sh   # the last release into build/seed/ (NISH_BOOTSTRAP names another)
-npm run build            # self/, built by the seed, into build/nish (scripts/bootstrap.sh)
+npm run build            # build/nish to keep (scripts/bootstrap.sh); npm test builds its own
 npm run check            # ambient tsc --noEmit over self/, std/, tests/nish against runtime/nish.d.ts
 npm test                 # tests/run.js: goldens, llvm-as, native round trips, runtime,
                          # layout, memory, interop, exit codes, packaging, bench checksums, differential
@@ -148,9 +148,9 @@ else is noise in the diff. So:
   (`docs/wp22-arrow-functions.md`), and what the exemption buys today is only
   that the 22 `function` declarations still in `bench/` do not shout until
   their file is opened. New code in them is an arrow like everywhere else, and
-  the exemption comes off surface by surface as stage C migrates each one:
-  `self/` is the first to lose it, and is under the plugin now. The test fixtures (`tests/cases`, `tests/link`,
-  `tests/differential/corpus`) are not linted at all, because a `reject_*` case
+  the exemption comes off surface by surface as stage C migrates each one;
+  `self/` is under the plugin already. The test fixtures (`tests/cases`,
+  `tests/link`, `tests/differential/corpus`) are not linted at all, because a `reject_*` case
   exists to contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and
   `trailingCommas: all`; those formatter settings are not carried over.

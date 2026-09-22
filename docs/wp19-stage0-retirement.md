@@ -11,8 +11,8 @@ deletion — before `src/`, the `typescript` dependency and Node leave the
 checklist, not a schedule. Nothing here says when; everything here says what.
 
 > **R6 has landed: `src/` is deleted, and this document is now the record of
-> how.** Everything below §5's table was written while stage0 was alive and is
-> kept as it was measured — the present tense in it is the tense of the day it
+> how.** Everything in it except §5's R6 row was written while stage0 was alive
+> and is kept as it was measured — the present tense in it is the tense of the day it
 > was written, not a description of the tree. §5's R6 row says what the
 > deletion removed and what replaced each thing stage0 did;
 > [`.claude/selfhost.md`](../.claude/selfhost.md) and
@@ -46,11 +46,6 @@ It also costs a full second implementation of every construct, forever.
 is the previous released `nish` binary. This document is the price list.
 
 ### 1a. The doubling ends before R6
-
-> **Superseded by R6.** The register this section introduced,
-> `tests/self/stage1_only.txt`, was deleted with `src/`: with one compiler every
-> case is stage1's, and a construct is implemented in `self/` alone as a matter
-> of course.
 
 The gates below are about *deleting* `src/`. They are not what stops the second
 implementation costing a second implementation, and reading them as though they

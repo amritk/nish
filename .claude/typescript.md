@@ -11,14 +11,11 @@ them differs:
   `examples/`, `tests/cases/`, `tests/link/`, `tests/layout/`,
   `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`, and every
   snippet in `docs/` and `README.md`. These are compiled by `nish`, and the
-  language reference (`docs/LANGUAGE.md`) is the style guide: a construct the compiler refuses is not a style choice, it is a
-  compile error. **The first of the two house rules below now holds here too**:
-  the language has arrow functions (`docs/wp22-arrow-functions.md`), so an Nish
-  program declares a function as a `const` bound to an arrow. The second still
-  cannot. The language has `type` aliases now, but an
-  alias only renames a type that already exists, so an Nish *struct* is a
-  `class` or an `interface` and "`type`, never `interface`" has nothing to say
-  about it.
+  language reference (`docs/LANGUAGE.md`) is the style guide: a construct the
+  compiler refuses is not a style choice, it is a compile error. A function is
+  a `const` bound to an arrow (`docs/wp22-arrow-functions.md`), and a struct is
+  a `class` or an `interface`, because a `type` alias only renames a type that
+  already exists.
 - **The JavaScript tooling** — `tests/**/*.js`, `scripts/`, `bin/`,
   `bench/*.mjs`, `web/` and `docs/*.mjs`. This runs under Node, so the full
   language is available; the rule here is to write it *as if* Nish were the
@@ -188,19 +185,6 @@ linted. What still differs:
   holds the class and interface rules because they share the switch they are
   reached through and the side tables they write. Splitting them one per file
   would scatter a family across a directory.
-- **Nish programs now follow the arrow rule too**, since the language gained
-  arrows: `examples/`, `docs/cookbook/` and every snippet in `docs/` and
-  `README.md` are arrows already, and **`self/` joined them in WP22 stage C**.
-  `self/` is therefore *under* the plugin in `biome.json` now rather than
-  exempt from it, which is what makes the rule enforced rather than remembered:
-  a `function` declaration written there is a lint finding the moment it is
-  written, and there are none left to grandfather. `examples/`,
-  `docs/cookbook/` and `bench/*.ts` are still exempt, and that exemption is
-  what lets the 22 `function` declarations still in `bench/` sit there until
-  their file is opened; `tests/cases/` keeps its 693 by not being linted at all
-  (`docs/wp22-arrow-functions.md` §8) — but new code in all of them is an arrow
-  like everywhere else. The `type`-over-`interface` rule still does not reach
-  them, for the reason at the top of this file.
 
 ## Naming Conventions
 

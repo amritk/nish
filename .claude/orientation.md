@@ -84,13 +84,14 @@ docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
 ```bash
 npm ci                      # install (typescript and biome are dev dependencies)
 bash scripts/fetch-seed.sh  # the last release into build/seed/ (or set NISH_BOOTSTRAP)
-npm run build               # self/, built by the seed, into build/nish
+npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
 npm test                    # the whole suite; builds its own stage1 from the seed
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
-npm run test:update         # write missing .ll goldens
-scripts/bootstrap.sh --verify   # IR(stage1) == IR(stage2), stage3 == stage2
+npm run test:update         # write missing .ll goldens (the whole suite)
+UPDATE_GOLDENS=1 node tests/run.js <case>   # the same, for one case
+scripts/bootstrap.sh --verify   # the fixed point alone; npm test runs it too
 npm run test:cli            # the CLI contract, through the harness in Nish
 npm run lint                # biome, advisory, never a compile gate
 ```
@@ -103,24 +104,20 @@ the tools it could not find. Read the skip count, not just the failure count.
 In a fresh container `.claude/hooks/session-start.sh` installs the toolchain and
 fetches the seed so this does not happen quietly.
 
-`npm run check` is `tsc --noEmit` with no emit and no compiler behind it: it
-type-checks `self/`, `std/` and `tests/nish/` as TypeScript against
-`runtime/nish.d.ts`, the declarations of the language's builtins. That catches
+`npm run check` is `tsc --noEmit`: it type-checks `self/`, `std/` and
+`tests/nish/` as TypeScript against `runtime/nish.d.ts`, the declarations of
+the language's builtins. That catches
 a type error in the compiler's source before the seed is asked to build it, but
 it is not Nish's checker — a construct TypeScript accepts and Nish refuses
 passes it. What clears a `self/` change is the compiler building itself:
-`npm test` builds stage1 with the seed and compiles every golden with it, and
-`scripts/bootstrap.sh --verify` takes it to the fixed point.
+`npm test` builds stage1 with the seed, compiles every golden with it, and
+takes `self/` to the fixed point with `scripts/bootstrap.sh --verify`.
 [`selfhost.md`](./selfhost.md) is the rest of that story.
 
 ## Definition of done
 
-`npm run check` and an undegraded `npm test` green, and a new construct ships
-with a golden `.ll`, an `llvm-as` pass, a native round trip with expected
-stdout, at least one negative test, its `docs/LANGUAGE.md` rule and cookbook
-entry, and a `CHANGELOG.md` line. It is implemented once, in `self/`, and under
-the **rolling freeze** `self/` may not use it in its own source until the next
-release, because the seed that builds `self/` is the last release.
+[`CLAUDE.md`](../CLAUDE.md#definition-of-done) states it, and the checklist is
+`docs/ARCHITECTURE.md` → "How to add a construct".
 
 ## Where to read next
 
