@@ -12,28 +12,25 @@
  * template literals. Every program is deterministic and prints its locals at
  * the end.
  *
- * The generator feeds two comparisons, and they are independent:
+ * Each program is compiled with two compilers and the emitted IR compared
+ * byte for byte, module set included (WP14, repointed by WP19 G2.2), reusing
+ * the comparison of `tests/nish-cmp.js` so that the generated corpus is held
+ * to exactly what the checked-in one is. The pair is the seed release
+ * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run.
  *
- *   - the default mode (WP13) builds each program natively and runs the same
- *     program under Node through the rewrite (lib.js), and compares stdout,
- *     exit status and signal;
- *   - `--stage1` (WP14, repointed by WP19 G2.2) compiles each program with two
- *     compilers and compares the emitted IR byte for byte, module set
- *     included, reusing the comparison of `tests/nish-cmp.js` so that the
- *     generated corpus is held to exactly what the checked-in one is. The
- *     pair is the seed release against HEAD when there is a seed
- *     (`NISH_BOOTSTRAP`, or `--reference`), and stage0 against the
- *     self-hosted compiler until there is one, which is what it has always
- *     been. The candidate is linked once per run.
+ * There used to be a second, default mode that ran each program natively and
+ * under Node through the live rewrite. The rewriter was stage0's checker and
+ * went with it (R6), and a generated program has nothing a frozen store could
+ * hold, so that comparison is gone rather than frozen; `--stage1` is kept as a
+ * spelling of the one mode left, because `tests/run.js` passes it.
  *
- * Usage: node tests/differential/fuzz.js [--count N] [--seed S] [--jobs J] [--depth D]
- *        node tests/differential/fuzz.js --stage1 [--count N] [--seed S] [--depth D]
+ * Usage: node tests/differential/fuzz.js [--stage1] [--count N] [--seed S] [--depth D]
  *                                        [--reference <compiler>] [--candidate <compiler>]
+ *        node tests/differential/fuzz.js --print --seed S
  *
- * Program i of a run uses seed S + i; a mismatching program is saved as
- * build/test/differential/fuzz-fail-<S + i>.ts (`fuzz-stage1-fail-<S + i>.ts`
- * in stage1 mode) and reproduces with
- * `node tests/differential/fuzz.js [--stage1] --seed <S + i> --count 1`.
+ * Program i of a run uses seed S + i; a disagreeing program is saved as
+ * build/test/differential/fuzz-stage1-fail-<S + i>.ts and reproduces with
+ * `node tests/differential/fuzz.js --seed <S + i> --count 1`.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -260,10 +257,6 @@ function buildProgram(seed, label, opts = {}) {
 }
 
 /**
- * Generate and run `count` programs from `seed`. Returns
- * `{ seed, count, mismatches: [{ seed, file, result }], compileErrors, results }`.
- */
-/**
  * A generated comparison can hit TypeScript's `a < b > (c)` ambiguity, where
  * the parser reads `<` as the start of a type-argument list: `tsc` rejects
  * such a program exactly as `nish` does, so it tests nothing. Rather
@@ -282,46 +275,20 @@ function generateProgram(seed, opts = {}) {
   return text; // give up after 32 re-rolls and let the harness report it
 }
 
-async function fuzzRun({ count = 50, seed = 1, jobs = 4, depth = 3, log = () => {} } = {}) {
-  const dir = path.join(lib.buildDir, "fuzz");
-  fs.mkdirSync(dir, { recursive: true });
-  const programs = [];
-  for (let i = 0; i < count; i++) {
-    const s = (seed + i) >>> 0;
-    const file = path.join(dir, `fuzz-${s}.ts`);
-    fs.writeFileSync(file, generateProgram(s, { depth }));
-    programs.push({ name: `fuzz/${s}`, entry: file, args: [], kind: "fuzz", seed: s });
-  }
-  const results = await lib.pool(programs, jobs, async (p) => {
-    const r = await lib.runProgram(p);
-    log(r);
-    return r;
-  });
-  const mismatches = [];
-  const compileErrors = [];
-  for (const r of results) {
-    if (r.verdict === "match") continue;
-    const failFile = path.join(lib.buildDir, `fuzz-fail-${r.prog.seed}.ts`);
-    fs.copyFileSync(r.prog.entry, failFile);
-    (r.verdict === "mismatch" ? mismatches : compileErrors).push({ seed: r.prog.seed, file: failFile, result: r });
-  }
-  return { seed, count, mismatches, compileErrors, results };
-}
-
 /**
  * The reference and the candidate this mode compares, resolved the way
  * `tests/nish-cmp.js` resolves them — a native binary or a `.js` entry point,
- * `NISH_BOOTSTRAP` naming the seed — with one difference that matters: the
- * tool skips when there is no seed and this mode falls back to **stage0**.
- * There is no released `nish` yet, and the equality this fuzzer has asserted
- * since WP14, `IR(stage0, p) == IR(stage1, p)`, is worth keeping until there
- * is one. On the day a seed exists, `NISH_BOOTSTRAP` alone repoints this at
- * seed-release-versus-HEAD and nothing here changes (WP19 G2.2).
+ * `NISH_BOOTSTRAP` naming the seed. With no seed there is nothing to compare
+ * against, and the run refuses, naming what to set: the stage0 fallback that
+ * used to stand in here went with stage0 (R6).
  *
  * Returns `{ reference, candidate }` or `{ error }`.
  */
 function stage1Pair({ reference = null, candidate = null } = {}) {
-  const referenceSpec = reference ?? cmp.seedFromEnvironment() ?? path.join("dist", "index.js");
+  const referenceSpec = reference ?? cmp.seedFromEnvironment();
+  if (referenceSpec === null) {
+    return { error: "no reference: pass --reference <nish> or set NISH_BOOTSTRAP to a released nish" };
+  }
   let candidateSpec = candidate;
   if (candidateSpec === null) {
     const built = cmp.buildCandidate(referenceSpec);
@@ -396,25 +363,22 @@ function stage1Run({ count = 20, seed = 1, depth = 3, reference = null, candidat
   return { seed, count, pair, agreed, files, lines, disagreements };
 }
 
-export { generateProgram, fuzzRun, stage1Run };
+export { generateProgram, stage1Run };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   let count = 50;
   let seed = (Date.now() ^ (process.pid << 8)) >>> 0;
-  let jobs = Math.min(8, os.cpus().length || 2);
   let depth = 3;
   let printOnly = false;
-  let stage1 = false;
   let reference = null;
   let candidate = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--count") count = Number(argv[++i]);
     else if (argv[i] === "--seed") seed = Number(argv[++i]) >>> 0;
-    else if (argv[i] === "--jobs") jobs = Number(argv[++i]);
     else if (argv[i] === "--depth") depth = Number(argv[++i]);
     else if (argv[i] === "--print") printOnly = true;
-    else if (argv[i] === "--stage1") stage1 = true;
+    else if (argv[i] === "--stage1") continue;
     else if (argv[i] === "--reference") reference = argv[++i];
     else if (argv[i] === "--candidate") candidate = argv[++i];
     else {
@@ -430,64 +394,39 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.error("clang not installed");
     process.exit(2);
   }
-  if (stage1) {
-    const seedName = reference ?? cmp.seedFromEnvironment() ?? "dist/index.js (no seed yet: stage0)";
-    console.log(`fuzz: stage1 seed=${seed} count=${count} depth=${depth} reference=${seedName} (linking the candidate)`);
-    const tStage1 = Date.now();
-    const res = stage1Run({
-      count,
-      seed,
-      depth,
-      reference,
-      candidate,
-      log: (e) => {
-        const tag = e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase();
-        // The detail is a bounded diff excerpt and therefore several lines;
-        // indenting its continuations keeps one program to one visual block.
-        const detail = e.detail ? `  ${e.detail.replace(/\n/g, "\n      ")}` : "";
-        console.log(`${tag}  ${e.name}  ${e.ms} ms${detail}`);
-      },
-    });
-    if (res.pair === null) {
-      console.error(`fuzz: ${res.error}\nfuzz: nothing compared`);
-      process.exit(2);
-    }
-    console.log(
-      `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
-    );
-    // The pair is part of the reproduction now that it is a parameter: a
-    // failure against one seed release says nothing about another, and the
-    // seed a run used is the first thing somebody reading the saved program
-    // will want back.
-    const pairArgs = `${reference === null ? "" : ` --reference ${reference}`}${candidate === null ? "" : ` --candidate ${candidate}`}`;
-    for (const d of res.disagreements) {
-      console.log(`  ${d.verdict}: seed ${d.seed} saved to ${d.file}`);
-      console.log(`      ${d.detail.replace(/\n/g, "\n      ")}`);
-      console.log(`      reproduce: node tests/differential/fuzz.js --stage1 --seed ${d.seed} --count 1${pairArgs}`);
-    }
-    process.exit(res.disagreements.length === 0 ? 0 : 1);
-  }
-  console.log(`fuzz: seed=${seed} count=${count} depth=${depth} jobs=${jobs}`);
-  const t0 = Date.now();
-  fuzzRun({
+  const seedName = reference ?? cmp.seedFromEnvironment() ?? "(none)";
+  console.log(`fuzz: stage1 seed=${seed} count=${count} depth=${depth} reference=${seedName} (linking the candidate)`);
+  const tStage1 = Date.now();
+  const res = stage1Run({
     count,
     seed,
-    jobs,
     depth,
-    log: (r) => {
-      const tag = r.verdict === "match" ? "ok  " : r.verdict.toUpperCase();
-      console.log(`${tag}  ${r.prog.name}  native ${lib.summarize(r.native)}  node ${lib.summarize(r.node)}  ${r.ms} ms`);
-      if (r.verdict === "mismatch") console.log(`      ${lib.describeMismatch(r).replace(/\n/g, "\n      ")}`);
-      if (r.verdict === "compile-error" || r.verdict === "rewrite-error") console.log(`      ${r.detail.trim().split("\n")[0]}`);
+    reference,
+    candidate,
+    log: (e) => {
+      const tag = e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase();
+      // The detail is a bounded diff excerpt and therefore several lines;
+      // indenting its continuations keeps one program to one visual block.
+      const detail = e.detail ? `  ${e.detail.replace(/\n/g, "\n      ")}` : "";
+      console.log(`${tag}  ${e.name}  ${e.ms} ms${detail}`);
     },
-  }).then((res) => {
-    const bad = res.mismatches.length + res.compileErrors.length;
-    console.log(
-      `\nfuzz: seed=${res.seed} count=${res.count} mismatches=${res.mismatches.length} errors=${res.compileErrors.length} (${((Date.now() - t0) / 1000).toFixed(1)} s)`
-    );
-    for (const m of [...res.mismatches, ...res.compileErrors]) {
-      console.log(`  ${m.result.verdict}: seed ${m.seed} saved to ${m.file}`);
-    }
-    process.exit(bad === 0 ? 0 : 1);
   });
+  if (res.pair === null) {
+    console.error(`fuzz: ${res.error}\nfuzz: nothing compared`);
+    process.exit(2);
+  }
+  console.log(
+    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
+  );
+  // The pair is part of the reproduction now that it is a parameter: a
+  // failure against one seed release says nothing about another, and the
+  // seed a run used is the first thing somebody reading the saved program
+  // will want back.
+  const pairArgs = `${reference === null ? "" : ` --reference ${reference}`}${candidate === null ? "" : ` --candidate ${candidate}`}`;
+  for (const d of res.disagreements) {
+    console.log(`  ${d.verdict}: seed ${d.seed} saved to ${d.file}`);
+    console.log(`      ${d.detail.replace(/\n/g, "\n      ")}`);
+    console.log(`      reproduce: node tests/differential/fuzz.js --seed ${d.seed} --count 1${pairArgs}`);
+  }
+  process.exit(res.disagreements.length === 0 ? 0 : 1);
 }

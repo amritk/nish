@@ -5,25 +5,25 @@
  *
  *   1. compiled and linked with nish (`.args` respected), run, stdout and
  *      exit status captured;
- *   2. rewritten to JavaScript (rewrite.js) and run under Node with
- *      runtime/shim.mjs, stdout and exit status captured;
+ *   2. taken as the JavaScript its frozen rewrite in tests/differential/goldens/
+ *      holds, and run under Node with runtime/shim.mjs, stdout and exit
+ *      status captured;
  *   3. compared byte for byte.
  *
  * Usage: node tests/differential/run.js [--only <substring>] [--jobs N]
  *          [--update-known] [--quick] [--corpus-only] [--cases-only] [--verbose]
- *          [--frozen | --live] [--compiler <nish>]
+ *          [--compiler <nish>]
  *
  *   --only <s>       run only programs whose name contains <s>
  *   --jobs N         parallel builds (default: CPU count, max 8)
  *   --update-known   rewrite known-failures.txt with the current mismatches
  *   --quick          skip corpus programs named slow_* (the tests/run.js budget)
  *   --verbose        print both outputs of every mismatch
- *   --frozen         take the JavaScript from tests/differential/goldens/ rather
- *                    than from the live rewriter, which is what this comparison
- *                    runs on once stage0 is gone (WP19 G2.4)
- *   --live           demand the live rewriter instead, rather than falling back
- *   --compiler <p>   the compiler the native half is built with (default: stage0
- *                    while there is one, then the seed)
+ *   --compiler <p>   the compiler the native half is built with (default: the
+ *                    seed, `NISH_BOOTSTRAP` then build/nish)
+ *   --frozen         accepted and ignored: the frozen rewrites are the only
+ *                    JavaScript there is since the rewriter went with stage0
+ *                    (R6), and `tests/run.js` still spells it
  *
  * Exit status is non-zero when any program mismatches, fails to compile, or
  * fails to rewrite, unless it is listed in known-failures.txt (one name per
@@ -34,6 +34,11 @@
  * the run could have compared today's binary against the JavaScript of a source
  * that has since changed, and printed a verdict either way; `known-failures.txt`
  * covers decisions about the language, not references that have rotted.
+ *
+ * A program named in `tests/differential/goldens/unfrozen.txt` has no frozen
+ * rewrite at all. It is not built, not counted as agreeing, and not a
+ * failure: it is printed as UNFROZEN with the register's reason, and the
+ * summary says how many there were.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -47,7 +52,6 @@ async function main(argv) {
   let verbose = false;
   let cases = true;
   let corpus = true;
-  let frozen;
   let compilerSpec;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -58,8 +62,11 @@ async function main(argv) {
     else if (a === "--verbose") verbose = true;
     else if (a === "--corpus-only") cases = false;
     else if (a === "--cases-only") corpus = false;
-    else if (a === "--frozen") frozen = true;
-    else if (a === "--live") frozen = false;
+    else if (a === "--frozen") continue;
+    else if (a === "--live") {
+      console.error("--live: the live rewriter drove stage0's checker and was deleted with it (R6)");
+      return 2;
+    }
     else if (a === "--compiler") compilerSpec = argv[++i];
     else if (!a.startsWith("-") && only === undefined) only = a;
     else {
@@ -72,15 +79,14 @@ async function main(argv) {
     return 2;
   }
   // The two halves of the comparison, each resolved once and named in the run's
-  // first line. Neither is `dist/` by name any more: the native half takes the
-  // compiler `--compiler` or the seed protocol answers, and the Node half takes
-  // the live rewriter or the frozen store (WP19 G2.4).
+  // first line: the compiler `--compiler` or the seed protocol answers, and the
+  // frozen store (WP19 G2.4, R6).
   const compiler = lib.compilerFor(compilerSpec);
   if (compiler.error !== undefined) {
     console.error(compiler.error);
     return 2;
   }
-  const rewriter = await lib.rewriterFor({ frozen });
+  const rewriter = lib.rewriterFor();
   if (rewriter.error !== undefined) {
     console.error(rewriter.error);
     return 2;
@@ -106,11 +112,17 @@ async function main(argv) {
 
   let failures = 0;
   let stale = 0;
+  let unfrozen = 0;
   const mismatches = [];
   for (const r of results) {
     const isKnown = known.has(r.prog.name);
     let result;
-    if (r.verdict === "stale-golden") {
+    if (r.verdict === "unfrozen") {
+      // Named rather than dropped, and ahead of the known-failures test: the
+      // register is the record that this program is compared against nothing.
+      result = "UNFROZEN (no frozen rewrite; tests/differential/goldens/unfrozen.txt)";
+      unfrozen++;
+    } else if (r.verdict === "stale-golden") {
       // Deliberately ahead of the known-failures test: a rotted reference is
       // not a documented semantic difference, and counting it as one is how a
       // frozen oracle comes to look like coverage it no longer has.
@@ -126,7 +138,9 @@ async function main(argv) {
     // `--update-known` writes this list, and `known-failures.txt` holds
     // decisions about the language rather than references that have rotted, so
     // a STALE program must not be able to arrive in it.
-    if (r.verdict !== "match" && r.verdict !== "stale-golden") mismatches.push(r.prog.name);
+    if (r.verdict !== "match" && r.verdict !== "stale-golden" && r.verdict !== "unfrozen") {
+      mismatches.push(r.prog.name);
+    }
     console.log(
       `${pad(r.prog.name, width)}  ${pad(lib.summarize(r.native), 18)}  ${pad(lib.summarize(r.node), 18)}  ${pad(`${r.ms} ms`, 7)}  ${result}`
     );
@@ -141,20 +155,25 @@ async function main(argv) {
       console.log(indent(r.detail.trim().split("\n").slice(0, 8).join("\n")));
     } else if (r.verdict === "stale-golden") {
       console.log(indent(r.detail));
-      console.log(indent("run `npm run test:update` while stage0 exists, or read wp19 §6 for what it costs"));
+      console.log(indent("`node tests/differential/goldens.js --update` moves it into the register"));
+    } else if (r.verdict === "unfrozen") {
+      console.log(indent(r.detail));
     }
   }
 
   const matched = results.filter((r) => r.verdict === "match").length;
-  // The summary line's shape is the same under either rewriter on purpose: the
-  // frozen run is only worth anything if it reproduces the live one's verdicts,
-  // and two lines that can be read side by side is how that is checked.
+  // The summary line's shape is the one it had while a live rewriter existed,
+  // so the runs before and after R6 read side by side. A registered program is
+  // out of the denominator, because nothing compared it, and named just below.
   console.log(
-    `\n${matched}/${results.length} programs agree with Node (${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs); ${failures} unexpected failure(s).`
+    `\n${matched}/${results.length - unfrozen} programs agree with Node (${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs); ${failures} unexpected failure(s).`
   );
+  if (unfrozen > 0) {
+    console.log(`${unfrozen} program(s) have no frozen rewrite and were not compared (tests/differential/goldens/unfrozen.txt).`);
+  }
   if (stale > 0) {
     console.log(
-      `${stale} program(s) compared against nothing: their frozen rewrite is stale and was not used.`
+      `${stale} program(s) compared against nothing: their frozen rewrite is stale or missing and was not used.`
     );
   }
 
