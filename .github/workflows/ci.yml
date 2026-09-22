@@ -242,6 +242,9 @@ jobs:
           SEED: ${{ steps.seed.outputs.path }}
         run: npm test -- --seed "$SEED"
 
+      # `NISH` is the override R6.2 gives scripts/smoke.sh and
+      # docs/cookbook/regen.sh; until it lands both still run their default,
+      # the stage0 `npm test` just built.
       - name: Smoke (build + run every example with a main, size profile)
         env:
           NISH: build/nish
@@ -653,10 +656,16 @@ jobs:
         run: |
           tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
           asset="$(jq -r --arg host "$(uname -s)-$(uname -m)" '.targets[] | select(.host == $host) | .asset' .github/seed-targets.json)"
+          if [ -z "$asset" ]; then
+            echo "::error::.github/seed-targets.json names no seed for $(uname -s)-$(uname -m), so there is nothing to build the compiler under test with."
+            exit 1
+          fi
           tarball="nish-${tag#v}-$asset.tar.gz"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$tarball" --dir "$RUNNER_TEMP"
           tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
-          echo "path=$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
+          seed="$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish"
+          "$seed" --version
+          echo "path=$seed" >> "$GITHUB_OUTPUT"
 
       - name: Build the compiler with the seed
         env:

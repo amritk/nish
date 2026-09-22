@@ -314,6 +314,18 @@ function stripHeader(ir) {
     .trim();
 }
 
+// The modes stage0 retired with it. Refused rather than ignored: a flag the
+// suite no longer reads would run the whole suite and print a green summary
+// that says nothing about what the flag asked for.
+const RETIRED = ["--parity", "--verify-batch", "--batch-gate-only"].filter((flag) => process.argv.includes(flag));
+if (RETIRED.length > 0) {
+  console.error(
+    `tests/run.js: ${RETIRED.join(", ")} compared stage0 with stage1 and went with stage0 (R6); ` +
+      "there is nothing left to compare"
+  );
+  process.exit(2);
+}
+
 // ---- The compiler under test -----------------------------------------------------
 //
 // One stage1 for the whole run, linked by the seed: `--seed <nish>`, then
@@ -2212,12 +2224,22 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     );
     for (const name of namesTestedIn(branch[1])) calleesOf.set(name, symbols);
   }
+  // Every builtin is read as having a branch in the callee table, or is one of the
+  // two that lower to a single bitcast and call nothing. A builtin with neither
+  // would read as "calls nothing, so allocates nothing" -- the silent miss this
+  // guard exists to prevent -- so a branch this scan cannot see is a failure
+  // naming the builtin, not a pass.
+  const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64"]);
+  const unread = builtins.filter((b) => !calleesOf.has(b) && !CALLS_NOTHING.has(b));
   check(
     `self/builtins.ts and self/emit_builtins.ts still read as a builtin list and a callee table ` +
       `(${builtins.length} builtins, ${calleesOf.size} with callees)`,
-    builtins.length > 0 && calleesOf.size > 0,
-    "`isBuiltinFunction` or `identifierBuiltinCalleesNamed` moved or changed shape; this check reads both by name, " +
-      "so point it at the new one"
+    builtins.length > 0 && calleesOf.size > 0 && unread.length === 0,
+    unread.length > 0
+      ? `no branch of identifierBuiltinCalleesNamed was read for ${unread.join(", ")}: teach this scan its ` +
+          "shape, or name the builtin in CALLS_NOTHING if it really calls no runtime symbol"
+      : "`isBuiltinFunction` or `identifierBuiltinCalleesNamed` moved or changed shape; this check reads both " +
+          "by name, so point it at the new one"
   );
 
   // The runtime table, as the compiler under test declares it: every `declare`
@@ -2840,8 +2862,8 @@ if (!only && HAS_CLANG) {
 
     // web/: the compiler itself as one wasi module, driven through web/worker.mjs
     // over the in-memory filesystem in web/wasi.mjs — the browser path, exercised
-    // without a browser. The IR has to be the bytes stage0 writes for the same
-    // input, because a playground that emits *nearly* the right IR is worse than
+    // without a browser. The IR has to be the bytes the native compiler writes
+    // for the same input, because a playground that emits *nearly* the right IR is worse than
     // no playground. This is also the end-to-end guard on the arena ABI: the
     // compiler allocates from compiled code on every node it parses, so a wasm32
     // layout that disagrees with the IR traps here long before it prints anything.
@@ -2861,7 +2883,7 @@ if (!only && HAS_CLANG) {
       execFileSync(NISH, ["examples/add.ts", "-o", referenceLl], { cwd: root, stdio: "pipe" });
       const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], { cwd: root });
       check(
-        "web: nish.wasm in a worker emits stage0's IR for examples/add.ts, byte for byte",
+        "web: nish.wasm in a worker emits the native compiler's IR for examples/add.ts, byte for byte",
         worker.status === 0 && String(worker.stdout) === fs.readFileSync(referenceLl, "utf8"),
         String(worker.stderr)
       );
@@ -3074,9 +3096,10 @@ if (!only || "nish-runner".includes(only)) {
       // cwd is the repository root because the runner addresses `tests/cases` and
       // the compiler by relative path: there is no `cwd` builtin for it to build
       // an absolute one from, which is also why it folds `<root>/` out of a
-      // golden rather than into its own output. The compiler is the one under
-      // test, named after the filter and in `NISH` (the override
-      // `tests/nish/run.ts` takes in place of its default).
+      // golden rather than into its own output. The compiler under test is named
+      // after the filter and in `NISH`, the override R6.2 gives
+      // `tests/nish/run.ts`; until that lands the runner ignores both and
+      // spawns its default, `node dist/index.js`.
       const compilerArg = path.relative(root, NISH);
       const ran = spawnSync(runnerExe, ["pop", compilerArg], {
         cwd: root,
@@ -4899,7 +4922,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       if (seedVersion !== undefined && olderThan(seedVersion, cmpSince)) {
         skip(
           `NISH_BOOTSTRAP is nish ${seedVersion}, older than cmpSince ${cmpSince} in .github/seed-targets.json, ` +
-            "so tests/nish-cmp.js (WP19 G2) did not run"
+            "so tests/nish-cmp.js (WP19 G2) and tests/differential/fuzz.js --stage1 did not run"
         );
       } else {
         const nishCmp = spawnSync("node", [path.join(root, "tests", "nish-cmp.js")], {
@@ -4913,32 +4936,32 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           nishCmp.status === 0,
           `${nishCmp.stdout}${nishCmp.stderr}`
         );
-      }
 
-      const stage1FuzzSeed = 20261001;
-      const stage1Fuzz = spawnSync(
-        "node",
-        [
-          path.join(root, "tests", "differential", "fuzz.js"),
-          "--stage1",
-          "--seed",
-          String(stage1FuzzSeed),
-          "--count",
-          "16",
-        ],
-        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
-      );
-      const stage1FuzzSummary =
-        stage1Fuzz.stdout
-          .trim()
-          .split("\n")
-          .filter((l) => l.startsWith("fuzz: stage1 seed="))
-          .pop() ?? "";
-      check(
-        `the released nish and HEAD emit the same IR for random programs (${stage1FuzzSummary || `seed=${stage1FuzzSeed}`})`,
-        stage1Fuzz.status === 0,
-        `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
-      );
+        const stage1FuzzSeed = 20261001;
+        const stage1Fuzz = spawnSync(
+          "node",
+          [
+            path.join(root, "tests", "differential", "fuzz.js"),
+            "--stage1",
+            "--seed",
+            String(stage1FuzzSeed),
+            "--count",
+            "16",
+          ],
+          { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+        );
+        const stage1FuzzSummary =
+          stage1Fuzz.stdout
+            .trim()
+            .split("\n")
+            .filter((l) => l.startsWith("fuzz: stage1 seed="))
+            .pop() ?? "";
+        check(
+          `the released nish and HEAD emit the same IR for random programs (${stage1FuzzSummary || `seed=${stage1FuzzSeed}`})`,
+          stage1Fuzz.status === 0,
+          `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
+        );
+      }
     }
 
     // S5, and the claim the work package exists for: `self/` compiles `self/`.
@@ -5253,9 +5276,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       }
 
       // WP21 S2's declared limitation: a package reached through a symlink is a
-      // second package, because the compiler has no `realpath` to call on a
-      // module path -- stage0 could have grown one and was deliberately not
-      // allowed to (`docs/wp21-packages.md` §10d), and stage1 keeps the rule.
+      // second package, because a module path is joined rather than resolved --
+      // an open decision about what a package's identity is, not a missing
+      // builtin (`self/compilation.ts`, TODO(WP21 S3); `docs/wp21-packages.md`
+      // §10d).
       const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
       const symlinkApp = path.join(symlinkSrc, "app");
       if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
@@ -5658,7 +5682,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     // predates it has only its stage0 default to offer, and says so by not
     // naming the flag.
     const benchSource = fs.readFileSync(path.join(root, "bench", "run.mjs"), "utf8");
-    const benchCompiler = benchSource.includes('"--compiler"') ? ["--compiler", path.relative(root, NISH)] : [];
+    const benchCompiler = /a === "--compiler"/.test(benchSource) ? ["--compiler", path.relative(root, NISH)] : [];
     const v = spawnSync(
       "node",
       [
