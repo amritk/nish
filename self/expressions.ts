@@ -514,6 +514,33 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
 const literalHint = (other: i32, fallback: i32): i32 => isNumeric(other) ? other : fallback;
 
 /**
+ * Whether this operand *is* the numeric literal, for the rule above.
+ *
+ * `docs/LANGUAGE.md` says it in four words — "`-5` and `(5)` count as the
+ * literal" — so `-1 / z` and `(1) / z` with `z: f64` are the same shape as
+ * `1 / z` and the literal takes `f64` from the sibling. Testing
+ * `kind === N_NUMBER` instead read the sign and the parentheses as
+ * expressions in their own right, which sent the pair down the branch below
+ * and refused every program that wrote a signed literal on the *left* of an
+ * operator whose other side was wider than the mode's default: `-1 / z`,
+ * `-1 * big`, `-1 === z`, `-1 < z` (WP19 §A5, the sixth entry).
+ *
+ * Only unary minus and parentheses unwrap, which is the same list `peekable`
+ * walks and the same list stage0's `contextType` climbs out of
+ * (`src/checker/math.ts`): `!1` and `~1` are operators applied to a literal
+ * rather than spellings of one.
+ */
+const literalOperand = (node: Node): boolean => {
+  if (node.kind === N_PAREN) {
+    return literalOperand(node.children[0]);
+  }
+  if (node.kind === N_UNARY) {
+    return node.text === "-" && literalOperand(node.children[0]);
+  }
+  return node.kind === N_NUMBER;
+};
+
+/**
  * Whether stage0's `peekType` would answer for this node — which is what
  * decides whether a bare literal on the *other* side may take its type.
  *
@@ -562,7 +589,7 @@ const checkOperator = (
   // whichever side is checked first is what the other is checked against.
   let left = T_ERROR;
   let right = T_ERROR;
-  if (leftNode.kind === N_NUMBER && rightNode.kind !== N_NUMBER) {
+  if (literalOperand(leftNode) && !literalOperand(rightNode)) {
     right = checkExpression(ctx, rightNode, scope, -1);
     // The right operand has not been checked yet as far as stage0's walk is
     // concerned — it *peeks* at the node rather than checking it — so a shape
