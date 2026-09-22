@@ -42,7 +42,7 @@ Compilation                                                            self/comp
 | Compilation | `self/compilation.ts` | Owns every `ModuleUnit` of one program: loads roots and imports (keyed by resolved path, so cycles terminate), runs the checker passes in the right order, rejects symbol clashes, runs the attribute analysis over all modules, emits one `.ll` per module, and computes output stems. It does not decide where output goes; `compile.ts` writes it. |
 | Parser | `self/tokens.ts`, `self/lexer.ts`, `self/nodes.ts`, `self/parser.ts`, `self/parents.ts` | The compiler's own scanner and parser. The tree is one `Node` class with a `kind: i32` discriminant and dense ids; the child layout per kind is written beside each kind in `nodes.ts`. A syntax error is a diagnostic like any other. |
 | Validator | `self/validator.ts` | One pre-order walk, dispatched by a `switch` on the node kind; decides everything from syntax alone (no types, no scopes). What is here is forbidden by design; what the checker refuses with `Unsupported ...` is merely not implemented yet. Defence in depth: it sees nodes the checker never visits. |
-| Types | `self/types.ts`, `self/annotations.ts` | A type is an `i32` interned in the compilation's one `TypeTable`, so type equality is an integer compare. `types.ts` holds `llvmType`, `alignOf`, `sameType`, `assignable` and the numeric predicates; `annotations.ts` turns a written annotation into a type id. |
+| Types | `self/types.ts`, `self/annotations.ts` | A type is an `i32` interned in the compilation's one `TypeTable`, so type equality is an integer compare. `types.ts` holds `llvmType`, `alignOf`, `assignable` and the numeric predicates (two types are the same type when their ids are equal); `annotations.ts` turns a written annotation into a type id. |
 | Checker | `self/checker.ts` + `declarations.ts`, `structs.ts`, `constants.ts`, `assignment.ts` (definite assignment), `statements.ts`, `expressions.ts`, `members.ts`, `arrays.ts`, `builtins.ts`, `result.ts`, `generics.ts`, `bounds.ts`, `symbols.ts`, `context.ts` | Pass 1 collects signatures and struct layouts; pass 1b binds imports; pass 2 checks bodies. Every statement and expression goes through the central `switch` of its category (see below) and its type is recorded in a side table. |
 | Diagnostics | `self/diagnostics.ts`, `self/codes.ts` | The `file:line:col: error: message` summary, the caret excerpt and the `--json` object; `codes.ts` is the hand-kept registry of every diagnostic code. |
 | Attributes | `self/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts, allocation facts) and the call-graph fixpoint that turns them into LLVM attributes, arena scopes, and stack slots. Runs over the whole program at once. |
@@ -151,11 +151,11 @@ own source until the seed compiles it, which is the next release.
    merely unsupported today, leave the validator alone: the checker's
    `Unsupported ...` fallback covers it.
 3. **Types.** New type? Add its id or kind to `self/types.ts` and extend
-   `llvmType`, `alignOf`, `sameType` and `assignable` there, the annotation
+   `llvmType`, `alignOf` and `assignable` there, the annotation
    resolver in `self/annotations.ts`, and `cType` / `tsKeyword` in
    `self/interop_abi.ts`. A numeric type also touches `isNumeric` plus
    `isInteger` (and `isUnsigned`/`intBits` for an integer width) or `isFloat`,
-   the constant encoding in `numericConstant` (`self/emit.ts`), `wasmType` and
+   the constant encoding in `numericConstant` (`self/emit_ops.ts`), `wasmType` and
    the bridging decision in `self/interop_wasm.ts`, the scalar readers and
    boxers in `self/interop_napi.ts`, and the basic-type table in
    `self/debug.ts`. The N-API tables are the ones to remember: a type with no
@@ -195,7 +195,7 @@ own source until the seed compiles it, which is the next release.
    `runtime_os.c` beside it, and a direct `clang` line names both.
 8. **Attributes.** Tell the fact collector in `self/attributes.ts` what the
    construct does: memory effect (`readsMemory`, the callee symbols the
-   `collect*Facts` functions and `factCollectors` record), escapes
+   `collect*Facts` methods record), escapes
    (`classifyUse`), loop boundedness (`isCountedLoop`). Never add an attribute
    you cannot cite a proof for; write the reason next to the code.
 9. **Tests.** A golden `tests/cases/<name>.ts` + `.ll` (`npm run test:update`
@@ -409,7 +409,7 @@ owns the boolean algebra and the scope plumbing and recognises `p !== null`,
 and hands every other condition to `narrowResultTest` in `self/result.ts`,
 which recognises `r.ok` / `r.isOk()` / `r.isErr()`. The soundness argument is therefore literally the
 same one — variables only, dropped on assignment, dropped before a loop that
-assigns. The refinement rides on the type as `state`, which `sameType`
+assigns. The refinement rides on the type as `state`, which type equality
 ignores because the LLVM value is the same pointer either way.
 
 `Ok(v)` / `Err(e)` are allocation sites for WP6 like `new C(...)` is, so a

@@ -73,7 +73,7 @@ npm install -g ./amritk-nish-0.4.0.tgz ./amritk-nish-x86_64-linux-0.4.0.tgz
 
 > [!TIP]
 > Building from source works just as well: `git clone`, `npm ci`,
-> `npm run build`, then `build/nish ...` wherever this README says `nish`.
+> `bash scripts/fetch-seed.sh`, `npm run build`, then `build/nish ...` wherever this README says `nish`.
 > The build is a bootstrap: the previous release's `nish` (the seed, fetched
 > by `scripts/fetch-seed.sh`, or named with `NISH_BOOTSTRAP=<path>`) compiles
 > `self/`, and that compiler compiles `self/` again into `build/nish`.
@@ -465,6 +465,7 @@ the whole compiler costs it **91 ms and 86 MB**; the TypeScript compiler it
 replaced took 786 ms and 178 MB for the same input.
 
 ```bash
+bash scripts/fetch-seed.sh          # the last release, into build/seed/
 npm run build                       # seed -> stage1 -> stage2 = build/nish
 build/nish hello.ts --link hello    # -o, --link, --profile, its own directories
 ```
@@ -517,6 +518,7 @@ releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 
 ```bash
 npm ci
+bash scripts/fetch-seed.sh   # the last release into build/seed/, once
 npm run build            # seeded bootstrap into build/nish (NISH_BOOTSTRAP=<nish> names the seed)
 npm test                 # build + goldens, llvm-as, native round trips, runtime, layout, memory, interop, bench checksums, differential
 node tests/run.js locals # only cases whose name contains "locals"

@@ -756,9 +756,10 @@ their own; releasing what they built is part of M4.
 ### What remains
 
 M4 and WP15 are the road, and they are not sequential with each other. M6 is
-done: R6 deleted stage0 after 0.5.0 was out, which is the release it had to
-wait for, because `nish-cmp` compares against the last release and every seed
-before 0.5.0 shipped no `std/` —
+done: R6 deleted stage0 after 0.6.0 was out, which is the release it had to
+wait for, because `nish-cmp` compares against the last release and its
+`cmpSince` is 0.6.0 — the seeds before 0.5.0 ship no `std/`, and 0.5.0 differs
+from HEAD by WP30's deliberate changes (`.github/seed-targets.json`) —
 [wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on) has the
 reasoning as it stood before the deletion. The language reference cannot be frozen while
 items 5, 6 and 8 below are each still going to add or withdraw a rule, so the

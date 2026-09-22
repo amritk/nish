@@ -172,8 +172,7 @@ on a real workload on every run.
 It is still not a replacement for `tests/run.js`, and the difference is worth
 being precise about: it covers section A, the golden cases, and none of the
 pipeline checks — no interop sidecars, no layout assertions, no wasm profiles, no
-packaging, no self-hosting oracles, and none of the sixteen flag variations
-`tests/self/parity.js` runs. It also skips, by name and counted, the three
+packaging and no self-hosting oracles. It also skips, by name and counted, the three
 sidecars it does not implement (`.env`, `.argv`, `.stdout`). What it demonstrates
 is that the language can host its own harness; what `tests/run.js` does is prove
 the compiler.

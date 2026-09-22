@@ -757,7 +757,7 @@ A function's own position — the `DISubprogram`'s `line` and `scopeLine`, its
 parameters' `DILocalVariable`s, and the `DILocation` the prologue and any
 untied instruction carry — is where the **declaration** starts: `export`, or
 `const`, or `function`. Not the arrow: the parser normalises WP22's two
-spellings into one node that spans the declaration, and `FunctionSig.declSite`
+spellings into one node that spans the declaration, and `FunctionSig.decl`
 is the node the checker records for it (`tests/cases/dbg_arrow`). stage0 read
 the position off the arrow, whose own start is its parameter list, and named
 the wrong line whenever the arrow sat below its `const`

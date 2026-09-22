@@ -71,8 +71,9 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
  * arena is asked for that many bytes, so the program dies with `out of memory`
  * instead of answering null. Node's `readFileSync` raises `EISDIR` and the
  * stage0 twin (the TypeScript compiler, deleted in R6) turned that into null,
- * so without this the two compilers answered differently for one tree — a package whose `exports` names a directory, which
- * WP21 S2 made reachable (`tests/link/package_dir_target`).
+ * so without this the two compilers answered differently for one tree — a
+ * package whose `exports` names a directory, which WP21 S2 made reachable
+ * (`tests/link/package_dir_target`).
  *
  * The test is `!S_ISDIR` rather than `S_ISREG` on purpose: a directory is the
  * only thing whose `lseek(SEEK_END)` answers `LONG_MAX`, and refusing anything

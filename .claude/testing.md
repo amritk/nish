@@ -50,16 +50,16 @@ test is **data, not code**: a source file next to the output it must produce.
   express the property (a byte budget, a vectorisation check, an ABI
   agreement).
 - **Differential tests** (`tests/differential/`) compile every whole program
-  natively and run the JavaScript rewrite of it under Node, then compare
-  stdout, exit status and signal byte for byte. The rewrite was typed by
-  stage0's checker, so it is **frozen** —
-  `tests/differential/goldens/rewrites.txt` — and nothing can regenerate it: a program whose source has changed since its
-  rewrite was frozen fails as `STALE` rather than being compared against the
-  old one, `known-failures.txt` cannot excuse that, and a corpus program with
-  no frozen rewrite is named in a register rather than silently skipped.
-  `npm run test:diff` runs the full set. `node tests/differential/fuzz.js
-  --stage1 --count 200` compares the last release's IR with this tree's over a
-  random batch, printing the seed so a failure reproduces with `--seed <s> --count 1`.
+  natively and run the JavaScript rewrite of it under Node, then compare stdout,
+  exit status and signal byte for byte. The rewrite was typed by stage0's
+  checker, so it is **frozen** — `tests/differential/goldens/rewrites.txt` — and
+  nothing can regenerate it: a program whose source has changed since its
+  rewrite was frozen fails as `STALE` rather than being compared against the old
+  one, `known-failures.txt` cannot excuse that, and a corpus program with no
+  frozen rewrite is named in a register rather than silently skipped. `npm run
+  test:diff` runs the full set. `node tests/differential/fuzz.js --stage1
+  --count 200` compares the last release's IR with this tree's over a random
+  batch, printing the seed so a failure reproduces with `--seed <s> --count 1`.
   A discrepancy that is a deliberate semantic difference (documented in
   `docs/wp13-differential.md`) goes in `known-failures.txt`; anything else is a
   bug.
@@ -119,10 +119,11 @@ PR adding a construct is not finished without all of them:
    (`docs/cookbook/regen.sh`).
 6. One implementation, in `self/`. There is no second compiler to compare it
    with, so the golden and the native round trip are the proof, and
-   `tests/nish-cmp.js` — the last release against this tree — fails on the
-   corpus programs whose output the change moves until `CHANGELOG.md` names
-   the difference. `self/` may not use the construct in its own source until
-   the next release (the rolling freeze, `.claude/selfhost.md`).
+   `tests/nish-cmp.js` — the last release against this tree — reports every
+   corpus program whose output the change moves, and fails unless its `DECLARED`
+   list names the difference (the header of `tests/nish-cmp.js` says what an
+   entry carries). `self/` may not use the construct in its own source until the
+   next release (the rolling freeze, `.claude/selfhost.md`).
 7. A case that *reaches* each new wording, not only a code for it.
    `tests/diagnostic_coverage.js` compiles the negatives, the `perf_*`
    positives and `tests/wordings/`, reads the code out of every `--json`
@@ -146,12 +147,12 @@ of `clang -Oz -c runtime/runtime.c` summed, and the same for
 `runtime/runtime_os.c`, which is neither file's source size and neither is
 `size`'s text column; they are separate so that a new syscall wrapper cannot
 move the core's ceiling — the runtime symbol table agreeing across
-`self/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising `cf_sum_loop`)
-pin properties that have been broken before. When one fails, the change is what
-is wrong, not the test. Never delete a guard, and never move a number to turn a
-red line green; a budget is raised only deliberately, by a commit that carries
-the fresh measurement and the reason for it (`docs/wp7-runtime.md`
-§"Runtime additions and budget").
+`self/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising
+`cf_sum_loop`) pin properties that have been broken before. When one fails, the
+change is what is wrong, not the test. Never delete a guard, and never move a
+number to turn a red line green; a budget is raised only deliberately, by a
+commit that carries the fresh measurement and the reason for it
+(`docs/wp7-runtime.md` §"Runtime additions and budget").
 
 ## Testing a Nish program in Nish
 
@@ -232,9 +233,10 @@ It is not a replacement for this file's subject, and what it leaves out is now
 short enough to name: the cross-module `declare`/`define` attribute agreement,
 which needs a regular expression the language does not have, `UPDATE_GOLDENS`,
 which it must never do, and every pipeline check — interop sidecars, layout,
-wasm and napi profiles, packaging, the self-hosting oracles. `tests/run.js` is still what proves the compiler; the runner
-proves the language can host a harness. Its own header comment is the accurate
-description of what it covers; keep the two in step.
+wasm and napi profiles, packaging, the self-hosting oracles. `tests/run.js` is
+still what proves the compiler; the runner proves the language can host a
+harness. Its own header comment is the accurate description of what it covers;
+keep the two in step.
 
 ### The CLI contract in Nish
 
@@ -285,7 +287,7 @@ skips against a compiler that has no hook.
 node tests/run.js locals            # only cases whose name contains "locals"
 npm run test:update                 # write missing .ll goldens and tests/self/goldens/
 npm run test:diff                   # the full differential set
-node tests/differential/fuzz.js --count 200
+node tests/differential/fuzz.js --stage1 --count 200
 node tests/self/goldens.js          # the stage1 goldens alone, ~13 s
 node tests/differential/goldens.js --fresh  # the frozen WP13 rewrites: hashes, orphans, counts
 npm run test:cli                    # the CLI contract, through the Nish harness
@@ -336,11 +338,11 @@ the run you intend to quote.
 that mentions it.** The human-readable diagnostic report is capped:
 `DiagnosticSink.format` / `formatWarnings` in `self/diagnostics.ts` print at
 most 20, the cap `self/compile.ts` passes in, then `...and N more performance
-warnings`, then the total. The cap is the class's rule rather than an accident of the
-printer — `docs/LANGUAGE.md` states it for the warnings and `docs/wp10-ci.md`
-for the errors — and what follows from it is that a `grep -c` over the report
-answers 20 and keeps answering 20. Over the 60 modules of `self/` that do not
-declare `main`:
+warnings`, then the total. The cap is the class's rule rather than an accident
+of the printer — `docs/LANGUAGE.md` states it for the warnings and
+`docs/wp10-ci.md` for the errors — and what follows from it is that a `grep -c`
+over the report answers 20 and keeps answering 20. Over the 60 modules of
+`self/` that do not declare `main`:
 
 ```bash
 mods=$(for f in self/*.ts; do grep -qE '^export (function main\b|const main\s*=)' "$f" || echo "$f"; done)

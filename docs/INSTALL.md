@@ -341,6 +341,7 @@ From a checkout:
 git clone https://github.com/amritk/nish.git
 cd nish
 npm ci
+bash scripts/fetch-seed.sh   # the last release, into build/seed/
 npm run build       # seed -> stage1 -> stage2 = build/nish
 build/nish hello.ts --link hello
 ```

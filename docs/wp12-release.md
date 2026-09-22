@@ -566,6 +566,10 @@ the publish.
 
 ## The npm name
 
+> The analysis below was written while `src/` existed and names its files in
+> the present tense; R6 deleted it, and `self/branding.ts` is now the one file
+> the compiler reads its name from.
+
 **Decided 2026-09-19: the package is `@amritk/nish`, and the command stays
 `nish`.** That is option (a) below, taken without the project rename option (b)
 would have carried. `package.json#name` is the scoped name; `bin.nish` is
@@ -654,6 +658,12 @@ names, which are `@amritk/nish-<asset>` — derived from this one rather than
 written out, so the scope is still spelled in a single place.
 
 ## Which compiler the package ships
+
+> **Superseded in part by R6.** This section records the 2026-09-19 decision
+> and its amendments as they were written. Where it says `dist/` stays in the
+> package, or that stage0 is the seed and the oracle, that stopped being true
+> when R6 deleted `src/`: the package ships no compiler for Node, and the seed
+> is the previous release.
 
 **Decided 2026-09-19: (c) for which binary, (b) for delivery, (a) as the
 fallback.** `bin.nish` runs the self-hosted native compiler. `dist/` stays in
