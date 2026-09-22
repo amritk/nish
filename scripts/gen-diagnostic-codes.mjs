@@ -175,8 +175,7 @@ const nextFree = (pairs) => {
 
 const { found, all } = problems(fs.readFileSync(REGISTRY, "utf8"));
 for (const problem of found) console.error(`error: ${problem}`);
-if (process.argv.includes("--check")) process.exit(found.length > 0 ? 1 : 0);
-if (found.length === 0) {
+if (found.length === 0 && !process.argv.includes("--check")) {
   console.log(`self/codes.ts: ${all.length} rules, well-formed; next free: ${nextFree(all).join(" ")}`);
 }
 process.exit(found.length > 0 ? 1 : 0);

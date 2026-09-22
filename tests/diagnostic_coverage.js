@@ -90,6 +90,7 @@ import { fileURLToPath } from "node:url";
 import { jobsFrom, pool, run } from "./pool.js";
 import { readCodesRegistry } from "../scripts/codes-registry.js";
 import { extraArgs, linkPrograms, root } from "./self/corpus.js";
+import { defaultSeedSpec } from "./self/seed.js";
 
 const WORDINGS = path.join(root, "tests", "wordings");
 const CASES = path.join(root, "tests", "cases");
@@ -217,20 +218,6 @@ const resolveCompiler = (spec) => {
 };
 
 /**
- * The compiler nobody named. `NISH_BOOTSTRAP` first, because that is the seed
- * `scripts/bootstrap.sh` and CI already agree on (G3), then what
- * `npm run bootstrap` leaves behind. There used to be a third answer, stage0's
- * `dist/index.js`; R6 deletes it, and `tests/run.js` names its compiler with
- * `--compiler` anyway.
- */
-const defaultCompiler = () => {
-  const seed = process.env.NISH_BOOTSTRAP;
-  if (seed !== undefined && seed !== "") return seed;
-  const bootstrapped = path.join("build", "nish");
-  return fs.existsSync(path.join(root, bootstrapped)) ? bootstrapped : null;
-};
-
-/**
  * Whether a run's `--json` objects are the parser turning the file down rather
  * than a phase naming a rule. Every syntax error carries one code (`SYNTAX` in
  * `self/codes.ts`), which is the field to key on: the prose is two different
@@ -289,7 +276,9 @@ const parse = (argv) => {
 
 const main = async (argv) => {
   const options = parse(argv);
-  const spec = options.compiler ?? defaultCompiler();
+  // Nobody named one: the seed order, `NISH_BOOTSTRAP` then `build/nish`.
+  // There used to be a third answer, stage0's `dist/index.js`; R6 deletes it.
+  const spec = options.compiler ?? defaultSeedSpec();
   if (spec === null) {
     process.stderr.write(
       "no compiler: pass --compiler <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap`\n"

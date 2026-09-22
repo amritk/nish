@@ -74,28 +74,23 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CORPUS_DIRS, extraArgs, linkPrograms, programs, root } from "../tests/self/corpus.js";
+import { resolveSeed } from "../tests/self/seed.js";
 import { rewrite } from "./arrowify.mjs";
 
 const work = path.join(root, "build", "arrowify");
 
 /**
  * The compiler both sides of the sweep run, `--compiler` or `build/nish` --
- * what `npm run bootstrap` leaves in the tree. It used to be stage0's
- * `dist/index.js` and nothing else, which R6 deletes; the question this tool
- * asks, "did the rewrite move a byte?", is one any compiler can answer, as
- * long as the same one answers both sides. A `.js` / `.mjs` / `.cjs` path is
- * run under node, the rule `scripts/bootstrap.sh` applies to `NISH_BOOTSTRAP`.
- * Set once by `main` before anything is compiled.
+ * what `npm run bootstrap` leaves in the tree -- resolved by
+ * `tests/self/seed.js`, so a `.js` path runs under node the way it does
+ * everywhere else. It used to be stage0's `dist/index.js` and nothing else,
+ * which R6 deletes; the question this tool asks, "did the rewrite move a
+ * byte?", is one any compiler can answer, as long as the same one answers both
+ * sides. Set once by `main` before anything is compiled.
  */
 let compiler = { cmd: "", prefix: [] };
 
 const DEFAULT_COMPILER = path.join("build", "nish");
-
-const compilerFor = (spec) => {
-  const file = path.resolve(root, spec);
-  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return null;
-  return /\.(?:js|mjs|cjs)$/.test(file) ? { cmd: process.execPath, prefix: [file] } : { cmd: file, prefix: [] };
-};
 const tree = path.join(work, "tree");
 const lock = path.join(root, "build", "arrowify.lock");
 
@@ -715,11 +710,10 @@ const main = (argv) => {
     process.stderr.write(`arrow-verify: --compiler needs a path, not ${compilerArg ?? "the end of the command"}\n`);
     return 2;
   }
-  const spec = flags.has("--compiler") ? compilerArg : DEFAULT_COMPILER;
-  const resolved = compilerFor(spec);
-  if (resolved === null) {
+  const resolved = resolveSeed(flags.has("--compiler") ? compilerArg : DEFAULT_COMPILER);
+  if (resolved.error !== undefined) {
     process.stderr.write(
-      `arrow-verify: no compiler at ${spec}; pass --compiler <nish>, or run \`npm run bootstrap\` to leave one in ${DEFAULT_COMPILER}\n`
+      `arrow-verify: ${resolved.error}; pass --compiler <nish>, or run \`npm run bootstrap\` to leave one in ${DEFAULT_COMPILER}\n`
     );
     return 2;
   }

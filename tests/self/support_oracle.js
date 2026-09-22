@@ -38,7 +38,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed } from "./seed.js";
+import { seedWithoutStage0 } from "./goldens.js";
+import { linkWith, namedSeedSpec } from "./seed.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 
@@ -260,24 +261,6 @@ function build(seed) {
   return linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));
 }
 
-/**
- * The compiler that links the driver: `--seed`, then `NISH_BOOTSTRAP`, then
- * `build/nish` -- `tests/self/seed.js`'s order -- and nothing after it. This
- * oracle used to fall back to stage0's `dist/index.js` when no seed was named;
- * it compares against something that outlives `src/`, so the compiler that
- * builds its subject has to outlive it too, and R6 took the fallback out.
- */
-const seedWithoutStage0 = (argv) => {
-  const spec = namedSeedSpec(argv) ?? defaultSeedSpec();
-  if (spec === null) {
-    return {
-      error:
-        "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` to leave one in build/nish",
-    };
-  }
-  return resolveSeed(spec);
-};
-
 /** `want` against `got` line by line: the differing lines, as a report prints them. */
 const differences = (want, got) => {
   const differing = [];
@@ -306,27 +289,34 @@ const report = (differing, verbose) => {
 async function main(argv) {
   const verbose = argv.includes("--verbose");
   const update = argv.includes("--update");
-  const seed = seedWithoutStage0(argv);
+  const seed = seedWithoutStage0(namedSeedSpec(argv));
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
     return 1;
   }
-  const binary = build(seed);
-  if (binary === null) return 1;
-  const run = spawnSync(binary, [CASES], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  if (run.status !== 0) {
-    process.stderr.write(`support exited ${run.status}\n${run.stderr}`);
-    return 1;
-  }
   const caseText = fs.readFileSync(CASES, "utf8");
   const stage0 = await stage0Escapes();
+  // The driver's output, linked and run only by the paths that read it: the
+  // link is the one expensive step here, and a missing or stale golden can be
+  // reported without it.
+  const driver = () => {
+    const binary = build(seed);
+    if (binary === null) return null;
+    const run = spawnSync(binary, [CASES], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    if (run.status !== 0) {
+      process.stderr.write(`support exited ${run.status}\n${run.stderr}`);
+      return null;
+    }
+    return run.stdout;
+  };
 
   if (update) {
     // With stage0 in the tree the golden is stage0's answer. Without it, the
     // only thing left to record is stage1's own output, which is a golden in
     // the ordinary sense — reviewed as a diff — and is only written when every
     // line Node can still answer agrees with it.
-    const recorded = stage0 !== null ? expected(caseText, stage0) : run.stdout;
+    const recorded = stage0 !== null ? expected(caseText, stage0) : driver();
+    if (recorded === null) return 1;
     const stale = staleLines(recorded, caseText);
     if (stale.length > 0) {
       report(stale, verbose);
@@ -363,8 +353,10 @@ async function main(argv) {
       return 1;
     }
   }
+  const got = driver();
+  if (got === null) return 1;
   const want = golden.split("\n");
-  const differing = differences(want, run.stdout.split("\n"));
+  const differing = differences(want, got.split("\n"));
   report(differing, verbose);
   const recorded = want.filter((line) => STAGE0_LINE.test(line)).length;
   const against = stage0 !== null ? "the golden and stage0" : "the golden";
@@ -375,4 +367,4 @@ async function main(argv) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(await main(process.argv.slice(2)));
-export { expected, build, GOLDEN };
+export { expected, build };
