@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 344 programs, 5981 dump lines.
+# 345 programs, 6001 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -6075,6 +6075,27 @@ function main(): i32 -> @nish_main [exported entry]
   local 32:12 i: i32 (let)
   callee 33:18 combine -> @combine
   callee 33:26 half -> @half
+program bench/scan.ts
+module bench/scan.ts (entry)
+const ERR_DEPTH: i32 = -1
+const ERR_UNTERMINATED: i32 = -2
+const MAX_DEPTH: i32 = 64
+function scanJson(bytes: u8[]): i32 -> @scanJson [exported]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 30:7 tokens: i32 (let)
+  local 31:7 depth: i32 (let)
+  local 32:7 inString: boolean (let)
+  local 33:7 escaped: boolean (let)
+  local 34:12 i: i32 (let)
+  local 35:11 b: u8 (const)
+function isJsonShaped(bytes: u8[]): boolean -> @isJsonShaped [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: scanJson
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=scanJson#0
+  stackSites=0 stackLocals=0
+  callee 75:10 scanJson -> @scanJson
 program bench/sieve.ts
 module bench/sieve.ts (entry)
 function sieve(composite: boolean[], n: i32): i32 -> @sieve
