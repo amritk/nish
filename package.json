@@ -4,9 +4,7 @@
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
   "exports": {
-    ".": "./dist/index.js",
     "./package.json": "./package.json",
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
@@ -16,7 +14,6 @@
     "nish": "bin/nish"
   },
   "files": [
-    "dist",
     "bin",
     "runtime",
     "scripts",

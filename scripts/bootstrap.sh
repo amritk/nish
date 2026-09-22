@@ -176,8 +176,9 @@ install=$stages
 build_to=$stages
 [ "$verify" -eq 1 ] && build_to=3
 
-# The published npm package ships dist/, runtime/ and scripts/ but not self/,
-# so say which one is missing rather than failing inside the compiler.
+# The published npm package ships bin/, runtime/, scripts/ and std/ but not
+# self/ -- and, since 0.6.0, no compiler of its own at all -- so say which file
+# is missing rather than failing inside the compiler.
 if [ ! -f self/compile.ts ]; then
   echo "bootstrap: self/compile.ts is missing; run this from a checkout of the repository" >&2
   exit 3

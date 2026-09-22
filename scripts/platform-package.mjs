@@ -17,13 +17,14 @@
  * is compiled on the way in.
  *
  * It deliberately declares no `bin`. The `nish` command belongs to the main
- * package's launcher, which is the only thing that knows how to fall back when
- * no platform package was installed; two packages claiming one command name
- * would leave which binary wins up to npm's link order.
+ * package's launcher, which is the only thing that knows which platform's
+ * binary to hand over to -- and, since 0.6.0, the only thing that knows how to
+ * say so when none was installed; two packages claiming one command name would
+ * leave which binary wins up to npm's link order.
  */
 import fs from "node:fs";
 import path from "node:path";
-import { targetForAsset } from "../dist/packaging.js";
+import { targetForAsset } from "../bin/packaging.js";
 
 const args = process.argv.slice(2);
 const flag = (name) => {

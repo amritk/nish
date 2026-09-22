@@ -1349,9 +1349,12 @@ is more useful than a dated run of something unrelated.
   it" half: `bin.nish` is a launcher, the binary arrives as one
   `@amritk/nish-<asset>` `optionalDependencies` entry per platform with `os`
   and `cpu` set, and npm installs the matching one. The WP12 check still
-  passes, and it now covers both paths — with no platform package beside it the
-  launcher runs `dist/`, which is the fallback for a platform this project
-  attaches no binary for, and with one it hands over argv, status and signals.
+  passes, and it now covers both paths — with a platform package the round trip
+  packs, installs and links a hello-world through a real staged compiler, and
+  with none the launcher refuses by name and exits 3. **Amended 2026-09-22**:
+  that second path used to be a fallback to `dist/`, and a fallback that is the
+  compiler this package deletes is not one, so `files` stops shipping `dist/`
+  and the refusal is what a platform with no binary gets (§6, cost 5).
   **Nothing is compiled on a user's machine on any path**, which was never
   written into this bullet and is the property the gate is actually about.
 - `--version` has a source that is not `package.json`.
@@ -2345,6 +2348,66 @@ is one commit that does nothing else.
    class a golden `.ll` is worst at catching. That mechanism stops.
 4. **One implementation is one bus factor**, and the language becomes whatever
    `self/` does, with no second reading to appeal to.
+5. **musl, FreeBSD and every 32-bit platform lose their `npm install`.** This
+   is the one cost on the list that is paid by somebody other than this
+   repository, so it is worth being exact about who and what. `package.json`'s
+   `files` shipped `dist/`, and `bin/nish` ran it on any platform this project
+   attaches no prebuilt binary for — the four are `x86_64-linux`,
+   `aarch64-linux`, `x86_64-darwin`, `aarch64-darwin`
+   ([`.github/seed-targets.json`](../.github/seed-targets.json)). `dist/` was
+   affordable as a fallback precisely because it was in the package for its own
+   reasons, as the seed and as the oracle; delete `src/` and it has none, and
+   keeping it would mean publishing and maintaining a second implementation of
+   the compiler for the smallest constituency in §1's table. So `files` stops
+   shipping it and the launcher refuses: it names the four platforms that do
+   have a binary, says there is nothing inside the package to fall back to, and
+   exits 3 (`docs/wp12-release.md`, "Which compiler the package ships", amended
+   2026-09-22).
+
+   **What those users had and no longer have** is a working compiler from one
+   `npm install`, needing no C toolchain, about eight times slower than the
+   native one and the same compiler by every test here. **What is left** is in
+   [INSTALL.md](INSTALL.md) and none of it is a supported install: bootstrap in
+   a glibc host or container with `NISH_BOOTSTRAP=<released nish>` and link with
+   the machine's own `clang`; compile the compiler to a single WASI module
+   (`--profile wasi`) and run it under Node; or use a target this project does
+   build. The seed does not have to be *for* the machine, but it has to run *on*
+   it, which is the whole of the difficulty on musl.
+
+   Two properties survive and are the reason this is a cost rather than a
+   regression: **nothing is compiled on a user's machine on any path**, and a
+   supported platform still installs by download and unpack. What a user on an
+   unsupported platform gets is a sentence naming the situation and a remedy,
+   which is the honest form of a package that cannot serve them — and the
+   alternative that was never on the table is a command that exits 0 having
+   compiled nothing. **The refusal is machine-readable**, which is not a detail:
+   `AGENTS.md` promises that a failure with no source position is still one JSON
+   line and that under `--json` nobody has to read stderr to find out why a run
+   failed, so the refusal answers `--json` with one `{"severity","code","message"}`
+   object on stdout carrying `NL0002` — the toolchain code the compiler already
+   mints for "a program that had to run would not" — and exits 3. The first
+   version of this change made it prose on every path, which broke that contract
+   on a path that is reachable on a fully supported platform (`--no-optional`, or
+   a lockfile without the optional entries), and nothing in the suite saw it
+   because `tests/nish/cli.ts` drives the compiler rather than the command.
+
+   **What the suite asserts, and which of it could have failed before.** Seven
+   checks in `tests/run.js`'s WP12 block were watched failing against the
+   fallback they replace: the refusal and its exit 3, the package it names, the
+   remedy it names, the unstartable-binary refusal, the `--json` object and its
+   contents, and that a refusal writes nothing *when asked for an `-o` and a
+   `--link`* — that last one being an assertion only in that form, because
+   against an empty directory it passed before the change as well. The rest is
+   **new coverage that could not have failed against the old behaviour, and
+   saying so is the point of this paragraph**: three assert a message that did
+   not exist until this commit, one pins the printed platform list against
+   `.github/seed-targets.json`, and four exercise the packaging path — of which
+   `the platform package ships a whole compiler` was watched failing against a
+   `files` list with an entry deleted from it, which is the 0.1.1–0.4.0 defect
+   exactly. One of them, `installed nish compiles and links a program importing
+   nish/text`, passes on the old fallback too; its value is that it now runs
+   through the platform package rather than through `dist/`, which is the half
+   of this block that was never tested before (§5a item 1).
 
 Against that: every construct is written once instead of twice, `self/` gets a
 one-release lag instead of a permanent freeze, the compiler stops depending on

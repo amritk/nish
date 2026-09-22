@@ -16,8 +16,9 @@ read `AGENTS.md` and `.claude/orientation.md` instead.
 Verify, never guess: `nish program.ts --json` prints one flat JSON object per
 diagnostic on stdout and is the only authority on whether a program is legal.
 Key on the stable `code` field (`NL2249`), never on the prose in `message`.
-Exit codes: 0 ok, 1 the program was rejected, 2 usage, 3 C toolchain, 70 a bug
-in the compiler.
+Exit codes: 0 ok, 1 the program was rejected, 2 usage, 3 the C toolchain or the
+prebuilt compiler could not be run (one NL0002 object under --json), 70 a bug in
+the compiler.
 
 ## Writing Nish
 

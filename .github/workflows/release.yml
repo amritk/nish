@@ -67,12 +67,14 @@ on:
 # on as many machines as there are targets.
 #
 # What this does NOT do is keep third-party install code away from the write
-# token, because `release` still runs `npm ci` and `npm run build` under it:
-# `npm pack` ships `dist/`, so the tarball has to be built where it is
-# published. Narrowing the other jobs shrinks that surface from every runner in
-# the matrix to one; it does not remove it. Removing it would mean building the
-# package in a job with `contents: read` and passing it here as an artifact,
-# which is a change worth making on its own terms rather than as a footnote.
+# token, because `release` still runs `npm ci` under it. What it no longer has
+# to do is build the compiler first: `npm pack` stopped shipping `dist/` in
+# 0.6.0, so the tarball is the launcher and the whitelisted data files, and
+# nothing in it is `tsc` output. Narrowing the other jobs shrinks the surface
+# from every runner in the matrix to one; it does not remove it. Removing it
+# would mean packing in a job with `contents: read` and passing the tarball
+# here as an artifact, which is a change worth making on its own terms rather
+# than as a footnote.
 permissions:
   contents: write
 
@@ -213,7 +215,7 @@ jobs:
       # compiler. `--link` shells out to scripts/build.sh and compiles
       # runtime/runtime.c, and the compiler looks for both in <its own dir>/..
       # and in the working directory -- so `nish` must sit one level down from
-      # them, exactly as `dist/index.js` does in the npm package. Ship it flat
+      # them, exactly as `bin/nish` does in the npm package. Ship it flat
       # beside runtime/ and it links only while the working directory happens
       # to be the unpacked folder, which is a trap rather than a distribution.
       #
@@ -367,10 +369,12 @@ jobs:
           echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
           # A platform package whose binary did not ship is the worst outcome
           # this workflow can produce: it installs without error on every
-          # machine it matches and silently answers at the Node compiler's pace
-          # forever, because falling back is exactly what the launcher does when
-          # it cannot find the binary. No smoke test of the unpacked tarball can
-          # see it, so the list is checked here.
+          # machine it matches, and every `nish` on those machines then refuses
+          # for want of the binary this package exists to carry -- an install
+          # that reports success and leaves the user with no compiler. Since
+          # 0.6.0 that is a refusal rather than a silent fall back to Node,
+          # which is louder and no less broken. No smoke test of the unpacked
+          # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
           for f in bin/nish runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
@@ -472,15 +476,14 @@ jobs:
             exit 1
           fi
 
-      # No LLVM here any more: this job packs and publishes, and the compilers
-      # were built and smoke-tested on their own hardware by the `binaries` job
-      # above. `npm run build` is still needed, because `npm pack` ships
-      # `dist/`.
+      # No LLVM here any more, and no build either: this job packs and publishes,
+      # and the compilers were built and smoke-tested on their own hardware by the
+      # `binaries` job above. `npm run build` used to be needed because `npm pack`
+      # shipped `dist/`; since 0.6.0 the tarball is the launcher in `bin/` plus the
+      # whitelisted data files, none of it `tsc` output, so there is nothing to
+      # build before packing.
       - name: Install dependencies
         run: npm ci
-
-      - name: Build
-        run: npm run build
 
       # Every binary the matrix produced, back into one directory. The release
       # job `needs: binaries`, so reaching this step at all means every row
@@ -541,7 +544,13 @@ jobs:
           # program printing a string and fails on any program that reads a file,
           # lists a directory, spawns a child or asks the clock -- the half of the
           # runtime whose absence a smoke test of `hello.ts` cannot see.
-          for f in dist/index.js runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts; do
+          #
+          # `bin/` rather than `dist/index.js` since 0.6.0: the tarball carries the
+          # launcher and not a compiler, and the compiler travels in the platform
+          # packages the matrix above built. The three `bin/` paths are the command
+          # and the two files behind it, and a tarball missing any of them installs
+          # a package whose `bin` points at nothing.
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
@@ -604,8 +613,8 @@ jobs:
       #     # The platform packages first, then the one that depends on them.
       #     # In this order a failure half way leaves a registry where the main
       #     # package does not yet exist, so nobody can install a version whose
-      #     # binaries are missing; the other order publishes a compiler that
-      #     # resolves nothing and falls back to Node on every machine.
+      #     # binaries are missing; the other order publishes a command that
+      #     # resolves nothing and refuses on every machine.
       #     while IFS= read -r pkg; do
       #       npm publish "$pkg" --provenance --access public
       #     done < build/release/packages.txt
