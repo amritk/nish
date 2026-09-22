@@ -99,7 +99,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const nish_str *` in, `nish_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
 | `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
 | `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
-| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
+| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
 | `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
@@ -2510,10 +2510,20 @@ compiler's own marks are never invalidated by user resets.
   types are rejected because a zeroed pointer would be null
   (`tests/cases/arr_new_zeroed`, `reject_arr_new_string`).
 - **Typed-array names are aliases, not views.** `Int32Array` is `i32[]` with
-  every array operation, `push` included; there is no separate buffer type,
-  no `subarray`, and no `Uint8Array` / `Float32Array` (`boolean[]` has no
-  flat JS view because an `i1` must be 0 or 1). At a host boundary the
-  alias names the JS typed array that crosses ([wp8-interop.md](wp8-interop.md)).
+  every array operation, `push` included; there is no separate buffer type and
+  no `subarray`. The alias names are exactly four — `Int32Array`,
+  `Float32Array`, `Float64Array`, `BigInt64Array` — and an *unsigned* array has
+  none: a program writes `u8[]`, and `Uint8Array` is not a type it can spell.
+  That asymmetry is only a spelling. `u8[]`, `u16[]`, `u32[]` and `u64[]` cross
+  a host boundary as the matching typed array
+  ([wp30-bytes-interop.md](wp30-bytes-interop.md)), and an element of one needs
+  **none** of the masking its scalar twin needs: a scalar `u32` result travels
+  in an i32 value type and reaches JavaScript negative above 2^31 unless the
+  loader restores it, while an element is a byte in `data` that `Uint32Array`
+  reads unsigned. `boolean[]` still has no flat view at all, because an `i1`
+  must be 0 or 1 and that is a per-element check rather than a reinterpretation.
+  At a host boundary the name is the JS typed array that crosses
+  ([wp8-interop.md](wp8-interop.md)).
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,

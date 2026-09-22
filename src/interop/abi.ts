@@ -96,9 +96,9 @@ function writtenArrayParams(sig: FunctionSig, facts: FunctionFacts | undefined):
  * declining these functions with the reason they always gave.
  */
 export interface TypedView {
-  /** `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`: the language's alias and the JS constructor. */
+  /** The language's array alias and the JS constructor whose element layout matches it. */
   ctor: string;
-  elemSize: 4 | 8;
+  elemSize: 1 | 2 | 4 | 8;
   cElem: string;
   napiType: string;
 }
@@ -108,6 +108,23 @@ export function typedView(t: StaticType): TypedView | undefined {
   switch (kindOf((t as { elem: StaticType }).elem)) {
     case "i32":
       return { ctor: "Int32Array", elemSize: 4, cElem: "int32_t", napiType: "napi_int32_array" };
+    // WP30: every unsigned width has an exact typed array, and an array of one
+    // needs none of the masking its *scalar* boundary does (wp8-interop.md,
+    // "The unsigned widths"). A scalar `u32` result reaches JS through an i32
+    // value type and arrives negative above 2^31 without an explicit `>>> 0`;
+    // an element never travels in a value type at all. It is a byte in `data`
+    // that a `Uint32Array` reads unsigned, and a store through one truncates
+    // exactly as the language wraps, so the range is restored by the view
+    // rather than by generated arithmetic. The narrow widths get *simpler*
+    // here, not harder, which reads like an omission unless it is said.
+    case "u8":
+      return { ctor: "Uint8Array", elemSize: 1, cElem: "uint8_t", napiType: "napi_uint8_array" };
+    case "u16":
+      return { ctor: "Uint16Array", elemSize: 2, cElem: "uint16_t", napiType: "napi_uint16_array" };
+    case "u32":
+      return { ctor: "Uint32Array", elemSize: 4, cElem: "uint32_t", napiType: "napi_uint32_array" };
+    case "u64":
+      return { ctor: "BigUint64Array", elemSize: 8, cElem: "uint64_t", napiType: "napi_biguint64_array" };
     case "f32":
       return { ctor: "Float32Array", elemSize: 4, cElem: "float", napiType: "napi_float32_array" };
     case "f64":
@@ -280,7 +297,12 @@ export function resultTypesUsed(
   const note = (t: StaticType, byValue: boolean): void => {
     for (const inner of resultTypesIn(t)) {
       const name = cResultName(inner);
-      const use = uses.get(name) ?? { type: inner as ResultType, layout: resultLayout(inner), word: false, object: false };
+      const use = uses.get(name) ?? {
+        type: inner as ResultType,
+        layout: resultLayout(inner),
+        word: false,
+        object: false,
+      };
       // Only the outermost type of a by-value return travels in a register;
       // anything nested inside it is a payload, and a payload is a pointer.
       if (byValue && inner === t) use.word = true;
@@ -313,7 +335,16 @@ export function resultTypesUsed(
  */
 export function isScalar(t: StaticType): boolean {
   const k = kindOf(t);
-  return k === "i32" || k === "u8" || k === "u16" || k === "u32" || k === "f32" || k === "f64" || k === "bool" || k === "void";
+  return (
+    k === "i32" ||
+    k === "u8" ||
+    k === "u16" ||
+    k === "u32" ||
+    k === "f32" ||
+    k === "f64" ||
+    k === "bool" ||
+    k === "void"
+  );
 }
 
 /** TypeScript source spelling of a signature, for comments and declarations. */
@@ -365,13 +396,82 @@ export function tsKeyword(t: StaticType): string {
  * parameter names, only the header reader does.
  */
 const C_RESERVED = new Set([
-  "auto", "bool", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
-  "extern", "false", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return",
-  "short", "signed", "sizeof", "static", "struct", "switch", "true", "typedef", "union", "unsigned", "void",
-  "volatile", "while", "_Bool", "alignas", "alignof", "and", "asm", "catch", "class", "delete", "explicit",
-  "export", "friend", "mutable", "namespace", "new", "not", "operator", "or", "private", "protected", "public",
-  "template", "this", "throw", "try", "typename", "using", "virtual", "xor", "nish_str", "nish_arena", "nish_array",
-  "env", "info", "argv", "argc", "type", "out", "result", "mark",
+  "auto",
+  "bool",
+  "break",
+  "case",
+  "char",
+  "const",
+  "continue",
+  "default",
+  "do",
+  "double",
+  "else",
+  "enum",
+  "extern",
+  "false",
+  "float",
+  "for",
+  "goto",
+  "if",
+  "inline",
+  "int",
+  "long",
+  "register",
+  "restrict",
+  "return",
+  "short",
+  "signed",
+  "sizeof",
+  "static",
+  "struct",
+  "switch",
+  "true",
+  "typedef",
+  "union",
+  "unsigned",
+  "void",
+  "volatile",
+  "while",
+  "_Bool",
+  "alignas",
+  "alignof",
+  "and",
+  "asm",
+  "catch",
+  "class",
+  "delete",
+  "explicit",
+  "export",
+  "friend",
+  "mutable",
+  "namespace",
+  "new",
+  "not",
+  "operator",
+  "or",
+  "private",
+  "protected",
+  "public",
+  "template",
+  "this",
+  "throw",
+  "try",
+  "typename",
+  "using",
+  "virtual",
+  "xor",
+  "nish_str",
+  "nish_arena",
+  "nish_array",
+  "env",
+  "info",
+  "argv",
+  "argc",
+  "type",
+  "out",
+  "result",
+  "mark",
 ]);
 
 export function cParamName(name: string): string {
@@ -399,7 +499,10 @@ export function cFunctionName(symbol: string): { ident: string; label: string } 
 }
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `undefined` when a type has no C spelling. */
-export function cPrototype(sig: FunctionSig, writtenParams: ReadonlySet<string> = new Set()): string | undefined {
+export function cPrototype(
+  sig: FunctionSig,
+  writtenParams: ReadonlySet<string> = new Set()
+): string | undefined {
   const ret = cType(sig.returnType, "return");
   if (ret === undefined) return undefined;
   const params: string[] = [];

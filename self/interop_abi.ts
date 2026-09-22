@@ -184,7 +184,7 @@ const writtenArrayParams = (table: TypeTable, sig: FunctionSig, facts: FunctionF
  * wasm and N-API bridges go on declining these functions.
  */
 export class TypedView {
-  /** `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`: the language's alias and the JS constructor. */
+  /** The language's array alias and the JS constructor whose element layout matches it. */
   ctor: string;
   elemSize: i32;
   cElem: string;
@@ -205,6 +205,23 @@ export const typedView = (table: TypeTable, t: i32): TypedView | null => {
   switch (table.kindOf(table.refOf(t))) {
     case T_I32:
       return new TypedView("Int32Array", 4, "int32_t", "napi_int32_array");
+    // WP30: every unsigned width has an exact typed array, and an array of one
+    // needs none of the masking its *scalar* boundary does (wp8-interop.md,
+    // "The unsigned widths"). A scalar `u32` result reaches JS through an i32
+    // value type and arrives negative above 2^31 without an explicit `>>> 0`;
+    // an element never travels in a value type at all. It is a byte in `data`
+    // that a `Uint32Array` reads unsigned, and a store through one truncates
+    // exactly as the language wraps, so the range is restored by the view
+    // rather than by generated arithmetic. The narrow widths get *simpler*
+    // here, not harder, which reads like an omission unless it is said.
+    case T_U8:
+      return new TypedView("Uint8Array", 1, "uint8_t", "napi_uint8_array");
+    case T_U16:
+      return new TypedView("Uint16Array", 2, "uint16_t", "napi_uint16_array");
+    case T_U32:
+      return new TypedView("Uint32Array", 4, "uint32_t", "napi_uint32_array");
+    case T_U64:
+      return new TypedView("BigUint64Array", 8, "uint64_t", "napi_biguint64_array");
     case T_F32:
       return new TypedView("Float32Array", 4, "float", "napi_float32_array");
     case T_F64:

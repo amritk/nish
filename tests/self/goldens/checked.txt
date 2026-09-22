@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 417 programs, 7536 dump lines.
+# 420 programs, 7591 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -584,6 +584,29 @@ function main(): i32 -> @nish_main [exported entry]
   callee 52:22 scale -> @scale
   local 53:9 big: i64[] (const)
   callee 53:15 widen -> @widen
+program tests/cases/arr_u8.ts
+module tests/cases/arr_u8.ts (entry)
+function fill(bytes: u8[], v: u8): void -> @fill
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: v
+  pointer bytes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 14:12 i: i32 (let)
+function sum(bytes: u8[]): i32 -> @sum
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 20:7 total: i32 (let)
+  local 21:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: fill nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32 sum
+  stackSites=1 stackLocals=1
+  local 28:9 bytes: u8[] (const)
+  callee 29:3 fill -> @fill
+  callee 30:18 sum -> @sum
+  callee 38:18 sum -> @sum
+  local 41:9 one: u8 (const)
 program tests/cases/arr_unchecked.ts
 module tests/cases/arr_unchecked.ts (entry)
 function get(xs: i32[], i: i32): i32 -> @get
@@ -4973,6 +4996,20 @@ function spread(n: i32): f64 -> @spread [exported]
   local 20:9 ps: Point[] (const)
   local 21:7 i: i32 (let)
   callee 26:10 centroidX -> @centroidX
+program docs/cookbook/arr_u8_elements.ts
+module docs/cookbook/arr_u8_elements.ts (entry)
+function get(bytes: u8[], i: i32): u8 -> @get
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i
+  calls: nish_panic_index
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function set(bytes: u8[], i: i32, v: u8): void -> @set
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i v
+  calls: nish_panic_index
+  pointer bytes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 program docs/cookbook/arr_unchecked.ts
 module docs/cookbook/arr_unchecked.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get
@@ -6095,6 +6132,27 @@ function main(): i32 -> @nish_main [exported entry]
   local 32:12 i: i32 (let)
   callee 33:18 combine -> @combine
   callee 33:26 half -> @half
+program bench/scan.ts
+module bench/scan.ts (entry)
+const ERR_DEPTH: i32 = -1
+const ERR_UNTERMINATED: i32 = -2
+const MAX_DEPTH: i32 = 64
+function scanJson(bytes: u8[]): i32 -> @scanJson [exported]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 30:7 tokens: i32 (let)
+  local 31:7 depth: i32 (let)
+  local 32:7 inString: boolean (let)
+  local 33:7 escaped: boolean (let)
+  local 34:12 i: i32 (let)
+  local 35:11 b: u8 (const)
+function isJsonShaped(bytes: u8[]): boolean -> @isJsonShaped [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: scanJson
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=scanJson#0
+  stackSites=0 stackLocals=0
+  callee 75:10 scanJson -> @scanJson
 program bench/sieve.ts
 module bench/sieve.ts (entry)
 function sieve(composite: boolean[], n: i32): i32 -> @sieve
