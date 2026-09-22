@@ -167,12 +167,16 @@ echo "rows=$rows" >> "$out"
 #
 # WHICH RELEASE. `cmpSince` in .github/seed-targets.json, compared the way
 # `attachedSince` is and for the same reason -- a release already published
-# cannot grow a file. The seeds 0.1.1 through 0.4.0 ship no std/, so against
-# any of them the tool correctly reports two corpus programs on which HEAD is
-# right and the seed is broken. That is a defect in what was published, not a
-# difference anybody can fix in the tree, so this gate gets no row until a
-# release carries a seed that can compile the corpus -- an absent row saying
-# no comparison happened, where a green one with those two programs allowlisted
+# cannot grow a file. Two different things put a release out of this gate's
+# reach, and the field expresses both as one floor. The seeds 0.1.1 through
+# 0.4.0 ship no std/, so against any of them the tool correctly reports two
+# corpus programs on which HEAD is right and the seed is broken -- a defect in
+# what was published, not a difference anybody can fix in the tree. And a
+# release that predates a DECIDED change of output disagrees with HEAD on
+# purpose, which is why the field is ahead of 0.5.0 today (WP30; the JSON's
+# note says so and says what the dark window costs). Either way this gate gets
+# no row until a release it may be asked about exists -- an absent row saying
+# no comparison happened, where a green one with the differences allowlisted
 # would say one happened and passed. The JSON's note has the reasoning at
 # length and the recovery.
 cmp_since="$(jq -r '.cmpSince // empty' "$targets")"
@@ -200,7 +204,7 @@ if jq -e -n --arg v "$version" --arg since "$cmp_since" \
   cmp="$(printf '%s' "$rows" | jq -c '[.[] | select(.runner | startswith("ubuntu"))]')"
 else
   cmp='[]'
-  echo "::notice::nish-cmp (WP19 G2.1) does not run against $tag: .github/seed-targets.json sets cmpSince to $cmp_since, and a seed older than that cannot compile the corpus -- the releases before it ship no std/, so every nish/<module> specifier is refused. No row runs, and nothing here claims the comparison passed. The first release at or after $cmp_since gives this gate a row with no edit to ci.yml."
+  echo "::notice::nish-cmp (WP19 G2.1) does not run against $tag: .github/seed-targets.json sets cmpSince to $cmp_since, and a release before that is one this gate may not be asked about -- either it ships no std/ and cannot compile the corpus at all, or a decided change of output since it means HEAD and it disagree on purpose. The JSON's note says which applies today and what it costs. No row runs, and nothing here claims the comparison passed. The first release at or after $cmp_since gives this gate a row with no edit to ci.yml."
 fi
 echo "cmp=$cmp" >> "$out"
 echo "::notice::Seeded from $tag. The rolling freeze is checked on:$checked. Not yet due at $tag, so it is NOT checked on:${unchecked:- (nothing)} -- each of those is written <asset>:<attachedSince>, and its row appears here on the first release at or after that version."
