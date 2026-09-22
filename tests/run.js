@@ -10105,7 +10105,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
 
   // The store driven the way R6 will drive it: the JavaScript comes out of the
   // goldens rather than out of stage0's checker, and the programs are compiled,
-  // linked and run for real. Two programs rather than 175, because what this
+  // linked and run for real. Two programs rather than 176, because what this
   // adds over the check above is only that the frozen path still works end to
   // end -- `node tests/differential/run.js --frozen` is the whole corpus, and
   // reproduces this run's verdicts -- and the pair is the multi-module shape,

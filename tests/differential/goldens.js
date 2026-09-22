@@ -17,7 +17,7 @@
  * expression, because `i32`, `u8`, `f32` and `i64` are all just `number` to
  * `tsc` — so `rewrite.js` drives **stage0's own `Compilation`** in process.
  * §2B's table said this oracle survives stage0. It does not: deleting `src/`
- * takes the rewriter with it, and with it 175 programs of semantic comparison.
+ * takes the rewriter with it, and with it 176 programs of semantic comparison.
  *
  * So the rewrite is frozen the way the four dying oracles' output was frozen
  * in `tests/self/goldens/`: the rewritten `.mjs` of every program is written
@@ -107,7 +107,7 @@ const ID_CHARS = 16;
  * The repository root, as the store spells it. A rewritten module imports the
  * shim by absolute path, so the text as generated carries whatever directory
  * this checkout happens to live in and could not be compared between two of
- * them. Nothing else in a rewritten module is absolute — measured over all 356
+ * them. Nothing else in a rewritten module is absolute — measured over all 358
  * of them — and a body that contains the token itself is refused rather than
  * round-tripped, because the substitution would not be reversible.
  */

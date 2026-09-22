@@ -34,10 +34,10 @@ both compilers", below).
 | `tests/differential/rewrite.js` | Nish -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
 | `runtime/shim.mjs` | The Node side of the runtime: `toI32`/`toI64`/`toF64`, wrapping helpers, byte length, bounds-checked indexing, `console.log`, file I/O, `process.exit`, trap. |
 | `tests/differential/fuzz.js` | Random integer/boolean program generator and driver: `fuzzRun` compares the binary with Node, `stage1Run` (`--stage1`) compares stage0's IR with stage1's through `tests/self/ir_oracle.js`. |
-| `tests/differential/corpus/` | 71 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`), which with the 104 entry-point cases of `tests/cases/` make the 175 the runner compares. |
+| `tests/differential/corpus/` | 71 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`), which with the 105 entry-point cases of `tests/cases/` make the 176 the runner compares. |
 | `tests/differential/known-failures.txt` | Programs whose native behaviour is known to differ; each is explained below. |
 | `tests/differential/goldens.js` | The frozen rewrites: generates the store from the live rewriter, verifies it against the live rewriter, and checks every program's sources against the hashes the store holds ("Freezing the rewrite", below). |
-| `tests/differential/goldens/rewrites.txt` | The rewritten `.mjs` of all 175 programs, which is what the comparison runs from once stage0 is gone. |
+| `tests/differential/goldens/rewrites.txt` | The rewritten `.mjs` of all 176 programs, which is what the comparison runs from once stage0 is gone. |
 
 Build products live in `build/test/differential/<program>/`: `ir/` (the
 `.ll` modules), `app` (the binary), `js/<module>.rewritten.ts` (the
@@ -464,8 +464,9 @@ node tests/differential/run.js --frozen       # the whole comparison, from the s
 hash, and the id of the JavaScript it rewrote to — followed by every distinct
 body, framed by a line count so no line of JavaScript needs escaping and named
 by its own hash so a hand edit is caught on read. The shim's absolute path is
-stored as `<root>`; nothing else in a rewritten module is absolute. 175
-programs, 356 modules, 352 distinct bodies, 233 KiB.
+stored as `<root>`; nothing else in a rewritten module is absolute. 176
+programs, 358 modules, 354 distinct bodies, 235 KiB — and those are the
+header's own numbers, which a verify recomputes rather than reads.
 
 **The staleness guard is the point of the exercise.** A frozen reference is
 only a reference while the program it was made from has not changed, so every
@@ -521,7 +522,7 @@ rewriter, so it dies exactly as `checked_oracle.js` does.
 *Freshness* is what is left afterwards, and it is four questions rather than
 one: every program has a record, each record's sources still hash to what they
 hashed, no record is left over from a program that is gone — deleting a corpus
-program would otherwise take its coverage from 175 to 174 with nothing named —
+program would otherwise take its coverage from 176 to 175 with nothing named —
 and the header's own counts are recomputed from what was parsed, so the file's
 description of itself is a claim with a check behind it. What freshness cannot
 see is a record that names the wrong file while holding that file's hash;
