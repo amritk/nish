@@ -1,1 +1,1 @@
-Spread in array literals is not supported
+expected an expression, found `...`

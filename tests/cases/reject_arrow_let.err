@@ -1,1 +1,1 @@
-Function `double` must be declared `const`, not `let`
+a module holds no top-level `let`; use `const`

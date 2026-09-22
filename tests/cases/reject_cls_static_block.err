@@ -1,1 +1,1 @@
-Unsupported class member in `Point`: ClassStaticBlockDeclaration
+a class member is a field, a method or a constructor, found `{`

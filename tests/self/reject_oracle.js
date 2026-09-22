@@ -5,27 +5,30 @@
  *   node tests/self/reject_oracle.js             the whole set
  *   node tests/self/reject_oracle.js --verbose   name every skip
  *
- * Accepting the same programs is half of a checker being the same checker;
- * *refusing* the same ones, for the same reason, is the other half, and it is
- * the half a dump comparison cannot see. Each case's expected fragments are
- * the ones the suite already requires of stage0 — one per line of
+ * Accepting the right programs is half of a checker being correct; *refusing*
+ * the right ones, for the right reason, is the other half, and it is the half a
+ * dump comparison cannot see. Each case's expected fragments are the ones the
+ * suite already requires of the driver — one per line of
  * `tests/cases/<name>.err`, and the whole of `tests/link/<name>/expected.err`
- * for a program of several modules — so this asserts exactly the same thing of
- * stage1: it must exit non-zero and its output must contain every fragment.
+ * for a program of several modules — so this asserts the same thing of the
+ * checker on its own: it must exit non-zero and its output must contain every
+ * fragment.
  *
  * The `tests/link/` cases are here because a rejection that needs more than
  * one module — a name imported twice, a `main` outside the entry, a class
  * reached through a chain of modules — can only be provoked by a whole
  * program, and stage1 has driven whole programs since S5.
  *
- * Two kinds of case are not stage1's to answer, and each is counted and named
- * apart from the other so that neither can hide in a total:
+ * Two kinds of case are counted and named apart from the rest, so that neither
+ * can hide in a total:
  *
  *   - it is refused by the S2 *parser*, which turns forbidden syntax down by
- *     name rather than by the message stage0's Phase 0 validator writes. Those
- *     wordings are deliberately different — a message about the operator the
- *     programmer wrote beats one about a node kind — and the count is the
- *     measurement, not a hole. `tests/self/parser_refusals.txt` is that
+ *     name rather than by the message stage0's Phase 0 validator wrote. Those
+ *     wordings were deliberately different — a message about the operator the
+ *     programmer wrote beats one about a node kind — and since stage0 retired
+ *     the case's `.err` pins stage1's sentence, so a parser refusal is held to
+ *     its fragments like any other case *and* counted in the bucket, whose size
+ *     is the measurement rather than a hole. `tests/self/parser_refusals.txt` is that
  *     measurement case by case, and its header is the contract; the bucket and
  *     the register are compared both ways below, so a rule leaving the
  *     checker's reach and a rule coming back each fail until somebody says so.
@@ -265,15 +268,19 @@ function compare(seed, binary, entry) {
   });
   const output = `${run.stdout}${run.stderr}`;
   if (run.status === 0) return { failed: "stage1 accepted it" };
-  // A parser refusal is a different wording by design; the checker's is not.
-  // The `syntax error: ` prefix is what puts the case in the bucket, so it is
-  // the bucket's name rather than part of the sentence, and the register does
-  // not repeat it on every line.
-  if (/syntax error:/.test(output)) return { parser: firstLine(output).replace(/^syntax error: /, "") };
   const missing = entry.fragments.filter((fragment) => !output.includes(fragment));
-  if (missing.length > 0) {
-    return { failed: `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}` };
+  const failed =
+    missing.length > 0 ? `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}` : null;
+  // A parser refusal is counted in the bucket, which the register holds to a
+  // ceiling, and it is held to the case's fragments as well: since stage0
+  // retired, a case's `.err` pins the sentence stage1 answers with, whichever
+  // phase says it. The `syntax error: ` prefix is what puts the case in the
+  // bucket, so it is the bucket's name rather than part of the sentence, and
+  // the register does not repeat it on every line.
+  if (/syntax error:/.test(output)) {
+    return { parser: firstLine(output).replace(/^syntax error: /, ""), failed, fragments: entry.fragments.length };
   }
+  if (failed !== null) return { failed };
   return { fragments: entry.fragments.length };
 }
 
@@ -383,6 +390,8 @@ function main(argv) {
     if (result.parser !== undefined) {
       parser.push(`${where}: ${result.parser}`);
       bucket.push({ name: entry.name, where, sentence: result.parser });
+      if (result.failed !== null) failed.push(`${where}: ${result.failed}`);
+      else checked += result.fragments;
     } else if (result.skipped !== undefined) {
       skipped.push(`${where}: ${result.skipped}`);
       unproven.add(entry.name);

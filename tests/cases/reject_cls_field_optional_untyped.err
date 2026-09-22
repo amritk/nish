@@ -1,1 +1,1 @@
-Field `x` of class `Point` cannot be optional (every field has a fixed slot)
+a type annotation is required

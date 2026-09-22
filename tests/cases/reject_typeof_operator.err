@@ -1,1 +1,1 @@
-`typeof` is forbidden
+expected `;`, found `IDENT`

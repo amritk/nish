@@ -58,7 +58,8 @@ import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
 import { dirname } from "./paths";
 import { jsonQuote, splitByte } from "./strings";
-import { codeFor, TOOLCHAIN } from "./codes";
+import { codeFor, INTERNAL, TOOLCHAIN } from "./codes";
+import { internalError, simulatedInternalError } from "./ice";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
@@ -411,6 +412,18 @@ export const main = (): number => {
   if (opts.emitNapiAsync.length > 0 && !opts.threads) {
     console.error(`compile: --emit-napi-async requires --threads (its exports allocate on a worker thread)`);
     return 2;
+  }
+
+  // The exit-70 path on demand (`self/ice.ts`), at the point stage0 raised
+  // its own: the command line is valid and nothing is compiled yet. Under
+  // `--json` the crash is an object as well, the one stage0's top-level catch
+  // printed, so a reader that asked for JSON never has to scrape stderr for it.
+  if (simulatedInternalError()) {
+    const message = `simulated internal compiler error while compiling ${roots[0]}`;
+    if (json) {
+      console.log(`{"severity":"error","code":"${INTERNAL}","message":${jsonQuote(`internal compiler error: ${message}`)}}`);
+    }
+    return internalError(message);
   }
 
   const compilation = new Compilation(opts);

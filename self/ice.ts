@@ -61,6 +61,21 @@ export const EXIT_INTERNAL: i32 = 70;
 const ENV_DEBUG: string = "NISH_DEBUG";
 
 /**
+ * The test hook for this report, stage0's `NISH_SIMULATE_ICE` carried over so
+ * the exit-70 path stays provable once stage0 is gone (WP19 R6). A broken
+ * invariant cannot be provoked from a program — that is what makes it one — so
+ * `tests/run.js` asks for one through the environment instead. Not a user
+ * feature: set and non-empty is all it reads, as stage0's truthiness test was.
+ */
+const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE";
+
+/** Whether the run asked for a simulated internal error (`ENV_SIMULATE_ICE`). */
+export const simulatedInternalError = (): boolean => {
+  const value = getenv(ENV_SIMULATE_ICE);
+  return value !== null && value.length > 0;
+};
+
+/**
  * Report a broken compiler invariant and answer the exit status for it. Every
  * caller is `process.exit(internalError(...))`, which ends the path.
  */

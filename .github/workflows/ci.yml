@@ -1,8 +1,9 @@
 # Nish continuous integration.
 #
 # test: typecheck + the full golden/native test suite on Linux with LLVM 18
-#       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size table
-#       in the job summary, and the IR cookbook staleness check. The matrix is
+#       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), every case compiled by a
+#       stage1 the last released nish builds, then a binary size table in the
+#       job summary, and the IR cookbook staleness check. The matrix is
 #       written for macOS too and that row is commented out; the comment beside
 #       it names the six checks that still fail there, with the run that
 #       measured them. It is the one macOS gap in this file -- `bootstrap` and
@@ -21,14 +22,6 @@
 #       a release carries a seed it can use and there is no row otherwise; the
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
-# parity-select + parity-changed: WP19 G1 on the push path, bounded by the
-#       diff, as a pair of jobs for the reason seeds/bootstrap is a pair --
-#       `parity-select` maps the diff onto corpus programs in seconds and with
-#       no toolchain, and `parity-changed` exists at all only when that answer
-#       is not none, so "a pull request that touches no corpus program pays
-#       nothing" is a job conclusion rather than a step that skipped. The
-#       nightly `parity.yml` covers the corpus the diff did not touch, and the
-#       flag-set half of the mode already runs inside `npm test` above.
 # lint: `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
 #
@@ -55,15 +48,12 @@ permissions:
 
 # Node's on-disk V8 compile cache, for every job in this file.
 #
-# This is a measurement rather than a habit. The suite's cost is not compiling
-# Nish; it is starting Node. `tests/batch_worker.js` has the breakdown for one
-# `node dist/index.js <case>` -- about 634 ms on the box it was written on, of
-# which 1.5 ms is compiling and ~473 ms is `import ts from "typescript"` -- and
-# section A already avoids paying it by driving the library API in process. The
-# oracles and `tests/diagnostic_coverage.js` cannot: they compare what the
-# *command line* answers, so a process per program is the thing being checked.
-#
-# So the import is made cheaper instead of avoided. `NODE_COMPILE_CACHE` caches
+# This is a measurement rather than a habit, taken while the compiler was
+# stage0: one `node dist/index.js <case>` cost about 634 ms, of which 1.5 ms
+# was compiling and ~473 ms was `import ts from "typescript"`. The compiler
+# under test is a native binary now, but the harness and its tools are still
+# Node programs that spawn one another, and any job that still builds `dist/`
+# pays that import. `NODE_COMPILE_CACHE` caches
 # V8's compilation of every module it loads, keyed on the file's content and the
 # Node version, and Node falls back to compiling normally when the key misses --
 # a stale or absent cache costs time and can never change an answer. Measured on
@@ -212,10 +202,49 @@ jobs:
       - name: Typecheck
         run: npm run check
 
+      # The seed: the last release's compiler for this runner's platform,
+      # `.github/seed-targets.json`'s asset for `uname -s`-`uname -m`. Every
+      # compile `npm test` makes is stage1's, and stage1 is `self/` built by
+      # this binary -- the rolling freeze (WP19 G3) asked on the platform the
+      # suite runs on, before the suite has run a check. The same download the
+      # `bootstrap` job makes, from the same release, by the same name.
+      - name: Fetch the seed
+        id: seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          asset="$(jq -r --arg host "$(uname -s)-$(uname -m)" '.targets[] | select(.host == $host) | .asset' .github/seed-targets.json)"
+          if [ -z "$asset" ]; then
+            echo "::error::.github/seed-targets.json names no seed for $(uname -s)-$(uname -m), so there is nothing to build the compiler under test with."
+            exit 1
+          fi
+          tarball="nish-${tag#v}-$asset.tar.gz"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$tarball" --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
+          seed="$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish"
+          "$seed" --version
+          echo "path=$seed" >> "$GITHUB_OUTPUT"
+
+      # `build/nish` is what the steps after the suite drive: stage1, one
+      # directory below the repository root, which is where its package root is
+      # found from (`packageRoot` in self/compile.ts).
+      - name: Build the compiler with the seed
+        env:
+          SEED: ${{ steps.seed.outputs.path }}
+        run: '"$SEED" self/compile.ts --link build/nish'
+
+      # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
+      # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
+      # row per seed, and whose `cmpSince` rule that job's matrix states.
       - name: Test
-        run: npm test
+        env:
+          SEED: ${{ steps.seed.outputs.path }}
+        run: npm test -- --seed "$SEED"
 
       - name: Smoke (build + run every example with a main, size profile)
+        env:
+          NISH: build/nish
         run: bash scripts/smoke.sh
 
       # docs/IR_COOKBOOK.md promises the exact IR each construct compiles to
@@ -223,6 +252,8 @@ jobs:
       # (the `internal` linkage of --strict-exports and the `nsw` defaults were
       # missing), so the staleness check is a gate rather than a chore.
       - name: Docs (IR cookbook up to date)
+        env:
+          NISH: build/nish
         run: bash docs/cookbook/regen.sh --check
 
       # The diagnostic-code registry is generated from the compiler's own
@@ -239,7 +270,7 @@ jobs:
 
       - name: Size report
         run: |
-          node dist/index.js examples/add.ts -o build/add.ll
+          build/nish examples/add.ts -o build/add.ll
           bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
           {
             echo "### Binary size (${{ matrix.os }}, LLVM 18)"
@@ -445,15 +476,12 @@ jobs:
       # The command line's contract, asked of the compiler that outlives stage0.
       # `tests/nish/cli.ts` is a Nish program reading the compiler's own output —
       # the streams, the exit-code bands, one flat `--json` object per diagnostic —
-      # and this is the only place it is pointed at a *self-hosted* nish. `npm test`
-      # runs it against stage0; a divergence in stage1's driver fails only here.
-      # Two checks are stage0's own and report as counted skips, which the summary
-      # below prints.
+      # and here it is pointed at the stage2 this row's seed built, where `npm test`
+      # points it at a stage1. Its counted skips are the summary below.
       - name: The CLI contract, against the self-hosted compiler
         run: |
           set -o pipefail
-          npm run build
-          node dist/index.js tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
+          build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
@@ -617,354 +645,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The same seed and the same build the `test` job makes; see there.
+      - name: Fetch the seed
+        id: seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          asset="$(jq -r --arg host "$(uname -s)-$(uname -m)" '.targets[] | select(.host == $host) | .asset' .github/seed-targets.json)"
+          tarball="nish-${tag#v}-$asset.tar.gz"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$tarball" --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
+          echo "path=$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
+
+      - name: Build the compiler with the seed
+        env:
+          SEED: ${{ steps.seed.outputs.path }}
+        run: '"$SEED" self/compile.ts --link build/nish'
+
       # The runner answers 1 when any check failed, so the step's own exit status
       # is the gate. Its last line is the summary, which is what a reader wants
       # in the job log without expanding it.
       # `set -o pipefail` is load-bearing: the default shell for a `run:` step is
       # `bash -e`, without it, so the exit status of a pipeline would be `tee`'s
       # and a runner that answered 1 would still be a green step.
+      # The runner is built by the compiler under test and handed it: as the
+      # argument after the filter (empty here, which is the whole corpus) and as
+      # `NISH`, the override `tests/nish/run.ts` takes in place of its default.
+      # Until that override lands (R6.2) the default is stage0's `dist/`, which
+      # is why this still builds it; the deletion stage removes the build.
       - name: The corpus, through the Nish runner
+        env:
+          NISH: build/nish
         run: |
           set -o pipefail
-          npm run test:nish | tee "$RUNNER_TEMP/nish-runner.log"
+          npm run build
+          build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
+          build/nish-runner "" build/nish | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
         run: |
           summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
           echo "::notice::tests/nish/run.ts over tests/cases: $summary"
-
-  # Section A of `tests/run.js` compiles the golden cases in process, sixty-four
-  # to a worker, rather than spawning `dist/index.js` once per case. That is the
-  # difference between six minutes and a handful of seconds, and the whole of it
-  # rests on the two paths answering the same thing -- so this job compiles the
-  # *whole* corpus both ways and compares the exit status, stdout, stderr and the
-  # bytes of every module.
-  #
-  # `npm test` checks one case per shape on every run (`gateCases` in
-  # `tests/batch_compile.js` says which, and why that set is derived from the
-  # corpus rather than listed). The complete comparison costs one compiler process
-  # per case -- the very thing the change removed -- which is exactly the bill a
-  # CI runner should pay instead of a developer's inner loop. It runs in parallel
-  # with `test`, so it costs a runner rather than wall-clock time, and the
-  # toolchain is installed so that the goldens the gate reads still assemble and
-  # run natively rather than skipping underneath it.
-  #
-  # It *is* a narrower run, and that is a correction rather than a relaxation.
-  # This comment used to say the opposite -- "`npm test` with the gate widened,
-  # not a narrower run" -- and the cost of the difference was measured on
-  # 2026-09-18: the job took 18 m 21 s, of which 14 m 44 s was `tests/run.js`
-  # making, a second time, on the same commit, exactly the checks the `test` job
-  # makes. `--verify-batch` changes one set in one line and nothing else, so the
-  # second run of the other nineteen hundred checks proved nothing the first did
-  # not, and because this is the longest job in the workflow it was the workflow's
-  # wall clock. `--batch-gate-only` stops after the gate and carries a counted
-  # skip that names what it did not check, so the narrowing is in the output
-  # rather than only here.
-  batch-parity:
-    name: the batched compile against the CLI
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install LLVM 18 + lld
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
-          bin="$RUNNER_TEMP/llvm-bin"
-          mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
-            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
-          done
-          echo "$bin" >> "$GITHUB_PATH"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      # `--batch-gate-only` widens the gate to the whole corpus and then stops;
-      # the section's own checks run as usual, so a difference is a FAIL line
-      # naming the case.
-      #
-      # It stops because `--verify-batch` alone changes exactly one thing about
-      # the run -- the gate's set -- and then runs every other check in
-      # `tests/run.js` a second time, on the same commit the `test` job is
-      # already running them on. This is the longest job in the workflow, so
-      # that duplicate was the workflow's wall clock. Measured: 105.8 s against
-      # 684.9 s, making 1,780 of the full mode's 2,560 checks, where the 780 left
-      # out are the ones the `test` job makes on this same commit. The narrow run
-      # reports as a narrow run: its summary carries a counted skip naming them.
-      - name: Every golden case, compiled both ways
-        run: |
-          set -o pipefail
-          node tests/run.js --batch-gate-only | tee "$RUNNER_TEMP/batch-parity.log"
-
-      # The summary is not the last line: a run with skips prints a note after it,
-      # so the line is picked by what it says rather than by where it sits.
-      - name: Say what this proved
-        if: always()
-        run: |
-          summary="$(grep -E '^[0-9]+ passed, ' "$RUNNER_TEMP/batch-parity.log" 2>/dev/null | tail -n 1)"
-          echo "::notice::the batched compile against the CLI, over tests/cases: ${summary:-the run produced no summary}"
-
-  # WP19 G1 on the push path, bounded by the diff. Two jobs, for the reason the
-  # `seeds` / `bootstrap` pair above is two: answer cheaply first, then decide
-  # whether to pay for a toolchain -- and make that decision a *job* conclusion,
-  # because a step that skips inside a green job leaves the job green and a
-  # reader cannot tell "nothing to compare" from "compared and agreed".
-  #
-  # `parity.yml` runs `node tests/run.js --parity` -- the whole corpus through
-  # both compilers under every flag variation -- nightly on `main`. That fixes
-  # "nobody remembered to type the command". It does not stop a pull request
-  # from merging a difference, and that is exactly how one got in: the `CPtr`
-  # internal compiler error under `-g` reached `main` on a green pull request
-  # and was found by a nightly four nights later, by which time the gate had
-  # been red for four days with nobody reading it.
-  #
-  # The full corpus cannot go here. Measured on `ubuntu-latest` on 2026-09-18:
-  # `13260 runs over 884 programs (2100.5 s)`, in a job that took 36 minutes
-  # end to end, and the four nightlies before it took 36 to 56. It grows with
-  # every program and with every flag the suite adds, so putting it on every
-  # push is the trade `parity.yml`'s own header argues against -- and that
-  # header is right.
-  #
-  # So the check is bounded by what the pull request touched: the corpus
-  # programs its diff adds or edits files of, and nothing else. A pull request
-  # that touches no corpus program never installs a toolchain and never builds
-  # a compiler; one that adds a case pays for that case, under all fifteen
-  # variations, against both compilers. `changedPrograms` in
-  # `tests/self/parity.js` owns the file-to-program mapping and its comment
-  # states the rule.
-  #
-  # DELETIONS ARE REPORTED, NOT COMPARED, and the distinction is exact rather
-  # than a shortcut. The mapping is built from the tree as the diff left it, so
-  # a program the diff removed has no row and cannot be selected -- correctly,
-  # because there is no source left for either compiler to compile and a
-  # program that is gone cannot carry a reintroduced difference. What it can do
-  # is shrink the corpus, and a gate that answered "no corpus program is
-  # touched by this diff" to a pull request which had just deleted three cases
-  # would be describing its own coverage wrongly. So `removedPrograms` names
-  # them, the step below counts them, and both summaries say how many. The
-  # count never starts the second job: there is nothing to run for them.
-  #
-  # WHAT THE BOUND IS, AT THE TAIL. "Bounded by the diff" is not "short": a
-  # golden is one of a program's own files, so a pull request that regenerates
-  # them selects the programs it regenerated, and the tree has commits that
-  # touched 1,337 corpus files (`bf65e79`) and 237 (`07c5935`). Such a pull
-  # request makes the second job the nightly -- 36 minutes, measured above --
-  # and that is the rule applied evenly rather than an escape from it: the job
-  # costs what the diff changed, and a diff that rewrites the whole corpus
-  # costs the whole corpus. It cannot cost more than the nightly does, which
-  # is what `timeout-minutes` below is set from. If that tail ever becomes the
-  # common case, the answer is to cap the selection and say in the summary
-  # that the nightly has the rest -- not to silently compare fewer programs
-  # than the count claims.
-  #
-  # WHAT THIS DOES NOT COVER, and it is worth saying plainly because a bounded
-  # gate read as an unbounded one is the failure this whole work package is
-  # about. A `src/` or `self/` edit can move every program in the corpus, and
-  # this sees only the `self/` modules the diff happens to touch. The nightly
-  # covers the rest, and the flag-set half of the mode -- the half that found
-  # `--no-warn-performance` and `--out-dir` -- already runs on every `npm test`
-  # inside the `test` job above. Between the three, a reintroduced difference
-  # is red somewhere a human is looking: on the pull request when the pull
-  # request wrote the program, in the issue tracker the next morning otherwise.
-  parity-select:
-    name: which corpus programs this pull request touches
-    runs-on: ubuntu-latest
-    outputs:
-      count: ${{ steps.select.outputs.count }}
-      removed: ${{ steps.select.outputs.removed }}
-    steps:
-      # Two commits deep, because the diff is taken from git rather than from
-      # the API. On a `pull_request` event the checkout is the merge commit, so
-      # its first parent is the base branch and `git diff HEAD^ HEAD` is the
-      # pull request's net change against it -- no second fetch and no base-ref
-      # guessing. On a push the first parent is the commit before this one,
-      # which after a squash merge is the merged pull request's own diff. One
-      # spelling covers both because first-parent is what each of them wants.
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      # No `cache: npm`: nothing in this job runs npm, and restoring and saving
-      # a cache for a dependency set that is never installed is the one cost
-      # that would stand between "pays nothing" and nothing.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      # `--list` builds nothing and needs no `node_modules`: `tests/self/
-      # parity.js` and the two modules it imports are node builtins only, so
-      # this reads the corpus off disk, maps the changed files onto programs
-      # and names them. That is what lets the job below not exist at all when
-      # the answer is none.
-      - name: Select
-        id: select
-        run: |
-          if git rev-parse --verify --quiet 'HEAD^{commit}' > /dev/null; then
-            git diff --name-only HEAD^ HEAD > "$RUNNER_TEMP/changed.txt"
-          else
-            # A repository with one commit in it, and nothing to compare against.
-            : > "$RUNNER_TEMP/changed.txt"
-          fi
-          changed=$(wc -l < "$RUNNER_TEMP/changed.txt")
-          # Redirected rather than piped, and that is the point: `bash -e` is
-          # the default shell and does not carry pipefail, so a `| wc -l` would
-          # swallow a parity.js that exited 1 and hand the gate a count of 0 --
-          # the shape of failure this whole job exists to stop. As its own
-          # statement the exit status is the step's, with no flag to remember.
-          # The two streams go to separate files because they answer different
-          # questions: stdout is the programs to compare, one per line, and
-          # stderr is the summary and the programs the diff removed.
-          node tests/self/parity.js --changed "$RUNNER_TEMP/changed.txt" --list \
-            > "$RUNNER_TEMP/selected.txt" 2> "$RUNNER_TEMP/select.err"
-          # GNU `wc` reading stdin prints a bare number, which matters because
-          # `count` is compared against the string '0' in a job-level `if:`.
-          count=$(wc -l < "$RUNNER_TEMP/selected.txt")
-          # `grep -c` answers 1 when it matches nothing, and `bash -e` would
-          # end the step on it.
-          removed=$(grep -c '^parity: removed: ' "$RUNNER_TEMP/select.err" || true)
-          {
-            echo "count=$count"
-            echo "removed=$removed"
-          } >> "$GITHUB_OUTPUT"
-          echo "selected $count corpus program(s) out of $changed changed file(s)"
-          cat "$RUNNER_TEMP/selected.txt"
-          cat "$RUNNER_TEMP/select.err"
-
-      # Handed on rather than recomputed, so the job below cannot disagree with
-      # this one about what the diff was -- the same reason `parity.yml` passes
-      # its log between its two jobs this way.
-      - name: Hand the selection to the job that compares it
-        if: steps.select.outputs.count != '0'
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-selection
-          path: |
-            ${{ runner.temp }}/changed.txt
-            ${{ runner.temp }}/selected.txt
-          retention-days: 3
-
-      # A green tick on this job means "nothing to compare", and that is a
-      # different claim from the one the job below makes. It says which -- and
-      # it says it about deletions too, because "nothing was compared" and
-      # "nothing was compared and the corpus is three programs smaller" are not
-      # the same report, and only one of them is true of a pull request that
-      # removed three cases.
-      - name: Say what this proved
-        if: steps.select.outputs.count == '0'
-        env:
-          REMOVED: ${{ steps.select.outputs.removed }}
-        run: |
-          {
-            echo "### Parity, bounded by this diff ($(date -u +%Y-%m-%d))"
-            echo
-            echo "No corpus program is touched by this diff, so nothing was compared."
-            if [ -n "$REMOVED" ] && [ "$REMOVED" != "0" ]; then
-              echo
-              echo "It removes **$REMOVED corpus program(s)**, which is why there is nothing to compare"
-              echo "for them -- a program that is gone has no source either compiler can be given."
-              echo "What shrank is the corpus:"
-              echo
-              echo '```'
-              grep '^parity: removed: ' "$RUNNER_TEMP/select.err" || true
-              echo '```'
-            fi
-            echo
-            echo "The nightly \`Parity\` workflow is what covers the corpus this did not."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  parity-changed:
-    name: parity (the programs this pull request touched)
-    needs: parity-select
-    # One condition, at the level it belongs to. A step added to this job
-    # therefore cannot quietly start running on a pull request that touches no
-    # corpus program, which is how the claim above would stop being true with
-    # nobody noticing.
-    if: needs.parity-select.outputs.count != '0'
-    runs-on: ubuntu-latest
-    # An hour, where GitHub's default is six. The work here can never exceed
-    # the nightly's, which took 36 minutes over the whole corpus on this same
-    # runner, so an hour is headroom on the widest legitimate selection and a
-    # hang is a red check within the hour instead of a pull request held all
-    # afternoon. `parity.yml` caps the same mode at 120 for a corpus that has
-    # room to grow; this one is capped tighter because it sits in front of a
-    # human waiting to merge.
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Take the selection
-        uses: actions/download-artifact@v4
-        with:
-          name: parity-selection
-          path: ${{ runner.temp }}
-
-      - name: Install LLVM 18 + lld
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
-          bin="$RUNNER_TEMP/llvm-bin"
-          mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
-            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
-          done
-          echo "$bin" >> "$GITHUB_PATH"
-
-      - name: Install dependencies
-        run: npm ci
-
-      # The mode spawns `dist/index.js` for stage0 and links its own stage1
-      # binary out of `self/`, so stage0 has to exist first.
-      - name: Build stage0
-        run: npm run build
-
-      # `set -o pipefail`, because the default shell for a `run:` step is
-      # `bash -e` without it and the pipeline's status would be `tee`'s: a mode
-      # that answered 1 would be a green step, which is this job's whole subject.
-      - name: Parity over those programs
-        run: |
-          set -o pipefail
-          node tests/run.js --parity --changed "$RUNNER_TEMP/changed.txt" \
-            | tee "$RUNNER_TEMP/parity-changed.log"
-
-      - name: Say what this proved
-        if: always()
-        env:
-          COUNT: ${{ needs.parity-select.outputs.count }}
-          REMOVED: ${{ needs.parity-select.outputs.removed }}
-        run: |
-          {
-            echo "### Parity, bounded by this diff ($(date -u +%Y-%m-%d), ubuntu-latest)"
-            echo
-            echo "$COUNT corpus program(s), every flag variation, both compilers:"
-            if [ -n "$REMOVED" ] && [ "$REMOVED" != "0" ]; then
-              echo
-              echo "(The diff also removes $REMOVED corpus program(s); the mode names them in its log."
-              echo "There is nothing to compare for a program that is gone, so they are not in this count.)"
-            fi
-            echo
-            echo '```'
-            cat "$RUNNER_TEMP/selected.txt" 2>/dev/null || true
-            echo '```'
-            echo
-            echo '```'
-            tail -n 20 "$RUNNER_TEMP/parity-changed.log" 2>/dev/null || echo "(the mode produced no output)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
 
   lint:
     name: lint

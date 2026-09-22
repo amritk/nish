@@ -1,1 +1,1 @@
-`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`
+expected `;`, found `IDENT`

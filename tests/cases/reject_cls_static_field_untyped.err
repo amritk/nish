@@ -1,1 +1,1 @@
-Field `total` of class `Counter`: `static` members are not supported (use a top-level function or const)
+a type annotation is required
