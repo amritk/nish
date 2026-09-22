@@ -149,11 +149,11 @@ const rewriteOptions = (args) => {
  * every module Node runs.
  */
 const produceOne = (rewriteProgram, prog) => {
-  const out = path.join(WORK, prog.name.replace(/[\\/]/g, "_"));
-  fs.rmSync(out, { recursive: true, force: true });
+  const dir = path.join(WORK, prog.name.replace(/[\\/]/g, "_"));
+  fs.rmSync(dir, { recursive: true, force: true });
   let rewritten;
   try {
-    rewritten = rewriteProgram(prog.entry, rewriteOptions(prog.args), out);
+    rewritten = rewriteProgram(prog.entry, rewriteOptions(prog.args), dir);
   } catch (e) {
     return { error: `${prog.name} does not rewrite: ${(e.stack ?? String(e)).split("\n")[0]}` };
   }
@@ -174,10 +174,17 @@ const produceOne = (rewriteProgram, prog) => {
     }
     const text = portable(raw);
     const id = digest(text);
+    const source = relative(rewritten.sources[i]);
+    // A record line is space-separated, and a path with a space in it would
+    // read back as two fields. No corpus program has one; this is what makes
+    // that a refusal rather than a silently mangled record.
+    if (source.includes(" ") || out.includes(" ")) {
+      return { error: `${prog.name}: \`${source}\` has a space in its path, which the store cannot hold` };
+    }
     modules.push({
       id,
       out,
-      source: relative(rewritten.sources[i]),
+      source,
       srcHash: digest(fs.readFileSync(rewritten.sources[i], "utf8")),
     });
     bodies.set(id, text);
@@ -219,6 +226,9 @@ const readStore = () => {
       current = { name: line.slice("program ".length), flags: [], modules: [], entry: null };
       programs.set(current.name, current);
       continue;
+    }
+    if (line.startsWith("  ") && current === null) {
+      return { error: `${relative(STORE)}:${i + 1}: a record's field before any \`program\` line` };
     }
     if (line.startsWith("  flags ")) {
       current.flags = line.slice("  flags ".length).split(" ").filter(Boolean);

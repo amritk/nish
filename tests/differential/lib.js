@@ -35,7 +35,8 @@ const knownFile = path.join(import.meta.dirname, "known-failures.txt");
 
 const RUN_TIMEOUT_MS = 30_000;
 
-const words = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean) : []);
+const words = (file) =>
+  fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean) : [];
 
 /**
  * `<name>.env`: one `NAME=value` per line, layered over the inherited
@@ -192,7 +193,16 @@ const rewriterFor = async ({ frozen } = {}) => {
     rewrite: (prog, dir) => {
       const record = store.programs.get(prog.name);
       if (record === undefined) {
-        throw stale(`${prog.name} has no frozen rewrite: it has no differential coverage`);
+        // A generated program is the one case where this is not somebody's
+        // oversight: the fuzzer invents its corpus from a seed, so a reference
+        // for it has to be *computed* and there is nothing a store could hold.
+        // That is why the fuzz differential against Node dies with the
+        // rewriter rather than being frozen with everything else.
+        throw stale(
+          prog.kind === "fuzz"
+            ? `${prog.name} is generated, so no store can hold its rewrite: the fuzz differential against Node needs the rewriter (wp19 §6 item 6)`
+            : `${prog.name} has no frozen rewrite: run \`npm run test:update\` while stage0 exists`
+        );
       }
       const why = staleness(record, prog, store.bodies);
       if (why !== null) throw stale(`${prog.name}'s frozen rewrite is stale: ${why}`);
@@ -262,12 +272,14 @@ async function runProgram(prog, options = {}) {
     // the opposite of one: the comparison *could* have run, against a reference
     // that is no longer this program's. `run.js` fails on it whatever
     // `known-failures.txt` says.
-    if (e.stale === true) return { prog, verdict: "stale-golden", detail: e.message, native, ms: Date.now() - t0 };
+    if (e.stale === true)
+      return { prog, verdict: "stale-golden", detail: e.message, native, ms: Date.now() - t0 };
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }
   const node = await run("node", [js.entry, ...argv], { env });
 
-  const same = native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
+  const same =
+    native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
   return { prog, verdict: same ? "match" : "mismatch", native, node, ms: Date.now() - t0, work };
 }
 
@@ -307,8 +319,10 @@ function describeMismatch(r) {
       }
     }
   }
-  if (b.stderr.length > 0 && b.status !== 1) lines.push(`node stderr: ${String(b.stderr).trim().split("\n")[0]}`);
-  if (a.stderr.length > 0 && a.status !== 1) lines.push(`native stderr: ${String(a.stderr).trim().split("\n")[0]}`);
+  if (b.stderr.length > 0 && b.status !== 1)
+    lines.push(`node stderr: ${String(b.stderr).trim().split("\n")[0]}`);
+  if (a.stderr.length > 0 && a.status !== 1)
+    lines.push(`native stderr: ${String(a.stderr).trim().split("\n")[0]}`);
   return lines.join("\n");
 }
 
