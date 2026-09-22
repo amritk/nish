@@ -2,7 +2,7 @@
  *
  * Include this from C drivers, N-API shims, or any other host that links the C
  * runtime next to compiled Nish modules. Everything here is a contract shared
- * with `src/codegen/runtime.ts` (the IR side) and the implementation, which is
+ * with `self/runtime.ts` (the IR side) and the implementation, which is
  * two translation units: `runtime/runtime.c` holds the core every program
  * touches — the arena, strings, arrays, number formatting, the panics — and
  * `runtime/runtime_os.c` holds everything that wraps a system call: the file

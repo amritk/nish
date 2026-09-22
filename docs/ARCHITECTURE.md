@@ -9,23 +9,28 @@ make every emitted LLVM attribute sound, and the build profiles. Read
 
 ## The pipeline
 
+The compiler is `self/`, written in Nish (the Nish-0 subset of
+[wp14-selfhost.md](wp14-selfhost.md)), and it is the only implementation.
+It is built by the previous release, the *seed* (see
+[Bootstrapping](#bootstrapping) below), and nothing in it runs on Node.
+
 ```
-nish a.ts b.ts [-o out/] [--link exe] [--emit-header a.h ...]      src/index.ts
+nish a.ts b.ts [-o out/] [--link exe] [--emit-header a.h ...]      self/compile.ts
    │
    ▼
-Compilation                                                            src/compilation.ts
+Compilation                                                            self/compilation.ts
    ├─ load (per module, transitively through imports; each file once)
-   │    ├─ Phase A  parse        ts.createSourceFile                    src/parser.ts
-   │    ├─ Phase 0  validate     forbidden-syntax sweep, hard fail      src/validator.ts
-   │    └─ Phase B1 signatures   functions, classes, interfaces, imports src/checker/index.ts
+   │    ├─ Phase A  parse        tokens, then one Node tree              self/lexer.ts, self/parser.ts
+   │    ├─ Phase 0  validate     forbidden-syntax sweep, hard fail       self/validator.ts
+   │    └─ pass 1   signatures   functions, classes, interfaces, imports self/checker.ts
    ├─ check
-   │    ├─ Phase B1b bind imports to the exporters' signatures
+   │    ├─ pass 1b  bind imports to the exporters' signatures
    │    ├─ reject external-symbol clashes across modules
-   │    └─ Phase B2 bodies       statements/expressions via dispatch tables
+   │    └─ pass 2   bodies       one switch per syntactic category       self/statements.ts, self/expressions.ts
    ├─ emit
-   │    ├─ Phase C0 attributes   program-wide purity/escape/loop fixpoint src/codegen/attributes.ts
-   │    └─ Phase C1 IR text      one module per source file             src/codegen/emitter.ts
-   └─ interop sidecars           --emit-header / --emit-dts / --emit-napi src/interop/
+   │    ├─ Phase C0 attributes   program-wide purity/escape/loop fixpoint self/attributes.ts
+   │    └─ Phase C1 IR text      one module per source file             self/emit.ts
+   └─ interop sidecars           --emit-header / --emit-dts / --emit-napi self/interop_*.ts
    │
    ▼
 .ll files ──▶ scripts/build.sh + runtime/*.c ──▶ native binary / .wasm / .node
@@ -33,156 +38,176 @@ Compilation                                                            src/compi
 
 | Stage | File(s) | Responsibility |
 | --- | --- | --- |
-| CLI | `src/index.ts` | Flag parsing, output planning (`-o file.ll`, `-o dir/`, `--link exe` intermediates), the toolchain probe, exit codes (0 ok, 1 compile error, 2 usage, 3 toolchain, 70 internal), the internal-error report. |
-| Compilation | `src/compilation.ts` | Owns every `ModuleUnit` of one program: loads roots and imports (keyed by absolute path, so cycles terminate), runs the checker passes in the right order, rejects symbol clashes, runs the attribute analysis over all modules, emits one `.ll` per module, and computes output stems. |
-| Parser | `src/parser.ts` | Wraps `ts.createSourceFile` with `setParentNodes`; turns TypeScript syntax diagnostics into `StaticSyntaxError`. |
-| Validator | `src/validator.ts` | One pre-order `ts.forEachChild` walk, dispatched by `ts.SyntaxKind` through the `validators` table; decides everything from syntax alone (no types, no scopes); throws on the first forbidden construct. Defence in depth: it sees nodes the checker never visits. |
-| Types | `src/types.ts` | The `StaticType` model, `llvmType`, `alignOf`, `sameType`, `resolveTypeNode` (annotation to `StaticType`), the per-file named-type resolver for classes, and the mangling that gives each `Result<T, E>` its monomorphised struct name. |
-| Checker | `src/checker/index.ts` + `checker/*.ts` | Pass 1 collects signatures and struct layouts; pass 1b binds imports; pass 2 checks bodies. Every statement and expression is dispatched through a table keyed by `ts.SyntaxKind` (see below) and its type is recorded in a side table. |
-| Diagnostics | `src/diagnostics.ts` | `CompileError` with the `file:line:col: error: message` summary and the caret excerpt. |
-| Attributes | `src/codegen/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts, allocation facts) and the call-graph fixpoint that turns them into LLVM attributes, arena scopes, and stack slots. Runs over the whole program at once. |
-| Escape analysis | `src/codegen/escape.ts` | Per allocation site (`new`, object literal, array literal, `new Array<T>(<literal>)`, `Ok(v)` / `Err(e)`): does the value stay `local`, is it `returned`, or does it `leak`? Decides stack allocation and feeds the arena-scope facts (WP6). |
-| Target | `src/codegen/target.ts` | The `--target` table: canonical triples, their aliases, `host` resolution from `process.platform`/`arch`, and the clang 18 data-layout string written into the module header (WP9). |
-| Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
-| IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
-| Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/runtime_os.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation, in two translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime_os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
-| Interop | `src/interop/{abi,header,dts,napi}.ts` | C header, wasm `.d.ts`, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
-| Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh` | The clang/LTO profiles, the size table, the example smoke test. |
-| Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, benchmark checksums. |
-| Differential tests | `tests/differential/{run,lib,rewrite,fuzz}.js`, `tests/differential/corpus/`, `runtime/shim.mjs` | Every whole program compiled natively and rewritten to JavaScript from the checker's own types, run under Node, and compared byte for byte; a seeded random-program fuzzer (WP13). |
+| CLI | `self/compile.ts`, `self/options.ts`, `self/ice.ts` | Flag parsing, output planning (`-o file.ll`, `-o dir/`, `--link exe` intermediates, every directory in the way made with `mkdirSync`), running `bash scripts/build.sh` through `spawnSync` for the link, exit codes (0 ok, 1 compile error, 2 usage, 3 toolchain, 70 internal). `ice.ts` prints the internal-error report a broken invariant exits 70 with. |
+| Compilation | `self/compilation.ts` | Owns every `ModuleUnit` of one program: loads roots and imports (keyed by resolved path, so cycles terminate), runs the checker passes in the right order, rejects symbol clashes, runs the attribute analysis over all modules, emits one `.ll` per module, and computes output stems. It does not decide where output goes; `compile.ts` writes it. |
+| Parser | `self/tokens.ts`, `self/lexer.ts`, `self/nodes.ts`, `self/parser.ts`, `self/parents.ts` | The compiler's own scanner and parser. The tree is one `Node` class with a `kind: i32` discriminant and dense ids; the child layout per kind is written beside each kind in `nodes.ts`. A syntax error is a diagnostic like any other. |
+| Validator | `self/validator.ts` | One pre-order walk, dispatched by a `switch` on the node kind; decides everything from syntax alone (no types, no scopes). What is here is forbidden by design; what the checker refuses with `Unsupported ...` is merely not implemented yet. Defence in depth: it sees nodes the checker never visits. |
+| Types | `self/types.ts`, `self/annotations.ts` | A type is an `i32` interned in the compilation's one `TypeTable`, so type equality is an integer compare. `types.ts` holds `llvmType`, `alignOf`, `sameType`, `assignable` and the numeric predicates; `annotations.ts` turns a written annotation into a type id. |
+| Checker | `self/checker.ts` + `declarations.ts`, `structs.ts`, `constants.ts`, `assignment.ts` (definite assignment), `statements.ts`, `expressions.ts`, `members.ts`, `arrays.ts`, `builtins.ts`, `result.ts`, `generics.ts`, `bounds.ts`, `symbols.ts`, `context.ts` | Pass 1 collects signatures and struct layouts; pass 1b binds imports; pass 2 checks bodies. Every statement and expression goes through the central `switch` of its category (see below) and its type is recorded in a side table. |
+| Diagnostics | `self/diagnostics.ts`, `self/codes.ts` | The `file:line:col: error: message` summary, the caret excerpt and the `--json` object; `codes.ts` is the hand-kept registry of every diagnostic code. |
+| Attributes | `self/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts, allocation facts) and the call-graph fixpoint that turns them into LLVM attributes, arena scopes, and stack slots. Runs over the whole program at once. |
+| Escape analysis | `self/escape.ts` | Per allocation site (`new`, object literal, array literal, `new Array<T>(<literal>)`, `Ok(v)` / `Err(e)`): does the value stay `local`, is it `returned`, or does it `leak`? Decides stack allocation and feeds the arena-scope facts (WP6). |
+| Target | `self/target.ts` | The `--target` table: canonical triples, their aliases, `host` resolution from `process.platform`/`arch`, and the clang 18 data-layout string written into the module header (WP9). |
+| Emitter | `self/emit.ts` + `emit_util.ts`, `emit_ops.ts`, `emit_control.ts`, `emit_strings.ts`, `emit_arrays.ts`, `emit_classes.ts`, `emit_builtins.ts`, `emit_result.ts`, `tbaa.ts`, `debug.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct lowerings. Contains no user-facing error handling. |
+| IR builder | `self/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
+| Runtime ABI | `self/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic (the `RuntimeTable`); the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
+| Runtime | `runtime/runtime.c`, `runtime/runtime_os.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation, in two translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime_os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. `runtime/nish.d.ts` declares the builtins so that `tsc` can type-check a Nish program. |
+| Interop | `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | C header, wasm `.d.ts` and its loader, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
+| Dumps | `self/dump.ts`, `self/ast_text.ts` | The `--emit-checked` and `--emit-ast` text. |
+| Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh`, `bootstrap.sh`, `fetch-seed.sh` | The clang/LTO profiles, the size table, the example smoke test, and the seeded build of the compiler itself. |
+| Tests | `tests/run.js` + `tests/{cases,link,ir,layout,self}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, the bootstrap, benchmark checksums. |
+| Differential tests | `tests/differential/{run,lib,fuzz}.js`, `tests/differential/corpus/`, `tests/differential/goldens/`, `runtime/shim.mjs` | Every whole program compiled natively and compared, byte for byte, with its frozen JavaScript rewrite run under Node; a seeded random-program fuzzer (WP13). |
 | Bench | `bench/run.mjs`, `bench/*.{ts,c,rs}`, `bench/rss.c`, `bench/ffi.mjs` | The Nish / C / Rust suite that writes `docs/BENCHMARKS.md` (WP9), and the interop batching benchmark (WP8). |
+
+### Bootstrapping
+
+`self/` is a Nish program, so building it needs a Nish compiler: the last
+released `nish` binary, which is the seed. `scripts/fetch-seed.sh` downloads
+that release's tarball into `build/seed/`, and `NISH_BOOTSTRAP=<path>`
+points at another one. `scripts/bootstrap.sh` (what `npm run build` runs)
+builds the chain:
+
+```
+seed ──▶ stage1 (self/ built by the seed) ──▶ stage2 (self/ built by stage1) = build/nish
+                                                └─▶ stage3 (self/ built by stage2), --verify only
+```
+
+`--verify` asserts `IR(stage1) == IR(stage2)` and stage3 == stage2 byte for
+byte. `IR(seed) == IR(stage1)` is reported and not asserted: it asks whether
+the codegen has changed since the release, and a codegen change is expected
+to move it.
+
+The consequence for every change is the **rolling freeze**: `self/` may
+*use* in its own source only what the seed compiles. A new construct is
+implemented in `self/` and may be written inside `self/` from the next
+release on. CI's `bootstrap` job is what checks the freeze, by building
+stage1 from the released seed at all.
 
 ## Side tables: the checker records, the emitter reads
 
 The checker never rewrites the AST and the emitter never re-derives a type.
 Everything the emitter needs is written into `CheckedProgram`
-(`src/checker/program.ts`), keyed by AST node in `WeakMap`s so that no node
-is ever mutated:
+(`self/program.ts`), in arrays indexed by `Node.id`, so that no node is ever
+mutated. The parser hands out dense ids as it builds the tree, so each
+table's size is known before the checker starts:
 
 | Table | Key | Value | Who writes | Who reads |
 | --- | --- | --- | --- | --- |
-| `types` | any expression node | its `StaticType` | every expression checker | `ctx.typeOf` in every emitter |
-| `bindings` | identifier node | the `LocalVar` it refers to (`param` or `local` storage) | identifier/assignment checkers | `emitIdentifier` (SSA value vs. `load` from a slot), escape analysis |
-| `locals` | `VariableDeclaration` node | the `LocalVar` it introduces | `checkVariableDeclarationList` | alloca emission, counted-loop analysis |
-| `callees` | `CallExpression` node | the `FunctionSig` called (free functions and methods) | call checkers | call emission, call-graph facts |
-| `structs` | class/interface name | `StructInfo`: fields with index/offset, size, align, methods, ctor | pass 1 | GEP indices, `sizeof`, `dereferenceable` |
-| `coercions` | expression node | `{ from, to }` for a class used as an interface it implements | contextual-type check | one `bitcast` at the use site |
-| `functions`, `imports`, `exports`, `entryMain` | – | signatures in source order, import bindings, exported names, the entry `main` | pass 1 / 1b | function emission, `declare`s, the `@main` wrapper |
+| `nodeTypes` | any expression node | its type id | every expression checker | `typeOf` in every lowering |
+| `nodeLocals` | identifier node | the `Local` it refers to (parameter or local slot) | identifier/assignment checkers | identifier lowering (SSA value vs. `load` from a slot), escape analysis |
+| `nodeConstants` | identifier node | the module constant it names, when it is not a variable | identifier checker | constant lowering |
+| `nodeCallees` | call node | the `FunctionSig` called (free functions and methods) | call checkers | call emission, call-graph facts |
+| `nodeBuiltins` | call or identifier node | the canonical builtin a `nish:` import resolved to | import binding, call checkers | builtin lowering |
+| `nodeCoercions` | expression node | the type a class value *was* where an implemented interface is expected | contextual-type check | one `bitcast` at the use site |
+| `nodeCaseValues`, `nodeEnumValues` | `case` label / enum member node | the folded constant | `constants.ts` | `switch` and enum lowering |
+| `nodeProvenIndex`, `nodeProvenClamp` | index and `substring` bound nodes | the bounds analysis proved it in range | `bounds.ts` | `emit_arrays.ts`, `emit_strings.ts`, and the attribute pass |
+| `structs`, `functions`, `imports`, `exports`, `entryMain` | – | struct layouts, signatures in source order, import bindings, exported names, the entry `main` | pass 1 / 1b | GEP indices, `sizeof`, `dereferenceable`, function emission, `declare`s, the `@main` wrapper |
 
 Consequences:
 
-- The emitter can assume every node it sees is valid, so `emit/*.ts` has no
-  diagnostics at all; an unexpected node there is an internal error (exit
-  70), never a user error.
+- The emitter can assume every node it sees is valid, so the `emit_*.ts`
+  modules have no diagnostics at all; an unexpected node there is an internal
+  error (`panic`, exit 70), never a user error.
 - Whole-program facts live *outside* the AST: `analyzeFunctions` returns a
-  `Map<symbol, FunctionFacts>` over every module, and the emitter of each
-  module reads the same map, which is why an importer's `declare` carries
-  exactly the exporter's attributes (`tests/link/*` check this attribute for
-  attribute).
-- A `Checker` can also run stand-alone on one module (`check()`), which is
-  what unit-style tests and `--runtime-decls` prelude generation use.
+  `FactsTable` over every module, and the emitter of each module reads the
+  same table, which is why an importer's `declare` carries exactly the
+  exporter's attributes (`tests/link/*` check this attribute for attribute).
 
-### Dispatch tables
+### Dispatch
 
-Both phases are tables keyed by `ts.SyntaxKind` (or by operator token, or by
-receiver type kind), populated by construct-family modules that are spread
-into the core tables at load time:
+Both phases dispatch through one central `switch` on the node kind per
+syntactic category (wp14 §3a D2), and the family modules hold the handlers:
 
-| Checker table (`src/checker/`) | Emitter mirror (`src/codegen/emit/`) | Keyed by |
+| Checker (`self/`) | Emitter (`self/`) | Switches on |
 | --- | --- | --- |
-| `statementCheckers` (`statements.ts`) | `statementEmitters` (`statements.ts`) | statement `SyntaxKind` |
-| `expressionCheckers` (`expressions.ts`) | `expressionEmitters` (`expressions.ts`) | expression `SyntaxKind` |
-| `binaryCheckers`, `unaryCheckers` | `binaryEmitters`, `unaryEmitters` | operator token |
-| `assignmentTargetCheckers` (`members.ts`) | `assignmentTargetEmitters` (`members.ts`) | kind of the assignment *target* (`p.x = v`, `a[i] = v`) |
-| `propertyCheckers`, `methodCallCheckers`, `newCheckers`, `namespaceProperties` (`members.ts`) | the same names in `emit/members.ts` | receiver type kind (`string`, `array`, `struct`, `result`) or constructor name |
-| `builtinCalls` (dotted: `console.log`, `Math.*`, `process.exit`; `strings.ts`) | `builtinCallEmitters` (`emit/strings.ts`) | dotted name |
-| `builtinFunctions` (bare: `toI32`, `readFileSync`; `expressions.ts`) | `builtinFunctionEmitters` (`emit/expressions.ts`) | identifier, consulted only when no user function has that name |
+| `checkStatement` (`statements.ts`) | `Emitter.emitStatementKind` (`emit.ts`) | statement kind |
+| `checkExpression` (`expressions.ts`) | `Emitter.emitRawExpression` (`emit.ts`) | expression kind |
+| binary and unary operators (`expressions.ts`) | `emitBinary`, `emitUnary` (`emit_ops.ts`) | operator token |
+| `checkMemberAssignment` (`members.ts`), `checkIndexAssignment` (`arrays.ts`) | `emitAssignment` (`emit_ops.ts`), `emitFieldAssignment` (`emit_classes.ts`), `emitElementAssignment` (`emit_arrays.ts`), `emitCompoundAssignment` (`emit_control.ts`) | kind of the assignment *target* (`p.x = v`, `a[i] = v`) |
+| `checkMember`, `checkMethodCall` (`members.ts`), then `checkArrayProperty`, `checkStringProperty`, `checkResultProperty` | `emitMethodCall` (`emit_classes.ts`), `emitArrayMethodCall`, `emitStringMethodCall`, `emitResultProperty` | receiver type kind (`string`, `array`, `struct`, `result`) |
+| `checkBuiltinCall`, `checkNamespaceProperty` (`builtins.ts`) | `emitBuiltinCall`, `emitIdentifierBuiltinCall`, `emitNamespaceProperty` (`emit_builtins.ts`) | dotted name (`console.log`, `Math.*`, `process.exit`) or bare builtin, consulted only when no user function has that name |
 
-Family modules: `control-flow.ts`, `strings.ts`, `math.ts`, `io.ts`,
-`arrays.ts`, `classes.ts`, `arena.ts` (the `Arena.*` builtins) on both sides
-(`checker/` and `codegen/emit/`), `result.ts` on both sides (WP16),
-`checker/nullable.ts` (the `null` literal, `T | null` assignability),
-`checker/narrowing.ts` (the flow engine `nullable.ts` and `result.ts` both
-register a rule with) and `emit/arithmetic.ts` (integer
-operators with the checked `sdiv`/`srem`, shared by binary operators and
-every `op=` form) on one side, plus `builtins.ts` for the shared plumbing. The array module *wraps* the
-existing `=`/`op=` handlers (`installArrayAssignmentCheckers`) instead of
-replacing them, so element targets and property targets compose in either
-registration order.
+Nish-0 has no function values, so there are no tables of closures: the
+emitter is one `Emitter` class that the family modules are handed, and a new
+construct is a new `case` in the switch plus a function in its family.
+Narrowing is `narrow` in `expressions.ts`, which `T | null` guards and
+`result.ts`'s `narrowResultTest` both go through.
 
 ## How to add a construct
 
-The checklist every work package has followed (MASTER_PLAN.md §7).
-
-**First, decide how many implementations it gets.** Steps 2 to 7 below are
-`src/`, and every one of them has a mirror in `self/` (`.claude/selfhost.md`
-has the module map). Writing both is what buys the byte-for-byte comparison
-between two independent implementations, and it is worth it for anything
-subtle. Writing only the `self/` half is the other legitimate answer since
-[wp19 §1a](wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6): name the
-case in `tests/self/stage1_only.txt` and its golden is compiled by stage1,
-while the oracles declare it instead of skipping it. The tests, the rule and
-the changelog line are the same either way, and `self/` may not *use* the
-construct in its own source until the seed compiles it — one release later.
+The checklist every work package follows (MASTER_PLAN.md §7). A construct is
+implemented once, in `self/`, and the tests, the rule and the changelog line
+are what make it part of the language. Under the rolling freeze
+([Bootstrapping](#bootstrapping)) `self/` may not *use* the construct in its
+own source until the seed compiles it, which is the next release.
 
 1. **Decide the rule and the lowering first.** Write the TypeScript snippet
    and the IR you expect by hand; check it with `llvm-as` and
    `opt -passes=verify`.
-2. **Validator.** If the construct can *never* be compiled, add a rule to
-   `validators` in `src/validator.ts` and a `tests/cases/reject_<x>.ts` +
-   `.err`. If it is merely unsupported today, leave the validator alone: the
-   checker's `Unsupported ... in Phase 1` fallback covers it.
-3. **Types.** New type? Extend `StaticType`, `llvmType`, `alignOf`,
-   `sameType`, `typeToString`, `resolveTypeNode` in `src/types.ts`, and
-   `cType`/`isScalar`/`tsKeyword` in `src/interop/abi.ts`. A numeric type
-   also touches `isNumeric` plus `isInteger` (and `isUnsigned`/`intBits` for
-   an integer width) or `isFloat` (and `floatConstant` in
-   `codegen/emit/builtins.ts` for the constant encoding), `wasmType` in
-   `interop/dts.ts`, `crossesWasm` in `interop/wasm.ts`,
-   `SCALAR_READERS`/`scalarBox` in `interop/napi.ts`, and
-   `BASIC_TYPES`/`bitsOf` in `codegen/debug.ts`. The two N-API tables are the
-   ones to remember: a type with no row there does not make the shim refuse a
-   signature that mentions it, it makes the shim leave that function out of
-   the addon, which is how `u8`, `u16`, `u32`, `u64` and `f32` were unbridged
-   for as long as they were.
-4. **Checker.** Write a handler in the matching family module (or a new
-   one), register it in the table, record every type/binding the emitter
-   will need in `CheckedProgram`, and give every rejection a message that
-   names the construct. Termination-affecting statements return `true` from
-   their `StatementChecker` when they cannot fall through.
-5. **Emitter.** Mirror the handler in `src/codegen/emit/`; read only the
-   side tables; name every new basic block (`ctx.fn.block("kind.role")`);
+2. **Parser and validator.** New syntax needs a node kind in `self/nodes.ts`
+   (with its child layout written beside it) and a production in
+   `self/parser.ts`. If the construct can *never* be compiled, add a rule to
+   `self/validator.ts` and a `tests/cases/reject_<x>.ts` + `.err`. If it is
+   merely unsupported today, leave the validator alone: the checker's
+   `Unsupported ...` fallback covers it.
+3. **Types.** New type? Add its id or kind to `self/types.ts` and extend
+   `llvmType`, `alignOf`, `sameType` and `assignable` there, the annotation
+   resolver in `self/annotations.ts`, and `cType` / `tsKeyword` in
+   `self/interop_abi.ts`. A numeric type also touches `isNumeric` plus
+   `isInteger` (and `isUnsigned`/`intBits` for an integer width) or `isFloat`,
+   the constant encoding in `numericConstant` (`self/emit.ts`), `wasmType` and
+   the bridging decision in `self/interop_wasm.ts`, the scalar readers and
+   boxers in `self/interop_napi.ts`, and the basic-type table in
+   `self/debug.ts`. The N-API tables are the ones to remember: a type with no
+   row there does not make the shim refuse a signature that mentions it, it
+   makes the shim leave that function out of the addon, which is how `u8`,
+   `u16`, `u32`, `u64` and `f32` were unbridged for as long as they were.
+4. **Checker.** Add a `case` to the category's `switch` and write the handler
+   in the matching family module (or a new one); record every type and binding
+   the emitter will need in the `CheckedProgram` side tables; give every
+   rejection a message that names the construct. A statement that cannot fall
+   through returns `true` from `checkStatement`.
+5. **Diagnostics.** A new diagnostic is an entry added by hand to
+   `self/codes.ts`, with the next free number in its band; never renumber or
+   reuse a code. `scripts/gen-diagnostic-codes.mjs` is frozen: `--check`
+   validates the registry's format and that every code is unique, and writes
+   nothing. The diagnostic also needs a program that *reaches its words*
+   (`tests/wordings/`, checked by `tests/diagnostic_coverage.js` inside
+   `npm test`), or a line with a reason in `tests/wordings/unreachable.txt`.
+6. **Emitter.** Add the `case` to `self/emit.ts` and the lowering to its
+   `emit_*.ts` family; read only the side tables; name every new basic block;
    hoist allocas with `emitAlloca`; reference runtime symbols only through
-   `ctx.useRuntime(name)` so the declaration is emitted.
-6. **Runtime.** New C symbol? Add it to `RUNTIME_FUNCTIONS` in
-   `src/codegen/runtime.ts` (signature, attributes, `effect`, `noreturn`), to
-   the runtime, and to `runtime/nish.h`; `tests/run.js` fails if the three
+   `useRuntime` so the declaration is emitted.
+7. **Runtime.** New C symbol? Add it to the `RuntimeTable` in
+   `self/runtime.ts` (signature, attributes, effect, `noreturn`), to the
+   runtime, and to `runtime/nish.h`; `tests/run.js` fails if the three
    disagree. The runtime is two translation units: a symbol that wraps a system
    call goes in `runtime/runtime_os.c`, everything else in `runtime/runtime.c`.
-   Any struct layout change touches `runtime.ts` and `runtime.c` in the same
-   commit and extends a layout test. Keep each file within its budget — every
-   `.text*` section summed, at `-Oz`, under 3,584 bytes for `runtime.c` and
-   1,280 for `runtime_os.c` (§2 of the master plan, and
+   Any struct layout change touches `self/runtime.ts` and `runtime.c` in the
+   same commit and extends a layout test. Keep each file within its budget —
+   every `.text*` section summed, at `-Oz`, under 3,584 bytes for `runtime.c`
+   and 1,280 for `runtime_os.c` (§2 of the master plan, and
    [wp7-runtime.md](wp7-runtime.md) for each measurement, why the ceilings are
    separate and why either moved). `node tests/run.js budget` measures both, so
    this is a check you can run rather than a number to remember;
    `clang -Oz -c <file> && size -A <file>.o` is the same measurement by hand.
    A link line names only `runtime.c`: `scripts/build.sh` compiles
    `runtime_os.c` beside it, and a direct `clang` line names both.
-7. **Attributes.** Tell the fact collector what the construct does:
-   memory effect (`readsMemory`, callee symbols via `collectStringFacts` /
-   `collectBuiltinFacts` / `factCollectors`), escapes (`classifyUse`), loop
-   boundedness (`isCountedLoop`). Never add an attribute you cannot cite a
-   proof for; write the reason next to the code.
-8. **Tests.** A golden `tests/cases/<name>.ts` + `.ll` (`npm run test:update`
-   writes a missing golden), a native round trip (`.out`, using
-   `tests/driver.c`'s `test()` or an `export const main`), at least one
+8. **Attributes.** Tell the fact collector in `self/attributes.ts` what the
+   construct does: memory effect (`readsMemory`, the callee symbols the
+   `collect*Facts` functions and `factCollectors` record), escapes
+   (`classifyUse`), loop boundedness (`isCountedLoop`). Never add an attribute
+   you cannot cite a proof for; write the reason next to the code.
+9. **Tests.** A golden `tests/cases/<name>.ts` + `.ll` (`npm run test:update`
+   writes a missing golden), an `llvm-as` pass, a native round trip (`.out`,
+   using `tests/driver.c`'s `test()` or an `export const main`), at least one
    `reject_*` case, and `.args` for flags.
-9. **Docs.** Add the rule to [LANGUAGE.md](LANGUAGE.md) with the test-case
-   citation, a snippet to `docs/cookbook/` with a marker in
-   [IR_COOKBOOK.md](IR_COOKBOOK.md), run `docs/cookbook/regen.sh`, and add a
-   line to `CHANGELOG.md`.
+10. **Docs.** Add the rule to [LANGUAGE.md](LANGUAGE.md) with the test-case
+    citation, a snippet to `docs/cookbook/` with a marker in
+    [IR_COOKBOOK.md](IR_COOKBOOK.md), and a line to `CHANGELOG.md`. The
+    cookbook is regenerated by `docs/cookbook/regen.sh` against `build/nish`,
+    the compiler the change itself builds, so the entry is written in the same
+    pull request as the construct rather than a release later.
 
 ## ABI contracts and the tests that guard them
 
@@ -191,22 +216,22 @@ host is a contract that a test enforces:
 
 | Contract | Defined in | Guarded by |
 | --- | --- | --- |
-| Arena state `%struct.nish_arena = { i8* buf, i64 off, i64 cap, i8* chunks }`, bumped directly by the inlined fast path. `off` and `cap` are `uint64_t` on the C side, never `size_t`: the IR says `i64` on every target, and under wasm32 a `size_t` pair would sit at bytes 4 and 8 instead of 8 and 16 | `codegen/runtime.ts` (`ARENA_TYPE`, `inlineAllocator`), `runtime.c` (`struct nish_arena`), `runtime_wasm.c`, `nish.h` | **alloc smoke** (`tests/ir/alloc_smoke.ll` + `alloc_smoke_main.c`): the `--runtime-decls` prelude plus an IR function that allocates twice is linked against `runtime.c` with LTO and must observe a 16-byte bump for two 12-byte objects (`tests/run.js`, section B). The offsets themselves are `_Static_assert`ed in both runtimes and, per target, in the header layout check that compiles `nish.h` for the host and for wasm32 |
-| String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `codegen/emit/strings.ts`, `runtime.c` (`nish_str`), `nish.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
-| Array header `%struct.nish_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `nish.h`, `interop/wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`nish_array_grow`, `nish_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
-| Class/interface layout = clang's layout of the same C struct | `checker/classes.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `nish_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
-| Element storage of an array: `sizeof(T)` per slot, and for a *record* element type (an `interface` nobody implements, WP15 §2a) the records themselves end to end, at clang's array stride | `checker/program.ts` (`inlineElementStruct`, `elementStride`), `codegen/emit/arrays.ts`, `runtime.c` (`nish_array_grow`, `nish_alloc_array` take `elem_size`), `nish.h`, `interop/header.ts` (the element note per prototype) | the same **layout test**: `buildPs` hands C a grown `P[]`, which `structs.c` walks as a `struct P *`, checking the stride and every field of every element, plus `tests/cases/arr_struct_*` for the IR and the native round trip |
-| Every runtime function has a prototype in the public header | `codegen/runtime.ts`, `runtime/nish.h` | **header test** (`tests/run.js`, WP8 section): every name in `RUNTIME_FUNCTIONS` (minus intrinsics) plus `nish_arena` must appear in `nish.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
-| Generated C header matches the IR's signatures | `interop/header.ts` | `add.h` content check; a C driver compiled against it with `-Werror` and run |
-| Generated `.d.ts` is valid TypeScript | `interop/dts.ts` | `tsc` over the generated file |
-| N-API shim and wasm build agree | `interop/napi.ts`, `build.sh --profile napi/wasm` | addon build, load, type-check errors, `.node` vs `.wasm` results |
-| Importer `declare` = exporter `define` attributes | `attributes.ts`, `emitter.ts` | every `tests/link/*` positive test compares the attribute sets across modules |
-| Entry wrapper and exit codes | `emitter.ts` (`emitEntryWrapper`), `index.ts` | `entry_main*` goldens, `tests/link/*` expected exit codes, the WP12 exit-code block (ICE hook, missing toolchain, failing `build.sh`) |
-| C ABI of scalars (`int32_t`, `double`, `bool` zero-extended) | `interop/abi.ts` | `examples/main.c` driver in the size-profile check, `tests/driver.c` in every `.out` case |
-| Package contents (`dist/`, `runtime/`, `scripts/`, `LICENSE`, `docs/INSTALL.md`) | `package.json#files` | the WP12 package block: `npm pack`, install into a temp prefix, link a hello-world from another directory |
+| Arena state `%struct.nish_arena = { i8* buf, i64 off, i64 cap, i8* chunks }`, bumped directly by the inlined fast path. `off` and `cap` are `uint64_t` on the C side, never `size_t`: the IR says `i64` on every target, and under wasm32 a `size_t` pair would sit at bytes 4 and 8 instead of 8 and 16 | `self/runtime.ts` (`ARENA_TYPE`, `inlineAllocator`), `runtime.c` (`struct nish_arena`), `runtime_wasm.c`, `nish.h` | **alloc smoke** (`tests/ir/alloc_smoke.ll` + `alloc_smoke_main.c`): the `--runtime-decls` prelude plus an IR function that allocates twice is linked against `runtime.c` with LTO and must observe a 16-byte bump for two 12-byte objects (`tests/run.js`, section B). The offsets themselves are `_Static_assert`ed in both runtimes and, per target, in the header layout check that compiles `nish.h` for the host and for wasm32 |
+| String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `self/emit_strings.ts`, `runtime.c` (`nish_str`), `nish.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
+| Array header `%struct.nish_array = { i64 len, i64 cap, i8* data }` | `self/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `nish.h`, `self/interop_wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`nish_array_grow`, `nish_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
+| Class/interface layout = clang's layout of the same C struct | `self/structs.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `nish_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
+| Element storage of an array: `sizeof(T)` per slot, and for a *record* element type (an `interface` nobody implements, WP15 §2a) the records themselves end to end, at clang's array stride | `self/program.ts` (`inlineElementStruct`, `elementStride`), `self/emit_arrays.ts`, `runtime.c` (`nish_array_grow`, `nish_alloc_array` take `elem_size`), `nish.h`, `self/interop_header.ts` (the element note per prototype) | the same **layout test**: `buildPs` hands C a grown `P[]`, which `structs.c` walks as a `struct P *`, checking the stride and every field of every element, plus `tests/cases/arr_struct_*` for the IR and the native round trip |
+| Every runtime function has a prototype in the public header | `self/runtime.ts`, `runtime/nish.h` | **header test** (`tests/run.js`, WP8 section): every runtime function in the `RuntimeTable` (minus intrinsics) plus `nish_arena` must appear in `nish.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
+| Generated C header matches the IR's signatures | `self/interop_header.ts` | `add.h` content check; a C driver compiled against it with `-Werror` and run |
+| Generated `.d.ts` is valid TypeScript | `self/interop_dts.ts` | `tsc` over the generated file |
+| N-API shim and wasm build agree | `self/interop_napi.ts`, `build.sh --profile napi/wasm` | addon build, load, type-check errors, `.node` vs `.wasm` results |
+| Importer `declare` = exporter `define` attributes | `self/attributes.ts`, `self/emit.ts` | every `tests/link/*` positive test compares the attribute sets across modules |
+| Entry wrapper and exit codes | `self/emit.ts` (`emitEntryWrapper`), `self/compile.ts` | `entry_main*` goldens, `tests/link/*` expected exit codes, the WP12 exit-code block (ICE hook, missing toolchain, failing `build.sh`) |
+| C ABI of scalars (`int32_t`, `double`, `bool` zero-extended) | `self/interop_abi.ts` | `examples/main.c` driver in the size-profile check, `tests/driver.c` in every `.out` case |
+| Package contents (`bin/`, `runtime/`, `scripts/`, `std/`, `LICENSE`, `docs/INSTALL.md`); the compiler itself comes from the platform package `@amritk/nish-<asset>` | `package.json#files`, `optionalDependencies` | the WP12 package block: `npm pack`, install into a temp prefix, link a hello-world from another directory |
 
 The rule behind the table (MASTER_PLAN.md §2): any change to a struct layout
-touches `runtime.ts` and `runtime.c` in the same commit and adds or extends
+touches `self/runtime.ts` and `runtime.c` in the same commit and adds or extends
 a layout smoke test.
 
 ### Runtime symbols
@@ -214,7 +239,7 @@ a layout smoke test.
 `runtime/runtime.c` (3,515 bytes of `.text*` at `-Oz` against a budget of
 3,584, plus 10,068 bytes of `.rodata` that is almost all Ryu's two
 power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,251
-bytes against 1,280) provide, in the order of `RUNTIME_FUNCTIONS`, the symbols
+bytes against 1,280) provide, in the order of the `RuntimeTable` in `self/runtime.ts`, the symbols
 below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
 `scripts/size-report.sh`, which reports every row:
 
@@ -266,7 +291,7 @@ addq  (%r14), %rbx       ; object = buf + old offset
 
 ## Attribute soundness rules
 
-`src/codegen/attributes.ts` emits an LLVM attribute only when the checker's
+`self/attributes.ts` emits an LLVM attribute only when the checker's
 facts prove it; a wrong attribute is undefined behaviour, not a missed
 optimisation. The facts per function (`FunctionFacts`) are collected in one
 AST walk and then refined by a fixpoint over the whole program's call
@@ -280,7 +305,7 @@ it.
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |
 | `nounwind` | always | No exceptions exist and there is no `throw`; a failure a caller should handle is a `Result<T, E>` (WP16). |
-| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`nish_panic_index` is `noreturn`), and an integer `/` or `%` (`nish_panic_div`) clear it — a *proven* `a[i]` does not, because the checker showed the index in range and no check is emitted (WP15 §2, `src/checker/bounds.ts`). Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
+| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`nish_panic_index` is `noreturn`), and an integer `/` or `%` (`nish_panic_div`) clear it — a *proven* `a[i]` does not, because the checker showed the index in range and no check is emitted (WP15 §2, `self/bounds.ts`). Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
 | `readnone` | effect `none` | The body touches no memory but its own allocas and calls only `readnone` callees (LLVM's own FunctionAttrs would infer it). |
 | `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, a `Result` payload, `nish_str_eq`) and nothing writes; building a `Result`, a checked `a[i]`, and an integer division force `write` (the allocator and the panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
 | `noundef` (params, returns) | every shape but one | Every Nish value is initialised. The exception is a by-value `Result` under the private ABI (WP15 §7b): the arm that is not live is `undef` by construction, and `noundef` on an aggregate is about every element of it, so that shape carries none. |
@@ -288,15 +313,15 @@ it.
 | `nonnull align 8` | non-nullable strings, arrays, structs | No null value in those types; literals, arena objects, and stack objects are 8-aligned. A `T \| null` parameter or return keeps `align 8` (null is aligned) and loses `nonnull` and `dereferenceable` (WP6). |
 | `dereferenceable(sizeof)` / `dereferenceable(24)` | non-nullable struct params/returns (non-empty) / non-nullable array params and returns | Every object comes from the arena or a stack slot with at least `sizeof` bytes; every array value comes from a literal, `new Array`, or a function that returned one, all of which write the full 24-byte header (WP9). |
 | `readonly` (string param) | always | Strings are immutable. |
-| `!tbaa` (class field load/store) | the struct is a class that implements no interface | Struct-path TBAA: a field is named by its class, its LLVM type and its byte offset, so a store to one field cannot be a load of another whatever the two pointers are. Sound because Nish has no inheritance, no casts, no unions and no pointer arithmetic, so a `%struct.C*` is the only type through which a `C` object's bytes are read or written. `implements` is the exception — it lays an interface's fields out first so `%struct.C*` may be `bitcast` to `%struct.I*`, real prefix subtyping — and those accesses carry no tag at all. Worth 87.5M instructions to 80.0M on `bench/nbody` (`src/codegen/emit/tbaa.ts`). |
+| `!tbaa` (class field load/store) | the struct is a class that implements no interface | Struct-path TBAA: a field is named by its class, its LLVM type and its byte offset, so a store to one field cannot be a load of another whatever the two pointers are. Sound because Nish has no inheritance, no casts, no unions and no pointer arithmetic, so a `%struct.C*` is the only type through which a `C` object's bytes are read or written. `implements` is the exception — it lays an interface's fields out first so `%struct.C*` may be `bitcast` to `%struct.I*`, real prefix subtyping — and those accesses carry no tag at all. Worth 87.5M instructions to 80.0M on `bench/nbody` (`self/tbaa.ts`). |
 | `noalias` (string param) | always | Nothing writes through a string pointer, and `noalias` only concerns modified memory. |
 | `noalias` (`%this`) | constructors only | `new` hands the constructor a fresh allocation; never on other struct params (two may alias). |
 | `readonly` (struct/array param) | `!writesThrough` after the fixpoint | No store through the pointer, no escape, only passed to `readonly` parameters. Array element stores through nested indexing count as writes, conservatively. |
 | `nocapture` | strings: `!escaping`; pointers: `!captured` after the fixpoint | `classifyUse`: a use is harmless when consumed on the spot (operator operand, condition, `.length` receiver, template hole that concatenates, runtime builtin argument, all declared `nocapture`); it escapes when returned, stored, aliased, pushed, or passed to a capturing user function. Strings passed to a user function always escape (no fixpoint for strings). |
-| runtime `declare` attributes | from `RUNTIME_FUNCTIONS` | Written next to each symbol in `runtime.ts`; intrinsics carry a subset of what LLVM itself attaches (`nounwind willreturn readnone`). |
+| runtime `declare` attributes | from the `RuntimeTable` | Written next to each symbol in `self/runtime.ts`; intrinsics carry a subset of what LLVM itself attaches (`nounwind willreturn readnone`). |
 | `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `nish_arena_grow` | The fast path must inline; the slow path must not. |
 | `tail` (call marker, not an attribute) | a `return g(...)` whose arguments are every one a scalar, whose callee's parameter count matches the argument list, and which nothing follows (no packed-`Result` unpack, no WP9 reclaim, no scope release left behind) | The marker claims the callee cannot access the caller's stack frame. It holds because the callee is handed no pointer at all, and because no other path reaches a caller alloca either: the only allocas a function has are its locals' slots, whose addresses are never materialised as values, and the WP6 stack sites, which exist only for allocations whose flow is `local` and so are never stored, captured or returned. The proof is `marksTailCall` in `escape.ts` rather than `attributes.ts`, because it is a fact about one call site rather than about a function, and it is the one entry in this table `--plain` keeps: it decides whether a deep recursion runs at all rather than how fast it runs. |
-| `!alias.scope` / `!noalias` (array accesses) | every load and store of an `nish_array` header field, and every load and store of element data | The header's three fields and the `cap * sizeof(T)` of element storage never overlap, in any of the four shapes the compiler produces them: two arena bumps, two entry-block allocas (WP6), the `nish_alloc_array` host entry (two bumps again), and `nish_argv_init`'s single `malloc` block whose elements begin *after* the header. So an element store cannot reach a header field, nor the reverse. Strings are excluded — one block, length and bytes contiguous. Struct fields were excluded too, for want of a measurement; they have one now and carry `!tbaa` instead, above. WP15 §2b; the argument is written out in `emit/arrays.ts`. |
+| `!alias.scope` / `!noalias` (array accesses) | every load and store of an `nish_array` header field, and every load and store of element data | The header's three fields and the `cap * sizeof(T)` of element storage never overlap, in any of the four shapes the compiler produces them: two arena bumps, two entry-block allocas (WP6), the `nish_alloc_array` host entry (two bumps again), and `nish_argv_init`'s single `malloc` block whose elements begin *after* the header. So an element store cannot reach a header field, nor the reverse. Strings are excluded — one block, length and bytes contiguous. Struct fields were excluded too, for want of a measurement; they have one now and carry `!tbaa` instead, above. WP15 §2b; the argument is written out in `self/emit_arrays.ts`. |
 
 `--plain` turns all of this off (and the alignment hints) and produces the
 bare Phase 1 IR, which is useful when comparing against hand-written IR. The
@@ -306,7 +331,7 @@ decoration should do.
 
 ### Escape analysis, stack allocation, and arena scopes
 
-`src/codegen/escape.ts` runs inside the attribute fixpoint (it needs the
+`self/escape.ts` runs inside the attribute fixpoint (it needs the
 `nocapture` facts of callees, and the scope facts it produces flow back up
 the call graph). For every *allocation site* in a function (`new C(...)`,
 an object literal, an array literal, `new Array<T>(<literal>)`) it follows
@@ -356,14 +381,15 @@ for the release only, needs `g` not to read the bump position
 
 ### `T | null`
 
-`checker/nullable.ts` owns the `null` literal (typed by its contextual
+The checker owns the `null` literal (typed by its contextual
 `T | null`), the one-way assignability `T -> T | null` (`assignable` in
-`types.ts`, used by initializers, returns, arguments, stores, literals,
+`self/types.ts`, used by initializers, returns, arguments, stores, literals,
 `push`, and ternaries), and narrowing: a per-variable set of "known
 non-null" bindings that a guard (`!== null` / `=== null` in `if`, `while`,
 `for`, `&&`, `||`, `?:`, composed through `!` and parentheses) opens for the
 region it dominates, that an early-terminating branch extends past the `if`,
-and that any assignment to the variable, or a loop that assigns it, closes.
+and that any assignment to the variable, or a loop that assigns it, closes
+(`narrow` and `clearNarrowingsAssignedIn` in `self/expressions.ts`).
 Only locals and parameters narrow, never property paths. The emitter sees
 no difference between `T` and `T | null` except in the attributes
 (`nonnull` and `dereferenceable` are dropped, [rules above](#attribute-soundness-rules))
@@ -371,18 +397,17 @@ and in `icmp eq ... null` for the comparisons.
 
 ### `Result<T, E>`
 
-`checker/result.ts` owns the type, the three rules that make an error
+`self/result.ts` owns the type, the three rules that make an error
 impossible to ignore, and the layout every `Result` shares with the emitter;
-`codegen/emit/result.ts` owns the lowering. The layout is *derived* from the
+`self/emit_result.ts` owns the lowering. The layout is *derived* from the
 type rather than declared, so nothing has to be registered or kept in sync:
 both sides call `resultLayout`, and an imported signature that mentions a
 `Result` brings across only the layouts of its payloads.
 
-The narrowing is the `T | null` engine, extracted into
-`checker/narrowing.ts` and given a registry: `nullable.ts` contributes the
-rule that recognises `p !== null`, `result.ts` the one that recognises
-`r.ok` / `r.isOk()` / `r.isErr()`, and the engine owns the boolean algebra
-and the scope plumbing. The soundness argument is therefore literally the
+The narrowing is the `T | null` engine: `narrow` in `self/expressions.ts`
+owns the boolean algebra and the scope plumbing and recognises `p !== null`,
+and hands every other condition to `narrowResultTest` in `self/result.ts`,
+which recognises `r.ok` / `r.isOk()` / `r.isErr()`. The soundness argument is therefore literally the
 same one — variables only, dropped on assignment, dropped before a loop that
 assigns. The refinement rides on the type as `state`, which `sameType`
 ignores because the LLVM value is the same pointer either way.
@@ -395,7 +420,7 @@ automatic arena scope.
 A `Result` whose two payloads are each a scalar of at most four bytes
 **travels in a register** (WP17), returned and passed: `resultByValue` in
 `types.ts` decides, `llvmAbiType` gives the `define` and its parameters their
-`i64`, and `emit/result.ts` packs at every `ret` and every argument and
+`i64`, and `self/emit_result.ts` packs at every `ret` and every argument and
 unpacks at every call site and in the callee prologue, into an object the
 receiving function owns — so nothing else in the lowering changed, and the
 allocation moved to whichever side unpacks (which is why
@@ -409,7 +434,7 @@ is still a pointer: [wp16-results.md](wp16-results.md).
 ### `nsw`, `--wrapping`, `--strict-exports` and `--target`
 
 - **`nsw`** (WP9, on by default since WP15 §3): `intOpcode` in
-  `emit/context.ts` is the single place that decides the flag; every
+  `self/emit_ops.ts` is the single place that decides the flag; every
   user-level **signed** integer `add`/`sub`/`mul` (including unary minus,
   `op=` on locals, fields, and elements, and `++`/`--`) becomes `add nsw` etc.,
   so signed overflow is undefined and LLVM may widen `i32` induction variables
@@ -422,26 +447,26 @@ is still a pointer: [wp16-results.md](wp16-results.md).
   appears anywhere.
   The proof under the attribute is the checker's recorded type, read through
   `isUnsigned`; there is no other input to the decision.
-- **Constant folding follows the same rule** (`checker/constants.ts`): by
+- **Constant folding follows the same rule** (`self/constants.ts`): by
   default an initialiser that overflows its width is refused rather than
   folded, because the fold must agree with the instruction it replaces;
   `--wrapping` restores the wrap.
 - **`--strict-exports`** (WP5, on by default since WP15 §3): a function without
-  `export` gets `internal` linkage (`emitter.ts`) and is left out of the
-  `--emit-header` / `--emit-dts` / `--emit-napi` surface (`interop/abi.ts`,
+  `export` gets `internal` linkage (`self/emit.ts`) and is left out of the
+  `--emit-header` / `--emit-dts` / `--emit-napi` surface (`self/interop_abi.ts`,
   `externalFunctions`); `--no-strict-exports` puts both back. What it does
-  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function *symbol*
+  *not* change is `rejectSymbolClashes` (`self/compilation.ts`): a function *symbol*
   is unique across the program in either mode, because `analyzeFunctions` keys
   the fact fixpoint by that symbol and two functions sharing one would be
   emitted with each other's attributes. Since WP21 S1 a symbol carries its
-  module's package prefix (`packages.ts`), so the *name* has to be unique only
+  module's package prefix (`self/packages.ts`), so the *name* has to be unique only
   within the package that declares it — which is what lets two dependencies
   each keep a private `helper()`. The root package's prefix is empty, so for a
   single-package program the symbol, the rule and the message are all exactly
   what they were.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
-  `codegen/target.ts` (strings copied from `clang --target=<triple> -S
+  `self/target.ts` (strings copied from `clang --target=<triple> -S
   -emit-llvm`); a mismatch with the layout clang applies at link time is a
   hard error, never a silent miscompilation. Without the flag the module is
   target-neutral and `opt`/`llc` assume a generic layout with no vector
@@ -491,9 +516,12 @@ per profile; CI attaches it to every run.
 
 ## Test harness
 
-`npm test` builds `dist/` and runs `tests/run.js`, which prints one
-`PASS`/`FAIL` line per check (several hundred) and skips the
-toolchain-dependent steps when LLVM is not installed:
+`npm test` runs `tests/run.js`, which builds its own stage1 from the seed
+(linked at `build/nish-test`), compiles every case with it, prints one
+`PASS`/`FAIL` line per check (several hundred), and skips the
+toolchain-dependent steps when LLVM is not installed. A run that could not do
+everything it should prints a `DEGRADED:` line; an undegraded run has none, and
+the skip count is the number to read, not only the exit code.
 
 - **Golden cases** (`tests/cases/<name>.ts`): compile with the flags in
   `<name>.args`; a `<name>.err` case must fail with exit 1 and the message
@@ -502,22 +530,29 @@ toolchain-dependent steps when LLVM is not installed:
   `<name>.c` or `tests/driver.c` plus both runtime `.c` files and `-lm`, run, and
   match stdout. A source declaring `main` — `export const main`, or the legacy
   `export function main` — is linked without the driver. `node tests/run.js <substring>` runs a subset;
-  `npm run test:update` writes missing goldens. The compiles happen **in
-  process**, sixty-four cases to a worker (`tests/batch_worker.js`), because
-  spawning a compiler per case spent ~473 ms of every 634 on `import
-  ts from "typescript"` and 1.5 ms on compiling; a case whose `.args` names a
-  flag the library API cannot express falls back to a real CLI spawn, and the
-  two paths are compared byte for byte on every run over one case per shape and
-  over the whole corpus under `node tests/run.js --verify-batch` (CI's
-  `batch-parity` job). The link is against the runtime and the driver **as
-  object files**, built once per run instead of recompiled per case (470 ms a
-  link became 91 ms), keyed on the defines the runtime needs — today only
-  `-DNISH_THREADS=1`. Two `runtime objects:` checks hold that up: the binary
-  linked against the objects must be byte-identical to the one built from the
-  sources, and a `--threads` module must *fail* to link against the default
-  objects, so a case handed the wrong runtime is a link error rather than a
-  program with two arenas.
-- **Diagnostics** (WP10): the caret excerpt format, syntax errors.
+  `npm run test:update` writes missing goldens. The link is against the
+  runtime and the driver **as object files**, built once per run instead of
+  recompiled per case (470 ms a link became 91 ms), keyed on the defines the
+  runtime needs — today only `-DNISH_THREADS=1`. Two `runtime objects:` checks
+  hold that up: the binary linked against the objects must be byte-identical
+  to the one built from the sources, and a `--threads` module must *fail* to
+  link against the default objects, so a case handed the wrong runtime is a
+  link error rather than a program with two arenas.
+- **Diagnostics** (WP10): the caret excerpt format, syntax errors, and
+  `tests/diagnostic_coverage.js`: every code in `self/codes.ts` is provoked by
+  a `tests/wordings/` program or named in `tests/wordings/unreachable.txt`
+  with a reason.
+- **The compiler itself** (`tests/self/`): `bootstrap.js` builds the chain
+  from the seed and asserts `IR(stage1) == IR(stage2)` and stage3 == stage2;
+  `goldens.js` holds the type, diagnostic, symbol and checked dumps to the
+  goldens in `tests/self/goldens/`; `support_oracle.js` and `reject_oracle.js`
+  check the support library and the refusals; `tests/lexer_oracle.js` and
+  `tests/parser_oracle.js` compare `self/`'s lexer and parser with the
+  `typescript` package, which is a devDependency: the published package has
+  no runtime dependency.
+  `tests/nish-cmp.js` compiles the corpus with the last *released* compiler
+  and with HEAD and compares the IR and the sidecars, so a change to codegen
+  is visible as a diff against what users have installed.
 - **Link tests** (`tests/link/<name>/`): whole programs built with `--link`,
   expected exit code and stdout, `declare`/`define` attribute agreement,
   `expected.ir` fragments (`--strict-exports`).
@@ -525,8 +560,7 @@ toolchain-dependent steps when LLVM is not installed:
   must vectorise `cf_sum_loop` and the unchecked `arr_sum` (`<4 x i32>`), and
   the checked sum must vectorise once inlined.
 - **Layout** (WP2), **pipeline checks** (runtime unit test, alloc smoke,
-  size profile, wasm profile), **interop** (WP8), **validator** timing
-  (under 50 ms on a synthetic 1,000-line file), **exit codes** and
+  size profile, wasm profile), **interop** (WP8), **exit codes** and
   **packaging** (WP12).
 - **Memory** (WP6): every `mem_*` module passes `opt -passes=verify`;
   `mem_stack_struct.ll` contains five `alloca %struct.*` objects and no
@@ -545,40 +579,43 @@ toolchain-dependent steps when LLVM is not installed:
   checksums (Rust is skipped without `rustc`).
 - **Differential** (WP13, needs clang): `tests/differential/run.js --quick`
   compiles every whole program in `tests/cases` (those declaring `main` and
-  no `.err`) and the 50-program corpus with
-  `--link`, runs the binary, rewrites the same program to JavaScript with
-  `tests/differential/rewrite.js` (the checker's recorded types choose the
-  rewrite: `(a + b) | 0` and `Math.imul` for `i32`, `BigInt.asIntN(64, ...)`
-  for `i64`, `__nish.idx` for bounds checks, byte lengths, saturating
-  conversions), runs it under Node with `runtime/shim.mjs`, and compares
-  stdout, exit status, and signal byte for byte. Programs listed in
-  `tests/differential/known-failures.txt` (libm 1-ulp differences,
-  `minnum`/`maxnum` with NaN, `Math.round(-0)`, the division panics, raw
-  `Arena.used()` prints) are reported but do not fail. A second check runs
-  `tests/differential/fuzz.js` on 10 random integer/boolean programs with a
-  fixed seed; the seed is printed so a failure reproduces with
-  `--seed <s> --count 1`. `npm run test:diff` runs the full set and
-  `node tests/differential/fuzz.js --count 200` a larger batch
-  ([wp13-differential.md](wp13-differential.md)).
+  no `.err`) and the corpus with `--link`, runs the binary, runs the same
+  program's JavaScript rewrite under Node with `runtime/shim.mjs`, and
+  compares stdout, exit status, and signal byte for byte. The rewrites are
+  frozen in `tests/differential/goldens/rewrites.txt` — they were generated
+  from the checker's recorded types (`(a + b) | 0` and `Math.imul` for
+  `i32`, `BigInt.asIntN(64, ...)` for `i64`, bounds checks, byte lengths,
+  saturating conversions) and there is no live rewriter any more — so a corpus
+  program with no frozen rewrite is named in a register rather than skipped
+  in silence. Programs listed in `tests/differential/known-failures.txt`
+  (libm 1-ulp differences, `minnum`/`maxnum` with NaN, `Math.round(-0)`, the
+  division panics, raw `Arena.used()` prints) are reported but do not fail.
+  `tests/differential/fuzz.js --stage1` generates random integer/boolean
+  programs from a printed seed, compiles each with the released compiler and
+  with HEAD, and compares the IR; a failure reproduces with
+  `--seed <s> --count 1` ([wp13-differential.md](wp13-differential.md)).
+- **Nish harnesses**: `npm run test:nish` and `npm run test:cli` build and run
+  `tests/nish/run.ts` and `tests/nish/cli.ts`, test programs written in Nish.
 
 ## Where the name lives
 
 The project has been renamed twice, so this is a live concern rather than a
-hypothetical one. The name is written out in exactly two source files, and
-renaming it is an edit to those two rather than a sweep over the tree:
+hypothetical one. The name is written out in exactly one source file,
+`self/branding.ts`, and renaming it is an edit to that file rather than a
+sweep over the tree:
 
-| File | Holds |
+| Constant | Holds |
 | --- | --- |
-| `src/branding.ts` | `LANGUAGE` (the language, as a diagnostic names it), `CLI` (the npm package, the `bin` entry, the word a message uses for itself), and the names derived from `CLI`: `ENV_DEBUG`, `ENV_SIMULATE_ICE`, `RUNTIME_HEADER`, `HEADER_GUARD_PREFIX` |
-| `self/branding.ts` | `LANGUAGE`, plus `CLI` and `VERSION` for the DWARF producer string `-g` writes — stage1's driver still calls itself `compile`, and it has no `package.json` to read the version out of, so `tests/run.js` fails when `VERSION` and `package.json` disagree |
+| `LANGUAGE` | the language, as a diagnostic names it |
+| `CLI` | the command, the word a message uses for itself |
+| `BUILTIN_SCHEME`, `STD_PREFIX`, `PACKAGE_CONDITION` | the `nish:` builtin-module scheme, the standard library's import prefix, and the `package.json` condition a package resolves under |
+| `RUNTIME_HEADER`, `HEADER_GUARD_PREFIX` | the `#include` and the include guard a generated header writes |
+| `VERSION` | the version `--version` prints and the DWARF producer string `-g` writes. The compiler has no `package.json` to read it out of, so `tests/run.js` fails when `VERSION` and `package.json` disagree |
 
 Every string the compiler *prints or writes* builds its name from those
 constants: the Phase 0 messages, `--help`, the banner and include guard on a
 generated header, the `#include` a generated header emits, the DWARF producer
-string, the internal-error report. The two files must agree on `LANGUAGE`,
-because `tests/self/reject_oracle.js` compares the two compilers' messages byte
-for byte, and on `CLI` and the version, because `tests/self/ir_oracle.js`
-compares the `-g` metadata the same way.
+string, the internal-error report.
 
 Prose is deliberately exempt. Comments and these documents name the language
 where that reads better than a constant would; what they must not do is put a
@@ -603,12 +640,13 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 
 | Path | Contents |
 | --- | --- |
-| `src/` | the compiler (see the pipeline table); `branding.ts` holds the project's name |
-| `runtime/` | `runtime.c` (the core every program touches) and `runtime_os.c` (the system-call half, measured against its own ceiling), `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
-| `scripts/` | `build.sh`, `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
+| `self/` | the compiler, in Nish (see the pipeline table); `branding.ts` holds the project's name, `codes.ts` the diagnostic registry |
+| `runtime/` | `runtime.c` (the core every program touches) and `runtime_os.c` (the system-call half, measured against its own ceiling), `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests), `nish.d.ts` (the builtins' declarations `npm run check` type-checks against) |
+| `bin/` | the npm package's installer: `nish` hands over to the prebuilt native compiler from the platform package `@amritk/nish-<asset>`; an unsupported platform is an error, not a fallback |
+| `scripts/` | `build.sh`, `bootstrap.sh`, `fetch-seed.sh`, `size-report.sh`, `smoke.sh`, `changelog-gen.mjs`, `gen-diagnostic-codes.mjs` (frozen; `--check` only) |
 | `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
-| `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `differential/` (`run.js`, `lib.js`, `rewrite.js`, `fuzz.js`, `corpus/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |
+| `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `self/` (the bootstrap and the compiler's own goldens), `wordings/`, `nish/`, `nish-cmp.js`, `differential/` (`run.js`, `lib.js`, `fuzz.js`, `corpus/`, `goldens/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |
 | `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |
 | `docs/` | this documentation; `docs/README.md` is the index |
-| `.github/workflows/` | `ci.yml` (Ubuntu, LLVM 18; the macOS row is one uncommented line), `parity.yml` (WP19 G1's corpus half, nightly), `release.yml` (tag-driven tarball) |
+| `.github/workflows/` | `ci.yml` (Ubuntu, LLVM 18; the `bootstrap` job builds stage1 from the released seed, which is what enforces the rolling freeze), `release.yml` (tag-driven tarball), `release-pr.yml`, `pr-title.yml` |

@@ -1,26 +1,33 @@
 # Node
 
-This repo runs on **Node.js 18+ and npm**, not Bun. The sibling repos (`mjst`,
-`mini`, `agent-ummo`) carry a `bun.md` that says "default to Bun"; that rule is
-deliberately not carried here. `nish` is published to npm as a tool a
-user installs with `npm install -g` on a machine that has Node and clang and
-nothing else, and CI (`.github/workflows/ci.yml`) runs the same commands a user
-would.
+This repo's tooling runs on **Node.js 22.18+ and npm**, not Bun. The sibling
+repos (`mjst`, `mini`, `agent-ummo`) carry a `bun.md` that says "default to
+Bun"; that rule is deliberately not carried here. The compiler itself is not a
+Node program — it is `self/`, a native binary built by the last release — but
+`nish` is published to npm as a tool a user installs with `npm install -g` on a
+machine that has Node and clang and nothing else, the test harness and the
+scripts are JavaScript, and CI (`.github/workflows/ci.yml`) runs the same
+commands a user would.
 
 - Use `node <file>` to run scripts, `npm install` / `npm ci` to install, and
   `npm run <script>` to run scripts. Do not introduce `bun`, `bunx`, `pnpm` or
   `yarn` anywhere, including in docs and CI.
-- `dist/` is what `tsc` wrote (`npm run build`), **ES modules**, no bundler. The
-  CLI entry is `dist/index.js`; `tests/run.js` spawns it the way a user's shell
-  would, so a change to the CLI surface is tested end to end.
-- The only runtime dependency is `typescript`. Adding a second one is a
-  design decision to raise in the PR, not a convenience.
+- The published package has **no runtime dependency**. `bin/nish` hands over to
+  the native compiler npm installed from the matching `@amritk/nish-<asset>`
+  optional dependency, and an unsupported platform is an error rather than a
+  fallback. `typescript` and `@biomejs/biome` are development dependencies:
+  `npm run check`, the lexer and parser oracles and a few packaging checks use
+  the first. Adding a runtime dependency is a design decision to raise in the
+  PR, not a convenience.
+- `tests/run.js` spawns the compiler the way a user's shell would —
+  `build/nish-test`, which it builds from the seed at the start of the run — so
+  a change to the CLI surface is tested end to end.
 - Node built-ins are imported as `node:fs`, `node:path`, `node:child_process`.
-  There is no `.env` loading. The only environment variables read are `CC`
-  (the C compiler `--link` invokes), `NISH_DEBUG` (full stack on an
-  internal error) and `NISH_SIMULATE_ICE` (test hook) in `src/index.ts`,
-  plus `UPDATE_GOLDENS` in the test runner. A new one is a CLI design decision,
-  not a shortcut.
+  There is no `.env` loading. The compiler reads `PATH` (to find the tools
+  `--link` runs) and `NISH_SIMULATE_ICE` (the test hook for the exit-70 path,
+  in `self/compile.ts`); `scripts/build.sh` reads `CC`, the C compiler a link
+  invokes; the harness reads `UPDATE_GOLDENS` and `NISH_BOOTSTRAP` (the seed).
+  A new one is a CLI design decision, not a shortcut.
 - Bun-specific APIs (`Bun.file`, `Bun.$`, `bun:sqlite`, HTML imports) do not
   exist here; use `node:fs` and `spawnSync` / `execFileSync`, as
   `tests/run.js` and `bench/run.mjs` do.
@@ -29,13 +36,14 @@ would.
 
 ```bash
 npm install              # install (npm ci in CI)
-npm run build            # rm -rf dist && tsc
-npm run check            # tsc --noEmit
-npm test                 # build + tests/run.js: goldens, llvm-as, native round trips, runtime,
+bash scripts/fetch-seed.sh   # the last release into build/seed/ (NISH_BOOTSTRAP names another)
+npm run build            # self/, built by the seed, into build/nish (scripts/bootstrap.sh)
+npm run check            # ambient tsc --noEmit over self/, std/, tests/nish against runtime/nish.d.ts
+npm test                 # tests/run.js: goldens, llvm-as, native round trips, runtime,
                          # layout, memory, interop, exit codes, packaging, bench checksums, differential
 node tests/run.js <sub>  # only cases whose name contains <sub>
 npm run test:update      # write missing .ll goldens
-npm run test:diff        # the full differential set against Node
+npm run test:diff        # the full differential set, against the frozen rewrites under Node
 npm run lint             # biome check, formatter disabled (advisory, never a compile gate)
 npm run format           # biome format --write
 npm run smoke            # build and run every example with a main
@@ -45,11 +53,9 @@ docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mj
 node scripts/arrowify.mjs --check <file.ts>   # WP22: what is still spelled `function`, and why
 node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff every .ll byte for byte
 node scripts/arrow-verify.mjs --applied self  # the same, for a rewrite the tree already carries
-node scripts/gen-diagnostic-codes.mjs        # rewrite src/codes.ts + self/codes.ts
-node scripts/gen-diagnostic-codes.mjs --check  # fail if either is stale (CI + npm test)
+node scripts/gen-diagnostic-codes.mjs --check  # self/codes.ts well formed, every code unique (CI + npm test)
 node scripts/ci-profile.mjs                  # which check a CI job's wall clock went to
 node scripts/ci-profile.mjs -- npm run test:nish   # ...for any suite command
-node tests/run.js --batch-gate-only          # the batched-compile gate over the whole corpus, then stop
 ```
 
 **Profile the unfiltered run.** `node tests/run.js <substring>` is for finding a
@@ -62,40 +68,26 @@ durations it explains.
 
 **`NODE_COMPILE_CACHE` is set for every CI job**, and is worth exporting
 locally too. It is Node's own on-disk cache of V8's module compilation, not a
-variable this repository reads, so it cannot reach the compiler's behaviour: a
-missing or stale key costs time and never changes an answer. The suite's cost is
-dominated by `import ts from "typescript"` paid once per compiler spawn (~473 ms
-of ~634 ms — `tests/batch_worker.js` has the breakdown), and the cache takes one
-spawn from 412 ms to 315 ms.
+variable this repository reads, so it cannot reach the compiler's behaviour — the
+compiler is not a Node program — and only saves the harness and the scripts
+their start-up: a missing or stale key costs time and never changes an answer.
 
-Three generated artefacts have a `--check` mode and all three are gates:
-`docs/IR_COOKBOOK.md`, and the two halves of the diagnostic-code registry.
-Adding a diagnostic means running the code generator; it appends a number and
-never moves one that already exists.
+Two artefacts have a `--check` mode and both are gates: `docs/IR_COOKBOOK.md`,
+and the diagnostic-code registry.
 
-**It appends by reading `src/codes.ts` back, and that file alone.**
-`existing()` in `gen-diagnostic-codes.mjs` parses every four-space-indented
-`"<fragment>",` / `"NL####",` pair out of `src/codes.ts` into a map, carries a
-fragment the source scan no longer finds as a retired entry so its number is
-never handed out twice, takes the highest number per band from what it parsed,
-and numbers everything left over one past that. `self/codes.ts` is written from
-the same entries and never read, so nothing in it is preserved by being there.
-
-That makes a merge conflict in `src/codes.ts` the one place where resolving by
-taking a side wholesale is wrong. The discarded side's fragments are still in
-the checker, so the scan still finds them; they are no longer in the preserved
-map, so they are appended with fresh numbers — and the per-band watermark the
-appending counts up from is taken from that same map, so it drops with them. Deleting one live pair by hand and regenerating moved
-`` "` is not generic, so `new " `` from NL2318 to NL2325, and
-`node scripts/gen-diagnostic-codes.mjs --check` then exited 0, because the file
-it compares against is the file it just wrote. What caught it was
-`tests/diagnostic_coverage.js`, exit 1 on the `tests/wordings/` case named for
-the code: `FAIL nl2318_generic_new: expected NL2318, got NL2325`. That cover is
-partial — its summary line counts the wordings cases against the registry, and
-the cases are the smaller number — and it does not reach prose:
-`tests/wordings/unreachable.txt` names a retired code's live replacement in a
-sentence (`NL2206 retired: ... is NL2318 now`), and nothing reads those
-sentences. Keep both sides' assignments and let the generator append.
+**The registry, `self/codes.ts`, is kept by hand.** Until WP19 R6
+`scripts/gen-diagnostic-codes.mjs` wrote it — and a copy in `src/` — from a scan
+of the TypeScript compiler's sources; that scan had nothing left to read once
+`src/` was deleted, so the generator is frozen and only checks. Adding a
+diagnostic means adding its fragment to `self/codes.ts` with the next free
+number in its band. **A number is never moved, reused or handed out twice**: a
+retired message keeps its entry, and `--check` fails on a duplicate code or an
+entry that does not have the table's shape. It does not know whether a code is
+*reached* — `tests/diagnostic_coverage.js` asks that, one `tests/wordings/`
+program per code, and fails a code no program provokes and no line of
+`tests/wordings/unreachable.txt` explains. In a merge conflict in
+`self/codes.ts`, keep both sides' entries and renumber only the ones this branch
+added, past `main`'s highest in the band.
 
 ## The toolchain that is not npm
 
@@ -122,8 +114,8 @@ runs both.
 
 ## Biome
 
-`biome.json` is the formatter and style linter for `src/`, `tests/**/*.js` and
-`examples/**`. It never influences compilation. `npm run lint` runs the checks
+`biome.json` is the formatter and style linter for `self/`, `std/`, `bin/`,
+`tests/**/*.js`, `examples/**` and the rest of the JavaScript tooling. It never influences compilation. `npm run lint` runs the checks
 with the formatter **disabled**, because not every file has been formatted to
 the shared style yet, and reformatting a file in a PR that is about something
 else is noise in the diff. So:
@@ -157,10 +149,10 @@ else is noise in the diff. So:
   that the 22 `function` declarations still in `bench/` do not shout until
   their file is opened. New code in them is an arrow like everywhere else, and
   the exemption comes off surface by surface as stage C migrates each one:
-  `self/` is the first to lose it, and is under the plugin with `src/` now. The test fixtures (`tests/cases`, `tests/link`,
+  `self/` is the first to lose it, and is under the plugin now. The test fixtures (`tests/cases`, `tests/link`,
   `tests/differential/corpus`) are not linted at all, because a `reject_*` case
   exists to contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and
   `trailingCommas: all`; those formatter settings are not carried over.
-  Flipping them would rewrite every file in `src/`, and the formatter is not a
+  Flipping them would rewrite every file in `self/`, and the formatter is not a
   gate here anyway.

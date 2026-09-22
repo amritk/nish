@@ -11,7 +11,7 @@ Conventions:
   meaning `tests/cases/cf_if.ts` (with its `.ll` golden, `.out` native output,
   or `.err` expected message). A `tests/link/<name>` citation is a whole-program
   link test. Rules marked *(CLI only)* were verified by compiling a snippet
-  with `node dist/index.js` and have no dedicated test case yet.
+  with `nish` and have no dedicated test case yet.
 - Error messages are quoted as the fragment `tests/run.js` matches; the full
   line is `<file>:<line>:<col>: error: <message>` followed by a caret excerpt
   ([wp10-ci.md](wp10-ci.md#diagnostic-format)).
@@ -32,10 +32,12 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 
 ## Lexical rules
 
-Nish source is TypeScript syntax, parsed by the official TypeScript
-parser (`ts.createSourceFile`), so tokens, comments, and ASI behave exactly as
-in TypeScript. Syntax errors are reported as `syntax error:` in the same
-`file:line:col` shape (`tests/run.js`, WP10 block).
+Nish source is TypeScript syntax, read by the compiler's own lexer and
+parser (`self/lexer.ts`, `self/parser.ts`), which follow TypeScript's rules for
+tokens, comments, and ASI; `tests/lexer_oracle.js` and
+`tests/parser_oracle.js` hold them to the `typescript` package's scanner and
+parser over the test corpus. Syntax errors are reported as `syntax error:` in
+the same `file:line:col` shape (`tests/run.js`, WP10 block).
 
 - **Encoding.** Source is UTF-8. String contents are stored as UTF-8 bytes
   (`tests/cases/str_escape`).
@@ -73,7 +75,7 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
   (`tests/cases/reject_bigint_literal`, `reject_regex`).
 - **Reserved prefix.** Function, class, and interface names starting with
   `nish_` are reserved for the runtime: `` Function names starting with `nish_` are reserved for the runtime ``
-  *(CLI only; `src/checker/declarations.ts`)*.
+  *(CLI only; `self/declarations.ts`)*.
 - **Identifiers** that may never appear as values: `eval`, `Function`,
   `Proxy`, `Reflect`, `Symbol`, `globalThis`, `arguments`, `undefined`
   (see [Forbidden constructs](#forbidden-constructs-phase-0-validator)).
@@ -83,7 +85,9 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
 Every Nish type maps 1:1 onto one LLVM first-class type. There is no
 boxing, no runtime type tag, no structural subtyping (except
 `implements`, below), and no implicit conversion of any kind: two values are
-compatible only when their types are identical (`src/types.ts`, `sameType`).
+compatible only when their types are identical (`self/types.ts`, where a
+type is interned and two types are the same type exactly when they are the
+same `i32`).
 
 | Nish | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
@@ -106,8 +110,8 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
-Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
-(`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
+Sources: `self/types.ts` (`TypeTable.llvmType`, `alignOf`),
+`self/interop_abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
 `cls_point`; the ten-struct layout test `tests/layout/structs.ts` (offsets and
 `sizeof` cross-checked against clang, [wp2-classes.md](wp2-classes.md#layout)).
 
@@ -127,7 +131,7 @@ Type rules:
   ([Type aliases](#type-aliases), [Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
-  (`src/types.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
+  (`self/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
   array, or string; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
@@ -159,7 +163,7 @@ Type rules:
 
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it
-takes that type (`src/checker/math.ts`, `contextualLiteralType`;
+takes that type (`self/expressions.ts`, `checkNumericLiteral`;
 `tests/cases/i64_basic`, `math_i32`, `conversions`):
 
 | Context | Example | Literal type |
@@ -214,8 +218,8 @@ is an integer: give it a name first, or write `toI32(0xc0)`. A literal in an int
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
 at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``,
 `tests/cases/reject_i64_literal_precision`; an unsigned context has the same
-rule, `reject_u64_literal_precision`) because TypeScript's parser has already
-rounded larger literals to a double. Every one of these messages quotes the
+rule, `reject_u64_literal_precision`) because a numeric literal is read as a
+double, as TypeScript reads it, so a larger one is already rounded. Every one of these messages quotes the
 literal **as it is written**, not as the parser cooked it: `0x1FF` reads back
 as `0x1FF` and a rounded literal as the digits in the file. In an *unsigned* context it must also be non-negative
 and fit the width: `const b: u8 = -1` is
@@ -354,7 +358,7 @@ value, so nothing is boxed; `null` takes its type from context.
   each other (`` Cannot compare two `string | null` values; compare each with `null` ``,
   `tests/cases/reject_null_compare_two`), and neither can a nullable and a
   plain `T` *(CLI only)*: narrow first.
-- **Narrowing** (`src/checker/nullable.ts`): inside the region a condition
+- **Narrowing** (`self/expressions.ts`): inside the region a condition
   guards, a nullable *variable* (a local or parameter, never a property
   path) reads as `T`:
 
@@ -515,7 +519,7 @@ spelling that reaches the success payload without deciding what happens to the
 failure, so the success path cannot be written before the error path is
 handled.
 
-Narrowing is the same engine as `T | null` (`src/checker/narrowing.ts`) and
+Narrowing is the same engine as `T | null` (`self/expressions.ts`) and
 obeys the same rules: it applies to a **variable**, not a property path; it
 ends at any assignment to that variable; and it is dropped before a loop that
 assigns it. All three spellings compose with `!`, `&&`, `||` and the ternary,
@@ -631,7 +635,7 @@ const double = (n: i32): i32 => n * 2; // a concise body is that one `return`
 
 The `function` keyword declares the same thing and is accepted as the legacy
 spelling; the two compile to identical IR, instruction for instruction
-(`tests/cases/fn_arrow`), and both compilers read both.
+(`tests/cases/fn_arrow`).
 
 - **The arrow form** is a `const` — `let` is
   `` Function `f` must be declared `const`, not `let` ``
@@ -1518,7 +1522,7 @@ declare function free(block: CPtr): void;
 - **It gets no pointer attributes.** `dereferenceable`, `align`, `nonnull`,
   `nocapture` and `readonly` are each a claim about memory this compiler laid
   out, and it laid out none of this; `isPointerParam` in
-  `src/codegen/attributes.ts` is an allow-list so that a `CPtr` falls out of it
+  `self/attributes.ts` is an allow-list so that a `CPtr` falls out of it
   by construction rather than by a case somebody remembered to write.
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
@@ -1541,7 +1545,7 @@ end.** That is the trade the feature is: the whole-program fact fixpoint is the
 performance thesis, and a foreign call is a hole in it.
 
 **And it is outside the differential oracle by construction.** The oracle
-rewrites a program to JavaScript and runs it against `runtime/shim.mjs`, on the
+runs a program's JavaScript rewrite against `runtime/shim.mjs`, on the
 premise that the same source means the same thing in both worlds; that premise
 does not hold for a source whose meaning is "whatever this C function does"
 ([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the
@@ -1722,7 +1726,7 @@ A statement *terminates* when control cannot fall out of it: `return`,
 both terminate; a `switch` with a `default`, no `break` aimed at it and a
 terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
-terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
+terminate. Rules (`self/statements.ts`, `checker.ts`):
 
 - A non-`void` function's body must terminate
   (`must return a value of type i32 on every path`,
@@ -2176,7 +2180,8 @@ tell `-o out` meaning a directory from `-o out` meaning a file, and shell out
 for `--link` — `mkdirSync` and `spawnSync` are the calls
 [wp14-selfhost.md](wp14-selfhost.md) §3a D4 named as the price of a
 self-hosted link step, and `isDirectorySync` is the one §7a named as the price
-of the last spelling of `-o` that was still stage0's.
+of the last spelling of `-o` that, at the time, only the TypeScript compiler
+handled.
 
 `isDirectorySync` is a question about the file system *now*: the answer can be
 stale by the time the caller acts on it, so `mkdirSync` is still the call that
@@ -2351,7 +2356,7 @@ stored in a field would land in the written set and lose the `const` its
 annotation promised (`tests/cases/arr_readonly_escape`). The checker is what
 makes the promise true — no store, no `push`, no `pop`, and no widening back to
 a mutable `T[]` — and it is exact where the fixpoint is not
-(`writtenArrayParams`, `src/interop/abi.ts` and `self/interop_abi.ts`).
+(`writtenArrayParams`, `self/interop_abi.ts`).
 
 `process.argv` is read-only under a rule of its own rather than this type
 (`` `process.argv` is read-only ``), because it is a value and not an
@@ -2855,8 +2860,9 @@ by the caller.
   [wp10-ci.md](wp10-ci.md#code). A clean compile with no warnings prints
   nothing.
 - **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
-  indented `<SyntaxKind> <line:col>-<line:col>` tree (identifier and literal
-  text appended) and writes no IR (`tests/cases/dump_ast`).
+  indented `<KIND> <start> <end>` tree — the node kinds of `self/nodes.ts` and
+  each node's span as byte offsets, identifier and literal text appended — and
+  writes no IR (`tests/cases/dump_ast`).
 - **`--emit-checked`** checks the program and prints the side tables the
   emitter would consume: per module its structs (fields with index and byte
   offset, size, align, constructor and methods), imports, and functions
@@ -2884,13 +2890,11 @@ by the caller.
   byte-identical. `--link -g` passes `-g` to `scripts/build.sh`, which
   compiles `runtime.c` with `-g` and skips the strip step of every profile
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
-  linked binary's line table with `llvm-dwarfdump`). The self-hosted compiler
-  takes `-g` too and emits the same bytes, which is what
-  `tests/self/ir_oracle.js` compares.
+  linked binary's line table with `llvm-dwarfdump`).
 
 ## Forbidden constructs (Phase 0 validator)
 
-`src/validator.ts` walks the whole syntax tree before the checker and rejects
+`self/validator.ts` walks the whole syntax tree before the checker and rejects
 everything below on the first hit, regardless of where it appears (even in
 dead code or nested type arguments). Each row gives the exact message
 fragment `tests/run.js` matches and the case that proves it.
@@ -2981,8 +2985,8 @@ property and element access); the checker then requires a numeric type.
 ## Rejected by the checker
 
 Everything the validator lets through but the checker cannot compile. The
-messages are exact for the cases cited; other rows quote
-`src/checker/*.ts` and `src/types.ts`.
+messages are exact for the cases cited; other rows quote the checker
+(`self/checker.ts` and the modules beside it) and `self/types.ts`.
 
 | Situation | Message | Test |
 | --- | --- | --- |

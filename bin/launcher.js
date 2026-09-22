@@ -18,7 +18,7 @@
  * and that is a decision rather than an oversight.** Until 0.6.0 this file
  * imported `dist/index.js` -- the TypeScript compiler built from `src/` -- so
  * musl, FreeBSD and 32-bit anything got a working compiler that happened to be
- * slower. `src/` is being deleted (`docs/wp19-stage0-retirement.md`), so there
+ * slower. `src/` was deleted in R6 (`docs/wp19-stage0-retirement.md`), so there
  * is no second compiler in the package to reach for, and the honest answer is
  * the one below: name the platforms a release carries, say there is nothing to
  * fall back to, and exit non-zero. The alternative -- shipping `self/` and
@@ -26,8 +26,8 @@
  * and quietly doing nothing was never on the table: a command that exits 0
  * having compiled nothing is worse than one that refuses.
  *
- * `bin/` rather than `dist/` for the same reason: the command may not be a
- * build artifact of the compiler it installs.
+ * `bin/` rather than the old `dist/` for the same reason: the command may not
+ * be a build artifact of the compiler it installs.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";

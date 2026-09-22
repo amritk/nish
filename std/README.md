@@ -116,8 +116,8 @@ that are *not* this package.
   user would. `tests/link/std_text_f64` is the same corpus under
   `--number-mode f64`, which is where a module that spelled its widths and forgot
   a `toI32` is caught.
-- **`std/` is not on the compiler's dependency list.** Nothing in `src/` or
-  `self/` imports it, and nothing should: the compiler is the thing that has to
+- **`std/` is not on the compiler's dependency list.** Nothing in `self/`
+  imports it, and nothing should: the compiler is the thing that has to
   build before the library means anything.
 
 ## Who reads the library, and what each reader proved

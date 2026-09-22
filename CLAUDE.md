@@ -1,9 +1,9 @@
 # Project rules
 
 **New session? Read [`.claude/orientation.md`](.claude/orientation.md) first** —
-it is the ninety-second map of the repository, the two compilers, and the
-commands. If the work touches `self/`, read
-[`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
+it is the ninety-second map of the repository, the compiler, the seed that
+builds it, and the commands. If the work touches the compiler — `self/` —
+read [`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
 
 Writing a *program* in Nish rather than working on the compiler? That is
 [`docs/AI.md`](docs/AI.md) — the whole language as rules in one pass, every
@@ -12,9 +12,9 @@ example compiled by `npm test`.
 Developer guidelines live in the `.claude/` directory:
 
 - **orientation.md** — start here: what the repo is, where the code is, what to run
-- **selfhost.md** — the `self/` compiler: Nish-0, the module map, the oracles
+- **selfhost.md** — the `self/` compiler: Nish-0, the seed, the module map, how it is tested
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
-- **typescript.md** — TypeScript style: the Nish rules for every program in the repo, and the static-friendly rules for the compiler source
+- **typescript.md** — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
 - **comments.md** — Comment guidelines and JSDoc
 - **testing.md** — The golden-test harness, what every construct ships with
 - **architecture.md** — The pipeline, the rules that shape every change, where to read next
@@ -25,21 +25,21 @@ Developer guidelines live in the `.claude/` directory:
 
 ## Definition of done
 
-`npm run check` and `npm test` green. A new construct ships with a golden
-`.ll`, an `llvm-as` pass, a native round trip with expected stdout, at least one
-negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a line in
-`CHANGELOG.md` — see `docs/MASTER_PLAN.md` §7 and the checklist in
-`docs/ARCHITECTURE.md`. Show the exact LLVM IR for every TypeScript snippet a
-PR adds to the tests.
+`npm run check` (an ambient `tsc --noEmit` over `self/`, `std/` and
+`tests/nish/` against `runtime/nish.d.ts`) and an undegraded `npm test` green.
+A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
+trip with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
+rule and cookbook entry, and a line in `CHANGELOG.md` — see
+`docs/MASTER_PLAN.md` §7 and the checklist in `docs/ARCHITECTURE.md`. Show the
+exact LLVM IR for every TypeScript snippet a PR adds to the tests.
 
-**A construct does not have to be written twice.** Implement it in `src/` and
-`self/` and the oracles compare the two byte for byte, which is the strongest
-thing this repository can say about a lowering. Implement it in `self/` alone
-and name its case in `tests/self/stage1_only.txt`: the golden is compiled by
-stage1 and the stage0 oracles declare the case instead of skipping it
-(`docs/wp19-stage0-retirement.md` §1a). Everything else on the list is
-unchanged, and `self/` may not use the construct in its own source until the
-next release, which is the rolling freeze CI's `bootstrap` job checks.
+**There is one compiler, and a construct is written once, in `self/`.** The
+TypeScript implementation that used to sit beside it in `src/` was deleted in
+WP19 R6 (`docs/wp19-stage0-retirement.md`). `self/` is built by the last
+released `nish` — the seed, which `scripts/fetch-seed.sh` puts in `build/seed/`
+— so `self/` may not *use* a new construct in its own source until the next
+release: the rolling freeze, which CI's `bootstrap` job checks by building
+`self/` with that release.
 
 ## Git & PR Guidelines
 

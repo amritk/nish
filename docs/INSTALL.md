@@ -1,15 +1,17 @@
 # Installing nish
 
 `nish` compiles a static subset of TypeScript to LLVM IR and, with
-`--link`, to a native binary. The compiler itself only needs Node.js; the
-`--link` step (and anything else that turns `.ll` into machine code) needs an
-LLVM toolchain.
+`--link`, to a native binary. The compiler is itself a native binary, written
+in Nish (`self/`), and needs nothing to run; the `--link` step (and anything
+else that turns `.ll` into machine code) needs an LLVM toolchain.
 
 ## 1. Prerequisites
 
-- **Node.js 22.18 or newer** (22 is what CI uses). That is the version where
-  Node strips TypeScript types without a flag, which the compiler is written in
-  and `docs/RUN_UNDER_NODE.md` relies on.
+- **Node.js 22.18 or newer** (22 is what CI uses), for the npm route and for
+  building from a checkout — the launcher, the postinstall step and the test
+  harness are Node scripts. It is the version where Node strips TypeScript
+  types without a flag, which `docs/RUN_UNDER_NODE.md` relies on. The
+  `install.sh` route below needs no Node at all.
 - **clang** (LLVM 18 recommended) and **lld**, for `--link`. Without them
   `nish` still writes the `.ll` files and exits 3 with the install
   command for your platform when you ask for `--link`.
@@ -196,7 +198,7 @@ nish: no prebuilt compiler for freebsd/x64
 
 Until 0.6.0 it ran the TypeScript compiler that shipped in the same package
 instead — the same compiler by every test here, about eight times slower, and
-no C toolchain needed. That compiler was `src/`, which is being deleted
+no C toolchain needed. That compiler was `src/`, which was deleted in R6
 ([wp19](wp19-stage0-retirement.md)), so there is nothing left in the package to
 fall back to. The cost is stated where the rest of that deletion's costs are,
 in [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
@@ -329,7 +331,7 @@ directory can still emit IR with `-o`, but `--link` will tell you it cannot
 find `scripts/build.sh`.
 
 It still needs `clang` and `lld` on `PATH` for `--link` (§1), because linking
-is the C toolchain's job in either compiler; what it does not need is Node.
+is the C toolchain's job, not the compiler's; what it does not need is Node.
 x86_64 Linux is the only platform built today — on anything else, take the
 `.tgz` above or build from a checkout.
 
@@ -338,11 +340,16 @@ From a checkout:
 ```bash
 git clone https://github.com/amritk/nish.git
 cd nish
-npm install
-npm run build       # src/ -> dist/
-npm link            # optional: puts `nish` on PATH
-# or run it in place: node dist/index.js ...
+npm ci
+npm run build       # seed -> stage1 -> stage2 = build/nish
+build/nish hello.ts --link hello
 ```
+
+The build is a bootstrap, the way Rust and Go build themselves: the compiler
+is written in Nish, so something has to compile it first, and that is the
+previous release's `nish` binary — the seed. `scripts/fetch-seed.sh` downloads
+it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
+skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
 `runtime/` (the C runtime — two translation units and their header),
@@ -372,37 +379,38 @@ program that reads no files and spawns nothing. `scripts/build.sh` compiles
 through it — every `--link`, and every `--profile` recipe in these documents —
 needs to name only the one.
 
-## 2a. Building the self-hosted compiler (optional)
+## 2a. What `npm run build` does
 
-`self/` is the same compiler written in Nish, and it compiles itself
+`self/` is the compiler, written in Nish, and it compiles itself
 ([docs/wp14-selfhost.md](wp14-selfhost.md)). From a checkout, with clang on
-`PATH`:
+`PATH`, `npm run build` runs `scripts/bootstrap.sh` with the seed from §2:
 
 ```bash
-npm run bootstrap                  # dist/ -> stage1 -> build/nish
-build/nish hello.ts --link hello
-./hello
+npm run build                                  # build/nish
+NISH_BOOTSTRAP=~/.nish/bin/nish npm run build  # the same, seeded by an installed nish
+scripts/bootstrap.sh --verify                  # and assert the fixed point
 ```
 
-`scripts/bootstrap.sh` builds stage1 with the Node compiler, then stage2 with
-stage1, and installs stage2 as `build/nish`. `--verify` also builds stage3
-and compares the IR and the binaries byte for byte; `--stages 1` stops one link
-sooner. `build/nish` is then the compiler you run: it takes the same `-o`,
-`--link` and `--profile` spellings as `nish` and makes every directory in the
-way of the IR, a sidecar or the binary itself. It looks for `scripts/build.sh`
-and the two `runtime/*.c` files one level up from wherever it was invoked, then
-in the working directory, so it wants a checkout or an installed package around
-it the way `nish` does.
+The seed builds stage1, stage1 builds stage2, and stage2 is installed as
+`build/nish`. `--verify` also builds stage3 and asserts
+`IR(stage1) == IR(stage2)` and `stage3 == stage2` byte for byte; the seed's
+own IR is only reported beside them, because a codegen change since the
+release is expected to move it. `--stages 1` stops one link sooner.
 
-The native compiler is about eight times faster than the Node one and needs no
-Node at all. It writes the interop sidecars (`--emit-header`, `--emit-dts`,
-`--emit-napi`) and the DWARF `-g` asks for byte for byte as `nish` does, and
-passes `-g` on to `scripts/build.sh`, so the debug info survives into the
-binary. It answers every flag `nish` answers, `--emit-ast` and
-`--target host` included; the one thing that differs is what `--emit-ast`
-prints, because each compiler dumps its own syntax tree and only `nish` has
-the `typescript` package's node names to print. `nish` is also what the
-`.tgz` package installs, whichever way that package reaches the machine.
+`build/nish` is then the compiler you run: it takes the same `-o`, `--link`
+and `--profile` spellings as an installed `nish`, because it is the same
+program, and makes every directory in the way of the IR, a sidecar or the
+binary itself. It looks for `scripts/build.sh` and the two `runtime/*.c` files
+one level up from wherever it was invoked, then in the working directory, so
+it wants a checkout or an installed package around it the way `nish` does.
+
+Because the seed is the last release, `self/` may only *use* in its own
+source the constructs that release compiles. A new construct is implemented
+in `self/` and becomes usable inside `self/` from the next release on; CI's
+`bootstrap` job is what checks that the released seed still builds stage1.
+Until R6 the seed was a TypeScript compiler in `src/`, run under Node; it was
+deleted once the native one answered every flag it did
+([wp19](wp19-stage0-retirement.md)).
 
 ## 3. Hello world
 

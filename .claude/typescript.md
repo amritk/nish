@@ -4,27 +4,31 @@ You write TypeScript code that is clear, predictable, and easy to maintain. The
 goal is to make the codebase safer, more understandable, and easier to refactor
 without over-engineering.
 
-Two kinds of TypeScript live in this repo, and the rules differ because the
-compiler that runs them differs:
+Two kinds of code live in this repo, and the rules differ because what runs
+them differs:
 
-- **Nish programs** — `std/`, `examples/`, `tests/cases/`, `tests/link/`,
-  `tests/layout/`, `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`,
-  and every snippet in `docs/` and `README.md`. These are compiled by
-  `nish`, and the language reference (`docs/LANGUAGE.md`) is the style
-  guide: a construct the compiler refuses is not a style choice, it is a
+- **Nish programs** — the compiler itself (`self/`), `std/`, `tests/nish/`,
+  `examples/`, `tests/cases/`, `tests/link/`, `tests/layout/`,
+  `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`, and every
+  snippet in `docs/` and `README.md`. These are compiled by `nish`, and the
+  language reference (`docs/LANGUAGE.md`) is the style guide: a construct the compiler refuses is not a style choice, it is a
   compile error. **The first of the two house rules below now holds here too**:
   the language has arrow functions (`docs/wp22-arrow-functions.md`), so an Nish
-  program declares a function as a `const` bound to an arrow, exactly as `src/`
-  does. The second still cannot. The language has `type` aliases now, but an
+  program declares a function as a `const` bound to an arrow. The second still
+  cannot. The language has `type` aliases now, but an
   alias only renames a type that already exists, so an Nish *struct* is a
   `class` or an `interface` and "`type`, never `interface`" has nothing to say
   about it.
-- **The compiler's own source** — `src/`, plus the JavaScript in `tests/`,
-  `bench/` and `docs/`. This runs under Node through `tsc`, so the full
-  language is available; the rule here is to write it *as if* Nish were
-  the target wherever that costs nothing, so that the code reads like the
-  language it compiles and the dynamic corners are the ones a reader can
-  point at.
+- **The JavaScript tooling** — `tests/**/*.js`, `scripts/`, `bin/`,
+  `bench/*.mjs`, `web/` and `docs/*.mjs`. This runs under Node, so the full
+  language is available; the rule here is to write it *as if* Nish were the
+  target wherever that costs nothing, so that the code reads like the language
+  it tests and the dynamic corners are the ones a reader can point at.
+
+The compiler was once in the second group: until WP19 R6 a TypeScript
+implementation in `src/` ran under Node beside `self/`. It is deleted, and the
+compiler is an Nish program like any other — held, on top of the rules below,
+to the smaller subset `.claude/selfhost.md` calls Nish-0.
 
 ## Principles
 
@@ -112,125 +116,78 @@ comment at the top and put the expected fragment in the `.err` file; a
 `reject_*` case that also fails for a second, accidental reason is a weaker
 test than it looks.
 
-## Writing the compiler (`src/`)
+## Writing the compiler (`self/`)
 
-The full language is available, and the `typescript` compiler API it walks is
-thoroughly dynamic. The rule is to keep the dynamic parts at that boundary and
-write the rest the way Nish would have it:
+`self/` is an Nish program, so everything in the section above holds, and it is
+written in Nish-0 on top of that (`.claude/selfhost.md`): no closures, no `Map`,
+no `try`, one `Node` class, side tables as arrays indexed by `Node.id`. What the
+compiler adds as house rules:
 
-- **Explicit return types** on every exported function, and on any function
-  whose return type is not obvious from a one-line body. Annotate the
-  parameters of every function; infer only locals.
-- **No `any`.** There is none in `src/` today and `noExplicitAny` is an
-  error in `biome.json`; the `typescript` API is walked through `ts.Node` and
-  the `ts.is*` guards, never through `any`. `unknown` is acceptable only at an
-  input boundary (a parsed flag, a caught error) and is narrowed at once.
-- **Casts are boundary work.** `node as ts.CallExpression` after a
-  `ts.isCallExpression` guard, or inside a handler the dispatch table already
-  selected by `SyntaxKind`, is the accepted pattern: the table is the proof.
-  A cast anywhere else is a claim the compiler cannot verify, so prefer a
-  type guard, and when a cast is unavoidable write the reason next to it.
+- **The checker records, the emitter reads.** The checker writes the side
+  tables in `self/program.ts`; the emitter reads them, never re-derives a type,
+  and never reports a user-facing error (an unexpected node there is an
+  internal error, exit 70).
+- **Dispatch by a central `switch` on the node kind, not by `if` chains**
+  across constructs. A new construct is a new case in each layer, mirrored.
+- **A module owns a construct family**, and the family's checker and emitter
+  halves are named for each other (`arrays.ts` / `emit_arrays.ts`).
+- **The rolling freeze.** `self/` is built by the last release, so it may only
+  use what that release compiles, however much the tree it sits in can.
+
+## Writing the tooling (JavaScript)
+
 - **`===` / `!==` only**, and a boolean condition where the value could be
   `0` or `""`: `if (list.length > 0)`, not `if (list.length)`. Biome enforces
   the `.length` half (`useExplicitLengthCheck`) and `noDoubleEquals`; the rest
   is on you, because the language has no truthiness and the source should read
   the same way.
-- **Nullable means `T | null`**, checked with `!== null`. Prefer that over
-  `?.` and `??` when the null case is a real branch with its own meaning; keep
-  `?.` / `??` for optional lookups (`runtime?.effect ?? "write"` in
-  `attributes.ts`) where spelling the branch out would only add lines. Do not introduce
-  `undefined` as a value in a new type when `null` will do.
+- **Nullable means `null`**, checked with `!== null`. Prefer that over `?.` and
+  `??` when the null case is a real branch with its own meaning; keep `?.` /
+  `??` for optional lookups where spelling the branch out would only add
+  lines. Do not introduce `undefined` as a value when `null` will do.
 - **Prefer `const`;** `let` is for a genuine reassignment (a loop counter, an
-  accumulator, a cursor walking up `node.parent`).
-- **`type`, never `interface`.** Every declaration is a `type` alias: the
-  struct-like records the side tables store (`StructInfo`, `FunctionSig`,
-  `LocalVar`) as much as the unions and signatures (`StaticType`, `Validator`,
-  `StatementChecker`). `useConsistentTypeDefinitions` enforces it. Write
-  members that hold a function as properties, not method shorthand
-  (`emit: (ctx: EmitContext) => string`, not `emit(ctx: EmitContext): string`);
-  `useConsistentMethodSignatures` enforces that, and it also buys stricter
-  parameter checking, because method shorthand is checked bivariantly.
-  Discriminated unions are fine here since the emitter switches on the tag;
-  give the tag a string literal type and make every switch exhaustive.
+  accumulator, a cursor).
 - **Arrow functions bound to a `const`, never a `function` declaration.**
-  `const checkCall = (ctx: CheckContext, node: ts.CallExpression): StaticType => { ... };`
   Biome has no built-in rule for this, so it is a plugin,
-  `biome-plugins/no-function-declaration.grit`. Two things to respect when you
-  convert a file: a `const` is not hoisted, so a dispatch table has to sit
-  *below* the handlers it names, and `tsc` reports a use before declaration
-  when it does not. Class methods stay methods, because an arrow property
-  would rebind `this` and move the function off the prototype.
-- **Classes are allowed where there is state with an invariant** —
-  `Compilation`, `IRModule` / `IRFunction` / `IRBlock`, `Scope`,
-  `CompileError`, `DiagnosticSink`. Everything else is plain functions over
-  plain objects, and a class must not become a home for unrelated helpers.
-  Inheritance exists only in the error hierarchy (`CompileError extends
-  Error`, `StaticSyntaxError extends CompileError`); nothing else extends
-  anything, the same as the language, where `implements` is a layout check
-  and there is no `extends` at all.
-- **`Map` / `Set` / `WeakMap` for lookups, not `Record<string, T>` on a
-  mutable object.** The side tables are `WeakMap`s keyed by AST node
-  precisely so that no node is ever mutated; a new table follows that
-  pattern. `Record` is for a literal table that is written once
-  (`RUNTIME_FUNCTIONS`, the dispatch tables).
-- **Dispatch by table, not by `if`/`switch` chains** across constructs: the
-  validator, checker and emitter are each keyed by `ts.SyntaxKind`. A new
-  construct is a new entry in each, mirrored across the layers. A `switch`
-  inside one handler over the *tags of its own type* is fine.
-- **The checker records, the emitter reads.** The checker writes the side
-  tables in `CheckedProgram`; the emitter reads them, never re-derives a
-  type, and never reports a user-facing error (an unexpected node there is
-  an internal error, exit 70).
-- **Relative imports only** (`./diagnostics`, `../types`). The only bare
-  specifier in `src/` is `typescript`, and the runtime dependency list stays
-  at that one entry.
+  `biome-plugins/no-function-declaration.grit`. A `const` is not hoisted, so a
+  table of handlers has to sit *below* the handlers it names. Class methods
+  stay methods, because an arrow property would rebind `this`.
+- **Classes only where there is state with an invariant.** Everything else is
+  plain functions over plain objects, and a class must not become a home for
+  unrelated helpers.
+- **`Map` / `Set` for lookups, not a mutable object used as a dictionary.** An
+  object literal is for a table that is written once.
 - **Node built-ins carry the `node:` prefix** (`node:fs`, `node:path`,
-  `node:child_process`), and only `src/index.ts`, `src/compilation.ts`,
-  `src/parser.ts` and `src/version.ts` import `node:fs`; the checker and
-  emitter are pure functions from AST to side tables to text (the
-  `readFileSync` they know about is the builtin they compile, not a call).
-- **`import type` is not used** (`useImportType` is off in `biome.json`,
-  `verbatimModuleSyntax` is not on). A plain `import` of a type-only name is
-  erased by `tsc`; keep it that way rather than mixing the two forms.
-- **ES modules, Node 22.18+, no bundler.** `tsconfig.json` emits ES modules
-  into `dist/` under `module: Node16`, so **every relative import carries its
-  `.js` extension** — `./diagnostics.js`, `../types.js`, `./checker/index.js` —
-  because that is what Node resolves at runtime and `tsc` refuses the
-  extensionless form here (TS2835). The whole repository is one module system
-  now: `tests/` and `scripts/` are ESM too, `__dirname` is
+  `node:child_process`).
+- **ES modules, Node 22.18+, no bundler.** The whole repository is one module
+  system: `tests/` and `scripts/` are ESM, `__dirname` is
   `import.meta.dirname`, and the `.mjs` files exist only where a name wants to
   say "this is loaded by something else" (`runtime/shim.mjs`,
-  `runtime/nish.mjs`, `bench/`). The floor is the version where Node
-  strips types without a flag, which is what makes
-  `node --experimental-strip-types prog.ts` a real thing to point people at.
-- **The two house rules are mid-migration.** The compiler source predates
-  them and still holds a few hundred `function` declarations and a few dozen
-  `interface`s, and so does the JavaScript test harness. Both rules are
-  therefore `warn` rather than `error`: `npm run lint` stays green, and the
-  warning count is the size of what is left. New code follows the rule, and a
-  file opened for another reason is converted while you are in it. To see only
-  real errors while that backlog stands, run
-  `npm run lint -- --diagnostic-level=error`. The `interface` half is
-  mechanical — `npx biome check --write --unsafe` rewrites every one of them —
-  but read the diff before keeping it, and do not mix that sweep into a commit
-  about something else. The arrow half has no automatic fix, because moving a
-  declaration to a `const` can reorder a file.
+  `runtime/nish.mjs`, `bench/`).
+- **The arrow rule is mid-migration.** The harness predates it and still holds
+  `function` declarations, so the rule is `warn` rather than `error`:
+  `npm run lint` stays green, and the warning count is the size of what is
+  left. New code follows the rule, and a file opened for another reason is
+  converted while you are in it. To see only real errors while that backlog
+  stands, run `npm run lint -- --diagnostic-level=error`. There is no automatic
+  fix, because moving a declaration to a `const` can reorder a file.
 
 ## What differs from the sibling repos
 
 The `.claude/` rules in `mjst`, `mini` and `agent-ummo` say "always arrow
 functions", "always `type` over `interface`", "one function per file", "no
-classes" and "use `satisfies` instead of `as`". The first two now hold for the
-compiler's own source, and are linted. Three things still differ:
+classes" and "use `satisfies` instead of `as`". The first holds here and is
+linted. What still differs:
 
 - **Classes stay** where there is state with an invariant, as above. A repo of
   pure functions is the sibling ideal; an SSA builder and a scope chain are not
-  that, and `instanceof CompileError` is how the CLI separates a user error
-  from an internal one.
-- **A module owns a construct family, not one function.** `checker/classes.ts`
-  holds every class-related handler because they share the dispatch table they
-  register into and the side tables they write. Splitting them one per file
-  would scatter a table across a directory.
+  that.
+- **`interface` stays** in an Nish program, because an Nish struct is a `class`
+  or an `interface` and a `type` alias only renames a type that exists.
+- **A module owns a construct family, not one function.** `self/structs.ts`
+  holds the class and interface rules because they share the switch they are
+  reached through and the side tables they write. Splitting them one per file
+  would scatter a family across a directory.
 - **Nish programs now follow the arrow rule too**, since the language gained
   arrows: `examples/`, `docs/cookbook/` and every snippet in `docs/` and
   `README.md` are arrows already, and **`self/` joined them in WP22 stage C**.
@@ -245,34 +202,28 @@ compiler's own source, and are linted. Three things still differ:
   like everywhere else. The `type`-over-`interface` rule still does not reach
   them, for the reason at the top of this file.
 
-`satisfies` is welcome in `src/` wherever it helps — a dispatch table checked
-against its key type while keeping its literal value types is the obvious case.
-It is only an Nish program that cannot use it.
-
 ## Naming Conventions
 
 - **camelCase for values, PascalCase for types** — TypeScript's own
   convention, with no repo dialect on top of it. Functions, locals,
   parameters, class fields and object properties are camelCase
-  (`checkExpression`, `emitCall`, `declareVariables`); classes and `type`
-  aliases are PascalCase (`CheckContext`, `StaticType`, `FunctionSig`);
-  a module-level constant that is a frozen table or a fixed scalar is
-  CONSTANT_CASE (`RUNTIME_FUNCTIONS`, `TYPED_ARRAY_ALIASES`, `LANGUAGE`).
-  An acronym keeps its own case rather than being title-cased: `IRBlock`,
-  `IRFunction`, `compileToIR`, not `IrBlock` or `compileToIr`. File names
+  (`checkExpression`, `emitCall`); classes, interfaces and `type` aliases are
+  PascalCase (`CheckContext`, `FunctionSig`); a module-level constant that is
+  a frozen table or a fixed scalar is CONSTANT_CASE (`T_ERROR`,
+  `EFFECT_WRITE`, `LANGUAGE`). An acronym keeps its own case rather than being
+  title-cased: `IRBlock`, `IRFunction`, not `IrBlock` or `IrFunction`. File names
   are the one place that is not camelCase, and Biome enforces it
   (`useFilenamingConvention`): kebab-case or snake_case, so `emit/strings.ts`
   and `interop_abi.ts` are both fine and `emitStrings.ts` is not.
 - **Three kinds of name are exempt, because the spelling is the meaning.**
-  A table key that names a JavaScript global or builtin keeps that global's
-  exact spelling, since the key *is* the identifier being matched —
-  `Function`, `Proxy`, `Reflect`, `Symbol` in the validator's
-  `FORBIDDEN_VALUE_IDENTIFIERS`, `Int32Array` in `TYPED_ARRAY_ALIASES`,
-  `parseInt` and `Number` in the builtin checkers. A name that crosses an ABI keeps the
-  ABI's spelling: `nish_*` runtime symbols, WASI's `fd_write` and
-  `args_get` in `web/wasi.mjs`, `x86_64Layout` in `codegen/target.ts`. And a
-  benchmark ported from another language keeps the source program's
-  constants, so `bench/nbody.ts` has `SOLAR_MASS` and `PI` as locals.
+  A name that is a JavaScript global or builtin keeps that global's exact
+  spelling, since the name *is* the identifier being matched — `Proxy` and
+  `Reflect` as the validator refuses them, `Int32Array`, `parseInt` and
+  `Number` as the language's builtins. A name that crosses an ABI keeps the
+  ABI's spelling: `nish_*` runtime symbols, WASI's `fd_write` and `args_get` in
+  `web/wasi.mjs`. And a benchmark ported from another language keeps the
+  source program's constants, so `bench/nbody.ts` has `SOLAR_MASS` and `PI` as
+  locals.
 - **This one is prose, not lint, and that is measured.** Biome's
   `useNamingConvention` was tried over the whole repo: with `strictCase` on
   it flags 82 places, and with it off (the setting that tolerates `IRBlock`)

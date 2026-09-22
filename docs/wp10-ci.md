@@ -12,18 +12,21 @@ comment above the `on:` block has the details.
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
+| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm run check`, `npm test`, then the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on six remaining measured failures rather than on cost. It is the one macOS gap in the file: `bootstrap` and `nish-cmp` have had darwin rows since the 0.4.0 seeds. See below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
 | `nish-cmp (x86_64-linux)` | Ubuntu, LLVM 18 | WP19 G2.1: the corpus compiled with the **last released** compiler and with the one HEAD builds, every byte compared. One row per Linux seed a release carries, and no row at all until a release carries a seed that can compile the corpus — `cmpSince` in `.github/seed-targets.json` decides which, and its note says why that is not the first release |
-| `runner` | Ubuntu, LLVM 18 | the golden corpus again, through `tests/nish/run.ts` — the harness written in Nish (`npm run test:nish`). A compiler regression fails here and in `test`; a regression in the *runner*, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
-| `batch-parity` | Ubuntu, LLVM 18 | `node tests/run.js --batch-gate-only`: every golden case compiled both through the in-process batch and through the CLI, compared byte for byte, then stopped. `npm test` gates one case per shape; this widens it to the whole corpus |
-| `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
+| `runner` | Ubuntu, LLVM 18 | fetches the seed, then the golden corpus again, through `tests/nish/run.ts` — the harness written in Nish (`npm run test:nish`). A compiler regression fails here and in `test`; a regression in the *runner*, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
+| `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`), and `node docs/check-links.mjs` |
 
-`.github/workflows/parity.yml` is the fourth job and does not run here: WP19
-G1's corpus half is nightly, on its own workflow, for the reasons under
-[the parity run](#the-parity-run-nightly) below.
+Every job that compiles anything compiles it with `self/`, built from the
+seed: there is no other compiler in the repository. Until WP19 R6 deleted
+`src/`, the workflow also carried the jobs that compared the two
+implementations — `batch-parity`, `parity-select` and `parity-changed` in this
+file, the nightly `parity.yml` beside it, and the `ddc` job in `release.yml` —
+and they went with it, because each one's subject was stage0
+([the parity run](#the-parity-run-retired) below).
 
 `nish-cmp` shares the `seeds` job with `bootstrap` and is a matrix for the same
 reason, so the table of conclusions under
@@ -31,8 +34,9 @@ reason, so the table of conclusions under
 both: an absent row means no comparison happened, and never that one happened
 and passed. It is the successor to `tests/self/ir_oracle.js` and
 `tests/self/interop_oracle.js`, the two largest of the six oracles WP19 R6
-deletes with `src/`, and the axis it compares on is the one that survives that
-deletion — not stage0 against stage1, but the last release against HEAD.
+deleted with `src/`, and the axis it compares on is the one that survived that
+deletion — not two implementations against each other, but the last release
+against HEAD.
 
 **The macOS `test` row has been run twice, and each run is a list of named
 checks rather than a verdict on the platform.** 2026-09-13 (WP19 R2) was the
@@ -176,7 +180,10 @@ costs one rename per stage. stage1 is left alone because nothing compares it to
 a binary: `IR(seed) == IR(stage1)` compares the `.ll` files its build wrote, and
 those are the same bytes wherever the executable landed.
 
-Both darwin rows then report what Linux has always reported:
+Both darwin rows then reported what Linux had always reported. The seed in
+that run was still stage0, which is why its first line is an assertion; a
+released seed's `IR(seed) == IR(stage1)` is reported rather than asserted
+([wp12-release.md](wp12-release.md#the-bootstrap-seed)):
 
 ```
 IR(stage0) == IR(stage1): 61 modules identical
@@ -245,8 +252,9 @@ Neither stops the row now, and neither is what the failures above are.
 
 ### The seeded build, and what a missing seed reports
 
-`bootstrap` builds `self/` with the **last released** binary rather than with
-stage0, which is the only thing that checks WP19's rolling freeze
+`bootstrap` builds `self/` with the **last released** binary — the seed, and
+since R6 the only compiler that exists to build it with — which is the only
+thing that checks WP19's rolling freeze
 ([G3](wp19-stage0-retirement.md#g3--the-seed-protocol-exists-and-ci-uses-it)).
 
 **There are three answers and only two colours, so the freeze is a pair of
@@ -311,7 +319,7 @@ a regression.
 `.github/seed-targets.json` is also where the *asset name* is spelled, once.
 `release.yml` looks its own up rather than writing it out, and the same block
 of `tests/run.js` checks every row against the compiler's own target table:
-that each `triple` is one `src/codegen/target.ts` calls canonical, and that
+that each `triple` is one `self/target.ts` calls canonical, and that
 each `asset` is that triple with the vendor and the ABI dropped
 (`x86_64-unknown-linux-gnu` → `x86_64-linux`, `aarch64-apple-darwin` →
 `aarch64-darwin`). The four spellings used to live in two comments calling each
@@ -395,55 +403,25 @@ so the API answered 403. The throwaway carried a branch-scoped `push:` trigger
 as well — same jobs, same hardware, same steps — and went away with the branch.
 
 
-### The parity run, nightly
+### The parity run, retired
 
-`.github/workflows/parity.yml` runs `node tests/run.js --parity` on a
-`schedule:` at 06:17 UTC, and on `workflow_dispatch` with an optional `only`
-filter. It is the corpus half of WP19 G1: every program in the corpus through
-both compilers under all sixteen flag variations, comparing exit status,
-stdout, stderr and every file written.
-
-It is a workflow of its own rather than a step in `test` because of what it
-costs — roughly 9,000 compilations by each compiler, plus linking a stage1
-binary first, which is forty minutes against three for `npm test`. The
-flag-set half is the opposite trade and already runs inside `npm test`: two
-`--help` runs, seconds, and it is the half that found `--no-warn-performance`
-and `--out-dir`.
-
-Nightly rather than on demand because the gate has already reopened once in
-the gap between runs, and nobody noticed until it was run by hand
-([wp19 §A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)).
-The job writes its summary line into the run summary with the date, because
-that number is a fact about the corpus on the day it was measured. A red
-result is a gate, not a flake.
-
-**And a run summary is still somewhere somebody has to look.** Running nightly
-fixes "nobody remembered to type the command"; it does not fix "nobody opened
-the run", which is the same silence one step further out — the gate goes red
-on a Tuesday and the record still reads green until somebody scrolls back
-through Actions. So the job carries its own verdict into the repository: a
-**full** run that is not green opens the issue *WP19 G1: the parity gate is
-not green*, or comments on the one already open so that a week of red is one
-thread rather than seven, and a full run that is green closes it. Two states
-open it, because both leave the day unproved — an undeclared difference, and a
-run that never reached the mode at all.
-
-Only a full run may touch that issue. A `workflow_dispatch` with an `only`
-filter reports into the job summary and nowhere else, because a green subset
-of the corpus read as a green corpus is exactly the mistake
+`.github/workflows/parity.yml` ran `node tests/run.js --parity` nightly: every
+program in the corpus through both compilers under all sixteen flag
+variations, comparing exit status, stdout, stderr and every file written. It
+was the corpus half of WP19 G1, and `ci.yml`'s `parity-select` and
+`parity-changed` ran the same comparison on a pull request over the programs
+it touched. It opened an issue when a full run was not green and closed it
+when one was, because a gate that goes red where nobody looks is the silence
 [§A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)
 records.
 
-**The writing is a second job, and that is a permission boundary rather than
-tidiness.** `issues: write` is the only authority this workflow needs beyond
-`contents: read`, and the job that would otherwise hold it runs `npm ci` and
-then thousands of compilations of whatever is in the tree — repository code and
-its dependency tree, with a token that can open, comment on and close issues.
-So the workflow is `contents: read`, the corpus job inherits that, and a
-`record` job that runs nothing but `gh` asks for `issues: write` for itself and
-reads the run's log as an artifact. It is also where "only a full run may touch
-the issue" now lives, as a job condition rather than a step condition: for a
-filtered run the job does not exist.
+All three compared stage0 with stage1, so R6 deleted them with `src/`; a
+comparison with one side gone has nothing left to say. What the corpus is
+held to now is its goldens — `tests/cases/*.ll`, `.err` and `.stdout`, compiled
+by stage1 in `npm test` — and `nish-cmp`, which compares HEAD with the last
+release rather than with a second implementation.
+
+### The toolchain on each runner
 
 Both `test` jobs need the plain tool names `clang`, `llc`, `llvm-as`, `opt`,
 `ld.lld` and `wasm-ld` on `PATH`, because `tests/run.js` and the scripts
@@ -458,7 +436,7 @@ probe for exactly those:
   formula only if that ever stops being true, because `lld` pulls in the
   newest LLVM as a dependency.
 
-After the tests, the job compiles `examples/add.ts`, runs
+After the tests, the job compiles `examples/add.ts` with `build/nish`, runs
 `scripts/size-report.sh --markdown`, and appends the table to the job summary
 so the size of every profile (`debug`, `speed`, `size`, `wasm`) is visible on
 the run page for each OS. A `concurrency` group cancels superseded runs of
@@ -467,7 +445,8 @@ the same branch.
 ## Where the wall clock goes
 
 Measured on 2026-09-18, run 474 on `main` (`a89bee7`), six jobs on
-`ubuntu-latest`:
+`ubuntu-latest`, **before R6** — two compilers in the tree, and the
+`batch-parity` job that compared them still in the workflow:
 
 | Job | Duration | The step that is nearly all of it |
 | --- | --- | --- |
@@ -478,9 +457,10 @@ Measured on 2026-09-18, run 474 on `main` (`a89bee7`), six jobs on
 | `lint` | 10 s | — |
 | `seeds` | 8 s | — |
 
-The jobs run in parallel, so the workflow's wall clock is the longest of them:
-**18 m 27 s**. Everything else — `npm ci` behind `setup-node`'s cache, the apt
-install of LLVM 18, `tsc` — is seconds, and none of it is worth attention.
+The jobs run in parallel, so the workflow's wall clock was the longest of them:
+**18 m 27 s**. `batch-parity` went with `src/`, and so did most of what made
+`test` long (below); these numbers are the record of that tree, not of this
+one, and want re-measuring before anyone cites them.
 
 ### Benchmarking each part
 
@@ -496,15 +476,14 @@ node scripts/ci-profile.mjs -- npm run test:nish
 
 It profiles the **unfiltered** run on purpose. Narrowing with
 `node tests/run.js <substring>` is not a measurement of anything until
-`rm -rf build/test`, and fifteen `fs.existsSync` guards drop checks with no
-`SKIP` line to say so (`.claude/testing.md` has both traps); profiling from
-outside the process avoids each of them. Read the expensive rows and not the
-cheap ones: the suite makes 234 `spawnSync` calls, each of which blocks the
-event loop, so queued writes flush in bursts and the order *within* a burst
-carries no timing information.
+`rm -rf build/test`, and `fs.existsSync` guards drop checks with no `SKIP` line
+to say so (`.claude/testing.md` has both traps); profiling from outside the
+process avoids each of them. Read the expensive rows and not the cheap ones:
+every `spawnSync` the suite makes blocks the event loop, so queued writes flush
+in bursts and the order *within* a burst carries no timing information.
 
-What it reported for `npm test` on that commit — 660.5 s locally, against the
-runner's 14 m 44 s, so this box is about 1.34x a `ubuntu-latest`:
+What it reported for `npm test` at `a89bee7` — 660.5 s locally, against the
+runner's 14 m 44 s, so that box was about 1.34x a `ubuntu-latest`:
 
 | Check | Cost |
 | --- | --- |
@@ -519,68 +498,39 @@ runner's 14 m 44 s, so this box is about 1.34x a `ubuntu-latest`:
 | `self/ prints what tests/self/goldens/ records` | 17.0 s |
 | `the bootstrap script: a stage0 seed asserts IR(stage0) == IR(stage1)` | 16.3 s |
 
-The ten of them are 70% of the run, and the WP14 self-hosting block alone is
-about 330 s of it.
+The ten of them were 70% of the run. The five that name stage0 were
+comparisons with it, and R6 either deleted them or left them comparing against
+recorded bytes — `tests/self/goldens/`, the `.ll` and `.err` goldens,
+`nish-cmp` — rather than against a second compiler run per program.
 
 ### The one cost behind most of that list
 
-Almost none of it is compiling Nish. `tests/batch_worker.js` measured one
-`node dist/index.js <case>` at about 634 ms, of which **1.5 ms** is compiling:
-36 ms is Node starting, ~473 ms is `import ts from "typescript"`, and ~85 ms is
-loading `dist/`. Section A of `tests/run.js` already avoids paying it by driving
-the library API in process — that is the difference between six minutes and a
-handful of seconds — but the oracles and `tests/diagnostic_coverage.js` cannot:
-what they compare is what the *command line* answers, so a process per program
-is the thing under test rather than an implementation detail.
+Almost none of it was compiling Nish. `tests/batch_worker.js` measured one
+stage0 run, `node dist/index.js <case>`, at about 634 ms, of which **1.5 ms**
+was compiling: 36 ms was Node starting, ~473 ms was `import ts from
+"typescript"`, and ~85 ms was loading `dist/`. The oracles and
+`tests/diagnostic_coverage.js` could not avoid paying it, because what they
+compared was what the *command line* answers, so a process per program was the
+thing under test.
 
-Two things follow, and the workflow does both.
-
-**The import is made cheaper.** `NODE_COMPILE_CACHE` is set for every job in
-`ci.yml`, which caches V8's compilation of every module Node loads, keyed on
-content and Node version; a missing or stale key costs time and cannot change an
-answer. Measured here: 412 ms → 315 ms for one compiler spawn (−24%),
-`tests/diagnostic_coverage.js --require-coverage --strict-refusals` 77.0 s →
-65.5 s (−15%), and the whole of `npm test` 660.5 s → 627.3 s (−5.0%), with the
-run undegraded at 1,909 passed, 0 failed, 2 skipped either way — read the skip
-count, not the exit status. The suite's tail is clang and native runs rather than
-Node, which is why 24% per spawn is 5% per suite.
-
-**The duplicate is removed.** `--verify-batch` changes exactly one thing about a
-run — the set the batched-compile gate is taken over — and then makes every other
-check in `tests/run.js` a second time, on the same commit the `test` job is
-already making them on. `batch-parity` is the longest job in the workflow, so
-that duplicate was the workflow's wall clock.
-
-`--batch-gate-only` widens the same gate and stops after it. Measured on this
-box at `a89bee7`, both modes on the one commit: **105.8 s against 684.9 s**, a
-6.5x cut. It makes 1,780 of the full mode's 2,560 checks, and the 780 it leaves
-out are exactly the checks the `test` job makes on the same commit — which is the
-whole argument for leaving them out. It reports as the narrow run it is, with a
-counted skip naming what it did not check, because a green that claims more than
-it proved is the one thing this suite may not print.
-
-The counts move with the corpus and the ratio does not, so re-derive them rather
-than quoting these. The split is structural: the narrow run is section A plus the
-widened gate, and every check the suite has added since sits *after* the gate. At
-`16110e2`, one commit later, the plain run had grown to 1,937 checks and the
-narrow run was still 1,780 of them, at 116.9 s.
+The workflow answered that twice while stage0 existed — `NODE_COMPILE_CACHE`
+for the import, and `--batch-gate-only` so `batch-parity` stopped repeating the
+`test` job's checks — and R6 answered it at the root. Every compiler process
+the suite spawns now is the native stage1 binary, which imports nothing, so
+the per-process cost those two measures were shaving is no longer in the
+suite. `tests/batch_compile.js`, `tests/batch_worker.js` and `--batch-gate-only`
+went with `src/`.
 
 ### What is still on the table
 
-The `test` job is now the wall clock, and the WP14 self-hosting block is about
-half of it. The block is already a set of separate child processes
-(`tests/self/*_oracle.js`), so moving it to a job of its own would take the
-workflow to roughly eight minutes. What stands in the way is not the runner but
-the accounting: `tests/run.js` has no way to run one section and *say* it ran
-one section, and the substring filter is the trap described above. A `--section`
-mechanism with honest skip counting is the piece of work that unlocks it.
-
-`tests/diagnostic_coverage.js` is the other one: 80 s, ~600 CLI spawns, ~99% of
-it the import above. It pools four wide already, and pool width does not help
-(76.9 s at `--jobs 4`, 73.9 s at 8, 77.1 s at 12 on four cores) because the
-cores are saturated. Batching it the way `tests/batch_compile.js` batches
-section A would take it to seconds — but it reads `--json` off a command line by
-design, so that is a rewrite of a gate rather than a tuning knob.
+Re-measuring. Both items this section used to list — splitting the WP14
+self-hosting block into a job of its own, and batching
+`tests/diagnostic_coverage.js` — were priced against the stage0 process cost
+above, and that cost has gone. What still stands is the accounting problem
+either would have hit: `tests/run.js` has no way to run one section and *say*
+it ran one section, and the substring filter is the trap described above. A
+`--section` mechanism with honest skip counting is the piece of work that
+unlocks splitting `test` at all, if a fresh profile says it is worth splitting.
 
 ## Running the same steps locally
 
@@ -597,11 +547,17 @@ brew install llvm@18
 export PATH="$(brew --prefix llvm@18)/bin:$PATH"
 
 npm ci
-npm run check           # tsc --noEmit
-npm test                # build + tests/run.js (goldens, llvm-as, native, runtime, size, wasm)
+bash scripts/fetch-seed.sh   # the last release's nish into build/seed/ (or set NISH_BOOTSTRAP)
+npm run check           # tsc --noEmit over self/, std/ and tests/nish/
+npm run build           # the seeded bootstrap: build/nish
+npm test                # stage1 from the seed + tests/run.js (goldens, llvm-as, native, runtime, size, wasm)
 npm run lint            # only if package.json defines it
 npm run size-report     # the plain table; add --markdown via scripts/size-report.sh
 ```
+
+There is no compiler to build with `tsc`: `npm run check` type-checks `self/`
+against `runtime/nish.d.ts` and emits nothing, and every compiler the steps
+above run is `self/`, built by the seed.
 
 `scripts/build.sh` and `scripts/size-report.sh` branch on `uname`: on macOS
 they use ld64's `-dead_strip` / `-x` instead of `--gc-sections` / `-s`, skip
@@ -614,7 +570,7 @@ with a message.
 ## Diagnostic format
 
 Every error the compiler reports, whether from the parser or the checker, is a
-`CompileError` (`src/diagnostics.ts`) and is printed to stderr in this shape:
+`Diagnostic` (`self/diagnostics.ts`) and is printed to stderr in this shape:
 
 ```
 tests/cases/reject_type_mismatch.ts:1:40: error: Operator `+` requires two operands of the same numeric type, got i32 and boolean
@@ -631,44 +587,44 @@ tests/cases/reject_type_mismatch.ts:1:40: error: Operator `+` requires two opera
   marked only on its first line). Tabs in the source are reproduced in the
   caret line so the markers stay aligned in a terminal.
 
-Syntax errors from the TypeScript parser use the same layout with the
-`syntax error:` prefix (`StaticSyntaxError`, a `CompileError` subclass):
+Syntax errors from the parser (`self/parser.ts`) use the same layout with the
+`syntax error:` prefix — the same `Diagnostic`, with `syntax error` as the word
+before the text:
 
 ```
-build/test/diag_syntax.ts:2:10: syntax error: ':' expected.
+build/test/diag_syntax.ts:2:10: syntax error: <what the parser expected>
   2 |   return 1;
     |          ^
 ```
 
-The `CompileError` object exposes `file`, `line`, `column`, `summary` (the
-first line) and `excerpt` (the two excerpt lines) for tooling that wants the
-parts separately; `message` is always `summary + "\n" + excerpt`.
+A tool that wants the parts separately — file, line, column, code, message —
+reads them from `--json` rather than parsing this text.
 
 Tests for the format live in the `// ---- WP10: diagnostics` block of
 `tests/run.js`.
 
 ## Multi-error reporting
 
-The compiler no longer stops at the first error. Every phase that can
-recover hands its `CompileError`s to one `DiagnosticSink`
-(`src/diagnostics.ts`) owned by the `Compilation`:
+The compiler does not stop at the first error. Every phase that can recover
+reports into one `DiagnosticSink` (`self/diagnostics.ts`) owned by the
+`Compilation` (`self/compilation.ts`):
 
 | Phase | Recovery unit | Where |
 | --- | --- | --- |
-| Parser | every parse diagnostic of the file | `parseSource` |
-| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validateNish` |
+| Parser | every parse diagnostic of the file | `parse` (`self/parser.ts`) |
+| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validate` (`self/validator.ts`) |
 | Pass 1 (signatures) | per declaration: class/interface (marked `poisoned`, its layout checks skipped), import, function signature, module resolution | `Checker.collectSignatures`, `Compilation.load` |
 | Pass 1b/1c | per import binding; every symbol clash | `Checker.bindImports`, `Compilation.rejectSymbolClashes` |
-| Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` |
+| Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` (`self/statements.ts`) |
 
-Between phases `DiagnosticSink.throwIfErrors` sorts what was collected (files
-in load order, then line and column), throws the first error as a plain
-`CompileError` and attaches the rest as `error.additional`. So a caller that
-only knows single errors (`compileToIR`, older tests) still gets exactly the
-message it always got, pass 2 never runs over broken signatures, and the
-emitter never sees a poisoned function.
+The language has no exceptions, so a phase reports into the sink and returns a
+sentinel, and the sink is asked at the end of the phase whether to stop
+(`hasErrors`). So pass 2 never runs over broken signatures, and the emitter
+never sees a poisoned function. `sorted()` orders what was collected — files in
+load order, then line and column, stably, so two errors at one position keep
+the order the phases produced them in.
 
-The driver prints `formatErrorReport`: each error's summary and excerpt, at
+The driver prints `DiagnosticSink.format`: each error's summary and excerpt, at
 most 20 (`MAX_REPORTED_ERRORS`) before `...and N more errors`, then an
 `N errors` line. A lone error prints exactly its message, as before. To
 limit cascades, `let x: T = <rejected>` still declares `x` as `T`, and
@@ -696,21 +652,29 @@ on. Syntax errors keep the `syntax error: ` prefix in `message`.
 
 `code` is the stable identifier for the rule that was broken, and it is the
 field to key on: the prose in `message` is allowed to improve between releases
-and the code is not. The registry is `src/codes.ts` and its stage1 twin
-`self/codes.ts`, both generated by `scripts/gen-diagnostic-codes.mjs` from the
-compiler's own diagnostic sites, so a diagnostic added without a code fails
-`npm test` rather than shipping. The generator only ever appends numbers, and a
-retired rule keeps its number reserved.
+and the code is not. The registry is `self/codes.ts`, the one copy, and it is
+**kept by hand**. Adding a diagnostic is adding its entry there with the next
+free number in its band; a code is never renumbered, and a retired rule keeps
+its number reserved rather than handing it to another.
+
+`scripts/gen-diagnostic-codes.mjs` generated the registry while there were two
+compilers to keep in step (`src/codes.ts` and `self/codes.ts`, from the
+diagnostic sites of `src/`). It is frozen now: it scans nothing and writes
+nothing, and `--check`, which CI runs, validates the file's format and that
+every code in it is unique. What stops a diagnostic shipping without a real
+code is `tests/diagnostic_coverage.js`: every registry code has to be provoked
+by a program in `tests/wordings/` or named with a reason in
+`tests/wordings/unreachable.txt`.
 
 The band says which phase refused the program:
 
 | Band | Meaning |
 | --- | --- |
 | `NL0000` | no rule matched this message yet (see the backlog below) |
-| `NL0001` | a syntax error; the text is the `typescript` package's, so all of them share one code |
+| `NL0001` | a syntax error; every one of them shares one code, a convention from when the text was the `typescript` package's |
 | `NL0002` | the C toolchain `--link` needs could not be used (exit 3) |
 | `NL0003` | an internal compiler error (exit 70) |
-| `NL1xxx` | Phase 0, the forbidden-syntax sweep (`src/validator.ts`) |
+| `NL1xxx` | Phase 0, the forbidden-syntax sweep (`self/validator.ts`) |
 | `NL2xxx` | the checker: signatures, bodies, types |
 | `NL3xxx` | the driver and module loading |
 | `NL4xxx` | the interop sidecar generators |
@@ -722,7 +686,7 @@ removed. A handful of messages are built entirely out of interpolations
 (`` `${fn}` expects ${a}, got ${b} ``) and have no run long enough to identify
 a rule; those report `NL0000`. `tests/run.js` pins how many there are, so the
 backlog can shrink but not grow. Giving one a code is a matter of giving the
-message words of its own, not of editing the table.
+message words of its own and then its registry entry.
 
 Codes appear in `--json` only. The human summary line
 `file:line:col: error: <text>` is unchanged, because the `.err` goldens and
@@ -746,8 +710,8 @@ worth seeing twice.
 
 ## `--emit-ast` and `--emit-checked`
 
-Both write to stdout instead of IR (`src/dump.ts`); file names are printed
-relative to the working directory.
+Both write to stdout instead of IR (`self/ast_text.ts` and `self/dump.ts`);
+file names are printed relative to the working directory.
 
 - `--emit-ast`: the syntax tree of every module after Phase 0, one node per
   line, `<SyntaxKind> <line:col>-<line:col>` (start without trivia, end
@@ -766,7 +730,7 @@ Goldens: `tests/cases/dump_ast.stdout`, `tests/cases/dump_checked.stdout`
 
 ## `-g` debug info
 
-`src/codegen/debug.ts` builds the DWARF metadata; `IRFunction` gained a
+`self/debug.ts` builds the DWARF metadata; `IRFunction` (`self/ir.ts`) carries a
 `subprogram` (`define ... !dbg !N`) and a current location that `emit`
 appends as `, !dbg !N`, set by the emitter around every statement and
 expression and restored afterwards. Emitted: `!llvm.dbg.cu`, the
@@ -782,9 +746,9 @@ checker's offsets, array pointers to `{ long len; long cap; T* data; }`.
 
 The directory is `.` rather than the working directory, which is what clang's
 `-fdebug-compilation-dir=.` writes: a `-g` build then depends only on the
-command line, so it is reproducible across machines, and stage1 — which has no
-`process.cwd()` to ask for and no runtime budget to grow one (WP14 D4) — emits
-the same bytes. A class reached through an import is described against *its
+command line, so it is reproducible across machines, and it asks nothing of
+the compiler, which has no `process.cwd()` to ask with and no runtime budget to
+grow one (WP14 D4). A class reached through an import is described against *its
 own* `DIFile` and line numbers rather than the importing module's, which is why
 there is more than one `DIFile` in a program with imports
 (`tests/link/reachable_struct`).
@@ -792,25 +756,23 @@ there is more than one `DIFile` in a program with imports
 A function's own position — the `DISubprogram`'s `line` and `scopeLine`, its
 parameters' `DILocalVariable`s, and the `DILocation` the prologue and any
 untied instruction carry — is where the **declaration** starts: `export`, or
-`const`, or `function`. Not the arrow. stage0 used to read it off the
-`ArrowFunction`, whose own start is its parameter list, which put the same
-function at two different positions depending on which of WP22's two spellings
-declared it and named the wrong line whenever the arrow sat below its `const`;
-`FunctionSig.declSite` is the node the checker records for it now
-(`tests/cases/dbg_arrow`, `docs/wp19-stage0-retirement.md` §A5). Stage1 never
-had the bug, because its parser normalises both spellings into one node that
-spans the declaration.
+`const`, or `function`. Not the arrow: the parser normalises WP22's two
+spellings into one node that spans the declaration, and `FunctionSig.declSite`
+is the node the checker records for it (`tests/cases/dbg_arrow`). stage0 read
+the position off the arrow, whose own start is its parameter list, and named
+the wrong line whenever the arrow sat below its `const`
+(`docs/wp19-stage0-retirement.md` §A5); the golden is what keeps that from
+coming back.
 
 A `DILocation` column is a **byte** offset into its line, plus one — what
-`clang -g` writes and what a debugger reads it back against. stage0 used to
-count the UTF-16 code units the `typescript` API hands it, which differs from
-stage1's byte count for every position after a non-ASCII character on the same
-line (`tests/cases/dbg_utf8`). Diagnostic columns are a separate question and
-are still code units on stage0: the consumer there is an editor.
+`clang -g` writes and what a debugger reads it back against — not UTF-16 code
+units, which differ from it for every position after a non-ASCII character on
+the same line (`tests/cases/dbg_utf8`). Diagnostic columns are a separate
+question and are code units: the consumer there is an editor
+(`self/diagnostics.ts`, `columnOf` against `byteColumnOf`).
 
-**Both compilers emit it.** `self/debug.ts` is the stage1 port, `-g` is a flag
-of `self/compile.ts` as it is of `src/index.ts`, and `tests/self/ir_oracle.js`
-compares the two byte for byte, metadata numbering included.
+`-g` is a flag of `self/compile.ts`, and the `dbg_*` goldens in `tests/cases/`
+pin the bytes it emits, metadata numbering included.
 
 `--link -g` passes `-g` to `scripts/build.sh`, which adds `-g` for every
 input (so `runtime.c` has symbols too) and drops the strip flag of the

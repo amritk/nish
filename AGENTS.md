@@ -10,10 +10,10 @@ For Claude Code the same rules live in
 [`CLAUDE.md`](./CLAUDE.md); the detailed developer guidelines are in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
-- [`.claude/orientation.md`](./.claude/orientation.md) — **start here**: the two compilers, the code map, the commands, what is always true
-- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: Nish-0, the module map, the oracles, the milestones
+- [`.claude/orientation.md`](./.claude/orientation.md) — **start here**: the compiler and its seed, the code map, the commands, what is always true
+- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: Nish-0, the seed, the module map, how it is tested
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
-- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the Nish rules for every program in the repo, and the static-friendly rules for the compiler source
+- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines
@@ -21,10 +21,15 @@ For Claude Code the same rules live in
 ## What this is
 
 `nish` (**Nish**) is an ahead-of-time compiler from a strictly static
-subset of TypeScript to LLVM IR, published to npm as a single package. It is a
-**Node.js + npm** project with one runtime dependency (`typescript`); the
-sibling repos' Bun rules do not apply here. The reference documents are
-[`docs/LANGUAGE.md`](./docs/LANGUAGE.md) (what the language is) and
+subset of TypeScript to LLVM IR. The compiler is written in Nish itself, in
+`self/`, and built by the previous released `nish` — the seed — the way rustc
+and Go build themselves; the TypeScript implementation that used to seed it
+(`src/`, "stage0") was deleted in WP19 R6. The repository is a **Node.js + npm**
+project for its tooling: the test harness, the scripts and the installer are
+JavaScript, `typescript` is a development dependency for `npm run check`, and
+the published package has no runtime dependency at all — it hands over to a
+prebuilt native compiler. The sibling repos' Bun rules do not apply here. The
+reference documents are [`docs/LANGUAGE.md`](./docs/LANGUAGE.md) (what the language is) and
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (how the compiler is put
 together); [`docs/MASTER_PLAN.md`](./docs/MASTER_PLAN.md) is the work-package
 plan, with the conventions every agent follows in §7 and a brief template in §8.
@@ -33,8 +38,10 @@ plan, with the conventions every agent follows in §7 and a brief template in §
 
 ```bash
 npm install                 # install (npm ci in CI)
-npm run check               # tsc --noEmit
-npm test                    # build + the full suite (goldens, llvm-as, native, runtime, differential)
+bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
+npm run build               # self/, built by the seed, into build/nish
+npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
+npm test                    # the full suite (goldens, llvm-as, native, runtime, differential)
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
 npm run lint                # biome, advisory
@@ -52,9 +59,9 @@ Read these rather than scraping prose; they are contracts with tests behind
 them — the WP12 block of `tests/run.js`, and
 [`tests/nish/cli.ts`](./tests/nish/cli.ts), which asks the same questions from a
 program written in Nish that reads the answers the way a wrapper does
-(`npm run test:cli`, and `build/nish-cli build/nish` against the self-hosted
-compiler). [`docs/AI.md`](./docs/AI.md) documents the same surfaces for an agent
-*using* the compiler, and ships in the npm tarball so an install describes
+(`npm run test:cli`, or `build/nish-cli <compiler>` against any other build).
+[`docs/AI.md`](./docs/AI.md) documents the same surfaces for an agent *using*
+the compiler, and ships in the npm tarball so an install describes
 itself.
 
 | Ask | Command | Answer |
@@ -77,10 +84,11 @@ Every `--json` object is flat:
   (`NL1xxx` Phase 0, `NL2xxx` checker, `NL3xxx` driver, `NL4xxx` interop,
   `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
   the registry are documented in
-  [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry lives in
-  `src/codes.ts` and `self/codes.ts` and is **generated** by
-  `scripts/gen-diagnostic-codes.mjs`; run it after adding a diagnostic, or
-  `npm test` fails while it is stale.
+  [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry is
+  `self/codes.ts`, and it is **kept by hand**: a new diagnostic gets the next
+  free number in its band, and a number is never moved or handed out twice.
+  `node scripts/gen-diagnostic-codes.mjs --check` validates its format and that
+  every code is unique, and `npm test` runs it.
 - A failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is still one JSON line,
   `{"severity","code","message"}`. Under `--json` you never have to read stderr
@@ -97,7 +105,7 @@ object under `--json`; the `message` is what tells them apart.
 `npm test` ends with `N passed, M failed, K skipped`. **The skip count is the
 number that decides what a green run is worth**: without LLVM 18 the
 toolchain-dependent checks — assembly, native round trips, linking, the interop
-addons, the self-hosting oracles, the differential suite — skip rather than
+addons, building the compiler at all, the differential suite — skip rather than
 fail, and the run prints a `DEGRADED:` banner naming the tools it could not
 find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
@@ -195,17 +203,17 @@ what is blocking and what you need — and keep watching.
   one negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
   `CHANGELOG.md` line. There is no changesets flow here; the changelog is the
   record.
-- **A construct may be implemented once.** Writing it in both `src/` and
-  `self/` buys the byte-for-byte comparison between two implementations;
-  writing it in `self/` alone is the other legitimate answer, and costs one
-  line in `tests/self/stage1_only.txt`, which makes the golden stage1's and
-  the stage0 oracles declare the case rather than skip it
-  ([wp19 §1a](./docs/wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6)).
-  What is never allowed is the third thing: `self/` alone and unregistered,
-  where the oracles quietly stop comparing.
+- **A construct is implemented once, in `self/`.** There is no second
+  implementation to compare it with since WP19 R6
+  ([wp19](./docs/wp19-stage0-retirement.md)), so its golden `.ll`, its native
+  round trip and `tests/nish-cmp.js` — the last release against this tree —
+  are what prove the lowering. **The rolling freeze** still holds: `self/` may
+  not use the construct in its own source until the seed compiles it, which is
+  the next release, and CI's `bootstrap` job fails the pull request that
+  tries.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
-  the reason in `src/codegen/attributes.ts` beside the code.
-- **A struct layout change touches `runtime.ts` and `runtime.c` in the same
+  the reason in `self/attributes.ts` beside the code.
+- **A struct layout change touches `self/runtime.ts` and `runtime.c` in the same
   commit** and extends a layout test. The C runtime is two translation units
   with a budget each — `runtime.c` for the core and `runtime_os.c` for whatever
   wraps a system call — so keep both inside theirs (`node tests/run.js budget`)
@@ -215,16 +223,14 @@ what is blocking and what you need — and keep watching.
 - **Never** put Claude/session links, tracking IDs, model names or platform
   attributions in commits, code, or PR text. Commit messages: imperative
   subject, body explaining the lowering.
-- **In the compiler's own source, declare types with `type` and functions as
-  arrows bound to a `const`.** Both are linted at `warn` while the existing
-  code is migrated, so the warning count is the backlog rather than a failure.
-  Class methods stay methods. **An Nish program follows the arrow half of that
-  rule too** — the language has arrow functions
-  ([wp22](./docs/wp22-arrow-functions.md)), so a function there is
-  `const f = (a: i32): i32 => ...` and the `function` keyword is the legacy
-  spelling. The `type` half still does not reach it: an Nish struct is a
-  `class` or an `interface`, and a `type` alias only renames a type that
-  already exists.
+- **Declare a function as an arrow bound to a `const`**, in the compiler
+  (`self/`, an Nish program) and in the JavaScript tooling alike: the language
+  has arrow functions ([wp22](./docs/wp22-arrow-functions.md)), so a function
+  is `const f = (a: i32): i32 => ...` and the `function` keyword is the legacy
+  spelling. The rule is linted at `warn` while the tooling is migrated, so the
+  warning count is the backlog rather than a failure. Class methods stay
+  methods. A struct is a `class` or an `interface`: a `type` alias only renames
+  a type that already exists.
 - Match the surrounding code's style, comment density, and naming. Biome
   (`biome.json`) is the formatter and linter, run with the formatter disabled
   in `npm run lint`; keep new files formatted and do not reformat files you did

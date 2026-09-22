@@ -12,8 +12,9 @@ Repo: `amritk/nish`, default branch `main`.
 ## 1. Vision
 
 Nish is an ahead-of-time compiler for a strictly static subset of
-TypeScript. It parses source with the official TypeScript compiler API, hard
-fails on anything dynamic, and emits LLVM IR that clang/LLVM turn into native
+TypeScript. It parses source with its own lexer and parser, written, like the
+rest of the compiler, in the language it compiles; it hard fails on anything
+dynamic, and emits LLVM IR that clang/LLVM turn into native
 binaries for x86_64, ARM64, and WebAssembly.
 
 Targets, in priority order:
@@ -40,17 +41,17 @@ prototypes, `eval`, reflection, exceptions as control flow.
 └───────────────────────────────┬──────────────────────────────────┘
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ 2. Compiler frontend (this repo, src/)                           │
+│ 2. Compiler frontend (this repo, self/, written in Nish)         │
+│    Phase A  lexer.ts, parser.ts   one Node tree, dense ids       │
 │    Phase 0  validator.ts   forbidden-syntax sweep, hard fail     │
-│    Phase A  parser.ts      ts.createSourceFile                   │
-│    Phase B  checker/       Nish types, scopes, side tables│
+│    Phase B  checker.ts + families   types, scopes, side tables   │
 └───────────────────────────────┬──────────────────────────────────┘
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │ 3. Compiler backend                                              │
-│    Phase C  codegen/attributes.ts  purity / escape / loop facts  │
-│             codegen/emitter.ts     AST -> LLVM IR text           │
-│             codegen/runtime.ts     runtime ABI, inline allocator │
+│    Phase C  attributes.ts   purity / escape / loop facts         │
+│             emit*.ts        AST -> LLVM IR text                  │
+│             runtime.ts      runtime ABI, inline allocator        │
 │    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
 │    runtime/runtime_os.c            files, spawn, env (C, 1.2 KB) │
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
@@ -60,11 +61,11 @@ prototypes, `eval`, reflection, exceptions as control flow.
 Design rules that every WP must respect:
 
 - **Checker records, emitter reads.** The checker writes types and bindings
-  into side tables (`CheckedProgram.types/bindings/locals/callees`). The
+  into side tables (`CheckedProgram.nodeTypes/nodeLocals/nodeCallees`). The
   emitter contains no user-facing error handling; any node it sees is valid.
 - **Attributes are guarantees.** An LLVM attribute is emitted only when the
   checker has proved it. A wrong attribute is undefined behaviour.
-- **ABI is a contract.** Struct layouts in `codegen/runtime.ts` and
+- **ABI is a contract.** Struct layouts in `self/runtime.ts` and
   `runtime/runtime.c` must match byte for byte, and a test must prove it
   (see `tests/ir/alloc_smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
@@ -152,29 +153,30 @@ alias (a generic *function* is monomorphised, WP18), `symbol`,
 
 ## 4. What exists today
 
-There are now **two compilers for one language**, and the second is written in
-the language they both compile: `src/` (stage0, TypeScript on Node, 16,210
-lines) and `self/` (stage1, the same compiler in Nish, 22,395 lines).
-They agree byte for byte on the IR of every program in the corpus, which is
-what WP14 below means by self-hosting. `.claude/orientation.md` is the
+There is **one compiler**, and it is written in the language it compiles:
+`self/`, 64 modules and 35,431 lines of Nish. Until R6 it had a twin, `src/`
+(stage0, the same compiler in TypeScript on Node), and the two agreed byte for
+byte on the IR of every program in the corpus, which is what WP14 below means
+by self-hosting. R6 deleted `src/` (§9, M6); `self/` is now built by the last
+released `nish`, the seed. `.claude/orientation.md` is the
 ninety-second map; the table below is the inventory.
 
 | Area | State | Files |
 | --- | --- | --- |
-| CLI and driver: `-o <file>` / `-o <dir>/`, `--link`, `--profile`, `--number-mode`, `--target`, `--nsw`, `--strict-exports`, `--unchecked-indexing`, `--no-stack-alloc`, `-g`, `--json`, the dumps, `--version`, exit codes 0/1/2/3/70 | done (WP5, WP9, WP10, WP12) | `src/index.ts`, `src/compilation.ts`, `src/version.ts` |
-| Phase A parse and Phase 0 validate: the forbidden-syntax sweep, with the message and the `reject_*` case for every rule | done (WP0) | `src/parser.ts`, `src/validator.ts` |
-| Checker, pass 1 signatures / pass 1b imports / pass 2 bodies, dispatch tables keyed by `ts.SyntaxKind`, side tables in `program.ts` | done | `src/checker/` (21 modules, one per construct family: `classes`, `arrays`, `strings`, `math`, `bitwise`, `narrowing`, `nullable`, `result`, `arena`, `io`, ...) |
-| Emitter: SSA temps, hoisted allocas, control flow, structs, arrays, strings, `Result`, builtins, one module per source file | done | `src/codegen/emitter.ts`, `ir.ts`, `emit/` (15 modules) |
-| Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `src/codegen/attributes.ts`, `escape.ts` |
-| Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `src/codegen/debug.ts` |
-| Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `src/interop/` (`abi`, `header`, `dts`, `wasm`, `napi`) |
+| CLI and driver: `-o <file>` / `-o <dir>/`, `--link`, `--profile`, `--number-mode`, `--target`, `--nsw`, `--strict-exports`, `--unchecked-indexing`, `--no-stack-alloc`, `-g`, `--json`, the dumps, `--version`, exit codes 0/1/2/3/70 | done (WP5, WP9, WP10, WP12) | `self/compile.ts`, `self/compilation.ts`, `self/ice.ts`, `self/branding.ts` |
+| Phase A parse and Phase 0 validate: the forbidden-syntax sweep, with the message and the `reject_*` case for every rule | done (WP0) | `self/lexer.ts`, `self/parser.ts`, `self/validator.ts` |
+| Checker, pass 1 signatures / pass 1b imports / pass 2 bodies, one `switch` on the node kind per category, side tables indexed by node id in `program.ts` | done | `self/checker.ts` and its families (`declarations`, `structs`, `statements`, `expressions`, `members`, `arrays`, `builtins`, `result`, `generics`, `bounds`, ...) |
+| Emitter: SSA temps, hoisted allocas, control flow, structs, arrays, strings, `Result`, builtins, one module per source file | done | `self/emit.ts`, `ir.ts`, `emit_*.ts` |
+| Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `self/attributes.ts`, `escape.ts` |
+| Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `self/debug.ts` |
+| Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `self/interop_{abi,header,dts,wasm,napi}.ts` |
 | Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (1,138 lines) and `runtime/runtime_os.c` (290 lines, the system-call half), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
-| Inline `alwaysinline` bump allocator in IR, the runtime ABI table both sides agree on | done | `src/codegen/runtime.ts` |
+| Inline `alwaysinline` bump allocator in IR, the runtime ABI table the compiler and the C runtime agree on | done | `self/runtime.ts` |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, the PGO recipe, the size report | done (WP9) | `scripts/build.sh`, `scripts/size-report.sh` |
-| The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` | done (WP14) | `self/` (54 modules), `scripts/bootstrap.sh` |
+| The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` — built from the released seed | done (WP14, WP19) | `self/`, `scripts/bootstrap.sh`, `scripts/fetch-seed.sh` |
 | Tests: 382 golden cases (229 of them `reject_*`), 24 `tests/link/` programs, `llvm-as`, native round trips, runtime unit tests, IR/C layout smoke, size and wasm builds, interop, exit codes, packaging, bench checksums | done | `tests/run.js` and `tests/cases/`, `link/`, `ir/`, `layout/` |
-| Differential testing against Node: 50 corpus programs plus `tests/cases`, rewritten from the checker's own types, and a fuzzer that prints its seed | done (WP13) | `tests/differential/`, `runtime/shim.mjs` |
-| The stage1 oracles: lexer, parser, support, types, diagnostics, symbols, checked dump, rejections, IR, interop sidecars, and the bootstrap | done (WP14) | `tests/lexer_oracle.js`, `tests/parser_oracle.js`, `tests/self/` |
+| Differential testing against Node: 50 corpus programs plus `tests/cases`, each run natively and as its frozen JavaScript rewrite, and a fuzzer that prints its seed | done (WP13) | `tests/differential/`, `runtime/shim.mjs` |
+| The compiler's own tests: the bootstrap from the seed, the goldens that succeeded the stage0 oracles, the lexer, parser, support and rejection oracles, and the comparison with the last release | done (WP14, WP19) | `tests/self/`, `tests/lexer_oracle.js`, `tests/parser_oracle.js`, `tests/nish-cmp.js` |
 | Benchmarks: seven programs in Nish, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
@@ -186,8 +188,8 @@ bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
 14.5 KB for the C twins and 349-377 KB for the Rust ones
-([BENCHMARKS.md](BENCHMARKS.md)). stage1 compiles the same programs about
-eight times faster than stage0 (`docs/wp14-selfhost.md` §4, D5).
+([BENCHMARKS.md](BENCHMARKS.md)). While both existed, stage1 compiled the same
+programs about eight times faster than stage0 (`docs/wp14-selfhost.md` §4, D5).
 
 ## 5. Work packages
 
@@ -203,13 +205,18 @@ and are recorded here in the same form so that this section says what happened
 rather than only what was planned: five of them have landed, and WP15 is the
 roadmap the project is on now. Each entry carries its state in its heading.
 
+The file paths in the packages up to WP17 are where the work was done at the
+time, which for most of them was `src/`, the TypeScript compiler R6 deleted
+(§9, M6). Each piece now lives in `self/`; [ARCHITECTURE.md](ARCHITECTURE.md)'s
+pipeline table is the map.
+
 ### WP-P: Pipeline prep for parallel work (S) — do first
 
 Goal: make `checker.ts` and `emitter.ts` extensible by adding files, so
 Wave 1 agents do not all edit the same two functions.
 
-- Split `checkStatement`/`checkExpression` and `emitStatement`/`emitExpression`
-  into dispatch tables keyed by `ts.SyntaxKind`, with one module per
+- `checkStatement`/`checkExpression` and `emitStatement`/`emitExpression`
+  were split into dispatch tables keyed by `ts.SyntaxKind`, with one module per
   construct family: `src/checker/{statements,expressions,declarations}.ts`,
   `src/codegen/emit/{statements,expressions}.ts`.
 - Introduce a golden-test harness: `tests/cases/<name>.ts` + `<name>.ll` +
@@ -225,12 +232,13 @@ Acceptance: `npm test` unchanged and green; existing goldens byte-identical.
 Goal: a dedicated, un-bypassable forbidden-syntax sweep that runs before the
 checker, plus Biome configured purely as a formatter/linter for humans.
 
-- `src/validator.ts`: `validateNish(sourceFile)` walks the whole tree
-  with `ts.forEachChild` and throws `CompileError` for everything in §3.2.
-  It must catch things the checker never reaches (e.g. `any` nested in a
+- `src/validator.ts`: `validateNish(sourceFile)` walked the whole tree
+  with `ts.forEachChild` and threw `CompileError` for everything in §3.2.
+  It had to catch things the checker never reaches (e.g. `any` nested in a
   type argument, `delete` inside an unreachable branch).
-- Wire it into `src/compiler.ts` as Phase 0. Keep the checker's own checks;
-  the validator is defence in depth, not a replacement.
+- It was wired into `src/compiler.ts` as Phase 0, and the checker kept its own
+  checks: the validator is defence in depth, not a replacement. Its successor
+  is `self/validator.ts`.
 - `biome.json` with format + recommended lint for the compiler's own source
   and `examples/`. `npm run lint`, `npm run format`. Biome output is never
   consulted by the compiler.
@@ -460,9 +468,9 @@ Goal: make the compiler something a stranger can install, and make its
 refusals legible.
 
 - `package.json#files` whitelists what `npm pack` ships; `src/index.ts`
-  resolves `scripts/build.sh` and `runtime/runtime.c` from the package root
-  (`PKG_ROOT`), never from the working directory, so `npm install -g` works
-  from anywhere.
+  resolved `scripts/build.sh` and `runtime/runtime.c` from the package root
+  (`PKG_ROOT`), never from the working directory, so `npm install -g` worked
+  from anywhere. `self/compile.ts` does the same from its own binary's path.
 - Exit codes 0, 1, 2, 3 and 70, each with a documented message shape. The
   toolchain probe runs *before* compilation, so a missing clang is reported
   without writing any IR.
@@ -486,10 +494,11 @@ Goal: prove that a compiled program behaves exactly like the same TypeScript
 run under Node, up to the handful of semantic decisions this compiler
 documents.
 
-- `tests/differential/rewrite.js` rewrites a whole program to JavaScript *from
+- `tests/differential/rewrite.js` rewrote a whole program to JavaScript *from
   the checker's own types*, so what is compared is the language's semantics
   rather than a hand translation; `runtime/shim.mjs` is the Node side of the
-  runtime.
+  runtime. The rewriter drove stage0's checker, so the rewrites were frozen in
+  `tests/differential/goldens/` before R6 deleted it.
 - 50 corpus programs plus every whole program in `tests/cases`, built
   natively and run, compared byte for byte on stdout, exit status and
   terminating signal.
@@ -505,12 +514,13 @@ runs the quick corpus plus a fixed-seed fuzz batch. No wrong instruction
 sequence was found; three semantic gaps were, all since closed or documented
 (ECMAScript `Math.pow`, and checked integer division for `x / 0` and
 `INT_MIN / -1`). The generator has since gained a second customer in WP14,
-where `--stage1` compares the two compilers' IR instead of Node.
+where `--stage1` compared the two compilers' IR instead of Node; since R6 it
+compares the last release's IR with HEAD's.
 [wp13-differential.md](wp13-differential.md).
 
 ### WP14: Self-hosting (L, after WP8) — landed
 
-Goal: the compiler compiles itself. `self/` is `src/` rewritten in Nish,
+Goal: the compiler compiles itself. `self/` was `src/` rewritten in Nish,
 and the claim is an equality rather than a demo:
 `IR(stage1, self/) == IR(stage2, self/)` byte for byte, with stage3 identical
 to stage2.
@@ -526,12 +536,15 @@ to stage2.
 - An oracle per phase (lexer, parser, support, types, diagnostics, symbols,
   the checked dump, the rejections, the IR, the interop sidecars), each
   comparing stage1 against stage0 over the whole corpus rather than against a
-  hand-written golden.
-- `scripts/bootstrap.sh` builds the chain and leaves `build/nish` behind;
-  `--verify` runs the three equalities with `cmp` — all three for a stage0
-  seed, and the two that do not mention the seed for any other, since
-  `IR(seed) == IR(stage1)` is diverse double-compiling only when the seed is
-  the second implementation (`docs/wp19-stage0-retirement.md` G3).
+  hand-written golden. R6 retired them with stage0; §9's M6 row says what
+  replaced each.
+- `scripts/bootstrap.sh` builds the chain from the seed and leaves
+  `build/nish` behind; `--verify` asserts `IR(stage1) == IR(stage2)` and
+  stage3 == stage2 with `cmp`, and reports `IR(seed) == IR(stage1)` without
+  asserting it. That third equality was diverse double-compiling only while
+  the seed was stage0, the second implementation
+  (`docs/wp19-stage0-retirement.md` G3); against a released seed it asks
+  whether the codegen has changed since that release.
 - §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
   so stage1 plans its own output, makes its own directories and runs
   `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
@@ -539,10 +552,10 @@ to stage2.
 Dependencies: WP0 through WP8; WP16 and WP17 were implemented on both sides
 for the same reason.
 
-Acceptance (met): `tests/self/bootstrap.js` proves the three equalities on
-every run of `npm test`, and the IR oracle requires stage1 to compile every
-program in the corpus with no exemption list. What is still stage0's is listed
-in full in [wp14-selfhost.md](wp14-selfhost.md) §7a: `--emit-ast`,
+Acceptance (met): `tests/self/bootstrap.js` proved the three equalities on
+every run of `npm test`, and the IR oracle required stage1 to compile every
+program in the corpus with no exemption list. What was still stage0's when the
+package closed is listed in full in [wp14-selfhost.md](wp14-selfhost.md) §7a: `--emit-ast`,
 `--target host`, exit 70 for an internal error, and `-o <dir>` without a
 trailing slash.
 
@@ -672,24 +685,29 @@ it left. What the diagram would show for them is a line.
 
 1. Work on a sub-branch of `main` named `wp<N>/<short-name>`; open a PR into
    `main`.
-2. `npm test` must be green, and every new construct needs: a golden `.ll`,
-   an `llvm-as` pass, a native round trip with expected stdout, and at least
-   one negative test. Run `opt -passes=verify` on every emitted module.
-2a. A construct is implemented in `src/` *and* `self/`, which the oracles
-   compare byte for byte, or in `self/` alone with its case named in
-   `tests/self/stage1_only.txt`
-   ([wp19 §1a](wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6)).
-   Either is a decision; `self/` alone and unregistered is not, because the
-   oracles would then stop comparing its case without anyone deciding they
-   should. A new diagnostic also needs a case that *reaches its words*
-   (`tests/diagnostic_coverage.js`, inside `npm test`), not only a code.
+2. `npm run check` and an undegraded `npm test` must be green, and every new
+   construct needs: a golden `.ll`, an `llvm-as` pass, a native round trip
+   with expected stdout, and at least one negative test. Run
+   `opt -passes=verify` on every emitted module.
+2a. There is one compiler, so a construct is implemented once, in `self/`
+   ([ARCHITECTURE.md](ARCHITECTURE.md), "How to add a construct"). Under the
+   rolling freeze `self/` may not *use* it in its own source until the seed
+   compiles it, which is the next release; CI's `bootstrap` job, which builds
+   stage1 from the released seed, is what checks that. A new diagnostic is an
+   entry added by hand to `self/codes.ts` with the next free number in its
+   band, never a renumbered or reused one, and it needs a case that *reaches
+   its words* (`tests/diagnostic_coverage.js`, inside `npm test`), not only a
+   code.
 3. Do not emit an attribute you cannot cite a checker proof for. Write the
-   reason in `attributes.ts` alongside the code.
-4. Any change to a struct layout touches `runtime.ts` and `runtime.c` in
+   reason in `self/attributes.ts` alongside the code.
+4. Any change to a struct layout touches `self/runtime.ts` and `runtime.c` in
    the same commit and adds/extends a layout smoke test.
 5. Keep `runtime.c` and `runtime_os.c` within their budgets (§2). Report the
    size of whichever you changed in the PR.
-6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added.
+6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added, and add a
+   line to `CHANGELOG.md`. The cookbook is regenerated by
+   `docs/cookbook/regen.sh` against `build/nish`, so its entry lands with the
+   construct.
 7. Commit messages: imperative subject, body explaining the lowering.
    No model names in commits, code, or PR text.
 8. Never widen scope into another WP's files; leave a TODO referencing the
@@ -699,8 +717,11 @@ it left. What the diagram would show for them is a line.
 
 ```
 You are implementing <WP-N: title> for Nish, a TypeScript-to-LLVM-IR AOT
-compiler. Read docs/MASTER_PLAN.md (§2 design rules, §3 spec, §5 your WP,
-§7 conventions) and README.md first. Run `npm test` before changing anything.
+compiler. The compiler is self/, written in Nish and built by the last
+released nish (the seed): `npm run build` leaves build/nish. Read
+docs/MASTER_PLAN.md (§2 design rules, §3 spec, §5 your WP, §7 conventions),
+docs/ARCHITECTURE.md and README.md first. Run `npm test` before changing
+anything.
 
 Scope: <paste the WP bullet list>.
 Out of scope: <neighbouring WPs>.
@@ -708,7 +729,10 @@ Files you own: <list>. Files you may read but not edit: <list>.
 
 Definition of done:
 - <acceptance criteria from §5>
-- `npm test` green, new goldens under tests/cases/, docs updated.
+- `npm run check` and an undegraded `npm test` green, new goldens under
+  tests/cases/, docs updated.
+- self/ does not use the new construct in its own source until the next
+  release (the rolling freeze).
 - Push to branch wp<N>/<name> and open a PR into `main` with the IR for each
   new construct shown in the PR body.
 
@@ -724,24 +748,19 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x, which the run's own analysis reads as spread rather than the program ([BENCHMARKS.md](BENCHMARKS.md), [wp9-optimisation.md](wp9-optimisation.md#summary)). The other three closed: the causes were named rather than guessed, and each section below the gap table says what the measurement was before the change |
 | M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** WP2b has left the milestone rather than been finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)), so what M4 still wants is the frozen reference and the tag |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
-| M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | open — after M4. **Four of the six gates are closed with a dated measurement, and what is left is two items of work and one decision.** Re-measured on 2026-09-19: G1 parity green over the corpus (`node tests/run.js --parity`), G2's wording half green at 264 of 410 registry codes provoked by **stage1**, 66 unreachable with a reason and 80 stage0-only with their programs on file (`node tests/diagnostic_coverage.js --compiler build/nish --require-coverage --strict-refusals`, re-measured 2026-09-21 — the earlier 344/410 was stage0's, which is not a compiler that outlives stage0), G3/G6's three IR equalities and the fixed point green (`node tests/self/bootstrap.js`), and G4's policy sentence written. The measurements themselves live in [wp19 §5](wp19-stage0-retirement.md#5-order) with the command and the date beside each, because a count repeated here is a count that will be wrong before anybody reads it — a number for this gate has five times turned out to be false or to mean less than it looked, and the corpus growing is only one of the five reasons ([§A8](wp19-stage0-retirement.md#a8-the-fifth-way-this-gate-lied-a-surface-variations-had-never-named) is the newest: a surface the cross product had never named). What remains is in [wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on), sorted by what kind of thing it is: **work** — the macOS checks that encode an ELF assumption, and the defects the gate is green in spite of because no corpus program poses the question (the package becoming a thin installer and `nish-cmp` as a required check were both on this list and landed on 2026-09-20; so did the `$PATH` half of `packageRoot`, and its symlink half followed on 2026-09-21, one release later because the `realpath` builtin it needed had to be in a *released* compiler before `self/` could call it — the rolling freeze, measured against the v0.5.0 seed). One of those defects, #94, is stage0's and is **resolved by** R6 rather than blocking it: R6 deletes the file it lives in — and **one human decision**: whether the second implementation still earns its keep. A release carrying the darwin and `aarch64-linux` seeds was the second, and v0.4.0 closed it on 2026-09-20 by carrying all four. It closed it with a caveat worth carrying: the compiler those assets contain ships no `std/`, which `nish-cmp` found on its first run and which is fixed for the next release — so a gate was green on a seed broken in a way the gate did not ask about. The third, the npm registry name G5's installer waited on, was answered on 2026-09-19 — `@amritk/nish`, with the command still `nish` ([wp12-release.md](wp12-release.md#the-npm-name)) — which moved the installer out of the decisions and into the work. On that last one the evidence this week runs the other way: stage0 caught a machine-readable contract stage1 was not answering across 89 programs, and each compiler caught a span the other got wrong |
+| M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** — R6 ([wp19 §5](wp19-stage0-retirement.md#5-order)) deleted `src/`, the TypeScript compiler that `tsc` built into `dist/`, and with it the `typescript` runtime dependency (it stays a devDependency, for `npm run check` and the lexer and parser oracles), the six oracles that compared stage1 with stage0 (types, diagnostics, symbols, checked, IR, interop), the parity mode and its workflows, and the stage1-only register, which had nothing left to register once every case was stage1's. Each oracle has a successor that runs without stage0: the types, diagnostics, symbols and checked dumps are held to the goldens in `tests/self/goldens/` (`tests/self/goldens.js`), which were written from stage0 while it still existed; the IR and the interop sidecars are held to the `tests/cases/*.ll` goldens and to `tests/nish-cmp.js`, which compares HEAD with the last released compiler. The seed is that release, fetched by `scripts/fetch-seed.sh`, and `self/` is the only compiler. <!-- R6 measurement: the lead fills the date, main's commit and the npm test summary line after the deletion merges --> The undegraded `npm test` on the deletion was measured on _(date to be filled after the deletion merges)_. |
 
 WP12, WP13, WP16 and WP17 landed between M3 and M5 without a milestone of
 their own; releasing what they built is part of M4.
 
 ### What remains
 
-M4 and WP15 are the near road and M6 is the far one, and none of the three
-is sequential with the others. M6 is closer than "far" suggests and is not
-scheduled: as of 2026-09-19 four of its six gates carry a green measurement
-with a date, and the deletion is becoming a decision rather than a project —
-[wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on) separates the
-work left from the one decision that remains, and says why the honest answer to
-it is *not yet*. It also says which release the deletion can land in, which is
-**not 0.5.0**: `nish-cmp` compares against the last release, every seed before
-0.5.0 ships no `std/`, so the gate has no row until 0.5.0 is out. Landing R6 in
-0.5.0 would delete the two largest oracles during the one window their
-successor cannot run in. The language reference cannot be frozen while
+M4 and WP15 are the road, and they are not sequential with each other. M6 is
+done: R6 deleted stage0 after 0.5.0 was out, which is the release it had to
+wait for, because `nish-cmp` compares against the last release and every seed
+before 0.5.0 shipped no `std/` —
+[wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on) has the
+reasoning as it stood before the deletion. The language reference cannot be frozen while
 items 5, 6 and 8 below are each still going to add or withdraw a rule, so the
 WP15 order *is* the road to 1.0 rather than a detour from it; WP22's
 arrow-function migration and WP23's landing items change the reference too,
@@ -754,11 +773,11 @@ document does not need a second one open beside it to be current:
 | 1 | Fast defaults: `--strict-exports` and `--nsw` on by default — **done** | small, and it moves the baseline everything after it is measured against. It is also what a private two-scalar ABI for `Result` needs (WP17 §4) |
 | 1a | Array alias domains — **done** | the array header and the element buffer are separate alias domains, so LICM may hoist `len` and `data` out of a loop that writes elements. Worth 1.58x when it landed and, re-measured, 1.63x to 3.96x depending on where the array is held ([wp15-performance.md](wp15-performance.md) §2b, §2c) |
 | 1b | An invariant array header — **candidate 1 refuted; open for candidate 2** | marking the header `!invariant.load` off `readonly T[]` is a miscompile, not a hoist: the whole of `self/` marked that way (7,068 header loads over 60 modules, against an unmarked build of 988,296 bytes) comes out as a 22,048-byte compiler — 2.2% of it — that cannot parse its own argv. The deletion is what reproduces; its severity is not, and earlier heads on the same box did not link at all. What is not refuted is the win — a loop over two array *parameters* has it banked, and the same loop with the array in a **class field**, which is how `self/` is written, is **2.48x** behind and recovers all of it from a hoist written by hand in the source. The item is re-scoped to that hoist done in the emitter, with the field-shape program of [wp15-performance.md](wp15-performance.md) §2c as its acceptance program, its criterion **one length value feeding the loop condition and the bounds check both** (a hoist that leaves two measures 761 ms against 756), and `self/bounds.ts` as the real code with the shape. It needs the whole-program "does not grow an array" fact `attributes.ts` does not have yet |
-| 2 | The `performance` diagnostic class — **done** | the framework — `--no-warn-performance` in `src/index.ts`, `PerformanceWarning` in `src/diagnostics.ts` — plus the two warnings that needed no new analysis, quadratic string building and allocation in a loop, ruled in `docs/LANGUAGE.md` and tested by `tests/cases/perf_*`. **All ten of WP15 §8's rules ship now**: the surviving-bounds-check warning `NL9007` arrived with item 6, `NL9008` and `NL9009` with the flag and the clamp fold they report on, and the struct-padding rule `NL9010` last — a floor accumulator on the layout walk the checker already made, plus the report order the warning list needed before a pass-1 rule could join it, which was written down as its own change first because the order of `--json` is a contract. [wp15-performance.md](wp15-performance.md) §9 item 2 has what measuring those four taught; `docs/LANGUAGE.md` is normative for all ten |
+| 2 | The `performance` diagnostic class — **done** | the framework — `--no-warn-performance` in `self/compile.ts`, the performance warnings in `self/diagnostics.ts` and `self/checker.ts` — plus the two warnings that needed no new analysis, quadratic string building and allocation in a loop, ruled in `docs/LANGUAGE.md` and tested by `tests/cases/perf_*`. **All ten of WP15 §8's rules ship now**: the surviving-bounds-check warning `NL9007` arrived with item 6, `NL9008` and `NL9009` with the flag and the clamp fold they report on, and the struct-padding rule `NL9010` last — a floor accumulator on the layout walk the checker already made, plus the report order the warning list needed before a pass-1 rule could join it, which was written down as its own change first because the order of `--json` is a contract. [wp15-performance.md](wp15-performance.md) §9 item 2 has what measuring those four taught; `docs/LANGUAGE.md` is normative for all ten |
 | 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
-| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/checker/bounds.ts`, `self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
+| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `self/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `self/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. Generic **functions** have landed in both compilers — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 the order for classes, constraints and the whole-program rule. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
@@ -845,7 +864,7 @@ analysis**: wp20 T1's "every handle is joined on every path" becomes a join the
 compiler emits at every block exit, so the rule is not proved and its
 diagnostic is not needed. **Race freedom needs no annotations and no
 detector**: Rust asks for `Send`/`Sync` bounds and Go ships a runtime detector,
-while the fixpoint in `src/codegen/attributes.ts` already proves `readnone` and
+while the fixpoint in `self/attributes.ts` already proves `readnone` and
 `readonly` whole-program, so a parallel body it cannot clear is simply a
 compile error. And **the stage order should reverse**: wp20 builds spawn first
 and data parallelism last, but the data-parallel intrinsic is where the whole
@@ -884,8 +903,8 @@ change cannot alter a byte of IR — the emitter reads `FunctionSig`s and never
 the declaration's syntax kind — so the golden `.ll` files verify the migration
 instead of being work it creates, and the two checker rules it needs accept an
 arrow without admitting the function values Phase 0 forbids. The order is
-forced by the bootstrap: both compilers must accept arrows before `self/` can
-be migrated, and `self/` must be arrows before `function` can be rejected.
+forced by the bootstrap: both compilers had to accept arrows before `self/`
+could be migrated, and `self/` must be arrows before `function` can be rejected.
 Stages A and B are cheap and strictly additive; C and D are 1,401 rewrites for
 no expressiveness, and are worth taking incrementally — new code in arrows, a
 file converted when it is opened for another reason — rather than as a flag day.
@@ -929,13 +948,13 @@ what `async`/`await` is — the only choice is who writes the state machine, and
 both answers were measured. A hand-written coroutine in textual IR is split by
 LLVM 18's default pipeline, and when the handle does not escape its caller the
 frame, the allocation and both split functions are elided outright, under the
-condition `src/codegen/escape.ts` already computes; rustc, meanwhile, uses none
+condition `self/escape.ts` already computes; rustc, meanwhile, uses none
 of those intrinsics and builds a 20-byte struct with a one-byte state
 discriminant and a `switch`, allocating nothing — which is the shape to copy,
 since a struct and a `switch` are constructs this language already has. The
 blocker is that there is nothing to await. Every I/O call in the
 language is synchronous and there is no socket, timer, sleep or poller in
-either compiler or either runtime, so the first deliverable of an async package
+the compiler or either runtime, so the first deliverable of an async package
 would be a poller and a socket type rather than a keyword — a larger package
 than the syntax, for a workload nobody has asked for. What an asker usually
 wants is one of two things that already have answers: overlapping work is
@@ -996,7 +1015,7 @@ overturn the refusal — it finds the one condition under which the refusal does
 not apply, using wp24's own load-bearing finding to do it. wp24 §7 refuses
 `async` as an erased no-op because erasure makes a program mean something
 different under Node. wp24 §2 finds that there is nothing to await: no timer,
-no sleep, no poller, no socket, in either compiler or either runtime. Read the
+no sleep, no poller, no socket, in the compiler or either runtime. Read the
 second against the first and the erasure is exact rather than a lie **whenever
 no two promises are simultaneously live** — because a JavaScript `await` only
 reorders a program when some other pending continuation exists to run in the
