@@ -16,15 +16,22 @@
  * ```
  * node tests/differential/unmodified.js            # table + summary
  * node tests/differential/unmodified.js --verbose  # with the diffs
+ * node tests/differential/unmodified.js --compiler build/nish
  * ```
+ *
+ * Nothing here is rewritten, so **nothing here is frozen either** (WP19 G2.4):
+ * the Node side is the `.ts` on disk and the native side only needs *a*
+ * compiler. `--compiler` names one, and without it `compilerFor` answers stage0
+ * while there is a stage0 and the seed afterwards, which is the whole of what
+ * this check needs to outlive `src/`.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { compilerFor } from "./lib.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
-const cli = path.join(root, "dist", "index.js");
 const prelude = path.join(root, "runtime", "nish.mjs");
 const work = path.join(root, "build", "test", "unmodified");
 
@@ -65,9 +72,9 @@ function programs() {
 }
 
 /** Compile and link with `--number-mode f64`, then run the binary. */
-function native({ name, source }) {
+function native({ name, source }, compiler) {
   const exe = path.join(work, name);
-  const built = spawnSync("node", [cli, source, "--number-mode", "f64", "--link", exe], {
+  const built = spawnSync(compiler.cmd, [...compiler.prefix, source, "--number-mode", "f64", "--link", exe], {
     cwd: root,
     encoding: "utf8",
   });
@@ -93,11 +100,13 @@ function unmodified({ source }) {
   return { stdout: ran.stdout, status: ran.status };
 }
 
-function runUnmodified({ verbose = false } = {}) {
+function runUnmodified({ verbose = false, compiler: spec } = {}) {
+  const compiler = compilerFor(spec);
+  if (compiler.error !== undefined) return { ok: false, summary: compiler.error, detail: "" };
   fs.mkdirSync(work, { recursive: true });
   const rows = [];
   for (const program of programs()) {
-    const a = native(program);
+    const a = native(program, compiler);
     if (a.failed) {
       rows.push({ ...program, outcome: "ERROR", detail: a.failed });
       continue;
@@ -132,7 +141,11 @@ function runUnmodified({ verbose = false } = {}) {
 export { runUnmodified };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = runUnmodified({ verbose: process.argv.includes("--verbose") });
+  const at = process.argv.indexOf("--compiler");
+  const result = runUnmodified({
+    verbose: process.argv.includes("--verbose"),
+    compiler: at >= 0 ? process.argv[at + 1] : undefined,
+  });
   console.log(result.summary);
   if (!result.ok) console.error(result.detail);
   process.exit(result.ok ? 0 : 1);
