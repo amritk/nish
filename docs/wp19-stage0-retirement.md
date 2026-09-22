@@ -715,6 +715,116 @@ cross product does not name is a flag nothing compares**, and the sixteen
 variations are a list somebody wrote, not a property of the compilers. Read
 that list before believing a green number covers a surface.
 
+#### A9. The sixth way this gate lied: a corpus list that named a directory nothing read
+
+```
+PARITY_BEFORE
+PARITY_AFTER
+```
+
+§A8 closed on a sentence — "a flag the cross product does not name is a flag
+nothing compares" — and the other half of it had been true the whole time. **A
+*directory* the corpus does not name is a directory nothing compares**, and
+`CORPUS_DIRS` in `tests/self/corpus.js` did not name
+`tests/differential/corpus`:
+
+```js
+const CORPUS_DIRS = ["tests/cases", "examples", "self", "docs/cookbook", "bench", "tests/parser"];
+```
+
+71 whole programs — WP13's differential set, the one corpus in the repository
+built to hold a compiled program's **behaviour** against the same program
+rewritten to JavaScript and run under Node. Not one of
+them had ever been compiled by stage1: not by `ir_oracle.js`, not by
+`checked_oracle.js`, not by `goldens.js`, not by `nish-cmp.js`, and not under
+any of `--parity`'s sixteen variations. Measured on 2026-09-22 on `5c56ef3`,
+by naming the files on the two oracles' command lines:
+
+```
+69/69 programs agree (75 modules, 18470 IR lines), 0 skipped, 2 rejected by stage1    ir_oracle.js
+69/69 files agree (1486 dump lines), 0 skipped, 2 rejected by stage1                  checked_oracle.js
+```
+
+**Two of the 71 were compile errors, and the disagreement count over the whole
+directory is exactly those two.** `corpus/str_template` and
+`corpus/conversions_roundtrip` both write ``-1 / z`` with ``z: f64``, and
+stage1 answered ``Operator `/` requires two operands of the same numeric type,
+got i32 and f64`` where stage0 compiles it. Nothing else differed: every one of
+the 69 programs stage1 accepted is byte-identical IR and a byte-identical
+`--emit-checked` dump. The two are one defect — `docs/LANGUAGE.md` says "`-5`
+and `(5)` count as the literal" and stage1 matched the bare spelling only, on
+the left-hand operand — and its reach is far wider than the corpus showed:
+every operator (`+ - * / % < <= > >= === !==`), every typed right operand (a
+variable, a field, an element, a user call, a conversion call), every numeric
+target type, and `(1) / z` as well as `-1 / z`. `tests/cases/math_literal_operand_forms`
+is the case that asks the question from every run onwards, and
+`reject_neg_literal_unpeekable` pins the boundary it must not cross.
+
+**How this one stayed hidden, which is a shape the previous five do not
+cover.** §A5 lists two ways a closed gate reopens in silence, §A6 a third,
+§A7 a fourth, §A8 a fifth. Each of those five is about a *measurement* going
+stale or a *variation* going unwritten. This one is about the corpus's own
+definition, and three things held it up:
+
+1. **The document said the opposite.** `.claude/selfhost.md` listed
+   `tests/differential/corpus/` as part of the corpus, in the same sentence
+   that explains why the corpus has to answer each program's flags. Anybody
+   checking whether those programs were compared read that sentence and
+   stopped. It was the only statement on the subject and it was false.
+2. **The tree already held the contradiction, in a comment, and nobody joined
+   the two.** `scripts/arrow-verify.mjs` carried a `differentialPrograms()` of
+   its own whose header said it plainly — "They are not in `CORPUS_DIRS`
+   because the stage1 oracles do not read them" — because that sweep rewrites
+   a file whether an oracle compiles it or not and therefore had to compile
+   them. A function whose *existence* was the evidence, sitting beside a
+   document that denied it. That is §A5's rule about comments one more time,
+   with the direction reversed: the comment was right and the document was
+   wrong, and neither was read against the other.
+3. **Every counter in every oracle read zero.** A directory outside
+   `CORPUS_DIRS` is not a skip, not a declaration and not a rejection — it is
+   absent, so no summary line has a column for it. G1's criterion is that the
+   "stage0 rejects it" / "stage1 rejects it" counters read zero, and they did,
+   over a corpus that excluded the programs where the answer was two.
+   **A count of the things that got in cannot report the things that never
+   arrived**, which is why the remedy is the enumeration and not a number.
+
+`programs()` also read only the files directly in a directory, so the
+multi-module programs were outside every oracle on a second, independent
+rule: `const_modules/`, `modules_basic/` and `modules_diamond/` arrived with
+the directory above, and **`examples/multi/` has been absent for as long as it
+has existed**. A directory holding a `main.ts` is a program now, which is what
+`tests/link/` and `tests/differential/lib.js` have always said.
+
+**Every count of the corpus in this repository moves with this, and they are
+worth naming rather than leaving to be found.** What this widening adds is 74
+programs — the 71, `examples/multi/main.ts`, and the two cases the checker fix
+ships with — so `tests/self/goldens/checked.txt` goes from 344 programs and
+5,981 dump lines to **417 and 7,536**, `nish-cmp`'s corpus grows by the same
+74, and G1's parity counts are re-derived above and in §5 and §5a. The oracle
+rows in `.claude/selfhost.md` are re-derived as well — `checked_oracle.js`
+**480/480**, `reject_oracle.js` **378/378**, `ir_oracle.js` **509/509**,
+`interop_oracle.js` **80** sidecars against 314, 222, 324 and 60 written there
+— and only part of each of those four deltas is this change: **those rows were
+already stale**, the reject and interop ones entirely so, since neither of
+those oracles reads a program from this directory. A row nobody re-derives
+drifts whether or not somebody widens the corpus underneath it, which is the
+same lesson in its cheapest form. §2B's table still says `checked_oracle.js`
+covers 319 programs and `goldens/checked.txt` 262 of them; that cell is left to
+the change that owns that section, and this sentence is here so the two cannot
+be read as agreeing.
+
+**What stops the next one is the enumeration, not this section.**
+`tests/differential/corpus` is in `CORPUS_DIRS`, `arrow-verify.mjs`'s private
+enumerator is deleted so there is one rule again, and the corpus sentence in
+`.claude/selfhost.md` now carries what it cost to find out that it was wrong.
+And one thing found on the way out: **`checked_oracle.js` returned 0 when
+stage1 rejected a corpus program.** It printed `N rejected by stage1` in its
+summary, kept the names behind `--verbose`, and exited green — so of the two
+oracles that meet these two programs, only `ir_oracle.js` would have failed on
+them. It fails now, prints the rejection whether or not `--verbose` was asked
+for, and both oracles were watched exiting 1 on the two programs with the
+checker fix reverted.
+
 #### Should `--parity` run in CI?
 
 **Yes, and not in the `test` job — and it does now.**
@@ -1054,6 +1164,19 @@ question than it looks: *the corpus, under the variations somebody listed*.
 Both halves of that are a lower bound — which is why #94 still reproduces on a
 tree this gate calls green, and why the variation list belongs in the reading of
 any number this section reports.
+
+**And the corpus half is a lower bound twice over, which §A9 is what it took to
+learn.** "The corpus" is not the repository's Nish programs; it is the
+directories `CORPUS_DIRS` names, and until 2026-09-22 it did not name
+`tests/differential/corpus` — 71 whole programs, the only set in the
+repository about what a compiled program *does*, compiled by stage1 nowhere in
+the suite, with two compile errors waiting in them. `.claude/selfhost.md` said
+the corpus held them. So the standing qualification has a second clause: the
+difference set is a lower bound over *the corpus somebody enumerated* as well
+as over the programs and the variations somebody wrote, and every counter in
+every oracle read zero throughout, because **a count of what got in cannot
+report what never arrived**. Before quoting a number from this gate, read
+`CORPUS_DIRS` and not only the summary line.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 

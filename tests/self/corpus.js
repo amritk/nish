@@ -106,8 +106,12 @@ function programs() {
     for (const name of fs.readdirSync(full).sort()) {
       const file = path.join(full, name);
       if (!name.endsWith(".ts")) {
+        // `<entry>/main.ts` existing is the whole test: it is false for a file
+        // and for a directory that is not a program, so nothing here has to
+        // `stat` an entry — which would throw on a dangling symlink the tree
+        // is entitled to hold (`tests/link/package_symlink` is one).
         const main = path.join(file, "main.ts");
-        if (fs.statSync(file).isDirectory() && fs.existsSync(main)) files.push(main);
+        if (fs.existsSync(main)) files.push(main);
         continue;
       }
       if (fs.existsSync(file.replace(/\.ts$/, ".err"))) continue;
