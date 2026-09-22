@@ -46,11 +46,14 @@
  * Two things report as counted skips against a compiler that is not stage0: the
  * spelling of the tool's own name in the usage text, which stage1's driver has not
  * adopted yet, and the whole internal-error group, which is one skip because what
- * is missing is one thing — `NISH_SIMULATE_ICE`, a test hook stage0 has and a
- * self-hosted compiler does not. stage1 answers an internal error with the same
- * code and the same report (`self/ice.ts`) and has nothing to provoke one with. A
- * Node entry point is what stage0 is and what stage1 is not, which is how this
- * file tells them apart: the same test `tests/diagnostic_coverage.js` makes.
+ * is missing is one thing — `NISH_SIMULATE_ICE`, the test hook that provokes an
+ * internal error on demand. stage1 answers an internal error with the same code
+ * and the same report (`self/ice.ts`). For the usage text, a Node entry point is
+ * what stage0 is and what stage1 is not, which is how this file tells them apart:
+ * the same test `tests/diagnostic_coverage.js` makes. For the hook it asks the
+ * compiler instead — a run with the variable set that compiles cleanly has no
+ * hook — so the group runs against whichever compiler has one, stage1 included
+ * once `self/` grows it.
  *
  * So `build/nish-cli` is 69 checks and 0 skips against stage0, and 57 checks and
  * those 2 skips against `build/nish` — the numbers the CI bootstrap job prints.
@@ -212,7 +215,7 @@ class Cli {
   head: string[];
   /** What the report calls it. */
   label: string;
-  /** Whether it is a Node entry point, and so has stage0's `NISH_SIMULATE_ICE` hook. */
+  /** Whether it is a Node entry point, which today means stage0. */
   node: boolean;
 
   constructor(spec: string) {
@@ -563,9 +566,14 @@ const checkToolchain = (t: Suite, cli: Cli, env: boolean): void => {
 };
 
 /**
- * Band 70, the compiler's own bug, reached through stage0's `NISH_SIMULATE_ICE`
- * hook: the report names the input, asks for a bug report, and keeps the stack
- * behind `NISH_DEBUG=1`.
+ * Band 70, the compiler's own bug, reached through the `NISH_SIMULATE_ICE` hook:
+ * the report names the input, asks for a bug report, and keeps the stack behind
+ * `NISH_DEBUG=1`.
+ *
+ * Whether the compiler has the hook is probed rather than assumed from what kind
+ * of file it is. The first run sets the variable on a program that compiles, so
+ * an exit 0 is a compiler with no hook — a counted skip — and any other answer is
+ * the hook's, which the checks below then hold to the contract.
  */
 const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
   if (!env) {
@@ -575,14 +583,17 @@ const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
     );
     return;
   }
-  if (!cli.node) {
-    // Not a gap: stage1 answers 70 with the same report (`self/ice.ts`), and the
-    // hook that provokes one on demand is stage0's alone.
-    t.skip("an internal compiler error", `${cli.label} has no NISH_SIMULATE_ICE hook (self/ice.ts)`);
-    return;
-  }
   const source = `${WORK}/${FIXTURE_OK}`;
   const run = cli.run("ice", ["NISH_SIMULATE_ICE=1"], [source, "-o", `${WORK}/ice.ll`]);
+  if (run.status === 0) {
+    // Not a gap: a compiler without the hook still answers 70 with the same
+    // report when it really breaks (`self/ice.ts`); it has nothing to provoke one with.
+    t.skip(
+      "an internal compiler error",
+      `${cli.label} has no NISH_SIMULATE_ICE hook: it compiled ${FIXTURE_OK} with the variable set`
+    );
+    return;
+  }
   if (!t.eqI32("an internal compiler error exits 70", run.status, 70)) {
     return;
   }
