@@ -159,8 +159,8 @@ handlers live on opposite sides of the cycle.
 ## How `self/` is tested
 
 Every tool below builds its compiler from `self/` with the seed
-(`tests/self/seed.js`: `--seed`, then `NISH_BOOTSTRAP`, then `build/seed`, then
-`build/nish`), and all of them are wired into `tests/run.js`, skipped without
+(`tests/self/seed.js`: `--seed`, then `NISH_BOOTSTRAP`, then `build/nish`, then
+the fetched release in `build/seed/`), and all of them are wired into `tests/run.js`, skipped without
 clang.
 
 | Tool | Compares |
