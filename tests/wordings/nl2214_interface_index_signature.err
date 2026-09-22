@@ -1,1 +1,1 @@
-Index signatures are not supported in interface `Table` (object layout is fixed)
+syntax error: an interface holds only annotated fields

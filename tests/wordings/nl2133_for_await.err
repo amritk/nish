@@ -1,1 +1,1 @@
-`for await` is not supported
+syntax error: expected `(`, found `IDENT`

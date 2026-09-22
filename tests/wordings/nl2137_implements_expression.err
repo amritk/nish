@@ -1,1 +1,1 @@
-`implements` must name a declared interface
+syntax error: expected `{`, found `.`

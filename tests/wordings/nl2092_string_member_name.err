@@ -1,1 +1,1 @@
-Members of `Point` must have plain identifier names
+syntax error: a class member is a field, a method or a constructor, found `STRING`
