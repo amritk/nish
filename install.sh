@@ -12,9 +12,10 @@
 # architecture by .github/workflows/release.yml before the release existed.
 #
 # The other way in is npm -- `npm install -g @amritk/nish` -- which gets the
-# same binary through per-platform packages, and falls back to a compiler that
-# runs under node on a platform this does not cover. docs/INSTALL.md §2 has
-# both, and says which to pick.
+# same binary through per-platform packages. It covers the same platforms and no
+# more: since 0.6.0 there is no compiler inside that package to fall back to, so
+# on anything else it refuses by name rather than serving something slower.
+# docs/INSTALL.md §2 has both channels, and says which to pick.
 set -eu
 
 REPO="amritk/nish"
@@ -175,9 +176,11 @@ fi
 asset="$(nish_asset "$(uname -s)" "$(uname -m)" || true)"
 if [ -z "$asset" ]; then
   die "no prebuilt compiler for $(uname -s) on $(uname -m).
-  The npm package works anywhere node does -- it falls back to a compiler that
-  runs under node on a platform with no binary of its own:
-      npm install -g @amritk/nish"
+  This project publishes one for x86_64/aarch64 on linux and darwin, and that
+  is the whole list -- the npm package refuses on anything else rather than
+  falling back, because there is no second compiler in it to fall back to.
+  docs/INSTALL.md has what is left for this platform: bootstrapping from a
+  released nish that runs here, in a checkout of the repository."
 fi
 
 command -v curl >/dev/null 2>&1 || die "curl is required"

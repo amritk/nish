@@ -37,8 +37,13 @@
  * **This script may never fail an install.** It exits 0 whatever happens --
  * no prebuilt binary for this platform, a read-only `node_modules`, scripts
  * disabled, a partially written package. Every one of those leaves the shim in
- * place, which is a working compiler. A postinstall that can break `npm ci` is
- * a worse bug than the startup cost it exists to remove.
+ * place, and the shim is the mechanism this only optimises: where a prebuilt
+ * binary exists it finds it, and where none does it says so and exits 3. What
+ * it is *not*, since 0.6.0, is a compiler of its own -- `dist/` is no longer in
+ * the package -- so "the shim is still there" means the command still behaves
+ * correctly, not that it can still compile on a platform with no binary. A
+ * postinstall that can break `npm ci` is a worse bug than the startup cost it
+ * exists to remove.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -52,14 +57,16 @@ const swap = async () => {
   // here installs this package's own optionalDependencies -- and without this
   // guard, the first `npm ci` after they are published would overwrite the
   // tracked `bin/nish` with a binary and leave the working tree dirty. The
-  // same check `scripts/bootstrap.sh` makes, for the same reason.
-  if (fs.existsSync(path.join(root, "src", "launcher.ts"))) return "a checkout, so the shim stays";
+  // landmark is `self/compile.ts`, which is the check `scripts/bootstrap.sh`
+  // makes and is not in `files`; it used to be `src/launcher.ts`, which stopped
+  // being a landmark when the launcher moved into `bin/` and ships.
+  if (fs.existsSync(path.join(root, "self", "compile.ts"))) return "a checkout, so the shim stays";
 
   const shim = path.join(root, "bin", "nish");
   if (!fs.existsSync(shim)) return "no bin/nish to replace";
 
-  const packaging = path.join(root, "dist", "packaging.js");
-  if (!fs.existsSync(packaging)) return "dist/ is not built yet";
+  const packaging = path.join(root, "bin", "packaging.js");
+  if (!fs.existsSync(packaging)) return "bin/packaging.js is missing";
   const { assetFor, platformPackageName } = await import(pathToFileURL(packaging).href);
   const asset = assetFor(process.platform, process.arch);
   if (asset === null) return `no prebuilt binary for ${process.platform}/${process.arch}`;

@@ -62,11 +62,13 @@ npm install -g ./amritk-nish-0.4.0.tgz ./amritk-nish-x86_64-linux-0.4.0.tgz
 ```
 
 > [!NOTE]
-> Installing the npm tarball on its own also works and gives you the TypeScript
-> compiler running under Node — the same compiler, about eight times slower to
-> compile with, and no C toolchain needed to install it. That is also what a
-> platform with no prebuilt binary gets. [docs/INSTALL.md](docs/INSTALL.md) §2
-> has the table of what is built for what.
+> **Install the pair.** The main package is a launcher and carries no compiler:
+> installed on its own it has nothing to hand over to and says so, exiting 3.
+> The same is true on a platform this project publishes no binary for — musl,
+> FreeBSD, 32-bit anything — which since 0.6.0 gets a diagnostic naming the four
+> that do rather than the TypeScript compiler under Node that used to ship
+> beside it. [docs/INSTALL.md](docs/INSTALL.md) §2 has the table of what is
+> built for what, and what is left for a platform outside it.
 
 > [!TIP]
 > Building from source works just as well: `git clone`, `npm install`,
@@ -461,10 +463,13 @@ npm run bootstrap                   # build/nish, built by itself
 build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-The released `.tgz` still ships the Node compiler: it is the seed every
-bootstrap starts from and the oracle every `self/` phase is compared against.
-What it is no longer is the only one that can emit DWARF, write the interop
-sidecars or link an executable — the self-hosted compiler does all three, the
+The Node compiler is still the seed every bootstrap starts from and the oracle
+every `self/` phase is compared against. What it no longer is, since 0.6.0, is
+something the released `.tgz` ships: the npm package installs the native
+compiler for the host and refuses on a platform that has none, so `dist/` stays
+in the repository for those two jobs and travels nowhere
+([wp12](docs/wp12-release.md#which-compiler-the-package-ships)). Nor is it the
+only one that can emit DWARF, write the interop sidecars or link an executable — the self-hosted compiler does all three, the
 first two byte for byte the same, and it answers `--target host` and `--emit-ast` too.
 No flag is stage0's by name any more; what differs is what `--emit-ast`
 *prints*, since each compiler dumps its own tree — stage0 the `typescript`
