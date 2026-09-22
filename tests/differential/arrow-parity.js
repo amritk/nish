@@ -92,7 +92,22 @@ for (let i = 0; i < argv.length; i++) {
   }
 }
 
-const { rewriteProgram } = await import(pathToFileURL(rewriteModule).href);
+// The rewriter drives stage0's own `Compilation`, so this guard is one of the
+// things that dies with `src/` (WP19 §6): the property it checks is about how
+// `rewrite.js` treats the two spellings, and after R6 there is no `rewrite.js`
+// to check. It says so and exits 2 rather than printing a module-resolution
+// stack trace, because a harness that cannot run should read as a decision.
+let rewriteProgram;
+try {
+  ({ rewriteProgram } = await import(pathToFileURL(rewriteModule).href));
+} catch (e) {
+  console.error(
+    `arrow-parity: the rewriter is unavailable, so there is nothing to compare: ${e.message}\n` +
+      "      This guard is stage0's (WP19 §6). The frozen rewrites in tests/differential/goldens/\n" +
+      "      are what carries the WP13 comparison once stage0 is gone."
+  );
+  process.exit(2);
+}
 
 /** The one rewritten module of a single-module fixture, as the text Node would run. */
 const rewriteFixture = (stem) => {

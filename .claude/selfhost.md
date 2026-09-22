@@ -224,15 +224,20 @@ flags each program is compiled with, so that a program needing
 
 **`tests/differential/corpus/` and the directory programs joined it on
 2026-09-22, and this sentence claimed them for weeks before they were in it**
-(wp19 §A5, the sixth entry). 71 whole programs — the set that pins the
-language's *runtime* behaviour — had never been compiled by stage1 by any
-oracle or by `--parity`, and two of them did not compile at all
-(``-1 / z`` with ``z: f64``, `docs/LANGUAGE.md`'s "`-5` and `(5)` count as the
-literal"). Both the corpus list here and the sentence in §5a's G1 row read
+(wp19 §A9, the sixth entry in §A5's series). 71 whole programs — the set that
+pins the language's *runtime* behaviour — had never been compiled by stage1 by
+any oracle or by `--parity`, and two of them did not compile at all
+(``-1 / z`` with ``z: f64``, against `docs/LANGUAGE.md`'s "`-5` and `(5)` count
+as the literal"; fixed in `self/expressions.ts`). WP19 G2.4 found the same two
+from the other side, by pointing the differential harness's native half at the
+seed — `docs/wp19-stage0-retirement.md` §6 item 6 — which is what it takes to
+notice a program nothing compares: two independent routes to one defect, and
+neither of them this list. Both the corpus list here and §5a's G1 row read
 green over a set that silently excluded them. When this list changes, re-derive
-the numbers that quote it rather than editing the list alone. The fuzzer's
-`--stage1` mode has no corpus at all: it generates its programs from a seed, so
-the only thing that reproduces a failure is the seed it prints
+the numbers that quote it rather than editing the list alone.
+
+The fuzzer's `--stage1` mode has no corpus at all: it generates its programs
+from a seed, so the only thing that reproduces a failure is the seed it prints
 (`--stage1 --seed <s> --count 1`) and the program it saves under
 `build/test/differential/`.
 
@@ -306,10 +311,17 @@ node tests/self/goldens.js --update         # regenerate these alone
 ```
 
 Regenerate from **stage1**, never from stage0: stage1 is what survives, and the
-four oracles are what say the two agree. The seed that builds stage1 is
-`--seed`, then `NISH_BOOTSTRAP`, then `build/nish`; there is deliberately no
-fourth answer, because reaching for stage0 is the dependency the gate exists to
-remove. `self/`'s dump is stored deduplicated by module — 19.9 MB of live text,
+four oracles are what say the two agree. **One store in the repository is the
+exception, on purpose**: `tests/differential/goldens/rewrites.txt`, the WP13
+oracle's JavaScript, whose reference genuinely is stage0's *checker* — the
+rewrite needs the static type of every expression and stage1 has no rewriter to
+ask — which is exactly why it had to be frozen before stage0 went rather than
+repointed (`tests/differential/goldens.js`, and wp19 §6 item 6 for what the
+freeze does not save).
+
+The seed that builds stage1 is `--seed`, then `NISH_BOOTSTRAP`, then
+`build/nish`; there is deliberately no fourth answer, because reaching for
+stage0 is the dependency the gate exists to remove. `self/`'s dump is stored deduplicated by module — 19.9 MB of live text,
 1.0 MB of distinct text — and the comparison still reads every byte of it.
 
 ## Habits that have paid off

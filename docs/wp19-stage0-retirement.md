@@ -908,7 +908,7 @@ decision and a leap:
 | `lexer_oracle.js` | the `typescript` package's scanner | **survives** — it never read `src/`, and since G2.3 it does not build with it either. Costs one devDependency |
 | `parser_oracle.js` | the `typescript` package's parser | **survives**, same reason |
 | `support_oracle.js` | `node:path`, `Buffer`, `Map`, `JSON.stringify` | **survives, less two families.** This row was wrong: the oracle also compares `irEscape` and `f64Hex` / `f32Hex` against stage0's own `dist/codegen/emit/*.js`. Those lines are dropped from both sides, counted and named, when there is no `dist/` — recovering them as a golden is unfinished G2.4 work |
-| `tests/differential/` default mode | the same program rewritten to JS and run under Node (WP13) | **survives** — it is a *semantic* oracle and never needed a second compiler |
+| `tests/differential/` default mode | the same program rewritten to JS and run under Node (WP13) | **survives only because it was frozen, and this row was wrong.** It needs no second *compiler*, but the JavaScript it compares against is typed by stage0's `Compilation`, which `rewrite.js` drives in process — so `src/` takes the reference generator with it. `tests/differential/goldens/rewrites.txt` holds the rewrite of all 176 programs and reproduces the live verdicts exactly (§6 item 6); what dies with the rewriter is the fuzz differential against Node and the arrow-parity guard |
 | `reject_oracle.js` | each case's own `.err` fragments | **survives**; the fragments are checked in, not derived from stage0 |
 | `tests/cases/*.ll` (150 goldens) | checked-in IR | **survives**, and becomes the primary regression net |
 | `types_oracle.js` | `src/types.ts` | **dies** |
@@ -921,7 +921,13 @@ decision and a leap:
 | `bootstrap.js`, first equality | `IR(stage0, self/) == IR(stage1, self/)` | **dies** |
 | `bootstrap.js`, second and third | the fixed point, stage3 == stage2 | **survive** — they never involved stage0's output |
 
-Six oracles and one fuzzer mode die. The replacement is Go's `toolstash -cmp`:
+Six oracles and **both** fuzzer modes die, and the row above them is the one
+that had to be re-read: a *semantic* oracle needs no second compiler and still
+needs stage0 to produce the JavaScript it compares against. `--stage1` is the
+mode this table named; the default mode, which compares a generated program
+with Node, goes for the same reason the row above it nearly did — the reference
+is `rewrite.js`, and a program invented from a seed has no frozen one to fall
+back on (§6 item 6). The replacement for the six is Go's `toolstash -cmp`:
 compare **the seed release against HEAD** over the same corpus, byte for byte,
 and require a named reason for every file that differs. That is a weaker
 property — it catches regressions rather than disagreements, and it cannot find
@@ -941,6 +947,7 @@ one implementation's opinion:
 | `types_oracle.js` | 119 lines: every LLVM type, alignment, printed name, flag and assignable pair | `goldens/types.txt`, verbatim | 3.6 KB |
 | `diagnostics_oracle.js` | 570 lines: the line/column index over every offset, the excerpt rendering, the `--json` shape, the sink's order and its cut | `goldens/diagnostics.txt`, verbatim | 19 KB |
 | `symbols_oracle.js` | 25 lines: what a name resolves to, what it reads as, where a narrowing ends | `goldens/symbols.txt`, verbatim | 1.0 KB |
+| `rewrite.js`, the WP13 reference | 176 whole programs rewritten to JavaScript and run against Node: stdout, exit status and terminating signal, byte for byte | `tests/differential/goldens/rewrites.txt`, 358 modules stored by content | 235 KB |
 
 The `self/` dumps are 19.9 MB raw because a `self/` program is loaded whole and
 each of the 57 entries re-dumps every module it imports; the distinct content
@@ -1266,6 +1273,13 @@ Specifically:
    checked-in goldens *before* they are deleted — in particular every
    diagnostic wording, which is presently proved by comparison and would
    otherwise be proved by nothing.
+5. The WP13 differential oracle's *reference* is recovered the same way, and
+   for a reason this gate did not originally see: §2B had it surviving, and it
+   does not, because `rewrite.js` types its JavaScript with stage0's own
+   `Compilation`. **Done.** `tests/differential/goldens/rewrites.txt` is the
+   rewrite of all 176 programs, frozen while stage0 exists; the frozen run
+   reproduces the live one's 176 verdicts exactly, and what could not be frozen
+   is priced in §6 item 6 rather than discovered later.
 
 **The check.** The numbers, in this document, on the day: how many programs
 each dying oracle covered, and what covers them afterwards. For the wordings
@@ -1275,8 +1289,8 @@ over both compilers, so the gate cannot be met once and then drift: a registry
 code that no program provokes fails the run until somebody writes the case or
 writes the reason.
 
-**State: item 4 is met, and here is the run that says so.** Measured on this
-tree on **2026-09-19**, `node tests/diagnostic_coverage.js --report`:
+**State: items 4 and 5 are met, and here are the runs that say so.** Measured
+on this tree on **2026-09-19**, `node tests/diagnostic_coverage.js --report`:
 
 ```
 wordings: 126/126 cases pin their code, coverage 344/410 codes, 66 unreachable, uncoded=4 (compiler dist/index.js)
@@ -1288,6 +1302,28 @@ and the same tool over stage1, which is the half that outlives stage0
 ```
 wordings: 83/126 cases pin their code (41 refused by the parser, 2 answered differently), coverage 264/410 codes, 66 unreachable, uncoded=5 (compiler build/self/compile)
 ```
+
+Item 5's run is `node tests/differential/run.js`, twice on 2026-09-22 with
+nothing between the two but where the JavaScript came from:
+
+```
+164/176 programs agree with Node (51.4 s, 4 jobs); 0 unexpected failure(s).   # live rewrite
+164/176 programs agree with Node (50.1 s, 4 jobs); 0 unexpected failure(s).   # frozen rewrite
+```
+
+and the 176 rows above each summary are the same verdicts in the same order,
+compared line by line rather than by their totals. With `src/` and `dist/`
+moved aside the harness resolves both halves itself — the seed for the native
+side, the store for the Node side — and answers `162/176`, the difference being
+two programs stage1's checker refuses rather than anything about the freeze
+(§6 item 6).
+
+**Those numbers moved once already, and the way they moved is the gate working.**
+They were 163/175 when this section was written; #138 landed a corpus program
+with an entry point, the store had no record for it, and the verify failed —
+`175/176 programs fresh, the store differs from the live rewrite` — rather than
+comparing the 175 it had and reporting a green 175. One `npm run test:update`
+later the store covers 176 and the run agrees with Node on 164 of them.
 
 The four goldens are in `tests/self/goldens/` with their numbers in §2B. **344
 of the 410 registry codes are provoked by a program that outlives stage0** and
@@ -2591,6 +2627,106 @@ is one commit that does nothing else.
    nish/text`, passes on the old fallback too; its value is that it now runs
    through the platform package rather than through `dist/`, which is the half
    of this block that was never tested before (§5a item 1).
+
+6. **The WP13 differential oracle can no longer make its own reference, and
+   two of its checks stop existing.** §2B listed this one as surviving R6 and
+   the row was wrong; it is corrected there rather than quietly, because a row
+   that says "survives" is what let R6 be planned as one commit. The oracle
+   needs no second *compiler* — it compares a native binary with the same
+   program under Node — but the JavaScript it compares against is produced by
+   `tests/differential/rewrite.js`, which drives stage0's `Compilation` in
+   process, because `i32`, `u8`, `f32` and `i64` are all just `number` to
+   `tsc`'s own checker and the rewrite has to know which is which. Delete
+   `src/` and the reference *generator* goes with it. This is the only oracle
+   in the repository about **runtime semantics** rather than emitted text: no
+   `.ll` golden, no `nish-cmp` row and no parity variation can see a program
+   that prints the wrong number.
+
+   **What is saved.** G2.4's move, taken on 2026-09-22 while stage0 still
+   exists: the rewrite of all 176 programs is checked in as
+   `tests/differential/goldens/rewrites.txt` — 358 modules, 354 distinct
+   bodies, 235 KiB — and `tests/differential/run.js` compares against the store
+   instead of against the rewriter (`--frozen`, and automatically when there is
+   no `dist/`). Neither half of the harness names stage0 any more: the native
+   side takes `--compiler` or the seed protocol's answer, as the four surviving
+   oracles do since G2.3.
+
+   **What it is worth, measured rather than claimed.** The frozen run
+   reproduces the live one program by program and not merely in total —
+   `164/176 programs agree with Node ...; 0 unexpected failure(s)` from both,
+   the same 176 verdicts in the same order, the twelve `known-failures.txt`
+   decisions among them. `npm test` then requires the store to be byte
+   identical to what the live rewriter produces today, so what is frozen stays
+   what the oracle actually compares, and every record carries the SHA-256 of
+   each source module the program loads: a program whose source has moved
+   fails as `STALE` ahead of `known-failures.txt`, because a frozen reference
+   that silently compares against changed source is worse than no oracle at
+   all — it reads as coverage.
+
+   **What cannot be frozen, and therefore dies:**
+
+   - **The fuzz differential against Node** — `fuzz.js` in its default mode,
+     which `npm test` runs ten programs of and which `--count 200` is the
+     larger form of. Its programs are generated from a seed and are not checked
+     in, so there is nothing to freeze: a reference for a program that does not
+     exist yet has to be *computed*, which is the one thing a store cannot do.
+     The generator itself survives, and after R6 what it can still ask is
+     whether a generated program compiles and runs, not whether it computes
+     what Node computes. (`fuzz.js --stage1`, the IR comparison, was already
+     priced as dying in §2B.)
+   - **The arrow-parity guard**, `arrow-parity.js`. Its subject *is* the
+     rewriter — that `function f() {}` and `const f = () => {}` rewrite to the
+     same JavaScript, the WP22 defect that had nine corpus programs compared
+     with JavaScript's own `console.log` left in them — so freezing its output
+     would leave a check that two checked-in files match each other. What
+     carries the risk instead of the check is the store: its text was generated
+     while that guard was green, and it cannot drift without the staleness
+     guard or the per-body hash failing on read.
+   - **The store's fidelity check**, which is the other half of `goldens.js`:
+     the whole file rebuilt from the live rewriter and compared byte for byte.
+     Freshness survives it — every program has a record, its sources still
+     hash, no record is orphaned, the header's counts are the store's own — but
+     freshness cannot see a record that names the wrong module while holding
+     that module's hash, and nothing short of the rewriter can. So after R6 the
+     store is trusted the way `tests/cases/*.ll` is trusted, and is weaker for
+     exactly the reason cost 2 gives.
+   - **A corpus program added after R6 gets no differential coverage.** Until
+     then a new program is one `npm run test:update` away from a frozen
+     rewrite; afterwards `goldens.js` fails it by name, and the only honest
+     answers are to write the program's coverage off or to port the rewriter.
+     That is an ongoing cost, not a one-off: the corpus has grown from 50
+     programs to 71 over this project's life, and every future addition pays
+     it.
+
+   **The way out, for whoever wants it back.** stage1 prints the same type
+   information the rewrite needs — `--emit-checked` is the dump the checked
+   goldens are made of — so the rewriter can be ported onto it and the store
+   goes back to being generated rather than frozen. It is a project of its own
+   and is deliberately not R6's: the store is what makes R6 possible without
+   losing the oracle, and the port is what would make the oracle live again.
+
+   **One finding this work turned up, which is a cost of its own.** With the
+   native half moved to stage1, two of the 71 corpus programs stop compiling:
+   `corpus/str_template` and `corpus/conversions_roundtrip`, both on `-1 / z`
+   with `z: f64`, where stage0 types the negated literal from its context and
+   stage1 answers ``Operator `/` requires two operands of the same numeric
+   type, got i32 and f64``. Neither `--parity` nor the IR oracle could have
+   found it, and the reason is worth more than the defect: `CORPUS_DIRS` in
+   `tests/self/corpus.js` does not include `tests/differential/corpus`, so
+   **those 71 programs are compiled by stage1 nowhere in the suite** — G1's
+   standing qualification, that the difference set is a lower bound over a
+   corpus somebody wrote, with a sixth instance. The frozen run with `src/` and
+   `dist/` moved aside therefore read `162/176` and named the two.
+
+   **Both halves of that are closed, and §A9 is the record.** `CORPUS_DIRS`
+   names `tests/differential/corpus` now, so the 71 are compiled by stage1 by
+   `ir_oracle.js`, `checked_oracle.js`, `goldens.js` and `--parity` like
+   everything else, and the defect they found is fixed in
+   `self/expressions.ts` — `docs/LANGUAGE.md` says "`-5` and `(5)` count as the
+   literal" and stage1 matched only the bare spelling on an operator's left.
+   R6 inherits neither. What this paragraph found from the differential side
+   and §A9 found from the corpus side is one defect reached by two routes, and
+   the route that should have reached it first was the corpus.
 
 Against that: every construct is written once instead of twice, `self/` gets a
 one-release lag instead of a permanent freeze, the compiler stops depending on
