@@ -62,8 +62,8 @@ import { codeFor, TOOLCHAIN } from "./codes";
 import { internalError, simulatedInternalError } from "./ice";
 import { resolveTarget, supportedTargets } from "./target";
 
-const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       compile -v, --version | -h, --help";
+const usageText = (): string =>
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} -v, --version | -h, --help`;
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -235,9 +235,54 @@ const reportToolchainFailure = (message: string, json: boolean): void => {
   console.error(message);
 };
 
+/**
+ * The install line for a C toolchain on each platform, the one this compiler is
+ * running on marked with `>`, so the reader finds theirs without being told
+ * which it is.
+ */
+const toolchainInstallHint = (): string => {
+  const lines: string[] = [];
+  lines.push(`${platformMark("linux")} Ubuntu / Debian:  sudo apt-get install -y clang-18 lld-18 llvm-18`);
+  lines.push(`${platformMark("linux")} Fedora:           sudo dnf install clang lld llvm`);
+  lines.push(`${platformMark("darwin")} macOS:            brew install llvm@18   (or: xcode-select --install)`);
+  lines.push(`${platformMark("win32")} Windows:          use WSL (Ubuntu) and follow the Ubuntu line`);
+  return lines.join("\n");
+};
+
+/** `>` beside the install line for the platform this compiler is running on. */
+const platformMark = (platform: string): string => (process.platform === platform ? ">" : " ");
+
+/**
+ * Whether the C compiler `scripts/build.sh` will use can be run at all: `CC`
+ * when it is set and not empty, `clang` otherwise -- the rule the script itself
+ * follows -- asked for `--version` with both streams discarded. Empty when it
+ * answers 0, and otherwise the whole report, which names what was run, what it
+ * answered, and how to install one.
+ */
+const missingToolchain = (): string => {
+  const fromEnvironment = getenv("CC");
+  const cc = fromEnvironment !== null && fromEnvironment.length > 0 ? fromEnvironment : "clang";
+  const probe: string[] = [];
+  probe.push(cc);
+  probe.push("--version");
+  const status = spawnSyncTo(probe, "/dev/null", "/dev/null");
+  if (status === 0) {
+    return "";
+  }
+  const why = status < 0 ? `${cc} could not be run` : `\`${cc} --version\` exited with ${status}`;
+  const lines: string[] = [];
+  lines.push(`--link: no usable C compiler found (${why}).`);
+  lines.push(
+    `${CLI} needs clang (LLVM 18 recommended) on PATH, or CC=<compiler>, to build a binary. Install it with:`
+  );
+  lines.push(toolchainInstallHint());
+  lines.push(`See docs/INSTALL.md. Without --link, ${CLI} still writes the LLVM IR (.ll) for you to build yourself.`);
+  return lines.join("\n");
+};
+
 export const main = (): number => {
   if (process.argv.length < 2) {
-    console.error(USAGE);
+    console.error(usageText());
     return 2;
   }
   const opts = new Options();
@@ -377,8 +422,8 @@ export const main = (): number => {
       // A request that succeeded, not a refusal: stdout and exit 0. stage0
       // answers it the same way (`usageText` in `src/index.ts`), so a script
       // that asks either compiler for its help sees the same shape; an actual
-      // usage error still prints USAGE on stderr and returns 2 below.
-      console.log(USAGE);
+      // usage error still prints the usage on stderr and returns 2 below.
+      console.log(usageText());
       return 0;
     } else if (value === "-v" || value === "--version") {
       // The line stage0 prints. stage1 cannot read `package.json`, so the
@@ -387,7 +432,7 @@ export const main = (): number => {
       console.log(`${CLI} ${VERSION}`);
       return 0;
     } else if (value.startsWith("-")) {
-      console.error(`compile: unknown flag \`${value}\`\n${USAGE}`);
+      console.error(`compile: unknown flag \`${value}\`\n${usageText()}`);
       return 2;
     } else {
       // Every positional is a root, as it is for stage0: a program whose
@@ -398,7 +443,7 @@ export const main = (): number => {
     arg = arg + 1;
   }
   if (roots.length === 0) {
-    console.error(USAGE);
+    console.error(usageText());
     return 2;
   }
   // WP24 A1: an asynchronous export allocates on a libuv worker while the JS
@@ -412,6 +457,18 @@ export const main = (): number => {
   if (opts.emitNapiAsync.length > 0 && !opts.threads) {
     console.error(`compile: --emit-napi-async requires --threads (its exports allocate on a worker thread)`);
     return 2;
+  }
+
+  // `--link` needs a C compiler, and a missing one is a problem with the run
+  // rather than with the program, so it is found out before anything is
+  // compiled or written: one clear sentence with the install line for this
+  // platform, instead of `scripts/build.sh` failing after the IR is on disk.
+  if (link.length > 0) {
+    const problem = missingToolchain();
+    if (problem.length > 0) {
+      reportToolchainFailure(problem, json);
+      return 3;
+    }
   }
 
   // The exit-70 path on demand (`self/ice.ts`), at the point stage0 raised
