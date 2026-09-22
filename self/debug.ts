@@ -113,7 +113,7 @@ const basicType = (type: i32, json: boolean): string => {
     case T_BOOL:
       return '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)';
     default:
-      process.exit(internalErrorFor(json, `debug: no DWARF basic type for type id ${type}`));
+      process.exit(internalErrorFor(`debug: no DWARF basic type for type id ${type}`, json));
   }
 };
 
@@ -271,7 +271,7 @@ export class DebugInfo {
     } else if (this.table.isStruct(type)) {
       const info = this.program.struct(this.table.nameOf(type));
       if (info === null) {
-        process.exit(internalErrorFor(this.table.json, `debug: no struct recorded for \`${this.table.nameOf(type)}\``));
+        process.exit(internalErrorFor(`debug: no struct recorded for \`${this.table.nameOf(type)}\``, this.table.json));
       } else {
         ref = this.pointerTo(this.composite(info));
       }
@@ -282,7 +282,7 @@ export class DebugInfo {
       // debugger.
       const declared = this.program.enumNamed(this.table.nameOf(type));
       if (declared === null) {
-        process.exit(internalErrorFor(this.table.json, `debug: no enum recorded for \`${this.table.nameOf(type)}\``));
+        process.exit(internalErrorFor(`debug: no enum recorded for \`${this.table.nameOf(type)}\``, this.table.json));
       } else {
         ref = this.enumeration(declared);
       }

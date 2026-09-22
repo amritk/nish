@@ -477,7 +477,7 @@ export const main = (): number => {
   // real report, `--json` object included, so what the hook shows is what a
   // broken invariant would.
   if (simulatedInternalError()) {
-    return internalErrorFor(json, `simulated internal compiler error while compiling ${roots[0]}`);
+    return internalErrorFor(`simulated internal compiler error while compiling ${roots[0]}`, json);
   }
 
   const compilation = new Compilation(opts);

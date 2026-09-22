@@ -22,7 +22,7 @@
 // The shape at each site is one statement rather than a report call followed by
 // an exit:
 //
-//     process.exit(internalErrorFor(this.opts.json, "emitter: no callee recorded for `f`"));
+//     process.exit(internalErrorFor("emitter: no callee recorded for `f`", this.opts.json));
 //
 // because the pair can be half-written and this cannot. `process.exit(...)` is
 // what the definite-return analysis reads as a terminator, so a site that kept
@@ -45,7 +45,6 @@
 
 import { CLI, VERSION } from "./branding";
 import { INTERNAL } from "./codes";
-import { jsonQuote } from "./strings";
 
 /**
  * `EX_SOFTWARE` from `sysexits.h`, which is what stage0 exits with for an
@@ -79,21 +78,68 @@ export const simulatedInternalError = (): boolean => {
   return value !== null && value.length > 0;
 };
 
+/** The sixteen digits a `\u00XX` escape spells a control character with. */
+const HEX_DIGITS: string = "0123456789abcdef";
+
 /**
  * Report a broken compiler invariant and answer the exit status for it. Every
- * caller is `process.exit(internalErrorFor(json, ...))`, which ends the path.
+ * caller is `process.exit(internalErrorFor(message, json))`, which ends the path.
  *
  * `json` is `Options.json`, handed down by the site because the site is where
  * the report is made: under `--json` the crash is also one `NL0003` object on
  * stdout, as stage0 printed it from its top-level catch, so a reader that asked
  * for JSON never has to scrape stderr for a failure. The human report goes to
  * stderr either way.
+ *
+ * The object is written in pieces, and `message` is escaped here rather than by
+ * `jsonQuote` or any helper, for the attribute pass. Every site hands this a
+ * string it has just built, and a string handed on to a user function counts as
+ * escaping (`noteUse` in `self/attributes.ts`): `message` would escape, each
+ * site's fresh string would leak, and every function that can reach a report
+ * would lose its arena scope -- `Emitter.typeOf` and `Emitter.slotOf` among
+ * them, which run on every expression. Handed only to builtins, as here, it
+ * stays in the frame. The escapes are `jsonQuote`'s, byte for byte.
  */
-export const internalErrorFor = (json: boolean, message: string): i32 => {
+export const internalErrorFor = (message: string, json: boolean): i32 => {
   if (json) {
-    console.log(
-      `{"severity":"error","code":"${INTERNAL}","message":${jsonQuote(`internal compiler error: ${message}`)}}`
-    );
+    write('{"severity":"error","code":"');
+    write(INTERNAL);
+    write('","message":"internal compiler error: ');
+    let start = 0;
+    let i = 0;
+    while (i < message.length) {
+      const c = message.charCodeAt(i);
+      if (c === 34 || c === 92 || c < 32) {
+        if (i > start) {
+          write(message.substring(start, i));
+        }
+        if (c === 34) {
+          write('\\"');
+        } else if (c === 92) {
+          write("\\\\");
+        } else if (c === 8) {
+          write("\\b");
+        } else if (c === 9) {
+          write("\\t");
+        } else if (c === 10) {
+          write("\\n");
+        } else if (c === 12) {
+          write("\\f");
+        } else if (c === 13) {
+          write("\\r");
+        } else {
+          write("\\u00");
+          write(HEX_DIGITS.substring(c >> 4, (c >> 4) + 1));
+          write(HEX_DIGITS.substring(c & 15, (c & 15) + 1));
+        }
+        start = i + 1;
+      }
+      i = i + 1;
+    }
+    if (message.length > start) {
+      write(message.substring(start, message.length));
+    }
+    write('"}\n');
   }
   console.error(`${CLI} ${VERSION}: internal compiler error`);
   console.error(`  ${message}`);
@@ -103,5 +149,18 @@ export const internalErrorFor = (json: boolean, message: string): i32 => {
   return EXIT_INTERNAL;
 };
 
-/** `internalErrorFor` with no `--json` to answer to: the human report alone. */
-export const internalError = (message: string): i32 => internalErrorFor(false, message);
+/**
+ * The same report for a caller with no command line to answer to. Its lines
+ * are `internalErrorFor`'s written out again rather than a call to it, for the
+ * reason given there -- passing `message` on would make it escape here -- and
+ * `tests/run.js` reads the report from both, so the two cannot drift apart
+ * unnoticed.
+ */
+export const internalError = (message: string): i32 => {
+  console.error(`${CLI} ${VERSION}: internal compiler error`);
+  console.error(`  ${message}`);
+  console.error(`  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`);
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
+  console.error("the command line at https://github.com/amritk/nish/issues");
+  return EXIT_INTERNAL;
+};

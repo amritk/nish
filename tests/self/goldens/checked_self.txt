@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 408442 dump lines live, 64 distinct modules.
+# 64 programs, 408166 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -34,18 +34,18 @@ entry self/emit_arrays.ts: self/emit_arrays.ts self/attributes.ts self/emit_buil
 entry self/emit_builtins.ts: self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/attributes.ts self/emit_strings.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/ir.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/runtime.ts self/escape.ts self/options.ts self/parents.ts self/debug.ts self/target.ts
 entry self/emit_classes.ts: self/emit_classes.ts self/emit.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/ir.ts self/emit_strings.ts self/runtime.ts self/escape.ts self/emit_result.ts self/options.ts self/parents.ts self/debug.ts self/target.ts self/tbaa.ts
 entry self/emit_control.ts: self/emit_control.ts self/emit_arrays.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_result.ts self/options.ts self/emit_classes.ts self/tbaa.ts self/emit_ops.ts self/constants.ts self/emit_strings.ts self/runtime.ts self/target.ts self/parents.ts
-entry self/emit_ops.ts: self/emit_ops.ts self/ice.ts self/branding.ts self/codes.ts self/strings.ts self/constants.ts self/context.ts self/diagnostics.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/emit.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit_arrays.ts self/runtime.ts self/emit_strings.ts self/ir.ts self/escape.ts self/emit_result.ts self/options.ts self/parents.ts self/debug.ts self/emit_control.ts self/emit_classes.ts self/tbaa.ts self/target.ts
+entry self/emit_ops.ts: self/emit_ops.ts self/ice.ts self/branding.ts self/codes.ts self/constants.ts self/context.ts self/diagnostics.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/emit.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit_arrays.ts self/runtime.ts self/emit_strings.ts self/ir.ts self/escape.ts self/emit_result.ts self/options.ts self/parents.ts self/debug.ts self/emit_control.ts self/emit_classes.ts self/tbaa.ts self/target.ts
 entry self/emit_result.ts: self/emit_result.ts self/emit.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/ir.ts self/emit_classes.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/escape.ts self/options.ts self/parents.ts self/debug.ts self/target.ts
 entry self/emit_strings.ts: self/emit_strings.ts self/emit.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/ir.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/runtime.ts self/escape.ts self/options.ts self/parents.ts self/debug.ts self/target.ts
 entry self/emit_util.ts: self/emit_util.ts self/program.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/types.ts self/ice.ts self/branding.ts self/nish_modules.ts self/packages.ts self/symbols.ts
 entry self/escape.ts: self/escape.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts
 entry self/expressions.ts: self/expressions.ts self/branding.ts self/generics.ts self/annotations.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/declarations.ts self/structs.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/members.ts
 entry self/generics.ts: self/generics.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
-entry self/ice.ts: self/ice.ts self/branding.ts self/codes.ts self/strings.ts
+entry self/ice.ts: self/ice.ts self/branding.ts self/codes.ts
 entry self/interop_abi.ts: self/interop_abi.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts self/compilation.ts self/checker.ts self/assignment.ts self/bounds.ts self/statements.ts self/parser.ts self/lexer.ts self/tokens.ts self/paths.ts self/manifest.ts self/std_modules.ts self/validator.ts
 entry self/interop_dts.ts: self/interop_dts.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts self/checker.ts self/assignment.ts self/bounds.ts self/statements.ts self/parser.ts self/lexer.ts self/tokens.ts self/paths.ts self/manifest.ts self/std_modules.ts self/validator.ts self/interop_abi.ts self/interop_wasm.ts
 entry self/interop_header.ts: self/interop_header.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts self/checker.ts self/assignment.ts self/bounds.ts self/statements.ts self/parser.ts self/lexer.ts self/tokens.ts self/paths.ts self/manifest.ts self/std_modules.ts self/validator.ts self/interop_abi.ts
-entry self/interop_napi.ts: self/interop_napi.ts self/ice.ts self/branding.ts self/codes.ts self/strings.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts self/checker.ts self/assignment.ts self/bounds.ts self/statements.ts self/parser.ts self/lexer.ts self/tokens.ts self/paths.ts self/manifest.ts self/std_modules.ts self/validator.ts self/interop_abi.ts
+entry self/interop_napi.ts: self/interop_napi.ts self/ice.ts self/branding.ts self/codes.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts self/checker.ts self/assignment.ts self/bounds.ts self/statements.ts self/parser.ts self/lexer.ts self/tokens.ts self/paths.ts self/manifest.ts self/std_modules.ts self/validator.ts self/interop_abi.ts
 entry self/interop_wasm.ts: self/interop_wasm.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/target.ts self/parents.ts self/checker.ts self/assignment.ts self/bounds.ts self/statements.ts self/parser.ts self/lexer.ts self/tokens.ts self/paths.ts self/manifest.ts self/std_modules.ts self/validator.ts self/interop_abi.ts
 entry self/ir.ts: self/ir.ts self/strings.ts self/map.ts
 entry self/lexer.ts: self/lexer.ts self/strings.ts self/tokens.ts
@@ -70,7 +70,7 @@ entry self/symbols.ts: self/symbols.ts self/map.ts
 entry self/target.ts: self/target.ts
 entry self/tbaa.ts: self/tbaa.ts self/emit.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/generics.ts self/annotations.ts self/declarations.ts self/structs.ts self/arrays.ts self/emit_util.ts self/result.ts self/members.ts self/emit_arrays.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/ir.ts self/emit_classes.ts self/emit_result.ts self/emit_strings.ts self/runtime.ts self/escape.ts self/options.ts self/parents.ts self/debug.ts self/target.ts
 entry self/tokens.ts: self/tokens.ts
-entry self/types.ts: self/types.ts self/ice.ts self/branding.ts self/codes.ts self/strings.ts self/map.ts
+entry self/types.ts: self/types.ts self/ice.ts self/branding.ts self/codes.ts self/map.ts
 entry self/validator.ts: self/validator.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
 module self/annotations.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
@@ -2435,26 +2435,26 @@ module self/ice.ts
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
 import INTERNAL from "./codes" -> const INTERNAL
-import jsonQuote from "./strings" -> function @jsonQuote
 const EXIT_INTERNAL: i32 = 70 [exported]
 const ENV_DEBUG: string = "NISH_DEBUG"
 const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE"
+const HEX_DIGITS: string = "0123456789abcdef"
 function simulatedInternalError(): boolean -> @simulatedInternalError [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_getenv
   stackSites=0 stackLocals=0
-  local 78:9 value: string | null (const)
-function internalErrorFor(json: boolean, message: string): i32 -> @internalErrorFor [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
-  calls: jsonQuote nish_print nish_str_concat nish_write
+  local 77:9 value: string | null (const)
+function internalErrorFor(message: string, json: boolean): i32 -> @internalErrorFor [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_new nish_write
   stackSites=0 stackLocals=0
-  callee 95:61 jsonQuote -> @jsonQuote
+  local 108:9 start: i32 (let)
+  local 109:9 i: i32 (let)
+  local 111:13 c: i32 (const)
 function internalError(message: string): i32 -> @internalError [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
-  escaping: message
-  calls: internalErrorFor
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 107:56 internalErrorFor -> @internalErrorFor
 module self/generics.ts
 import resolveType from "./annotations" -> function @resolveType
 import LANGUAGE from "./branding" -> const LANGUAGE
@@ -7554,8 +7554,8 @@ function Emitter.emitModule(this: Emitter): string -> @Emitter.emitModule [expor
   callee 260:5 Emitter.emitRuntimePrelude -> @Emitter.emitRuntimePrelude
   callee 261:12 IRModule.toText -> @IRModule.toText
 function Emitter.factsFor(this: Emitter, sig: FunctionSig): FunctionFacts -> @Emitter.factsFor [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=120
-  calls: FactsTable.get internalErrorFor nish_exit nish_str_concat
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false returnDeref=120
+  calls: FactsTable.get internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer this: size=152 writesThrough=false captured=false
   pointer sig: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -7643,9 +7643,9 @@ function Emitter.endReclaim(this: Emitter, mark: string, value: string): string 
   callee 403:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee 403:42 Emitter.useRuntime -> @Emitter.useRuntime
 function Emitter.planTailCall(this: Emitter, value: Node): boolean -> @Emitter.planTailCall [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   escaping: value
-  calls: Emitter.typeOf marksTailCall nish_array_grow nish_panic_index
+  calls: Emitter.typeOf marksTailCall nish_arena_mark nish_arena_release nish_array_grow nish_panic_index
   pointer this: size=152 writesThrough=true captured=false passedTo=Emitter.typeOf#0
   pointer value: size=40 writesThrough=true captured=true
   stackSites=1 stackLocals=1
@@ -7866,7 +7866,7 @@ function Emitter.emitStatementKind(this: Emitter, stmt: Node): void -> @Emitter.
   callee 741:9 emitContinue -> @emitContinue
   callee 744:9 emitThrow -> @emitThrow
   callee 747:22 internalErrorFor -> @internalErrorFor
-  callee 747:88 nodeName -> @nodeName
+  callee 747:72 nodeName -> @nodeName
 function Emitter.emitReturn(this: Emitter, stmt: Node): void -> @Emitter.emitReturn [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitReturnValue Emitter.emitScopeExit IRFunction.emit nish_panic_index
@@ -7972,7 +7972,7 @@ function Emitter.emitRawExpression(this: Emitter, expr: Node): string -> @Emitte
   callee 892:16 emitArrayLiteral -> @emitArrayLiteral
   callee 894:16 emitObjectLiteral -> @emitObjectLiteral
   callee 896:22 internalErrorFor -> @internalErrorFor
-  callee 896:89 nodeName -> @nodeName
+  callee 896:73 nodeName -> @nodeName
 function Emitter.emitIdentifier(this: Emitter, expr: Node): string -> @Emitter.emitIdentifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.alignSuffix Emitter.llvm Emitter.paramObject Emitter.slotOf IRFunction.emitValue constantText emitNamespaceProperty internalErrorFor nish_exit nish_panic_index nish_str_concat
@@ -8065,8 +8065,8 @@ function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCal
   callee 1027:12 Emitter.endReclaim -> @Emitter.endReclaim
   callee 1027:34 IRFunction.emitValue -> @IRFunction.emitValue
 function Emitter.slotOf(this: Emitter, local: Local): string -> @Emitter.slotOf [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: internalErrorFor nish_exit nish_panic_index nish_str_concat
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat
   pointer this: size=152 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -8080,14 +8080,14 @@ function Emitter.setSlot(this: Emitter, local: Local, slot: string): void -> @Em
   pointer local: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Emitter.typeOf(this: Emitter, expr: Node): i32 -> @Emitter.typeOf [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: internalErrorFor nish_exit nish_panic_index nish_str_concat nodeName
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat nodeName
   pointer this: size=152 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 1049:11 type: i32 (const)
   callee 1051:20 internalErrorFor -> @internalErrorFor
-  callee 1051:86 nodeName -> @nodeName
+  callee 1051:70 nodeName -> @nodeName
 function Emitter.llvm(this: Emitter, type: i32): string -> @Emitter.llvm [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
@@ -8202,9 +8202,9 @@ struct DebugInfo (class) size=96 align=8 exported
   method locationOf -> @DebugInfo.locationOf
   method declareLocal -> @DebugInfo.declareLocal
 function basicType(type: i32, json: boolean): string -> @basicType
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   escaping: json type
-  calls: internalErrorFor nish_exit nish_str_concat nish_str_from_i32
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 116:20 internalErrorFor -> @internalErrorFor
 function bitsOf(type: i32): i32 -> @bitsOf
@@ -8304,7 +8304,7 @@ function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typ
   callee 272:20 CheckedProgram.struct -> @CheckedProgram.struct
   callee 272:40 TypeTable.nameOf -> @TypeTable.nameOf
   callee 274:22 internalErrorFor -> @internalErrorFor
-  callee 274:91 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 274:74 TypeTable.nameOf -> @TypeTable.nameOf
   callee 276:15 DebugInfo.pointerTo -> @DebugInfo.pointerTo
   callee 276:30 DebugInfo.composite -> @DebugInfo.composite
   callee 278:16 TypeTable.isEnum -> @TypeTable.isEnum
@@ -8312,7 +8312,7 @@ function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typ
   callee 283:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
   callee 283:47 TypeTable.nameOf -> @TypeTable.nameOf
   callee 285:22 internalErrorFor -> @internalErrorFor
-  callee 285:89 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 285:72 TypeTable.nameOf -> @TypeTable.nameOf
   callee 287:15 DebugInfo.enumeration -> @DebugInfo.enumeration
   callee 289:16 TypeTable.isResult -> @TypeTable.isResult
   callee 295:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
@@ -10791,15 +10791,15 @@ function emitIntBinary(emitter: Emitter, opcode: string, type: i32, lhs: string,
   callee 161:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee 162:10 IRFunction.emitValue -> @IRFunction.emitValue
 function integerOpcode(op: string, json: boolean): string -> @integerOpcode
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   escaping: json
-  calls: internalErrorFor nish_exit nish_str_concat nish_str_eq
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
   callee 202:16 internalErrorFor -> @internalErrorFor
 function floatOpcode(op: string, json: boolean): string -> @floatOpcode [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   escaping: json
-  calls: internalErrorFor nish_exit nish_str_concat nish_str_eq
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
   callee 240:16 internalErrorFor -> @internalErrorFor
 function bitwiseOpcode(op: string): string -> @bitwiseOpcode
@@ -10952,8 +10952,8 @@ function storeLocal(emitter: Emitter, local: Local, value: string): void -> @sto
   callee 405:51 Emitter.slotOf -> @Emitter.slotOf
   callee 405:75 Emitter.alignSuffix -> @Emitter.alignSuffix
 function targetLocal(emitter: Emitter, target: Node): Local -> @targetLocal [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=24
-  calls: internalErrorFor nish_exit nish_panic_index nish_str_concat
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false returnDeref=24
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=152 writesThrough=false captured=false
   pointer target: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -11424,16 +11424,16 @@ import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
 function structInfoOf(emitter: Emitter, type: i32): StructInfo -> @structInfoOf [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=112
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false returnDeref=112
   escaping: type
-  calls: CheckedProgram.struct TypeTable.nameOf internalErrorFor nish_exit nish_str_concat
+  calls: CheckedProgram.struct TypeTable.nameOf internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 60:9 info: StructInfo | null (const)
   callee 60:16 CheckedProgram.struct -> @CheckedProgram.struct
   callee 60:39 TypeTable.nameOf -> @TypeTable.nameOf
   callee 64:16 internalErrorFor -> @internalErrorFor
-  callee 64:81 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 64:62 TypeTable.nameOf -> @TypeTable.nameOf
 function structTypeName(info: StructInfo): string -> @structTypeName
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat

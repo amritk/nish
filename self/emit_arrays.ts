@@ -754,7 +754,7 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   // site from the same literal, so ask it the same question.
   const count = emitter.isStackSite(expr) ? literalLength(expr.children[2].children[0]) : -1;
   if (count < 0 && emitter.isStackSite(expr)) {
-    process.exit(internalErrorFor(emitter.opts.json, "emitter: a stack array whose length is not a literal"));
+    process.exit(internalErrorFor("emitter: a stack array whose length is not a literal", emitter.opts.json));
   }
   const data = emitData(emitter, expr, elem, count, bytes);
   emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
@@ -1065,7 +1065,7 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const decl = stmt.children[0].children[0].children[0];
   const local = emitter.program.nodeLocals[decl.id];
   if (local === null) {
-    process.exit(internalErrorFor(emitter.opts.json, "emitter: a `for...of` variable with no local recorded"));
+    process.exit(internalErrorFor("emitter: a `for...of` variable with no local recorded", emitter.opts.json));
   }
   const elem = local.type;
   const ty = emitter.llvm(elem);

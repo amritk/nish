@@ -199,7 +199,7 @@ const integerOpcode = (op: string, json: boolean): string => {
   if (op === "!==") {
     return "icmp ne";
   }
-  process.exit(internalErrorFor(json, `emitter: unexpected binary operator \`${op}\``));
+  process.exit(internalErrorFor(`emitter: unexpected binary operator \`${op}\``, json));
 };
 
 /** The floating-point opcode for the same operator. */
@@ -237,7 +237,7 @@ export const floatOpcode = (op: string, json: boolean): string => {
   if (op === "!==") {
     return "fcmp une";
   }
-  process.exit(internalErrorFor(json, `emitter: unexpected binary operator \`${op}\``));
+  process.exit(internalErrorFor(`emitter: unexpected binary operator \`${op}\``, json));
 };
 
 /** The bitwise opcode for `& | ^ << >> >>>` and their compound forms. */
@@ -388,7 +388,7 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
     const ty = emitter.llvm(emitter.typeOf(operand));
     return emitter.fn.emitValue(`xor ${ty} ${emitter.emitExpression(operand)}, -1`);
   }
-  process.exit(internalErrorFor(emitter.opts.json, `emitter: unexpected unary operator \`${op}\``));
+  process.exit(internalErrorFor(`emitter: unexpected unary operator \`${op}\``, emitter.opts.json));
 };
 
 // ---- Locals ------------------------------------------------------------------------
@@ -411,7 +411,7 @@ export const targetLocal = (emitter: Emitter, target: Node): Local => {
   if (local !== null) {
     return local;
   }
-  process.exit(internalErrorFor(emitter.opts.json, `emitter: no binding for the assignment target \`${target.text}\``));
+  process.exit(internalErrorFor(`emitter: no binding for the assignment target \`${target.text}\``, emitter.opts.json));
 };
 
 // ---- Assignment ---------------------------------------------------------------------

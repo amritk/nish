@@ -520,7 +520,7 @@ export class TypeTable {
       case K_RESULT:
         return `%struct.${this.resultStructName(type)}*`;
       default:
-        process.exit(internalErrorFor(this.json, `internal error: llvmType of kind ${this.kinds[type]}`));
+        process.exit(internalErrorFor(`internal error: llvmType of kind ${this.kinds[type]}`, this.json));
     }
   }
 

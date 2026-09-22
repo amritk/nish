@@ -361,7 +361,7 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, 
     case READ_SCALAR: {
       const scalar = r.scalar;
       if (scalar === null) {
-        process.exit(internalErrorFor(json, "napi: scalar reader without a scalar"));
+        process.exit(internalErrorFor("napi: scalar reader without a scalar", json));
       }
       // The getter writes the parameter itself unless its width is not one
       // N-API has a getter for, and then a temporary carries the raw value.
@@ -389,7 +389,7 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, 
       const shape = `${what} must be { ok: true, value } or { ok: false, error }`;
       const errScalar = r.errScalar;
       if (errScalar === null) {
-        process.exit(internalErrorFor(json, "napi: result reader without an error arm"));
+        process.exit(internalErrorFor("napi: result reader without an error arm", json));
       }
       // Each arm reads into its union member, or into a temporary the
       // narrowing below turns into that member's own type.
@@ -446,7 +446,7 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, 
     default: {
       const view = r.view;
       if (view === null) {
-        process.exit(internalErrorFor(json, "napi: view reader without a view"));
+        process.exit(internalErrorFor("napi: view reader without a view", json));
       }
       lines.push(`nish_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
       lines.push(`if (!nish_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
@@ -583,7 +583,7 @@ const napiBoxerCall = (box: Boxer, value: string, json: boolean): string => {
     default: {
       const view = box.view;
       if (view === null) {
-        process.exit(internalErrorFor(json, "napi: view boxer without a view"));
+        process.exit(internalErrorFor("napi: view boxer without a view", json));
       }
       return `nish_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
     }
