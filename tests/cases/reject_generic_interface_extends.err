@@ -1,1 +1,1 @@
-Interface inheritance (`extends`) is not supported; list every field
+expected `{`, found `extends`

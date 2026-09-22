@@ -1,1 +1,1 @@
-Top-level `let` is not supported
+a module holds no top-level `let`; use `const`

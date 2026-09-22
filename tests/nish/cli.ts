@@ -32,31 +32,23 @@
  *     build/nish-cli build/nish         # the self-hosted compiler
  *
  * **It pins the shape and not the bytes**, because the contract is the shape. The
- * two compilers word the same refusal differently — stage1's usage text is one
- * line and calls the driver `compile`, its unreadable-input message says
- * `cannot open <file>` where stage0 passes Node's `ENOENT` through, and its
- * band-3 failure names `scripts/build.sh` where stage0 names the compiler it
- * could not find — and `tests/run.js` records that difference in the same words
- * ("the two usage *texts* differ ... so it is the shape that is pinned, not the
- * bytes"). So a check here asks that the usage text is on the right stream with
+ * two compilers word some answers differently — stage1's usage text is one line
+ * where stage0's lists the flags one per line, and its unreadable-input message
+ * says `cannot open <file>` where stage0 passes Node's `ENOENT` through. So a
+ * check here asks that the usage text is on the right stream with
  * the right code and names every advertised flag, that a refusal names the flag
  * or the file it is about, and that a failure carries the documented band and
  * code — each of which both compilers promise.
  *
- * Two things report as counted skips against a compiler that is not stage0: the
- * spelling of the tool's own name in the usage text, which stage1's driver has not
- * adopted yet, and the whole internal-error group, which is one skip because what
- * is missing is one thing — `NISH_SIMULATE_ICE`, the test hook that provokes an
- * internal error on demand. stage1 answers an internal error with the same code
- * and the same report (`self/ice.ts`). For the usage text, a Node entry point is
- * what stage0 is and what stage1 is not, which is how this file tells them apart:
- * the same test `tests/diagnostic_coverage.js` makes. For the hook it asks the
- * compiler instead — a run with the variable set that compiles cleanly has no
- * hook — so the group runs against whichever compiler has one, stage1 included
- * once `self/` grows it.
- *
- * So `build/nish-cli` is 69 checks and 0 skips against stage0, and 57 checks and
- * those 2 skips against `build/nish` — the numbers the CI bootstrap job prints.
+ * The internal-error group needs `NISH_SIMULATE_ICE`, the test hook that
+ * provokes one on demand, and asks the compiler whether it has one — a run with
+ * the variable set that compiles cleanly has none — so the group is one counted
+ * skip against a compiler without it and runs against both compilers here. One
+ * answer in it is each compiler's own: under `NISH_DEBUG=1` stage0 prints its
+ * stack, and stage1, which has no exceptions and so no stack, says so in the
+ * report. A Node entry point is what stage0 is and what stage1 is not, which is
+ * how this file tells them apart there: the same test
+ * `tests/diagnostic_coverage.js` makes.
  *
  * Two POSIX utilities stand in for builtins the language does not have, exactly as
  * `tests/nish/run.ts` uses them: `env(1)` gives a child the environment a check
@@ -372,17 +364,9 @@ const checkHelp = (t: Suite, cli: Cli, name: string): void => {
   t.eqI32("--help exits 0", help.status, 0);
   t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
   t.eqStr("--help says nothing on stderr", trim(help.stderr), "");
-  // The spelling rather than the shape, and the one place this file reads bytes
-  // that are one compiler's: the usage text has to name the tool the user typed,
-  // which stage1's driver does not do yet (it calls itself `compile` — see
-  // `self/branding.ts`, and the same note beside the `--help` check in
-  // `tests/run.js`).
-  const named = "the usage text names the tool itself";
-  if (cli.node) {
-    t.contains(named, help.stdout, `usage: ${name}`);
-  } else {
-    t.skip(named, `${cli.label}'s driver still calls itself \`compile\` (self/branding.ts)`);
-  }
+  // The spelling rather than the shape: the usage text has to name the tool the
+  // user typed. Both compilers build it from `CLI` in their `branding.ts`.
+  t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
   t.eqBool("--help prints no stack frame", hasStackFrame(help.stdout), false);
   const flags = advertisedFlags();
   t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
@@ -611,7 +595,19 @@ const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
     [source, "-o", `${WORK}/ice.ll`]
   );
   t.eqI32("with NISH_DEBUG=1 it is still 70", debug.status, 70);
-  t.eqBool("and the stack is printed", hasStackFrame(debug.stderr), true);
+  if (cli.node) {
+    t.eqBool("and the stack is printed", hasStackFrame(debug.stderr), true);
+  } else {
+    // A native compiler has no exceptions, so there is no stack to print: what
+    // the variable owes the reader there is the report saying so, rather than
+    // a line promising a trace a rerun would not produce (`self/ice.ts`).
+    t.contains(
+      "and the report says there is no stack behind it",
+      debug.stderr,
+      "there is no stack behind this, so NISH_DEBUG=1 adds nothing"
+    );
+    t.eqBool("and still prints no stack frame", hasStackFrame(debug.stderr), false);
+  }
 
   const json = cli.run("ice_json", ["NISH_SIMULATE_ICE=1"], [source, "--json", "-o", `${WORK}/ice.ll`]);
   t.eqI32("under --json it is still 70", json.status, 70);

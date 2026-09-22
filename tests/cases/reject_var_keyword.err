@@ -1,1 +1,1 @@
-`var` is forbidden
+expected `;`, found `IDENT`

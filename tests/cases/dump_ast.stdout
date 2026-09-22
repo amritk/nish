@@ -1,49 +1,56 @@
-SourceFile tests/cases/dump_ast.ts
-  FunctionDeclaration 1:1-7:2
-    Identifier 1:10-1:15 `scale`
-    Parameter 1:16-1:25
-      Identifier 1:16-1:17 `p`
-      NumberKeyword 1:19-1:25
-    Parameter 1:27-1:36
-      Identifier 1:27-1:28 `k`
-      NumberKeyword 1:30-1:36
-    NumberKeyword 1:39-1:45
-    Block 1:46-7:2
-      VariableStatement 2:3-2:17
-        VariableDeclarationList 2:3-2:16
-          VariableDeclaration 2:7-2:16
-            Identifier 2:7-2:12 `total`
-            NumericLiteral 2:15-2:16 0
-      ForStatement 3:3-5:4
-        VariableDeclarationList 3:8-3:17
-          VariableDeclaration 3:12-3:17
-            Identifier 3:12-3:13 `i`
-            NumericLiteral 3:16-3:17 0
-        BinaryExpression 3:19-3:24
-          Identifier 3:19-3:20 `i`
-          LessThanToken 3:21-3:22
-          Identifier 3:23-3:24 `k`
-        PostfixUnaryExpression 3:26-3:29
-          Identifier 3:26-3:27 `i`
-        Block 3:31-5:4
-          ExpressionStatement 4:5-4:16
-            BinaryExpression 4:5-4:15
-              Identifier 4:5-4:10 `total`
-              PlusEqualsToken 4:11-4:13
-              Identifier 4:14-4:15 `p`
-      ReturnStatement 6:3-6:16
-        Identifier 6:10-6:15 `total`
-  FunctionDeclaration 9:1-11:2
-    ExportKeyword 9:1-9:7
-    Identifier 9:17-9:22 `greet`
-    Parameter 9:23-9:35
-      Identifier 9:23-9:27 `name`
-      StringKeyword 9:29-9:35
-    StringKeyword 9:38-9:44
-    Block 9:45-11:2
-      ReturnStatement 10:3-10:23
-        BinaryExpression 10:10-10:22
-          StringLiteral 10:10-10:15 "hi "
-          PlusToken 10:16-10:17
-          Identifier 10:18-10:22 `name`
-  EndOfFileToken 12:1-12:1
+SOURCE_FILE tests/cases/dump_ast.ts
+  FUNCTION 0 133
+    IDENT 9 14 scale
+    LIST 15 35
+      PARAM 15 24
+        IDENT 15 16 p
+        TYPE_REF 18 24 number
+          LIST 0 0
+      PARAM 26 35
+        IDENT 26 27 k
+        TYPE_REF 29 35 number
+          LIST 0 0
+    TYPE_REF 38 44 number
+      LIST 0 0
+    BLOCK 45 133
+      VAR 49 63
+        LIST 53 62
+          VAR_DECL 53 62
+            IDENT 53 58 total
+            EMPTY 0 0
+            NUMBER 61 62 0
+      FOR 66 115
+        VAR 71 80
+          LIST 75 80
+            VAR_DECL 75 80
+              IDENT 75 76 i
+              EMPTY 0 0
+              NUMBER 79 80 0
+        BINARY 82 87 <
+          IDENT 82 83 i
+          IDENT 86 87 k
+        UNARY+postfix 89 92 ++
+          IDENT 89 90 i
+        BLOCK 94 115
+          EXPR_STMT 100 111
+            BINARY 100 110 +=
+              IDENT 100 105 total
+              IDENT 109 110 p
+      RETURN 118 131
+        IDENT 125 130 total
+    LIST 0 0
+  FUNCTION+export 135 205
+    IDENT 151 156 greet
+    LIST 157 169
+      PARAM 157 169
+        IDENT 157 161 name
+        TYPE_REF 163 169 string
+          LIST 0 0
+    TYPE_REF 172 178 string
+      LIST 0 0
+    BLOCK 179 205
+      RETURN 183 203
+        BINARY 190 202 +
+          STRING 190 195 #3
+          IDENT 198 202 name
+    LIST 0 0

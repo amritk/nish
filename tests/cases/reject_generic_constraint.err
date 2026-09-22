@@ -1,1 +1,1 @@
-A constrained type parameter (`T extends ...`) is not supported yet
+a constrained type parameter (`T extends ...`) is not supported yet
