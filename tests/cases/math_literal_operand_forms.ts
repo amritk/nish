@@ -2,7 +2,7 @@
 // signed or parenthesised literal on the *left* of a binary operator takes the other
 // operand's type exactly as a bare one does. stage1 matched only the bare spelling and
 // refused every line below, on a shape two whole programs of
-// tests/differential/corpus already wrote (WP19 §A5, the sixth entry).
+// tests/differential/corpus already wrote (WP19 §A9, the sixth entry in §A5's series).
 export const main = (): number => {
   const z: f64 = 2;
   const big: i64 = 3000000000;
