@@ -147,7 +147,7 @@ const signatureText = (table: TypeTable, sig: FunctionSig): string => {
 const structText = (table: TypeTable, info: StructInfo, out: string[]): void => {
   const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
   const exported = info.exported ? " exported" : "";
-  out.push(`struct ${info.name} (${kind}) size=${info.size} align=${info.align}${exported}`);
+  out.push(`struct ${table.typeName(info.type)} (${kind}) size=${info.size} align=${info.align}${exported}`);
   if (info.implementsNames.length > 0) {
     out.push(`  implements ${info.implementsNames.join(", ")}`);
   }

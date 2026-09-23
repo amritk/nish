@@ -760,6 +760,10 @@ export const instantiateStructHere = (
   }
   const info = new StructInfo(name, template.kind, ctx.table.structOf(name), template.decl, template.origin);
   info.exported = template.exported;
+  // WP18 §6.7: `Box<i32>` in every diagnostic, the dump and `-g`, while the
+  // symbol and `%struct` stay `Box$i32`. Set before the members are collected,
+  // because their names and messages are built from it.
+  ctx.table.setDisplayName(info.type, instanceDisplayName(ctx.table, template.sourceName, args));
   const instance = new StructInstantiation(template, args, info, bindings);
   instance.from = site.fromStruct;
   template.count = template.count + 1;
@@ -1736,8 +1740,8 @@ export const refuseParameterMember = (
   ctx.errorOnce(
     member,
     at,
-    `Unknown ${method ? "method" : "field"} \`${member.text}\` on ${kind} \`${info.name}\`, the constraint of ` +
-      `\`${param}\`: a constrained type parameter has only the members its constraint declares`
+    `Unknown ${method ? "method" : "field"} \`${member.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`, ` +
+      `the constraint of \`${param}\`: a constrained type parameter has only the members its constraint declares`
   );
   return true;
 };

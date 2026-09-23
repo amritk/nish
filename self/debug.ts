@@ -23,11 +23,14 @@
 //
 // **Two things differ from `src/`, and neither is visible in the output:**
 //
-//   - The type cache is keyed by `TypeTable.typeName`, not by the type id. Two
+//   - The type cache is keyed by `TypeTable.mangle`, not by the type id. Two
 //     ids can name one type — a `Result` carries the checker's proof about the
 //     use site in its id (`R_OK`, `R_ERR`) and stage0's `typeToString` cannot
 //     see that proof — so keying by the id would describe one struct twice and
-//     the metadata numbers would drift apart.
+//     the metadata numbers would drift apart. Not by `typeName` either: that is
+//     the spelling a person reads (`Box<i32>`, WP18 §6.7), and the mangling is
+//     the one spelling that is injective by construction, because every symbol
+//     an instantiation gets is built from it.
 //   - There are no optional parameters, so `beginFunction` takes `artificial`
 //     and `name` positionally and `member` takes an empty `file` for a member
 //     with no declaration to point at.
@@ -183,7 +186,7 @@ export class DebugInfo {
   fileKeys: StringMap;
   fileRefs: string[];
   /**
-   * `TypeTable.typeName` -> index into `typeRefs`. A composite is reserved
+   * `TypeTable.mangle` -> index into `typeRefs`. A composite is reserved
    * before its members are built, so a field whose type is the struct itself
    * finds the reference already there instead of recursing forever.
    */
@@ -257,7 +260,7 @@ export class DebugInfo {
     if (type === T_CPTR) {
       return this.foreignPointer();
     }
-    const key = this.table.typeName(type);
+    const key = this.table.mangle(type);
     const known = this.typeKeys.get(key, -1);
     if (known >= 0) {
       return this.typeRefs[known];
@@ -267,7 +270,7 @@ export class DebugInfo {
       const ch = this.module.addMetadata('!DIBasicType(name: "char", size: 8, encoding: DW_ATE_signed_char)');
       ref = this.pointerTo(ch);
     } else if (this.table.isArray(type)) {
-      ref = this.pointerTo(this.arrayHeader(this.table.refOf(type), key));
+      ref = this.pointerTo(this.arrayHeader(this.table.refOf(type), this.table.typeName(type)));
     } else if (this.table.isStruct(type)) {
       const info = this.program.struct(this.table.nameOf(type));
       if (info === null) {
@@ -316,10 +319,11 @@ export class DebugInfo {
    * There is no pointee type this compiler can honestly name, and DWARF spells
    * that `baseType: null` — `void *`, as clang writes it.
    *
-   * It is memoised here rather than in `typeKeys`, whose keys are
-   * `TypeTable.typeName`: that spells the foreign pointer `CPtr`, and a
-   * `class CPtr` — legal, though unreachable by that name — would share the
-   * entry and be described with the other's DWARF.
+   * It is memoised here rather than in `typeKeys` because those keys used to
+   * be `TypeTable.typeName`, which spells the foreign pointer `CPtr`, and a
+   * `class CPtr` — legal, though unreachable by that name — would have shared
+   * the entry. The mangling keeps the two apart now (`$CPtr` is the class),
+   * and a field of its own still costs nothing.
    */
   foreignPointer(): string {
     if (this.cptr === "") {
@@ -348,10 +352,14 @@ export class DebugInfo {
     );
   }
 
-  /** `%struct.<name>` with the checker's layout. Reserved before its members so a self-referencing field resolves. */
+  /**
+   * `%struct.<name>` with the checker's layout. Reserved before its members so a
+   * self-referencing field resolves. The DWARF `name` is the source spelling,
+   * `Box<i32>` for an instantiation, as clang names a C++ template's (WP18 §6.7).
+   */
   composite(info: StructInfo): string {
     const ref = this.module.reserveMetadata();
-    this.setTypeRef(info.name, this.pointerTo(ref));
+    this.setTypeRef(this.table.mangle(info.type), this.pointerTo(ref));
     const file = this.fileOf(info.origin);
     const members: string[] = [];
     for (const f of info.fields) {
@@ -362,7 +370,7 @@ export class DebugInfo {
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
     this.module.setMetadata(
       ref,
-      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(this.table.typeName(info.type))}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     );
     return ref;
   }
@@ -448,7 +456,7 @@ export class DebugInfo {
    * the in-memory composite is what a local, a field and `p *r` see.
    */
   resultWord(type: i32): string {
-    const key = `${this.table.typeName(type)}.word`;
+    const key = `${this.table.mangle(type)}.word`;
     const known = this.typeKeys.get(key, -1);
     if (known >= 0) {
       return this.typeRefs[known];
