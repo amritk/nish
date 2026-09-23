@@ -1300,7 +1300,10 @@ export const main = (): i32 => {
   A value is `T`-typed however it reached the receiver: a local inferred from a
   `T`, an element of a `T[]`, a `T | null` narrowed to `T`, a field of type `T`
   read through `this`, and the result of a generic call that returns its
-  argument (`reject_generic_member_through_local`). What decides it is where
+  argument (`reject_generic_member_through_local`); a field of `new Box<T>(t)`,
+  an element of `[t]` (`reject_generic_member_through_expression`); and a
+  `Result<T, E>`'s `value`, `pop()` on a `T[]`, an assignment's value and `this`
+  copied into a local (`reject_generic_member_through_payload`). What decides it is where
   the value came from, never its type — at `T = Point` a `T` and a `Point` are
   one type, and only the `T` is refused
   (`reject_generic_member_same_type_local`).
@@ -1337,7 +1340,10 @@ export const main = (): i32 => {
   was inferred or written, and reported in that module:
   `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` ``
   (`tests/cases/reject_generic_unsatisfied_constraint`,
-  `tests/link/generic_constraint_import_unsatisfied`).
+  `tests/link/generic_constraint_import_unsatisfied`). Every position a type
+  argument can be written in is a request of its own — a field, an array
+  element, a `Result` arm, inside another instantiation, an `implements`
+  clause (`reject_generic_unsatisfied_constraint_positions`).
 - **Not supported yet**, each with its own message: a default type argument
   (`<T = string>`), and type parameters on a method or a type alias. A generic
   `main` is refused too: the entry point is called by the C runtime, which has

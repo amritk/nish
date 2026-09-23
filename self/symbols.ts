@@ -33,7 +33,7 @@ export class Local {
    * body of an instantiation (WP18 G6), and `null` everywhere else. `type` is
    * concrete — `T` is `Point` by the time a body is checked — so this is the
    * only record that the local came from `T`, which is what decides whether a
-   * member may be read through it (`receiverParameter` in `self/generics.ts`).
+   * member may be read through it (`refuseParameterMember` in `self/generics.ts`).
    */
   origin: TypeOrigin | null;
 
@@ -58,18 +58,36 @@ export class Local {
  * `args[i]`, which is itself an origin (`U`, here), or `null` for an argument
  * that came from no type parameter at all. Substituting that way, rather than
  * resolving, is what keeps a type parameter from ever becoming a type.
+ *
+ * Two expressions stand in for an annotation, because they spell the same
+ * shape: `new Box<U>(u)`, whose written type arguments are an annotation's,
+ * and an array literal, whose one argument is the origin of its elements.
  */
 export class TypeOrigin {
   annotation: Node;
   names: string[];
   args: (TypeOrigin | null)[];
+  /**
+   * The value came from an expression `originOf` has no case for, so where it
+   * came from is not known. It is refused as a type parameter's whenever its
+   * type is one's binding: failing closed, for the reason `originOf` gives.
+   */
+  unknown: boolean;
 
   constructor(annotation: Node, names: string[], args: (TypeOrigin | null)[]) {
     this.annotation = annotation;
     this.names = names;
     this.args = args;
+    this.unknown = false;
   }
 }
+
+/** The origin of an expression nothing knows how to follow (see `TypeOrigin.unknown`). */
+export const unknownOrigin = (expr: Node): TypeOrigin => {
+  const origin = new TypeOrigin(expr, [], []);
+  origin.unknown = true;
+  return origin;
+};
 
 export class Scope {
   parent: Scope | null;

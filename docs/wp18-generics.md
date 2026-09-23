@@ -1665,13 +1665,40 @@ So a value carries a *type origin*: the annotation the template wrote, with the
 type parameters it may mention still as syntax. A parameter's origin is its
 annotation, a local's is its annotation or its initialiser's origin
 (`const q = p;` is still a `T`), and an expression's is worked out from its
-parts — through parentheses and a ternary, to the element of a `T[]`, to a field
-or method of `this` in a generic class (`this.value.x` where `value: T`), to a
-field or method of a value whose origin is `Box<U>` (with `Box`'s parameters
-standing for what was written), and to the result of a generic call whose
-return type is one of its own parameters (`identity(p)` is whatever `p` is).
-`T | null` narrowed to `T` is a `T` because the narrowing changes the type and
-not the origin. When the receiver's origin comes out as a bare type parameter
+parts — through parentheses, a ternary and an assignment's right-hand side, to
+the element of a `T[]`, of `new Array<T>(n)` and of an array literal (`[t][0]`),
+to `pop()` on any of those, to a field or method of `this` in a generic class
+(`this.value.x` where `value: T`, and `this` itself copied into a local), to a
+field or method of a value whose origin is `Box<U>` — written as an annotation
+or as `new Box<U>(u)`, which are one shape — with `Box`'s parameters standing
+for what was written, to the payload of a `Result<T, E>` (`value`, `error`,
+`orReturn()`, `unwrapOr()`, `expect()`), and to the result of a generic call
+whose return type is one of its own parameters (`identity(p)` is whatever `p`
+is). `T | null` narrowed to `T` is a `T` because the narrowing changes the type
+and not the origin.
+
+**`originOf` is exhaustive, and its `default` fails closed.** The first version
+had a `default` that answered "not from a type parameter", so every expression
+kind it had no case for waved a member of `T` through: `new Box<T>(t).value.x`
+and `[t][0].x` compiled at `T = Point`. So every expression kind of
+`self/nodes.ts` now has a case that either follows the value or says why it
+cannot be a `T` — a literal has the type it spells, a unary operator answers a
+number or a boolean, a binary one other than `=` answers its own result type
+(`s + t` at `T = string` is a concatenation, not a `T`), an object literal takes
+its type from an annotation, and a plain function or builtin declares its
+return type outside every template (the three builtins that pass their
+argument's type through, `Math.abs`, `min` and `max`, only take numbers). The
+`default` is left for a kind added later, and it answers *unknown*: an unknown
+receiver is refused whenever its concrete type is the binding of some type
+parameter in scope. That is the type-equality test the trap rules out as a
+test for "came from `T`", and it is used there on purpose, because it errs by
+refusing: a construct nobody taught `originOf` about shows up as a false
+refusal in its own tests, where the other default would have shown up as
+nothing at all. No expression kind reaches it today, so no case pins it; the
+alternative, an internal error, is not a path the checker has.
+`reject_generic_member_through_expression` and
+`reject_generic_member_through_payload` pin the kinds the first version missed,
+each beside a function that does the same at `Point` and must be accepted. When the receiver's origin comes out as a bare type parameter
 of the body being checked, the member is looked up in that parameter's
 constraint first: no constraint is §8's message 8, and a member the constraint
 lacks is refused in the words `self/members.ts` already uses, with the
@@ -1716,7 +1743,10 @@ annotation `Holder<Circle>` above `class Circle implements Shape` is resolved
 before `Circle`'s `implements` clause is read, and an imported class has no
 members until its import binds, so a pass-1 request makes the instantiation
 and writes the check down, and pass 1b runs it
-(`reject_generic_unsatisfied_constraint_annotation`).
+(`reject_generic_unsatisfied_constraint_annotation`). A type argument is held
+to its constraint wherever it is written: a field, an array element, a `Result`
+arm, inside another instantiation and after `implements` all make their own
+request (`reject_generic_unsatisfied_constraint_positions`).
 
 **What a constraint may name.**
 

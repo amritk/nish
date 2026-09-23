@@ -97,7 +97,7 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     );
     return T_ERROR;
   }
-  if (refuseParameterMember(ctx, receiverExpr, expr, "read", false, scope)) {
+  if (refuseParameterMember(ctx, receiverExpr, receiver, expr, "read", false, scope)) {
     return T_ERROR; // WP18 G6: a `T`'s members are its constraint's
   }
   if (receiver === T_STRING) {
@@ -161,7 +161,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     );
     return T_ERROR;
   }
-  if (refuseParameterMember(ctx, receiverExpr, access, "call", true, scope)) {
+  if (refuseParameterMember(ctx, receiverExpr, receiver, access, "call", true, scope)) {
     return T_ERROR;
   }
   if (receiver === T_STRING) {
@@ -394,7 +394,7 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   if (receiver === T_ERROR) {
     return T_ERROR;
   }
-  if (refuseParameterMember(ctx, receiverExpr, target, "assign to", false, scope)) {
+  if (refuseParameterMember(ctx, receiverExpr, receiver, target, "assign to", false, scope)) {
     return T_ERROR;
   }
   if (ctx.table.isArray(receiver) && target.text === "length") {
