@@ -11,6 +11,7 @@ and subject to the same rules as `examples/` or `self/`
 | [`testing.ts`](./testing.ts) | a test runner: a `Suite` a program drives with straight-line assertions, printing the `PASS` / `FAIL` / `SKIP` lines the repository's own harness prints, and answering the exit code |
 | [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, and `firstDifference` over two arrays of lines |
 | [`json.ts`](./json.ts) | `jsonField(object, name)`: the value of one field of one flat JSON object, which is the shape the compiler's own `--json` diagnostics have. A reader and not a parser — it answers text, answers `null` for a field that is not there, and does not validate |
+| [`pair.ts`](./pair.ts) | `Pair<A, B>`: an interface with `first` and `second`, for a function that answers two values from one call. A type and nothing else — the caller writes an object literal at the return — and for returning two values rather than storing them side by side |
 
 ## How a program imports it
 
@@ -101,9 +102,13 @@ that are *not* this package.
   may declare those names itself.
 - **It is an Nish program**, so the constraints are the language's: a function is
   an arrow bound to a module-level `const`, a function is never a value, there
-  are no generics, no `try` / `catch`, and no optional or default parameters.
-  Those four are what shape an API here more than any style preference — see the
-  header of `testing.ts` for what they did to that one.
+  is no `try` / `catch`, and there are no optional or default parameters. Those
+  three are what shape an API here more than any style preference — see the
+  header of `testing.ts` for what they did to that one. Generics arrived after
+  it (WP18), and `pair.ts` is the first module to export a generic type; a
+  generic *function* here would be monomorphised into each importer like any
+  other, but `testing.ts` still has one assertion per type because it was
+  written first ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3c).
 - **Ship it with a `tests/link/` case.** `tests/link/<name>/` is the only place a
   multi-module program is exercised end to end, and it is also what puts the
   module into the corpus the stage1 oracles read
