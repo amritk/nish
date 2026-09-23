@@ -10,8 +10,9 @@ information, and no generic code left in the binary.
 This note was the design, written before the code. **Generic functions have
 landed** — §15 records what shipped against what §11 planned, and where the
 implementation chose differently it says why. So have generic classes (§15.4),
-the whole-program half (§15.5) and constraints (§15.6); the peripheries of G8
-are what is left. [LANGUAGE.md](LANGUAGE.md) stays
+the whole-program half (§15.5), constraints (§15.6), the peripheries of G8
+(§15.7) and generic methods (§15.8), and with them WP18 is closed: §16 lists
+what stays deferred on purpose. [LANGUAGE.md](LANGUAGE.md) stays
 normative for what the language *is*; the rest of this file says what it should
 become and why.
 
@@ -353,6 +354,10 @@ and a user function named `identity_i32` both become `identity_i32`). That
 hazard predates this package — `Point.shifted` and `Point_shifted` collide the
 same way — but generics make it much easier to hit.
 
+*As landed (§15.7):* the collision is closed by a different name, not a
+refusal: an instantiation is `nish_gen_identity_i32` in C, and only the
+pre-existing `Point.shifted` case is refused (NL4008).
+
 ### 3d. One AST, N type assignments
 
 This is the part of the change that touches the most files, and it is worth
@@ -609,10 +614,10 @@ caps below: a program that asked for 4,097 instantiations has no ancestor that
 is the right answer either. `reject_generic_polymorphic_recursion` is the
 function half's case, and the two compilers already agree on it.
 
-The recovered case's second diagnostic shows the same type spelled two ways in
-one report — `Nest<i32>` in the refusal, `Nest$i32 | null` below it — and its
-`.err` pins that, because it is what both compilers do today. That is the
-display-name gap §16's G8 entry already records, not a fact about this rule.
+The recovered case's second diagnostic used to show the same type spelled two
+ways in one report — `Nest<i32>` in the refusal, `Nest$i32 | null` below it.
+G8 closed that display-name gap (§15.7): the `.err` now reads
+`Nest<i32> | null` in both.
 
 ### The backstop: a cap
 
@@ -909,9 +914,11 @@ generic body has N addresses — the same thing gdb does for a C++ template, and
 the reason `dbg_generic` should assert two `DISubprogram`s with distinct
 `linkageName`s and the same `line`.
 
-`-g` is stage0's today (`wp17-result-abi.md` §6); if it still is when this
-lands, the IR oracle skips the `-g` corpus exactly as it does now, and the
-DWARF half is a stage0-only change.
+*As landed (§15.7):* this is what `self/debug.ts` emits. The paragraph that
+stood here planned for `-g` being stage0's alone; stage1 took `-g` over and WP19
+R6 deleted stage0, so there is one compiler and `tests/cases/dbg_generic` is
+its golden. The debug type cache is keyed on the mangled name, because two
+packages can each have a `Box<i32>` that displays alike.
 
 ### 6.8 Interop: `--emit-header`, `--emit-dts`, `--emit-napi`
 
@@ -949,6 +956,15 @@ The alternative, refusing to export generics at all, was rejected because it
 would make the most useful thing a library can ship (a container the caller
 instantiates) unexportable, while the instantiations it actually contains are
 perfectly ordinary C functions.
+
+*As landed (§15.7):* the recommendation held and the names did not. The C
+collapse `identity_i32` is not injective (§14 question 4), and a mangled
+argument can hold a `.` (`identity$arr.i32`), which is no more a JavaScript
+identifier than a C one, so "export `identity$i32` verbatim" was wrong for any
+array, nullable or `Result` argument. Every sidecar now uses one name,
+`nish_gen_identity_i32`, bound to the symbol with `NISH_SYMBOL` in C. The
+`src/interop/` paths above are stage0's and historical since WP19 R6; the code
+is `self/interop_*.ts`.
 
 ---
 
@@ -1181,6 +1197,10 @@ its own note, and §14 records it. It would change the IR of every module of
 
 ## 11. The plan
 
+*Historical.* This is the plan as written, with a stage0 column: WP19 R6
+deleted `src/`, so every path in that column is gone and the stage1 column is
+the only compiler. §15 records what each milestone actually did.
+
 Eight milestones, in the style of wp14 §4. Each lands in **both** compilers,
 leaves `npm run check`, `npm test` and the bootstrap green, and is useful on
 its own. This is written to be implemented by several agents in sequence, so
@@ -1205,6 +1225,13 @@ not acceptable. If G3 and G4 are hard to separate in practice, merge them.
 ---
 
 ## 12. The test obligation
+
+*Historical in its stage0 half.* The oracles below that compare stage0 with
+stage1 (`checked_oracle.js`, `reject_oracle.js`, `ir_oracle.js`,
+`interop_oracle.js`, `fuzz.js --stage1`) and `src/dump.ts` went with stage0 in
+WP19 R6; `docs/wp19-stage0-retirement.md` records what replaced each. The
+fuzzer now compares the seed with HEAD (§15.7), and the differential rewrite
+below is deferred (§16).
 
 Per `docs/ARCHITECTURE.md`'s nine-step checklist and `.claude/testing.md`.
 
@@ -1351,11 +1378,25 @@ reviewed before code is written.
    `struct Box_i32` definitions and the header did not compile — so
    `cStructName` is injective now (§15.4), and `cFunctionName` is G8's, where
    `NISH_SYMBOL` means the answer can be a rename rather than a refusal.
+   **Answered (§15.7).** A symbol with a `$` in it — every instantiation, and
+   every method of an instantiated class — is now `nish_gen_<collapse>` in C,
+   the escape `cStructName` already used. `nish_` is refused as the start of a
+   user function, class or interface name, so no user name can take one, and a
+   user `identity_i32` beside `identity<i32>` is two C functions
+   (`interop_generic_collision`). What is left is the pre-existing `.` case,
+   `Point.shifted` beside `Point_shifted`, which the rename cannot reach; it is
+   refused with NL4008, naming both, whenever a sidecar is requested
+   (`reject_interop_generic_clash`).
 5. **Whether `--emit-dts` should also declare the *generic* signature**
    alongside the instantiations. TypeScript can express `identity<T>(x: T): T`;
    C cannot. Declaring both would make the `.d.ts` read the way a TypeScript
    user expects while the instantiations carry the actual exports — at the cost
    of a declaration that has no symbol behind it.
+   **Answered: no (§15.7).** `--emit-dts` declares each instantiation under its
+   `nish_gen_` name, with a comment naming it as written
+   (`identity<i32>(x: number): number`), and nothing else. A `.d.ts` is a
+   promise about what the loader returns, and the loader has no `identity` to
+   return; the generic signature would type-check a call that fails at run time.
 6. **The node-id span for stage1's overlay.** §3d assumes a top-level
    declaration's nodes occupy a contiguous id range, which follows from the
    parser handing out ids at node creation. It has not been proved over every
@@ -1363,6 +1404,7 @@ reviewed before code is written.
    overlay, which costs memory and nothing else.
 7. **Generic methods**, deferred in §2. The instantiation key would become
    (receiver instantiation × method arguments). Is there a real want?
+   **Answered: added (§15.8).**
 8. **Whether `self/map.ts` should ever become `Map<K, V>`.** §10 says not in
    this package. It would change the IR of every module of `self/`, so it is a
    package with its own note and its own bootstrap risk, gated on the fixed
@@ -1395,8 +1437,9 @@ and instantiated from anywhere, each instantiation is defined once in the
 module that declares the template, and every other module `declare`s it. §15.5
 records what *it* decided differently, including the trap §16 marked, which is
 closed. Constraints (G6) followed, and §15.6 records how member access on a
-type parameter is decided. The peripheries (G8) are not done; §16 is the order
-to take them in.
+type parameter is decided. The peripheries (G8) followed, and §15.7 records
+them; generic methods (§14 question 7) came with them, in §15.8. **WP18 is
+closed**: §16 lists what stays deferred, each with what would bring it back.
 
 The acceptance test of §9 holds and is checked rather than asserted:
 `tests/cases/gen_identity.ll` is `str_param_passthrough.ll` with the symbol
@@ -1460,6 +1503,12 @@ at a call site, non-terminating monomorphisation, `$` in a declared name, a
 constrained parameter, wrong arity — and five are the "not yet" boundary: a
 generic class or interface, a generic type alias, a generic method, a generic
 `main`, and instantiating a generic imported from another module.
+
+*Since superseded.* That list is the boundary as it stood when generic
+functions landed. A constrained parameter is supported (§15.6, G6), and so are
+generic classes and interfaces (§15.4), generics across modules (§15.5) and
+generic methods (§15.8); a generic type alias and a generic `main` are still
+refused. `docs/LANGUAGE.md` has the current rules.
 
 `reject_generic_class`, `reject_type_alias_generic`, `reject_generic_method`
 and `reject_generic_constraint` are refused by stage1's *parser* rather than in
@@ -1771,6 +1820,78 @@ Multiple bounds, trait bounds and F-bounded constraints stay out, as §13 says.
 compiled before this and does not now; the fix is the constraint the message
 names. Nothing in the corpus, `std/`, `examples/` or `docs/` did.
 
+### 15.7 G8, the peripheries, and what it decided
+
+Five changes, each merged on its own.
+
+**Display and linkage are two spellings** (§6.7, as designed). An instantiated
+class reads `Box<i32>` in every diagnostic — member, argument, object-literal,
+definite-assignment, `implements` and cross-package-clash messages alike — in
+the `--emit-checked` dump, and as the `-g` `name` of its composite type and its
+methods (`Box<i32>.get`). The symbol, the `%struct` name, the DWARF
+`linkageName`, the sidecars' bindings and every table key keep `Box$i32`. The
+display spelling is a side table on the `TypeTable`, set once where the
+instantiation is minted, so `typeName` answers it and `mangle` and `nameOf` do
+not change. Two decisions: the debug type cache is keyed on the mangled name,
+which stays injective when two packages' `Box<i32>` display alike; and a
+polymorphic-recursion chain through a class now reads
+`` `grow<i32>` asks for `grow<Box<i32>>` ``, which closes the case the old §16
+marked. No non-debug IR byte moved (`dbg_generic`,
+`reject_generic_recursion_through_class`, `reject_generic_member_display`,
+`reject_generic_implements_display`, `reject_generic_ctor_display`,
+`tests/link/package_generic_class_clash`).
+
+**One host name per instantiation, in every sidecar** (§6.8, differently). The
+header declares `nish_gen_<collapse>` — `nish_gen_identity_i32`,
+`nish_gen_identity_arr_i32`, `nish_gen_Box_i32_get` — bound to the symbol with
+`NISH_SYMBOL`, and the comment above it says which instantiation it is. The
+`.d.ts`, the wasm loader and N-API export the same identifier, because §6.8's
+"`$` is legal in JavaScript" missed the `.` that an array, nullable or `Result`
+argument puts in the mangling. Reusing `cStructName`'s `nish_gen_` escape for
+functions is what makes `cFunctionName` injective (§14 question 4), and NL4008
+refuses the one clash left, a method's `.`-joined name against a function's.
+This was a breaking change: an instantiation that crossed as `identity_i32`
+crosses as `nish_gen_identity_i32` (`interop_generic_fn`,
+`interop_generic_collision`, `reject_interop_generic_clash`,
+`tests/wordings/nl4008_c_name_clash`).
+
+**Message 9 is NL4007**, in §8's words. It fires for an exported template of
+the root package that the program never instantiates — a function (`C
+signature`), a class or interface (`C layout`), and, with §15.8, a generic
+method of an exported class — whenever `--emit-header`, `--emit-dts`,
+`--emit-napi` or `--emit-napi-async` is given, before any IR is written. With
+no sidecar flag nothing changes, which `reject_interop_generic_unused` checks by
+compiling the same file both ways (`tests/wordings/nl4007_generic_never_instantiated`).
+§14 question 5 is answered here too: the `.d.ts` declares the instantiations and
+not the template, because the loader has nothing to return for it.
+
+**A constraint is satisfied by a declaration, not a name** (#161). Struct type
+ids are interned by name, so a module that declared its own `Shape` or `Base`
+satisfied the template's constraint by spelling, and the program then failed
+inside the template, in the wrong module, or compiled while reading one layout
+as another's. The argument is now compared by `StructInfo` identity, which each
+declaration has once and every importer shares, and a plain interface's
+implementer by the interface's declaring module together with the name in its
+`implements` clause. That second half is exact only while implementing an
+imported interface stays refused (NL2079); were NL2079 lifted it would refuse
+the newly legal case rather than accept a stranger, and `implementsDeclaration`
+in `self/generics.ts` says so. A request that fails is NL2328 at the call, in
+its existing words (`tests/link/generic_constraint_same_name`,
+`…_same_name_fields`, `…_same_name_itself`, `…_same_name_class`, and the
+positive `generic_constraint_import_back`).
+
+**The fuzzer emits generics** (§12's last oracle, retargeted). With stage0 gone
+the comparison is the seed against HEAD. Most generated programs now declare a
+generic function, a generic class and a function over it, each instantiated at
+two or three of `i32`, `boolean`, `string` and a class, and every
+instantiation is called. The generic lines draw from a second random stream, so
+every line an existing seed printed is still printed. Measured: 300 of 300
+programs agree between the 0.8.0 seed and HEAD, and 747 of 1000 seeds contain
+generics (`tests/differential/fuzz.js`).
+
+What G8 did **not** do is §12's Node-side differential rewrite; §16 says why it
+waits.
+
 ### 15.8 Generic methods (§14 q7), and what they decided
 
 §2 turned a method's own type parameters down, and §14's seventh question asked
@@ -1932,39 +2053,44 @@ input is unchanged and its fixed point with it.
 
 ---
 
-## 16. What is next, in order
+## 16. WP18 is closed: what stays deferred
 
-1. ~~**G5, generic classes and interfaces.**~~ **Landed** — §15.4 records what
-   it decided differently, including that the struct half of the termination
-   rule *is* a request chain after all, over a second cursor rather than over a
-   template graph.
-2. ~~**G7, whole-program.**~~ **Landed** — §15.5 records what it decided, and
-   the trap this entry used to warn about is closed: an instantiation's symbol
-   is minted from the *template's* `symbolPrefix` rather than the instantiating
-   module's, in `instantiate` and in `collectInstanceMembers` on both sides, so
-   two packages importing one generic mint one symbol for one function instead
-   of one symbol for two. `tests/link/package_generic_import` pins it,
-   `tests/link/generic_import` and `generic_two_importers` are §12's two cases,
-   and the two refusals that stood in for the milestone are deleted (their
-   codes, NL2298 and NL2316, are retired in `tests/wordings/unreachable.txt`
-   and reserved for ever, as every retired code is).
-3. ~~**G6, constraints.**~~ **Landed** — §15.6 records what it decided: member
-   access is judged against the constraint while each instantiation is
-   checked, by where a value came from rather than by its type, and reported
-   once per template; satisfaction is checked at each request, against the
-   concrete type argument. The "not supported yet" refusal is gone and its
-   code, NL2294, is retired in `tests/wordings/unreachable.txt`.
-4. **G8, the peripheries.** `-g` naming (`dbg_generic`), the three interop
-   sidecars and the C-name collision of §14 question 4, the differential
-   rewrite's one-JS-function-per-instantiation, and the fuzzer learning to emit
-   a generic declaration. §6.7's display name is G8's too, and G5 left a case
-   for it to fix: a diagnostic about a chain through an instantiated class
-   quotes the mangled spelling — `` `grow<i32>` asks for `grow<Box$i32>` ``
-   — because `typeToString` answers from the type alone and an instantiated
-   class is an ordinary struct that carries no arguments. It is correct and it
-   is what the IR and the header say; it is not what the user wrote. The interop half has a decision waiting in it: an
-   exported template with no instantiation produces no symbol, and §8 message 9
-   says that should be an error when a sidecar is asked for. It is not one yet.
-5. **Generic methods on a generic class** (§14 question 7) and
-   **contextual-return inference** (§2a) stay deferred with their stated
-   triggers.
+G2 to G8 and generic methods have landed (§15). What follows is not a
+remaining milestone. Each item was put off on purpose, and each says what
+would bring it back.
+
+1. **Contextual-return inference** (§2a, §14 question 1). A type parameter that
+   appears only in the return type stays uninferable and is refused at the
+   declaration. *Trigger:* the first container library written against
+   generics needs a factory in more than two places.
+2. **Explicit type arguments at a call site** (§2a, §14 question 2). Refused on
+   a parser ground: one token of lookahead cannot tell `f<i32>(x)` from
+   `(f < i32) > (x)`. *Trigger:* evidence that inference is too weak in
+   practice, which would pay for a restartable lexer and a save/restore cursor
+   in `self/parser.ts`.
+3. **Discriminated unions** (§7). Their own note, with the coupling to
+   generics dissolved. *Trigger:* that note.
+4. **The Node-side differential rewrite** (§12). A generic body needs one
+   JavaScript function per instantiation, because each rewrites differently
+   (`i32` wraps, `f64` does not). The rewriter would have to read the
+   instantiation set and the per-instantiation types from the checker, and
+   with stage0 gone that means a rewriter driven by stage1's typed output
+   (`docs/wp19-stage0-retirement.md` §6, item 6). Until then the fuzzer's seed-versus-HEAD
+   IR comparison (§15.7) and the golden round trips cover generics.
+   *Trigger:* a stage1-typed rewriter.
+5. **Implementing an imported interface** (NL2079). It is still refused, and
+   §15.7's constraint check leans on that: it fails closed, so lifting NL2079
+   alone would refuse a class that implements an imported constraint.
+   *Trigger:* a program that needs it. The same change then has to record the
+   resolved `StructInfo` beside each `implements` name, so that
+   `implementsDeclaration` in `self/generics.ts` compares declarations.
+
+Known follow-ups, found in review and not fixed here:
+
+- `coercesTo` in `self/structs.ts` decides that a class converts to an interface
+  by comparing the interface's *name* with the names in `implementsNames`, the
+  shape #161 fixed for constraints.
+- The constructor-argument message of an instantiation names the template —
+  `` Argument 1 of `new Box`: expected i32, got string `` for `new Box<i32>("x")`
+  — rather than `new Box<i32>`, and `--emit-checked` prints no `callee` line
+  for the `new` of a generic instantiation.

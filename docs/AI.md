@@ -433,6 +433,10 @@ export const main = (): i32 => {
   A class constraint is satisfied by that class alone. The refusal is at the
   call: `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not
   implement it ``.
+- **A constraint is a declaration, not a name.** A `Shape` your module declares
+  is not the `Shape` another module's `<T extends Shape>` names, even with the
+  same fields, so implementing your own is refused the same way; import the
+  template's `Shape` instead.
 
 ```ts nish:ok
 interface Shape { area: i32; }
@@ -454,6 +458,26 @@ export const main = (): i32 => areaOf(new Circle(2)) - 12;
   and no bound that mentions another parameter.
 - **`$` may not appear in a function, class or interface name** — it is what
   separates a generic's name from its type arguments in the emitted symbol.
+- **Read `identity<i32>` in a message, `identity$i32` in the IR.** Diagnostics,
+  `--emit-checked` and the `-g` debug names spell an instantiation as written
+  (`identity<Box<i32>>`, `Box<i32>.get`); symbols and `%struct` names are
+  mangled (`@identity$$Box$i32`, `%struct.Box$i32`).
+- **A host calls an exported instantiation as `nish_gen_…`**: `identity<i32>`
+  is `nish_gen_identity_i32` in the C header, the `.d.ts`, the wasm loader and
+  the N-API addon, and `identity<i32[]>` is `nish_gen_identity_arr_i32`. There
+  is no `identity` to call — only the instantiations the program makes.
+- **With a sidecar flag, an exported generic must be instantiated.** Nothing
+  instantiated means no symbol, so `--emit-header`, `--emit-dts` and
+  `--emit-napi` refuse it (NL4007) rather than leave it out; call it somewhere,
+  or do not export it. The same flags refuse two names that are one C
+  identifier, such as a method `Point.shifted` and a function `Point_shifted`
+  (NL4008).
+
+```ts nish:err NL4007 --emit-dts build/docs-ai/nl4007.d.ts
+export const identity = <T>(x: T): T => x;   // exported, never called
+
+export const main = (): i32 => 0;
+```
 
 ### Generic classes and interfaces
 
@@ -1011,7 +1035,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined`, `?.`, `??`, a cast, a
-   callback, a generic *alias* or *method*, or `extends`?
+   callback, a generic *alias*, or `extends`?
 9. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
