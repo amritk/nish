@@ -6,19 +6,19 @@
 // verbatim — and it is the one the §2b alias domains do *not* already fix:
 // there the header load sits in a bounds-checked block, where LLVM may not
 // speculate it out. `fieldScale` is that loop and `constScale` is the hoist a
-// programmer writes by hand, and after this the two read their headers the same
-// way — but they are still *not* the same loop, and the check below says so:
-// `constScale` carries one bounds check and `fieldScale` two, because
-// `checker/bounds.ts` keys its length facts by variable and never by a property
-// path, so `h.xs.length` proves nothing about `h.xs[i]`. That second check is
-// the second loop exit, and closing it is that file's work rather than the
-// emitter's.
+// programmer writes by hand, and the two are now the same loop: they read their
+// headers the same way, and since #106 `self/bounds.ts` keys length facts by
+// property path as well as by variable, so `h.xs.length` proves `h.xs[i]` the
+// way `xs.length` proves `xs[i]` and both carry one bounds check, `dst`'s.
+// Before #106 `fieldScale` carried a second, on `h.xs[i]`, and that second
+// check was the second loop exit the hoist alone could not remove.
 //
 // `tests/run.js` pins what a golden cannot say in words: no header-domain load
-// is left inside `@fieldScale`'s loop, and the `len` the `while` condition
-// compares against is the *same SSA value* the bounds check compares against.
-// That second half is §2c's criterion and the reason the first half alone is
-// not enough — two lengths are two loop exits, whatever they were loaded from.
+// is left inside `@fieldScale`'s loop, and that loop is `@constScale`'s
+// register for register — the condition reads the preheader's `len` and no
+// second length of `h.xs` is compared anywhere. That is §2c's criterion, one
+// length value, met the strongest way, and the reason the first half alone was
+// not enough: two lengths are two loop exits, whatever they were loaded from.
 // A caution for anyone measuring this shape with `bench/hoist_field.ts`: that
 // benchmark's `field` number is **bimodal on code placement**, not on the loop.
 // The same ten-instruction inner loop reads ~755 ms or ~1493 ms depending on

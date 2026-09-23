@@ -2028,11 +2028,11 @@ compare, so negative indices fail too (`tests/cases/arr_bounds_panic`,
 `arr_index_read_write`, `arr_f64`).
 
 **The check is not emitted when the checker has proved the index in range**
-(WP15 §2.1/§2.2). The proof is flow-sensitive and keyed by *variable*: a fact
-is about a local or a parameter, never about a field or a property path, for
-the same reason a null narrowing is ([Nullable types](#nullable-types)). An
-access `w[i]` needs `i >= 0` and `i < w.length`, and both come from the
-program as written:
+(WP15 §2.1/§2.2). The proof is flow-sensitive. A fact's index is a local or a
+parameter, and its length holder `w` is a local, a parameter, or a **property
+path** — a local, a parameter or `this`, then field reads: `h.xs`,
+`this.state.idx` (#106). An access `w[i]` needs `i >= 0` and `i < w.length`,
+and both come from the program as written:
 
   - `i >= 0` from a literal initialiser, from `i = w.length`, from a test that
     reaches the access (`if (i >= 0)`, `0 <= i`, the false arm of `i < 0`), or
@@ -2078,6 +2078,37 @@ counted loops**, which is the one thing besides the overflow flags that the
 flag changes (`tests/cases/opt_wrapping` pins both halves). An `f64` index is never proved, because a bound on the double is
 not a bound on its truncation. `tests/cases/arr_bounds_proven` and
 `perf_bounds_quiet` pin the proofs; the surviving checks warn, below.
+
+**A property path has to earn what a local gets for free**, because a field
+can be written through an alias and a local cannot. `h.xs.length` proves
+`h.xs[i]` only while nothing between the test and the access can rebind the
+path or resize the array, and a path fact ends at:
+
+  - a store to a field whose name is anywhere on the path, through *any*
+    holder — `g.xs = ys` ends `h.xs`'s facts even where `g` is a different
+    object, because the name is compared rather than the aliasing guessed
+    (`arr_path_reassign`, `arr_path_alias_store`);
+  - a store of a whole element into an array of structs, which rewrites a
+    record in place with no field name written (`arr_path_record_store`);
+  - an assignment to the root (`arr_path_root`);
+  - **any call** and any `new`, for a string path as well as an array one: a
+    callee may `push` or `pop` the array or store a new value in the field,
+    and a `pop` through a second holder of the same array is a call too
+    (`arr_path_callee_pop`, `arr_path_callee_string`, `arr_path_alias_shrink`).
+    `charCodeAt` and the builtin `toI32` are the exceptions, as they are for a
+    local: they are lowered inline and call nothing.
+
+A path is never built through a link whose **declared** type is nullable —
+the root's included — whatever a guard narrowed it to, and neither is one
+whose last link is `T[] | null` (`arr_path_nullable`). Each of those tests is a
+program that proves `i < h.xs.length`, breaks it by one rule, and reads
+`h.xs[i]`; each must panic, and each reads past the array with its rule
+removed. `arr_path_hold` pins where the fact holds, and
+`tests/cases/arr_header_hoist` pins the measured point of it: a loop over
+`h.xs` compiles to the loop `const xs = h.xs` does, with one bounds check fewer
+than before and so one loop exit fewer. A path the proof cannot take keeps its
+check without a warning, because the rewrite the warning would name is that
+`const xs = h.xs` hoist.
 
 The proof changes what the program *costs*, never what it *means*: an
 out-of-range index that reaches a check still panics.

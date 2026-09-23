@@ -4,6 +4,15 @@
 # a line out when its program is gone. The rewriter that wrote the store was
 # stage0's and is deleted, so a line here is coverage lost, not a task deferred:
 # the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).
+cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
+cases/arr_path_alias_store added after R6: no rewriter to freeze it with
+cases/arr_path_callee_pop added after R6: no rewriter to freeze it with
+cases/arr_path_callee_string added after R6: no rewriter to freeze it with
+cases/arr_path_hold added after R6: no rewriter to freeze it with
+cases/arr_path_nullable added after R6: no rewriter to freeze it with
+cases/arr_path_reassign added after R6: no rewriter to freeze it with
+cases/arr_path_record_store added after R6: no rewriter to freeze it with
+cases/arr_path_root added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with

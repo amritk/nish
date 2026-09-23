@@ -39,6 +39,10 @@ hand — the git log is the working account until a release turns it into one.
 
 - checker: Hold a constraint to its declaration, not its name (#161)
 
+### Performance
+
+- checker: Key bounds length facts by property path (#106)
+
 ## [0.8.0] - 2026-09-23
 
 ### Breaking changes

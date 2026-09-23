@@ -931,6 +931,90 @@ header. The arena makes it worse rather than better, because it never frees: the
 window in which the location stays dereferenceable is the life of the process.
 Whatever closes nbody's gap, it is not that marking.
 
+### Candidate 2 shipped, and the checker's property paths are what took the 2.48x
+
+Candidate 2 landed in two halves, and only the second one moved the clock.
+
+**The hoist (#104)** lifts a field-held array's header into the preheader
+wherever `FunctionFacts.resizesArray` says nothing the loop reaches can grow it,
+with one `len` feeding the condition and the bounds check. It did its job —
+three header reloads left `fieldScan`'s loop — and `bench/hoist_field.ts` did
+not move (755 ms against 753 ms with loop alignment pinned). What was left was
+a second *compare*: `self/bounds.ts` kept its length facts by variable only, so
+`const xs = h.xs` proved `xs[i]` and `h.xs.length` proved nothing about
+`h.xs[i]`. §2c's criterion was necessary and not sufficient.
+
+**Property-path facts (#106)** key a length holder by a root and a chain of
+field names as well as by a variable. `h.xs.length` now proves `h.xs[i]`, and
+`tests/cases/arr_header_hoist` pins that `@fieldScale`'s loop is
+`@constScale`'s register for register, with one bounds check each. What makes
+it sound is what drops a path fact, since a field can be written through an
+alias and a local cannot, and each rule has a program in `tests/cases/arr_path_*`
+that must panic and does not with that rule removed:
+
+| rule | the program that needs it |
+| --- | --- |
+| a store to a field named on the path, through any holder (by name, not type) | `arr_path_reassign`, `arr_path_alias_store` |
+| a whole-record element store (records are inline, §2a) | `arr_path_record_store` |
+| an assignment to the root | `arr_path_root` |
+| any call or `new`, string paths included | `arr_path_callee_pop`, `arr_path_callee_string`, `arr_path_alias_shrink` |
+| no path through a link whose declared type is nullable | `arr_path_nullable` |
+
+The call rule is where the plan and the code differ, and the code is the
+stricter one. The plan was to drop a path only at a call whose
+`resizesArray` is true or not known. In this compiler it is never known:
+the attribute fixpoint runs in the emit phase, after every body has been
+checked. It would also not be enough if it were known, because a callee that
+stores `h.xs = shorter` resizes nothing and still rebinds the path.
+`arr_path_callee_string` is exactly that callee. So every call drops every
+path, and a loop that calls something keeps its checks, as it does for a local
+array. The loops that matter here are the ones that call nothing:
+`fieldScan`, and `knownAtMost` below.
+
+Measured on `bench/hoist_field.ts`: x86-64, Intel Xeon @ 2.80GHz, clang 18,
+`--profile speed`, both binaries linked with
+`-Wl,-mllvm,-align-all-nofallthru-blocks=4` (the loop-alignment pin #104
+used), `taskset -c 0`, and the minimum of 7 rounds inside each run, taken over
+four alternating runs:
+
+| build | param | field | hoisted | field / param |
+| --- | ---: | ---: | ---: | ---: |
+| before (main, the hoist alone) | 243 ms | 577 ms | 243 ms | 2.37x |
+| **after (property paths)** | 243 ms | **242 ms** | 243 ms | **1.00x** |
+
+**2.38x on the field scan, and the field/param gap is closed completely.**
+§2c measured 2.48x on another box and load. The gap on this box was 2.37x, and
+all of it is gone. The three shapes are now within noise of one another. The
+linked binary carries 39 packed-double instructions against the before
+build's 32. Without the alignment pin, `field` is 247–249 ms against 588–595 ms.
+
+**The real-code check.** This is `self/` as of the base commit, compiled by
+the compiler before and after with `--profile speed`, then `opt -O2` on
+`bounds.ll`:
+
+- `nish_panic_index` calls in the unoptimised module: 159 → 132.
+- Bounds-check exits inside loops after `-O2` (a conditional branch in a block
+  that reaches itself, with a successor that panics): 110 → 87.
+- Header-domain loads inside a loop: 367 → 369, in the same 24 functions.
+  That count does not go down, because the hoist had already taken the loads
+  that could move. What this change removes is compares.
+
+`knownAtMost` is the shape §2c named. After `-O2` it now reads no header in
+its loop, and it has one check where it had two. The `atMostIndex[k]` read is
+proven by the loop condition. `atMostHolder[k]` keeps its check, because the
+condition says nothing about that path. Across the whole of `self/`, 15
+functions change their recorded facts in `tests/self/goldens/checked_self.txt`:
+a function whose last check was proven loses its `nish_panic_index` callee,
+and so gains `willreturn` or `readonly` wherever nothing else stood in the way.
+
+One finding came out of the soundness tests and is not fixed here. #104's
+hoist has the same gap as the whole-record rule above. `storedFields` in
+`self/emit_arrays.ts` does not count `rs[0] = other` over an array of records.
+So a loop over `r.xs`, where `r` is a `const` bound to `rs[0]`, reads the
+replaced array after the store: it prints `1 2 3` where `--plain` panics.
+`arr_path_record_store` binds `r` with `let` so that it tests the proof
+alone. The hoist's fix belongs to the hoist.
+
 ## 3. Fast defaults — **done**
 
 | Flag | Default | What it buys | What it costs |
@@ -1434,7 +1518,7 @@ measurement closed says so and says why.
    checks everything below was written to eliminate cost 0.5% once the header
    is hoisted.
 1b. **An invariant array header** (§2c) — **candidate 1 refuted, candidate 2
-   open, and the item re-scoped to it**. What is closed is the `readonly T[]`
+   done (#104, #106)**. What is closed is the `readonly T[]`
    marking: `readonly` constrains the holder rather than the array, so a
    caller's `push` between two calls makes the marking undefined behaviour and
    not a lost hoist — a twenty-line program that must print `6 10` prints `6 6`
@@ -1461,6 +1545,13 @@ measurement closed says so and says why.
    The item's prerequisite is the whole-program "does not grow an array" fact
    the `attributes.ts` fixpoint does not have yet, which is also what
    `checker/bounds.ts` wants.
+   **Update: done, in two halves** (§2c, "Candidate 2 shipped"). #104
+   shipped the hoist and `FunctionFacts.resizesArray`, and measured it neutral
+   on its own. #106 keys the bounds proof's length facts by property path, which
+   removes the second compare. On `bench/hoist_field.ts` the field scan goes from
+   577 ms to 242 ms with loop alignment pinned. That is **2.38x**, level with
+   the parameter and hand-hoisted shapes, and it closes the whole gap. §2c's
+   2.48x was the same gap measured on another box.
 1c. **Shortest-digit formatting** (§7a) — **done**. 35x on printing a double,
    and a correctness fix; the first item to spend the runtime budget.
 1d. **The private `Result` ABI** (§7b) — **done**. 1.40x on `bench/result`,

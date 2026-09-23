@@ -67,32 +67,24 @@ while.body:
   %14 = sext i32 %13 to i64
   %15 = load i32, i32* %i.addr, align 4
   %16 = sext i32 %15 to i64
-  %17 = icmp ult i64 %16, %3
-  br i1 %17, label %bounds.ok, label %bounds.fail
+  %17 = bitcast i8* %5 to i32*
+  %18 = getelementptr inbounds i32, i32* %17, i64 %16
+  %19 = load i32, i32* %18, align 4, !alias.scope !9, !noalias !8
+  %20 = mul nsw i32 %19, 2
+  %21 = icmp ult i64 %14, %7
+  br i1 %21, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %16, i64 %3)
-  unreachable
-
-bounds.ok:
-  %18 = bitcast i8* %5 to i32*
-  %19 = getelementptr inbounds i32, i32* %18, i64 %16
-  %20 = load i32, i32* %19, align 4, !alias.scope !9, !noalias !8
-  %21 = mul nsw i32 %20, 2
-  %22 = icmp ult i64 %14, %7
-  br i1 %22, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
   call void @nish_panic_index(i64 %14, i64 %7)
   unreachable
 
-bounds.ok.1:
-  %23 = bitcast i8* %9 to i32*
-  %24 = getelementptr inbounds i32, i32* %23, i64 %14
-  store i32 %21, i32* %24, align 4, !alias.scope !9, !noalias !8
-  %25 = load i32, i32* %i.addr, align 4
-  %26 = add nsw i32 %25, 1
-  store i32 %26, i32* %i.addr, align 4
+bounds.ok:
+  %22 = bitcast i8* %9 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 %14
+  store i32 %20, i32* %23, align 4, !alias.scope !9, !noalias !8
+  %24 = load i32, i32* %i.addr, align 4
+  %25 = add nsw i32 %24, 1
+  store i32 %25, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
