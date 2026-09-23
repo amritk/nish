@@ -1265,6 +1265,9 @@ if (!only || "performance".includes(only)) {
     "perf_arena_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
+    // Every index proven through a hoisted `toI32(w.length)`, the spelling that
+    // compiles in both number modes; `perf_bounds_toi32_f64` is checked below.
+    "perf_bounds_toi32",
     // Literal spellings neither compiler folds: normalising them in stage0 would
     // fold exactly what stage1 refuses, and only one of the two would warn.
     "perf_overflow_spelling",
@@ -1281,6 +1284,87 @@ if (!only || "performance".includes(only)) {
       `performance: ${name} takes no slow path with a faster form to name, so nothing is reported`,
       quiet.status === 0 && summaries(quiet.stderr).length === 0,
       quiet.stderr
+    );
+  }
+
+  // WP15 §2: `toI32(w.length)` is the length, in both number modes. The quiet
+  // case above runs in i32 mode; this is the same program under f64, where the
+  // hoist is the only spelling that compiles at all.
+  const toI32Quiet = compile("perf_bounds_toi32_f64", "perf_bounds_toi32_f64_quiet.ll", ["--number-mode", "f64"]);
+  check(
+    "performance: perf_bounds_toi32_f64 proves every access through `toI32(w.length)` under --number-mode f64, so nothing is reported",
+    toI32Quiet.status === 0 && summaries(toI32Quiet.stderr).length === 0,
+    toI32Quiet.stderr
+  );
+
+  // Only the length converts to a length: the conversion of anything else
+  // leaves the check, and the warning, where they were.
+  const toI32Loop = compile("perf_bounds_toi32_loop", "perf_bounds_toi32_loop_report.ll");
+  const toI32LoopLines = summaries(toI32Loop.stderr);
+  check(
+    "performance: `toI32` of something that is not a length proves nothing, and each access warns",
+    toI32Loop.status === 0 &&
+      toI32LoopLines.length === 2 &&
+      positions(toI32LoopLines) === "14:33,23:17" &&
+      toI32LoopLines[0].includes("`i` is not proven to be in range for `s` here") &&
+      toI32LoopLines[1].includes("`j` is not proven to be in range for `xs` here"),
+    toI32Loop.stderr
+  );
+
+  // A user function named `toI32` wins over the builtin and answers what it
+  // likes, here one past the length. The warning says the check stayed, and
+  // the run says it had to: the last pass panics instead of reading past `s`.
+  const toI32User = compile("perf_bounds_toi32_user", "perf_bounds_toi32_user_report.ll");
+  const toI32UserLines = summaries(toI32User.stderr);
+  check(
+    "performance: a user function named `toI32` is not trusted as the length, so the access warns",
+    toI32User.status === 0 &&
+      toI32UserLines.length === 1 &&
+      positions(toI32UserLines) === "14:30" &&
+      toI32UserLines[0].includes("`i` is not proven to be in range for `s` here"),
+    toI32User.stderr
+  );
+  if (has("clang") && toI32User.status === 0) {
+    const exe = path.join(buildDir, "perf_bounds_toi32_user");
+    const cc = linkNative(exe, path.join(buildDir, "perf_bounds_toi32_user_report.ll"));
+    const run = cc.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : null;
+    check(
+      "perf_bounds_toi32_user: the kept check stops the pass past the end — exits 1 with `index out of range: 3 >= 3`",
+      run !== null &&
+        run.status === 1 &&
+        run.stderr.includes("index out of range: 3 >= 3") &&
+        run.stdout === "97\n98\n99\n",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : cc.stderr
+    );
+  } else {
+    skip("perf_bounds_toi32_user: the panic run needs clang");
+  }
+
+  // `std/text` is imported into every program that reads lines, so a warning
+  // from inside it is a warning about code the user cannot change. A program
+  // importing every export — read off the module, so a new one is covered the
+  // day it lands — must compile silent from `std/text.ts` in both number
+  // modes: the checks are proven away, which is not the same as silenced.
+  const textExports = [...fs.readFileSync(path.join(root, "std", "text.ts"), "utf8").matchAll(/^export const (\w+)/gm)].map(
+    (m) => m[1]
+  );
+  const textUser = path.join(buildDir, "std_text_importer.ts");
+  fs.writeFileSync(
+    textUser,
+    `import { ${textExports.join(", ")} } from "nish/text";\n\nexport const main = (): i32 => 0;\n`
+  );
+  for (const mode of ["i32", "f64"]) {
+    const outDir = path.join(buildDir, `std_text_importer_${mode}`);
+    const run = spawnSync(NISH, [textUser, "-o", `${outDir}/`, "--number-mode", mode], { cwd: root, encoding: "utf8" });
+    const fromText = summaries(run.stderr).filter((l) => l.includes("std/text.ts:"));
+    check(
+      `performance: a program importing all ${textExports.length} exports of nish/text compiles with no warning from std/text.ts (--number-mode ${mode})`,
+      run.status === 0 &&
+        textExports.length >= 8 &&
+        fs.existsSync(path.join(outDir, "text.ll")) &&
+        fromText.length === 0 &&
+        !run.stderr.includes("more performance warnings"),
+      run.stderr
     );
   }
 

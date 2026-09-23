@@ -582,9 +582,45 @@ const indexLocal = (program: CheckedProgram, expr: Node): Local | null => {
   return v;
 };
 
-/** `w.length` on a local holder: the expression a bound is stated against. */
+/**
+ * Whether `call` is the builtin `toI32` itself, resolved the way the checker
+ * resolved it: a plain identifier with no user function behind it
+ * (`nodeCallees` is `null` only for a builtin) and no `nish:` import
+ * renaming another builtin to that spelling (`nodeBuiltins` is `""`). A user
+ * function called `toI32` wins over the builtin, and it may answer anything,
+ * so the spelling alone is never trusted.
+ */
+const isBuiltinToI32 = (program: CheckedProgram, call: Node): boolean => {
+  const callee = call.children[0];
+  return (
+    callee.kind === N_IDENT &&
+    callee.text === "toI32" &&
+    program.nodeCallees[call.id] === null &&
+    program.nodeBuiltins[call.id] === "" &&
+    call.children[1].children.length === 1
+  );
+};
+
+/**
+ * `w.length` on a local holder: the expression a bound is stated against.
+ *
+ * `toI32(w.length)` is accepted as the same expression, because every fact
+ * this file draws from a length needs only `0 <= value <= w.length`, and the
+ * conversion keeps both. In i32 mode `.length` is already an `i32` and the
+ * conversion is the identity. Under `--number-mode f64` `.length` is the
+ * `sitofp` of the header's `i64`, exact below `2^53`, and `toI32` lowers it
+ * with the saturating `llvm.fptosi.sat.i32.f64`: the answer is the length
+ * itself, or `2^31 - 1` for a longer one — never negative and never past the
+ * length. That is what lets a program, `std/text` among them, hoist
+ * `const n: i32 = toI32(s.length)`, the one spelling that compiles in both
+ * modes, and keep the proof `const n = s.length` gets. Only `toI32`: another
+ * target changes the type the facts are stated in, and nothing asks for it.
+ */
 const lengthOfLocal = (ctx: CheckContext, expr: Node): Local | null => {
-  const e = unwrapBoundsParens(expr);
+  let e = unwrapBoundsParens(expr);
+  if (e.kind === N_CALL && isBuiltinToI32(ctx.program, e)) {
+    e = unwrapBoundsParens(e.children[1].children[0]);
+  }
   if (e.kind !== N_MEMBER || e.text !== "length") {
     return null;
   }
@@ -1129,6 +1165,12 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
       judge(walk, state, e, callee.children[0], e.children[1].children[0]);
       return;
     }
+    if (isBuiltinToI32(ctx.program, e)) {
+      // A cast or one `llvm.fptosi.sat` inline: nothing is called that could
+      // hold an array. Without this, `const m = toI32(ys.length)` would drop
+      // the fact `const n = toI32(xs.length)` recorded one line above it.
+      return;
+    }
     // `nish_str_new` is a callee like any other, so the array lengths go here
     // whether or not this call was a `substring`.
     forgetArrayLengths(ctx, state);
@@ -1330,7 +1372,7 @@ const collectEffects = (ctx: CheckContext, node: Node, stepped: Local[], clobber
   if (node.kind === N_NEW) {
     calls = true;
   }
-  if (node.kind === N_CALL && !isCharCodeAt(ctx, node)) {
+  if (node.kind === N_CALL && !isCharCodeAt(ctx, node) && !isBuiltinToI32(ctx.program, node)) {
     calls = true;
   }
   if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
