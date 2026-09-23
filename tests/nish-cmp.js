@@ -79,14 +79,20 @@
  *     it, `selfCheckVersions` drives it over fabricated inputs on every run,
  *     and the summary counts the files that needed it.
  *
- * **A difference must be named in `CHANGELOG.md`.** `DECLARED` below is how:
- * an entry names the program and the file that may differ, the sentence saying
- * why, and the words `CHANGELOG.md` has to carry for the declaration to hold.
- * A difference no entry covers fails the run; an entry whose CHANGELOG words
- * have gone fails the run as well, so the release note and the tool cannot
- * drift apart. The list is empty, and the intent is that it stays nearly so:
- * it is a record of intended output changes for one release, not an allowlist
- * to grow.
+ * **A difference must be named in the release notes.** `DECLARED` below is
+ * how: an entry names the program and the file that may differ, the sentence
+ * saying why, and the words the notes have to carry for the declaration to
+ * hold. The notes are `CHANGELOG.md` for what has been released, and for what
+ * has not, the section `scripts/changelog-gen.mjs` would render from the
+ * commits since the last release tag — the words a pull request's own subject
+ * will land as. `CHANGELOG.md` is written by that generator when a release is
+ * cut, so a hand-written line there is duplicated by the next release; reading
+ * the generator's pending section instead lets a pull request name its change
+ * without touching the file. A difference no entry covers fails the run; an
+ * entry whose words are in neither fails the run as well, so the release note
+ * and the tool cannot drift apart. The intent is that the list stays short: it
+ * is a record of intended output changes for one release, not an allowlist to
+ * grow.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -105,6 +111,11 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  *     changelog: "string concatenation now calls `nish_str_concat2`",
  *     why: "one sentence somebody is willing to sign, in their own words",
  *   }
+ *
+ * `changelog` is matched against `CHANGELOG.md` and against the pending
+ * release section (`pendingNotes`), so for an unreleased change it is the
+ * pull request's subject as the generator renders it: the scope dropped, the
+ * first letter raised, and no `(#N)`.
  *
  * A declaration is deliberately narrow — one program, one file — so that the
  * *next* difference in the same place is still reported. A release that
@@ -208,6 +219,18 @@ const DECLARED = [
     file: "text.ll",
     changelog: "Prove bounds through toI32(length) and compile std/text silent",
     why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
+  },
+  {
+    program: "tests/link/std_json/main.ts",
+    file: "json.ll",
+    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet self/",
+    why: "std/json's reads and `substring` clamps are proven by the guards it now states, through `toI32(w.length)`, which the reference compiler still checks",
+  },
+  {
+    program: "tests/link/std_text_f64/main.ts",
+    file: "json.ll",
+    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet self/",
+    why: "the same std/json proofs under --number-mode f64",
   },
   {
     program: "tests/cases/gen_constraint.ts",
@@ -395,6 +418,98 @@ function selfCheckVersions() {
   }
   return null;
 }
+
+/** `git` in the repository, as `spawnSync` answers it: the caller reads the status. */
+const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+
+/**
+ * The release section `scripts/changelog-gen.mjs` would write for the commits
+ * since the last release, as `{ text }`, or `{ error }` saying why it cannot
+ * be read.
+ *
+ * It is the generator's own collect-and-render path, run as the generator's
+ * own command line — without `--write`, which is the only flag that writes
+ * anything — so the words a declaration is held to are the words the release
+ * will print, and no second reading of a commit subject exists here to drift
+ * from the first.
+ *
+ * The range is `<last v* tag>..HEAD`, which needs the history back to that tag
+ * and the tag itself. A CI checkout has neither (`actions/checkout` fetches one
+ * commit and no tags), and there the generator would not fail: `git describe`
+ * would find no tag and it would render the fetched commits as a first
+ * release. So the history is fetched when it is shallow, the tags when none is
+ * reachable, and the answer is an error — never an empty section — when either
+ * is still missing afterwards. A run with no release tag at all has no seed to
+ * compare with either, since the seed *is* the last release.
+ */
+const pendingNotes = () => {
+  const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"]);
+  const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true";
+  if (shallow()) git(["fetch", "--quiet", "--unshallow", "--tags", "origin"]);
+  else if (describe().status !== 0) git(["fetch", "--quiet", "--tags", "origin"]);
+  if (shallow()) {
+    return { error: "the checkout is shallow and `git fetch --unshallow` did not deepen it, so the commits since the last release cannot be read" };
+  }
+  const tag = describe();
+  if (tag.status !== 0) {
+    return { error: `no v* release tag is reachable from HEAD, even after fetching the tags: ${tag.stderr.trim()}` };
+  }
+  const rendered = spawnSync(process.execPath, [path.join(root, "scripts", "changelog-gen.mjs"), "--stdout", "md"], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (rendered.status !== 0) {
+    return { error: `scripts/changelog-gen.mjs could not render ${tag.stdout.trim()}..HEAD: ${rendered.stderr.trim()}` };
+  }
+  return { text: rendered.stdout };
+};
+
+/**
+ * Whether a declaration's words are in the release notes: `CHANGELOG.md`, or
+ * the pending section.
+ *
+ * `pending` is `pendingNotes()`'s answer, or null when it was never asked for
+ * because every declaration was already named in `CHANGELOG.md`. Only its
+ * rendered `text` counts: an error message that happens to quote the words —
+ * the generator lists the unconventional subjects it skipped — is not the
+ * release notes carrying them.
+ */
+const isNamed = (words, changelogText, pending) =>
+  changelogText.includes(words) || (pending?.text?.includes(words) ?? false);
+
+/**
+ * `isNamed` over inputs no repository produces, on every run, for the reason
+ * `selfCheckRoots` gives: it decides whether a declared difference is excused,
+ * so a mistake in it passes a difference nobody wrote up. Returns the reason it
+ * failed, or null.
+ */
+const selfCheckNotes = () => {
+  const words = "Prove bounds through toI32(length)";
+  const released = `## [0.7.0] - 2026-09-22\n\n### Performance\n\n- checker: ${words} (#154)\n`;
+  const pending = { text: `### Performance\n\n- checker: ${words} (\`72a4b16\`)\n` };
+  const cases = [
+    // Released: the file carries it, whatever the pending notes say.
+    [words, released, null, true],
+    [words, released, { error: "shallow" }, true],
+    // Unreleased: only the section the generator would render carries it.
+    [words, "## [Unreleased]\n", pending, true],
+    // In neither: the declaration does not hold.
+    [words, "## [Unreleased]\n", { text: "### Tests\n\n- Something else\n" }, false],
+    // The pending notes could not be read: never a pass, even though the
+    // error text quotes the words the way the generator's stderr would.
+    [words, "## [Unreleased]\n", { error: `skipped 1 commit: abc1234 ${words}` }, false],
+    // Not asked for at all.
+    [words, "## [Unreleased]\n", null, false],
+  ];
+  for (const [w, changelogText, notes, want] of cases) {
+    const got = isNamed(w, changelogText, notes);
+    if (got !== want) {
+      return `isNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+    }
+  }
+  return null;
+};
 
 /**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
@@ -704,8 +819,10 @@ usage: node tests/nish-cmp.js [options] [program.ts ...]
                               run skips, because there is nothing to compare to)
   -c, --candidate <compiler>  the compiler under test (default: self/ built into
                               build/self/compile by the reference)
-      --changelog <file>      where a declared difference must be named
-                              (default: CHANGELOG.md)
+      --changelog <file>      where a released difference is named (default:
+                              CHANGELOG.md); an unreleased one is named by the
+                              section scripts/changelog-gen.mjs would render
+                              for the commits since the last v* tag
       --no-sidecars           compare only the IR, not the four WP8 sidecars
       --lines <n>             differing lines to print per file (default: 3)
       --verbose               name every program, not only the differences
@@ -772,6 +889,11 @@ function main(argv) {
   const selfCheckVersion = selfCheckVersions();
   if (selfCheckVersion !== null) {
     process.stderr.write(`nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`);
+    return 2;
+  }
+  const selfCheckNote = selfCheckNotes();
+  if (selfCheckNote !== null) {
+    process.stderr.write(`nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`);
     return 2;
   }
 
@@ -847,31 +969,33 @@ function main(argv) {
   if (undeclared.length > MAX_ROWS) {
     process.stdout.write(`  ... ${undeclared.length - MAX_ROWS} more differing file(s), not printed\n`);
   }
-  // A declaration is a claim that `CHANGELOG.md` names the difference. The
+  // A declaration is a claim that the release notes name the difference. The
   // claim is checked here rather than trusted, because the whole point of G2's
   // sentence is that the release note and the compiler's output cannot drift
   // apart: a declaration whose words have gone fails the run exactly as an
-  // undeclared difference does.
+  // undeclared difference does. The pending section is only rendered when
+  // `CHANGELOG.md` leaves a declaration unnamed, since it may have to fetch
+  // history to do it.
   const changelogText = fs.existsSync(path.resolve(root, changelog))
     ? fs.readFileSync(path.resolve(root, changelog), "utf8")
     : "";
-  const unnamed = [];
   const byReason = new Map();
-  for (const row of declared) {
-    byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1);
-    if (!changelogText.includes(row.declared.changelog) && !unnamed.includes(row.declared)) {
-      unnamed.push(row.declared);
-    }
-  }
+  for (const row of declared) byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1);
+  const reasons = [...byReason.keys()];
+  const pending = reasons.some((r) => !changelogText.includes(r.changelog)) ? pendingNotes() : null;
+  const unnamed = reasons.filter((r) => !isNamed(r.changelog, changelogText, pending));
   for (const [reason, count] of byReason) {
     const where = `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim();
     process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`);
   }
   for (const reason of unnamed) {
     process.stdout.write(
-      `  FAIL ${changelog} does not name this difference: the declaration asks it for ` +
-        `"${reason.changelog}"\n`
+      `  FAIL neither ${changelog} nor the pending release notes name this difference: the declaration asks ` +
+        `for "${reason.changelog}"\n`
     );
+  }
+  if (unnamed.length > 0 && pending?.error !== undefined) {
+    process.stdout.write(`  FAIL the pending release notes could not be read: ${pending.error}\n`);
   }
   // A declaration that covers nothing is not a failure — a single-program run
   // is entitled to match none of them — but it is worth saying on a full run,
@@ -937,8 +1061,10 @@ export {
   resolveCompiler,
   resolvePair,
   seedFromEnvironment,
+  selfCheckNotes,
   selfCheckRoots,
   selfCheckVersions,
+  isNamed,
   withoutOwnRoot,
   withoutOwnVersion,
 };

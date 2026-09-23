@@ -2773,7 +2773,11 @@ by the caller.
   `file:line:col: performance: <text>`. They are **on by default**, print on
   stderr, and **never change the exit code**: a program that trips one still
   compiles and still exits 0. `--no-warn-performance` silences the class and
-  changes nothing else — the IR is byte-identical either way. A compilation
+  changes nothing else — the IR is byte-identical either way. The standard
+  library and the examples compile with **none**, in both number modes where
+  they compile, and `npm test` fails the day one of them warns; the compiler's
+  own source is held to a per-code count that may only fall
+  (`.claude/testing.md`, "The performance gate"). A compilation
   that *failed* prints its errors and none of its warnings; a report of more
   than one warning is capped at 20, like the error report, with
   `...and N more performance warnings` and an `N performance warnings` line.

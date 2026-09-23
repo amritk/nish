@@ -111,7 +111,10 @@ const testingFirstDifferentLine = (actual: string[], expected: string[]): i32 =>
   const expectedLength: i32 = toI32(expected.length);
   const shorter: i32 = actualLength < expectedLength ? actualLength : expectedLength;
   let i: i32 = 0;
-  while (i < shorter) {
+  // Two bounds rather than `i < shorter`: they stop at the same index, and each
+  // is what proves one of the two reads below in range, where the minimum of
+  // the pair proves neither.
+  while (i < actualLength && i < expectedLength) {
     if (actual[i] !== expected[i]) {
       return i;
     }

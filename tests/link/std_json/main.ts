@@ -69,6 +69,26 @@ export const main = (): number => {
   t.eqStr("a field after both is still found", jsonCaseField(awkward, "after"), "3");
   t.eqStr("a field of a nested object is not a field of this one", jsonCaseField(awkward, "inner"), "<absent>");
 
+  // A string inside a nested value is skipped whole, by the nested-value scan's
+  // own string rule: a closer or an escaped quote in it ends nothing, a doubled
+  // backslash does not escape the quote after it, and a string that never ends
+  // leaves the value unended, so neither it nor any field after it answers.
+  const nestedBrace = '{"a":{"m":"x } y"},"b":1}';
+  t.eqStr("a brace in a nested string closes nothing", jsonCaseField(nestedBrace, "a"), '{"m":"x } y"}');
+  t.eqStr("and the field after it is found", jsonCaseField(nestedBrace, "b"), "1");
+  const nestedBracket = '{"a":["x ] y"],"b":2}';
+  t.eqStr("a bracket in a nested string closes nothing", jsonCaseField(nestedBracket, "a"), '["x ] y"]');
+  t.eqStr("and the field after it is found", jsonCaseField(nestedBracket, "b"), "2");
+  const nestedQuote = '{"a":["x\\"]y"],"b":2}';
+  t.eqStr("an escaped quote in a nested string ends nothing", jsonCaseField(nestedQuote, "a"), '["x\\"]y"]');
+  t.eqStr("and the field after it is found", jsonCaseField(nestedQuote, "b"), "2");
+  const nestedBackslash = '{"a":{"m":"\\\\"},"b":3}';
+  t.eqStr("a doubled backslash does not escape a nested string's quote", jsonCaseField(nestedBackslash, "a"), '{"m":"\\\\"}');
+  t.eqStr("and the field after it is found", jsonCaseField(nestedBackslash, "b"), "3");
+  const nestedUnended = '{"a":{"m":"x},"b":4}';
+  t.eqStr("a nested string that never ends leaves its value unended", jsonCaseField(nestedUnended, "a"), "<absent>");
+  t.eqStr("and nothing after it answers", jsonCaseField(nestedUnended, "b"), "<absent>");
+
   // The other value forms, and the ambiguity the module header admits to: a
   // `null` value and the string `"null"` answer the same four bytes.
   const values = '{"yes":true,"no":false,"nothing":null,"quoted":"null","float":-1.5e3}';

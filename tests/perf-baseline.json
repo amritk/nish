@@ -1,0 +1,95 @@
+{
+  "note": [
+    "The performance warnings self/compile.ts is allowed, per file and per diagnostic code, counted from --json by tests/run.js (the performance ratchet).",
+    "More fails and names the warnings of that file and code; fewer fails until the count here is lowered to match, so the cap only moves down.",
+    "std/ and examples/ are not here: they are held to zero. See .claude/testing.md, \"The performance gate\"."
+  ],
+  "counts": {
+    "self/ast_text.ts": {
+      "NL9002": 1,
+      "NL9003": 2
+    },
+    "self/attributes.ts": {
+      "NL9010": 2
+    },
+    "self/bounds.ts": {
+      "NL9010": 1
+    },
+    "self/checker.ts": {
+      "NL9007": 1
+    },
+    "self/compilation.ts": {
+      "NL9007": 10
+    },
+    "self/compile.ts": {
+      "NL9007": 2
+    },
+    "self/context.ts": {
+      "NL9010": 1
+    },
+    "self/debug.ts": {
+      "NL9007": 7
+    },
+    "self/diagnostics.ts": {
+      "NL9007": 7
+    },
+    "self/dump.ts": {
+      "NL9007": 2
+    },
+    "self/emit_arrays.ts": {
+      "NL9007": 2
+    },
+    "self/emit_classes.ts": {
+      "NL9007": 2
+    },
+    "self/emit_control.ts": {
+      "NL9007": 3
+    },
+    "self/generics.ts": {
+      "NL9002": 1,
+      "NL9007": 13
+    },
+    "self/ice.ts": {
+      "NL9009": 1
+    },
+    "self/interop_abi.ts": {
+      "NL9007": 1,
+      "NL9010": 1
+    },
+    "self/interop_header.ts": {
+      "NL9007": 1
+    },
+    "self/interop_napi.ts": {
+      "NL9010": 1
+    },
+    "self/interop_wasm.ts": {
+      "NL9007": 4
+    },
+    "self/manifest.ts": {
+      "NL9007": 7,
+      "NL9009": 2
+    },
+    "self/options.ts": {
+      "NL9010": 1
+    },
+    "self/packages.ts": {
+      "NL9007": 2
+    },
+    "self/paths.ts": {
+      "NL9007": 2
+    },
+    "self/program.ts": {
+      "NL9010": 4
+    },
+    "self/result.ts": {
+      "NL9007": 2
+    },
+    "self/strings.ts": {
+      "NL9007": 1,
+      "NL9009": 1
+    },
+    "self/tbaa.ts": {
+      "NL9002": 1
+    }
+  }
+}
