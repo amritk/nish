@@ -26,6 +26,10 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+### Performance
+
+- checker: Prove bounds through toI32(length) and compile std/text silent ([#154](https://github.com/amritk/nish/pull/154))
+
 ## [0.7.0] - 2026-09-23
 
 ### Breaking changes
