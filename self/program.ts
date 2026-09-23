@@ -289,17 +289,19 @@ export class StructInstantiation {
 export class Instantiation {
   /**
    * The generic function or generic method this specialises (a *request*), or
-   * `null` when it is a method or constructor of an instantiated generic class
-   * collected with its class — which needs the overlay and the type bindings
-   * for exactly the same reason and has no template of its own, because the
-   * class is the template (WP18 G5).
+   * `null` when it is a non-generic method or the constructor of an
+   * instantiated generic class, collected with its class — which needs the
+   * overlay and the type bindings for exactly the same reason and has no
+   * template of its own, because the class is the template (WP18 G5). A
+   * generic method of a generic class has both this and `owner`: its own type
+   * parameters come from the template, its class's from the owner (WP18 G8).
    */
   template: TemplateInfo | null;
   /**
    * The instantiated class whose parameters are bound in this body: the class
    * a collected member belongs to, or the receiver of a generic method (WP18
-   * G8). `null` for a free function and for a generic method of a declared
-   * class.
+   * G8), set alongside `template` when that method is itself generic. `null`
+   * for a free function and for a generic method of a declared class.
    */
   owner: StructInstantiation | null;
   /** One concrete type id per entry of `template.typeParams`, in that order. */

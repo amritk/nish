@@ -1,0 +1,1 @@
+Exported function `twice` is also defined in tests/wordings/nl3_clash/node_modules/clash_export/index.ts; exported names must be unique within the package that declares them

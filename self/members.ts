@@ -276,14 +276,17 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       `\`${name}\` is not generic, so \`new ${name}\` takes no type arguments`
     );
   }
+  // An instantiation is named the way it was written, `new Box<i32>`, as its
+  // methods are (`Box<i32>.set`); a plain class's display name is its own.
+  const label = `new ${template !== null ? ctx.table.typeName(info.type) : name}`;
   const ctor = info.ctor;
   if (ctor !== null) {
-    checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope, true);
+    checkMethodArguments(ctx, expr, ctor, args, label, scope, true);
     ctx.program.nodeCallees[expr.id] = ctor;
   } else if (args.children.length > 0) {
     ctx.error(
       expr,
-      `\`new ${name}\` expects 0 argument(s) (the class has no constructor), got ${args.children.length}`
+      `\`${label}\` expects 0 argument(s) (the class has no constructor), got ${args.children.length}`
     );
   }
   return info.type;

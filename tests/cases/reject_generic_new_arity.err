@@ -1,0 +1,1 @@
+`new Box<i32>` expects 0 argument(s) (the class has no constructor), got 1

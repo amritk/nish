@@ -711,6 +711,36 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.stdout + codesGen.stderr
   );
 
+  // ...and that it refuses what `codeFor` would misread (issue #107). The live
+  // registry is copied with one line broken, and `--check` has to reject each
+  // copy and name the table. A stray string with no other half is skipped by
+  // the pair reader, so it would pass for well-formed while every later rule
+  // took its neighbour's code; a gap in NL9xxx is a performance rule that lost
+  // its number.
+  const codesLive = fs.readFileSync(path.join(root, "self", "codes.ts"), "utf8");
+  const codesStray = '  "a fragment that nobody gave a code to",\n';
+  const codesMutations = [
+    ["a stray fragment in diagnosticRules", "diagnosticRules", (t) =>
+      t.replace("export const diagnosticRules = (): string[] => [\n", (open) => open + codesStray)],
+    ["a stray fragment in performanceRules", "performanceRules", (t) =>
+      t.replace("export const performanceRules = (): string[] => [\n", (open) => open + codesStray)],
+    ["a gap in the NL9xxx codes", "performanceRules", (t) => t.replace('"NL9010",', '"NL9011",')],
+  ];
+  for (const [i, [what, table, mutate]] of codesMutations.entries()) {
+    const copy = path.join(buildDir, `codes-mutation-${i}.ts`);
+    const mutated = mutate(codesLive);
+    fs.writeFileSync(copy, mutated);
+    const r = spawnSync("node", [path.join(root, "scripts", "gen-diagnostic-codes.mjs"), "--check", copy], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      `codes: --check rejects ${what}`,
+      mutated !== codesLive && r.status === 1 && r.stderr.includes(`\`${table}\``),
+      mutated === codesLive ? "the mutation did not apply" : r.stdout + r.stderr
+    );
+  }
+
   // The parse itself is `scripts/codes-registry.js`, shared with the
   // generator and with `tests/diagnostic_coverage.js` -- three copies of one
   // regex is how the first two drifted apart (issue #96), and that module's
@@ -794,15 +824,17 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // Five, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`: the whole-program rules -- a duplicate export, a
-  // duplicate import, a duplicate internal name and an export a module does
-  // not have -- are uncoded and always were, and stage1 answers the empty
-  // statement of `tests/wordings/nl2260_empty_statement` with ``Unsupported
-  // statement `;` ``, which quotes the statement and has no words of its own.
-  // They are named on stdout by the run, so shrinking this backlog means giving
-  // one of those messages a literal run of its own.
-  const UNCODED_BACKLOG = 5;
+  // Two, because the tool walks the `tests/link/` negatives as well as
+  // `tests/cases/reject_*`: an import of a name a module does not export
+  // (`tests/link/unknown_export`) is uncoded and always was, and stage1 answers
+  // the empty statement of `tests/wordings/nl2260_empty_statement` with
+  // ``Unsupported statement `;` ``, which quotes the statement and has no words
+  // of its own. It was five until #174 gave the duplicate-symbol wordings --
+  // a duplicate export, the same one reached through an import, and a
+  // duplicate internal name -- codes of their own (NL3024, NL3026). They are
+  // named on stdout by the run, so shrinking this backlog means giving one of
+  // those messages a registry entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 2;
   const wordings = spawnSync(
     "node",
     [

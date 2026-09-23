@@ -650,6 +650,41 @@ const checkPackageBoundary = (t: Suite, cli: Cli): void => {
 };
 
 /**
+ * One whole-program symbol clash (#174): the `tests/link/` program that provokes
+ * it, the module the report lands in — the later of the two, since the earlier
+ * one is named in the message — and the code it must carry. Until #174 all of
+ * these were `NL0000`, which is not a code a tool can key on.
+ */
+const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: string): void => {
+  const run = cli.plain(name, [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`]);
+  if (!t.eqI32(`${name}: a symbol two modules define is refused`, run.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(run.stdout);
+  if (!t.eqI32(`${name}: as one object`, toI32(objects.length), 1)) {
+    return;
+  }
+  t.eqStr(`${name}: whose code names the clash`, cliField(objects[0], "code"), code);
+  t.eqStr(`${name}: at the second definition`, cliField(objects[0], "file"), `tests/link/${name}/${file}`);
+};
+
+/**
+ * A constructor, a method, an exported function and a private one are each a
+ * symbol the whole program shares, so a second definition is a driver refusal
+ * with a code of its own: NL3022 for a class member and NL3023 for one inside a
+ * package, NL3024 for an exported function and NL3026 for a private one. The
+ * package spellings of the last two, NL3025 and NL3027, are pinned by
+ * `tests/wordings/`.
+ */
+const checkSymbolClashes = (t: Suite, cli: Cli): void => {
+  checkClashCode(t, cli, "class_clash_constructor", "lib.ts", "NL3022");
+  checkClashCode(t, cli, "class_clash_method", "lib.ts", "NL3022");
+  checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3023");
+  checkClashCode(t, cli, "duplicate_export", "b.ts", "NL3024");
+  checkClashCode(t, cli, "duplicate_internal", "helper.ts", "NL3026");
+};
+
+/**
  * `VERSION` without a prerelease or build tag: `0.9.0` for `0.9.0-rc.1`. A
  * floor is written in the numbers alone, so this is the version a floor is
  * compared against.
@@ -766,6 +801,7 @@ export const main = (): number => {
   checkInternalError(t, cli, env);
   checkPackageBoundary(t, cli);
   checkEnginesBoundary(t, cli);
+  checkSymbolClashes(t, cli);
 
   return t.done();
 };

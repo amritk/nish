@@ -692,6 +692,18 @@ the timing loop, and calling `scale(dst, h)` 150,000 times.
 | + every header load `!invariant.load` (13 in the module) | 305 ms | 310 ms | |
 | + `const xs = h.xs` hoisted **by hand in the source** | 306 ms | 308 ms | |
 
+These rows are the program above, on the box this section opens with: x86-64,
+Ubuntu clang 18.1.3, four cores under a load average around 25, **CPU time
+(user + sys), min of 15 after 3 warm-ups**. The 2.48x is its 756 ms against the
+parameter shape's 305 ms in the table before it. The program that re-derives
+the pair is **`bench/hoist_field.ts`**, committed after this measurement so that
+the figure would not have to be quoted from this note: it times the parameter,
+field and hand-hoisted shapes against each other in one process, and
+`bench/README.md` gives its protocol. It reports wall time, not CPU time, and
+on an idle four-core Xeon at 2.10 GHz, taking the minimum of its 7 alternating
+rounds over five pinned runs, it read 576 ms against 242 ms, which is **2.38x**. "Candidate
+2 shipped" below reconciles the two figures and records the gap closing.
+
 The last row is the one that decides the item. A hoist a programmer can write in
 the source recovers all of it, so the win does not need an invariance claim and
 does not need a language change: it needs the compiler to do that hoist, which
@@ -1744,9 +1756,17 @@ measurement closed says so and says why.
      sort was written for.
 
      **Two shapes stay silent**, because §8's bar is a rewrite the message can
-     name and neither has one: a class that `implements` an interface, whose
-     first fields are the interface's own and in its order, so "declare them
-     widest first" would be advice that stops the program compiling; and a
+     name and the one it names, "declare them widest first", does not fit
+     either. The first is a class that `implements` an interface. Its first
+     fields are the interface's own, in the interface's order, so that
+     *prefix* is fixed, and advice to reorder the whole class would stop the
+     program compiling. The fields the class adds after the prefix are the
+     author's to order, though, and a badly ordered suffix can still pad, so the
+     silence is broader than its reason, as `reportWastefulPadding`'s own
+     comment in `self/structs.ts` says. A narrower rule would keep the
+     interface's fields where they are and name an order for the rest only.
+     Whether that is worth building is
+     [#108](https://github.com/amritk/nish/issues/108). The second is a
      generic instantiation, where one declaration is shared by every
      instantiation and the order that suits one type argument need not suit
      another. An *interface* is the other side of that rule, and there it is a

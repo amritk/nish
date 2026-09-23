@@ -1418,7 +1418,9 @@ export const satisfiesConstraint = (
 };
 
 /**
- * Whether `cls`'s `implements` clause names the declaration `iface`.
+ * Whether `cls`'s `implements` clause names the declaration `iface`: the one
+ * test of "implements" in the checker, shared by a constraint here and by the
+ * implicit class-to-interface conversion (`coercesTo` in `structs.ts`, #173).
  * `implementsNames` holds names, resolved in the module that collected `cls`'s
  * members: its `origin`, which is its template's for an instantiation. A plain
  * interface resolved there is one that module declares, because implementing an
@@ -1429,7 +1431,7 @@ export const satisfiesConstraint = (
  * newly legal case rather than accepting a stranger; recording the resolved
  * `StructInfo` beside the name is the fix then.
  */
-const implementsDeclaration = (cls: StructInfo, iface: StructInfo): boolean => {
+export const implementsDeclaration = (cls: StructInfo, iface: StructInfo): boolean => {
   if (iface.instance === null && iface.origin !== cls.origin) {
     return false;
   }
