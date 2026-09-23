@@ -1,0 +1,1 @@
+Field `value` of class `Box<i32>` is not definitely assigned in the constructor

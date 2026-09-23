@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 425891 dump lines live, 64 distinct modules.
+# 64 programs, 426222 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -5887,7 +5887,7 @@ function checkEnumMember(ctx: CheckContext, expr: Node, info: EnumInfo): i32 -> 
 function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 -> @checkStructProperty
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
-  calls: CheckContext.errorAtProperty StructInfo.field StructInfo.method nish_str_concat structOf
+  calls: CheckContext.errorAtProperty StructInfo.field StructInfo.method TypeTable.typeName nish_str_concat structOf
   pointer ctx: size=160 writesThrough=true captured=false passedTo=structOf#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
@@ -5899,6 +5899,7 @@ function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   callee 136:18 StructInfo.method -> @StructInfo.method
   local 137:11 kind: string (const)
   callee 138:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 138:78 TypeTable.typeName -> @TypeTable.typeName
 function structOf(ctx: CheckContext, type: i32): StructInfo | null -> @structOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -5940,7 +5941,9 @@ function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @c
   callee 186:18 StructInfo.field -> @StructInfo.field
   local 187:11 kind: string (const)
   callee 188:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 188:83 TypeTable.typeName -> @TypeTable.typeName
   callee 191:3 checkMethodArguments -> @checkMethodArguments
+  callee 191:52 TypeTable.typeName -> @TypeTable.typeName
 function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig, args: Node, what: string, scope: Scope, literalContext: boolean): void -> @checkMethodArguments [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
@@ -6017,6 +6020,7 @@ function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i
   local 344:11 field: FieldInfo | null (const)
   callee 344:19 StructInfo.field -> @StructInfo.field
   callee 346:7 CheckContext.error -> @CheckContext.error
+  callee 346:28 TypeTable.typeName -> @TypeTable.typeName
   local 349:9 duplicate: boolean (let)
   local 350:16 name: string (const)
   callee 356:7 CheckContext.error -> @CheckContext.error
@@ -6029,11 +6033,13 @@ function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i
   local 364:13 spelled: string (const)
   callee 364:23 TypeTable.typeName -> @TypeTable.typeName
   callee 365:7 CheckContext.error -> @CheckContext.error
-  callee 367:95 TypeTable.typeName -> @TypeTable.typeName
+  callee 367:40 TypeTable.typeName -> @TypeTable.typeName
+  callee 367:115 TypeTable.typeName -> @TypeTable.typeName
   local 371:14 field: FieldInfo (const)
   local 372:9 set: boolean (let)
   local 373:16 name: string (const)
   callee 379:7 CheckContext.error -> @CheckContext.error
+  callee 379:47 TypeTable.typeName -> @TypeTable.typeName
 function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMemberAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.textOf StructInfo.field TypeTable.isArray TypeTable.isResult TypeTable.isStruct TypeTable.typeName assignInto assignableReadonly checkExpression isValueReceiver nish_panic_index nish_str_concat nish_str_eq refuseParameterMember structOf
@@ -6064,9 +6070,11 @@ function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32
   callee 422:17 StructInfo.field -> @StructInfo.field
   local 424:11 kind: string (const)
   callee 425:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 425:82 TypeTable.typeName -> @TypeTable.typeName
   callee 428:26 assignableReadonly -> @assignableReadonly
   local 429:11 where: string (const)
   callee 430:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 432:65 TypeTable.typeName -> @TypeTable.typeName
   callee 435:10 assignInto -> @assignInto
 function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, receiverExpr: Node, op: string): boolean -> @assignableReadonly
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
@@ -6214,7 +6222,7 @@ function assignedBy(expr: Node, out: Assigned): void -> @assignedBy
   callee 88:5 assignedBy -> @assignedBy
 function checkReads(ctx: CheckContext, cls: StructInfo, node: Node, assigned: Assigned, isTarget: boolean): void -> @checkReads
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.error StringSet.has StructInfo.field checkReads missingField nish_panic_index nish_str_concat nish_str_eq thisAccess
+  calls: CheckContext.error StringSet.has StructInfo.field TypeTable.typeName checkReads missingField nish_panic_index nish_str_concat nish_str_eq thisAccess
   pointer ctx: size=160 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 checkReads#0 CheckContext.error#0 checkReads#0
   pointer cls: size=112 writesThrough=false captured=false passedTo=StructInfo.field#0 missingField#0 checkReads#1 missingField#0 checkReads#1
   pointer node: size=40 writesThrough=false captured=false passedTo=thisAccess#0 CheckContext.error#1 CheckContext.error#1
@@ -6225,22 +6233,25 @@ function checkReads(ctx: CheckContext, cls: StructInfo, node: Node, assigned: As
   callee 102:22 StructInfo.field -> @StructInfo.field
   callee 102:52 StringSet.has -> @StringSet.has
   callee 103:7 CheckContext.error -> @CheckContext.error
+  callee 105:85 TypeTable.typeName -> @TypeTable.typeName
   callee 110:31 thisAccess -> @thisAccess
   local 111:11 missing: FieldInfo | null (const)
   callee 111:21 missingField -> @missingField
   callee 113:7 CheckContext.error -> @CheckContext.error
+  callee 115:84 TypeTable.typeName -> @TypeTable.typeName
   local 118:16 arg: Node (const)
   callee 119:7 checkReads -> @checkReads
   local 124:11 missing: FieldInfo | null (const)
   callee 124:21 missingField -> @missingField
   callee 126:7 CheckContext.error -> @CheckContext.error
+  callee 128:71 TypeTable.typeName -> @TypeTable.typeName
   local 134:9 plainStore: boolean (const)
   local 135:7 index: i32 (let)
   local 136:14 child: Node (const)
   callee 137:5 checkReads -> @checkReads
 function requireAll(ctx: CheckContext, cls: StructInfo, assigned: Assigned, at: Node): void -> @requireAll
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.error missingField nish_str_concat
+  calls: CheckContext.error TypeTable.typeName missingField nish_str_concat
   pointer ctx: size=160 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer cls: size=112 writesThrough=false captured=false passedTo=missingField#0
   pointer assigned: size=16 writesThrough=false captured=false passedTo=missingField#1
@@ -6249,6 +6260,7 @@ function requireAll(ctx: CheckContext, cls: StructInfo, assigned: Assigned, at: 
   local 143:9 missing: FieldInfo | null (const)
   callee 143:19 missingField -> @missingField
   callee 145:5 CheckContext.error -> @CheckContext.error
+  callee 145:39 TypeTable.typeName -> @TypeTable.typeName
 function walkStatements(ctx: CheckContext, cls: StructInfo, stmts: Node[], assigned: Assigned): Assigned -> @walkStatements
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=16
   escaping: assigned
@@ -6336,7 +6348,7 @@ function walkLoop(ctx: CheckContext, cls: StructInfo, head: Node, body: Node, as
   callee 249:33 Assigned.copy -> @Assigned.copy
 function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void -> @checkDefiniteAssignment [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: Assigned.constructor CheckContext.error StringSet.add StringSet.has missingField nish_alloc_struct nish_panic_index nish_str_concat walkStatements
+  calls: Assigned.constructor CheckContext.error StringSet.add StringSet.has TypeTable.typeName missingField nish_alloc_struct nish_panic_index nish_str_concat walkStatements
   pointer ctx: size=160 writesThrough=true captured=false passedTo=CheckContext.error#0 walkStatements#0 CheckContext.error#0
   pointer cls: size=112 writesThrough=false captured=false passedTo=walkStatements#1 missingField#0
   stackSites=0 stackLocals=0
@@ -6347,11 +6359,13 @@ function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void -> @c
   local 270:9 ctor: FunctionSig | null (const)
   callee 274:12 StringSet.has -> @StringSet.has
   callee 275:9 CheckContext.error -> @CheckContext.error
+  callee 277:57 TypeTable.typeName -> @TypeTable.typeName
   local 286:9 result: Assigned (const)
   callee 286:18 walkStatements -> @walkStatements
   local 290:9 missing: FieldInfo | null (const)
   callee 290:19 missingField -> @missingField
   callee 292:5 CheckContext.error -> @CheckContext.error
+  callee 294:47 TypeTable.typeName -> @TypeTable.typeName
 module self/ast_text.ts
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
@@ -16099,7 +16113,7 @@ function Compilation.rejectInstantiatedStructClashes(this: Compilation): void ->
   callee 743:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.declaredStructs(this: Compilation): StructRegistry -> @Compilation.declaredStructs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=16
-  calls: DiagnosticSink.report StringMap.constructor StringMap.get StringMap.set StructRegistry.add StructRegistry.constructor describePackage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
+  calls: DiagnosticSink.report StringMap.constructor StringMap.get StringMap.set StructRegistry.add StructRegistry.constructor TypeTable.typeName describePackage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=88 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local 755:11 declared: StructRegistry (const)
@@ -16119,6 +16133,7 @@ function Compilation.declaredStructs(this: Compilation): StructRegistry -> @Comp
   callee 774:27 describePackage -> @describePackage
   local 775:19 at: Node (const)
   callee 776:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 780:28 TypeTable.typeName -> @TypeTable.typeName
   callee 783:11 StructRegistry.add -> @StructRegistry.add
 function Compilation.rejectSymbolClashes(this: Compilation): void -> @Compilation.rejectSymbolClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false

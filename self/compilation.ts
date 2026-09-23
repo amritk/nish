@@ -777,7 +777,7 @@ export class Compilation {
               unit.source,
               at.start,
               at.end,
-              `${what} \`${info.name}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
+              `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
             );
           }
           declared.add(info);
