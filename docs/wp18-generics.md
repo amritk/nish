@@ -1839,12 +1839,26 @@ method `S.m`, a method of an instantiated class `S$a….m`, and now `S.m$b…` a
 `S$a….m$b…`. A declared function, class or interface name contains neither `$`
 nor `.` (`$` is refused there, §3c; `.` is not an identifier character). A
 *method* name could, until now, hold a `$` — §3c says it may not, and the code
-never enforced that — so `pick$i32` beside a generic `pick` would have been
-`pick<i32>`'s symbol. G8 refuses a `$` in a method name exactly where that can
-happen, when the part before the `$` names a generic method of the same class
-(`reject_generic_method_dollar`, in `rejectDollarInSymbolName`'s words), and no
-further: every program that compiled before still does, and a method name with
-no generic sibling cannot collide with an instantiation. With that, each argument
+never enforced that. G8 closes the two ways that reaches an instantiation's
+symbol, in `rejectDollarInSymbolName`'s words:
+
+- A **generic** method's own name may hold no `$` at all, exactly as a generic
+  function's may not, because it is the base every instantiation is built on:
+  `pick$i32<V>` at `i32` and `pick<U1, U2>` at `i32, i32` would both be
+  `Holder.pick$i32$i32` (`reject_generic_method_dollar_generic`, the same with
+  the declarations reversed in `…_generic_first`, and on a generic class in
+  `…_generic_class`). The first version of this section missed this case: it
+  checked only a non-generic sibling, and the program miscompiled in one order
+  and crashed the compiler in the other.
+- A **non-generic** method's `$` is refused where the part before the `$` names
+  a generic method of the same class (`pick$i32` beside `pick<T>`,
+  `reject_generic_method_dollar`), and no further, so every program that
+  compiled before still does: a method with no generic sibling cannot collide
+  with an instantiation.
+
+`instantiateHere` also no longer trusts the argument: a cached instantiation
+whose template is not the requesting one is an internal error (exit 70), never
+another template's signature handed back. With that, each argument
 mangling is prefix-coded, so given the arity of the declaration it belongs to —
 fixed per template — a reader of the symbol always knows where an argument list
 ends. Reading left to right: the declared name runs to the first `$` or `.`. If

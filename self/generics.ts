@@ -30,6 +30,7 @@ import { LANGUAGE } from "./branding";
 import { rejectForeignPointer } from "./annotations";
 import { CheckContext } from "./context";
 import { collectFunctionSignature } from "./declarations";
+import { internalErrorFor } from "./ice";
 import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
 import { collectMethodSignature, collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
@@ -955,6 +956,16 @@ export const instantiateHere = (
   const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args);
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
+    // One symbol is one (template, tuple): the mangling is injective because
+    // no declared name that becomes a symbol holds a `$` (§3c, §15.8). If that
+    // ever stops holding, answering with another template's signature is a
+    // silent miscompile, so it is an internal error instead.
+    const minted = existing.template;
+    if (minted === null || minted !== template) {
+      process.exit(
+        internalErrorFor(`generics: \`${symbol}\` was minted by two templates (\`${template.sourceName}\`)`, ctx.table.json)
+      );
+    }
     return existing.sig;
   }
   // WP27 S2. A template's parameters and return type are checked against its
@@ -1172,6 +1183,12 @@ export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node):
     }
     ctx.errored = false;
     const methodName = member.children[0].text;
+    // A generic method's own name becomes the base of every instantiation's
+    // symbol, so it may hold no `$` at all, exactly as a generic function's
+    // may not: `pick$i32<V>` at `i32` would be `pick<U1, U2>` at `i32, i32`.
+    if (isGenericFunction(member) && rejectDollarInSymbolName(ctx, methodName, "method", member.children[0])) {
+      continue;
+    }
     if (!isGenericFunction(member)) {
       if (methodName.indexOf("$") >= 0 && spellsGenericInstance(members, methodName)) {
         rejectDollarInSymbolName(ctx, methodName, "method", member.children[0]);

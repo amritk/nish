@@ -1525,9 +1525,13 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 - **A generic method is a member like any other**, so a field or another method
   of the same name is `` Duplicate member `pick` in class `Chooser` ``
   (`reject_generic_method_field_clash`).
-- **`$` is refused in a method name where it could spell an instantiation** —
-  `pick$i32` beside a generic `pick` would be `pick<i32>`'s symbol
-  (`reject_generic_method_dollar`).
+- **`$` is refused in a method name where it could spell an instantiation**:
+  in any generic method's own name, which every instantiation's symbol is built
+  on (`pick$i32<V>` at `i32` would be `pick<U1, U2>` at `i32, i32`;
+  `reject_generic_method_dollar_generic`, `…_generic_first`,
+  `…_generic_class`), and in a plain method's name when the part before the `$`
+  is a generic sibling's — `pick$i32` beside a generic `pick` would be
+  `pick<i32>`'s symbol (`reject_generic_method_dollar`).
 
 ### Interfaces and object literals
 

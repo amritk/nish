@@ -1,0 +1,1 @@
+:15:3: error: `pick$i32` cannot be the name of a method in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits

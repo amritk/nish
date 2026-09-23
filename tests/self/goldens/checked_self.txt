@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 434452 dump lines live, 64 distinct modules.
+# 64 programs, 434612 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -2586,6 +2586,7 @@ import LANGUAGE from "./branding" -> const LANGUAGE
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
 import CheckContext from "./context" -> struct CheckContext
 import collectFunctionSignature from "./declarations" -> function @collectFunctionSignature
+import internalErrorFor from "./ice" -> function @internalErrorFor
 import checkExpression from "./expressions" -> function @checkExpression
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
@@ -2685,29 +2686,29 @@ function structTypeParameterList(decl: Node): Node -> @structTypeParameterList [
   calls: nish_panic_index
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 129:9 at: i32 (const)
+  local 130:9 at: i32 (const)
 function isGenericStruct(decl: Node): boolean -> @isGenericStruct [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: structTypeParameterList
   pointer decl: size=40 writesThrough=false captured=false passedTo=structTypeParameterList#0
   stackSites=0 stackLocals=0
-  local 135:9 list: Node (const)
-  callee 135:16 structTypeParameterList -> @structTypeParameterList
+  local 136:9 list: Node (const)
+  callee 136:16 structTypeParameterList -> @structTypeParameterList
 function collectStructTypeParamNames(decl: Node): string[] -> @collectStructTypeParamNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow structTypeParameterList
   pointer decl: size=40 writesThrough=false captured=false passedTo=structTypeParameterList#0
   stackSites=0 stackLocals=0
-  local 141:9 names: string[] (const)
-  local 142:14 node: Node (const)
-  callee 142:22 structTypeParameterList -> @structTypeParameterList
+  local 142:9 names: string[] (const)
+  local 143:14 node: Node (const)
+  callee 143:22 structTypeParameterList -> @structTypeParameterList
 function isGenericFunction(decl: Node): boolean -> @isGenericFunction [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: typeParameterList
   pointer decl: size=40 writesThrough=false captured=false passedTo=typeParameterList#0
   stackSites=0 stackLocals=0
-  local 152:9 list: Node (const)
-  callee 152:16 typeParameterList -> @typeParameterList
+  local 153:9 list: Node (const)
+  callee 153:16 typeParameterList -> @typeParameterList
 function instanceSymbol(table: TypeTable, base: string, args: i32[]): string -> @instanceSymbol [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: base
@@ -2715,19 +2716,19 @@ function instanceSymbol(table: TypeTable, base: string, args: i32[]): string -> 
   pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.mangle#0
   pointer args: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 164:7 out: string (let)
-  local 165:14 arg: i32 (const)
-  callee 166:21 TypeTable.mangle -> @TypeTable.mangle
+  local 165:7 out: string (let)
+  local 166:14 arg: i32 (const)
+  callee 167:21 TypeTable.mangle -> @TypeTable.mangle
 function instanceDisplayName(table: TypeTable, base: string, args: i32[]): string -> @instanceDisplayName [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
   pointer args: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 173:7 out: string (let)
-  local 174:7 i: i32 (let)
-  callee 176:21 TypeTable.typeName -> @TypeTable.typeName
-  callee 176:58 TypeTable.typeName -> @TypeTable.typeName
+  local 174:7 out: string (let)
+  local 175:7 i: i32 (let)
+  callee 177:21 TypeTable.typeName -> @TypeTable.typeName
+  callee 177:58 TypeTable.typeName -> @TypeTable.typeName
 function instanceStructType(table: TypeTable, base: string, args: i32[]): i32 -> @instanceStructType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: base
@@ -2735,39 +2736,39 @@ function instanceStructType(table: TypeTable, base: string, args: i32[]): i32 ->
   pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.structOf#0 instanceSymbol#0 TypeTable.setDisplayName#0 instanceDisplayName#0
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceSymbol#2 instanceDisplayName#2
   stackSites=0 stackLocals=0
-  local 189:9 type: i32 (const)
-  callee 189:16 TypeTable.structOf -> @TypeTable.structOf
-  callee 189:31 instanceSymbol -> @instanceSymbol
-  callee 190:3 TypeTable.setDisplayName -> @TypeTable.setDisplayName
-  callee 190:30 instanceDisplayName -> @instanceDisplayName
+  local 190:9 type: i32 (const)
+  callee 190:16 TypeTable.structOf -> @TypeTable.structOf
+  callee 190:31 instanceSymbol -> @instanceSymbol
+  callee 191:3 TypeTable.setDisplayName -> @TypeTable.setDisplayName
+  callee 191:30 instanceDisplayName -> @instanceDisplayName
 function canonicalArgument(table: TypeTable, type: i32): i32 -> @canonicalArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.isResult TypeTable.withState
   pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.withState#0
   stackSites=0 stackLocals=0
-  callee 199:72 TypeTable.isResult -> @TypeTable.isResult
-  callee 199:95 TypeTable.withState -> @TypeTable.withState
+  callee 200:72 TypeTable.isResult -> @TypeTable.isResult
+  callee 200:95 TypeTable.withState -> @TypeTable.withState
 function containsType(ctx: CheckContext, inner: i32, outer: i32): boolean -> @containsType [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: inner outer
   calls: CheckedProgram.structArguments TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf containsType
   pointer ctx: size=160 writesThrough=false captured=false passedTo=containsType#0 containsType#0 containsType#0 containsType#0
   stackSites=0 stackLocals=0
-  local 211:9 table: TypeTable (const)
-  local 212:9 kind: i32 (const)
-  callee 212:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 214:12 containsType -> @containsType
-  callee 214:37 TypeTable.refOf -> @TypeTable.refOf
-  callee 217:12 containsType -> @containsType
-  callee 217:37 TypeTable.okOf -> @TypeTable.okOf
-  callee 217:59 containsType -> @containsType
-  callee 217:84 TypeTable.errOf -> @TypeTable.errOf
-  local 224:11 instance: StructInstantiation | null (const)
-  callee 224:22 CheckedProgram.structArguments -> @CheckedProgram.structArguments
-  callee 224:50 TypeTable.nameOf -> @TypeTable.nameOf
-  local 226:18 arg: i32 (const)
-  callee 227:13 containsType -> @containsType
+  local 212:9 table: TypeTable (const)
+  local 213:9 kind: i32 (const)
+  callee 213:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 215:12 containsType -> @containsType
+  callee 215:37 TypeTable.refOf -> @TypeTable.refOf
+  callee 218:12 containsType -> @containsType
+  callee 218:37 TypeTable.okOf -> @TypeTable.okOf
+  callee 218:59 containsType -> @containsType
+  callee 218:84 TypeTable.errOf -> @TypeTable.errOf
+  local 225:11 instance: StructInstantiation | null (const)
+  callee 225:22 CheckedProgram.structArguments -> @CheckedProgram.structArguments
+  callee 225:50 TypeTable.nameOf -> @TypeTable.nameOf
+  local 227:18 arg: i32 (const)
+  callee 228:13 containsType -> @containsType
 function growingArgument(ctx: CheckContext, previous: i32[], args: i32[]): i32 -> @growingArgument [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: containsType nish_panic_index
@@ -2775,8 +2776,8 @@ function growingArgument(ctx: CheckContext, previous: i32[], args: i32[]): i32 -
   pointer previous: size=0 writesThrough=true captured=false
   pointer args: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 242:7 i: i32 (let)
-  callee 244:36 containsType -> @containsType
+  local 243:7 i: i32 (let)
+  callee 245:36 containsType -> @containsType
 function expandingAncestor(ctx: CheckContext, from: Instantiation | null, template: TemplateInfo, args: i32[]): Expansion | null -> @expandingAncestor [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: from
@@ -2786,14 +2787,14 @@ function expandingAncestor(ctx: CheckContext, from: Instantiation | null, templa
   pointer template: size=64 writesThrough=false captured=false passedTo=chainArguments#0
   pointer args: size=0 writesThrough=true captured=true passedTo=chainArguments#1
   stackSites=0 stackLocals=0
-  local 266:9 wanted: i32[] (const)
-  callee 266:18 chainArguments -> @chainArguments
-  local 267:7 at: Instantiation | null (let)
-  local 279:11 owner: TemplateInfo | null (const)
-  local 281:13 index: i32 (const)
-  callee 281:21 growingArgument -> @growingArgument
-  callee 281:42 chainArguments -> @chainArguments
-  callee 283:16 new Expansion -> @Expansion.constructor
+  local 267:9 wanted: i32[] (const)
+  callee 267:18 chainArguments -> @chainArguments
+  local 268:7 at: Instantiation | null (let)
+  local 280:11 owner: TemplateInfo | null (const)
+  local 282:13 index: i32 (const)
+  callee 282:21 growingArgument -> @growingArgument
+  callee 282:42 chainArguments -> @chainArguments
+  callee 284:16 new Expansion -> @Expansion.constructor
 function chainArguments(template: TemplateInfo, args: i32[]): i32[] -> @chainArguments [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: args
@@ -2801,26 +2802,26 @@ function chainArguments(template: TemplateInfo, args: i32[]): i32[] -> @chainArg
   pointer template: size=64 writesThrough=false captured=false passedTo=receiverOf#0
   pointer args: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 298:9 receiver: StructInstantiation | null (const)
-  callee 298:20 receiverOf -> @receiverOf
-  local 302:9 out: i32[] (const)
-  local 303:14 arg: i32 (const)
-  local 306:14 arg: i32 (const)
+  local 299:9 receiver: StructInstantiation | null (const)
+  callee 299:20 receiverOf -> @receiverOf
+  local 303:9 out: i32[] (const)
+  local 304:14 arg: i32 (const)
+  local 307:14 arg: i32 (const)
 function receiverOf(template: TemplateInfo): StructInstantiation | null -> @receiverOf
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 318:9 owner: StructInfo | null (const)
+  local 319:9 owner: StructInfo | null (const)
 function chainParameters(template: TemplateInfo): string[] -> @chainParameters
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow receiverOf
   pointer template: size=64 writesThrough=false captured=false passedTo=receiverOf#0
   stackSites=0 stackLocals=0
-  local 324:9 receiver: StructInstantiation | null (const)
-  callee 324:20 receiverOf -> @receiverOf
-  local 328:9 out: string[] (const)
-  local 329:14 name: string (const)
-  local 332:14 name: string (const)
+  local 325:9 receiver: StructInstantiation | null (const)
+  callee 325:20 receiverOf -> @receiverOf
+  local 329:9 out: string[] (const)
+  local 330:14 name: string (const)
+  local 333:14 name: string (const)
 function expandingStructAncestor(ctx: CheckContext, from: StructInstantiation | null, template: StructTemplateInfo, args: i32[]): StructExpansion | null -> @expandingStructAncestor [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: from
@@ -2830,10 +2831,10 @@ function expandingStructAncestor(ctx: CheckContext, from: StructInstantiation | 
   pointer template: size=64 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=growingArgument#2
   stackSites=0 stackLocals=0
-  local 359:7 at: StructInstantiation | null (let)
-  local 362:13 index: i32 (const)
-  callee 362:21 growingArgument -> @growingArgument
-  callee 364:16 new StructExpansion -> @StructExpansion.constructor
+  local 360:7 at: StructInstantiation | null (let)
+  local 363:13 index: i32 (const)
+  callee 363:21 growingArgument -> @growingArgument
+  callee 365:16 new StructExpansion -> @StructExpansion.constructor
 function unifyAnnotation(ctx: CheckContext, annotation: Node, arg: i32, names: StringSet, bindings: StringMap): void -> @unifyAnnotation [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: arg
@@ -2843,58 +2844,58 @@ function unifyAnnotation(ctx: CheckContext, annotation: Node, arg: i32, names: S
   pointer names: size=8 writesThrough=false captured=false passedTo=unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 StringSet.has#0 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3
   pointer bindings: size=32 writesThrough=true captured=false passedTo=unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 StringMap.get#0 StringMap.set#0 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4
   stackSites=0 stackLocals=0
-  local 389:9 table: TypeTable (const)
-  callee 391:5 unifyAnnotation -> @unifyAnnotation
-  callee 395:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 396:7 unifyAnnotation -> @unifyAnnotation
-  callee 396:52 TypeTable.refOf -> @TypeTable.refOf
-  callee 402:5 unifyAnnotation -> @unifyAnnotation
-  local 409:9 member: Node | null (let)
-  local 410:9 count: i32 (let)
-  local 411:16 part: Node (const)
-  callee 418:7 unifyAnnotation -> @unifyAnnotation
-  callee 418:36 TypeTable.stripNull -> @TypeTable.stripNull
-  local 425:9 name: string (const)
-  local 426:9 list: Node (const)
-  local 427:9 argc: i32 (const)
-  callee 429:9 StringSet.has -> @StringSet.has
-  callee 429:28 StringMap.get -> @StringMap.get
-  callee 430:7 StringMap.set -> @StringMap.set
-  callee 430:26 canonicalArgument -> @canonicalArgument
-  callee 434:71 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 435:5 unifyAnnotation -> @unifyAnnotation
-  callee 435:44 TypeTable.refOf -> @TypeTable.refOf
-  callee 438:42 TypeTable.isResult -> @TypeTable.isResult
-  callee 439:5 unifyAnnotation -> @unifyAnnotation
-  callee 439:44 TypeTable.okOf -> @TypeTable.okOf
+  local 390:9 table: TypeTable (const)
+  callee 392:5 unifyAnnotation -> @unifyAnnotation
+  callee 396:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 397:7 unifyAnnotation -> @unifyAnnotation
+  callee 397:52 TypeTable.refOf -> @TypeTable.refOf
+  callee 403:5 unifyAnnotation -> @unifyAnnotation
+  local 410:9 member: Node | null (let)
+  local 411:9 count: i32 (let)
+  local 412:16 part: Node (const)
+  callee 419:7 unifyAnnotation -> @unifyAnnotation
+  callee 419:36 TypeTable.stripNull -> @TypeTable.stripNull
+  local 426:9 name: string (const)
+  local 427:9 list: Node (const)
+  local 428:9 argc: i32 (const)
+  callee 430:9 StringSet.has -> @StringSet.has
+  callee 430:28 StringMap.get -> @StringMap.get
+  callee 431:7 StringMap.set -> @StringMap.set
+  callee 431:26 canonicalArgument -> @canonicalArgument
+  callee 435:71 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 436:5 unifyAnnotation -> @unifyAnnotation
+  callee 436:44 TypeTable.refOf -> @TypeTable.refOf
+  callee 439:42 TypeTable.isResult -> @TypeTable.isResult
   callee 440:5 unifyAnnotation -> @unifyAnnotation
-  callee 440:44 TypeTable.errOf -> @TypeTable.errOf
-  callee 447:7 TypeTable.kindOf -> @TypeTable.kindOf
-  local 448:11 instance: StructInstantiation | null (const)
-  callee 448:22 CheckedProgram.structArguments -> @CheckedProgram.structArguments
-  callee 448:50 TypeTable.nameOf -> @TypeTable.nameOf
-  local 450:11 i: i32 (let)
-  callee 452:9 unifyAnnotation -> @unifyAnnotation
+  callee 440:44 TypeTable.okOf -> @TypeTable.okOf
+  callee 441:5 unifyAnnotation -> @unifyAnnotation
+  callee 441:44 TypeTable.errOf -> @TypeTable.errOf
+  callee 448:7 TypeTable.kindOf -> @TypeTable.kindOf
+  local 449:11 instance: StructInstantiation | null (const)
+  callee 449:22 CheckedProgram.structArguments -> @CheckedProgram.structArguments
+  callee 449:50 TypeTable.nameOf -> @TypeTable.nameOf
+  local 451:11 i: i32 (let)
+  callee 453:9 unifyAnnotation -> @unifyAnnotation
 function mentionsTypeParam(annotation: Node, names: StringSet): boolean -> @mentionsTypeParam [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: StringSet.has mentionsTypeParam nish_panic_index
   pointer annotation: size=40 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 mentionsTypeParam#1
   stackSites=0 stackLocals=0
-  local 462:11 list: Node (const)
-  local 463:11 argc: i32 (const)
-  callee 465:23 StringSet.has -> @StringSet.has
-  local 469:14 child: Node (const)
-  callee 470:9 mentionsTypeParam -> @mentionsTypeParam
+  local 463:11 list: Node (const)
+  local 464:11 argc: i32 (const)
+  callee 466:23 StringSet.has -> @StringSet.has
+  local 470:14 child: Node (const)
+  callee 471:9 mentionsTypeParam -> @mentionsTypeParam
 function typeParamSet(template: TemplateInfo): StringSet -> @typeParamSet [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=8
   calls: StringSet.add StringSet.constructor nish_alloc_struct
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 479:9 names: StringSet (const)
-  callee 479:17 new StringSet -> @StringSet.constructor
-  local 480:14 name: string (const)
-  callee 481:5 StringSet.add -> @StringSet.add
+  local 480:9 names: StringSet (const)
+  callee 480:17 new StringSet -> @StringSet.constructor
+  local 481:14 name: string (const)
+  callee 482:5 StringSet.add -> @StringSet.add
 function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancestor: Instantiation, args: i32[], index: i32): string -> @nonTerminatingMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index template
@@ -2904,16 +2905,16 @@ function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancesto
   pointer ancestor: size=96 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
-  local 500:7 earlier: TemplateInfo (let)
-  local 501:9 own: TemplateInfo | null (const)
-  local 505:9 from: string (const)
-  callee 505:16 instanceDisplayName -> @instanceDisplayName
-  local 506:9 to: string (const)
-  callee 506:14 instanceDisplayName -> @instanceDisplayName
-  local 507:9 grew: string (const)
-  callee 507:16 TypeTable.typeName -> @TypeTable.typeName
-  callee 507:31 chainArguments -> @chainArguments
-  callee 511:10 chainParameters -> @chainParameters
+  local 501:7 earlier: TemplateInfo (let)
+  local 502:9 own: TemplateInfo | null (const)
+  local 506:9 from: string (const)
+  callee 506:16 instanceDisplayName -> @instanceDisplayName
+  local 507:9 to: string (const)
+  callee 507:14 instanceDisplayName -> @instanceDisplayName
+  local 508:9 grew: string (const)
+  callee 508:16 TypeTable.typeName -> @TypeTable.typeName
+  callee 508:31 chainArguments -> @chainArguments
+  callee 512:10 chainParameters -> @chainParameters
 function nonTerminatingStructMessage(table: TypeTable, template: StructTemplateInfo, ancestor: StructInstantiation, args: i32[], index: i32): string -> @nonTerminatingStructMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index
@@ -2923,12 +2924,12 @@ function nonTerminatingStructMessage(table: TypeTable, template: StructTemplateI
   pointer ancestor: size=40 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
-  local 528:9 from: string (const)
-  callee 528:16 instanceDisplayName -> @instanceDisplayName
-  local 529:9 to: string (const)
-  callee 529:14 instanceDisplayName -> @instanceDisplayName
-  local 530:9 grew: string (const)
-  callee 530:16 TypeTable.typeName -> @TypeTable.typeName
+  local 529:9 from: string (const)
+  callee 529:16 instanceDisplayName -> @instanceDisplayName
+  local 530:9 to: string (const)
+  callee 530:14 instanceDisplayName -> @instanceDisplayName
+  local 531:9 grew: string (const)
+  callee 531:16 TypeTable.typeName -> @TypeTable.typeName
 function deferInstantiation(ctx: CheckContext, imp: ImportBinding, written: Node, at: Node): i32 -> @deferInstantiation [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DeferredInstance.constructor instanceStructType nish_alloc_struct nish_array_grow resolveType
@@ -2937,11 +2938,11 @@ function deferInstantiation(ctx: CheckContext, imp: ImportBinding, written: Node
   pointer written: size=40 writesThrough=false captured=false
   pointer at: size=40 writesThrough=true captured=true passedTo=DeferredInstance.constructor#3
   stackSites=0 stackLocals=0
-  local 549:9 args: i32[] (const)
-  local 551:16 node: Node (const)
-  callee 552:17 resolveType -> @resolveType
-  callee 555:38 new DeferredInstance -> @DeferredInstance.constructor
-  callee 556:10 instanceStructType -> @instanceStructType
+  local 550:9 args: i32[] (const)
+  local 552:16 node: Node (const)
+  callee 553:17 resolveType -> @resolveType
+  callee 556:38 new DeferredInstance -> @DeferredInstance.constructor
+  callee 557:10 instanceStructType -> @instanceStructType
 function instantiateWritten(ctx: CheckContext, template: StructTemplateInfo, written: Node, at: Node): StructInfo | null -> @instantiateWritten [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error instantiateStruct nish_array_grow nish_panic_index nish_str_concat resolveType
@@ -2950,14 +2951,14 @@ function instantiateWritten(ctx: CheckContext, template: StructTemplateInfo, wri
   pointer written: size=40 writesThrough=false captured=false
   pointer at: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 instantiateStruct#3
   stackSites=0 stackLocals=0
-  local 574:9 count: i32 (const)
-  local 576:9 example: string (let)
-  local 577:9 i: i32 (let)
-  callee 582:5 CheckContext.error -> @CheckContext.error
-  local 589:9 args: i32[] (const)
-  local 590:7 i: i32 (let)
-  callee 592:15 resolveType -> @resolveType
-  callee 595:10 instantiateStruct -> @instantiateStruct
+  local 575:9 count: i32 (const)
+  local 577:9 example: string (let)
+  local 578:9 i: i32 (let)
+  callee 583:5 CheckContext.error -> @CheckContext.error
+  local 590:9 args: i32[] (const)
+  local 591:7 i: i32 (let)
+  callee 593:15 resolveType -> @resolveType
+  callee 596:10 instantiateStruct -> @instantiateStruct
 function RequestSite.constructor(this: RequestSite, asker: CheckContext): void -> @RequestSite.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: asker
@@ -2970,8 +2971,8 @@ function reachForeignLayout(ctx: CheckContext, info: StructInfo, symbols: boolea
   pointer ctx: size=160 writesThrough=false captured=false
   pointer info: size=128 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
   stackSites=0 stackLocals=0
-  callee 639:7 StringMap.has -> @StringMap.has
-  callee 645:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee 640:7 StringMap.has -> @StringMap.has
+  callee 646:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
 function registerForeignLayouts(ctx: CheckContext, root: StructInfo, from: CheckContext, symbols: boolean): void -> @registerForeignLayouts [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: root symbols
@@ -2980,19 +2981,19 @@ function registerForeignLayouts(ctx: CheckContext, root: StructInfo, from: Check
   pointer root: size=128 writesThrough=true captured=true passedTo=reachForeignLayout#1
   pointer from: size=160 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 656:9 pending: StructInfo[] (const)
-  callee 657:7 reachForeignLayout -> @reachForeignLayout
-  local 667:7 at: i32 (let)
-  local 669:11 info: StructInfo (const)
-  local 671:11 names: StringSet (const)
-  callee 671:19 new StringSet -> @StringSet.constructor
-  callee 672:5 referencedStructNames -> @referencedStructNames
-  local 673:9 i: i32 (let)
-  callee 674:16 StringSet.size -> @StringSet.size
-  local 675:13 next: StructInfo | null (const)
-  callee 675:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 675:40 StringSet.at -> @StringSet.at
-  callee 676:28 reachForeignLayout -> @reachForeignLayout
+  local 657:9 pending: StructInfo[] (const)
+  callee 658:7 reachForeignLayout -> @reachForeignLayout
+  local 668:7 at: i32 (let)
+  local 670:11 info: StructInfo (const)
+  local 672:11 names: StringSet (const)
+  callee 672:19 new StringSet -> @StringSet.constructor
+  callee 673:5 referencedStructNames -> @referencedStructNames
+  local 674:9 i: i32 (let)
+  callee 675:16 StringSet.size -> @StringSet.size
+  local 676:13 next: StructInfo | null (const)
+  callee 676:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 676:40 StringSet.at -> @StringSet.at
+  callee 677:28 reachForeignLayout -> @reachForeignLayout
 function adoptArgumentLayouts(ctx: CheckContext, args: i32[], site: RequestSite): void -> @adoptArgumentLayouts [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size noteStructNames registerForeignLayouts
@@ -3000,16 +3001,16 @@ function adoptArgumentLayouts(ctx: CheckContext, args: i32[], site: RequestSite)
   pointer args: size=0 writesThrough=false captured=false
   pointer site: size=24 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 697:9 names: StringSet (const)
-  callee 697:17 new StringSet -> @StringSet.constructor
-  local 698:14 arg: i32 (const)
-  callee 699:5 noteStructNames -> @noteStructNames
-  local 701:7 i: i32 (let)
-  callee 702:14 StringSet.size -> @StringSet.size
-  local 703:11 info: StructInfo | null (const)
-  callee 703:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 703:44 StringSet.at -> @StringSet.at
-  callee 705:7 registerForeignLayouts -> @registerForeignLayouts
+  local 698:9 names: StringSet (const)
+  callee 698:17 new StringSet -> @StringSet.constructor
+  local 699:14 arg: i32 (const)
+  callee 700:5 noteStructNames -> @noteStructNames
+  local 702:7 i: i32 (let)
+  callee 703:14 StringSet.size -> @StringSet.size
+  local 704:11 info: StructInfo | null (const)
+  callee 704:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 704:44 StringSet.at -> @StringSet.at
+  callee 706:7 registerForeignLayouts -> @registerForeignLayouts
 function useExternalInstance(ctx: CheckContext, sig: FunctionSig): void -> @useExternalInstance [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: sig
@@ -3017,7 +3018,7 @@ function useExternalInstance(ctx: CheckContext, sig: FunctionSig): void -> @useE
   pointer ctx: size=160 writesThrough=false captured=false
   pointer sig: size=88 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 717:7 StringSet.add -> @StringSet.add
+  callee 718:7 StringSet.add -> @StringSet.add
 function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args: i32[], at: Node): StructInfo | null -> @instantiateStruct [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: RequestSite.constructor instantiateStructHere registerForeignLayouts
@@ -3026,11 +3027,11 @@ function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args
   pointer args: size=0 writesThrough=true captured=true passedTo=instantiateStructHere#2
   pointer at: size=40 writesThrough=true captured=true passedTo=instantiateStructHere#3
   stackSites=1 stackLocals=0
-  local 741:9 home: CheckContext (const)
-  local 742:9 info: StructInfo | null (const)
-  callee 742:16 instantiateStructHere -> @instantiateStructHere
-  callee 742:64 new RequestSite -> @RequestSite.constructor
-  callee 748:5 registerForeignLayouts -> @registerForeignLayouts
+  local 742:9 home: CheckContext (const)
+  local 743:9 info: StructInfo | null (const)
+  callee 743:16 instantiateStructHere -> @instantiateStructHere
+  callee 743:64 new RequestSite -> @RequestSite.constructor
+  callee 749:5 registerForeignLayouts -> @registerForeignLayouts
 function instantiateStructHere(ctx: CheckContext, template: StructTemplateInfo, args: i32[], at: Node, site: RequestSite): StructInfo | null -> @instantiateStructHere [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor adoptArgumentLayouts checkStructConstraints collectInstanceMembers expandingStructAncestor instanceStructType instanceSymbol nish_alloc_struct nish_panic_index nish_str_concat nish_str_from_i32 nonTerminatingStructMessage
@@ -3040,33 +3041,33 @@ function instantiateStructHere(ctx: CheckContext, template: StructTemplateInfo, 
   pointer at: size=40 writesThrough=true captured=true passedTo=checkStructConstraints#3 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2
   stackSites=0 stackLocals=0
-  callee 761:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  callee 764:8 checkStructConstraints -> @checkStructConstraints
-  local 767:9 name: string (const)
-  callee 767:16 instanceSymbol -> @instanceSymbol
-  local 768:9 existing: StructInstantiation | null (const)
-  callee 768:20 CheckedProgram.structInstance -> @CheckedProgram.structInstance
-  local 785:9 growing: StructExpansion | null (const)
-  callee 785:19 expandingStructAncestor -> @expandingStructAncestor
-  local 787:11 asker: CheckContext (const)
-  local 788:11 wasErrored: boolean (const)
-  callee 789:5 CheckContext.error -> @CheckContext.error
-  callee 789:21 nonTerminatingStructMessage -> @nonTerminatingStructMessage
-  callee 814:5 CheckContext.error -> @CheckContext.error
-  callee 822:5 CheckContext.error -> @CheckContext.error
-  local 830:9 bindings: StringMap (const)
-  callee 830:20 new StringMap -> @StringMap.constructor
-  local 831:7 i: i32 (let)
-  callee 833:5 StringMap.set -> @StringMap.set
-  local 836:9 type: i32 (const)
-  callee 836:16 instanceStructType -> @instanceStructType
-  local 837:9 info: StructInfo (const)
-  callee 837:16 new StructInfo -> @StructInfo.constructor
-  local 839:9 instance: StructInstantiation (const)
-  callee 839:20 new StructInstantiation -> @StructInstantiation.constructor
-  callee 846:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
-  callee 847:3 CheckedProgram.addStructInstance -> @CheckedProgram.addStructInstance
-  callee 848:3 collectInstanceMembers -> @collectInstanceMembers
+  callee 762:3 adoptArgumentLayouts -> @adoptArgumentLayouts
+  callee 765:8 checkStructConstraints -> @checkStructConstraints
+  local 768:9 name: string (const)
+  callee 768:16 instanceSymbol -> @instanceSymbol
+  local 769:9 existing: StructInstantiation | null (const)
+  callee 769:20 CheckedProgram.structInstance -> @CheckedProgram.structInstance
+  local 786:9 growing: StructExpansion | null (const)
+  callee 786:19 expandingStructAncestor -> @expandingStructAncestor
+  local 788:11 asker: CheckContext (const)
+  local 789:11 wasErrored: boolean (const)
+  callee 790:5 CheckContext.error -> @CheckContext.error
+  callee 790:21 nonTerminatingStructMessage -> @nonTerminatingStructMessage
+  callee 815:5 CheckContext.error -> @CheckContext.error
+  callee 823:5 CheckContext.error -> @CheckContext.error
+  local 831:9 bindings: StringMap (const)
+  callee 831:20 new StringMap -> @StringMap.constructor
+  local 832:7 i: i32 (let)
+  callee 834:5 StringMap.set -> @StringMap.set
+  local 837:9 type: i32 (const)
+  callee 837:16 instanceStructType -> @instanceStructType
+  local 838:9 info: StructInfo (const)
+  callee 838:16 new StructInfo -> @StructInfo.constructor
+  local 840:9 instance: StructInstantiation (const)
+  callee 840:20 new StructInstantiation -> @StructInstantiation.constructor
+  callee 847:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee 848:3 CheckedProgram.addStructInstance -> @CheckedProgram.addStructInstance
+  callee 849:3 collectInstanceMembers -> @collectInstanceMembers
 function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation): void -> @collectInstanceMembers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: instance
@@ -3074,17 +3075,17 @@ function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation
   pointer ctx: size=160 writesThrough=true captured=true passedTo=collectStructMembers#0
   pointer instance: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 858:9 savedBindings: StringMap (const)
-  local 859:9 savedStruct: StructInstantiation | null (const)
-  local 860:9 savedInstance: Instantiation | null (const)
-  local 861:9 savedErrored: boolean (const)
-  local 867:9 before: i32 (const)
-  callee 868:3 collectStructMembers -> @collectStructMembers
-  local 878:9 prefix: string (const)
-  local 879:7 i: i32 (let)
-  local 881:11 sig: FunctionSig (const)
-  local 893:11 member: Instantiation (const)
-  callee 893:20 new Instantiation -> @Instantiation.constructor
+  local 859:9 savedBindings: StringMap (const)
+  local 860:9 savedStruct: StructInstantiation | null (const)
+  local 861:9 savedInstance: Instantiation | null (const)
+  local 862:9 savedErrored: boolean (const)
+  local 868:9 before: i32 (const)
+  callee 869:3 collectStructMembers -> @collectStructMembers
+  local 879:9 prefix: string (const)
+  local 880:7 i: i32 (let)
+  local 882:11 sig: FunctionSig (const)
+  local 894:11 member: Instantiation (const)
+  callee 894:20 new Instantiation -> @Instantiation.constructor
 function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], at: Node): FunctionSig | null -> @instantiate [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: RequestSite.constructor instantiateHere useExternalInstance
@@ -3093,54 +3094,56 @@ function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], at:
   pointer args: size=0 writesThrough=true captured=true passedTo=instantiateHere#2
   pointer at: size=40 writesThrough=false captured=false passedTo=instantiateHere#3
   stackSites=1 stackLocals=0
-  local 914:9 home: CheckContext (const)
-  local 915:9 sig: FunctionSig | null (const)
-  callee 915:15 instantiateHere -> @instantiateHere
-  callee 915:57 new RequestSite -> @RequestSite.constructor
-  callee 918:5 useExternalInstance -> @useExternalInstance
+  local 915:9 home: CheckContext (const)
+  local 916:9 sig: FunctionSig | null (const)
+  callee 916:15 instantiateHere -> @instantiateHere
+  callee 916:57 new RequestSite -> @RequestSite.constructor
+  callee 919:5 useExternalInstance -> @useExternalInstance
 function instantiateHere(ctx: CheckContext, template: TemplateInfo, args: i32[], at: Node, site: RequestSite): FunctionSig | null -> @instantiateHere [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set adoptArgumentLayouts chainArguments chainParameters checkConstraints collectFunctionSignature collectMethodSignature expandingAncestor instanceDisplayName instanceSymbol nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nonTerminatingMessage receiverOf rejectForeignPointer
+  calls: CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set adoptArgumentLayouts chainArguments chainParameters checkConstraints collectFunctionSignature collectMethodSignature expandingAncestor instanceDisplayName instanceSymbol internalErrorFor nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_from_i32 nonTerminatingMessage receiverOf rejectForeignPointer
   pointer ctx: size=160 writesThrough=true captured=true passedTo=adoptArgumentLayouts#0 checkConstraints#1 expandingAncestor#0 collectFunctionSignature#0 collectMethodSignature#0
   pointer template: size=64 writesThrough=true captured=true passedTo=expandingAncestor#2 nonTerminatingMessage#1 chainParameters#0 chainArguments#0 Instantiation.constructor#1 receiverOf#0
   pointer args: size=0 writesThrough=true captured=true passedTo=adoptArgumentLayouts#1 checkConstraints#5 instanceSymbol#2 expandingAncestor#3 nonTerminatingMessage#3 chainArguments#1 instanceDisplayName#2 Instantiation.constructor#2
   pointer at: size=40 writesThrough=false captured=false passedTo=checkConstraints#6 rejectForeignPointer#3 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2
   stackSites=0 stackLocals=0
-  callee 935:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  callee 948:8 checkConstraints -> @checkConstraints
-  local 953:9 owner: StructInfo | null (const)
-  local 954:9 base: string (const)
-  local 955:9 symbol: string (const)
-  callee 955:18 instanceSymbol -> @instanceSymbol
-  local 956:9 existing: Instantiation | null (const)
-  callee 956:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
-  local 965:14 arg: i32 (const)
-  callee 966:9 rejectForeignPointer -> @rejectForeignPointer
-  local 982:9 growing: Expansion | null (const)
-  callee 982:19 expandingAncestor -> @expandingAncestor
-  callee 984:5 CheckContext.error -> @CheckContext.error
-  callee 984:26 nonTerminatingMessage -> @nonTerminatingMessage
-  callee 988:5 CheckContext.error -> @CheckContext.error
-  callee 996:5 CheckContext.error -> @CheckContext.error
-  local 1007:9 bindings: StringMap (const)
-  callee 1007:20 new StringMap -> @StringMap.constructor
-  local 1008:9 names: string[] (const)
-  callee 1008:17 chainParameters -> @chainParameters
-  local 1009:9 bound: i32[] (const)
-  callee 1009:17 chainArguments -> @chainArguments
-  local 1010:7 i: i32 (let)
-  callee 1012:5 StringMap.set -> @StringMap.set
-  local 1018:9 display: string (const)
-  callee 1018:19 instanceDisplayName -> @instanceDisplayName
-  local 1019:9 saved: StringMap (const)
-  local 1021:9 sig: FunctionSig (const)
-  callee 1022:22 collectFunctionSignature -> @collectFunctionSignature
-  callee 1022:69 collectMethodSignature -> @collectMethodSignature
-  local 1027:9 info: Instantiation (const)
-  callee 1027:16 new Instantiation -> @Instantiation.constructor
-  callee 1028:16 receiverOf -> @receiverOf
-  callee 1032:3 CheckedProgram.addInstantiation -> @CheckedProgram.addInstantiation
+  callee 936:3 adoptArgumentLayouts -> @adoptArgumentLayouts
+  callee 949:8 checkConstraints -> @checkConstraints
+  local 954:9 owner: StructInfo | null (const)
+  local 955:9 base: string (const)
+  local 956:9 symbol: string (const)
+  callee 956:18 instanceSymbol -> @instanceSymbol
+  local 957:9 existing: Instantiation | null (const)
+  callee 957:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
+  local 963:11 minted: TemplateInfo | null (const)
+  callee 966:9 internalErrorFor -> @internalErrorFor
+  local 976:14 arg: i32 (const)
+  callee 977:9 rejectForeignPointer -> @rejectForeignPointer
+  local 993:9 growing: Expansion | null (const)
+  callee 993:19 expandingAncestor -> @expandingAncestor
+  callee 995:5 CheckContext.error -> @CheckContext.error
+  callee 995:26 nonTerminatingMessage -> @nonTerminatingMessage
+  callee 999:5 CheckContext.error -> @CheckContext.error
+  callee 1007:5 CheckContext.error -> @CheckContext.error
+  local 1018:9 bindings: StringMap (const)
+  callee 1018:20 new StringMap -> @StringMap.constructor
+  local 1019:9 names: string[] (const)
+  callee 1019:17 chainParameters -> @chainParameters
+  local 1020:9 bound: i32[] (const)
+  callee 1020:17 chainArguments -> @chainArguments
+  local 1021:7 i: i32 (let)
+  callee 1023:5 StringMap.set -> @StringMap.set
+  local 1029:9 display: string (const)
+  callee 1029:19 instanceDisplayName -> @instanceDisplayName
+  local 1030:9 saved: StringMap (const)
+  local 1032:9 sig: FunctionSig (const)
+  callee 1033:22 collectFunctionSignature -> @collectFunctionSignature
+  callee 1033:69 collectMethodSignature -> @collectMethodSignature
+  local 1038:9 info: Instantiation (const)
+  callee 1038:16 new Instantiation -> @Instantiation.constructor
+  callee 1039:16 receiverOf -> @receiverOf
+  callee 1043:3 CheckedProgram.addInstantiation -> @CheckedProgram.addInstantiation
 function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo, scope: Scope): i32 -> @checkGenericCall [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: expr
@@ -3150,77 +3153,79 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   pointer template: size=64 writesThrough=true captured=true passedTo=typeParamSet#0 instantiate#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=2 stackLocals=2
-  local 1051:9 parameters: Node (const)
-  local 1052:9 args: Node (const)
-  callee 1054:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1059:9 names: StringSet (const)
-  callee 1059:17 typeParamSet -> @typeParamSet
-  local 1060:9 bindings: StringMap (const)
-  callee 1060:20 new StringMap -> @StringMap.constructor
-  local 1061:9 argTypes: i32[] (const)
-  local 1062:7 i: i32 (let)
-  callee 1064:19 checkExpression -> @checkExpression
-  local 1069:11 annotation: Node (const)
-  callee 1071:7 unifyAnnotation -> @unifyAnnotation
-  local 1075:9 tuple: i32[] (const)
-  local 1076:14 name: string (const)
-  local 1077:11 bound: i32 (const)
-  callee 1077:19 StringMap.get -> @StringMap.get
-  local 1082:11 at: i32 (let)
-  local 1083:11 k: i32 (let)
-  local 1085:15 annotation: Node (const)
-  callee 1086:54 mentionsTypeParam -> @mentionsTypeParam
-  local 1091:13 named: i32 (const)
-  local 1092:13 shown: string (const)
-  callee 1092:36 CheckContext.textOf -> @CheckContext.textOf
-  local 1093:13 got: string (const)
-  callee 1093:19 TypeTable.typeName -> @TypeTable.typeName
-  local 1094:13 where: Node (const)
-  callee 1095:14 CheckContext.errorType -> @CheckContext.errorType
-  local 1103:9 sig: FunctionSig | null (const)
-  callee 1103:15 instantiate -> @instantiate
-  local 1108:9 offset: i32 (const)
-  callee 1111:37 TypeTable.assignable -> @TypeTable.assignable
-  local 1112:13 want: string (const)
-  callee 1112:20 TypeTable.typeName -> @TypeTable.typeName
-  callee 1113:7 CheckContext.error -> @CheckContext.error
-  callee 1115:78 TypeTable.typeName -> @TypeTable.typeName
+  local 1062:9 parameters: Node (const)
+  local 1063:9 args: Node (const)
+  callee 1065:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1070:9 names: StringSet (const)
+  callee 1070:17 typeParamSet -> @typeParamSet
+  local 1071:9 bindings: StringMap (const)
+  callee 1071:20 new StringMap -> @StringMap.constructor
+  local 1072:9 argTypes: i32[] (const)
+  local 1073:7 i: i32 (let)
+  callee 1075:19 checkExpression -> @checkExpression
+  local 1080:11 annotation: Node (const)
+  callee 1082:7 unifyAnnotation -> @unifyAnnotation
+  local 1086:9 tuple: i32[] (const)
+  local 1087:14 name: string (const)
+  local 1088:11 bound: i32 (const)
+  callee 1088:19 StringMap.get -> @StringMap.get
+  local 1093:11 at: i32 (let)
+  local 1094:11 k: i32 (let)
+  local 1096:15 annotation: Node (const)
+  callee 1097:54 mentionsTypeParam -> @mentionsTypeParam
+  local 1102:13 named: i32 (const)
+  local 1103:13 shown: string (const)
+  callee 1103:36 CheckContext.textOf -> @CheckContext.textOf
+  local 1104:13 got: string (const)
+  callee 1104:19 TypeTable.typeName -> @TypeTable.typeName
+  local 1105:13 where: Node (const)
+  callee 1106:14 CheckContext.errorType -> @CheckContext.errorType
+  local 1114:9 sig: FunctionSig | null (const)
+  callee 1114:15 instantiate -> @instantiate
+  local 1119:9 offset: i32 (const)
+  callee 1122:37 TypeTable.assignable -> @TypeTable.assignable
+  local 1123:13 want: string (const)
+  callee 1123:20 TypeTable.typeName -> @TypeTable.typeName
+  callee 1124:7 CheckContext.error -> @CheckContext.error
+  callee 1126:78 TypeTable.typeName -> @TypeTable.typeName
 function rejectDollarInSymbolName(ctx: CheckContext, name: string, what: string, node: Node): boolean -> @rejectDollarInSymbolName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error nish_str_at nish_str_concat
   pointer ctx: size=160 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 1136:3 CheckContext.error -> @CheckContext.error
+  callee 1147:3 CheckContext.error -> @CheckContext.error
 function declareMethodTypeParameters(ctx: CheckContext, classDecl: Node): void -> @declareMethodTypeParameters [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.methodConstraintList collectStructTypeParamNames collectTypeParamNames indexOfName isGenericFunction nish_array_grow nish_panic_index nish_str_at nish_str_concat refuseUninferable rejectDollarInSymbolName resolveConstraints spellsGenericInstance typeParameterList
-  pointer ctx: size=160 writesThrough=true captured=true passedTo=rejectDollarInSymbolName#0 CheckContext.error#0 refuseUninferable#0 resolveConstraints#0
+  pointer ctx: size=160 writesThrough=true captured=true passedTo=rejectDollarInSymbolName#0 rejectDollarInSymbolName#0 CheckContext.error#0 refuseUninferable#0 resolveConstraints#0
   pointer classDecl: size=40 writesThrough=false captured=false passedTo=collectStructTypeParamNames#0
   stackSites=1 stackLocals=1
-  local 1166:9 className: string (const)
-  local 1167:9 classParams: string[] (const)
-  callee 1167:23 collectStructTypeParamNames -> @collectStructTypeParamNames
-  local 1168:9 members: Node[] (const)
-  local 1169:14 member: Node (const)
-  local 1174:11 methodName: string (const)
-  callee 1175:10 isGenericFunction -> @isGenericFunction
-  callee 1176:43 spellsGenericInstance -> @spellsGenericInstance
-  callee 1177:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
-  local 1181:11 list: Node (const)
-  callee 1181:18 typeParameterList -> @typeParameterList
-  local 1182:11 own: string[] (const)
-  callee 1182:17 collectTypeParamNames -> @collectTypeParamNames
-  local 1183:9 refused: boolean (let)
-  local 1184:16 param: Node (const)
-  callee 1185:37 indexOfName -> @indexOfName
-  callee 1186:9 CheckContext.error -> @CheckContext.error
-  callee 1198:9 refuseUninferable -> @refuseUninferable
-  local 1204:11 all: string[] (const)
-  local 1205:16 name: string (const)
-  local 1208:16 name: string (const)
-  callee 1211:5 resolveConstraints -> @resolveConstraints
-  callee 1211:29 CheckedProgram.methodConstraintList -> @CheckedProgram.methodConstraintList
+  local 1177:9 className: string (const)
+  local 1178:9 classParams: string[] (const)
+  callee 1178:23 collectStructTypeParamNames -> @collectStructTypeParamNames
+  local 1179:9 members: Node[] (const)
+  local 1180:14 member: Node (const)
+  local 1185:11 methodName: string (const)
+  callee 1189:9 isGenericFunction -> @isGenericFunction
+  callee 1189:38 rejectDollarInSymbolName -> @rejectDollarInSymbolName
+  callee 1192:10 isGenericFunction -> @isGenericFunction
+  callee 1193:43 spellsGenericInstance -> @spellsGenericInstance
+  callee 1194:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
+  local 1198:11 list: Node (const)
+  callee 1198:18 typeParameterList -> @typeParameterList
+  local 1199:11 own: string[] (const)
+  callee 1199:17 collectTypeParamNames -> @collectTypeParamNames
+  local 1200:9 refused: boolean (let)
+  local 1201:16 param: Node (const)
+  callee 1202:37 indexOfName -> @indexOfName
+  callee 1203:9 CheckContext.error -> @CheckContext.error
+  callee 1215:9 refuseUninferable -> @refuseUninferable
+  local 1221:11 all: string[] (const)
+  local 1222:16 name: string (const)
+  local 1225:16 name: string (const)
+  callee 1228:5 resolveConstraints -> @resolveConstraints
+  callee 1228:29 CheckedProgram.methodConstraintList -> @CheckedProgram.methodConstraintList
 function refuseUninferable(ctx: CheckContext, decl: Node, typeParams: string[], shown: string): boolean -> @refuseUninferable [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error StringSet.add StringSet.constructor mentionsTypeParam nish_panic_index nish_str_concat
@@ -3228,31 +3233,31 @@ function refuseUninferable(ctx: CheckContext, decl: Node, typeParams: string[], 
   pointer decl: size=40 writesThrough=false captured=false
   pointer typeParams: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 1224:9 parameters: Node (const)
-  local 1225:14 param: string (const)
-  local 1226:11 names: StringSet (const)
-  callee 1226:19 new StringSet -> @StringSet.constructor
-  callee 1227:5 StringSet.add -> @StringSet.add
-  local 1228:9 mentioned: boolean (let)
-  local 1229:16 declared: Node (const)
-  local 1230:13 annotation: Node (const)
-  callee 1231:42 mentionsTypeParam -> @mentionsTypeParam
-  callee 1236:7 CheckContext.error -> @CheckContext.error
+  local 1241:9 parameters: Node (const)
+  local 1242:14 param: string (const)
+  local 1243:11 names: StringSet (const)
+  callee 1243:19 new StringSet -> @StringSet.constructor
+  callee 1244:5 StringSet.add -> @StringSet.add
+  local 1245:9 mentioned: boolean (let)
+  local 1246:16 declared: Node (const)
+  local 1247:13 annotation: Node (const)
+  callee 1248:42 mentionsTypeParam -> @mentionsTypeParam
+  callee 1253:7 CheckContext.error -> @CheckContext.error
 function spellsGenericInstance(members: Node[], name: string): boolean -> @spellsGenericInstance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: isGenericFunction nish_arena_mark nish_arena_release nish_panic_index nish_str_at nish_str_concat
   pointer members: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1252:14 member: Node (const)
-  callee 1253:37 isGenericFunction -> @isGenericFunction
+  local 1269:14 member: Node (const)
+  callee 1270:37 isGenericFunction -> @isGenericFunction
 function collectTypeParamNames(decl: Node): string[] -> @collectTypeParamNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow typeParameterList
   pointer decl: size=40 writesThrough=false captured=false passedTo=typeParameterList#0
   stackSites=0 stackLocals=0
-  local 1262:9 names: string[] (const)
-  local 1263:14 node: Node (const)
-  callee 1263:22 typeParameterList -> @typeParameterList
+  local 1279:9 names: string[] (const)
+  local 1280:14 node: Node (const)
+  callee 1280:22 typeParameterList -> @typeParameterList
 function resolveConstraints(home: CheckContext, constraints: ConstraintList, list: Node, typeParams: string[]): void -> @resolveConstraints [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: StringMap.constructor StringSet.add StringSet.constructor nish_alloc_struct nish_array_grow resolveConstraint
@@ -3261,18 +3266,18 @@ function resolveConstraints(home: CheckContext, constraints: ConstraintList, lis
   pointer list: size=40 writesThrough=false captured=false
   pointer typeParams: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 1303:9 savedBindings: StringMap (const)
-  local 1304:9 savedInstance: Instantiation | null (const)
-  local 1305:9 savedStruct: StructInstantiation | null (const)
-  local 1306:9 savedErrored: boolean (const)
-  callee 1307:23 new StringMap -> @StringMap.constructor
-  local 1310:9 names: StringSet (const)
-  callee 1310:17 new StringSet -> @StringSet.constructor
-  local 1311:14 name: string (const)
-  callee 1312:5 StringSet.add -> @StringSet.add
-  local 1314:9 types: i32[] (const)
-  local 1315:14 param: Node (const)
-  callee 1318:46 resolveConstraint -> @resolveConstraint
+  local 1320:9 savedBindings: StringMap (const)
+  local 1321:9 savedInstance: Instantiation | null (const)
+  local 1322:9 savedStruct: StructInstantiation | null (const)
+  local 1323:9 savedErrored: boolean (const)
+  callee 1324:23 new StringMap -> @StringMap.constructor
+  local 1327:9 names: StringSet (const)
+  callee 1327:17 new StringSet -> @StringSet.constructor
+  local 1328:14 name: string (const)
+  callee 1329:5 StringSet.add -> @StringSet.add
+  local 1331:9 types: i32[] (const)
+  local 1332:14 param: Node (const)
+  callee 1335:46 resolveConstraint -> @resolveConstraint
 function resolveConstraint(ctx: CheckContext, param: Node, names: StringSet): i32 -> @resolveConstraint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckContext.textOf TypeTable.isStruct TypeTable.typeName mentionsTypeParam nish_panic_index nish_str_concat resolveType
@@ -3280,29 +3285,29 @@ function resolveConstraint(ctx: CheckContext, param: Node, names: StringSet): i3
   pointer param: size=40 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=mentionsTypeParam#1
   stackSites=0 stackLocals=0
-  local 1337:9 node: Node (const)
-  callee 1338:7 mentionsTypeParam -> @mentionsTypeParam
-  callee 1339:5 CheckContext.error -> @CheckContext.error
-  callee 1341:34 CheckContext.textOf -> @CheckContext.textOf
-  local 1347:9 type: i32 (const)
-  callee 1347:16 resolveType -> @resolveType
-  callee 1351:8 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 1352:5 CheckContext.error -> @CheckContext.error
-  callee 1354:34 TypeTable.typeName -> @TypeTable.typeName
+  local 1354:9 node: Node (const)
+  callee 1355:7 mentionsTypeParam -> @mentionsTypeParam
+  callee 1356:5 CheckContext.error -> @CheckContext.error
+  callee 1358:34 CheckContext.textOf -> @CheckContext.textOf
+  local 1364:9 type: i32 (const)
+  callee 1364:16 resolveType -> @resolveType
+  callee 1368:8 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 1369:5 CheckContext.error -> @CheckContext.error
+  callee 1371:34 TypeTable.typeName -> @TypeTable.typeName
 function resolveTemplateConstraints(template: TemplateInfo): void -> @resolveTemplateConstraints [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: resolveConstraints typeParameterList
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1364:3 resolveConstraints -> @resolveConstraints
-  callee 1364:59 typeParameterList -> @typeParameterList
+  callee 1381:3 resolveConstraints -> @resolveConstraints
+  callee 1381:59 typeParameterList -> @typeParameterList
 function resolveStructTemplateConstraints(template: StructTemplateInfo): void -> @resolveStructTemplateConstraints [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: resolveConstraints structTypeParameterList
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1369:3 resolveConstraints -> @resolveConstraints
-  callee 1369:59 structTypeParameterList -> @structTypeParameterList
+  callee 1386:3 resolveConstraints -> @resolveConstraints
+  callee 1386:59 structTypeParameterList -> @structTypeParameterList
 function satisfiesConstraint(asker: CheckContext, home: CheckContext, arg: i32, constraint: i32): boolean -> @satisfiesConstraint [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: arg constraint
@@ -3310,21 +3315,21 @@ function satisfiesConstraint(asker: CheckContext, home: CheckContext, arg: i32, 
   pointer asker: size=160 writesThrough=false captured=false
   pointer home: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1392:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 1395:9 info: StructInfo | null (const)
-  callee 1395:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 1395:37 TypeTable.nameOf -> @TypeTable.nameOf
-  local 1396:9 want: StructInfo | null (const)
-  callee 1396:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 1396:36 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 1400:27 implementsDeclaration -> @implementsDeclaration
+  callee 1409:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 1412:9 info: StructInfo | null (const)
+  callee 1412:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 1412:37 TypeTable.nameOf -> @TypeTable.nameOf
+  local 1413:9 want: StructInfo | null (const)
+  callee 1413:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 1413:36 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 1417:27 implementsDeclaration -> @implementsDeclaration
 function implementsDeclaration(cls: StructInfo, iface: StructInfo): boolean -> @implementsDeclaration
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
   pointer cls: size=128 writesThrough=false captured=false
   pointer iface: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1419:14 name: string (const)
+  local 1436:14 name: string (const)
 function checkConstraints(asker: CheckContext, home: CheckContext, templateName: string, typeParams: string[], constraints: ConstraintList, args: i32[], at: Node): boolean -> @checkConstraints [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.struct ConstraintList.at TypeTable.nameOf TypeTable.typeName nish_panic_index nish_str_concat satisfiesConstraint
@@ -3335,18 +3340,18 @@ function checkConstraints(asker: CheckContext, home: CheckContext, templateName:
   pointer args: size=0 writesThrough=true captured=false
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 1442:7 i: i32 (let)
-  local 1444:11 want: i32 (const)
-  callee 1444:18 ConstraintList.at -> @ConstraintList.at
-  callee 1445:23 satisfiesConstraint -> @satisfiesConstraint
-  local 1446:13 bound: string (const)
-  callee 1446:21 TypeTable.typeName -> @TypeTable.typeName
-  local 1447:13 info: StructInfo | null (const)
-  callee 1447:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 1447:40 TypeTable.nameOf -> @TypeTable.nameOf
-  local 1451:13 fix: string (const)
-  callee 1454:7 CheckContext.error -> @CheckContext.error
-  callee 1457:16 TypeTable.typeName -> @TypeTable.typeName
+  local 1459:7 i: i32 (let)
+  local 1461:11 want: i32 (const)
+  callee 1461:18 ConstraintList.at -> @ConstraintList.at
+  callee 1462:23 satisfiesConstraint -> @satisfiesConstraint
+  local 1463:13 bound: string (const)
+  callee 1463:21 TypeTable.typeName -> @TypeTable.typeName
+  local 1464:13 info: StructInfo | null (const)
+  callee 1464:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 1464:40 TypeTable.nameOf -> @TypeTable.nameOf
+  local 1468:13 fix: string (const)
+  callee 1471:7 CheckContext.error -> @CheckContext.error
+  callee 1474:16 TypeTable.typeName -> @TypeTable.typeName
 function checkStructConstraints(home: CheckContext, template: StructTemplateInfo, args: i32[], at: Node, asker: CheckContext): boolean -> @checkStructConstraints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DeferredConstraint.constructor checkConstraints nish_alloc_struct nish_array_grow resolveStructTemplateConstraints
@@ -3356,17 +3361,17 @@ function checkStructConstraints(home: CheckContext, template: StructTemplateInfo
   pointer at: size=40 writesThrough=true captured=true passedTo=DeferredConstraint.constructor#3 checkConstraints#6
   pointer asker: size=160 writesThrough=true captured=false passedTo=checkConstraints#0
   stackSites=0 stackLocals=0
-  callee 1477:3 resolveStructTemplateConstraints -> @resolveStructTemplateConstraints
-  callee 1479:36 new DeferredConstraint -> @DeferredConstraint.constructor
-  callee 1482:10 checkConstraints -> @checkConstraints
+  callee 1494:3 resolveStructTemplateConstraints -> @resolveStructTemplateConstraints
+  callee 1496:36 new DeferredConstraint -> @DeferredConstraint.constructor
+  callee 1499:10 checkConstraints -> @checkConstraints
 function checkDeferredConstraints(ctx: CheckContext): void -> @checkDeferredConstraints [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: checkConstraints
   pointer ctx: size=160 writesThrough=true captured=false passedTo=checkConstraints#0
   stackSites=0 stackLocals=0
-  local 1488:14 request: DeferredConstraint (const)
-  local 1490:11 template: StructTemplateInfo (const)
-  callee 1491:5 checkConstraints -> @checkConstraints
+  local 1505:14 request: DeferredConstraint (const)
+  local 1507:11 template: StructTemplateInfo (const)
+  callee 1508:5 checkConstraints -> @checkConstraints
 function elementOrigin(ctx: CheckContext, iterable: Node, scope: Scope): TypeOrigin | null -> @elementOrigin [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: StringMap.size originElement originOf
@@ -3374,38 +3379,38 @@ function elementOrigin(ctx: CheckContext, iterable: Node, scope: Scope): TypeOri
   pointer iterable: size=40 writesThrough=true captured=true passedTo=originOf#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=originOf#2
   stackSites=0 stackLocals=0
-  callee 1507:7 StringMap.size -> @StringMap.size
-  callee 1510:10 originElement -> @originElement
-  callee 1510:24 originOf -> @originOf
+  callee 1524:7 StringMap.size -> @StringMap.size
+  callee 1527:10 originElement -> @originElement
+  callee 1527:24 originOf -> @originOf
 function indexOfName(names: string[], name: string): i32 -> @indexOfName
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
   pointer names: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1515:7 i: i32 (let)
+  local 1532:7 i: i32 (let)
 function constraintInScope(ctx: CheckContext, name: string): i32 -> @constraintInScope
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: name
   calls: ConstraintList.at indexOfName
   pointer ctx: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1532:9 instance: Instantiation | null (const)
-  local 1536:9 template: TemplateInfo | null (const)
-  local 1538:11 at: i32 (const)
-  callee 1538:16 indexOfName -> @indexOfName
-  callee 1542:14 ConstraintList.at -> @ConstraintList.at
-  local 1545:9 owner: StructInstantiation | null (const)
-  callee 1549:10 ConstraintList.at -> @ConstraintList.at
-  callee 1549:40 indexOfName -> @indexOfName
+  local 1549:9 instance: Instantiation | null (const)
+  local 1553:9 template: TemplateInfo | null (const)
+  local 1555:11 at: i32 (const)
+  callee 1555:16 indexOfName -> @indexOfName
+  callee 1559:14 ConstraintList.at -> @ConstraintList.at
+  local 1562:9 owner: StructInstantiation | null (const)
+  callee 1566:10 ConstraintList.at -> @ConstraintList.at
+  callee 1566:40 indexOfName -> @indexOfName
 function unwrapOrigin(annotation: Node): Node -> @unwrapOrigin
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=40
   escaping: annotation
   calls: nish_panic_index unwrapOrigin
   pointer annotation: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 1555:12 unwrapOrigin -> @unwrapOrigin
-  local 1558:16 part: Node (const)
-  callee 1560:16 unwrapOrigin -> @unwrapOrigin
+  callee 1572:12 unwrapOrigin -> @unwrapOrigin
+  local 1575:16 part: Node (const)
+  callee 1577:16 unwrapOrigin -> @unwrapOrigin
 function isBareName(annotation: Node): boolean -> @isBareName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
@@ -3417,50 +3422,50 @@ function substituted(origin: TypeOrigin | null): TypeOrigin | null -> @substitut
   calls: indexOfName isBareName nish_panic_index unwrapOrigin
   pointer origin: size=32 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1581:7 at: TypeOrigin | null (let)
-  local 1583:11 node: Node (const)
-  callee 1583:18 unwrapOrigin -> @unwrapOrigin
-  callee 1584:10 isBareName -> @isBareName
-  local 1587:11 index: i32 (const)
-  callee 1587:19 indexOfName -> @indexOfName
+  local 1598:7 at: TypeOrigin | null (let)
+  local 1600:11 node: Node (const)
+  callee 1600:18 unwrapOrigin -> @unwrapOrigin
+  callee 1601:10 isBareName -> @isBareName
+  local 1604:11 index: i32 (const)
+  callee 1604:19 indexOfName -> @indexOfName
 function originParameter(ctx: CheckContext, origin: TypeOrigin | null, type: i32): string -> @originParameter
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: StringMap.get StringMap.has StringMap.keyAt StringMap.size isBareName substituted unwrapOrigin
   pointer ctx: size=160 writesThrough=false captured=false
   pointer origin: size=32 writesThrough=true captured=true passedTo=substituted#0
   stackSites=0 stackLocals=0
-  local 1609:9 at: TypeOrigin | null (const)
-  callee 1609:14 substituted -> @substituted
-  local 1614:9 i: i32 (let)
-  callee 1615:16 StringMap.size -> @StringMap.size
-  local 1616:13 name: string (const)
-  callee 1616:20 StringMap.keyAt -> @StringMap.keyAt
-  callee 1617:11 StringMap.get -> @StringMap.get
-  local 1624:9 node: Node (const)
-  callee 1624:16 unwrapOrigin -> @unwrapOrigin
-  callee 1625:31 isBareName -> @isBareName
-  callee 1628:10 StringMap.has -> @StringMap.has
+  local 1626:9 at: TypeOrigin | null (const)
+  callee 1626:14 substituted -> @substituted
+  local 1631:9 i: i32 (let)
+  callee 1632:16 StringMap.size -> @StringMap.size
+  local 1633:13 name: string (const)
+  callee 1633:20 StringMap.keyAt -> @StringMap.keyAt
+  callee 1634:11 StringMap.get -> @StringMap.get
+  local 1641:9 node: Node (const)
+  callee 1641:16 unwrapOrigin -> @unwrapOrigin
+  callee 1642:31 isBareName -> @isBareName
+  callee 1645:10 StringMap.has -> @StringMap.has
 function originElement(origin: TypeOrigin | null): TypeOrigin | null -> @originElement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeOrigin.constructor nish_alloc_struct nish_panic_index nish_str_eq substituted unwrapOrigin
   pointer origin: size=32 writesThrough=true captured=true passedTo=substituted#0
   stackSites=0 stackLocals=0
-  local 1637:9 at: TypeOrigin | null (const)
-  callee 1637:14 substituted -> @substituted
-  local 1641:9 node: Node (const)
-  callee 1641:16 unwrapOrigin -> @unwrapOrigin
-  callee 1643:12 new TypeOrigin -> @TypeOrigin.constructor
-  local 1648:9 isArrayRef: boolean (const)
-  local 1649:9 isArrayNew: boolean (const)
-  local 1651:11 list: Node (const)
-  callee 1653:14 new TypeOrigin -> @TypeOrigin.constructor
+  local 1654:9 at: TypeOrigin | null (const)
+  callee 1654:14 substituted -> @substituted
+  local 1658:9 node: Node (const)
+  callee 1658:16 unwrapOrigin -> @unwrapOrigin
+  callee 1660:12 new TypeOrigin -> @TypeOrigin.constructor
+  local 1665:9 isArrayRef: boolean (const)
+  local 1666:9 isArrayNew: boolean (const)
+  local 1668:11 list: Node (const)
+  callee 1670:14 new TypeOrigin -> @TypeOrigin.constructor
 function memberAnnotation(decl: Node, name: string, method: boolean): Node | null -> @memberAnnotation
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index nish_str_eq
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1665:9 members: Node (const)
-  local 1666:14 member: Node (const)
+  local 1682:9 members: Node (const)
+  local 1683:14 member: Node (const)
 function structShape(ctx: CheckContext, at: TypeOrigin, args: TypeOrigin | null[]): StructTemplateInfo | null -> @structShape
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckedProgram.structTemplate TypeOrigin.constructor nish_alloc_struct nish_array_grow nish_panic_index structTypeParameterList unwrapOrigin
@@ -3468,18 +3473,18 @@ function structShape(ctx: CheckContext, at: TypeOrigin, args: TypeOrigin | null[
   pointer at: size=32 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1689:9 node: Node (const)
-  callee 1689:16 unwrapOrigin -> @unwrapOrigin
-  local 1691:11 owner: StructInstantiation | null (const)
-  local 1695:16 param: Node (const)
-  callee 1695:25 structTypeParameterList -> @structTypeParameterList
-  callee 1696:17 new TypeOrigin -> @TypeOrigin.constructor
-  local 1700:7 name: string (let)
-  local 1701:7 written: Node | null (let)
-  local 1712:9 template: StructTemplateInfo | null (const)
-  callee 1712:20 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local 1716:14 arg: Node (const)
-  callee 1717:15 new TypeOrigin -> @TypeOrigin.constructor
+  local 1706:9 node: Node (const)
+  callee 1706:16 unwrapOrigin -> @unwrapOrigin
+  local 1708:11 owner: StructInstantiation | null (const)
+  local 1712:16 param: Node (const)
+  callee 1712:25 structTypeParameterList -> @structTypeParameterList
+  callee 1713:17 new TypeOrigin -> @TypeOrigin.constructor
+  local 1717:7 name: string (let)
+  local 1718:7 written: Node | null (let)
+  local 1729:9 template: StructTemplateInfo | null (const)
+  callee 1729:20 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local 1733:14 arg: Node (const)
+  callee 1734:15 new TypeOrigin -> @TypeOrigin.constructor
 function unwrapsOk(name: string, method: boolean): boolean -> @unwrapsOk
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -3492,22 +3497,22 @@ function originOfMember(ctx: CheckContext, receiver: Node, name: string, method:
   pointer receiver: size=40 writesThrough=true captured=true passedTo=originOf#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=originOf#2
   stackSites=0 stackLocals=0
-  local 1734:9 at: TypeOrigin | null (const)
-  callee 1734:14 substituted -> @substituted
-  callee 1734:26 originOf -> @originOf
-  callee 1739:12 originElement -> @originElement
-  local 1741:9 node: Node (const)
-  callee 1741:16 unwrapOrigin -> @unwrapOrigin
-  local 1743:11 list: Node (const)
-  callee 1744:9 unwrapsOk -> @unwrapsOk
-  callee 1745:14 new TypeOrigin -> @TypeOrigin.constructor
-  callee 1747:42 new TypeOrigin -> @TypeOrigin.constructor
-  local 1749:9 args: TypeOrigin | null[] (const)
-  local 1750:9 template: StructTemplateInfo | null (const)
-  callee 1750:20 structShape -> @structShape
-  local 1754:9 annotation: Node | null (const)
-  callee 1754:22 memberAnnotation -> @memberAnnotation
-  callee 1755:39 new TypeOrigin -> @TypeOrigin.constructor
+  local 1751:9 at: TypeOrigin | null (const)
+  callee 1751:14 substituted -> @substituted
+  callee 1751:26 originOf -> @originOf
+  callee 1756:12 originElement -> @originElement
+  local 1758:9 node: Node (const)
+  callee 1758:16 unwrapOrigin -> @unwrapOrigin
+  local 1760:11 list: Node (const)
+  callee 1761:9 unwrapsOk -> @unwrapsOk
+  callee 1762:14 new TypeOrigin -> @TypeOrigin.constructor
+  callee 1764:42 new TypeOrigin -> @TypeOrigin.constructor
+  local 1766:9 args: TypeOrigin | null[] (const)
+  local 1767:9 template: StructTemplateInfo | null (const)
+  callee 1767:20 structShape -> @structShape
+  local 1771:9 annotation: Node | null (const)
+  callee 1771:22 memberAnnotation -> @memberAnnotation
+  callee 1772:39 new TypeOrigin -> @TypeOrigin.constructor
 function originOfGenericCall(ctx: CheckContext, call: Node, template: TemplateInfo, scope: Scope): TypeOrigin -> @originOfGenericCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=32
   calls: TypeOrigin.constructor chainParameters isBareName nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq originElement originOf receiverOf structShape substituted unwrapOrigin
@@ -3516,32 +3521,32 @@ function originOfGenericCall(ctx: CheckContext, call: Node, template: TemplateIn
   pointer template: size=64 writesThrough=false captured=false passedTo=receiverOf#0 chainParameters#0
   pointer scope: size=40 writesThrough=false captured=false passedTo=originOf#2 originOf#2 originOf#2
   stackSites=1 stackLocals=1
-  local 1772:9 args: TypeOrigin | null[] (const)
-  local 1773:9 receiver: StructInstantiation | null (const)
-  callee 1773:20 receiverOf -> @receiverOf
-  local 1775:11 at: TypeOrigin | null (const)
-  callee 1775:16 substituted -> @substituted
-  callee 1775:28 originOf -> @originOf
-  local 1776:11 shape: TypeOrigin | null[] (const)
-  local 1777:9 shaped: StructTemplateInfo | null (let)
-  callee 1779:16 structShape -> @structShape
-  local 1781:9 k: i32 (let)
-  local 1793:9 parameters: Node (const)
-  local 1794:9 written: Node (const)
-  local 1795:14 name: string (const)
-  local 1796:9 found: TypeOrigin | null (let)
-  local 1797:9 k: i32 (let)
-  local 1799:13 annotation: Node (const)
-  callee 1799:26 unwrapOrigin -> @unwrapOrigin
-  callee 1800:11 isBareName -> @isBareName
-  callee 1801:17 originOf -> @originOf
-  callee 1802:54 isBareName -> @isBareName
-  callee 1802:65 unwrapOrigin -> @unwrapOrigin
-  callee 1803:13 unwrapOrigin -> @unwrapOrigin
-  callee 1804:19 originElement -> @originElement
-  callee 1804:33 originOf -> @originOf
-  callee 1811:10 new TypeOrigin -> @TypeOrigin.constructor
-  callee 1811:52 chainParameters -> @chainParameters
+  local 1789:9 args: TypeOrigin | null[] (const)
+  local 1790:9 receiver: StructInstantiation | null (const)
+  callee 1790:20 receiverOf -> @receiverOf
+  local 1792:11 at: TypeOrigin | null (const)
+  callee 1792:16 substituted -> @substituted
+  callee 1792:28 originOf -> @originOf
+  local 1793:11 shape: TypeOrigin | null[] (const)
+  local 1794:9 shaped: StructTemplateInfo | null (let)
+  callee 1796:16 structShape -> @structShape
+  local 1798:9 k: i32 (let)
+  local 1810:9 parameters: Node (const)
+  local 1811:9 written: Node (const)
+  local 1812:14 name: string (const)
+  local 1813:9 found: TypeOrigin | null (let)
+  local 1814:9 k: i32 (let)
+  local 1816:13 annotation: Node (const)
+  callee 1816:26 unwrapOrigin -> @unwrapOrigin
+  callee 1817:11 isBareName -> @isBareName
+  callee 1818:17 originOf -> @originOf
+  callee 1819:54 isBareName -> @isBareName
+  callee 1819:65 unwrapOrigin -> @unwrapOrigin
+  callee 1820:13 unwrapOrigin -> @unwrapOrigin
+  callee 1821:19 originElement -> @originElement
+  callee 1821:33 originOf -> @originOf
+  callee 1828:10 new TypeOrigin -> @TypeOrigin.constructor
+  callee 1828:52 chainParameters -> @chainParameters
 function originOfArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null -> @originOfArrayLiteral
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeOrigin.constructor nish_alloc_struct nish_array_grow originOf
@@ -3549,11 +3554,11 @@ function originOfArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope): Type
   pointer expr: size=40 writesThrough=true captured=true passedTo=TypeOrigin.constructor#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=originOf#2
   stackSites=0 stackLocals=0
-  local 1816:14 element: Node (const)
-  local 1817:11 found: TypeOrigin | null (const)
-  callee 1817:19 originOf -> @originOf
-  local 1819:13 elements: TypeOrigin | null[] (const)
-  callee 1821:14 new TypeOrigin -> @TypeOrigin.constructor
+  local 1833:14 element: Node (const)
+  local 1834:11 found: TypeOrigin | null (const)
+  callee 1834:19 originOf -> @originOf
+  local 1836:13 elements: TypeOrigin | null[] (const)
+  callee 1838:14 new TypeOrigin -> @TypeOrigin.constructor
 function originOf(ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null -> @originOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckedProgram.template Scope.lookup TypeOrigin.constructor nish_alloc_struct nish_panic_index nish_str_eq originElement originOf originOfArrayLiteral originOfGenericCall originOfMember unknownOrigin
@@ -3561,31 +3566,31 @@ function originOf(ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | nul
   pointer expr: size=40 writesThrough=true captured=true passedTo=originOfGenericCall#1 originOfGenericCall#1 TypeOrigin.constructor#1 originOfArrayLiteral#1 unknownOrigin#0
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 originOf#2 originOf#2 originOf#2 originOf#2 originOf#2 originOfMember#4 originOfGenericCall#3 originOfMember#4 Scope.lookup#0 originOfGenericCall#3 originOfArrayLiteral#2
   stackSites=0 stackLocals=0
-  local 1848:13 local: Local | null (const)
-  callee 1848:21 Scope.lookup -> @Scope.lookup
-  local 1854:13 owner: StructInstantiation | null (const)
-  callee 1855:38 new TypeOrigin -> @TypeOrigin.constructor
-  callee 1858:14 originOf -> @originOf
-  local 1860:13 whenTrue: TypeOrigin | null (const)
-  callee 1860:24 originOf -> @originOf
-  callee 1861:45 originOf -> @originOf
-  callee 1867:34 originOf -> @originOf
-  callee 1869:14 originElement -> @originElement
-  callee 1869:28 originOf -> @originOf
-  callee 1871:14 originOfMember -> @originOfMember
-  local 1873:13 callee: Node (const)
-  local 1877:15 sig: FunctionSig | null (const)
-  local 1878:15 instance: Instantiation | null (const)
-  local 1879:15 template: TemplateInfo | null (const)
-  callee 1881:18 originOfGenericCall -> @originOfGenericCall
-  callee 1883:16 originOfMember -> @originOfMember
-  callee 1885:38 Scope.lookup -> @Scope.lookup
-  local 1886:15 template: TemplateInfo | null (const)
-  callee 1886:26 CheckedProgram.template -> @CheckedProgram.template
-  callee 1888:18 originOfGenericCall -> @originOfGenericCall
-  callee 1899:53 new TypeOrigin -> @TypeOrigin.constructor
-  callee 1901:14 originOfArrayLiteral -> @originOfArrayLiteral
-  callee 1922:14 unknownOrigin -> @unknownOrigin
+  local 1865:13 local: Local | null (const)
+  callee 1865:21 Scope.lookup -> @Scope.lookup
+  local 1871:13 owner: StructInstantiation | null (const)
+  callee 1872:38 new TypeOrigin -> @TypeOrigin.constructor
+  callee 1875:14 originOf -> @originOf
+  local 1877:13 whenTrue: TypeOrigin | null (const)
+  callee 1877:24 originOf -> @originOf
+  callee 1878:45 originOf -> @originOf
+  callee 1884:34 originOf -> @originOf
+  callee 1886:14 originElement -> @originElement
+  callee 1886:28 originOf -> @originOf
+  callee 1888:14 originOfMember -> @originOfMember
+  local 1890:13 callee: Node (const)
+  local 1894:15 sig: FunctionSig | null (const)
+  local 1895:15 instance: Instantiation | null (const)
+  local 1896:15 template: TemplateInfo | null (const)
+  callee 1898:18 originOfGenericCall -> @originOfGenericCall
+  callee 1900:16 originOfMember -> @originOfMember
+  callee 1902:38 Scope.lookup -> @Scope.lookup
+  local 1903:15 template: TemplateInfo | null (const)
+  callee 1903:26 CheckedProgram.template -> @CheckedProgram.template
+  callee 1905:18 originOfGenericCall -> @originOfGenericCall
+  callee 1916:53 new TypeOrigin -> @TypeOrigin.constructor
+  callee 1918:14 originOfArrayLiteral -> @originOfArrayLiteral
+  callee 1939:14 unknownOrigin -> @unknownOrigin
 function declaredOrigin(ctx: CheckContext, annotation: Node, initializer: Node, scope: Scope): TypeOrigin | null -> @declaredOrigin [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: StringMap.size TypeOrigin.constructor nish_alloc_struct originOf
@@ -3594,9 +3599,9 @@ function declaredOrigin(ctx: CheckContext, annotation: Node, initializer: Node, 
   pointer initializer: size=40 writesThrough=true captured=true passedTo=originOf#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=originOf#2
   stackSites=0 stackLocals=0
-  callee 1932:7 StringMap.size -> @StringMap.size
-  callee 1936:12 new TypeOrigin -> @TypeOrigin.constructor
-  callee 1938:48 originOf -> @originOf
+  callee 1949:7 StringMap.size -> @StringMap.size
+  callee 1953:12 new TypeOrigin -> @TypeOrigin.constructor
+  callee 1955:48 originOf -> @originOf
 function parameterOrigin(ctx: CheckContext, sig: FunctionSig, index: i32): TypeOrigin | null -> @parameterOrigin [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index
@@ -3604,10 +3609,10 @@ function parameterOrigin(ctx: CheckContext, sig: FunctionSig, index: i32): TypeO
   pointer ctx: size=160 writesThrough=false captured=false
   pointer sig: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1943:7 StringMap.size -> @StringMap.size
-  local 1946:9 list: Node (const)
-  local 1947:9 at: i32 (const)
-  callee 1951:10 new TypeOrigin -> @TypeOrigin.constructor
+  callee 1960:7 StringMap.size -> @StringMap.size
+  local 1963:9 list: Node (const)
+  local 1964:9 at: i32 (const)
+  callee 1968:10 new TypeOrigin -> @TypeOrigin.constructor
 function refuseParameterMember(ctx: CheckContext, receiver: Node, receiverType: i32, member: Node, verb: string, method: boolean, scope: Scope): boolean -> @refuseParameterMember [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiverType
@@ -3617,28 +3622,28 @@ function refuseParameterMember(ctx: CheckContext, receiver: Node, receiverType: 
   pointer member: size=40 writesThrough=false captured=false passedTo=CheckContext.errorOnce#1 CheckContext.errorOnce#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=originOf#2
   stackSites=0 stackLocals=0
-  callee 1976:7 StringMap.size -> @StringMap.size
-  local 1979:9 param: string (const)
-  callee 1979:17 originParameter -> @originParameter
-  callee 1979:38 originOf -> @originOf
-  local 1983:9 at: i32 (const)
-  local 1984:9 constraint: i32 (const)
-  callee 1984:22 constraintInScope -> @constraintInScope
-  local 1989:11 bound: i32 (const)
-  callee 1989:19 StringMap.get -> @StringMap.get
-  local 1990:11 spelled: string (const)
-  callee 1990:21 TypeTable.typeName -> @TypeTable.typeName
-  local 1991:11 fix: string (const)
-  callee 1991:17 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 1995:5 CheckContext.errorOnce -> @CheckContext.errorOnce
-  local 2002:9 info: StructInfo | null (const)
-  callee 2002:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 2002:35 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 2006:16 StructInfo.method -> @StructInfo.method
-  callee 2006:52 StructInfo.field -> @StructInfo.field
-  local 2009:9 kind: string (const)
-  callee 2010:3 CheckContext.errorOnce -> @CheckContext.errorOnce
-  callee 2013:79 TypeTable.typeName -> @TypeTable.typeName
+  callee 1993:7 StringMap.size -> @StringMap.size
+  local 1996:9 param: string (const)
+  callee 1996:17 originParameter -> @originParameter
+  callee 1996:38 originOf -> @originOf
+  local 2000:9 at: i32 (const)
+  local 2001:9 constraint: i32 (const)
+  callee 2001:22 constraintInScope -> @constraintInScope
+  local 2006:11 bound: i32 (const)
+  callee 2006:19 StringMap.get -> @StringMap.get
+  local 2007:11 spelled: string (const)
+  callee 2007:21 TypeTable.typeName -> @TypeTable.typeName
+  local 2008:11 fix: string (const)
+  callee 2008:17 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 2012:5 CheckContext.errorOnce -> @CheckContext.errorOnce
+  local 2019:9 info: StructInfo | null (const)
+  callee 2019:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 2019:35 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 2023:16 StructInfo.method -> @StructInfo.method
+  callee 2023:52 StructInfo.field -> @StructInfo.field
+  local 2026:9 kind: string (const)
+  callee 2027:3 CheckContext.errorOnce -> @CheckContext.errorOnce
+  callee 2030:79 TypeTable.typeName -> @TypeTable.typeName
 module self/declarations.ts
 import CheckContext from "./context" -> struct CheckContext
 import isNishSpecifier from "./nish_modules" -> function @isNishSpecifier
