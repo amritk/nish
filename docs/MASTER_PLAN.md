@@ -122,8 +122,8 @@ declared on the class, `var`, loose `==`/`!=`, `arguments`, `this` outside
 methods, generators, `async`/`await`, decorators, enums with computed
 values, namespaces, `declare global`, dynamic `import()`, optional chaining
 and nullish coalescing on non-nullable types, union types other than
-`T | null`, type parameters on a class, an interface, a method or a type
-alias (a generic *function* is monomorphised, WP18), `symbol`,
+`T | null`, type parameters on a type alias or a constructor (a generic
+function, class, interface or method is monomorphised, WP18), `symbol`,
 `bigint`, regex literals, `try`/`catch` and `throw` (no unwinding; a failure is a `Result<T, E>`, WP16).
 
 ### 3.3 Semantics decisions already made
@@ -781,7 +781,7 @@ document does not need a second one open beside it to be current:
 | 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
 | 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `self/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `self/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
-| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. Generic **functions** have landed in both compilers — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 the order for classes, constraints and the whole-program rule. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
+| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | **done**: generic functions, classes, interfaces and methods, constraints, the whole-program rule and the peripheries (`-g`, the interop sidecars, the fuzzer) have all landed — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 what stays deferred, each with its trigger. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
 that survive it have been counted. Both have happened: seventeen survive in a
