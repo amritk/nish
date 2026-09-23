@@ -572,6 +572,18 @@ const DECLARED = [
     why: "a new program: `xs[i] = (i = 0)` keeps its check, which the reference compiler drops and writes past the array",
   },
   {
+    program: "tests/cases/arr_path_continue_for.ts",
+    file: "arr_path_continue_for.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: a `continue` that stores `h.xs` keeps the check on the `for` update's `h.xs[i]`, which the reference compiler drops and writes past the array",
+  },
+  {
+    program: "tests/cases/arr_path_continue_do.ts",
+    file: "arr_path_continue_do.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: a call before `continue` keeps the check on the `do/while` condition's `h.xs[i]`, which the reference compiler drops and reads past the array",
+  },
+  {
     program: "tests/cases/arr_bounds_continue_for.ts",
     file: "arr_bounds_continue_for.ll",
     changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
