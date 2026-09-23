@@ -261,7 +261,7 @@ and the version it expects from `--version` out of `package.json` with the same
 `jsonField`, so the expectation cannot drift from the release. Unlike the golden
 runner it runs in full on every `npm test`, because it spawns eighteen compilers
 rather than four hundred. The exit-70 checks drive the `NISH_SIMULATE_ICE` hook
-in `self/compile.ts`, which makes the compiler take the path a broken invariant
+in `self/ice.ts`, which makes the compiler take the path a broken invariant
 takes and print [`self/ice.ts`](../self/ice.ts)'s report; they are counted
 skips against a compiler that has no hook.
 

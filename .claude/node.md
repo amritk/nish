@@ -25,7 +25,7 @@ commands a user would.
 - Node built-ins are imported as `node:fs`, `node:path`, `node:child_process`.
   There is no `.env` loading. The compiler reads `PATH` (to find the tools
   `--link` runs) and `NISH_SIMULATE_ICE` (the test hook for the exit-70 path,
-  in `self/compile.ts`); `scripts/build.sh` reads `CC`, the C compiler a link
+  in `self/ice.ts`); `scripts/build.sh` reads `CC`, the C compiler a link
   invokes; the harness reads `UPDATE_GOLDENS` and `NISH_BOOTSTRAP` (the seed).
   A new one is a CLI design decision, not a shortcut.
 - Bun-specific APIs (`Bun.file`, `Bun.$`, `bun:sqlite`, HTML imports) do not
