@@ -656,6 +656,36 @@ const DECLARED = [
     why: "a new program: a `break` after the body moves `k` keeps the check on `s.charCodeAt(i)` under `i < k`, which the reference compiler drops",
   },
   {
+    program: "tests/cases/arr_bounds_generic_instances.ts",
+    file: "arr_bounds_generic_instances.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: `walk<Box>` proves `r.xs[i]` and `walk<Rec>`, whose whole-record store replaces the array under `r`, keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
+  },
+  {
+    program: "tests/cases/arr_bounds_generic_instances_prim.ts",
+    file: "arr_bounds_generic_instances_prim.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: `walk<i32>` proves `r.xs[i]` and `walk<Rec>` keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
+  },
+  {
+    program: "tests/cases/arr_bounds_generic_instances_method.ts",
+    file: "arr_bounds_generic_instances_method.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: `Store<Box>.walk` proves `r.xs[i]` and `Store<Rec>.walk` keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
+  },
+  {
+    program: "tests/cases/arr_bounds_generic_instances_iface.ts",
+    file: "arr_bounds_generic_instances_iface.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: `walk` over `Cell<string>` proves `r.xs[i]` and over `Cell<Rec>` keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
+  },
+  {
+    program: "tests/cases/arr_header_hoist_record_view.ts",
+    file: "arr_header_hoist_record_view.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: a whole-record store into `rs` keeps `c.rec.xs`, read off a `Rec` view in a class field, from being hoisted and keeps its check, where the reference compiler hoists it and reads the replaced array",
+  },
+  {
     program: "docs/cookbook/arr_bounds_path.ts",
     file: "arr_bounds_path.ll",
     changelog: "Key bounds length facts by property path",

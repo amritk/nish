@@ -2166,6 +2166,13 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_bounds_lazy_expect", "an `expect` message that did not run", "", "50 >= 3"],
     // #180: the header hoist counts a whole-record store the way the proof does.
     ["arr_header_hoist_record_store", "a whole-record store under a hoisted `const` view", "1", "1 >= 1"],
+    ["arr_header_hoist_record_view", "a whole-record store under a class field's view", "", "1 >= 1"],
+    // A generic's instantiations are proved against their own verdicts: one
+    // that stores a pointer or a value proves `r.xs[i]`, the `Rec` one must not.
+    ["arr_bounds_generic_instances", "a record store in `walk<Rec>`, beside `walk<Box>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_prim", "a record store in `walk<Rec>`, beside `walk<i32>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_method", "a record store in `Store<Rec>.walk`, beside `Store<Box>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_iface", "a record store through `Cell<Rec>`, beside `Cell<string>`", "15", "1 >= 1"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
     if (!fs.existsSync(ll)) continue;
@@ -2194,6 +2201,21 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
     check(
       "arr_header_hoist_record_class: a class-element store leaves both headers hoisted",
+      reloads === 0,
+      `${reloads} array header loads inside the loop`
+    );
+  }
+  // And it stops at what the store can reach: a whole-record store into `rs`
+  // rewrites a `Rec` slot, and `g.src` is read off a class, so its header stays
+  // in the preheader.
+  const classRootLl = path.join(buildDir, "arr_header_hoist_record_class_root.ll");
+  if (fs.existsSync(classRootLl)) {
+    const ir = fs.readFileSync(classRootLl, "utf8");
+    const fn = ir.slice(ir.search(/^define[^\n]*@stamp\(/m));
+    const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
+    const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
+    check(
+      "arr_header_hoist_record_class_root: a record store leaves a class-rooted header hoisted",
       reloads === 0,
       `${reloads} array header loads inside the loop`
     );

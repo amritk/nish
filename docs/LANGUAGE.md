@@ -2242,8 +2242,11 @@ path or resize the array, and a path fact ends at:
     (`arr_path_reassign`, `arr_path_alias_store`);
   - a store of a whole element into an array of inline records, which
     rewrites a record in place with no field name written
-    (`arr_path_record_store`). An array of classes holds pointers, so a store
-    there rewrites no object and ends nothing;
+    (`arr_path_record_store`). It ends the facts of a path with a link read
+    off a holder *declared* as that record type — `r.xs` for `const r = rs[0]`
+    — because a struct field is a pointer and interfaces are nominal, so
+    nothing else can point into the slot. An array of classes holds pointers,
+    so a store there rewrites no object and ends nothing;
   - an assignment to the root (`arr_path_root`);
   - **any call** and any `new`, for a string path as well as an array one: a
     callee may `push` or `pop` the array or store a new value in the field,
@@ -2264,10 +2267,17 @@ than before and so one loop exit fewer. The hoist that lifts `h.xs` out of the
 loop refuses a loop that stores a whole element into an array of inline
 records, by the same rule the proof drops its path facts by
 (`arr_header_hoist_record_store`), and keeps hoisting through a store into an
-array of classes (`arr_header_hoist_record_class`).
+array of classes (`arr_header_hoist_record_class`) and a path read off
+classes beside a record store (`arr_header_hoist_record_class_root`).
 A path the proof cannot take keeps its
 check without a warning, because the rewrite the warning would name is that
 `const xs = h.xs` hoist.
+
+A generic's instantiations are proved one at a time, each against its own
+verdicts: `rs[0] = x` rewrites a record when `T` is an inline record and
+stores a pointer or a value otherwise, so an access one instantiation proves
+may keep its check in another (`arr_bounds_generic_instances`, and the
+`_prim`, `_method` and `_iface` forms).
 
 The proof changes what the program *costs*, never what it *means*: an
 out-of-range index that reaches a check still panics.

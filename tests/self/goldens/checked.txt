@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 482 programs, 9195 dump lines.
+# 488 programs, 9480 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -187,6 +187,236 @@ function main(): i32 -> @nish_main [exported entry]
   local 8:7 xs: i32[] (let)
   local 9:7 n: i32 (let)
   local 10:7 i: i32 (let)
+program tests/cases/arr_bounds_generic_instances.ts
+module tests/cases/arr_bounds_generic_instances.ts (entry)
+struct Rec (interface) size=8 align=8
+  field xs: i32[] index=0 offset=0
+struct Box (class) size=4 align=4
+  field v: i32 index=0 offset=0
+  constructor -> @Box.constructor
+struct H (class) size=8 align=8
+  field r: Rec index=0 offset=0
+  constructor -> @H.constructor
+function Box.constructor(this: Box, v: i32): void -> @Box.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function H.constructor(this: H, r: Rec): void -> @H.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  pointer r: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Box.constructor H.constructor nish_alloc_struct nish_print nish_str_from_i32 walk$$Box walk$$Rec
+  stackSites=6 stackLocals=4
+  local 40:9 bs: Box[] (const)
+  callee 40:22 new Box -> @Box.constructor
+  callee 41:18 walk<Box> -> @walk$$Box
+  callee 41:27 new Box -> @Box.constructor
+  callee 41:39 new H -> @H.constructor
+  local 42:9 rs: Rec[] (const)
+  local 43:9 short: Rec (const)
+  local 44:9 h: H (const)
+  callee 44:13 new H -> @H.constructor
+  callee 45:18 walk<Rec> -> @walk$$Rec
+function walk<Box>(rs: Box[], x: Box, h: H): i32 -> @walk$$Box [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: x
+  calls: nish_panic_index
+  pointer rs: size=0 writesThrough=true captured=false
+  pointer x: size=4 writesThrough=true captured=true
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 26:7 t: i32 (let)
+  local 27:7 i: i32 (let)
+  local 28:9 r: Rec (const)
+function walk<Rec>(rs: Rec[], x: Rec, h: H): i32 -> @walk$$Rec [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer rs: size=0 writesThrough=true captured=false
+  pointer x: size=8 writesThrough=false captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 26:7 t: i32 (let)
+  local 27:7 i: i32 (let)
+  local 28:9 r: Rec (const)
+program tests/cases/arr_bounds_generic_instances_iface.ts
+module tests/cases/arr_bounds_generic_instances_iface.ts (entry)
+struct Rec (interface) size=8 align=8
+  field xs: i32[] index=0 offset=0
+struct H (class) size=8 align=8
+  field r: Rec index=0 offset=0
+  constructor -> @H.constructor
+struct Cell<string> (interface) size=8 align=8
+  field items: string[] index=0 offset=0
+struct Cell<Rec> (interface) size=8 align=8
+  field items: Rec[] index=0 offset=0
+function H.constructor(this: H, r: Rec): void -> @H.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  pointer r: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: H.constructor nish_alloc_struct nish_print nish_str_from_i32 walk$$Rec walk$str
+  stackSites=6 stackLocals=4
+  local 36:9 words: Cell<string> (const)
+  callee 37:18 walk<string> -> @walk$str
+  callee 37:35 new H -> @H.constructor
+  local 38:9 rs: Rec[] (const)
+  local 39:9 recs: Cell<Rec> (const)
+  local 40:9 short: Rec (const)
+  local 41:9 h: H (const)
+  callee 41:13 new H -> @H.constructor
+  callee 42:18 walk<Rec> -> @walk$$Rec
+function walk<string>(c: Cell<string>, x: string, h: H): i32 -> @walk$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: x
+  calls: nish_panic_index
+  pointer c: size=8 writesThrough=false captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 22:7 t: i32 (let)
+  local 23:7 i: i32 (let)
+  local 24:9 r: Rec (const)
+function walk<Rec>(c: Cell<Rec>, x: Rec, h: H): i32 -> @walk$$Rec [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer c: size=8 writesThrough=false captured=false
+  pointer x: size=8 writesThrough=false captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 22:7 t: i32 (let)
+  local 23:7 i: i32 (let)
+  local 24:9 r: Rec (const)
+program tests/cases/arr_bounds_generic_instances_method.ts
+module tests/cases/arr_bounds_generic_instances_method.ts (entry)
+struct Rec (interface) size=8 align=8
+  field xs: i32[] index=0 offset=0
+struct Box (class) size=4 align=4
+  field v: i32 index=0 offset=0
+  constructor -> @Box.constructor
+struct H (class) size=8 align=8
+  field r: Rec index=0 offset=0
+  constructor -> @H.constructor
+struct Store<Box> (class) size=8 align=8
+  field rs: Box[] index=0 offset=0
+  constructor -> @Store$$Box.constructor
+  method walk -> @Store$$Box.walk
+struct Store<Rec> (class) size=8 align=8
+  field rs: Rec[] index=0 offset=0
+  constructor -> @Store$$Rec.constructor
+  method walk -> @Store$$Rec.walk
+function Box.constructor(this: Box, v: i32): void -> @Box.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function H.constructor(this: H, r: Rec): void -> @H.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  pointer r: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Box.constructor H.constructor Store$$Box.constructor Store$$Box.walk Store$$Rec.constructor Store$$Rec.walk nish_alloc_struct nish_panic_index nish_print nish_str_from_i32
+  stackSites=6 stackLocals=4
+  local 45:9 boxes: Store<Box> (const)
+  callee 45:17 new Store<Box> -> @Store$$Box.constructor
+  callee 45:33 new Box -> @Box.constructor
+  callee 46:18 Store<Box>.walk -> @Store$$Box.walk
+  callee 46:29 new Box -> @Box.constructor
+  callee 46:41 new H -> @H.constructor
+  local 47:9 rs: Rec[] (const)
+  local 48:9 recs: Store<Rec> (const)
+  callee 48:16 new Store<Rec> -> @Store$$Rec.constructor
+  local 49:9 short: Rec (const)
+  local 50:9 h: H (const)
+  callee 50:13 new H -> @H.constructor
+  callee 51:18 Store<Rec>.walk -> @Store$$Rec.walk
+function Store<Box>.constructor(this: Store<Box>, rs: Box[]): void -> @Store$$Box.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: rs
+  pointer this: size=8 writesThrough=true captured=false
+  pointer rs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Store<Box>.walk(this: Store<Box>, x: Box, h: H): i32 -> @Store$$Box.walk [method instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: x
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  pointer x: size=4 writesThrough=true captured=true
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 30:9 t: i32 (let)
+  local 31:9 i: i32 (let)
+  local 32:11 r: Rec (const)
+function Store<Rec>.constructor(this: Store<Rec>, rs: Rec[]): void -> @Store$$Rec.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: rs
+  pointer this: size=8 writesThrough=true captured=false
+  pointer rs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Store<Rec>.walk(this: Store<Rec>, x: Rec, h: H): i32 -> @Store$$Rec.walk [method instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  pointer x: size=8 writesThrough=false captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 30:9 t: i32 (let)
+  local 31:9 i: i32 (let)
+  local 32:11 r: Rec (const)
+program tests/cases/arr_bounds_generic_instances_prim.ts
+module tests/cases/arr_bounds_generic_instances_prim.ts (entry)
+struct Rec (interface) size=8 align=8
+  field xs: i32[] index=0 offset=0
+struct H (class) size=8 align=8
+  field r: Rec index=0 offset=0
+  constructor -> @H.constructor
+function H.constructor(this: H, r: Rec): void -> @H.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  pointer r: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: H.constructor nish_alloc_struct nish_print nish_str_from_i32 walk$$Rec walk$i32
+  stackSites=6 stackLocals=4
+  local 32:9 ints: i32[] (const)
+  callee 33:18 walk<i32> -> @walk$i32
+  callee 33:32 new H -> @H.constructor
+  local 34:9 rs: Rec[] (const)
+  local 35:9 short: Rec (const)
+  local 36:9 h: H (const)
+  callee 36:13 new H -> @H.constructor
+  callee 37:18 walk<Rec> -> @walk$$Rec
+function walk<i32>(rs: i32[], x: i32, h: H): i32 -> @walk$i32 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: x
+  calls: nish_panic_index
+  pointer rs: size=0 writesThrough=true captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 t: i32 (let)
+  local 19:7 i: i32 (let)
+  local 20:9 r: Rec (const)
+function walk<Rec>(rs: Rec[], x: Rec, h: H): i32 -> @walk$$Rec [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer rs: size=0 writesThrough=true captured=false
+  pointer x: size=8 writesThrough=false captured=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 t: i32 (let)
+  local 19:7 i: i32 (let)
+  local 20:9 r: Rec (const)
 program tests/cases/arr_bounds_lazy_expect.ts
 module tests/cases/arr_bounds_lazy_expect.ts (entry)
 function parse(n: i32): Result<i32, string> -> @parse
@@ -458,6 +688,37 @@ function main(): i32 -> @nish_main [exported entry]
   callee 36:36 new Node -> @Node.constructor
   callee 36:72 new Node -> @Node.constructor
   callee 37:18 Grid.sumAndStamp -> @Grid.sumAndStamp
+program tests/cases/arr_header_hoist_record_class_root.ts
+module tests/cases/arr_header_hoist_record_class_root.ts (entry)
+struct Rec (interface) size=8 align=4
+  field a: i32 index=0 offset=0
+  field b: i32 index=1 offset=4
+struct Grid (class) size=8 align=8
+  field src: i32[] index=0 offset=0
+  constructor -> @Grid.constructor
+function Grid.constructor(this: Grid, src: i32[]): void -> @Grid.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: src
+  pointer this: size=8 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function stamp(g: Grid, rs: Rec[]): i32 -> @stamp [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div nish_panic_index
+  pointer g: size=8 writesThrough=false captured=false
+  pointer rs: size=0 writesThrough=true captured=false
+  stackSites=1 stackLocals=0
+  local 20:7 t: i32 (let)
+  local 21:9 n: i32 (const)
+  local 22:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Grid.constructor nish_panic_index nish_print nish_str_concat nish_str_from_i32 stamp
+  stackSites=4 stackLocals=1
+  local 30:9 rs: Rec[] (const)
+  local 34:9 t: i32 (const)
+  callee 34:13 stamp -> @stamp
+  callee 34:19 new Grid -> @Grid.constructor
 program tests/cases/arr_header_hoist_record_store.ts
 module tests/cases/arr_header_hoist_record_store.ts (entry)
 struct Rec (interface) size=8 align=8
@@ -471,6 +732,36 @@ function main(): i32 -> @nish_main [exported entry]
   local 19:9 r: Rec (const)
   local 20:7 i: i32 (let)
   local 25:11 x: i32 (const)
+program tests/cases/arr_header_hoist_record_view.ts
+module tests/cases/arr_header_hoist_record_view.ts (entry)
+struct Rec (interface) size=8 align=8
+  field xs: i32[] index=0 offset=0
+struct C (class) size=8 align=8
+  field rec: Rec index=0 offset=0
+  constructor -> @C.constructor
+function C.constructor(this: C, rec: Rec): void -> @C.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: rec
+  pointer this: size=8 writesThrough=true captured=false
+  pointer rec: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function sum(c: C, rs: Rec[], short: Rec): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer c: size=8 writesThrough=false captured=false
+  pointer rs: size=0 writesThrough=true captured=false
+  pointer short: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 t: i32 (let)
+  local 19:7 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: C.constructor nish_print nish_str_from_i32 sum
+  stackSites=4 stackLocals=2
+  local 31:9 rs: Rec[] (const)
+  local 32:9 c: C (const)
+  callee 32:13 new C -> @C.constructor
+  callee 33:18 sum -> @sum
 program tests/cases/arr_index_read_write.ts
 module tests/cases/arr_index_read_write.ts (entry)
 function set(a: i32[], i: i32, v: i32): void -> @set

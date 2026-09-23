@@ -15,11 +15,17 @@ cases/arr_bounds_continue_for added after R6: no rewriter to freeze it with
 cases/arr_bounds_continue_nested added after R6: no rewriter to freeze it with
 cases/arr_bounds_continue_proven added after R6: no rewriter to freeze it with
 cases/arr_bounds_continue_switch added after R6: no rewriter to freeze it with
+cases/arr_bounds_generic_instances added after R6: no rewriter to freeze it with
+cases/arr_bounds_generic_instances_iface added after R6: no rewriter to freeze it with
+cases/arr_bounds_generic_instances_method added after R6: no rewriter to freeze it with
+cases/arr_bounds_generic_instances_prim added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
+cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
+cases/arr_header_hoist_record_view added after R6: no rewriter to freeze it with
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with
 cases/arr_path_callee_pop added after R6: no rewriter to freeze it with

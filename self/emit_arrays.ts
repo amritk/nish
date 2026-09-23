@@ -27,7 +27,7 @@
 // negative index fail too.
 
 import { HoistedHeader, isResizeCall } from "./attributes";
-import { storesRecord } from "./bounds";
+import { NO_RECORD, recordReaches, recordStoreType } from "./bounds";
 import { parseIntegerLiteral } from "./constants";
 import { Emitter, LoopTarget } from "./emit";
 import {
@@ -313,11 +313,16 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
 };
 
 /**
- * Collect the field names `loop` stores to into `names`, and answer whether it
- * can store to a field it cannot name -- a `new`, a call to a user function
- * that writes memory, or an element store into an array of inline records, which
- * rewrites a record in place (`storesRecord` in `self/bounds.ts`, the rule the
- * bounds proof drops its path facts by).
+ * Collect the field names `loop` stores to into `names` and the records it
+ * stores whole into `records`, and answer whether it can store to a field it
+ * can neither name nor place -- a `new`, or a call to a user function that
+ * writes memory.
+ *
+ * An element store into an array of inline records rewrites a record in place
+ * and every field of it with no name written, but only a record of that type
+ * (`recordStoreType` in `self/bounds.ts`, the rule the bounds proof drops its
+ * path facts by), so it is collected rather than folded into the answer: a
+ * path read entirely off classes keeps its hoist (`pathHoldsRecord`).
  *
  * A hoisted `h.xs` is a field load lifted into the preheader, so it stands only
  * while nothing in the loop puts a different array in that field. A store to a
@@ -330,15 +335,19 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
  * would let more loops through. It is the fact that exists today, and being too
  * careful here costs a hoist rather than an answer.
  */
-const storedFields = (emitter: Emitter, node: Node, names: string[]): boolean => {
+const storedFields = (emitter: Emitter, node: Node, names: string[], records: i32[]): boolean => {
   let opaque = false;
   if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
     const target = unwrapParens(node.children[0]);
     if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
       names.push(target.text);
     }
-    if (target.kind === N_INDEX && storesRecord(emitter.program, emitter.table, target)) {
-      opaque = true; // a record rewritten in place, every field of it unnamed (#180)
+    if (target.kind === N_INDEX) {
+      // A record rewritten in place, every field of it unnamed (#180).
+      const stored = recordStoreType(emitter.program, emitter.table, target);
+      if (stored !== NO_RECORD && records.indexOf(stored) < 0) {
+        records.push(stored);
+      }
     }
   } else if (node.kind === N_UNARY) {
     const target = unwrapParens(node.children[0]);
@@ -357,7 +366,7 @@ const storedFields = (emitter: Emitter, node: Node, names: string[]): boolean =>
     }
   }
   for (const child of node.children) {
-    if (storedFields(emitter, child, names)) {
+    if (storedFields(emitter, child, names, records)) {
       opaque = true;
     }
   }
@@ -420,6 +429,29 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
   }
 };
 
+/**
+ * Whether a whole-record store the loop makes can rewrite a link of a path:
+ * some field of it is read off a holder declared as a record type the loop
+ * stores whole (`recordReaches`, shared with the bounds proof). The root's own
+ * type counts, since `const r = rs[0]` is a view into `rs`; a class never does.
+ */
+const pathHoldsRecord = (emitter: Emitter, expr: Node, records: i32[]): boolean => {
+  if (records.length === 0) {
+    return false;
+  }
+  let link = unwrapParens(expr);
+  while (link.kind === N_MEMBER) {
+    const holder = pathOf(emitter, link.children[0]).type;
+    for (const stored of records) {
+      if (recordReaches(stored, holder)) {
+        return true;
+      }
+    }
+    link = unwrapParens(link.children[0]);
+  }
+  return false;
+};
+
 /** Whether any link of a path names a field the loop stores to. */
 const pathIsShadowed = (expr: Node, names: string[]): boolean => {
   let link = unwrapParens(expr);
@@ -458,7 +490,8 @@ export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
     return;
   }
   const names: string[] = [];
-  const opaque = storedFields(emitter, loop, names);
+  const records: i32[] = [];
+  const opaque = storedFields(emitter, loop, names, records);
   const declared: Local[] = [];
   localsDeclaredIn(emitter, loop, declared);
   for (const use of uses) {
@@ -471,7 +504,7 @@ export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
     }
     if (use.path.length > 0) {
       // A property path, so the field loads move too and have to be stable.
-      if (opaque || pathIsShadowed(use.expr, names)) {
+      if (opaque || pathIsShadowed(use.expr, names) || pathHoldsRecord(emitter, use.expr, records)) {
         skip = true;
       }
     }
