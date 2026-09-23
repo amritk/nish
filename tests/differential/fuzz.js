@@ -400,7 +400,12 @@ function buildProgram(seed, label, opts = {}) {
         const call = `pick(${boolExpr(1, locals, [])}, ${valueAt(t, locals, [])}, ${valueAt(t, locals, [])})`;
         lines.push(`  console.log(${shown(t, call)});`);
       }
-      for (const t of cellTypes) lines.push(`  console.log(${shown(t, `${cellOf(t)}.get()`)});`);
+      for (const t of cellTypes) {
+        if (generics.trade) {
+          lines.push(`  console.log(${shown(t, `trade(${cellOf(t)}, ${valueAt(t, locals, [])})`)});`);
+        }
+        lines.push(`  console.log(${shown(t, `${cellOf(t)}.get()`)});`);
+      }
     });
   }
   for (const v of locals) lines.push(`  console.log(${v});`);
