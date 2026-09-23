@@ -572,6 +572,36 @@ const DECLARED = [
     why: "a new program: `xs[i] = (i = 0)` keeps its check, which the reference compiler drops and writes past the array",
   },
   {
+    program: "tests/cases/arr_bounds_continue_for.ts",
+    file: "arr_bounds_continue_for.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: a `continue` that rebinds `xs` keeps the check on the `for` update's `xs[i]`, which the reference compiler drops and writes past the array",
+  },
+  {
+    program: "tests/cases/arr_bounds_continue_do.ts",
+    file: "arr_bounds_continue_do.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: a `continue` that rebinds `xs` keeps the check on the `do/while` condition's `xs[i]`, which the reference compiler drops and reads past the array",
+  },
+  {
+    program: "tests/cases/arr_bounds_lazy_unwrap_or.ts",
+    file: "arr_bounds_lazy_unwrap_or.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: an `unwrapOr` fallback that never ran proves nothing, so `s.charCodeAt(i)` keeps the check the reference compiler drops",
+  },
+  {
+    program: "tests/cases/arr_bounds_lazy_expect.ts",
+    file: "arr_bounds_lazy_expect.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: an `expect` message that never ran proves nothing, so `s.charCodeAt(i)` keeps the check the reference compiler drops",
+  },
+  {
+    program: "tests/cases/arr_header_hoist_record_store.ts",
+    file: "arr_header_hoist_record_store.ll",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+    why: "a new program: a whole-record store into `rs` keeps `r.xs` from being hoisted, where the reference compiler hoists it and reads the replaced array",
+  },
+  {
     program: "docs/cookbook/arr_bounds_path.ts",
     file: "arr_bounds_path.ll",
     changelog: "Key bounds length facts by property path",

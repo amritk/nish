@@ -6,7 +6,13 @@
 # the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).
 cases/arr_bounds_cond_assign added after R6: no rewriter to freeze it with
 cases/arr_bounds_cond_effect added after R6: no rewriter to freeze it with
+cases/arr_bounds_continue_do added after R6: no rewriter to freeze it with
+cases/arr_bounds_continue_for added after R6: no rewriter to freeze it with
+cases/arr_bounds_continue_proven added after R6: no rewriter to freeze it with
+cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
+cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
+cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with
 cases/arr_path_callee_pop added after R6: no rewriter to freeze it with
@@ -19,6 +25,8 @@ cases/arr_path_cond_store added after R6: no rewriter to freeze it with
 cases/arr_path_cond_string added after R6: no rewriter to freeze it with
 cases/arr_path_cond_ternary added after R6: no rewriter to freeze it with
 cases/arr_path_cond_while added after R6: no rewriter to freeze it with
+cases/arr_path_continue_do added after R6: no rewriter to freeze it with
+cases/arr_path_continue_for added after R6: no rewriter to freeze it with
 cases/arr_path_hold added after R6: no rewriter to freeze it with
 cases/arr_path_nullable added after R6: no rewriter to freeze it with
 cases/arr_path_reassign added after R6: no rewriter to freeze it with

@@ -1408,12 +1408,6 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     } else if (callee.kind !== N_IDENT) {
       walkExpression(walk, state, callee);
     }
-    // A `substring`'s clamps are decided one bound at a time, interleaved with
-    // the arguments, because that is the order `emitSubstring` writes them in:
-    // bound 0 is clamped before bound 1 is evaluated, so nothing bound 1 does
-    // may reach back. The receiver's length is read before either, so the
-    // holder is dropped the moment an argument rebinds it — a literal `0`
-    // still folds after that, because no string has a negative length.
     const lazy = lazyResultMethod(ctx, e);
     if (lazy !== "") {
       // The argument runs on the `Err` path alone. `unwrapOr`'s fallback then
@@ -1427,6 +1421,12 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
       forgetCallEffects(walk, state);
       return;
     }
+    // A `substring`'s clamps are decided one bound at a time, interleaved with
+    // the arguments, because that is the order `emitSubstring` writes them in:
+    // bound 0 is clamped before bound 1 is evaluated, so nothing bound 1 does
+    // may reach back. The receiver's length is read before either, so the
+    // holder is dropped the moment an argument rebinds it — a literal `0`
+    // still folds after that, because no string has a negative length.
     const clamped = isSubstringCall(ctx, e);
     let holder: Local | null = null;
     if (clamped) {

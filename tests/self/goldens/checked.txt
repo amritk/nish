@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 466 programs, 8933 dump lines.
+# 474 programs, 9060 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -88,6 +88,85 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 read
   stackSites=1 stackLocals=0
   callee 20:18 read -> @read
+program tests/cases/arr_bounds_continue_do.ts
+module tests/cases/arr_bounds_continue_do.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 6:7 xs: i32[] (let)
+  local 7:7 n: i32 (let)
+  local 8:7 i: i32 (let)
+program tests/cases/arr_bounds_continue_for.ts
+module tests/cases/arr_bounds_continue_for.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 7:7 xs: i32[] (let)
+  local 8:7 n: i32 (let)
+  local 9:7 i: i32 (let)
+program tests/cases/arr_bounds_continue_proven.ts
+module tests/cases/arr_bounds_continue_proven.ts (entry)
+function sumOdd(xs: i32[]): i32 -> @sumOdd
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 7:7 s: i32 (let)
+  local 8:7 last: i32 (let)
+  local 9:7 i: i32 (let)
+  local 10:12 n: i32 (let)
+function countOdd(xs: i32[]): i32 -> @countOdd
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 25:7 odd: i32 (let)
+  local 26:7 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: countOdd nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 sumOdd
+  stackSites=1 stackLocals=1
+  local 41:9 xs: i32[] (const)
+  callee 42:18 sumOdd -> @sumOdd
+  callee 42:32 countOdd -> @countOdd
+program tests/cases/arr_bounds_lazy_expect.ts
+module tests/cases/arr_bounds_lazy_expect.ts (entry)
+function parse(n: i32): Result<i32, string> -> @parse
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
+  escaping: n
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_exit nish_print nish_str_concat nish_str_from_i32 nish_write parse
+  stackSites=0 stackLocals=0
+  local 10:9 s: string (const)
+  local 11:7 k: i32 (let)
+  local 12:9 r: Result<i32, string> (const)
+  callee 12:13 parse -> @parse
+  local 13:9 v: i32 (const)
+  local 14:9 i: i32 (const)
+  local 15:7 c: i32 (let)
+program tests/cases/arr_bounds_lazy_unwrap_or.ts
+module tests/cases/arr_bounds_lazy_unwrap_or.ts (entry)
+function parse(n: i32): Result<i32, string> -> @parse
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
+  escaping: n
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 parse
+  stackSites=0 stackLocals=0
+  local 9:9 s: string (const)
+  local 10:7 k: i32 (let)
+  local 11:9 r: Result<i32, string> (const)
+  callee 11:13 parse -> @parse
+  local 12:9 v: i32 (const)
+  local 13:9 i: i32 (const)
+  local 14:7 c: i32 (let)
 program tests/cases/arr_bounds_panic.ts
 module tests/cases/arr_bounds_panic.ts (entry)
 function pick(xs: i32[], i: i32): i32 -> @pick
@@ -281,6 +360,19 @@ function test(): i32 -> @test [exported]
   callee 125:14 new Holder -> @Holder.constructor
   callee 126:5 declaredInside -> @declaredInside
   callee 126:21 new Holder -> @Holder.constructor
+program tests/cases/arr_header_hoist_record_store.ts
+module tests/cases/arr_header_hoist_record_store.ts (entry)
+struct Rec (interface) size=8 align=8
+  field xs: i32[] index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_index nish_print nish_str_from_i32
+  stackSites=3 stackLocals=2
+  local 17:9 rs: Rec[] (const)
+  local 18:9 short: Rec (const)
+  local 19:9 r: Rec (const)
+  local 20:7 i: i32 (let)
+  local 25:11 x: i32 (const)
 program tests/cases/arr_index_read_write.ts
 module tests/cases/arr_index_read_write.ts (entry)
 function set(a: i32[], i: i32, v: i32): void -> @set
@@ -726,6 +818,49 @@ function main(): i32 -> @nish_main [exported entry]
   callee 23:13 new Holder -> @Holder.constructor
   local 24:7 i: i32 (let)
   callee 25:29 step -> @step
+program tests/cases/arr_path_continue_do.ts
+module tests/cases/arr_path_continue_do.ts (entry)
+struct H (class) size=8 align=8
+  field xs: i32[] index=0 offset=0
+  constructor -> @H.constructor
+function H.constructor(this: H, xs: i32[]): void -> @H.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: xs
+  pointer this: size=8 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function shrink(h: H): void -> @shrink
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  pointer h: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: H.constructor nish_panic_index nish_print nish_str_concat nish_str_from_i32 shrink
+  stackSites=1 stackLocals=1
+  local 19:9 h: H (const)
+  callee 19:13 new H -> @H.constructor
+  local 20:7 n: i32 (let)
+  local 21:7 i: i32 (let)
+  callee 31:7 shrink -> @shrink
+program tests/cases/arr_path_continue_for.ts
+module tests/cases/arr_path_continue_for.ts (entry)
+struct H (class) size=8 align=8
+  field xs: i32[] index=0 offset=0
+  constructor -> @H.constructor
+function H.constructor(this: H, xs: i32[]): void -> @H.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: xs
+  pointer this: size=8 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: H.constructor nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 16:9 h: H (const)
+  callee 16:13 new H -> @H.constructor
+  local 17:7 n: i32 (let)
+  local 18:7 i: i32 (let)
 program tests/cases/arr_path_hold.ts
 module tests/cases/arr_path_hold.ts (entry)
 struct State (class) size=24 align=8
@@ -854,11 +989,11 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_panic_index nish_print nish_str_from_i32
   stackSites=3 stackLocals=2
-  local 19:9 rs: Rec[] (const)
-  local 20:9 short: Rec (const)
-  local 21:7 r: Rec (let)
-  local 22:7 i: i32 (let)
-  local 27:11 x: i32 (const)
+  local 18:9 rs: Rec[] (const)
+  local 19:9 short: Rec (const)
+  local 20:7 r: Rec (let)
+  local 21:7 i: i32 (let)
+  local 26:11 x: i32 (const)
 program tests/cases/arr_path_root.ts
 module tests/cases/arr_path_root.ts (entry)
 struct Holder (class) size=8 align=8
