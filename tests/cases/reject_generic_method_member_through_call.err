@@ -1,0 +1,1 @@
+:20:53: error: Cannot read `area` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`

@@ -119,7 +119,9 @@ rejects. This table is the highest-value part of the page.
 | `undefined` | forbidden | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
-| `type Pair<T>` (a generic alias), a generic method | `` Generic type parameters are forbidden on a type alias in Nish `` | a generic **function**, **class** and **interface** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
+| `type Pair<T>` (a generic alias) | `` Generic type parameters are forbidden on a type alias in Nish `` | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
+| `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
+| `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
 | `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
@@ -447,7 +449,7 @@ export const main = (): i32 => areaOf(new Circle(2)) - 12;
 ```
 
 - **Not supported yet**, each with its own message: a default type argument
-  (`<T = string>`), and type parameters on a **method or type alias**. A
+  (`<T = string>`), and type parameters on a **constructor or type alias**. A
   generic `main` is refused. There are no multiple bounds (`T extends A & B`)
   and no bound that mentions another parameter.
 - **`$` may not appear in a function, class or interface name** — it is what
@@ -513,7 +515,54 @@ export const main = (): i32 => {
   extends Shape>` — by the rules a function's follow: its methods may read
   `this.item.area` through a field of type `T`, and `new Holder<Point>` or an
   annotation `Holder<Point>` is refused unless `Point` satisfies `Shape`.
-- **Not supported yet**: a generic method of its own.
+
+### Generic methods
+
+A method — of a generic class or not — may declare its own type parameters.
+They are inferred from the arguments like a generic function's, and each
+(receiver, method type arguments) pair is its own `define`:
+`@Chooser.pick$i32`, `@Box$i32.keep$str`.
+
+```ts nish:ok
+class Chooser {
+  flip: boolean = false;
+  pick<T>(a: T, b: T): T { return this.flip ? b : a; }
+}
+
+class Box<T> {
+  value: T;
+  constructor(v: T) { this.value = v; }
+  keep<U>(other: U): T { return this.value; }
+}
+
+export const main = (): i32 => {
+  const c = new Chooser();
+  const word: string = c.pick("left", "right");
+  console.log(word);
+  return c.pick(0, 1) + new Box<i32>(7).keep("seven") - 7;
+};
+```
+
+- **Never write the type arguments at the call**: `c.pick<i32>(1, 2)` is
+  `` Type arguments are not written at a call site ``. A method type parameter
+  that no parameter mentions is `` Cannot infer `U` for `Holder.make` ``.
+- **Do not reuse a class parameter's name**: `class Box<T> { map<T>(…) }` is
+  `` Type parameter `T` of `Box.map` shadows `Box`'s own `T` `` (NL2331) —
+  call the method's `U`.
+- **Constrain it like a function's** — `apply<U extends Shape>(u: U)` reads
+  `u.area` — but the constraint may not mention a type parameter, the class's
+  included.
+- **A constructor takes none**; its class's are written after `new`.
+
+```ts nish:err NL2331
+class Box<T> {
+  value: T;
+  constructor(v: T) { this.value = v; }
+  map<T>(other: T): T { return other; }   // shadows Box's T: call it U
+}
+
+export const main = (): i32 => new Box<i32>(1).value;
+```
 
 ### Calling C
 

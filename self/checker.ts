@@ -22,11 +22,12 @@ import {
   checkDeferredConstraints,
   collectStructTypeParamNames,
   collectTypeParamNames,
+  declareMethodTypeParameters,
   instantiateStruct,
   isGenericFunction,
   isGenericStruct,
-  mentionsTypeParam,
   parameterOrigin,
+  refuseUninferable,
   rejectDollarInSymbolName,
   resolveStructTemplateConstraints,
   resolveTemplateConstraints,
@@ -182,6 +183,10 @@ export class Checker {
         if (template !== null && template.decl === stmt) {
           resolveStructTemplateConstraints(template);
         }
+        // WP18 G8: the rules about a generic method that are its declaration's,
+        // once per class, for the reason the constraints above are resolved
+        // here: a generic class's members are collected once per instantiation.
+        declareMethodTypeParameters(this.ctx, stmt);
       } else if (stmt.kind === N_MODULE_CONST) {
         this.collectConstants(stmt);
       } else if (stmt.kind === N_FUNCTION) {
@@ -452,29 +457,7 @@ export class Checker {
       );
       return;
     }
-    // A type parameter is inferred from the arguments and from nothing else, so
-    // one that appears in no parameter can never be bound and the function
-    // could never be called. Reported here, once, against the declaration
-    // rather than against every call.
-    const parameters = stmt.children[1];
-    for (const param of template.typeParams) {
-      const names = new StringSet();
-      names.add(param);
-      let mentioned = false;
-      for (const declared of parameters.children) {
-        const annotation = declared.children[1];
-        if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
-          mentioned = true;
-        }
-      }
-      if (mentioned) {
-        continue;
-      }
-      this.ctx.error(
-        nameNode,
-        `Cannot infer \`${param}\` for \`${name}\`: a type parameter is inferred from the arguments, and ` +
-          `\`${param}\` appears in none of them; give \`${name}\` a parameter that mentions \`${param}\``
-      );
+    if (refuseUninferable(this.ctx, stmt, template.typeParams, name)) {
       return;
     }
     this.program.addTemplate(template);
@@ -538,8 +521,11 @@ export class Checker {
       // order the bodies are checked and the emitter walks it the same way. A
       // method of an instantiated class is the exception: `collectStructMembers`
       // appended it where a declared class's method is appended, which keeps an
-      // instantiated class's functions together and in member order.
-      if (info.owner === null) {
+      // instantiated class's functions together and in member order. An
+      // instantiation of a generic method (WP18 G8) is a request, not a member
+      // collected with its class, so it has a template and is appended here
+      // like a function's.
+      if (info.template !== null) {
         this.program.functions.push(info.sig);
       }
       this.checkInstanceBody(info);

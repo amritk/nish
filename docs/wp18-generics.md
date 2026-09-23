@@ -1771,6 +1771,165 @@ Multiple bounds, trait bounds and F-bounded constraints stay out, as §13 says.
 compiled before this and does not now; the fix is the constraint the message
 names. Nothing in the corpus, `std/`, `examples/` or `docs/` did.
 
+### 15.8 Generic methods (§14 q7), and what they decided
+
+§2 turned a method's own type parameters down, and §14's seventh question asked
+whether anybody wanted them. G8 answers yes and adds them: a method of a class,
+generic or not, may declare `<U, ...>`, and each call picks a tuple exactly as a
+call of a generic function does. Every decision below reuses a rule the function
+half already has; the ones that had to be made fresh are marked as such.
+
+**Where.** On a method of a class. Not on a constructor: TypeScript refuses
+`constructor<T>()` too, and a constructor's type arguments are its class's,
+written after `new`. Interfaces have no methods, so they are out by
+construction. The constructor refusal is the *parser's*
+(`reject_generic_method_constructor`, in `tests/self/parser_refusals.txt`),
+because the `typescript` package parses the list and leaves the refusal to its
+checker, so a list stage1 kept on the node would be one `tests/parser_oracle.js`
+cannot print; a syntax error is a counted skip there instead of a disagreement.
+
+**The tree.** An `N_METHOD` with type parameters carries them as a fifth child,
+the position an `N_FUNCTION` keeps them in, so `typeParameterList` reads either
+node and a method's first four children mean what they always meant. The child
+is pushed only when the list is non-empty, so every method that existed before
+this parses to exactly the tree it did and `--emit-ast` moves for none of them.
+
+**Scope.** The class's type parameters are in scope inside a generic method,
+and the method's are added beside them. A method type parameter with the name
+of one of its class's is refused at the declaration, once per class
+(`reject_generic_method_shadow`, NL2331): TypeScript lets the inner one shadow
+the outer, and this language refuses it for the reason NL2302 refuses `<T, T>`
+— a diagnostic, a constraint or an origin that names `T` has to mean one thing.
+
+**Inference.** From the arguments only, through the one `unifyAnnotation` path
+§2a describes, against the method's own parameter annotations. The class's
+parameters are already bound by the receiver, so only the method's are
+inferred. A method type parameter no parameter mentions is refused at the
+declaration in the words a generic function's is, with the method named
+`Holder.pick` (`reject_generic_method_uninferable`), and type arguments written
+at a method call (`h.pick<i32>(x)`, which a one-token parser reads as
+`(h.pick < i32) > (x)`) get the function's call-site sentence
+(`reject_generic_method`, re-pointed here from the refusal this section
+removes). The receiver is looked through when it is a path of names — a local,
+`this`, fields read through them (`reject_generic_method_path_type_args`) — by
+reading declared types rather than checking it, because the same test runs on
+every `this.count < n` and the operator check that follows checks the receiver
+anyway. A generic method is a member like any other, so a field of the same
+name is a duplicate member (`reject_generic_method_field_clash`); one
+`StructInfo.hasMember` answers for fields, methods and generic methods in both
+member collectors.
+
+**The key and the symbol.** One instantiation per (concrete receiver struct ×
+method tuple), which is one `define`: a method template is minted per receiver
+struct — once for a declared class, once per instantiation for a generic one,
+when `collectInstanceMembers` collects its members — and each keeps its own
+instantiation set. The symbol is the receiver's method symbol followed by the
+function mangling of the method tuple:
+
+```
+Holder.pick<i32>                 @Holder.pick$i32
+Holder.pick<string>              @Holder.pick$str
+Box<i32>.pair<string>            @Box$i32.pair$str
+Box<Point>.pair<i32[]>           @Box$$Point.pair$arr.i32
+```
+
+*Injective, against every form that exists.* The symbols that can share a
+package prefix are a declared function `f`, a function instance `f$a…`, a
+method `S.m`, a method of an instantiated class `S$a….m`, and now `S.m$b…` and
+`S$a….m$b…`. A declared function, class or interface name contains neither `$`
+nor `.` (`$` is refused there, §3c; `.` is not an identifier character). A
+*method* name could, until now, hold a `$` — §3c says it may not, and the code
+never enforced that. G8 closes the two ways that reaches an instantiation's
+symbol, in `rejectDollarInSymbolName`'s words:
+
+- A **generic** method's own name may hold no `$` at all, exactly as a generic
+  function's may not, because it is the base every instantiation is built on:
+  `pick$i32<V>` at `i32` and `pick<U1, U2>` at `i32, i32` would both be
+  `Holder.pick$i32$i32` (`reject_generic_method_dollar_generic`, the same with
+  the declarations reversed in `…_generic_first`, and on a generic class in
+  `…_generic_class`). The first version of this section missed this case: it
+  checked only a non-generic sibling, and the program miscompiled in one order
+  and crashed the compiler in the other.
+- A **non-generic** method's `$` is refused where the part before the `$` names
+  a generic method of the same class (`pick$i32` beside `pick<T>`,
+  `reject_generic_method_dollar`), and no further, so every program that
+  compiled before still does: a method with no generic sibling cannot collide
+  with an instantiation.
+
+`instantiateHere` also no longer trusts the argument: a cached instantiation
+whose template is not the requesting one is an internal error (exit 70), never
+another template's signature handed back. With that, each argument
+mangling is prefix-coded, so given the arity of the declaration it belongs to —
+fixed per template — a reader of the symbol always knows where an argument list
+ends. Reading left to right: the declared name runs to the first `$` or `.`. If
+it is `$`, exactly the template's arity of arguments follows; what comes next is
+the end (a function instance), or `.` and a method name (a method of an
+instantiated class). If it is `.`, a method name follows. After a method name,
+the end is a plain method and `$` starts the method's tuple, again of the
+method's own arity. Every step is forced, so no two (declaration, receiver
+tuple, method tuple) triples spell one symbol. The one thing a *method* name
+could have shared with a mangling tag — a `.` followed by `arr`, `opt`, `res`,
+`roarr` — is never read as a method, because an argument list is consumed by
+arity, not by looking for a `.`.
+
+**Display.** `Box<i32>.pair<string>` in every diagnostic, in the
+`--emit-checked` dump and as the `-g` `DISubprogram` `name`, with the mangled
+symbol in `linkageName` (`dbg_generic_method`). It is `instanceDisplayName`
+over a template whose source name is the receiver's display spelling and the
+method's, so nothing about the display-name rule is new.
+
+**Termination** (decided here). A method request joins the one function chain
+§15.1 already walks. What the chain compares is new: two links are "the same
+template" when they are instantiations of the same method *declaration*, and
+the tuple compared is the receiver's type arguments followed by the method's.
+That is what catches recursion that changes the receiver as it goes — `Box<T>`'s
+`m<U>` asking for `Box<U>.m<U[]>` — which comparing per-receiver template
+objects would not, because each receiver has its own. The soundness argument of
+§4 carries over unchanged, because the combined tuple is just a longer tuple
+over one declaration. The sentence is the function half's, with both ends named
+as written: `` `Holder.walk<i32>` asks for `Holder.walk<i32[]>` ``
+(`reject_generic_method_recursion`).
+
+**Constraints.** `pick<U extends Shape>` works as a function's does: a member
+of a `U` is judged against `Shape` by where the value came from (§15.6), and a
+type argument is held to `Shape` at each request. The constraint list is one
+per method declaration, resolved once in pass 1 in the class's module with no
+type parameter bound, and shared by every receiver, so a bad constraint is
+reported once however many instantiations the class has. A method constraint
+may not mention a type parameter — the method's or the class's — for NL2326's
+reason: it is resolved once, not once per receiver. Inside a generic method,
+`constraintInScope` answers a method parameter from the method's list and a
+class parameter from the class's (`gen_method_constraint`).
+
+**Member origins.** A call of a generic method is followed the way a call of a
+generic function is: its declared return type, with each method parameter
+standing for the argument it was inferred from and each class parameter
+standing for what the receiver's origin says it is. `id.same(t).area` inside a
+template is therefore still a member of `t`'s parameter, not a free pass
+(`reject_generic_method_member_through_call`).
+
+**Whole program** (§15.5). A generic method of an exported class is
+instantiated in the class's module whoever calls it, defined once there and
+declared by every other module that calls it, through the same
+`useExternalInstance` a generic function's instantiation takes
+(`tests/link/generic_method_import`, two importers, one `define`).
+
+**Interop** (decided here). An instantiation of a generic method on an exported
+class is an ordinary method with a `$` in its symbol, so the C header declares
+it under `cFunctionName`'s `nish_gen_` spelling, bound back with `NISH_SYMBOL`,
+and says in its comment which method it instantiates — `nish_gen_Holder_pick_i32`
+for `@Holder.pick$i32`. The JavaScript sidecars bridge no method, generic or
+not, because `this` is a struct pointer, so there is nothing new for them to
+spell. An exported class whose generic method no call instantiates is refused
+when a sidecar is requested, with message 9 (NL4007) naming the method: the
+header would otherwise describe the class and silently leave the method out
+(`gen_method_export` for the header, a `-pedantic` C driver and the JavaScript
+sidecars; `reject_generic_method_unused` for message 9, and the same file
+compiles with no sidecar flag).
+
+**`self/`** does not use generic methods (the rolling freeze), so the bootstrap
+input is unchanged and its fixed point with it.
+
 ---
 
 ## 16. What is next, in order

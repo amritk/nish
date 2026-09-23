@@ -1,0 +1,1 @@
+Type parameter `T` of `Box.also` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name

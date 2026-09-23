@@ -1,0 +1,1 @@
+--emit-header build/test/interop/reject_generic_method_unused.h

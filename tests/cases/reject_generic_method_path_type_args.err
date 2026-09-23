@@ -1,0 +1,1 @@
+:21:23: error: Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `this.h.get(...)`

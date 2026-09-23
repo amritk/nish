@@ -821,8 +821,8 @@ export class Parser {
 
   /**
    * Whether the identifier in hand is a member's name rather than a modifier in
-   * front of one: a name is followed by `(`, `:`, `?`, `!`, `=` or `;`, and a
-   * modifier by the next word. The last two are the malformed members —
+   * front of one: a name is followed by `(`, `<` (a generic method, WP18 G8),
+   * `:`, `?`, `!`, `=` or `;`, and a modifier by the next word. The last two are the malformed members —
    * `static = 5;` and `static;` have no annotation and neither compiles — and
    * they are here because `static` is a name there too, which is what stage0
    * calls them (``Field `static` of class `C` needs a type annotation``): the
@@ -833,6 +833,7 @@ export class Parser {
     const next = this.peek();
     return (
       next === TOK_LPAREN ||
+      next === TOK_LT ||
       next === TOK_COLON ||
       next === TOK_QUESTION ||
       next === TOK_BANG ||
@@ -884,9 +885,25 @@ export class Parser {
   parseMember(): Node {
     const start = this.start;
     const modifiers = this.parseMemberModifiers();
-    if (this.at(TOK_IDENT) && this.value === "constructor" && this.peek() === TOK_LPAREN) {
+    if (this.at(TOK_IDENT) && this.value === "constructor" && (this.peek() === TOK_LPAREN || this.peek() === TOK_LT)) {
       this.advance();
       const ctor = this.node(N_CONSTRUCTOR, start, this.end);
+      // WP18 G8: a constructor takes its class's type arguments, written after
+      // `new`, and has none of its own — TypeScript says the same. The list is
+      // read and refused here rather than carried to the checker because the
+      // `typescript` package parses it and leaves the refusal to its own
+      // checker, so a list kept on this node would be a tree
+      // `tests/parser_oracle.js` cannot print (docs/wp18-generics.md §15.8).
+      if (this.at(TOK_LT)) {
+        const listStart = this.start;
+        this.parseTypeParameters();
+        this.report(
+          "a constructor cannot have type parameters: it takes its class's, which are written after `new` " +
+            "(`new Box<i32>(v)`)",
+          listStart,
+          this.previousEnd
+        );
+      }
       // The constructor carries its modifiers too, and for the same reason the
       // field and the method do: `static constructor()` is a rule the checker
       // states. Dropping them here is how a `static` constructor came to be
@@ -906,13 +923,24 @@ export class Parser {
     // `m?(): void` is a method with a marker, not a field: the `?` sits
     // between the name and the parameter list, so the one token of lookahead
     // that tells a method from a field has to look past it.
-    if (this.peek() === TOK_LPAREN || this.markedMethodAhead()) {
+    //
+    // `m<U>(...)` is a generic method (WP18 G8): a field is always followed by
+    // `:`, `?`, `!`, `=` or `;`, so a `<` after a member's name can only open a
+    // type parameter list.
+    if (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()) {
       const method = this.node(N_METHOD, start, this.end);
       method.children.push(this.parseIdentifier());
+      const typeParams = this.parseTypeParameters();
       method.flags = modifiers | this.parseMemberMarker();
       method.children.push(this.parseParameters());
       method.children.push(this.parseReturnType());
       method.children.push(this.parseBlock());
+      // The fifth child, where an `N_FUNCTION` keeps its list, and only when
+      // there is one: a method without type parameters keeps exactly the tree
+      // it always had, so `--emit-ast` and the parser oracle move for none.
+      if (typeParams.children.length > 0) {
+        method.children.push(typeParams);
+      }
       method.end = this.previousEnd;
       return method;
     }

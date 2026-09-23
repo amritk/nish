@@ -454,6 +454,48 @@ const DECLARED = [
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
     why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
   },
+  {
+    program: "tests/cases/gen_method.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "a new program: `Chooser.pick<T>` on a non-generic class, which the reference compiler refuses at the `<` after the method name (`a type annotation is required`) and HEAD compiles to `@Chooser.pick$i32` and `@Chooser.pick$str`",
+  },
+  {
+    program: "tests/cases/gen_method_generic_class.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "a new program: `Box<T>.pair<U>` at two receivers and two method tuples, which the reference compiler refuses at the method's type parameter list and HEAD compiles to four defines",
+  },
+  {
+    program: "tests/cases/gen_method_constraint.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "a new program: `apply<U extends Shape>` on a plain class and `plus<U extends Shape>` on a generic one, which the reference compiler refuses at the method's type parameter list and HEAD compiles to direct field reads",
+  },
+  {
+    program: "tests/cases/gen_method_export.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "a new program: an exported class's generic methods, which the reference compiler refuses at the method's type parameter list and HEAD compiles, with each instantiation in the header as `nish_gen_Holder_pick_i32` and the like",
+  },
+  {
+    program: "tests/cases/dbg_generic_method.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "a new program: `Box<i32>.pair<U>` under -g, which the reference compiler refuses at the method's type parameter list and HEAD compiles with `DISubprogram`s named `Box<i32>.pair<string>` and `Box<i32>.pair<i32>`",
+  },
+  {
+    program: "docs/cookbook/gen_method.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "the cookbook snippet for a generic method, which the reference compiler refuses at the method's type parameter list and HEAD compiles to `@Chooser.pick$i32`, `@Chooser.pick$str` and `@Box$i32.keep$str`",
+  },
+  {
+    program: "tests/link/generic_method_import/main.ts",
+    file: "exit",
+    changelog: "Generic methods on classes (WP18 §14 q7)",
+    why: "a new program: an exported class's generic methods called from two importers, which the reference compiler refuses at the method's type parameter list in lib.ts and HEAD compiles with one `define` per instantiation, in lib.ll",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

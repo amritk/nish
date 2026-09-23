@@ -1,0 +1,3 @@
+:13:7: error: Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name
+:25:11: error: Type parameter `K` of `Cell.swap` shadows `Cell`'s own `K`: a class's type parameters are in scope in its methods, and a diagnostic that names `K` has to mean one of them; give the method's another name
+2 errors

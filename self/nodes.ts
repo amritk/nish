@@ -33,7 +33,7 @@ export const N_PARAM: i32 = 7; // children: name, type
 export const N_CLASS: i32 = 8; // children: name, extends, LIST of implements, LIST of members, LIST of type parameters (WP18 G5)
 export const N_INTERFACE: i32 = 9; // children: name, LIST of FIELD, LIST of type parameters (WP18 G5)
 export const N_FIELD: i32 = 10; // children: name, type, initializer
-export const N_METHOD: i32 = 11; // children: name, LIST of PARAM, return type, BLOCK
+export const N_METHOD: i32 = 11; // children: name, LIST of PARAM, return type, BLOCK, and a LIST of type parameters only when it has one (WP18 G8)
 export const N_CONSTRUCTOR: i32 = 12; // children: LIST of PARAM, BLOCK
 export const N_MODULE_CONST: i32 = 13; // children: LIST of VAR_DECL
 

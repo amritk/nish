@@ -1942,6 +1942,35 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
     want.length > 0 && got === want,
     `--- monomorphic\n${want}\n--- instantiated\n${got}\n${generic.error ?? ""}${plain.error ?? ""}`
   );
+  // WP18 G8: the same promise for a generic *method*. `Chooser.pick<i32>` is
+  // the method somebody would have written as `pickI32`, with `this` first and
+  // the same body, and nothing about it may differ but the symbol.
+  const methodBody = `{
+    let total = 0;
+    for (let i = 0; i < 4; i++) {
+      total = total + i;
+    }
+    return this.flip ? b : a;
+  }`;
+  const methodMain = (call) =>
+    `export const test = (): number => {\n  const c = new Chooser();\n  console.log(${call});\n  return 0;\n};\n`;
+  const genericMethod = twin(
+    "gen_method_twin",
+    `class Chooser {\n  flip: boolean = false;\n\n  pick<T>(a: T, b: T): T ${methodBody}\n}\n\n${methodMain("c.pick(7, 1)")}`
+  );
+  const plainMethod = twin(
+    "mono_method_twin",
+    `class Chooser {\n  flip: boolean = false;\n\n  pickI32(a: i32, b: i32): i32 ${methodBody}\n}\n\n${methodMain("c.pickI32(7, 1)")}`
+  );
+  const gotMethod = genericMethod.ir ? defineOf(genericMethod.ir, "Chooser.pick$i32") : "";
+  const wantMethod = plainMethod.ir
+    ? defineOf(plainMethod.ir, "Chooser.pickI32").replace("@Chooser.pickI32(", "@Chooser.pick$i32(")
+    : "";
+  check(
+    "generics: a generic method's instantiation is the hand-written method's `define`, symbol aside",
+    wantMethod.length > 0 && gotMethod === wantMethod,
+    `--- monomorphic\n${wantMethod}\n--- instantiated\n${gotMethod}\n${genericMethod.error ?? ""}${plainMethod.error ?? ""}`
+  );
 }
 // Every generic module must satisfy the IR verifier, not just the assembler:
 // an instantiation is emitted from side tables the module's own body never
@@ -3941,6 +3970,99 @@ if (!only || "interop".includes(only)) {
     );
   }
 
+  // ---- WP18 G8: an exported class's generic method ----------------------------------
+  // An instantiation of a generic method is a method whose symbol holds a `$`
+  // (`Holder.pick$i32`, `Box$i32.with$bool`), so the header declares it under the
+  // same `nish_gen_` spelling a generic function's takes and says which method it
+  // instantiates, and a C host calls it with the object first. The JavaScript
+  // sidecars bridge no method, because `this` is a struct pointer; what they must
+  // not do is name one with a `$` or a `.`.
+  const genMethod = emit("tests/cases/gen_method_export.ts", [
+    "--emit-header",
+    sidecar("gen_method_export", "h"),
+    "--emit-dts",
+    sidecar("gen_method_export", "d.ts"),
+    "--emit-napi",
+    sidecar("gen_method_export", "napi.c"),
+  ]);
+  check("gen_method_export: every sidecar is written", genMethod.status === 0, genMethod.stderr);
+  const genMethodText = (ext) =>
+    genMethod.status === 0 && fs.existsSync(sidecar("gen_method_export", ext))
+      ? fs.readFileSync(sidecar("gen_method_export", ext), "utf8")
+      : "";
+  const genMethodHeader = genMethodText("h");
+  check(
+    "gen_method_export.h declares each generic-method instantiation as nish_gen_<escaped collapse>, bound to its symbol",
+    genMethodHeader.includes(
+      'int32_t nish_gen_Holder_pick_i32(struct Holder *this_, int32_t a, int32_t b) NISH_SYMBOL("Holder.pick$i32");'
+    ) &&
+      genMethodHeader.includes(
+        'nish_str *nish_gen_Holder_pick_str(struct Holder *this_, const nish_str *a, const nish_str *b) NISH_SYMBOL("Holder.pick$str");'
+      ) &&
+      genMethodHeader.includes(
+        'int32_t nish_gen_Box_i32_with_bool(struct nish_gen_Box_i32 *this_, bool other) NISH_SYMBOL("Box$i32.with$bool");'
+      ) &&
+      genMethodHeader.includes(
+        "(an instantiation of the generic method Holder.pick: call it as nish_gen_Holder_pick_i32)"
+      ),
+    genMethodHeader
+  );
+  if (genMethod.status === 0) {
+    const syn = spawnSync("clang", [...strictC, "-pedantic", "-fsyntax-only", "-x", "c", sidecar("gen_method_export", "h")]);
+    check(
+      "gen_method_export.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    );
+    const methodDriver = path.join(interopDir, "gen_method_export_driver.c");
+    fs.writeFileSync(
+      methodDriver,
+      [
+        "#include <stdio.h>",
+        '#include "gen_method_export.h"',
+        "int main(void) {",
+        "  struct Holder h = {1};",
+        "  struct nish_gen_Box_i32 box = {5};",
+        "  nish_str *s = nish_gen_Holder_pick_str(&h, nish_str_from_i32(1), nish_str_from_i32(22));",
+        '  printf("%d %s %d %d\\n", nish_gen_Holder_pick_i32(&h, 3, 4), s->data, nish_gen_Box_i32_with_bool(&box, 0), run(&h));',
+        "  nish_free_arena();",
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    );
+    const methodExe = path.join(interopDir, "gen_method_export_driver");
+    const cc = spawnSync(
+      "clang",
+      [...strictC, "-O2", sidecar("gen_method_export", "ll"), path.join(runtimeDir, "runtime.c"), methodDriver, "-o", methodExe],
+      { cwd: root }
+    );
+    const run = cc.status === 0 ? spawnSync(methodExe) : null;
+    check(
+      "a -Werror C driver calls generic-method instantiations through gen_method_export.h",
+      run !== null && String(run.stdout).trim() === "4 22 5 3",
+      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+    );
+  }
+  const genMethodDts = genMethodText("d.ts");
+  const genMethodShim = genMethodText("napi.c");
+  check(
+    "gen_method_export's JavaScript sidecars bridge no method and name nothing with a `$` or a `.`",
+    genMethodDts.includes("Holder.pick<i32>(this: Holder, a: number, b: number): number  -- not exported to JS") &&
+      ![...genMethodDts.matchAll(/^ {2}([^\s/*(]+)\(/gm)].some((m) => /[$.]/.test(m[1])) &&
+      !/nish_napi_[A-Za-z0-9_]*[$.]/.test(genMethodShim) &&
+      !genMethodShim.includes("nish_napi_nish_gen_Holder"),
+    genMethodDts + genMethodShim
+  );
+  if (genMethodDts.length > 0) {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("gen_method_export", "d.ts")], { cwd: root });
+    check("gen_method_export.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr));
+  }
+  if (genMethod.status === 0 && hasNodeHeaders) {
+    const syn = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar("gen_method_export", "napi.c")]);
+    check("gen_method_export.napi.c compiles under -std=c11 -Wall -Wextra -Werror", syn.status === 0, String(syn.stderr));
+  }
+
   // A declared `identity_i32` beside `identity<i32>`: before G8 both were `identity_i32`
   // in C, and the header declared it twice with two meanings.
   const genClash = emit("tests/cases/interop_generic_collision.ts", [
@@ -4031,6 +4153,31 @@ if (!only || "interop".includes(only)) {
     "the same program with no sidecar flag compiles: message 9 is about the sidecar",
     unusedPlain.status === 0 && fs.existsSync(sidecar("reject_interop_generic_unused", "ll")),
     unusedPlain.stderr
+  );
+
+  // WP18 G8: the same rule for a generic method of an exported class, which a header
+  // would otherwise describe without the method. Refused under each sidecar flag,
+  // and compiled without one.
+  const unusedMethodSrc = "tests/cases/reject_generic_method_unused.ts";
+  for (const [flag, ext] of [
+    ["--emit-header", "h"],
+    ["--emit-dts", "d.ts"],
+    ["--emit-napi", "napi.c"],
+  ]) {
+    const out = sidecar("reject_generic_method_unused", ext);
+    fs.rmSync(out, { force: true });
+    const r = emit(unusedMethodSrc, [flag, out]);
+    check(
+      `${flag} refuses an exported class's generic method with no instantiation, and writes no sidecar`,
+      r.status === 1 && r.stderr.includes("`Holder.pick` is generic, so it has no single C signature") && !fs.existsSync(out),
+      r.stderr
+    );
+  }
+  const unusedMethodPlain = emit(unusedMethodSrc, []);
+  check(
+    "a generic method nothing instantiates compiles when no sidecar is asked for",
+    unusedMethodPlain.status === 0,
+    unusedMethodPlain.stderr
   );
 
   // ---- WP24 A1: asynchronous N-API exports (--emit-napi-async) --------------------

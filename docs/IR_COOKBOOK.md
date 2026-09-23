@@ -582,6 +582,150 @@ attributes #2 = { nounwind }
 ```
 <!-- cookbook:end gen_constraint -->
 
+### A generic method
+
+A method may declare type parameters of its own, and each (receiver struct,
+method type-argument tuple) is one `define`, named after the receiver's method
+symbol with the method's arguments appended: `Chooser.pick` at `i32` and at
+`string` is `@Chooser.pick$i32` and `@Chooser.pick$str`, and `Box<i32>.keep` at
+`string` is `@Box$i32.keep$str`. Each is the method somebody would have written
+for that type — `this` first, the same body, its own attributes — and a second
+call at a tuple already asked for adds nothing. Inside `keep` both the class's
+`T` and the method's `U` are bound (docs/wp18-generics.md §15.8).
+
+<!-- cookbook:begin gen_method -->
+```ts
+class Chooser {
+  flip: boolean = false;
+
+  pick<T>(a: T, b: T): T {
+    return this.flip ? b : a;
+  }
+}
+
+class Box<T> {
+  value: T;
+
+  constructor(value: T) {
+    this.value = value;
+  }
+
+  keep<U>(other: U): T {
+    return this.value;
+  }
+}
+
+export const main = (): i32 => {
+  const c = new Chooser();
+  const word: string = c.pick("left", "right");
+  console.log(word);
+  return c.pick(1, 2) + new Box<i32>(7).keep("seven");
+};
+```
+
+```llvm
+%struct.Chooser = type { i1 }
+%struct.Box$i32 = type { i32 }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"left\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"right\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"seven\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %c.addr = alloca %struct.Chooser*, align 8
+  %Chooser.obj = alloca %struct.Chooser, align 8
+  %word.addr = alloca i8*, align 8
+  %Box$i32.obj = alloca %struct.Box$i32, align 8
+  %0 = getelementptr inbounds %struct.Chooser, %struct.Chooser* %Chooser.obj, i32 0, i32 0
+  store i1 false, i1* %0, align 1, !tbaa !4
+  store %struct.Chooser* %Chooser.obj, %struct.Chooser** %c.addr, align 8
+  %1 = load %struct.Chooser*, %struct.Chooser** %c.addr, align 8
+  %2 = call i8* @Chooser.pick$str(%struct.Chooser* %1, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
+  store i8* %2, i8** %word.addr, align 8
+  %3 = load i8*, i8** %word.addr, align 8
+  call void @nish_print(i8* %3)
+  %4 = load %struct.Chooser*, %struct.Chooser** %c.addr, align 8
+  %5 = call i32 @Chooser.pick$i32(%struct.Chooser* %4, i32 1, i32 2)
+  call void @Box$i32.constructor(%struct.Box$i32* %Box$i32.obj, i32 7)
+  %6 = call i32 @Box$i32.keep$str(%struct.Box$i32* %Box$i32.obj, i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
+  %7 = add nsw i32 %5, %6
+  ret i32 %7
+}
+
+define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
+  store i32 %value, i32* %0, align 4, !tbaa !7
+  ret void
+}
+
+define internal noundef nonnull align 8 i8* @Chooser.pick$str(%struct.Chooser* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i8* noundef nonnull noalias readonly align 8 %a, i8* noundef nonnull noalias readonly align 8 %b) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Chooser, %struct.Chooser* %this, i32 0, i32 0
+  %1 = load i1, i1* %0, align 1, !tbaa !4
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i8* [ %b, %cond.true ], [ %a, %cond.false ]
+  ret i8* %2
+}
+
+define internal noundef i32 @Chooser.pick$i32(%struct.Chooser* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i32 noundef %a, i32 noundef %b) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Chooser, %struct.Chooser* %this, i32 0, i32 0
+  %1 = load i1, i1* %0, align 1, !tbaa !4
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i32 [ %b, %cond.true ], [ %a, %cond.false ]
+  ret i32 %2
+}
+
+define internal noundef i32 @Box$i32.keep$str(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i8* noundef nonnull noalias readonly align 8 nocapture %other) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4, !tbaa !7
+  ret i32 %1
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i1", !1, i64 0}
+!3 = !{!"Chooser", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"i32", !1, i64 0}
+!6 = !{!"Box$i32", !5, i64 0}
+!7 = !{!6, !5, i64 0}
+```
+<!-- cookbook:end gen_method -->
+
 ## Types
 
 ### `i64` and the explicit conversions

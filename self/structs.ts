@@ -17,7 +17,7 @@
 
 import { CheckContext } from "./context";
 import { rejectForeignPointer, resolveType } from "./annotations";
-import { instantiateWritten } from "./generics";
+import { collectTypeParamNames, instantiateWritten, isGenericFunction } from "./generics";
 import { isExported, collectParams } from "./declarations";
 import {
   FLAG_DEFINITE,
@@ -47,6 +47,7 @@ import {
   STRUCT_CLASS,
   STRUCT_INTERFACE,
   StructInfo,
+  TemplateInfo,
 } from "./program";
 import { StringSet } from "./map";
 import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
@@ -284,7 +285,7 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``;
-  if (owner.field(name) !== null || owner.methodIndex.has(name)) {
+  if (owner.hasMember(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${spelled(ctx, owner)}\``);
     return;
   }
@@ -386,7 +387,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
   const shown = spelled(ctx, owner);
-  if (owner.field(name) !== null || owner.methodIndex.has(name)) {
+  if (owner.hasMember(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${shown}\``);
     return;
   }
@@ -399,8 +400,33 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
     ctx.error(decl, `${what} of class \`${shown}\` cannot be optional`);
     return;
   }
-  const symbol = `${owner.name}.${name}`;
-  const sig = new FunctionSig(symbol, `${shown}.${name}`, decl);
+  // WP18 G8: a generic method has no signature until a call picks its type
+  // arguments, so it becomes a template here, after every rule above that is
+  // about the member rather than about its types.
+  if (isGenericFunction(decl)) {
+    declareMethodTemplate(ctx, owner, decl);
+    return;
+  }
+  const sig = collectMethodSignature(ctx, owner, decl, `${owner.name}.${name}`, `${shown}.${name}`);
+  owner.methodIndex.set(name, owner.methodSigs.length);
+  owner.methodSigs.push(sig);
+  ctx.program.functions.push(sig);
+};
+
+/**
+ * One method's signature, with `this` first: the declared method's, and since
+ * WP18 G8 each instantiation of a generic one, which calls this with the
+ * method's type parameters bound in `ctx.typeBindings` and its own symbol and
+ * display name.
+ */
+export const collectMethodSignature = (
+  ctx: CheckContext,
+  owner: StructInfo,
+  decl: Node,
+  symbol: string,
+  shownName: string
+): FunctionSig => {
+  const sig = new FunctionSig(symbol, shownName, decl);
   sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
@@ -410,16 +436,35 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(
       decl.children[0],
-      `${what} of class \`${shown}\` needs an explicit return type annotation`
+      `Method \`${decl.children[0].text}\` of class \`${spelled(ctx, owner)}\` needs an explicit return type annotation`
     );
     sig.returnType = T_ERROR;
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
     rejectForeignPointer(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation);
   }
-  owner.methodIndex.set(name, owner.methodSigs.length);
-  owner.methodSigs.push(sig);
-  ctx.program.functions.push(sig);
+  return sig;
+};
+
+/**
+ * A generic method of `owner` (WP18 G8): a template keyed by the receiver,
+ * which is `owner` itself — a declared class, or one instantiation of a
+ * generic one — so an instantiation is one (receiver × method tuple) and one
+ * `define`. The declaration-level rules (shadowing, an uninferable parameter,
+ * the constraints) are the class declaration's and run once for it, in
+ * `declareMethodTypeParameters`; the constraint list they resolve is shared
+ * with every receiver through `methodConstraintList`.
+ */
+const declareMethodTemplate = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  const name = decl.children[0].text;
+  const template = new TemplateInfo(`${spelled(ctx, owner)}.${name}`, decl, ctx.source, ctx);
+  template.owner = owner;
+  template.exported = owner.exported;
+  template.typeParams = collectTypeParamNames(decl);
+  template.constraints = ctx.program.methodConstraintList(decl);
+  owner.methodTemplates.set(name, owner.methodTemplateList.length);
+  owner.methodTemplateList.push(template);
+  ctx.program.methodTemplateList.push(template);
 };
 
 const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {

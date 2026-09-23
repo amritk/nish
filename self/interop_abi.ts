@@ -30,7 +30,7 @@ import { StringMap, StringSet } from "./map";
 import { ROOT_PACKAGE } from "./packages";
 import { basename } from "./paths";
 import { N_CONSTRUCTOR, Node } from "./nodes";
-import { FunctionSig, STRUCT_CLASS } from "./program";
+import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program";
 import { ResultLayout, resultLayout } from "./result";
 import { StringBuilder } from "./strings";
 import {
@@ -680,16 +680,19 @@ export const jsExportName = (sig: FunctionSig): string => cStructName(sig.name);
  */
 export const cAliasReason = (sig: FunctionSig): string => {
   const owner = sig.owner;
+  const instance = sig.instance;
+  // WP18 G8: an instantiation of a generic method names the method it came
+  // from, as written (`Holder.pick`), before anything about its receiver.
+  const template: TemplateInfo | null = instance === null ? null : instance.template;
+  if (owner !== null && template !== null) {
+    return `an instantiation of the generic method ${template.sourceName}`;
+  }
   if (owner !== null) {
     const generic = owner.instance;
     return generic === null ? "a method" : `a method of an instantiation of ${generic.template.sourceName}`;
   }
-  const instance = sig.instance;
-  if (instance !== null) {
-    const template = instance.template;
-    if (template !== null) {
-      return `an instantiation of ${template.sourceName}`;
-    }
+  if (template !== null) {
+    return `an instantiation of ${template.sourceName}`;
   }
   if (sig.name.indexOf(".") >= 0) {
     return "in a package";
@@ -757,6 +760,29 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
       if (template.origin === unit.source && template.exported && template.count === 0) {
         const kind = template.kind === STRUCT_CLASS ? "class" : "interface";
         reportUninstantiated(compilation, unit, template.sourceName, template.decl, "C layout", kind, "a struct");
+        ok = false;
+      }
+    }
+    // WP18 G8: a generic method of an exported class. It is minted once per
+    // receiver, so it is one declaration however many templates it has, and it
+    // is uninstantiated only when none of them was ever called.
+    const instantiated = new StringSet();
+    for (const template of program.methodTemplateList) {
+      if (template.count > 0) {
+        instantiated.add(`${template.decl.id}`);
+      }
+    }
+    const reported = new StringSet();
+    for (const template of program.methodTemplateList) {
+      const key = `${template.decl.id}`;
+      const owner = template.owner;
+      if (owner === null || template.origin !== unit.source || !template.exported || instantiated.has(key)) {
+        continue;
+      }
+      if (reported.add(key)) {
+        // Named as declared, `Box.pick`, not after whichever receiver minted it.
+        const shown = `${owner.decl.children[0].text}.${template.decl.children[0].text}`;
+        reportUninstantiated(compilation, unit, shown, template.decl, "C signature", "method", "a symbol");
         ok = false;
       }
     }

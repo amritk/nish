@@ -33,6 +33,7 @@ hand — the git log is the working account until a release turns it into one.
 ### Added
 
 - checker: Spell an instantiated class as written, in diagnostics and -g (WP18 G8)
+- checker: Generic methods on classes (WP18 §14 q7)
 
 ### Fixed
 

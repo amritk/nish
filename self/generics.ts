@@ -30,9 +30,10 @@ import { LANGUAGE } from "./branding";
 import { rejectForeignPointer } from "./annotations";
 import { CheckContext } from "./context";
 import { collectFunctionSignature } from "./declarations";
+import { internalErrorFor } from "./ice";
 import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
-import { collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
+import { collectMethodSignature, collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
 import {
   N_ARRAY,
   N_BIGINT,
@@ -263,13 +264,22 @@ export const expandingAncestor = (
   template: TemplateInfo,
   args: i32[]
 ): Expansion | null => {
+  const wanted = chainArguments(template, args);
   let at = from;
   while (at !== null) {
     // A member of an instantiated class carries no function template, so the
     // narrowing is also the test that this link of the chain is one of ours.
+    //
+    // WP18 G8: "ours" is the same *declaration*, not the same template object.
+    // A generic method is minted once per receiver, so a chain that changes
+    // the receiver as it recurses (`Box<T>`'s `m<U>` asking for
+    // `Box<U>.m<U[]>`) meets a different template at every step; comparing the
+    // declaration and the receiver's arguments followed by the method's is
+    // what sees it grow. For a function the two tests are one, because a
+    // function template is one object per declaration.
     const owner = at.template;
-    if (owner !== null && owner === template) {
-      const index = growingArgument(ctx, at.typeArgs, args);
+    if (owner !== null && owner.decl === template.decl) {
+      const index = growingArgument(ctx, chainArguments(owner, at.typeArgs), wanted);
       if (index >= 0) {
         return new Expansion(at, index);
       }
@@ -277,6 +287,53 @@ export const expandingAncestor = (
     at = at.from;
   }
   return null;
+};
+
+/**
+ * The tuple the termination rule compares for one request of `template` at
+ * `args`: `args` for a generic function, and for a generic method the
+ * receiver's type arguments followed by the method's (WP18 G8), because the
+ * receiver is part of what an instantiation of a method is.
+ */
+export const chainArguments = (template: TemplateInfo, args: i32[]): i32[] => {
+  const receiver = receiverOf(template);
+  if (receiver === null) {
+    return args;
+  }
+  const out: i32[] = [];
+  for (const arg of receiver.typeArgs) {
+    out.push(arg);
+  }
+  for (const arg of args) {
+    out.push(arg);
+  }
+  return out;
+};
+
+/**
+ * The instantiated class a generic method's receiver is (WP18 G8), whose
+ * parameters are bound in the method's body; `null` for a function and for a
+ * method of a declared class.
+ */
+const receiverOf = (template: TemplateInfo): StructInstantiation | null => {
+  const owner = template.owner;
+  return owner === null ? null : owner.instance;
+};
+
+/** The type parameter names `chainArguments` lines up with, in the same order. */
+const chainParameters = (template: TemplateInfo): string[] => {
+  const receiver = receiverOf(template);
+  if (receiver === null) {
+    return template.typeParams;
+  }
+  const out: string[] = [];
+  for (const name of receiver.template.typeParams) {
+    out.push(name);
+  }
+  for (const name of template.typeParams) {
+    out.push(name);
+  }
+  return out;
 };
 
 /**
@@ -439,13 +496,20 @@ export const nonTerminatingMessage = (
   args: i32[],
   index: i32
 ): string => {
-  const from = instanceDisplayName(table, template.sourceName, ancestor.typeArgs);
+  // A generic method's two ends may have different receivers (WP18 G8), so
+  // each is spelled from its own template; for a function both are one.
+  let earlier = template;
+  const own = ancestor.template;
+  if (own !== null) {
+    earlier = own;
+  }
+  const from = instanceDisplayName(table, earlier.sourceName, ancestor.typeArgs);
   const to = instanceDisplayName(table, template.sourceName, args);
-  const grew = table.typeName(ancestor.typeArgs[index]);
+  const grew = table.typeName(chainArguments(earlier, ancestor.typeArgs)[index]);
   return (
-    `Monomorphising \`${template.sourceName}\` would not terminate: \`${from}\` asks for \`${to}\`, which puts ` +
+    `Monomorphising \`${earlier.sourceName}\` would not terminate: \`${from}\` asks for \`${to}\`, which puts ` +
     `\`${grew}\` under a type constructor instead of passing it on, so the chain has no end; pass ` +
-    `\`${template.typeParams[index]}\` itself, or a type that does not mention it`
+    `\`${chainParameters(template)[index]}\` itself, or a type that does not mention it`
   );
 };
 
@@ -885,9 +949,23 @@ export const instantiateHere = (
   if (!checkConstraints(site.asker, ctx, template.sourceName, template.typeParams, template.constraints, args, at)) {
     return null;
   }
-  const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + template.sourceName, args);
+  // A generic method's symbol builds on its receiver's method symbol,
+  // `Box$i32.pick` (WP18 G8, §15.8).
+  const owner = template.owner;
+  const base = owner === null ? template.sourceName : `${owner.name}.${template.decl.children[0].text}`;
+  const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args);
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
+    // One symbol is one (template, tuple): the mangling is injective because
+    // no declared name that becomes a symbol holds a `$` (§3c, §15.8). If that
+    // ever stops holding, answering with another template's signature is a
+    // silent miscompile, so it is an internal error instead.
+    const minted = existing.template;
+    if (minted === null || minted !== template) {
+      process.exit(
+        internalErrorFor(`generics: \`${symbol}\` was minted by two templates (\`${template.sourceName}\`)`, ctx.table.json)
+      );
+    }
     return existing.sig;
   }
   // WP27 S2. A template's parameters and return type are checked against its
@@ -934,23 +1012,31 @@ export const instantiateHere = (
     return null;
   }
 
+  // WP18 G8: a generic method of an instantiated class sees the class's
+  // parameters too, bound by the receiver, and its own beside them — the
+  // shadowing rule keeps the two sets of names apart.
   const bindings = new StringMap();
+  const names = chainParameters(template);
+  const bound = chainArguments(template, args);
   let i = 0;
-  while (i < template.typeParams.length) {
-    bindings.set(template.typeParams[i], args[i]);
+  while (i < names.length) {
+    bindings.set(names[i], bound[i]);
     i = i + 1;
   }
   // The template's own annotations, resolved once with its parameters bound:
   // the signature collector a monomorphic declaration goes through, over a
   // resolver that now answers `T`.
+  const display = instanceDisplayName(ctx.table, template.sourceName, args);
   const saved = ctx.typeBindings;
   ctx.typeBindings = bindings;
-  const sig = collectFunctionSignature(ctx, template.decl);
+  const sig =
+    owner === null ? collectFunctionSignature(ctx, template.decl) : collectMethodSignature(ctx, owner, template.decl, symbol, display);
   ctx.typeBindings = saved;
   sig.name = symbol;
-  sig.sourceName = instanceDisplayName(ctx.table, template.sourceName, args);
+  sig.sourceName = display;
   sig.exported = template.exported;
   const info = new Instantiation(template, args, sig, bindings, ctx.program.nodeTypes.length);
+  info.owner = receiverOf(template);
   info.from = site.fromFunction;
   sig.instance = info;
   template.count = template.count + 1;
@@ -1029,10 +1115,12 @@ export const checkGenericCall = (
   if (sig === null) {
     return T_ERROR;
   }
+  // A generic method's signature starts with `this` (WP18 G8).
+  const offset = template.owner === null ? 0 : 1;
   i = 0;
   while (i < args.children.length) {
-    if (argTypes[i] !== T_ERROR && !ctx.table.assignable(argTypes[i], sig.paramTypes[i])) {
-      const want = ctx.table.typeName(sig.paramTypes[i]);
+    if (argTypes[i] !== T_ERROR && !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])) {
+      const want = ctx.table.typeName(sig.paramTypes[i + offset]);
       ctx.error(
         args.children[i],
         `Argument ${i + 1} of \`${sig.sourceName}\`: expected ${want}, got ${ctx.table.typeName(argTypes[i])}`
@@ -1062,6 +1150,128 @@ export const rejectDollarInSymbolName = (ctx: CheckContext, name: string, what: 
       "type arguments in the symbols the compiler emits"
   );
   return true;
+};
+
+/**
+ * The rules about a class's generic methods that belong to the *declaration*
+ * (WP18 G8), run once per class in pass 1 whether the class is generic or not:
+ * a generic class's members are collected once per instantiation, and a mistake
+ * in a method's type parameter list is one mistake, not one per receiver.
+ *
+ *   - A method type parameter may not share a name with one of its class's
+ *     (NL2331): both are in scope in the body, and a diagnostic, a constraint
+ *     or an origin that names `T` has to mean one of them.
+ *   - One that no parameter mentions can never be inferred, and is refused here
+ *     in the words a generic function's is.
+ *   - A method name with a `$` is refused where it could spell an
+ *     instantiation's symbol, which is when the part before the `$` names a
+ *     generic method of the same class (`pick$i32` beside `pick<T>`); §3c's
+ *     rule, applied only where it is needed so no program that compiled before
+ *     stops compiling.
+ *   - The constraints are resolved, once, into the list every receiver shares.
+ */
+export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node): void => {
+  if (classDecl.kind !== N_CLASS) {
+    return;
+  }
+  const className = classDecl.children[0].text;
+  const classParams = collectStructTypeParamNames(classDecl);
+  const members = classDecl.children[3].children;
+  for (const member of members) {
+    if (member.kind !== N_METHOD) {
+      continue;
+    }
+    ctx.errored = false;
+    const methodName = member.children[0].text;
+    // A generic method's own name becomes the base of every instantiation's
+    // symbol, so it may hold no `$` at all, exactly as a generic function's
+    // may not: `pick$i32<V>` at `i32` would be `pick<U1, U2>` at `i32, i32`.
+    if (isGenericFunction(member) && rejectDollarInSymbolName(ctx, methodName, "method", member.children[0])) {
+      continue;
+    }
+    if (!isGenericFunction(member)) {
+      if (methodName.indexOf("$") >= 0 && spellsGenericInstance(members, methodName)) {
+        rejectDollarInSymbolName(ctx, methodName, "method", member.children[0]);
+      }
+      continue;
+    }
+    const list = typeParameterList(member);
+    const own = collectTypeParamNames(member);
+    let refused = false;
+    for (const param of list.children) {
+      if (param.kind === N_IDENT && indexOfName(classParams, param.text) >= 0) {
+        ctx.error(
+          param,
+          `Type parameter \`${param.text}\` of \`${className}.${methodName}\` shadows \`${className}\`'s own ` +
+            `\`${param.text}\`: a class's type parameters are in scope in its methods, and a diagnostic that names ` +
+            `\`${param.text}\` has to mean one of them; give the method's another name`
+        );
+        refused = true;
+      }
+    }
+    if (refused) {
+      continue;
+    }
+    if (refuseUninferable(ctx, member, own, `${className}.${methodName}`)) {
+      continue;
+    }
+    // Resolved with the class's parameters counted as parameters, so a
+    // constraint that mentions one is NL2326's refusal: the list is resolved
+    // once for every receiver, which is the reason that rule gives.
+    const all: string[] = [];
+    for (const name of classParams) {
+      all.push(name);
+    }
+    for (const name of own) {
+      all.push(name);
+    }
+    resolveConstraints(ctx, ctx.program.methodConstraintList(member), list, all);
+  }
+  ctx.errored = false;
+};
+
+/**
+ * A type parameter is inferred from the arguments and from nothing else, so one
+ * that appears in no parameter of `decl` — a function's or a method's — can
+ * never be bound and the declaration could never be called. Reported once,
+ * against the declaration's name rather than against every call, and answers
+ * whether it was.
+ */
+export const refuseUninferable = (ctx: CheckContext, decl: Node, typeParams: string[], shown: string): boolean => {
+  const parameters = decl.children[1];
+  for (const param of typeParams) {
+    const names = new StringSet();
+    names.add(param);
+    let mentioned = false;
+    for (const declared of parameters.children) {
+      const annotation = declared.children[1];
+      if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+        mentioned = true;
+      }
+    }
+    if (!mentioned) {
+      ctx.error(
+        decl.children[0],
+        `Cannot infer \`${param}\` for \`${shown}\`: a type parameter is inferred from the arguments, and ` +
+          `\`${param}\` appears in none of them; give \`${shown}\` a parameter that mentions \`${param}\``
+      );
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Whether `name` starts with the name of a generic method of `members` and a
+ * `$`, which is how an instantiation of that method's symbol continues.
+ */
+const spellsGenericInstance = (members: Node[], name: string): boolean => {
+  for (const member of members) {
+    if (member.kind === N_METHOD && isGenericFunction(member) && name.startsWith(`${member.children[0].text}$`)) {
+      return true;
+    }
+  }
+  return false;
 };
 
 /** A template's declared type parameter names, in order, from its fifth child. */
@@ -1342,7 +1552,12 @@ const constraintInScope = (ctx: CheckContext, name: string): i32 => {
   }
   const template = instance.template;
   if (template !== null) {
-    return template.constraints.at(indexOfName(template.typeParams, name));
+    const at = indexOfName(template.typeParams, name);
+    // A generic method of a generic class has both lists in scope (WP18 G8):
+    // its own first, and the class's for a name that is not one of them.
+    if (at >= 0 || instance.owner === null) {
+      return template.constraints.at(at);
+    }
   }
   const owner = instance.owner;
   if (owner === null) {
@@ -1558,16 +1773,42 @@ const originOfMember = (ctx: CheckContext, receiver: Node, name: string, method:
 };
 
 /**
- * The origin of a call to a generic function: its declared return type, with
- * each of its type parameters standing for the argument it was inferred from —
- * `identity(p)` is whatever `p` is, and `first(xs)` is an element of `xs`. A
- * parameter inferred through any other shape stands for nothing, which is the
- * answer for a type that did not come from one of ours.
+ * The origin of a call to a generic function or a generic method: its declared
+ * return type, with each of its type parameters standing for the argument it
+ * was inferred from — `identity(p)` is whatever `p` is, and `first(xs)` is an
+ * element of `xs`. A parameter inferred through any other shape stands for
+ * nothing, which is the answer for a type that did not come from one of ours.
+ *
+ * A generic method of an instantiated class (WP18 G8) has the class's
+ * parameters in scope too, and they stand for what the receiver's origin says
+ * its type arguments are — `this` in a generic class is the class at its own
+ * parameters, an annotated `Box<U>` is `U` — and a receiver that says nothing
+ * makes them stand for nothing.
  */
 const originOfGenericCall = (ctx: CheckContext, call: Node, template: TemplateInfo, scope: Scope): TypeOrigin => {
+  const args: (TypeOrigin | null)[] = [];
+  const receiver = receiverOf(template);
+  if (receiver !== null) {
+    const at = substituted(originOf(ctx, call.children[0].children[0], scope));
+    const shape: (TypeOrigin | null)[] = [];
+    let shaped: StructTemplateInfo | null = null;
+    if (at !== null && !at.unknown) {
+      shaped = structShape(ctx, at, shape);
+    }
+    let k = 0;
+    while (k < receiver.template.typeParams.length) {
+      if (shaped !== null && k < shape.length) {
+        args.push(shape[k]);
+      } else if (at !== null && at.unknown) {
+        args.push(at);
+      } else {
+        args.push(null);
+      }
+      k = k + 1;
+    }
+  }
   const parameters = template.decl.children[1];
   const written = call.children[1];
-  const args: (TypeOrigin | null)[] = [];
   for (const name of template.typeParams) {
     let found: TypeOrigin | null = null;
     let k = 0;
@@ -1584,7 +1825,7 @@ const originOfGenericCall = (ctx: CheckContext, call: Node, template: TemplateIn
     }
     args.push(found);
   }
-  return new TypeOrigin(template.decl.children[2], template.typeParams, args);
+  return new TypeOrigin(template.decl.children[2], chainParameters(template), args);
 };
 
 /** An array literal's origin: the literal, standing for its first element that came from somewhere. */
@@ -1648,6 +1889,14 @@ export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigi
     case N_CALL: {
       const callee = expr.children[0];
       if (callee.kind === N_MEMBER) {
+        // A generic method's call was resolved to its instantiation when it was
+        // checked, which is before anybody asks where its value came from.
+        const sig = ctx.program.nodeCallees[expr.id];
+        const instance: Instantiation | null = sig === null ? null : sig.instance;
+        const template: TemplateInfo | null = instance === null ? null : instance.template;
+        if (template !== null && template.owner !== null) {
+          return originOfGenericCall(ctx, expr, template, scope);
+        }
         return originOfMember(ctx, callee.children[0], callee.text, true, scope);
       }
       if (callee.kind === N_IDENT && scope.lookup(callee.text) === null) {
