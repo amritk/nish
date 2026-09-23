@@ -102,6 +102,8 @@ Threads (WP20 T1–T4, WP29 P1) are 1.1 and out of scope.
 
 **Owns:** [`std/pair.ts`](../../std/pair.ts) (new), [`std/README.md`](../../std/README.md), `tests/cases/std_pair*`, `tests/cases/reject_std_pair_*`, [`docs/wp23-language-surface.md`](../../docs/wp23-language-surface.md), [`docs/wp26-stdlib.md`](../../docs/wp26-stdlib.md), plus the shared-append files.
 
+**Amended 2026-09-23T16:10Z** (the worker's draft #172 showed the original globs could not ship a `std/` module): also [`self/std_modules.ts`](../../self/std_modules.ts) (the module list `tests/run.js` checks against `std/`), [`.github/workflows/release.yml`](../../.github/workflows/release.yml) (the presence-gate loops only — a sensitive path, so the merge gate escalates it to the owner rather than merging it autonomously), `tests/link/std_pair_*/**` (the positive round trips live here, not in `tests/cases/`, because a `std/` import writes two modules), `tests/nish-cmp.js` (`DECLARED` entries, shared-append), and `tests/self/goldens/**` (regenerated only).
+
 - `export interface Pair<A, B> { first: A; second: B; }`, exactly wp23 §5.2. Use an interface, not a class, and add no constructor helper and no grammar. The JSDoc says what it is for, per wp23 §5.1: returning two values from one call, not storing two values side by side.
 - Round trips (`tests/cases/std_pair*.ts` + `.ll` + `.out`):
   - `Pair<i32, boolean>` returned from an arrow as an object literal (wp23 §5's `scanEscape` shape);
