@@ -353,6 +353,18 @@ const DECLARED = [
     why: "a new negative: the importer's own same-named `Base` class passed to a `T extends Base` bound on lib's class, which shares its type id and which the reference compiler compiled",
   },
   {
+    program: "tests/link/package_engines_floor/main.ts",
+    file: "exit",
+    changelog: "WP21 S3 — specific diagnostics at the package boundary",
+    why: "a new negative: a package whose `engines.nish` floor is above this compiler, which the reference compiler does not read and so compiled",
+  },
+  {
+    program: "tests/link/package_engines_range/main.ts",
+    file: "exit",
+    changelog: "WP21 S3 — specific diagnostics at the package boundary",
+    why: "a new negative: an `engines.nish` range that is not a floor, refused rather than taken as met, which the reference compiler does not read and so compiled",
+  },
+  {
     program: "tests/cases/dbg_generic.ts",
     file: "dbg_generic.ll",
     changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",

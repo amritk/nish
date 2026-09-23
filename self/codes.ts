@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 419;
+export const RULE_COUNT: i32 = 424;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -109,6 +109,8 @@ export const diagnosticRules = (): string[] => [
   "NL2157",
   "`, and the push may move that storage first; copy the fields you need into locals before pushing",
   "NL2291",
+  "`, which is not a range this compiler reads: the one it accepts is a floor, `>=X.Y.Z` or `>=X.Y`",
+  "NL3019",
   "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)",
   "NL2145",
   "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
@@ -123,6 +125,8 @@ export const diagnosticRules = (): string[] => [
   "NL2167",
   "` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ",
   "NL2042",
+  "`, because that entry declares none of the conditions this compiler compiles source from (`",
+  "NL3020",
   "; a class or interface name is still program-wide, so two packages cannot both declare one",
   "NL3009",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ",
@@ -157,6 +161,8 @@ export const diagnosticRules = (): string[] => [
   "NL2028",
   ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
   "NL2270",
+  " is not well-formed JSON, so this compiler could not read an entry point out of it",
+  "NL3021",
   "`; check the nullable side against `null` first, then compare the narrowed values",
   "NL2114",
   ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
@@ -469,6 +475,8 @@ export const diagnosticRules = (): string[] => [
   "NL1051",
   " (modules are resolved at compile time)",
   "NL1002",
+  "` needs a newer compiler: its `engines.",
+  "NL3018",
   "`declare function` is not supported yet",
   "NL2125",
   "`Function` constructor is forbidden in ",
@@ -501,6 +509,8 @@ export const diagnosticRules = (): string[] => [
   "NL2076",
   "` is set twice in the object literal",
   "NL2088",
+  "`, and this program is compiling in ",
+  "NL3017",
   "`.prototype` access is forbidden in ",
   "NL1012",
   "`): the type name is part of the ABI",

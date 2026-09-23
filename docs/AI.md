@@ -801,7 +801,11 @@ export const main = (): i32 => {
   the package declares it, so a manifest carrying both never compiles the wrong
   one of the two. A package without that condition is
   `` Package `lodash` has no Nish entry point ``, which is what an ordinary npm
-  package gets: there is nothing to compile in a `.js` file.
+  package gets: there is nothing to compile in a `.js` file. One that offers
+  only the other mode is `` supports Nish in f64 mode only ``, one whose
+  `"engines": {"nish": ">=X.Y.Z"}` is above this compiler `` needs a newer
+  compiler ``, and a `package.json` that is not JSON names its line and
+  column — each with its own `--json` code (`NL3017`–`NL3021`).
 - Functions may be renamed on import; classes and interfaces may not — the type
   name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
