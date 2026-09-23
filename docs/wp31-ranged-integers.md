@@ -207,10 +207,11 @@ follow with no new rule (§9).
 **Rejected: literal type arguments in general** (`FixedBuffer<256>`,
 `Box<3>`). A numeric argument to a user template is a const generic. It needs
 a value parameter in the template, substitution into expressions, and the
-termination rule of wp18 §4 extended to values.
-[wp23-language-surface.md](wp23-language-surface.md) deferred compile-time
-parameters to WP18 for that reason, and nothing in this note needs them.
-`integer` is a builtin and its two bounds are its whole content.
+termination rule of wp18 §4 extended to values. No note in this repository
+designs that construct, and this one does not need it: `integer` is a builtin,
+its two bounds are its whole content, and nothing inside it is substituted, so
+refusing a literal everywhere else keeps const generics an undesigned construct
+of their own rather than half of one smuggled in here.
 
 ---
 
