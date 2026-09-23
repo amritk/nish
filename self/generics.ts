@@ -1180,22 +1180,53 @@ export const resolveStructTemplateConstraints = (template: StructTemplateInfo): 
  * Whether `arg` satisfies `constraint`: it is the constraint, or it is a class
  * that `implements` it. There is no inheritance (WP25), so those are the only
  * two ways a type has a struct's members at the offsets the struct has them.
- * `arg`'s own layout is read from `ctx`, the module that asked for it.
+ * `arg`'s own layout is read from `asker`, the module that asked for it, and
+ * the constraint's from `home`, the template's module, which resolved it.
+ *
+ * Both are held to the *declaration*, not the name (#161). The `TypeTable`
+ * interns a struct by name alone, so a module's own `interface Shape` and the
+ * template's `Shape` are one type id, and an `implements Shape` written against
+ * the first says nothing about the second. A `StructInfo` is one object per
+ * declaration, shared by every module that imports or reaches it, so identity
+ * is an object compare.
  */
-export const satisfiesConstraint = (ctx: CheckContext, arg: i32, constraint: i32): boolean => {
-  if (arg === constraint) {
+export const satisfiesConstraint = (
+  asker: CheckContext,
+  home: CheckContext,
+  arg: i32,
+  constraint: i32
+): boolean => {
+  if (!asker.table.isStruct(arg)) {
+    return false;
+  }
+  const info = asker.program.struct(asker.table.nameOf(arg));
+  const want = home.program.struct(home.table.nameOf(constraint));
+  if (info === null || want === null) {
+    return false;
+  }
+  if (info === want) {
     return true;
   }
-  if (!ctx.table.isStruct(arg)) {
+  return implementsDeclaration(info, want);
+};
+
+/**
+ * Whether `cls`'s `implements` clause names the declaration `iface`.
+ * `implementsNames` holds names, resolved in the module that collected `cls`'s
+ * members — its `origin`, which is its template's for an instantiation. A
+ * plain interface named there is one that module declares, because an
+ * imported one cannot be implemented (NL2079), so it is `iface` exactly when
+ * the names agree and `iface` was declared there too. An instantiated
+ * interface's name is unique across the program (`generic_class_clash`), so
+ * its name is its identity. Anything else answers no, which is a refusal at
+ * the request rather than a layout taken from the wrong declaration.
+ */
+const implementsDeclaration = (cls: StructInfo, iface: StructInfo): boolean => {
+  if (iface.instance === null && iface.origin !== cls.origin) {
     return false;
   }
-  const info = ctx.program.struct(ctx.table.nameOf(arg));
-  if (info === null) {
-    return false;
-  }
-  const want = ctx.table.nameOf(constraint);
-  for (const name of info.implementsNames) {
-    if (name === want) {
+  for (const name of cls.implementsNames) {
+    if (name === iface.name) {
       return true;
     }
   }
@@ -1220,7 +1251,7 @@ export const checkConstraints = (
   let i = 0;
   while (i < args.length) {
     const want = constraints.at(i);
-    if (want >= 0 && !satisfiesConstraint(asker, args[i], want)) {
+    if (want >= 0 && !satisfiesConstraint(asker, home, args[i], want)) {
       const bound = home.table.typeName(want);
       const info = home.program.struct(home.table.nameOf(want));
       // A class constraint is met by the class and nothing else, because a

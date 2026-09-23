@@ -281,6 +281,18 @@ const DECLARED = [
     why: "a new program: constrained templates imported from another module, which the reference compiler refuses to parse",
   },
   {
+    program: "tests/link/generic_constraint_same_name_fields/main.ts",
+    file: "exit",
+    changelog: "Hold a constraint to its declaration, not its name",
+    why: "a new negative: a class implementing the importer's own same-named `Shape`, with lib's fields, which the reference compiler took for lib's `Shape` and compiled",
+  },
+  {
+    program: "tests/link/generic_constraint_same_name_itself/main.ts",
+    file: "exit",
+    changelog: "Hold a constraint to its declaration, not its name",
+    why: "a new negative: the importer's own same-named `Shape` passed as the argument, which shares lib's type id and which the reference compiler compiled",
+  },
+  {
     program: "tests/cases/dbg_generic.ts",
     file: "dbg_generic.ll",
     changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
