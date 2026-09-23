@@ -1997,6 +1997,29 @@ const panicCount = (ir, fn) =>
   ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(/call void @nish_panic_index/g) ?? [])
     .length;
 
+// #183: a function that can reach `nish_panic_index` through an unproven
+// `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
+// profile's optimiser deleted the loop that panics and the program exited 0.
+// The link goes through `--profile speed` itself rather than `linkNative`, so
+// the check covers the pipeline a user's build runs.
+if (has("clang") && (!only || "attr_panic_charcodeat".includes(only))) {
+  const exe = path.join(buildDir, "attr_panic_charcodeat");
+  const link = spawnSync(
+    NISH,
+    [path.join(casesDir, "attr_panic_charcodeat.ts"), "--link", exe, "--profile", "speed"],
+    { cwd: root, encoding: "utf8" }
+  );
+  const run = link.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : null;
+  check(
+    "attr_panic_charcodeat: --profile speed keeps the panic of an unproven charCodeAt (exit 1, `5 >= 0`)",
+    run !== null &&
+      run.status === 1 &&
+      run.stderr.includes("index out of range: 5 >= 0") &&
+      run.stdout.trim() === "before",
+    run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : link.stderr
+  );
+}
+
 if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   if (has("opt")) {
     for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
