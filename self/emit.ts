@@ -77,7 +77,7 @@ import {
 } from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { IRBlock, IRFunction, IRModule, IRParam } from "./ir";
 import { StringMap, StringSet } from "./map";
 import {
@@ -217,7 +217,7 @@ export class Emitter {
       // The driver validated the spec; an unknown one here is a programming error.
       const target = resolveTarget(opts.target);
       if (target === null) {
-        process.exit(internalError(`emitter: unsupported target \`${opts.target}\``));
+        process.exit(internalErrorFor(`emitter: unsupported target \`${opts.target}\``, opts.json));
       } else {
         this.module.targetHeader = targetHeader(target);
       }
@@ -268,7 +268,7 @@ export class Emitter {
     if (facts !== null) {
       return facts;
     }
-    process.exit(internalError(`emitter: no attribute facts for \`${sig.name}\` (was the whole program analysed?)`));
+    process.exit(internalErrorFor(`emitter: no attribute facts for \`${sig.name}\` (was the whole program analysed?)`, this.opts.json));
   }
 
   /** Named types a signature mentions must be declared in the module (the array header). */
@@ -535,7 +535,7 @@ export class Emitter {
         one.push(sig);
         this.declareAll(one, seen);
       } else {
-        process.exit(internalError(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``));
+        process.exit(internalErrorFor(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``, this.opts.json));
       }
     }
     // WP18 G7: an instantiation this module calls and another module defines.
@@ -744,7 +744,7 @@ export class Emitter {
         emitThrow(this, stmt);
         return;
       default:
-        process.exit(internalError(`emitter: unexpected statement ${nodeName(stmt.kind)}`));
+        process.exit(internalErrorFor(`emitter: unexpected statement ${nodeName(stmt.kind)}`, this.opts.json));
     }
   }
 
@@ -767,7 +767,7 @@ export class Emitter {
   emitReturnValue(value: Node): void {
     const sig = this.currentSig;
     if (sig === null) {
-      process.exit(internalError("emitter: `return` outside a function"));
+      process.exit(internalErrorFor("emitter: `return` outside a function", this.opts.json));
     }
     // WP17: a small `Result` leaves in a register. It is built before the
     // scope release, because the object it may be read out of is arena memory
@@ -808,7 +808,7 @@ export class Emitter {
     for (const decl of list.children) {
       const local = this.program.nodeLocals[decl.id];
       if (local === null) {
-        process.exit(internalError("emitter: a variable declaration with no local recorded"));
+        process.exit(internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json));
       } else {
         const ty = this.llvm(local.type);
         const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type));
@@ -893,7 +893,7 @@ export class Emitter {
       case N_OBJECT:
         return emitObjectLiteral(this, expr);
       default:
-        process.exit(internalError(`emitter: unexpected expression ${nodeName(expr.kind)}`));
+        process.exit(internalErrorFor(`emitter: unexpected expression ${nodeName(expr.kind)}`, this.opts.json));
     }
   }
 
@@ -924,7 +924,7 @@ export class Emitter {
       const ty = this.llvm(local.type);
       return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`);
     }
-    process.exit(internalError(`emitter: no binding for \`${expr.text}\``));
+    process.exit(internalErrorFor(`emitter: no binding for \`${expr.text}\``, this.opts.json));
   }
 
   emitBinaryExpression(expr: Node): string {
@@ -979,7 +979,7 @@ export class Emitter {
     }
     const sig = this.program.nodeCallees[expr.id];
     if (sig === null) {
-      process.exit(internalError(`emitter: no callee recorded for \`${callee.text}\``));
+      process.exit(internalErrorFor(`emitter: no callee recorded for \`${callee.text}\``, this.opts.json));
     }
     const args = expr.children[1];
     const operands: string[] = [];
@@ -1037,7 +1037,7 @@ export class Emitter {
       }
       i = i - 1;
     }
-    process.exit(internalError(`emitter: no slot for local \`${local.name}\``));
+    process.exit(internalErrorFor(`emitter: no slot for local \`${local.name}\``, this.opts.json));
   }
 
   setSlot(local: Local, slot: string): void {
@@ -1048,7 +1048,7 @@ export class Emitter {
   typeOf(expr: Node): i32 {
     const type = this.program.nodeTypes[expr.id];
     if (type < 0) {
-      process.exit(internalError(`emitter: no type recorded for ${nodeName(expr.kind)}`));
+      process.exit(internalErrorFor(`emitter: no type recorded for ${nodeName(expr.kind)}`, this.opts.json));
     }
     return type;
   }

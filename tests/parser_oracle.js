@@ -28,7 +28,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
-import { linkWith, seedForOracle, withoutSeed } from "./self/seed.js";
+import { seedWithoutStage0 } from "./self/goldens.js";
+import { linkWith, namedSeedSpec, withoutSeed } from "./self/seed.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -711,7 +712,7 @@ function build(seed) {
 function main(argv) {
   const verbose = argv.includes("--verbose");
   const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
-  const seed = seedForOracle(argv);
+  const seed = seedWithoutStage0(namedSeedSpec(argv));
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
     return 1;

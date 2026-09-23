@@ -1,19 +1,19 @@
-# Cases whose wording is stage0's alone because stage1's parser gets there
-# first, one case name per line.
+# Cases the self-hosted compiler's parser refuses before the rule is stated,
+# one case name per line.
 #
 # `.claude/selfhost.md`: lex and parse what is written, refuse in the phase
 # that owns the rule. stage1's parser turns down the syntax the language
 # forbids by name — `a class member is a field, a method or a constructor,
 # found `{`` — before Phase 0 or the checker can state the rule that stage0
-# states. That is the declared parity class of
+# stated. That is the declared parity class of
 # `docs/wp19-stage0-retirement.md` §A3 (602 rows), and closing it in code is
 # grammar for 45 constructs that never compile.
 #
-# The consequence for this corpus is exact and worth saying plainly: **these
-# wordings do not survive R6.** They are stage0's, they are pinned here while
-# stage0 lives, and on the day `src/` goes the sentences go with it — what the
-# user will see instead is the syntax error stage1 already prints, which is
-# pinned by `tests/self/reject_oracle.js`'s parser bucket.
+# The consequence for this corpus is exact: the rule's own wording was
+# stage0's, and it went with stage0 at R6 (its code is retired in
+# `unreachable.txt`). Each case's `.err` pins what a user sees instead — the
+# parser's first sentence — so a parser that rewords the refusal, or refuses
+# somewhere else, fails here.
 #
 # `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
 # case listed here that stage1 starts answering the same way is a failure: the

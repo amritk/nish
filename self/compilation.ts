@@ -225,6 +225,7 @@ export class Compilation {
   constructor(opts: Options) {
     this.opts = opts;
     this.table = new TypeTable();
+    this.table.json = opts.json;
     this.sink = new DiagnosticSink();
     this.runtime = new RuntimeTable();
     this.modules = [];

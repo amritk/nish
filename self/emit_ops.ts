@@ -18,7 +18,7 @@
 // over-wide shift poison and JavaScript wraps the count. A literal count is
 // masked here at compile time, so the common `x << 3` stays one instruction.
 
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { parseIntegerLiteral } from "./constants";
 import { Emitter } from "./emit";
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit_control";
@@ -165,7 +165,7 @@ export const emitIntBinary = (emitter: Emitter, opcode: string, type: i32, lhs: 
 // ---- Operator tables --------------------------------------------------------------
 
 /** The integer opcode for an arithmetic or comparison operator, in its signed spelling. */
-const integerOpcode = (op: string): string => {
+const integerOpcode = (op: string, json: boolean): string => {
   if (op === "+") {
     return "add";
   }
@@ -199,11 +199,11 @@ const integerOpcode = (op: string): string => {
   if (op === "!==") {
     return "icmp ne";
   }
-  process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
+  process.exit(internalErrorFor(`emitter: unexpected binary operator \`${op}\``, json));
 };
 
 /** The floating-point opcode for the same operator. */
-export const floatOpcode = (op: string): string => {
+export const floatOpcode = (op: string, json: boolean): string => {
   if (op === "+") {
     return "fadd";
   }
@@ -237,7 +237,7 @@ export const floatOpcode = (op: string): string => {
   if (op === "!==") {
     return "fcmp une";
   }
-  process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
+  process.exit(internalErrorFor(`emitter: unexpected binary operator \`${op}\``, json));
 };
 
 /** The bitwise opcode for `& | ^ << >> >>>` and their compound forms. */
@@ -350,9 +350,9 @@ export const emitBinary = (emitter: Emitter, expr: Node): string => {
   const lhs = emitter.emitExpression(expr.children[0]);
   const rhs = emitter.emitExpression(expr.children[1]);
   if (isInteger(type)) {
-    return emitIntBinary(emitter, integerOpcode(op), type, lhs, rhs);
+    return emitIntBinary(emitter, integerOpcode(op, emitter.opts.json), type, lhs, rhs);
   }
-  return emitter.fn.emitValue(`${floatOpcode(op)} ${emitter.llvm(type)} ${lhs}, ${rhs}`);
+  return emitter.fn.emitValue(`${floatOpcode(op, emitter.opts.json)} ${emitter.llvm(type)} ${lhs}, ${rhs}`);
 };
 
 /** `a & b` and friends: evaluate left then right (JS order), then one instruction. */
@@ -388,7 +388,7 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
     const ty = emitter.llvm(emitter.typeOf(operand));
     return emitter.fn.emitValue(`xor ${ty} ${emitter.emitExpression(operand)}, -1`);
   }
-  process.exit(internalError(`emitter: unexpected unary operator \`${op}\``));
+  process.exit(internalErrorFor(`emitter: unexpected unary operator \`${op}\``, emitter.opts.json));
 };
 
 // ---- Locals ------------------------------------------------------------------------
@@ -411,7 +411,7 @@ export const targetLocal = (emitter: Emitter, target: Node): Local => {
   if (local !== null) {
     return local;
   }
-  process.exit(internalError(`emitter: no binding for the assignment target \`${target.text}\``));
+  process.exit(internalErrorFor(`emitter: no binding for the assignment target \`${target.text}\``, emitter.opts.json));
 };
 
 // ---- Assignment ---------------------------------------------------------------------
@@ -469,7 +469,7 @@ const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
 export const withoutEquals = (op: string): string => op.substring(0, op.length - 1);
 
 /** The integer opcode of a compound arithmetic assignment, in its signed spelling. */
-export const compoundIntegerOpcode = (op: string): string => integerOpcode(withoutEquals(op));
+export const compoundIntegerOpcode = (op: string, json: boolean): string => integerOpcode(withoutEquals(op), json);
 
 /** The floating-point opcode of the same. */
-export const compoundFloatOpcode = (op: string): string => floatOpcode(withoutEquals(op));
+export const compoundFloatOpcode = (op: string, json: boolean): string => floatOpcode(withoutEquals(op), json);

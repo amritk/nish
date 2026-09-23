@@ -1,3 +1,1 @@
-reject_multi_decl.ts:3:3: error: Getters and setters are not supported in class `Box`
-reject_multi_decl.ts:9:3: error: Interface `Shape` cannot declare methods
-reject_multi_decl.ts:12:1: error: Abstract classes are not supported
+a type annotation is required

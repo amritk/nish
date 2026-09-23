@@ -40,7 +40,7 @@
 // analysis are WP16's, unchanged.
 
 import { Emitter } from "./emit";
-import { internalError } from "./ice";
+import { internalErrorFor } from "./ice";
 import { ResultLayout, resultLayout } from "./result";
 import { N_CALL, N_MEMBER, Node } from "./nodes";
 import { CheckedProgram } from "./program";
@@ -466,7 +466,7 @@ export const emitResultReturn = (emitter: Emitter, value: string): void => {
   // Only a local narrows, so the enclosing signature is bound before it is read.
   const sig = emitter.currentSig;
   if (sig === null) {
-    process.exit(internalError("emitter: a `Result` return outside a function"));
+    process.exit(internalErrorFor("emitter: a `Result` return outside a function", emitter.opts.json));
   }
   const abi = emitter.llvmAbi(sig.returnType, privateResultAbi(emitter, sig.exported));
   emitter.fn.emit(`ret ${abi} ${value}`);
@@ -516,7 +516,7 @@ export const emitResultProperty = (emitter: Emitter, expr: Node, receiver: i32):
 const emitOrReturn = (emitter: Emitter, expr: Node, receiver: i32): string => {
   const sig = emitter.currentSig;
   if (sig === null) {
-    process.exit(internalError("emitter: `orReturn()` outside a function"));
+    process.exit(internalErrorFor("emitter: `orReturn()` outside a function", emitter.opts.json));
   }
   const returnType = sig.returnType;
   declareResultTypes(emitter, receiver);

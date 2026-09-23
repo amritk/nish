@@ -3,7 +3,7 @@
  * `nish-cmp` — one corpus, two compilers, byte for byte (WP19 §3 gate G2.1).
  *
  *   node tests/nish-cmp.js --help
- *   node tests/nish-cmp.js --reference dist/index.js --candidate build/self/compile
+ *   node tests/nish-cmp.js --reference <released nish> --candidate build/self/compile
  *   NISH_BOOTSTRAP=/usr/local/bin/nish node tests/nish-cmp.js
  *   node tests/nish-cmp.js -r <ref> -c <cand> tests/cases/str_concat.ts
  *   node tests/nish-cmp.js -r <ref> -c <cand> --verbose --lines 10
@@ -465,8 +465,10 @@ function corpus() {
 
 /**
  * The compiler HEAD builds: `self/compile.ts` linked into `build/self/compile`
- * by the seed when there is one and by stage0 until then, which is the
- * arrangement G3 puts in `scripts/bootstrap.sh`. Always rebuilt rather than
+ * by the seed, which is the arrangement G3 puts in `scripts/bootstrap.sh`.
+ * There is no second answer: this is only called with a reference in hand,
+ * and the reference is the seed (R6 took out the stage0 fallback that used to
+ * sit here, which nothing could reach). Always rebuilt rather than
  * reused: a stale binary from an earlier checkout would be compared against
  * the release and reported as agreement, which is the one answer this tool
  * must never give by accident. Pass `--candidate` to compare a binary you
@@ -474,7 +476,7 @@ function corpus() {
  */
 function buildCandidate(seedSpec) {
   const out = path.join(root, "build", "self", "compile");
-  const builder = resolveCompiler(seedSpec ?? path.join("dist", "index.js"), "candidate builder");
+  const builder = resolveCompiler(seedSpec, "candidate builder");
   if (builder.error !== undefined) return { error: builder.error };
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const built = compile(builder, [path.join("self", "compile.ts"), "--link", out]);
@@ -490,8 +492,7 @@ usage: node tests/nish-cmp.js [options] [program.ts ...]
                               nish (default: $NISH_BOOTSTRAP; without one the
                               run skips, because there is nothing to compare to)
   -c, --candidate <compiler>  the compiler under test (default: self/ built into
-                              build/self/compile by the reference, or by stage0
-                              when the reference is not a released nish)
+                              build/self/compile by the reference)
       --changelog <file>      where a declared difference must be named
                               (default: CHANGELOG.md)
       --no-sidecars           compare only the IR, not the four WP8 sidecars
