@@ -67,7 +67,7 @@ cond.end:
   ret %struct.nish_result.i32.str* %9
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %s.addr = alloca i8*, align 8
   %k.addr = alloca i32, align 4

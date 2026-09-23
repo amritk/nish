@@ -691,6 +691,48 @@ const DECLARED = [
     changelog: "Pair<A, B> as a standard-library type",
     why: "a new program: a `Pair<i32, boolean>` held in a class field and pushed into an array, which the reference compiler refuses because its std/ has no pair.ts",
   },
+  {
+    program: "tests/cases/attr_panic_charcodeat.ts",
+    file: "attr_panic_charcodeat.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "a new program: `@at` and `@nish_main` reach `nish_panic_index` through an unproven `charCodeAt` and are not `willreturn`, where the reference compiler marks both and the speed profile deletes the panic",
+  },
+  {
+    program: "tests/cases/str_bytes.ts",
+    file: "str_bytes.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "`@firstByte`'s unproven `charCodeAt(0)` can reach `nish_panic_index`, so it and `@test` lose `willreturn`, and `@firstByte` its `readonly`, as an unproven `a[i]` already does",
+  },
+  {
+    program: "docs/cookbook/str_bytes.ts",
+    file: "str_bytes.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "`@firstByte`'s unproven `charCodeAt(0)` can reach `nish_panic_index`, so it loses `willreturn` and `readonly` and the attribute groups renumber",
+  },
+  {
+    program: "tests/cases/arr_path_cond_string.ts",
+    file: "arr_path_cond_string.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "`@code`'s unproven `t.s.charCodeAt(i)` can reach `nish_panic_index`, so it and `@nish_main` lose `willreturn`",
+  },
+  {
+    program: "tests/differential/corpus/str_methods.ts",
+    file: "str_methods.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "`@nish_main`'s unproven `charCodeAt` can reach `nish_panic_index`, so it loses `willreturn` and the attribute groups renumber",
+  },
+  {
+    program: "tests/link/result_import/main.ts",
+    file: "lib.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "`@parseDigit`'s unproven `text.charCodeAt(at)` can reach `nish_panic_index`, so it loses `willreturn`",
+  },
+  {
+    program: "tests/link/result_import/main.ts",
+    file: "main.ll",
+    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
+    why: "the importer's `declare` of `@parseDigit` loses `willreturn` with its definition, and the attribute groups renumber",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */
