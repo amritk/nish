@@ -12,6 +12,15 @@
  * template literals. Every program is deterministic and prints its locals at
  * the end.
  *
+ * Most programs also declare generics (WP18): a generic function `pick<T>`, a
+ * generic class `Cell<T>`, sometimes a generic function over it, `trade<T>`,
+ * and a plain class `Pt` to instantiate them at. Each is instantiated at two
+ * or three of `i32`, `boolean`, `string` and `Pt`, and the calls are
+ * interleaved with the rest of `main`. They are drawn from a second random
+ * stream of their own, so the straight-line program a seed printed before the
+ * generics existed is still there, statement for statement, with the generic
+ * lines woven into it.
+ *
  * Each program is compiled with two compilers and the emitted IR compared
  * byte for byte, module set included (WP14, repointed by WP19 G2.2), reusing
  * the comparison of `tests/nish-cmp.js` so that the generated corpus is held
@@ -58,11 +67,27 @@ function rng(seed) {
   };
 }
 
+/** The type arguments a generic is instantiated at: a scalar, a flag, a string and a class. */
+const GENERIC_TYPES = ["i32", "boolean", "string", "Pt"];
+const STRINGS = ["", "a", "xy", "hello", "Z9"];
+
 const LITERALS = [0, 1, -1, 2, 3, 7, 10, 100, 1000, 65536, 46341, 1000000000, 2147483647, -2147483647, 2147483646];
 
 /** Build one program from a seed; returns its source text. */
 function buildProgram(seed, label, opts = {}) {
-  const r = rng(seed);
+  const base = rng(seed);
+  // The generic lines draw from their own stream: `r` is `base` except while
+  // `withStream` has swapped it, so every draw the plain program makes is the
+  // one it made before generics existed.
+  const gen = rng((seed ^ 0x2545f491) >>> 0);
+  let r = base;
+  const withStream = (stream, build) => {
+    const saved = r;
+    r = stream;
+    const out = build();
+    r = saved;
+    return out;
+  };
   const maxDepth = opts.depth ?? 3;
   const nLocals = r.int(3, 6);
   const nBools = r.int(1, 3);
@@ -172,6 +197,50 @@ function buildProgram(seed, label, opts = {}) {
     lines.push(`  return ${intExpr(maxDepth - 1, ["a", "b"], [])};`);
     lines.push("}");
   }
+
+  // Which generics this program has, and the types each is instantiated at.
+  const generics = withStream(gen, () => {
+    if (!r.chance(0.75)) return null;
+    const typesOf = () => {
+      const shuffled = [...GENERIC_TYPES];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = r.int(0, i);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled.slice(0, r.int(2, 3));
+    };
+    return { pick: typesOf(), cell: typesOf(), trade: r.chance(0.6) };
+  });
+  if (generics !== null) {
+    lines.push("");
+    lines.push("class Pt {");
+    lines.push("  n: number;");
+    lines.push("  constructor(n: number) {");
+    lines.push("    this.n = n;");
+    lines.push("  }");
+    lines.push("}");
+    lines.push("");
+    lines.push("class Cell<T> {");
+    lines.push("  v: T;");
+    lines.push("  constructor(v: T) {");
+    lines.push("    this.v = v;");
+    lines.push("  }");
+    lines.push("  get(): T {");
+    lines.push("    return this.v;");
+    lines.push("  }");
+    lines.push("  set(w: T): void {");
+    lines.push("    this.v = w;");
+    lines.push("  }");
+    lines.push("  swap(w: T): T {");
+    lines.push("    const old = this.v;");
+    lines.push("    this.v = w;");
+    lines.push("    return old;");
+    lines.push("  }");
+    lines.push("}");
+    lines.push("");
+    lines.push("const pick = <T>(c: boolean, a: T, b: T): T => (c ? a : b);");
+    if (generics.trade) lines.push("const trade = <T>(cell: Cell<T>, w: T): T => cell.swap(w);");
+  }
   lines.push("");
   lines.push("export function main(): number {");
   callable = helpers;
@@ -180,6 +249,78 @@ function buildProgram(seed, label, opts = {}) {
     lines.push(`  let ${b} = ${boolExpr(2, locals, [])};`);
     boolEnv = [...boolEnv, b];
   }
+
+  /** A value of generic argument type `t`, reading `env` and bumping `mutable`. */
+  const valueAt = (t, env, mutable) => {
+    switch (t) {
+      case "i32":
+        return intExpr(maxDepth - 1, env, mutable);
+      case "boolean":
+        return boolExpr(maxDepth - 1, env, mutable);
+      case "string":
+        if (r.chance(0.4)) return "s0";
+        if (r.chance(0.5)) return JSON.stringify(r.pick(STRINGS));
+        return `\`${r.pick(STRINGS)}\${${intExpr(1, env, mutable)}}\``;
+      default:
+        return r.chance(0.4) ? "p0" : `new Pt(${intExpr(maxDepth - 1, env, mutable)})`;
+    }
+  };
+  /** A local of type `t` that a generic result may be stored in. */
+  const targetOf = (t) => {
+    switch (t) {
+      case "i32":
+        return r.pick(locals);
+      case "boolean":
+        return r.pick(bools);
+      case "string":
+        return "s0";
+      default:
+        return "p0";
+    }
+  };
+  /** `expr` of type `t` as something `console.log` prints. */
+  const shown = (t, expr) => (t === "Pt" ? `${expr}.n` : expr);
+  const cellTypes = generics === null ? [] : generics.cell;
+  const cellOf = (t) => `g${cellTypes.indexOf(t)}`;
+
+  if (generics !== null) {
+    withStream(gen, () => {
+      const used = [...generics.pick, ...generics.cell];
+      if (used.includes("string")) lines.push(`  let s0 = ${JSON.stringify(r.pick(STRINGS))};`);
+      if (used.includes("Pt")) lines.push(`  let p0 = new Pt(${literal()});`);
+      for (const t of cellTypes) {
+        lines.push(`  const ${cellOf(t)} = new Cell<${t}>(${valueAt(t, locals, [])});`);
+      }
+    });
+  }
+
+  /** One statement that calls a generic, at the top level of `main`. */
+  const genericStatement = (env, mutable) => {
+    if (r.chance(0.4)) {
+      const t = r.pick(generics.pick);
+      const call = `pick(${boolExpr(maxDepth - 1, env, mutable)}, ${valueAt(t, env, mutable)}, ${valueAt(t, env, mutable)})`;
+      if (r.chance(0.5)) lines.push(`  ${targetOf(t)} = ${call};`);
+      else lines.push(`  console.log(${shown(t, call)});`);
+      return;
+    }
+    const t = r.pick(cellTypes);
+    const cell = cellOf(t);
+    switch (r.int(0, 3)) {
+      case 0:
+        lines.push(`  ${cell}.set(${valueAt(t, env, mutable)});`);
+        break;
+      case 1:
+        lines.push(`  ${targetOf(t)} = ${cell}.get();`);
+        break;
+      case 2:
+        lines.push(`  console.log(${shown(t, `${cell}.swap(${valueAt(t, env, mutable)})`)});`);
+        break;
+      default:
+        if (generics.trade) lines.push(`  ${targetOf(t)} = trade(${cell}, ${valueAt(t, env, mutable)});`);
+        else lines.push(`  console.log(${shown(t, `${cell}.get()`)});`);
+        break;
+    }
+  };
 
   let loopId = 0;
   function statement(indent, env, mutable, depth) {
@@ -248,7 +389,25 @@ function buildProgram(seed, label, opts = {}) {
     }
   }
   const nStatements = r.int(8, 16);
-  for (let s = 0; s < nStatements; s++) statement(2, locals, locals, 2);
+  for (let s = 0; s < nStatements; s++) {
+    if (generics !== null && gen.chance(0.35)) withStream(gen, () => genericStatement(locals, locals));
+    statement(2, locals, locals, 2);
+  }
+  if (generics !== null) {
+    // Every instantiation is used at least once, whatever the draws above did.
+    withStream(gen, () => {
+      for (const t of generics.pick) {
+        const call = `pick(${boolExpr(1, locals, [])}, ${valueAt(t, locals, [])}, ${valueAt(t, locals, [])})`;
+        lines.push(`  console.log(${shown(t, call)});`);
+      }
+      for (const t of cellTypes) {
+        if (generics.trade) {
+          lines.push(`  console.log(${shown(t, `trade(${cellOf(t)}, ${valueAt(t, locals, [])})`)});`);
+        }
+        lines.push(`  console.log(${shown(t, `${cellOf(t)}.get()`)});`);
+      }
+    });
+  }
   for (const v of locals) lines.push(`  console.log(${v});`);
   for (const b of bools) lines.push(`  console.log(${b});`);
   lines.push("  return 0;");
