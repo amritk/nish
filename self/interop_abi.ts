@@ -29,7 +29,7 @@ import { Compilation, ModuleUnit } from "./compilation";
 import { StringMap, StringSet } from "./map";
 import { ROOT_PACKAGE } from "./packages";
 import { basename } from "./paths";
-import { N_IDENT, Node } from "./nodes";
+import { N_CONSTRUCTOR, Node } from "./nodes";
 import { FunctionSig, STRUCT_CLASS } from "./program";
 import { ResultLayout, resultLayout } from "./result";
 import { StringBuilder } from "./strings";
@@ -646,7 +646,7 @@ export class CName {
  */
 export const cFunctionName = (symbol: string): CName => {
   if (symbol.indexOf("$") >= 0) {
-    return new CName(`nish_gen_${collapseSeparators(symbol, true)}`, ` NISH_SYMBOL("${symbol}")`);
+    return new CName(cStructName(symbol), ` NISH_SYMBOL("${symbol}")`);
   }
   if (symbol.indexOf(".") >= 0) {
     return new CName(collapseSeparators(symbol, false), ` NISH_SYMBOL("${symbol}")`);
@@ -671,7 +671,7 @@ export const cFunctionName = (symbol: string): CName => {
  * one reading the `.d.ts` call the same instantiation by the same name. The
  * comment above each declaration says which instantiation it is.
  */
-export const jsExportName = (sig: FunctionSig): string => sig.name.indexOf("$") >= 0 ? cFunctionName(sig.name).ident : sig.name;
+export const jsExportName = (sig: FunctionSig): string => cStructName(sig.name);
 
 /**
  * Why a function is declared under a C name that is not its symbol, for the
@@ -766,7 +766,7 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
   while (i < clashes.length) {
     const first = clashes[i].sig;
     const second = clashes[i + 1];
-    const at = nameNodeOf(second.sig.decl);
+    const at = sigNameNode(second.sig);
     compilation.sink.report(
       second.unit.source,
       at.start,
@@ -789,7 +789,7 @@ const reportUninstantiated = (
   kind: string,
   becomes: string
 ): void => {
-  const at = nameNodeOf(decl);
+  const at = decl.children[0];
   compilation.sink.report(
     unit.source,
     at.start,
@@ -799,8 +799,11 @@ const reportUninstantiated = (
   );
 };
 
-/** The identifier a declaration is named by, or the declaration when it has none. */
-const nameNodeOf = (decl: Node): Node => decl.children.length > 0 && decl.children[0].kind === N_IDENT ? decl.children[0] : decl;
+/**
+ * The name a clash diagnostic points at, or the declaration for a constructor,
+ * which has none: `nameNode` in `self/compilation.ts`, for the same reason.
+ */
+const sigNameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `""` when a type has no C spelling. */
 export const cPrototype = (table: TypeTable, sig: FunctionSig, writtenParams: StringSet): string => {

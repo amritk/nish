@@ -796,10 +796,10 @@ const cDeclared = (compilation: Compilation, fns: ExternalFunction[]): ExternalF
   if (opts.emitHeader.length > 0) {
     return fns;
   }
-  const out: ExternalFunction[] = [];
   if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0) {
-    return out;
+    return [];
   }
+  const out: ExternalFunction[] = [];
   for (const fn of fns) {
     if (napiBridges(compilation.table, fn)) {
       out.push(fn);
