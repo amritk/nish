@@ -154,7 +154,8 @@ alias (a generic *function* is monomorphised, WP18), `symbol`,
 ## 4. What exists today
 
 There is **one compiler**, and it is written in the language it compiles:
-`self/`, 64 modules and 35,431 lines of Nish. Until R6 it had a twin, `src/`
+`self/`, 64 modules (`ls self/*.ts | wc -l`) and 35,601 lines of Nish
+(`cat self/*.ts | wc -l`). Until R6 it had a twin, `src/`
 (stage0, the same compiler in TypeScript on Node), and the two agreed byte for
 byte on the IR of every program in the corpus, which is what WP14 below means
 by self-hosting. R6 deleted `src/` (§9, M6); `self/` is now built by the last

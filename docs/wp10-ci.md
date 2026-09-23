@@ -12,7 +12,7 @@ comment above the `on:` block has the details.
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm run check`, `npm test`, then the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
+| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `build/nish` built with the seed, `npm test`, then the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on six remaining measured failures rather than on cost. It is the one macOS gap in the file: `bootstrap` and `nish-cmp` have had darwin rows since the 0.4.0 seeds. See below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
