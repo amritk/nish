@@ -744,7 +744,13 @@ reading the prose — which was the point of a code in the first place.
 | `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow — a nested condition object included, since the `nish` row may be inside it. | `tests/link/package_no_subpath`, `package_nested_condition` |
 
 `tests/nish/cli.ts` compiles each case with `--json` and holds its code, and
-`tests/link/package_engines_met` is the floor that is met and compiles.
+`tests/link/package_engines_met` is the floor that is met and compiles. The
+boundary itself is tested at this compiler's own version rather than at a
+number written down: `cli.ts` reads `VERSION` from `self/branding.ts`, writes
+one package whose floor is that version, which must compile, and one whose
+floor is a patch above it, which must be refused as `NL3018` naming both the
+floor and the version — so the test still sits on the boundary after the next
+release moves it.
 
 **The order they are asked in is part of the rule.** The floor is read first
 and whether or not an entry point resolves: a package that names a newer

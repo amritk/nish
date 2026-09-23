@@ -52,6 +52,7 @@
  * fail rather than one an earlier run has already satisfied.
  */
 import { jsonField } from "../../std/json";
+import { VERSION } from "../../self/branding";
 import { Suite } from "../../std/testing";
 import { contains, splitLines, trim } from "../../std/text";
 
@@ -648,6 +649,96 @@ const checkPackageBoundary = (t: Suite, cli: Cli): void => {
   checkPackageCode(t, cli, "package_nested_condition", none, "NL3014");
 };
 
+/**
+ * `VERSION` without a prerelease or build tag: `0.9.0` for `0.9.0-rc.1`. A
+ * floor is written in the numbers alone, so this is the version a floor is
+ * compared against.
+ */
+const versionCore = (version: string): string => {
+  let end = version.length;
+  const dash = version.indexOf("-");
+  if (dash >= 0 && dash < end) {
+    end = dash;
+  }
+  const plus = version.indexOf("+");
+  if (plus >= 0 && plus < end) {
+    end = plus;
+  }
+  return version.substring(0, end);
+};
+
+/** `core` with its last number one higher: the smallest floor this compiler does not meet. */
+const nextPatch = (core: string): string => {
+  let dot = -1;
+  let at = 0;
+  while (at < core.length) {
+    if (core.charCodeAt(at) === 46) {
+      dot = at;
+    }
+    at = at + 1;
+  }
+  return `${core.substring(0, dot + 1)}${toI32(parseInt(core.substring(dot + 1))) + 1}`;
+};
+
+/**
+ * A program importing one package whose `engines.nish` is `range`, written
+ * under `WORK` rather than checked in: the floors at the boundary are derived
+ * from the compiler's own version, so they have to move with every release,
+ * and a checked-in `>=0.8.0` would stop being the boundary at the next one.
+ */
+const writeEnginesFixture = (name: string, range: string): string => {
+  const dir = `${WORK}/${name}`;
+  const pkg = `${dir}/node_modules/pkg_edge`;
+  mkdirSync(dir);
+  mkdirSync(`${dir}/node_modules`);
+  mkdirSync(pkg);
+  writeFileSync(
+    `${pkg}/package.json`,
+    `{ "name": "pkg_edge", "version": "1.0.0", "engines": { "nish": "${range}" }, "exports": { ".": { "nish": "./index.ts" } } }\n`
+  );
+  writeFileSync(`${pkg}/index.ts`, "export const seed = (): i32 => 7;\n");
+  writeFileSync(`${dir}/main.ts`, 'import { seed } from "pkg_edge";\n\nexport const main = (): i32 => seed();\n');
+  return `${dir}/main.ts`;
+};
+
+/**
+ * The `engines.nish` boundary, at this compiler's own version (WP21 S3): a
+ * floor equal to it is met and compiles, one patch above it is refused as
+ * NL3018, and every refusal names the version that was compared. Both are
+ * derived from `VERSION` in `self/branding.ts`, the constant `--version`
+ * prints, so they test the boundary after a release as well as before it.
+ */
+const checkEnginesBoundary = (t: Suite, cli: Cli): void => {
+  const core = versionCore(VERSION);
+  const equal = writeEnginesFixture("engines_equal", `>=${core}`);
+  const met = cli.plain("engines_equal", [equal, "-o", `${WORK}/ir_engines_equal/`]);
+  t.eqI32(`a floor of >=${core}, this compiler's own version, is met and compiles`, met.status, 0);
+
+  const above = nextPatch(core);
+  const next = writeEnginesFixture("engines_above", `>=${above}`);
+  const refused = cli.plain("engines_above", [next, "--json", "-o", `${WORK}/ir_engines_above/`]);
+  if (!t.eqI32(`a floor of >=${above}, one patch above this compiler, is refused`, refused.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(refused.stdout);
+  if (!t.eqI32("as one object", toI32(objects.length), 1)) {
+    return;
+  }
+  t.eqStr("whose code is the floor's", cliField(objects[0], "code"), "NL3018");
+  t.contains(
+    "and whose message names the floor and this compiler's version",
+    cliField(objects[0], "message"),
+    `asks for \`>=${above}\` and this is nish ${VERSION}`
+  );
+
+  const fixed = cli.plain("engines_floor_text", ["tests/link/package_engines_floor/main.ts", "-o", `${WORK}/ir_engines_floor/`]);
+  t.contains(
+    "package_engines_floor's refusal ends with this compiler's version",
+    fixed.stderr,
+    `asks for \`>=999.0.0\` and this is nish ${VERSION}`
+  );
+};
+
 export const main = (): number => {
   const spec = process.argv.length > 1 ? process.argv[1] : DEFAULT_CLI;
   mkdirSync("build");
@@ -674,6 +765,7 @@ export const main = (): number => {
   checkToolchain(t, cli, env);
   checkInternalError(t, cli, env);
   checkPackageBoundary(t, cli);
+  checkEnginesBoundary(t, cli);
 
   return t.done();
 };
