@@ -34,6 +34,7 @@ import { parseCodesRegistry } from "../scripts/codes-registry.js";
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js";
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js";
 import { programs as corpusPrograms } from "./self/corpus.js";
+import { cwdFor } from "./differential/lib.js";
 import { packageRootOf, selfCheckNotes, selfCheckRoots, selfCheckVersions, withoutOwnRoot } from "./nish-cmp.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
 import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
@@ -9374,6 +9375,22 @@ if (!only || "differential".includes(only)) {
     `differential: native and Node agree on every corpus program not in known-failures.txt (${mode ? `${mode}; ` : ""}${summary || "no summary"})`,
     d.status === 0,
     d.stdout + d.stderr
+  );
+
+  // The runner above is parallel, and `io_nish_import` and its twin write the
+  // same relative path by design, so what keeps one from reading the file the
+  // other just truncated is that every run has a working directory of its own
+  // (`cwdFor` in tests/differential/lib.js). The race it closed failed one run
+  // in twenty; this fails every run the isolation is gone, because each twin's
+  // file then lands somewhere other than its own directory.
+  const scratch = ["io_nish_import", "io_nish_import_global"].flatMap((name) =>
+    ["native", "node"].map((side) => path.join(cwdFor(`cases/${name}`, side), "build", "test", "io_nish_import.txt"))
+  );
+  const astray = scratch.filter((file) => !fs.existsSync(file));
+  check(
+    "differential: each program runs in a working directory of its own",
+    astray.length === 0,
+    `not written where its own run should have put it:\n${astray.join("\n")}`
   );
 
   // The smaller, unrewritten claim beside it: an f64-mode program run as the

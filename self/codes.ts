@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 411;
+export const RULE_COUNT: i32 = 416;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -57,6 +57,8 @@ export const RULE_COUNT: i32 = 411;
  * contains.
  */
 export const diagnosticRules = (): string[] => [
+  "` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out",
+  "NL2326",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
   "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
@@ -65,6 +67,8 @@ export const diagnosticRules = (): string[] => [
   "NL2324",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
+  "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",
+  "NL2327",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
@@ -165,6 +169,8 @@ export const diagnosticRules = (): string[] => [
   "NL2129",
   "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
   "NL2266",
+  "`: a constrained type parameter has only the members its constraint declares",
+  "NL2330",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
   "NL2139",
   "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
@@ -303,6 +309,8 @@ export const diagnosticRules = (): string[] => [
   "NL2040",
   "` in a constant of integer type (annotate it `f64`)",
   "NL2068",
+  "`: an unconstrained type parameter has no members; ",
+  "NL2329",
   "`Number` expects a string, number, or boolean, got ",
   "NL2146",
   "`readonly` is only permitted on an array type, got ",
@@ -611,6 +619,8 @@ export const diagnosticRules = (): string[] => [
   "NL2239",
   "--target: unsupported target `",
   "NL3001",
+  "` does not implement it; pass ",
+  "NL2328",
   "` expects a number index, got ",
   "NL2058",
   "` expects an argument of type ",

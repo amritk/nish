@@ -34,29 +34,55 @@ import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
 import { collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
 import {
+  N_ARRAY,
+  N_BIGINT,
+  N_BINARY,
+  N_CALL,
   N_CLASS,
+  N_CONDITIONAL,
+  N_CONSTRUCTOR,
   N_EMPTY,
+  N_FALSE,
+  N_FIELD,
   N_IDENT,
+  N_INDEX,
+  N_INTERFACE,
   N_LIST,
+  N_MEMBER,
+  N_METHOD,
+  N_NEW,
+  N_NULL,
+  N_NUMBER,
+  N_OBJECT,
+  N_PAREN,
+  N_STRING,
+  N_SUPER,
+  N_TEMPLATE,
+  N_THIS,
+  N_TRUE,
   N_TYPE_ARRAY,
   N_TYPE_NULL,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
   N_TYPE_REF,
   N_TYPE_UNION,
+  N_UNARY,
   Node,
 } from "./nodes";
 import {
+  ConstraintList,
+  DeferredConstraint,
   DeferredInstance,
   FunctionSig,
   ImportBinding,
   Instantiation,
+  STRUCT_CLASS,
   StructInfo,
   StructInstantiation,
   StructTemplateInfo,
   TemplateInfo,
 } from "./program";
-import { Scope } from "./symbols";
+import { Scope, TypeOrigin, unknownOrigin } from "./symbols";
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, R_UNKNOWN, T_ERROR, TypeTable } from "./types";
 
 /**
@@ -658,6 +684,11 @@ export const instantiateStructHere = (
   site: RequestSite
 ): StructInfo | null => {
   adoptArgumentLayouts(ctx, args, site);
+  // WP18 G6: before the tuple is looked up, so every request is held to the
+  // constraint where it was written, not only the first one to name the tuple.
+  if (!checkStructConstraints(ctx, template, args, at, site.asker)) {
+    return null;
+  }
   const name = instanceSymbol(ctx.table, template.sourceName, args);
   const existing = ctx.program.structInstance(name);
   if (existing !== null) {
@@ -834,6 +865,13 @@ export const instantiateHere = (
   // language whose symbol escaped its package. It is read off the *template*
   // rather than off `ctx.program` so that the two cannot drift apart again if
   // the forwarding above ever changes shape.
+  // WP18 G6, the function half: a call's type arguments are inferred, so the
+  // request site is the call, which is where the user implied them. The
+  // constraints were resolved when the template was registered, in pass 1,
+  // and a call is never checked before pass 2.
+  if (!checkConstraints(site.asker, ctx, template.sourceName, template.typeParams, template.constraints, args, at)) {
+    return null;
+  }
   const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + template.sourceName, args);
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
@@ -1022,4 +1060,684 @@ export const collectTypeParamNames = (decl: Node): string[] => {
     }
   }
   return names;
+};
+
+// ---- Constraints (WP18 G6) ------------------------------------------------------------
+//
+// `<T extends Shape>` says two things, and they are checked in two places.
+// What a template may do with a `T` — read and call exactly `Shape`'s members —
+// is judged while each instantiation's body is checked, against the constraint
+// and never against the concrete type the instantiation happens to have. What
+// a type argument must be — `Shape` itself, or a class that `implements Shape`
+// — is judged at each request, where the argument was written or inferred.
+// Neither changes the lowering: `T` at `Circle` is `%struct.Circle`, and a
+// member read through it is the read a hand-written `Circle` would make.
+
+/**
+ * Resolve one template's constraints, once, in the module that declares it and
+ * with no type parameter bound (WP18 G6).
+ *
+ * The bindings and both instantiation cursors are cleared for the duration,
+ * because the first request for a template may arrive from inside some other
+ * instantiation's body, and a constraint means the same thing whoever asks.
+ * `errored` is cleared too, or a refused constraint met from inside a
+ * statement that had already failed would never be reported at all — and the
+ * list is only ever resolved once.
+ */
+export const resolveConstraints = (
+  home: CheckContext,
+  constraints: ConstraintList,
+  list: Node,
+  typeParams: string[]
+): void => {
+  if (constraints.resolved || constraints.resolving) {
+    return;
+  }
+  constraints.resolving = true;
+  const savedBindings = home.typeBindings;
+  const savedInstance = home.currentInstance;
+  const savedStruct = home.currentStructInstance;
+  const savedErrored = home.errored;
+  home.typeBindings = new StringMap();
+  home.currentInstance = null;
+  home.currentStructInstance = null;
+  const names = new StringSet();
+  for (const name of typeParams) {
+    names.add(name);
+  }
+  const types: i32[] = [];
+  for (const param of list.children) {
+    if (param.kind === N_IDENT) {
+      home.errored = false;
+      types.push(param.children.length > 0 ? resolveConstraint(home, param, names) : -1);
+    }
+  }
+  home.typeBindings = savedBindings;
+  home.currentInstance = savedInstance;
+  home.currentStructInstance = savedStruct;
+  home.errored = savedErrored;
+  constraints.types = types;
+  constraints.resolved = true;
+  constraints.resolving = false;
+};
+
+/**
+ * One `T extends X`: the struct type `X` names, or -1 once it has been refused.
+ * A constraint is resolved once for every instantiation, so it may not depend
+ * on one: that rules out a type parameter, and an instantiation that mentions
+ * one, which is where an F-bounded or parameter-dependent bound would start.
+ */
+const resolveConstraint = (ctx: CheckContext, param: Node, names: StringSet): i32 => {
+  const node = param.children[0];
+  if (mentionsTypeParam(node, names)) {
+    ctx.error(
+      node,
+      `\`${param.text} extends ${ctx.textOf(node)}\` is not supported: a constraint cannot mention a type ` +
+        "parameter, because it is resolved once for the template rather than once per instantiation; name a " +
+        "class or interface, with any type arguments written out"
+    );
+    return -1;
+  }
+  const type = resolveType(node, ctx);
+  if (type === T_ERROR) {
+    return -1;
+  }
+  if (!ctx.table.isStruct(type)) {
+    ctx.error(
+      node,
+      `\`${param.text} extends ${ctx.table.typeName(type)}\` is not supported: a constraint must be a declared ` +
+        "class or interface, because the members a type parameter has are its constraint's"
+    );
+    return -1;
+  }
+  return type;
+};
+
+/** `resolveConstraints` for a generic function, in its home module. */
+export const resolveTemplateConstraints = (template: TemplateInfo): void => {
+  resolveConstraints(template.home, template.constraints, typeParameterList(template.decl), template.typeParams);
+};
+
+/** `resolveConstraints` for a generic class or interface, in its home module. */
+export const resolveStructTemplateConstraints = (template: StructTemplateInfo): void => {
+  resolveConstraints(template.home, template.constraints, structTypeParameterList(template.decl), template.typeParams);
+};
+
+/**
+ * Whether `arg` satisfies `constraint`: it is the constraint, or it is a class
+ * that `implements` it. There is no inheritance (WP25), so those are the only
+ * two ways a type has a struct's members at the offsets the struct has them.
+ * `arg`'s own layout is read from `ctx`, the module that asked for it.
+ */
+export const satisfiesConstraint = (ctx: CheckContext, arg: i32, constraint: i32): boolean => {
+  if (arg === constraint) {
+    return true;
+  }
+  if (!ctx.table.isStruct(arg)) {
+    return false;
+  }
+  const info = ctx.program.struct(ctx.table.nameOf(arg));
+  if (info === null) {
+    return false;
+  }
+  const want = ctx.table.nameOf(constraint);
+  for (const name of info.implementsNames) {
+    if (name === want) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Every type argument of one request against its parameter's constraint,
+ * reporting the first that fails in `asker` at `at` — the request site, which
+ * is where the user wrote or implied the argument (WP18 §6.5). `home` is the
+ * template's module, which is where the constraint's own layout is known.
+ */
+export const checkConstraints = (
+  asker: CheckContext,
+  home: CheckContext,
+  templateName: string,
+  typeParams: string[],
+  constraints: ConstraintList,
+  args: i32[],
+  at: Node
+): boolean => {
+  let i = 0;
+  while (i < args.length) {
+    const want = constraints.at(i);
+    if (want >= 0 && !satisfiesConstraint(asker, args[i], want)) {
+      const bound = home.table.typeName(want);
+      const info = home.program.struct(home.table.nameOf(want));
+      // A class constraint is met by the class and nothing else, because a
+      // class can only `implements` an interface; so the fix names the class
+      // rather than sending the reader after a clause they cannot write.
+      const fix = info !== null && info.kind === STRUCT_CLASS
+        ? `pass \`${bound}\` itself, because a class constraint is satisfied by that class alone`
+        : `pass a class or interface that declares \`implements ${bound}\``;
+      asker.error(
+        at,
+        `\`${typeParams[i]}\` of \`${templateName}\` requires \`${typeParams[i]} extends ${bound}\`, and ` +
+          `\`${asker.table.typeName(args[i])}\` does not implement it; ${fix}`
+      );
+      return false;
+    }
+    i = i + 1;
+  }
+  return true;
+};
+
+/**
+ * The struct half of the check, which may have to wait: see
+ * `DeferredConstraint` for why a pass-1 request is written down instead.
+ */
+const checkStructConstraints = (
+  home: CheckContext,
+  template: StructTemplateInfo,
+  args: i32[],
+  at: Node,
+  asker: CheckContext
+): boolean => {
+  resolveStructTemplateConstraints(template);
+  if (asker.constraintsDeferred) {
+    asker.deferredConstraints.push(new DeferredConstraint(template, args, at));
+    return true;
+  }
+  return checkConstraints(asker, home, template.sourceName, template.typeParams, template.constraints, args, at);
+};
+
+/** The pass-1b end of `checkStructConstraints`: every request pass 1 wrote down. */
+export const checkDeferredConstraints = (ctx: CheckContext): void => {
+  ctx.constraintsDeferred = false;
+  for (const request of ctx.deferredConstraints) {
+    ctx.errored = false;
+    const template = request.template;
+    checkConstraints(
+      ctx,
+      template.home,
+      template.sourceName,
+      template.typeParams,
+      template.constraints,
+      request.args,
+      request.at
+    );
+  }
+  ctx.errored = false;
+  ctx.deferredConstraints = [];
+};
+
+/** The origin an element of `iterable` starts with in `for...of`, or `null` outside an instantiation. */
+export const elementOrigin = (ctx: CheckContext, iterable: Node, scope: Scope): TypeOrigin | null => {
+  if (ctx.typeBindings.size() === 0) {
+    return null;
+  }
+  return originElement(originOf(ctx, iterable, scope));
+};
+
+/** The position of `name` in `names`, or -1. */
+const indexOfName = (names: string[], name: string): i32 => {
+  let i = 0;
+  while (i < names.length) {
+    if (names[i] === name) {
+      return i;
+    }
+    i = i + 1;
+  }
+  return -1;
+};
+
+/**
+ * The constraint of the type parameter `name` of the instantiation whose body
+ * is being checked, or -1 when it has none. A method of an instantiated class
+ * answers from the class's parameter list, because those are its parameters.
+ * Every template's list is resolved by the end of pass 1, before any body.
+ */
+const constraintInScope = (ctx: CheckContext, name: string): i32 => {
+  const instance = ctx.currentInstance;
+  if (instance === null) {
+    return -1;
+  }
+  const template = instance.template;
+  if (template !== null) {
+    return template.constraints.at(indexOfName(template.typeParams, name));
+  }
+  const owner = instance.owner;
+  if (owner === null) {
+    return -1;
+  }
+  return owner.template.constraints.at(indexOfName(owner.template.typeParams, name));
+};
+
+/** `(T)`, `readonly T[]` and `T | null` are `T`, `T[]` and `T` for the question of where a value came from. */
+const unwrapOrigin = (annotation: Node): Node => {
+  if (annotation.kind === N_TYPE_PAREN || annotation.kind === N_TYPE_READONLY) {
+    return unwrapOrigin(annotation.children[0]);
+  }
+  if (annotation.kind === N_TYPE_UNION) {
+    for (const part of annotation.children) {
+      if (part.kind !== N_TYPE_NULL) {
+        return unwrapOrigin(part);
+      }
+    }
+  }
+  return annotation;
+};
+
+/**
+ * Whether an annotation is a bare name with no type arguments. A type
+ * parameter's own `IDENT` counts: it is what `this`'s origin names its
+ * class's parameters with.
+ */
+const isBareName = (annotation: Node): boolean =>
+  annotation.kind === N_IDENT || (annotation.kind === N_TYPE_REF && annotation.children[0].children.length === 0);
+
+/**
+ * Follow an origin through the names it substitutes, to the one whose
+ * annotation says something about shape: `value: T` read through `Box<U[]>`
+ * is `U[]`, as written in the body being checked.
+ */
+const substituted = (origin: TypeOrigin | null): TypeOrigin | null => {
+  let at = origin;
+  while (at !== null && !at.unknown && at.names.length > 0) {
+    const node = unwrapOrigin(at.annotation);
+    if (!isBareName(node)) {
+      return at;
+    }
+    const index = indexOfName(at.names, node.text);
+    if (index < 0) {
+      return at;
+    }
+    at = at.args[index];
+  }
+  return at;
+};
+
+/**
+ * The type parameter of the body being checked that `origin` is, once it is
+ * unwrapped and substituted, or "" when it is anything else — a class, an
+ * array, a type that mentions no parameter.
+ *
+ * An unknown origin (`TypeOrigin.unknown`) is answered from `type`, the
+ * receiver's concrete type: it is a parameter's when some parameter in scope
+ * is bound to exactly that type. That is the test the header of `originOf`
+ * says is *not* a test for "came from `T`" — it refuses too much — and it is
+ * used here for exactly that reason: an expression this module does not know
+ * how to follow is refused rather than waved through.
+ */
+const originParameter = (ctx: CheckContext, origin: TypeOrigin | null, type: i32): string => {
+  const at = substituted(origin);
+  if (at === null) {
+    return "";
+  }
+  if (at.unknown) {
+    let i = 0;
+    while (i < ctx.typeBindings.size()) {
+      const name = ctx.typeBindings.keyAt(i);
+      if (ctx.typeBindings.get(name, -1) === type) {
+        return name;
+      }
+      i = i + 1;
+    }
+    return "";
+  }
+  const node = unwrapOrigin(at.annotation);
+  if (at.names.length > 0 || !isBareName(node)) {
+    return "";
+  }
+  return ctx.typeBindings.has(node.text) ? node.text : "";
+};
+
+/**
+ * The origin of an element of an array whose origin is `origin`: `T` for
+ * `T[]`, `Array<T>` and `new Array<T>(n)`, and the elements' own origin for an
+ * array literal. An element of an unknown array is unknown.
+ */
+const originElement = (origin: TypeOrigin | null): TypeOrigin | null => {
+  const at = substituted(origin);
+  if (at === null || at.unknown) {
+    return at;
+  }
+  const node = unwrapOrigin(at.annotation);
+  if (node.kind === N_TYPE_ARRAY) {
+    return new TypeOrigin(node.children[0], at.names, at.args);
+  }
+  if (node.kind === N_ARRAY) {
+    return at.args.length > 0 ? at.args[0] : null;
+  }
+  const isArrayRef = node.kind === N_TYPE_REF && (node.text === "Array" || node.text === "ReadonlyArray");
+  const isArrayNew = node.kind === N_NEW && node.children[0].text === "Array";
+  if (isArrayRef || isArrayNew) {
+    const list = node.kind === N_NEW ? node.children[1] : node.children[0];
+    if (list.kind === N_LIST && list.children.length === 1) {
+      return new TypeOrigin(list.children[0], at.names, at.args);
+    }
+  }
+  return null;
+};
+
+/**
+ * A member's declared type in a generic class or interface: a field's
+ * annotation, or a method's return type. Found in the declaration rather than
+ * in an instantiated layout, because the layout has only concrete types.
+ */
+const memberAnnotation = (decl: Node, name: string, method: boolean): Node | null => {
+  const members = decl.kind === N_CLASS ? decl.children[3] : decl.children[1];
+  for (const member of members.children) {
+    if (member.children.length === 0 || member.children[0].text !== name) {
+      continue;
+    }
+    if (method && member.kind === N_METHOD) {
+      return member.children[2];
+    }
+    if (!method && member.kind === N_FIELD) {
+      return member.children[1];
+    }
+  }
+  return null;
+};
+
+/**
+ * The generic class or interface an origin is an instantiation of, with the
+ * origin of each type argument pushed onto `args`, or `null` when it is not
+ * one. Three spellings reach here: an annotation `Box<U>`, an expression
+ * `new Box<U>(u)` — the same written list, one position over — and the
+ * declaration itself, which is `this`'s origin inside an instantiated class's
+ * method, whose arguments are its own parameters.
+ */
+const structShape = (ctx: CheckContext, at: TypeOrigin, args: (TypeOrigin | null)[]): StructTemplateInfo | null => {
+  const node = unwrapOrigin(at.annotation);
+  if (node.kind === N_CLASS || node.kind === N_INTERFACE) {
+    const owner = ctx.currentStructInstance;
+    if (owner === null || owner.template.decl !== node) {
+      return null;
+    }
+    for (const param of structTypeParameterList(node).children) {
+      args.push(new TypeOrigin(param, [], []));
+    }
+    return owner.template;
+  }
+  let name = "";
+  let written: Node | null = null;
+  if (node.kind === N_TYPE_REF) {
+    name = node.text;
+    written = node.children[0];
+  } else if (node.kind === N_NEW) {
+    name = node.children[0].text;
+    written = node.children[1];
+  }
+  if (written === null || written.children.length === 0) {
+    return null;
+  }
+  const template = ctx.program.structTemplate(name);
+  if (template === null) {
+    return null;
+  }
+  for (const arg of written.children) {
+    args.push(new TypeOrigin(arg, at.names, at.args));
+  }
+  return template;
+};
+
+/** Whether a `Result` member hands back the ok payload: `value`, and the three methods that unwrap. */
+const unwrapsOk = (name: string, method: boolean): boolean =>
+  method ? name === "orReturn" || name === "unwrapOr" || name === "expect" : name === "value";
+
+/**
+ * The origin of `receiver.name` (or of `receiver.name(...)`'s result): the
+ * member's annotation in a generic class or interface, with the class's
+ * parameters standing for its type arguments' origins; the payload of a
+ * `Result`; the element `pop()` hands back. A member of anything else has a
+ * declared, concrete type, and a member of an unknown value is unknown.
+ */
+const originOfMember = (ctx: CheckContext, receiver: Node, name: string, method: boolean, scope: Scope): TypeOrigin | null => {
+  const at = substituted(originOf(ctx, receiver, scope));
+  if (at === null || at.unknown) {
+    return at;
+  }
+  if (method && name === "pop") {
+    return originElement(at);
+  }
+  const node = unwrapOrigin(at.annotation);
+  if (node.kind === N_TYPE_REF && node.text === "Result" && node.children[0].children.length === 2) {
+    const list = node.children[0];
+    if (unwrapsOk(name, method)) {
+      return new TypeOrigin(list.children[0], at.names, at.args);
+    }
+    return !method && name === "error" ? new TypeOrigin(list.children[1], at.names, at.args) : null;
+  }
+  const args: (TypeOrigin | null)[] = [];
+  const template = structShape(ctx, at, args);
+  if (template === null) {
+    return null;
+  }
+  const annotation = memberAnnotation(template.decl, name, method);
+  return annotation === null ? null : new TypeOrigin(annotation, template.typeParams, args);
+};
+
+/**
+ * The origin of a call to a generic function: its declared return type, with
+ * each of its type parameters standing for the argument it was inferred from —
+ * `identity(p)` is whatever `p` is, and `first(xs)` is an element of `xs`. A
+ * parameter inferred through any other shape stands for nothing, which is the
+ * answer for a type that did not come from one of ours.
+ */
+const originOfGenericCall = (ctx: CheckContext, call: Node, template: TemplateInfo, scope: Scope): TypeOrigin => {
+  const parameters = template.decl.children[1];
+  const written = call.children[1];
+  const args: (TypeOrigin | null)[] = [];
+  for (const name of template.typeParams) {
+    let found: TypeOrigin | null = null;
+    let k = 0;
+    while (found === null && k < parameters.children.length && k < written.children.length) {
+      const annotation = unwrapOrigin(parameters.children[k].children[1]);
+      if (isBareName(annotation) && annotation.text === name) {
+        found = originOf(ctx, written.children[k], scope);
+      } else if (annotation.kind === N_TYPE_ARRAY && isBareName(unwrapOrigin(annotation.children[0]))) {
+        if (unwrapOrigin(annotation.children[0]).text === name) {
+          found = originElement(originOf(ctx, written.children[k], scope));
+        }
+      }
+      k = k + 1;
+    }
+    args.push(found);
+  }
+  return new TypeOrigin(template.decl.children[2], template.typeParams, args);
+};
+
+/** An array literal's origin: the literal, standing for its first element that came from somewhere. */
+const originOfArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
+  for (const element of expr.children) {
+    const found = originOf(ctx, element, scope);
+    if (found !== null) {
+      const elements: (TypeOrigin | null)[] = [];
+      elements.push(found);
+      return new TypeOrigin(expr, [], elements);
+    }
+  }
+  return null;
+};
+
+/**
+ * Where an expression's value came from, as the template wrote it, or `null`
+ * when nothing about it mentions a type parameter (WP18 G6).
+ *
+ * This is the whole of how "the receiver came from `T`" is told apart from
+ * "the receiver's type is `Point`, which is `T`'s binding" — the second is not
+ * a test for the first, because `<T>(p: T, q: Point)` at `T = Point` gives `p`
+ * and `q` one type.
+ *
+ * Every expression kind of `self/nodes.ts` has a case, and each one either
+ * follows the value or says why it cannot be a `T`. The `default` fails
+ * closed: a kind added later answers "unknown", and an unknown receiver is
+ * refused whenever its type is some parameter's binding, so a construct this
+ * switch has not been taught about over-refuses in a test rather than letting
+ * a member of `T` through in silence (`docs/wp18-generics.md` §15.6).
+ */
+export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
+  switch (expr.kind) {
+    case N_IDENT: {
+      // A module constant or a builtin import is a scalar, a string or an
+      // array of them, declared outside every template.
+      const local = scope.lookup(expr.text);
+      return local === null ? null : local.origin;
+    }
+    case N_THIS: {
+      // In an instantiated class's method, `this` is the class at its own
+      // parameters; anywhere else it is a declared class.
+      const owner = ctx.currentStructInstance;
+      return owner === null ? null : new TypeOrigin(owner.template.decl, [], []);
+    }
+    case N_PAREN:
+      return originOf(ctx, expr.children[0], scope);
+    case N_CONDITIONAL: {
+      const whenTrue = originOf(ctx, expr.children[1], scope);
+      return whenTrue !== null ? whenTrue : originOf(ctx, expr.children[2], scope);
+    }
+    case N_BINARY:
+      // An assignment's value is its right-hand side. Every other operator
+      // answers a type of its own — a number, a boolean, a concatenated
+      // string — which is the operator's result, not the operand's.
+      return expr.text === "=" ? originOf(ctx, expr.children[1], scope) : null;
+    case N_INDEX:
+      return originElement(originOf(ctx, expr.children[0], scope));
+    case N_MEMBER:
+      return originOfMember(ctx, expr.children[0], expr.text, false, scope);
+    case N_CALL: {
+      const callee = expr.children[0];
+      if (callee.kind === N_MEMBER) {
+        return originOfMember(ctx, callee.children[0], callee.text, true, scope);
+      }
+      if (callee.kind === N_IDENT && scope.lookup(callee.text) === null) {
+        const template = ctx.program.template(callee.text);
+        if (template !== null) {
+          return originOfGenericCall(ctx, expr, template, scope);
+        }
+      }
+      // A plain function's return type is declared outside every template,
+      // and no builtin hands back its argument's type but `Math.abs`,
+      // `Math.min` and `Math.max`, whose values are numbers.
+      return null;
+    }
+    case N_NEW:
+      // `new Box<U>(u)` is an instantiation written out, exactly as an
+      // annotation `Box<U>` is; a class with no type arguments is declared.
+      return expr.children[1].children.length > 0 ? new TypeOrigin(expr, [], []) : null;
+    case N_ARRAY:
+      return originOfArrayLiteral(ctx, expr, scope);
+    case N_UNARY:
+      // `-`, `+`, `!`, `~`, `++` and `--` answer a number or a boolean.
+      return null;
+    case N_OBJECT:
+      // An object literal takes its type from its context, which is an
+      // annotation, and the annotation is what a declaration records.
+      return null;
+    case N_NUMBER:
+    case N_BIGINT:
+    case N_STRING:
+    case N_TEMPLATE:
+    case N_TRUE:
+    case N_FALSE:
+    case N_NULL:
+      // A literal has the type it spells.
+      return null;
+    case N_SUPER:
+      // Refused wherever it is written (WP25).
+      return null;
+    default:
+      return unknownOrigin(expr);
+  }
+};
+
+/**
+ * The origin a local declared in an instantiation's body starts with: its
+ * annotation when it has one, else its initialiser's. `null` outside an
+ * instantiation, where no annotation can mention a type parameter.
+ */
+export const declaredOrigin = (ctx: CheckContext, annotation: Node, initializer: Node, scope: Scope): TypeOrigin | null => {
+  if (ctx.typeBindings.size() === 0) {
+    return null;
+  }
+  if (annotation.kind !== N_EMPTY) {
+    return new TypeOrigin(annotation, [], []);
+  }
+  return initializer.kind === N_EMPTY ? null : originOf(ctx, initializer, scope);
+};
+
+/** The origin of parameter `index` of `sig` (after `this`, for a method), or `null` outside an instantiation. */
+export const parameterOrigin = (ctx: CheckContext, sig: FunctionSig, index: i32): TypeOrigin | null => {
+  if (ctx.typeBindings.size() === 0) {
+    return null;
+  }
+  const list = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[0] : sig.decl.children[1];
+  const at = sig.owner !== null ? index - 1 : index;
+  if (at < 0 || at >= list.children.length) {
+    return null;
+  }
+  return new TypeOrigin(list.children[at].children[1], [], []);
+};
+
+/**
+ * WP18 G6: a member read, written or called through a value that came from a
+ * type parameter is answered by the parameter's constraint, never by the type
+ * the instantiation bound it to. Answers true when the access was refused,
+ * after reporting it once for the template (`errorOnce`).
+ *
+ * An unconstrained parameter has no members at all (§8, message 8). A
+ * constrained one has its constraint's, and nothing else — a member the
+ * concrete type has and the constraint lacks is refused, or the constraint
+ * would be decoration. Everything past this check is the ordinary lookup on
+ * the concrete type, which finds the same member at the same index: an
+ * implementer's first fields are its interface's.
+ */
+export const refuseParameterMember = (
+  ctx: CheckContext,
+  receiver: Node,
+  receiverType: i32,
+  member: Node,
+  verb: string,
+  method: boolean,
+  scope: Scope
+): boolean => {
+  if (ctx.typeBindings.size() === 0) {
+    return false;
+  }
+  const param = originParameter(ctx, originOf(ctx, receiver, scope), receiverType);
+  if (param.length === 0) {
+    return false;
+  }
+  const at = member.end - member.text.length;
+  const constraint = constraintInScope(ctx, param);
+  if (constraint < 0) {
+    // The fix names the type this instantiation bound, which is the one the
+    // author had in mind. A constraint can only be a class or interface, so
+    // for anything else the honest fix is to stop being generic over it.
+    const bound = ctx.typeBindings.get(param, -1);
+    const spelled = ctx.table.typeName(bound);
+    const fix = ctx.table.isStruct(bound)
+      ? `say which ones it has with \`<${param} extends ${spelled}>\``
+      : `\`${param}\` is \`${spelled}\` here, and only a class or interface can be a constraint, so take a ` +
+        `\`${spelled}\` rather than a \`${param}\``;
+    ctx.errorOnce(
+      member,
+      at,
+      `Cannot ${verb} \`${member.text}\` of \`${param}\`: an unconstrained type parameter has no members; ${fix}`
+    );
+    return true;
+  }
+  const info = ctx.program.struct(ctx.table.nameOf(constraint));
+  if (info === null) {
+    return false;
+  }
+  if (method ? info.method(member.text) !== null : info.field(member.text) !== null) {
+    return false;
+  }
+  const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
+  ctx.errorOnce(
+    member,
+    at,
+    `Unknown ${method ? "method" : "field"} \`${member.text}\` on ${kind} \`${info.name}\`, the constraint of ` +
+      `\`${param}\`: a constrained type parameter has only the members its constraint declares`
+  );
+  return true;
 };

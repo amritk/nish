@@ -1,0 +1,1 @@
+:21:20: error: `T` of `Holder` requires `T extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`

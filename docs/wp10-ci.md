@@ -722,7 +722,7 @@ fails the same way.
 | What | Held to | Read from |
 | --- | --- | --- |
 | every `std/*.ts`, `examples/*.ts` and `examples/*/main.ts`, discovered from the directory | **zero**, in both number modes where the program compiles | `--json`, `severity` `"performance"`; a failure names `file:line:col` and the `NL9xxx` code |
-| `self/compile.ts` | `tests/perf-baseline.json`, per file and per code — 85 on 72a4b16 (NL9007 65, NL9010 11, NL9009 4, NL9002 3, NL9003 2) | the `--json` of the compile the self-hosting section already makes |
+| `self/compile.ts` | `tests/perf-baseline.json`, per file and per code — 85 on 72a4b16 (NL9007 65, NL9010 11, NL9009 4, NL9002 3, NL9003 2), 89 once constrained type parameters (#157) added four NL9007 in `self/generics.ts` | the `--json` of the compile the self-hosting section already makes |
 
 **Lowering the baseline.** When a change proves a `self/` warning away, the
 ratchet's second check fails with `self/<file>.ts NL9xxx: N, the baseline says

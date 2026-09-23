@@ -232,6 +232,54 @@ const DECLARED = [
     changelog: "Hold std/ and examples/ to zero performance warnings and ratchet self/",
     why: "the same std/json proofs under --number-mode f64",
   },
+  {
+    program: "tests/cases/gen_constraint.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: `<T extends Shape>` at two implementers, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/gen_constraint_class.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: a generic class with a constrained parameter, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/gen_constraint_generic_bound.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: a constraint that is an instantiation, `T extends Container<i32>`, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/gen_constraint_method.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: a method called through a class constraint, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/gen_constraint_two.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: two parameters with different constraints, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/gen_constraint_write.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: a field written through a constrained parameter, which the reference compiler refuses to parse",
+  },
+  {
+    program: "docs/cookbook/gen_constraint.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new cookbook snippet: the constrained-parameter lowering, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/link/generic_constraint_import/main.ts",
+    file: "exit",
+    changelog: "Constrained type parameters (WP18 G6)",
+    why: "a new program: constrained templates imported from another module, which the reference compiler refuses to parse",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

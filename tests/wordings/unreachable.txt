@@ -19,6 +19,7 @@ NL2001  retired: the overload/override rule the inheritance work removed
 NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
 NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal WP18 G7 replaced; a template is imported and instantiated now (tests/link/generic_import)
 NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by WP18 G7 (tests/link/generic_import, tests/link/package_generic_import)
+NL2294  retired: `a constrained type parameter is not supported yet`, the refusal WP18 G6 replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
@@ -133,7 +134,6 @@ NL2273  retired at R6: stage1's parser refuses reject_arrow_annotated before the
 NL2274  retired at R6: stage1's parser refuses reject_fn_two_names, nl2274_two_names_one_declaration before the rule is stated
 NL2286  retired at R6: stage1's parser refuses reject_enum_declare, nl2286_declare_enum before the rule is stated
 NL2292  retired at R6: stage1's parser refuses nl2292_default_type_argument before the rule is stated
-NL2294  retired at R6: stage1's parser refuses reject_generic_constraint before the rule is stated
 NL2260  retired at R6: stage1 answers reject_fn_nested, nl2260_empty_statement differently (stage1_divergence.txt)
 NL2302  retired at R6: stage1 answers nl2302_duplicate_type_parameter differently (stage1_divergence.txt)
 

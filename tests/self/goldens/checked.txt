@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 425 programs, 7685 dump lines.
+# 432 programs, 7906 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2440,6 +2440,196 @@ function Box$$Point.constructor(this: Box$$Point, v: Point): void -> @Box$$Point
 function Box$$Point.get(this: Box$$Point): Point -> @Box$$Point.get [method instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=8
   pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_constraint.ts
+module tests/cases/gen_constraint.ts (entry)
+struct Shape (interface) size=4 align=4
+  field area: i32 index=0 offset=0
+struct Circle (class) size=8 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  field radius: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=4 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  constructor -> @Square.constructor
+function Circle.constructor(this: Circle, radius: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: radius
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Circle.constructor Square.constructor areaOf$$Circle areaOf$$Square
+  stackSites=2 stackLocals=0
+  callee 30:35 areaOf<Circle> -> @areaOf$$Circle
+  callee 30:42 new Circle -> @Circle.constructor
+  callee 30:59 areaOf<Square> -> @areaOf$$Square
+  callee 30:66 new Square -> @Square.constructor
+function areaOf<Circle>(shape: Circle): i32 -> @areaOf$$Circle [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer shape: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function areaOf<Square>(shape: Square): i32 -> @areaOf$$Square [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer shape: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_constraint_class.ts
+module tests/cases/gen_constraint_class.ts (entry)
+struct Shape (interface) size=4 align=4
+  field area: i32 index=0 offset=0
+struct Circle (class) size=8 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  field radius: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Holder$$Circle (class) size=8 align=8
+  field item: Circle index=0 offset=0
+  constructor -> @Holder$$Circle.constructor
+  method area -> @Holder$$Circle.area
+function Circle.constructor(this: Circle, radius: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: radius
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Circle.constructor Holder$$Circle.area Holder$$Circle.constructor nish_alloc_struct
+  stackSites=1 stackLocals=1
+  local 32:9 held: Holder$$Circle (const)
+  callee 32:35 new Circle -> @Circle.constructor
+  callee 33:10 Holder$$Circle.area -> @Holder$$Circle.area
+function Holder$$Circle.constructor(this: Holder$$Circle, item: Circle): void -> @Holder$$Circle.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: item
+  pointer this: size=8 writesThrough=true captured=false
+  pointer item: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Holder$$Circle.area(this: Holder$$Circle): i32 -> @Holder$$Circle.area [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_constraint_generic_bound.ts
+module tests/cases/gen_constraint_generic_bound.ts (entry)
+struct Cell (class) size=16 align=8
+  implements Container$i32
+  field value: i32 index=0 offset=0
+  field label: string index=1 offset=8
+  constructor -> @Cell.constructor
+struct Container$i32 (interface) size=4 align=4
+  field value: i32 index=0 offset=0
+function Cell.constructor(this: Cell, value: i32): void -> @Cell.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Cell.constructor valueOf$$Cell
+  stackSites=1 stackLocals=0
+  callee 21:35 valueOf<Cell> -> @valueOf$$Cell
+  callee 21:43 new Cell -> @Cell.constructor
+function valueOf<Cell>(c: Cell): i32 -> @valueOf$$Cell [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer c: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_constraint_method.ts
+module tests/cases/gen_constraint_method.ts (entry)
+struct Counter (class) size=4 align=4
+  field count: i32 index=0 offset=0
+  constructor -> @Counter.constructor
+  method bump -> @Counter.bump
+function Counter.constructor(this: Counter, start: i32): void -> @Counter.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: start
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Counter.bump(this: Counter): i32 -> @Counter.bump [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Counter.constructor twice$$Counter
+  stackSites=1 stackLocals=0
+  callee 22:35 twice<Counter> -> @twice$$Counter
+  callee 22:41 new Counter -> @Counter.constructor
+function twice<Counter>(c: Counter): i32 -> @twice$$Counter [instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Counter.bump
+  pointer c: size=4 writesThrough=true captured=false passedTo=Counter.bump#0 Counter.bump#0
+  stackSites=0 stackLocals=0
+  callee 18:3 Counter.bump -> @Counter.bump
+  callee 19:10 Counter.bump -> @Counter.bump
+program tests/cases/gen_constraint_two.ts
+module tests/cases/gen_constraint_two.ts (entry)
+struct Shape (interface) size=4 align=4
+  field area: i32 index=0 offset=0
+struct Circle (class) size=4 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  constructor -> @Circle.constructor
+struct Counter (class) size=4 align=4
+  field count: i32 index=0 offset=0
+  constructor -> @Counter.constructor
+  method bump -> @Counter.bump
+function Circle.constructor(this: Circle, area: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: area
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Counter.constructor(this: Counter, start: i32): void -> @Counter.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: start
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Counter.bump(this: Counter): i32 -> @Counter.bump [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Circle.constructor Counter.constructor combine$$Circle$$Counter
+  stackSites=2 stackLocals=0
+  callee 31:35 combine<Circle, Counter> -> @combine$$Circle$$Counter
+  callee 31:43 new Circle -> @Circle.constructor
+  callee 31:59 new Counter -> @Counter.constructor
+function combine<Circle, Counter>(s: Circle, c: Counter): i32 -> @combine$$Circle$$Counter [instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Counter.bump
+  pointer s: size=4 writesThrough=false captured=false
+  pointer c: size=4 writesThrough=true captured=false passedTo=Counter.bump#0
+  stackSites=0 stackLocals=0
+  callee 29:83 Counter.bump -> @Counter.bump
+program tests/cases/gen_constraint_write.ts
+module tests/cases/gen_constraint_write.ts (entry)
+struct Shape (interface) size=4 align=4
+  field area: i32 index=0 offset=0
+struct Circle (class) size=8 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  field radius: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+function Circle.constructor(this: Circle, radius: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: radius
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Circle.constructor reset$$Circle
+  stackSites=1 stackLocals=1
+  local 24:9 c: Circle (const)
+  callee 24:13 new Circle -> @Circle.constructor
+  callee 25:3 reset<Circle> -> @reset$$Circle
+function reset<Circle>(shape: Circle): void -> @reset$$Circle [instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer shape: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 program tests/cases/gen_eq_purity.ts
 module tests/cases/gen_eq_purity.ts (entry)
@@ -5581,6 +5771,44 @@ function Box$str.constructor(this: Box$str, v: string): void -> @Box$str.constru
 function Box$str.get(this: Box$str): string -> @Box$str.get [method instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/gen_constraint.ts
+module docs/cookbook/gen_constraint.ts (entry)
+struct Shape (interface) size=4 align=4
+  field area: i32 index=0 offset=0
+struct Circle (class) size=8 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  field radius: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=4 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  constructor -> @Square.constructor
+function Circle.constructor(this: Circle, radius: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: radius
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Circle.constructor Square.constructor areaOf$$Circle areaOf$$Square
+  stackSites=2 stackLocals=0
+  callee 25:32 areaOf<Circle> -> @areaOf$$Circle
+  callee 25:39 new Circle -> @Circle.constructor
+  callee 25:56 areaOf<Square> -> @areaOf$$Square
+  callee 25:63 new Square -> @Square.constructor
+function areaOf<Circle>(shape: Circle): i32 -> @areaOf$$Circle [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer shape: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function areaOf<Square>(shape: Square): i32 -> @areaOf$$Square [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer shape: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 program docs/cookbook/gen_function.ts
 module docs/cookbook/gen_function.ts (entry)

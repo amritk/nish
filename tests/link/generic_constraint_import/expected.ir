@@ -1,0 +1,4 @@
+define noundef i32 @areaOf$$Shape(
+define noundef i32 @twice$$Counter(
+declare noundef i32 @areaOf$$Shape(
+declare noundef i32 @twice$$Counter(

@@ -1,0 +1,7 @@
+:31:18: error: Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+:34:54: error: Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+:38:11: error: Cannot assign to `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+:44:18: error: Cannot call `sum` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+:49:18: error: Unknown field `x` on interface `Point2`, the constraint of `T`: a constrained type parameter has only the members its constraint declares
+:52:43: error: Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+6 errors

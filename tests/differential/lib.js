@@ -188,6 +188,43 @@ const stale = (message) => {
   return e;
 };
 
+/** Everything one program's run leaves behind: `build/test/differential/<name>`. */
+const workFor = (name) => path.join(buildDir, name.replace(/[\\/]/g, "_"));
+
+/**
+ * The working directory one side of one program runs in: `<work>/<side>-cwd`,
+ * a stand-in for the repository root whose `build/` is its own.
+ *
+ * **The programs write by relative path, and the runs are parallel.** A corpus
+ * program that writes `build/test/io_nish_import.txt` and reads it back is
+ * correct on its own and wrong beside a second program writing the same path:
+ * `io_nish_import` and its twin `io_nish_import_global` do exactly that, by
+ * design, since `tests/run.js` requires the two to emit the same IR, and under
+ * `--jobs 8` one of them would read the file the other had just truncated. So
+ * nothing a program writes may be shared, and the isolation is the working
+ * directory rather than the path: the sources are frozen (a changed path would
+ * stale the rewrite), and a rule that every program pick a unique path is one
+ * the next program forgets.
+ *
+ * Everything else at the root is a symlink back to the checkout, so a program
+ * that reads a checked-in file by the path a user at the root would type
+ * (`corpus/io_streams` reads its own source) still finds it. `build/test/` and
+ * `build/test/differential/` are made empty, because those are the directories
+ * the corpus has always been able to assume. The native binary and the Node
+ * rewrite each get one, so neither can see what the other left behind either.
+ */
+const cwdFor = (name, side) => path.join(workFor(name), `${side}-cwd`);
+
+/** Make {@link cwdFor}'s directory for `side` of `prog`, and answer its path. */
+const scratchRoot = (prog, side) => {
+  const dir = cwdFor(prog.name, side);
+  fs.mkdirSync(path.join(dir, "build", "test", "differential"), { recursive: true });
+  for (const entry of fs.readdirSync(root)) {
+    if (entry !== "build") fs.symlinkSync(path.join(root, entry), path.join(dir, entry));
+  }
+  return dir;
+};
+
 /**
  * Build, run, rewrite, run, compare. Never throws; the result carries
  *   verdict: "match" | "mismatch" | "compile-error" | "rewrite-error" | "stale-golden" | "unfrozen"
@@ -203,7 +240,7 @@ async function runProgram(prog, context) {
   const why = context.rewriter.unfrozen(prog);
   if (why !== null) return { prog, verdict: "unfrozen", detail: why, ms: Date.now() - t0 };
 
-  const work = path.join(buildDir, prog.name.replace(/[\\/]/g, "_"));
+  const work = workFor(prog.name);
   fs.rmSync(work, { recursive: true, force: true });
   fs.mkdirSync(work, { recursive: true });
   const exe = path.join(work, "app");
@@ -221,7 +258,7 @@ async function runProgram(prog, context) {
   if (cc.status !== 0) {
     return { prog, verdict: "compile-error", detail: String(cc.stderr), ms: Date.now() - t0 };
   }
-  const native = await run(exe, prog.argv, { env: prog.env });
+  const native = await run(exe, prog.argv, { cwd: scratchRoot(prog, "native"), env: prog.env });
 
   let js;
   try {
@@ -235,7 +272,7 @@ async function runProgram(prog, context) {
       return { prog, verdict: "stale-golden", detail: e.message, native, ms: Date.now() - t0 };
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }
-  const node = await run("node", [js.entry, ...prog.argv], { env: prog.env });
+  const node = await run("node", [js.entry, ...prog.argv], { cwd: scratchRoot(prog, "node"), env: prog.env });
 
   const same =
     native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
@@ -291,6 +328,7 @@ const hasClang = () => spawnSync("which", ["clang"]).status === 0;
 export {
   root,
   buildDir,
+  cwdFor,
   knownFile,
   compilerFor,
   discoverPrograms,

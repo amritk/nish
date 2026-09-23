@@ -561,11 +561,13 @@ export class Parser {
   }
 
   /**
-   * `<T, U>` on a function declaration (WP18), or an empty list when there is
-   * none. Only the *names* are recorded: a constrained parameter
-   * (`<T extends Shape>`) needs member access on a type parameter, which is its
-   * own rule and its own milestone, and a default (`<T = string>`) has no
-   * position to fill because a type argument is inferred from the arguments.
+   * `<T, U>` on a function, class or interface declaration (WP18), or an empty
+   * list when there is none. Each parameter is its `IDENT`, so every reader
+   * that wants the names keeps reading `.text` at the position it always did;
+   * a constraint (`<T extends Shape>`, WP18 G6) is that identifier's one child.
+   * The checker, not the parser, decides what a constraint may name. A default
+   * (`<T = string>`) is still refused, because a type argument is inferred
+   * from the arguments and a default would have no position to fill.
    *
    * `<` here is unambiguous — a declaration cannot start with a comparison —
    * which is exactly why type arguments are written in an annotation and after
@@ -579,16 +581,13 @@ export class Parser {
     }
     this.advance();
     while (!this.at(TOK_GT) && !this.at(TOK_END)) {
-      list.children.push(this.parseIdentifier());
+      const param = this.parseIdentifier();
+      list.children.push(param);
       if (this.at(TOK_EXTENDS)) {
-        this.report(
-          "a constrained type parameter (`T extends ...`) is not supported yet",
-          this.start,
-          this.end
-        );
         this.advance();
-        this.parseType();
-      } else if (this.at(TOK_ASSIGN)) {
+        param.children.push(this.parseType());
+      }
+      if (this.at(TOK_ASSIGN)) {
         this.report(
           "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments",
           this.start,
@@ -630,7 +629,10 @@ export class Parser {
     scan.next();
     // WP18: `const identity = <T>(x: T): T => x` puts a type parameter list
     // between the `=` and the parameters. It is skipped by matching `>` against
-    // `<`, which is enough because a type parameter list holds only names.
+    // `<`. A constraint (G6) can nest one type argument list in another, and
+    // the lexer merges the closers of `<T extends Box<Box<i32>>>` into `>>`
+    // and `>>>`, so those count as two and three closers here exactly as
+    // `expectTypeArgumentEnd` splits them.
     if (scan.kind === TOK_LT) {
       let angles = 1;
       while (angles > 0) {
@@ -638,7 +640,10 @@ export class Parser {
         if (scan.kind === TOK_END) return false;
         if (scan.kind === TOK_LT) angles = angles + 1;
         else if (scan.kind === TOK_GT) angles = angles - 1;
+        else if (scan.kind === TOK_SHR) angles = angles - 2;
+        else if (scan.kind === TOK_USHR) angles = angles - 3;
       }
+      if (angles < 0) return false;
       scan.next();
     }
     if (scan.kind !== TOK_LPAREN) return false;

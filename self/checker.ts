@@ -19,13 +19,17 @@ import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModul
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  checkDeferredConstraints,
   collectStructTypeParamNames,
   collectTypeParamNames,
   instantiateStruct,
   isGenericFunction,
   isGenericStruct,
   mentionsTypeParam,
+  parameterOrigin,
   rejectDollarInSymbolName,
+  resolveStructTemplateConstraints,
+  resolveTemplateConstraints,
 } from "./generics";
 import {
   FLAG_CONST,
@@ -169,6 +173,14 @@ export class Checker {
         const info = this.program.struct(stmt.children[0].text);
         if (info !== null && info.decl === stmt) {
           collectStructMembers(this.ctx, info);
+        }
+        // WP18 G6: a generic one's constraints, for the reason
+        // `registerTemplate` resolves a function's. In this loop rather than
+        // at registration because a constraint may name a class declared
+        // further down, which the loop above has declared by now.
+        const template = this.program.structTemplate(stmt.children[0].text);
+        if (template !== null && template.decl === stmt) {
+          resolveStructTemplateConstraints(template);
         }
       } else if (stmt.kind === N_MODULE_CONST) {
         this.collectConstants(stmt);
@@ -466,6 +478,9 @@ export class Checker {
       return;
     }
     this.program.addTemplate(template);
+    // WP18 G6: here, once, so a constraint that names nothing a constraint may
+    // name is reported against the declaration even when nothing calls it.
+    resolveTemplateConstraints(template);
   }
 
   /**
@@ -651,6 +666,7 @@ export class Checker {
       // A parameter is an SSA value, so it is immutable, and `this` is one
       // too — which is what makes `this = x` a parameter assignment error.
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM);
+      local.origin = parameterOrigin(this.ctx, sig, i);
       if (!scope.declare(local)) {
         this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``);
       }
@@ -1077,6 +1093,9 @@ export class Checker {
    * and those members may name its own imports.
    */
   makeDeferredInstantiations(): void {
+    // WP18 G6: every import is bound, so every class a type argument can name
+    // has its `implements` clause, and pass 1's constraint checks can run.
+    checkDeferredConstraints(this.ctx);
     for (const request of this.program.deferredInstances) {
       this.ctx.errored = false;
       this.makeDeferredInstantiation(request);
