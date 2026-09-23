@@ -496,6 +496,54 @@ const DECLARED = [
     changelog: "Generic methods on classes (WP18 §14 q7)",
     why: "a new program: an exported class's generic methods called from two importers, which the reference compiler refuses at the method's type parameter list in lib.ts and HEAD compiles with one `define` per instantiation, in lib.ll",
   },
+  // #106: `self/bounds.ts` proves `h.xs[i]` from `h.xs.length`, so the compiler's
+  // own accesses through a field lose their checks and every module of it moves,
+  // bounds checks and the attributes a dropped panic frees alike. One entry per
+  // `self/` program, read from the corpus rather than listed, because the reason
+  // is the same for all of them.
+  ...programs()
+    .map((file) => path.relative(root, file))
+    .filter((program) => program.startsWith("self/"))
+    .map((program) => ({
+      program,
+      changelog: "Key bounds length facts by property path",
+      why: "the compiler's own field-held accesses are proven by property-path length facts, so their checks and the attributes a dropped panic frees move in every module",
+    })),
+  {
+    program: "bench/hoist_field.ts",
+    file: "hoist_field.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "`fieldScan`'s `h.xs[i]` is proven by `i < h.xs.length`, the check the reference compiler keeps and the 2.38x this change measures",
+  },
+  {
+    program: "tests/cases/arr_header_hoist.ts",
+    file: "arr_header_hoist.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "`@fieldScale`'s `h.xs[i]` loses its check, so its loop is `@constScale`'s register for register",
+  },
+  {
+    program: "tests/cases/arr_path_hold.ts",
+    file: "arr_path_hold.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "a new program: the accesses a property-path fact proves, whose checks the reference compiler keeps",
+  },
+  {
+    program: "tests/cases/arr_path_nullable.ts",
+    file: "arr_path_nullable.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "a new program: `@plain`'s path from a `Holder` is proven where the reference compiler keeps the check; `@narrowed`'s, from a `Holder | null`, keeps it in both",
+  },
+  {
+    program: "tests/link/reachable_struct/main.ts",
+    changelog: "Key bounds length facts by property path",
+    why: "`this.entries.length > 0 ? this.entries[0] : null` in lib.ts is proven by the guard on the path, so lib.ll drops its `nish_panic_index` and main.ll's declarations of lib's methods regroup their attributes",
+  },
+  {
+    program: "docs/cookbook/arr_bounds_path.ts",
+    file: "arr_bounds_path.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "the cookbook snippet for a property-path fact, whose `h.xs[i]` check the reference compiler keeps",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */
