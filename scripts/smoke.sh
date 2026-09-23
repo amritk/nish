@@ -3,12 +3,12 @@
 # run it, and print a table of binary sizes.
 #
 #   scripts/smoke.sh [examples-dir]      (default: examples/)
-#   npm run smoke                        (builds dist/ first)
-#   NISH=build/nish scripts/smoke.sh     with that compiler instead of stage0
+#   npm run smoke                        (after `npm run build`)
+#   NISH=<nish> scripts/smoke.sh         with that compiler instead
 #
 # NISH names the compiler, run as scripts/nish-compiler.sh says: a native
-# `nish` directly and a Node entry point under node. Unset, it is stage0,
-# dist/index.js.
+# `nish` directly and a Node entry point under node. Unset, it is build/nish,
+# what `npm run build` leaves.
 #
 # A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
@@ -25,7 +25,7 @@ mkdir -p "$out"
 
 # shellcheck source=scripts/nish-compiler.sh
 . scripts/nish-compiler.sh
-nish_compiler "${NISH:-dist/index.js}"
+nish_compiler "${NISH:-build/nish}"
 
 if ! command -v clang >/dev/null 2>&1 && [ -z "${CC:-}" ]; then
   echo "error: smoke test needs clang on PATH (see docs/INSTALL.md)" >&2

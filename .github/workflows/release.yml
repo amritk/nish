@@ -13,7 +13,7 @@
 # spells it. Both read it from .github/seed-targets.json, because a contract
 # each side writes down separately is two strings that agree until one is
 # edited. That file carries all four of WP19 G5's platforms, the canonical
-# target triple each one is (src/codegen/target.ts), the runner label that
+# target triple each one is (self/target.ts), the runner label that
 # provides it, and the version from which a release attaches it; tests/run.js
 # checks all four of those against the compiler's own table, against the labels
 # this file can ask for, and against this file's own text.
@@ -32,11 +32,9 @@
 # "built" and "smoke-tested" mean the same thing on every row: there is no tier
 # that was produced for a machine nobody ran it on.
 #
-# The release also cuts this version's provenance tag, `ddc-<version>`, between
-# the jobs that prove `IR(stage0, self/) == IR(stage1, self/)` and the publish
-# (the `ddc` job below, WP19 G6). That is the one record in this workflow that
-# cannot be produced afterwards, which is why the release cuts it rather than a
-# person remembering to.
+# The chain is seeded by the previous release: each `binaries` row downloads
+# that release's compiler for its own host and builds this one with it, the
+# same seed ci.yml's `bootstrap` job builds with (WP19 G3).
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
@@ -204,12 +202,27 @@ jobs:
           prefix="$(brew --prefix llvm@18)"
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
-      - name: Install dependencies
-        run: npm ci
-
-      # stage0, which seeds the chain for this release.
-      - name: Build
-        run: npm run build
+      # The seed: the previous release's compiler for this row's host, which
+      # builds this release's stage1 (WP19 G3), fetched into build/seed by
+      # scripts/fetch-seed.sh -- the download every local run and CI's test
+      # job use -- where scripts/bootstrap.sh takes it as its default seed.
+      # "Previous" is the newest published release that is not this tag, so a
+      # re-run after this tag's release exists does not seed from itself.
+      # Every target in .github/seed-targets.json has been attached since
+      # 0.4.0, so that release carries every row's asset; a target added later
+      # needs its first release seeded some other way, and the fetch fails
+      # rather than building with nothing.
+      - name: Fetch the seed (the previous release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous="$(gh api "repos/$GITHUB_REPOSITORY/releases" |
+            jq -r --arg self "$GITHUB_REF_NAME" '[.[] | select((.draft or .prerelease) | not) | select(.tag_name != $self)][0].tag_name // empty')"
+          if [ -z "$previous" ]; then
+            echo "::error::there is no earlier release to seed $GITHUB_REF_NAME from"
+            exit 1
+          fi
+          bash scripts/fetch-seed.sh "${previous#v}"
 
       # A tarball rather than a bare binary, because a bare binary is half a
       # compiler. `--link` shells out to scripts/build.sh and compiles
@@ -220,7 +233,7 @@ jobs:
       # to be the unpacked folder, which is a trap rather than a distribution.
       #
       # stage2, not stage1: it is the first binary in the chain that no part of
-      # stage0 emitted, and --verify is what says the stages agree.
+      # the seed emitted, and --verify is what says the stages agree.
       #
       # The runner's own `uname` is checked against the row's `host` before the
       # row's `asset` is stamped into a name. An asset labelled for one
@@ -390,66 +403,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # WP19 G6: the provenance tag, cut here rather than remembered.
-  #
-  # The last commit at which `IR(stage0, self/) == IR(stage1, self/)` and the
-  # fixed point both hold is tagged `ddc-<version>`, and G6's four-step
-  # procedure re-verifies the property from that tag -- which is the only thing
-  # that survives R6 deleting `src/`. Every other gate in WP19 can be recovered
-  # by doing the work later; this one cannot, because after the deletion there
-  # is no second implementation left to disagree with.
-  #
-  # It sits here, between the proof and the publish, for both halves of that
-  # sentence. The proof is this run's own: `tests/self/bootstrap.js` inside
-  # `npm test` in `ci`, and `scripts/bootstrap.sh --verify` with stage0 as the
-  # seed on every `binaries` row. And `release` needs this job, so the tag is
-  # cut before anything is published rather than after -- the release is the
-  # moment the tag is worth having and the moment it is easiest to forget.
-  #
-  # The decision is `.github/ddc-tag.sh` and not a `run:` block, because a gate
-  # nothing can run is a gate nothing checks: `tests/run.js` drives that script
-  # through each of its answers against a stand-in for `git`. In particular the
-  # refusal -- no tag on a run that did not prove the property -- is reached
-  # there, since it cannot be reached here without a release going wrong.
-  #
-  # `DDC_PROOF` is how the script is told, and it names the two jobs that prove
-  # the property -- not every job this one needs. `targets` only works out which
-  # binaries this release attaches; a refusal naming it would say it failed to
-  # prove an IR equality it never asserts.
-  #
-  # A `${{ needs.<job>.result }}` for a job this one does not `needs:` is the
-  # empty string rather than an error, so that line is load-bearing: drop a
-  # proving job from `needs:` alone and the script refuses to tag rather than
-  # tagging on a proof that did not run. Dropped from both, it would look like a
-  # healthy release from inside the script -- which is why `tests/run.js` reads
-  # this file for the pair, and why the two guards are worth having together.
-  #
-  # A job of its own rather than a step in `release`: it costs a runner and a
-  # checkout (about ten seconds, by the table in docs/wp10-ci.md), and buys a
-  # gate that re-runs on its own. The arm that makes a re-run green is the whole
-  # reason it can be re-run, and re-running it here does not repeat `npm ci`,
-  # the build and the artifact download.
-  #
-  # A `ddc-*` tag pushed with GITHUB_TOKEN raises no `push` event -- GitHub's
-  # loop guard, the same one release-pr.yml has to dispatch around -- and this
-  # workflow only triggers on `v*` anyway. Nothing here starts another run.
-  ddc:
-    name: the provenance tag
-    needs: [ci, targets, binaries]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cut this release's ddc tag, or refuse to
-        env:
-          DDC_PROOF: "ci:${{ needs.ci.result }} binaries:${{ needs.binaries.result }}"
-        run: bash .github/ddc-tag.sh "${GITHUB_REF_NAME#v}"
-
   release:
     name: release
-    needs: [ci, targets, binaries, ddc]
+    needs: [ci, targets, binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

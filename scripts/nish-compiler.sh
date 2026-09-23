@@ -1,7 +1,7 @@
 # Sourced, not run: how a shell script turns a compiler path into a command.
 #
 #   . scripts/nish-compiler.sh
-#   nish_compiler "${NISH:-dist/index.js}"
+#   nish_compiler "${NISH:-build/nish}"
 #   "${compiler[@]}" program.ts -o out.ll
 #
 # A Node entry point (.js, .mjs, .cjs) is run under node and anything else --

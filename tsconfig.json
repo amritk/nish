@@ -1,15 +1,11 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "rootDir": "src",
-    "outDir": "dist",
     "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "declaration": false
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "moduleDetection": "force"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["runtime/nish.d.ts", "self/**/*.ts", "std/**/*.ts", "tests/nish/**/*.ts"]
 }

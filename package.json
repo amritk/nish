@@ -18,6 +18,8 @@
     "runtime",
     "scripts",
     "!scripts/arrow-verify.mjs",
+    "!scripts/arrowify.mjs",
+    "!scripts/fetch-seed.sh",
     "std",
     "README.md",
     "LICENSE",
@@ -26,23 +28,23 @@
     "docs/INSTALL.md"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "bash scripts/bootstrap.sh",
     "postinstall": "node scripts/postinstall.mjs",
-    "bootstrap": "npm run build && bash scripts/bootstrap.sh",
-    "compile": "node dist/index.js",
-    "example": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && cat build/add.ll",
-    "test": "npm run build && node tests/run.js",
-    "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c",
-    "smoke": "npm run build && bash scripts/smoke.sh",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
-    "test:diff": "npm run build && node tests/differential/run.js",
-    "test:nish": "npm run build && node dist/index.js tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
-    "test:cli": "npm run build && node dist/index.js tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
-    "test:node": "npm run build && node tests/differential/unmodified.js",
+    "bootstrap": "bash scripts/bootstrap.sh",
+    "compile": "build/nish",
+    "example": "build/nish examples/add.ts -o build/add.ll && cat build/add.ll",
+    "test": "node tests/run.js",
+    "size-report": "build/nish examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c",
+    "smoke": "bash scripts/smoke.sh",
+    "check": "tsc -p tsconfig.json",
+    "test:update": "UPDATE_GOLDENS=1 node tests/run.js",
+    "test:diff": "node tests/differential/run.js",
+    "test:nish": "build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
+    "test:cli": "build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
+    "test:node": "node tests/differential/unmodified.js",
     "lint": "biome check --formatter-enabled=false .",
     "format": "biome format --write .",
-    "prepublishOnly": "npm run check && npm run build && npm test",
+    "prepublishOnly": "npm run check && npm test",
     "changelog": "node scripts/changelog-gen.mjs"
   },
   "engines": {
@@ -68,9 +70,6 @@
     "webassembly",
     "nish"
   ],
-  "dependencies": {
-    "typescript": "^5.6.0"
-  },
   "optionalDependencies": {
     "@amritk/nish-x86_64-linux": "0.6.0",
     "@amritk/nish-aarch64-linux": "0.6.0",
@@ -79,6 +78,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
   }
 }

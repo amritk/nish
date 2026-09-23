@@ -11,7 +11,7 @@
 //     --no-rust         skip Rust even when rustc is installed
 //     --no-go           skip Go even when the go tool is installed
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md)
-//     --compiler <nish> the compiler under test (default dist/index.js; a
+//     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
 //
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs

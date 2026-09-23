@@ -52,8 +52,8 @@ permissions:
 # stage0: one `node dist/index.js <case>` cost about 634 ms, of which 1.5 ms
 # was compiling and ~473 ms was `import ts from "typescript"`. The compiler
 # under test is a native binary now, but the harness and its tools are still
-# Node programs that spawn one another, and any job that still builds `dist/`
-# pays that import. `NODE_COMPILE_CACHE` caches
+# Node programs that spawn one another, and the oracles that parse with the
+# `typescript` package pay that import. `NODE_COMPILE_CACHE` caches
 # V8's compilation of every module it loads, keyed on the file's content and the
 # Node version, and Node falls back to compiling normally when the key misses --
 # a stale or absent cache costs time and can never change an answer. Measured on
@@ -225,7 +225,7 @@ jobs:
         run: npm test -- --seed build/seed/bin/nish
 
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
-      # run, in place of their stage0 default.
+      # run, the compiler this job built.
       - name: Smoke (build + run every example with a main, size profile)
         env:
           NISH: build/nish
@@ -327,8 +327,8 @@ jobs:
   # write -- so "a construct added in 0.N cannot be used by self/ until
   # 0.(N+1)" (docs/wp12-release.md, "The bootstrap seed") is a discipline, and
   # a discipline CI does not check is a comment. Using a construct too early
-  # breaks here and nowhere else: `npm test` bootstraps with stage0, which
-  # always knows every construct the working tree does.
+  # breaks here and in `test`, which builds its compiler with the same seed;
+  # these rows are the ones that do it on every platform the seed ships for.
   #
   # G3 asks for this on **both** operating systems and it gets both. That is
   # newer than it reads and it took two things, and neither was a line in this
@@ -486,15 +486,13 @@ jobs:
 
   # WP19 G2.1 -- one corpus, two compilers, byte for byte.
   #
-  # This is the check that has to exist before R6 can delete `src/`, and it is
-  # the reason the deletion is not simply a `git rm`. `tests/self/ir_oracle.js`
-  # and `tests/self/interop_oracle.js` are the two largest of the six oracles
-  # that die with stage0, and what they prove -- the IR of every module of
-  # every corpus program, and the four WP8 sidecars derived from the same
-  # checked program -- is proved by comparing two implementations. After R6
-  # there is only one, so the comparison has to change axis: not stage0
-  # against stage1, but the last RELEASED compiler against the one HEAD
-  # builds. A wrong lowering then shows up as a release that changed output
+  # This is the check that replaced `tests/self/ir_oracle.js` and
+  # `tests/self/interop_oracle.js`, the two largest of the six oracles R6
+  # deleted with `src/`. What they proved -- the IR of every module of every
+  # corpus program, and the four WP8 sidecars derived from the same checked
+  # program -- they proved by comparing two implementations. There is only one
+  # now, so the comparison changed axis: not stage0 against stage1, but the
+  # last RELEASED compiler against the one HEAD builds. A wrong lowering then shows up as a release that changed output
   # nobody declared, which is the strongest thing a single-implementation
   # compiler can say about itself (docs/wp19-stage0-retirement.md §2B, §6).
   #
@@ -643,7 +641,7 @@ jobs:
       # `bash -e`, without it, so the exit status of a pipeline would be `tee`'s
       # and a runner that answered 1 would still be a green step.
       # The runner is built by the compiler under test and handed it with
-      # `--compiler`, in place of its stage0 default; with no filter it walks the
+      # `--compiler`; with no filter it walks the
       # whole corpus.
       - name: The corpus, through the Nish runner
         run: |

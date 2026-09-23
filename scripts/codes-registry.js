@@ -2,8 +2,7 @@
  * The diagnostic-code registry, read back out of a `codes.ts`.
  *
  * `self/codes.ts` holds the table -- a fragment line, then the `NL####` line
- * that names its rule -- and `src/codes.ts` holds the same one for as long as
- * stage0 exists. Three places in this repository read it back:
+ * that names its rule. Three places in this repository read it back:
  * `scripts/gen-diagnostic-codes.mjs`, which checks the registry's shape, its
  * order and that no number is used twice; `tests/diagnostic_coverage.js`,
  * which asks which codes the suite reaches; and the `codes:` checks in

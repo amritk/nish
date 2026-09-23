@@ -1,5 +1,5 @@
 // A fixture for the WP24 A1 asynchronous N-API exports (`--emit-napi-async`,
-// the interop section of `tests/run.js`) and for `tests/self/interop_oracle.js`.
+// the interop section of `tests/run.js`) and for `tests/nish-cmp.js`.
 //
 // Four shapes in one file, because the flag's whole surface is which of them
 // gets a `<name>Async` twin and which is named in the shim with a reason:

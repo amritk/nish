@@ -769,9 +769,9 @@ export class Checker {
     while (pending.length > 0) {
       const info = pending.pop();
       const names = new StringSet();
-      // A self-referential field (`parent: Node | null`) puts the struct's own
-      // name in here. `src/` deletes it; `reach` already ignores it, because
-      // nothing reaches `pending` without its name being marked seen first.
+      // A self-referential field (`parent: Node | null`) puts the struct's own name in
+      // here; `reach` ignores it, since nothing reaches `pending` unless marked seen.
+      // @ts-expect-error `pop` is `T` in Nish and `T | undefined` in lib.es5 (runtime/nish.d.ts).
       referencedStructNames(this.ctx.table, info, names);
       this.reachAll(declared, seen, pending, names);
     }

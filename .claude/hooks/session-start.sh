@@ -48,17 +48,16 @@ if [ "$missing" -eq 1 ]; then
 fi
 
 # The seed: the last released compiler, in build/seed (scripts/fetch-seed.sh).
-# Non-fatal, because nothing this session does today needs it -- stage0 is
-# still every tool's default -- and a network that is down or a proxy that
-# refuses github.com must not stop the session from starting. It is a no-op
-# once a seed is there, and bounded, so a network that hangs rather than
-# refuses costs a minute and not the session. A session that wants the seed
-# points a tool at it with NISH_BOOTSTRAP=build/seed/bin/nish, or builds
-# build/nish from it.
+# `npm test` and `npm run build` build the compiler from it, and would fetch
+# it themselves; fetching here is so the session starts with one. Non-fatal,
+# because a network that is down or a proxy that refuses github.com must not
+# stop the session from starting. It is a no-op once a seed is there, and
+# bounded, so a network that hangs rather than refuses costs a minute and not
+# the session.
 if fetched="$(timeout 60 bash scripts/fetch-seed.sh 2>/dev/null)"; then
   seed="${fetched#fetch-seed: }"
 else
-  seed="MISSING (bash scripts/fetch-seed.sh failed; stage0 stays the fallback)"
+  seed="MISSING (bash scripts/fetch-seed.sh failed; npm test cannot build its compiler without one)"
 fi
 
 # Say what the session actually got, so the agent can see at a glance whether

@@ -12,9 +12,9 @@
  * that is trusted — the last released `nish` — and with the compiler HEAD
  * builds, and require every byte of every file they write to be the same. It
  * is the successor to `tests/self/ir_oracle.js` and
- * `tests/self/interop_oracle.js`, which compare stage0 with stage1 and die
- * with stage0 (`docs/wp19-stage0-retirement.md` §2B), so it compares what the
- * two of them compare together: the IR of every module of every program, and
+ * `tests/self/interop_oracle.js`, which compared stage0 with stage1 and were
+ * deleted with stage0 (`docs/wp19-stage0-retirement.md` §2B), so it compares
+ * what the two of them compared together: the IR of every module of every program, and
  * the four WP8 sidecars derived from the same checked program.
  *
  * **Both compilers are parameters, and neither is assumed to exist.** Nish has
@@ -45,8 +45,7 @@
  *   - not the wording of diagnostics, and not the dumps. A program both
  *     compilers refuse is counted and named apart (there is no artefact on
  *     either side); its message is pinned by the `.err` fragments checked in
- *     beside it, which `tests/self/reject_oracle.js` reads and which survive
- *     stage0. A program compiled with `--emit-ast` or `--emit-checked` writes
+ *     beside it, which `tests/self/reject_oracle.js` reads. A program compiled with `--emit-ast` or `--emit-checked` writes
  *     no artefact either, and its stdout is pinned by the `<name>.stdout`
  *     golden beside it. Both are counted in the summary rather than folded
  *     into a skip count;
@@ -82,7 +81,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
-import { stage1Only, stage1OnlyFor } from "./self/stage1_only.js";
 
 /**
  * Output differences that are decided rather than broken, each with the words
@@ -114,8 +112,8 @@ const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
  * native binary. This is `scripts/bootstrap.sh`'s rule for `NISH_BOOTSTRAP`
  * (WP19 G3), character for character, so that one path spells a seed in both
  * places: the kind is the suffix, deliberately not the executable bit, because
- * the bit describes the download — `dist/index.js` ships 0644 and a binary out
- * of a release tarball can arrive without `+x` — and the suffix is what
+ * the bit describes the download — a binary out of a release tarball can
+ * arrive without `+x` — and the suffix is what
  * whoever built the seed chose.
  */
 const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
@@ -131,10 +129,6 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
  * the working directory, which is where `compile` below spawns both of them.
  * The first candidate holding `scripts/build.sh` wins, which is the predicate
  * the compilers use, checked here against the filesystem instead of assumed.
- *
- * stage0 answers from `import.meta.dirname` (`src/version.ts`) and a Node entry
- * point is `<root>/dist/index.js`, so `<dirname>/..` is its root as well and
- * one rule covers both kinds of compiler.
  */
 function packageRootOf(file) {
   const candidates = [path.join(path.dirname(file), "..")];
@@ -336,7 +330,6 @@ function excerpt(want, got, limit) {
  */
 function compare(pair, work, file, options = {}) {
   const limit = options.lines ?? 3;
-  const registered = stage1OnlyFor(file, options.register ?? stage1Only());
   const flags = extraArgs(file);
   const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
   if (dump !== undefined) return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` };
@@ -363,13 +356,10 @@ function compare(pair, work, file, options = {}) {
     return { refused: firstLine(reference.stderr) || `exit ${reference.status}` };
   }
   if (reference.status !== 0) {
-    // A case in the stage1-only register is a construct HEAD has and the seed
-    // does not, which is what the rolling freeze *is*: the seed is a release
-    // older than the construct. That is the expected reading of "the reference
-    // refuses it" for exactly these programs, and it stops being true of its
-    // own accord one release later, when the seed has the construct and the
-    // two are compared like everything else (WP19 §1a, G4).
-    if (registered !== null) return { newSince: registered.why };
+    // A construct HEAD has and the seed does not is what the rolling freeze
+    // *is*, and it is a difference like any other: `DECLARED` names it with
+    // the CHANGELOG line that ships it, and the entry goes one release later,
+    // when the seed has the construct.
     return {
       differences: [
         {
@@ -591,7 +581,6 @@ function main(argv) {
   const declared = [];
   const dumps = [];
   const refused = [];
-  const stage1OnlyRows = [];
   let agreed = 0;
   let files = 0;
   let lines = 0;
@@ -601,8 +590,6 @@ function main(argv) {
     const result = compare(pair, work, file, options);
     if (result.dump !== undefined) {
       dumps.push(`${program}: ${result.dump}`);
-    } else if (result.newSince !== undefined) {
-      stage1OnlyRows.push(`${program}: stage1-only, and older than the seed: ${result.newSince}`);
     } else if (result.refused !== undefined) {
       refused.push(`${program}: both refuse it: ${result.refused}`);
     } else if (result.differences !== undefined) {
@@ -673,7 +660,6 @@ function main(argv) {
   if (verbose) {
     for (const row of refused) process.stdout.write(`  refused ${row}\n`);
     for (const row of dumps) process.stdout.write(`  dump ${row}\n`);
-    for (const row of stage1OnlyRows) process.stdout.write(`  stage1-only ${row}\n`);
   }
 
   // Said on its own line rather than only inside the summary, because it is the
@@ -688,7 +674,7 @@ function main(argv) {
     );
   }
 
-  const compared = inputs.length - refused.length - dumps.length - stage1OnlyRows.length;
+  const compared = inputs.length - refused.length - dumps.length;
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
   // compiles proves nothing about either, and must not be able to hide inside
@@ -697,12 +683,10 @@ function main(argv) {
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
   const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
   const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : "";
-  const stage1OnlyNote =
-    stage1OnlyRows.length > 0 ? `, ${stage1OnlyRows.length} stage1-only and newer than the seed` : "";
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${dumpNote}${stage1OnlyNote}${rootedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+      `${refusedNote}${dumpNote}${rootedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   );
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
 }

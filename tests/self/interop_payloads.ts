@@ -1,4 +1,4 @@
-// A fixture for `tests/self/interop_oracle.js`: the packed-`Result` payloads
+// A fixture for `tests/nish-cmp.js`: the packed-`Result` payloads
 // the rest of the interop corpus never mentions.
 //
 // `tests/cases/res_export.ts` covers `i32` and `void` arms, which is what the

@@ -1,5 +1,5 @@
 // The driver for `self/diagnostics.ts` (docs/wp14-selfhost.md, milestone S3),
-// against `src/diagnostics.ts` through `tests/self/diagnostics_oracle.js`.
+// checked against stage0 until R6; `tests/self/goldens/diagnostics.txt` is its output.
 //
 // What has to agree is not "an error is reported" but every byte of the text:
 // the summary line the `.err` goldens match on, the source excerpt with its

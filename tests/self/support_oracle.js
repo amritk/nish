@@ -16,9 +16,8 @@
  *     `tests/self/goldens/support.txt` (R6). These write bytes into the IR or
  *     pick the file a specifier loads, and there is no third implementation
  *     to ask — the rule is this project's — so stage0 was the oracle, and its
- *     answers were written down while it was still in the tree. When `dist/`
- *     is there the golden is checked against stage0 too, so it cannot have
- *     been recorded wrong; when it is not, the golden is the whole answer.
+ *     answers were written down while it was still in the tree. The golden
+ *     is the whole answer now.
  *   - the path functions against **`node:path`'s POSIX side**, because module
  *     identity is the resolved path and §3a D3 is the note that says a
  *     `..` normalised differently from Node's loads one file twice.
@@ -37,7 +36,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { seedWithoutStage0 } from "./goldens.js";
 import { linkWith, namedSeedSpec } from "./seed.js";
 
@@ -53,30 +52,6 @@ const GOLDEN = path.join(root, "tests", "self", "goldens", "support.txt");
  * golden is recomputed from Node on every run; these are read from it.
  */
 const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ |pkg |spec )/;
-
-/**
- * stage0's IR escape and float-hex, or null when `dist/` is not there — a
- * tree where `src/` has been deleted (R6), or one where nobody has run
- * `npm run build`. Imported here rather than at the top of the module so that
- * a missing stage0 means "read the golden" instead of a file that will not load.
- */
-async function stage0Escapes() {
-  const strings = path.join(root, "dist", "codegen", "emit", "strings.js");
-  const builtins = path.join(root, "dist", "codegen", "emit", "builtins.js");
-  const manifest = path.join(root, "dist", "manifest.js");
-  const packages = path.join(root, "dist", "packages.js");
-  if (!fs.existsSync(strings) || !fs.existsSync(builtins)) return null;
-  if (!fs.existsSync(manifest) || !fs.existsSync(packages)) return null;
-  const { escapeBytes } = await import(pathToFileURL(strings).href);
-  const { f32Constant, f64Constant } = await import(pathToFileURL(builtins).href);
-  // WP21 S2: the manifest reader and the specifier split, whose stage1 twins
-  // must answer the same file for the same `package.json`. Unlike `node:path`
-  // there is no third implementation to compare against — the rule is this
-  // project's — so stage0 is the oracle, and the golden is what it said.
-  const { nishExportTarget } = await import(pathToFileURL(manifest).href);
-  const { parseBareSpecifier } = await import(pathToFileURL(packages).href);
-  return { escapeBytes, f32Constant, f64Constant, nishExportTarget, parseBareSpecifier };
-}
 
 // ---- The pieces the driver prints -----------------------------------------------------
 
@@ -144,7 +119,11 @@ function slotsAfter(entries) {
 
 // ---- The expected output ---------------------------------------------------------------
 
-function expected(caseText, stage0) {
+/**
+ * The lines Node can answer, in the golden's order. The lines recorded from
+ * stage0 (`STAGE0_LINE`) are not among them: those are read from the golden.
+ */
+function expected(caseText) {
   const out = [];
   const texts = [];
   for (const line of caseText.split("\n")) {
@@ -155,7 +134,6 @@ function expected(caseText, stage0) {
       texts.push(first);
       out.push(`# text ${JSON.stringify(first)}`);
       out.push(`json ${JSON.stringify(first)}`);
-      if (stage0 !== null) out.push(`ir ${stage0.escapeBytes(Buffer.from(first, "utf8"))}`);
       out.push(`hash ${hashString(first)}`);
       out.push(`split ${JSON.stringify(first.split("/").join("|"))}`);
       out.push(`repeat ${JSON.stringify(first.repeat(3))}`);
@@ -173,24 +151,10 @@ function expected(caseText, stage0) {
     } else if (section === "pkg") {
       const [, subpath, primary, fallback, manifest] = fields;
       out.push(`# pkg ${JSON.stringify(subpath)} ${primary} ${fallback} ${JSON.stringify(manifest)}`);
-      if (stage0 !== null) {
-        const target = stage0.nishExportTarget(manifest, subpath, primary, fallback);
-        out.push(`pkg ${target === null ? "null" : JSON.stringify(target)}`);
-      }
     } else if (section === "spec") {
       out.push(`# spec ${JSON.stringify(first)}`);
-      if (stage0 !== null) {
-        const parsed = stage0.parseBareSpecifier(first);
-        out.push(
-          parsed === null ? "spec null" : `spec ${JSON.stringify(parsed.name)} ${JSON.stringify(parsed.subpath)}`
-        );
-      }
     } else if (section === "num") {
       out.push(`# num ${first}`);
-      if (stage0 !== null) {
-        out.push(`f64 ${stage0.f64Constant(Number(first))}`);
-        out.push(`f32 ${stage0.f32Constant(Number(first))}`);
-      }
     } else {
       throw new Error(`unknown section \`${section}\` in ${CASES}`);
     }
@@ -203,7 +167,6 @@ function expected(caseText, stage0) {
   }
 
   for (let byte = 0; byte < 256; byte++) {
-    if (stage0 !== null) out.push(`byte ${byte} ${stage0.escapeBytes(Buffer.from([byte]))}`);
     // Only the ASCII half: above it a lone byte is not a JavaScript string,
     // and the multi-byte text cases above already pin the pass-through.
     if (byte < 128) out.push(`byte json ${byte} ${JSON.stringify(String.fromCharCode(byte))}`);
@@ -278,7 +241,7 @@ const differences = (want, got) => {
  */
 const staleLines = (golden, caseText) =>
   differences(
-    expected(caseText, null).split("\n"),
+    expected(caseText).split("\n"),
     golden.split("\n").filter((line) => !STAGE0_LINE.test(line))
   );
 
@@ -295,7 +258,6 @@ async function main(argv) {
     return 1;
   }
   const caseText = fs.readFileSync(CASES, "utf8");
-  const stage0 = await stage0Escapes();
   // The driver's output, linked and run only by the paths that read it: the
   // link is the one expensive step here, and a missing or stale golden can be
   // reported without it.
@@ -311,11 +273,10 @@ async function main(argv) {
   };
 
   if (update) {
-    // With stage0 in the tree the golden is stage0's answer. Without it, the
-    // only thing left to record is stage1's own output, which is a golden in
-    // the ordinary sense — reviewed as a diff — and is only written when every
-    // line Node can still answer agrees with it.
-    const recorded = stage0 !== null ? expected(caseText, stage0) : driver();
+    // The only thing left to record is stage1's own output, which is a golden
+    // in the ordinary sense — reviewed as a diff — and is only written when
+    // every line Node can still answer agrees with it.
+    const recorded = driver();
     if (recorded === null) return 1;
     const stale = staleLines(recorded, caseText);
     if (stale.length > 0) {
@@ -325,8 +286,7 @@ async function main(argv) {
     }
     fs.mkdirSync(path.dirname(GOLDEN), { recursive: true });
     fs.writeFileSync(GOLDEN, recorded);
-    const from = stage0 !== null ? "stage0" : "stage1 (no stage0 in the tree)";
-    process.stdout.write(`wrote ${path.relative(root, GOLDEN)} from ${from}\n`);
+    process.stdout.write(`wrote ${path.relative(root, GOLDEN)} from stage1\n`);
     return 0;
   }
 
@@ -343,25 +303,14 @@ async function main(argv) {
     );
     return 1;
   }
-  // While stage0 lives, the recorded answers are held to it as well: a golden
-  // that stage0 no longer agrees with was recorded from something else.
-  if (stage0 !== null) {
-    const drift = differences(expected(caseText, stage0).split("\n"), golden.split("\n"));
-    if (drift.length > 0) {
-      report(drift, verbose);
-      process.stdout.write(`${path.relative(root, GOLDEN)} disagrees with stage0 (${drift.length} lines); run with --update\n`);
-      return 1;
-    }
-  }
   const got = driver();
   if (got === null) return 1;
   const want = golden.split("\n");
   const differing = differences(want, got.split("\n"));
   report(differing, verbose);
   const recorded = want.filter((line) => STAGE0_LINE.test(line)).length;
-  const against = stage0 !== null ? "the golden and stage0" : "the golden";
   process.stdout.write(
-    `${want.length - differing.length}/${want.length} lines agree (${recorded} recorded from stage0, checked against ${against}), seed ${seed.label}\n`
+    `${want.length - differing.length}/${want.length} lines agree (${recorded} recorded from stage0, checked against the golden), seed ${seed.label}\n`
   );
   return differing.length === 0 ? 0 : 1;
 }

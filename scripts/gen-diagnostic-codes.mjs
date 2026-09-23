@@ -35,8 +35,6 @@
  *   - **No fragment too short to identify a rule** (ten characters, trimmed),
  *     which would match half the suite.
  *   - **`RULE_COUNT` is the number of entries.**
- *   - **While `src/codes.ts` exists, it holds the same table**, pair for pair
- *     and in order: the two compilers answer one code for one message.
  *
  * A fragment is the longest literal run of its message's template -- the rule
  * in words, with every interpolated name, type and count removed -- matched as
@@ -52,7 +50,6 @@ import { parseCodesRegistry } from "./codes-registry.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REGISTRY = path.join(ROOT, "self", "codes.ts");
-const STAGE0 = path.join(ROOT, "src", "codes.ts");
 
 /** The bands a table entry may use. Band 0 is constants, never a table row. */
 const BANDS = new Set(["1", "2", "3", "4", "9"]);
@@ -141,25 +138,6 @@ const problems = (text) => {
     found.push(`RULE_COUNT is ${count[1]} and the tables hold ${all.length} rules`);
   }
 
-  // stage0's copy, for as long as there is one. The deletion takes this with it.
-  if (fs.existsSync(STAGE0)) {
-    const line = (p) => `${p.code} ${JSON.stringify(p.fragment)}`;
-    let stage0 = [];
-    try {
-      stage0 = parseCodesRegistry(fs.readFileSync(STAGE0, "utf8"), "src/codes.ts").map(line);
-    } catch (err) {
-      found.push(err.message);
-    }
-    const stage1 = all.map(line);
-    const at = stage0.findIndex((l, i) => l !== stage1[i]);
-    if (stage0.length !== stage1.length || at >= 0) {
-      found.push(
-        `src/codes.ts and self/codes.ts differ (${stage0.length} and ${stage1.length} rules` +
-          (at >= 0 ? `, first at entry ${at + 1}: ${stage0[at]} / ${stage1[at]}` : "") +
-          ")"
-      );
-    }
-  }
   return { found, all };
 };
 

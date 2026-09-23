@@ -25,30 +25,24 @@
  * `--version` it reads out of `package.json` with the same `jsonField`, so the
  * expectation and the compiler cannot drift apart at a release.
  *
- * The compiler under test is the argument, defaulting to stage0
- * (`dist/index.js`), and a native self-hosted compiler works as well:
+ * The compiler under test is the argument, defaulting to `build/nish`, what
+ * `npm run build` leaves behind:
  *
- *     build/nish-cli                    # dist/index.js, under node
- *     build/nish-cli build/nish         # the self-hosted compiler
+ *     build/nish-cli                    # build/nish
+ *     build/nish-cli build/nish-test    # another compiler
  *
- * **It pins the shape and not the bytes**, because the contract is the shape. The
- * two compilers word some answers differently — stage1's usage text is one line
- * where stage0's lists the flags one per line, and its unreadable-input message
- * says `cannot open <file>` where stage0 passes Node's `ENOENT` through. So a
- * check here asks that the usage text is on the right stream with
+ * **It pins the shape and not the bytes**, because the contract is the shape.
+ * The wording of an answer can move between releases where the contract does
+ * not. So a check here asks that the usage text is on the right stream with
  * the right code and names every advertised flag, that a refusal names the flag
  * or the file it is about, and that a failure carries the documented band and
- * code — each of which both compilers promise.
+ * code — each of which every release promises.
  *
  * The internal-error group needs `NISH_SIMULATE_ICE`, the test hook that
  * provokes one on demand, and asks the compiler whether it has one — a run with
  * the variable set that compiles cleanly has none — so the group is one counted
- * skip against a compiler without it and runs against both compilers here. One
- * answer in it is each compiler's own: under `NISH_DEBUG=1` stage0 prints its
- * stack, and stage1, which has no exceptions and so no stack, says so in the
- * report. A Node entry point is what stage0 is and what stage1 is not, which is
- * how this file tells them apart there: the same test
- * `tests/diagnostic_coverage.js` makes.
+ * skip against a compiler without it. Under `NISH_DEBUG=1` the compiler, which
+ * has no exceptions and so no stack, says so in the report.
  *
  * Two POSIX utilities stand in for builtins the language does not have, exactly as
  * `tests/nish/run.ts` uses them: `env(1)` gives a child the environment a check
@@ -67,8 +61,8 @@ import { contains, splitLines, trim } from "../../std/text";
  * that is already a file, and the run then ends before its first check.
  */
 const WORK: string = "build/cli-contract";
-/** The compiler nobody named: stage0, the one `npm run build` leaves behind. */
-const DEFAULT_CLI: string = "dist/index.js";
+/** The compiler nobody named: the one `npm run build` leaves behind. */
+const DEFAULT_CLI: string = "build/nish";
 /** The entry the checks that need a whole program compile. */
 const FIXTURE_OK: string = "ok.ts";
 /** A program with two errors in it, so "one object per diagnostic" is a countable claim. */
@@ -183,8 +177,8 @@ const isDiagnosticCode = (code: string): boolean => {
 /**
  * Whether `text` holds an indented `at ...` line, which is what a Node stack
  * frame looks like. `--help` and every diagnostic are prose; a stack frame in
- * either is a crash report that leaked, and under `NISH_DEBUG=1` it is the thing
- * being asked for.
+ * either is a crash report that leaked, and so is one under `NISH_DEBUG=1`, where a
+ * native compiler says it has no stack instead.
  */
 const hasStackFrame = (text: string): boolean => {
   for (const line of splitLines(text)) {
@@ -199,21 +193,18 @@ const hasStackFrame = (text: string): boolean => {
  * The compiler under test, as something spawnable.
  *
  * A `.js` entry is run under `node` and anything else directly, which is the
- * distinction `tests/diagnostic_coverage.js` and `tests/nish-cmp.js` both make —
- * and, today, the one between stage0 and a self-hosted binary.
+ * distinction `tests/diagnostic_coverage.js` and `tests/nish-cmp.js` both make.
  */
 class Cli {
-  /** The argv prefix that runs it: `["node", "dist/index.js"]`, or just the binary. */
+  /** The argv prefix that runs it: `["node", "<entry>.js"]`, or just the binary. */
   head: string[];
   /** What the report calls it. */
   label: string;
-  /** Whether it is a Node entry point, which today means stage0. */
-  node: boolean;
 
   constructor(spec: string) {
     this.label = spec;
-    this.node = spec.endsWith(".js") || spec.endsWith(".mjs") || spec.endsWith(".cjs");
-    this.head = this.node ? ["node", spec] : [spec];
+    const node = spec.endsWith(".js") || spec.endsWith(".mjs") || spec.endsWith(".cjs");
+    this.head = node ? ["node", spec] : [spec];
   }
 
   /**
@@ -472,10 +463,8 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
  * The two dump flags, which are the other two rows of the table in `AGENTS.md`:
  * the tree the parser built and the side tables the checker recorded.
  *
- * Their *content* is each compiler's own — stage0 prints the `typescript`
- * package's node names, stage1 the flattened vocabulary of `self/nodes.ts`, and
- * `tests/self/parity.js` declares that difference rather than comparing it — so
- * what is asked here is what both promise: the dump is on stdout, the exit code is
+ * Their *content* is pinned by the goldens (`tests/cases/dump_ast.stdout`,
+ * `tests/self/dump_ast.golden`), so what is asked here is the contract: the dump is on stdout, the exit code is
  * 0, and no IR is written, because a dump is a question about a program and not a
  * request to compile it.
  */
@@ -595,19 +584,15 @@ const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
     [source, "-o", `${WORK}/ice.ll`]
   );
   t.eqI32("with NISH_DEBUG=1 it is still 70", debug.status, 70);
-  if (cli.node) {
-    t.eqBool("and the stack is printed", hasStackFrame(debug.stderr), true);
-  } else {
-    // A native compiler has no exceptions, so there is no stack to print: what
-    // the variable owes the reader there is the report saying so, rather than
-    // a line promising a trace a rerun would not produce (`self/ice.ts`).
-    t.contains(
-      "and the report says there is no stack behind it",
-      debug.stderr,
-      "there is no stack behind this, so NISH_DEBUG=1 adds nothing"
-    );
-    t.eqBool("and still prints no stack frame", hasStackFrame(debug.stderr), false);
-  }
+  // A native compiler has no exceptions, so there is no stack to print: what
+  // the variable owes the reader is the report saying so, rather than a line
+  // promising a trace a rerun would not produce (`self/ice.ts`).
+  t.contains(
+    "and the report says there is no stack behind it",
+    debug.stderr,
+    "there is no stack behind this, so NISH_DEBUG=1 adds nothing"
+  );
+  t.eqBool("and still prints no stack frame", hasStackFrame(debug.stderr), false);
 
   const json = cli.run("ice_json", ["NISH_SIMULATE_ICE=1"], [source, "--json", "-o", `${WORK}/ice.ll`]);
   t.eqI32("under --json it is still 70", json.status, 70);
