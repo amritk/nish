@@ -1,0 +1,1 @@
+Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name

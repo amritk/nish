@@ -824,15 +824,17 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // Five, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`: the whole-program rules -- a duplicate export, a
-  // duplicate import, a duplicate internal name and an export a module does
-  // not have -- are uncoded and always were, and stage1 answers the empty
-  // statement of `tests/wordings/nl2260_empty_statement` with ``Unsupported
-  // statement `;` ``, which quotes the statement and has no words of its own.
-  // They are named on stdout by the run, so shrinking this backlog means giving
-  // one of those messages a literal run of its own.
-  const UNCODED_BACKLOG = 5;
+  // Two, because the tool walks the `tests/link/` negatives as well as
+  // `tests/cases/reject_*`: an import of a name a module does not export
+  // (`tests/link/unknown_export`) is uncoded and always was, and stage1 answers
+  // the empty statement of `tests/wordings/nl2260_empty_statement` with
+  // ``Unsupported statement `;` ``, which quotes the statement and has no words
+  // of its own. It was five until #174 gave the duplicate-symbol wordings --
+  // a duplicate export, the same one reached through an import, and a
+  // duplicate internal name -- codes of their own (NL3024, NL3026). They are
+  // named on stdout by the run, so shrinking this backlog means giving one of
+  // those messages a registry entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 2;
   const wordings = spawnSync(
     "node",
     [

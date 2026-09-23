@@ -2077,9 +2077,13 @@ Two defects found in review of G8 and generic methods, recorded here rather
 than in §16 because neither is a decision to defer — each is a bug with an
 issue that tracks it:
 
-- `coercesTo` in `self/structs.ts` decides that a class converts to an interface
-  by comparing the interface's *name* with the names in `implementsNames`, the
-  shape #161 fixed for constraints (#173).
+- `coercesTo` in `self/structs.ts` decided that a class converts to an
+  interface by comparing the interface's *name* with the names in
+  `implementsNames`, the shape #161 fixed for constraints (#173). **Fixed**: it
+  asks `implementsDeclaration` now, the test a constraint uses, so a module's
+  own `Shape` no longer accepts an imported `Circle` that implements another
+  one (`tests/link/iface_same_name_class`, and `…_imported` for the conversion
+  that stays legal).
 - The constructor-argument message of an instantiation names the template —
   `` Argument 1 of `new Box`: expected i32, got string `` for `new Box<i32>("x")`
   — rather than `new Box<i32>`, and `--emit-checked` prints no `callee` line
@@ -2114,8 +2118,10 @@ would bring it back.
    IR comparison (§15.7) and the golden round trips cover generics.
    *Trigger:* a stage1-typed rewriter.
 5. **Implementing an imported interface** (NL2079). It is still refused, and
-   §15.7's constraint check leans on that: it fails closed, so lifting NL2079
-   alone would refuse a class that implements an imported constraint.
+   §15.7's constraint check leans on that, and so does the implicit
+   class-to-interface conversion (#173): both fail closed, so lifting NL2079
+   alone would refuse a class that implements an imported constraint, and its
+   conversion to that interface.
    *Trigger:* a program that needs it. The same change then has to record the
    resolved `StructInfo` beside each `implements` name, so that
    `implementsDeclaration` in `self/generics.ts` compares declarations.
