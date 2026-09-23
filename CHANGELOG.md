@@ -26,6 +26,26 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-23
+
+### Breaking changes
+
+- Delete stage0, the TypeScript compiler ([#150](https://github.com/amritk/nish/pull/150))
+
+### Documentation
+
+- Describe one compiler in the rules and the live documents ([#148](https://github.com/amritk/nish/pull/148))
+
+### Tests
+
+- self: Compile every golden with stage1 and stop comparing against stage0 ([#145](https://github.com/amritk/nish/pull/145))
+- self: Take the surviving test tools off stage0 ([#147](https://github.com/amritk/nish/pull/147))
+
+### Build
+
+- Fetch a released seed and let every tool take a stage1 compiler ([#146](https://github.com/amritk/nish/pull/146))
+
+
 ## [0.6.0] - 2026-09-22
 
 ### Breaking changes
@@ -248,3 +268,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.4.0]: https://github.com/amritk/nish/releases/tag/v0.4.0
 [0.5.0]: https://github.com/amritk/nish/releases/tag/v0.5.0
 [0.6.0]: https://github.com/amritk/nish/releases/tag/v0.6.0
+[0.7.0]: https://github.com/amritk/nish/releases/tag/v0.7.0
