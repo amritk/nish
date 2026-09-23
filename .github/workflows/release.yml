@@ -231,9 +231,9 @@ jobs:
             exit 1
           fi
           tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
-          seed="$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish"
-          "$seed" --version
-          echo "path=$seed" >> "$GITHUB_OUTPUT"
+          # Not run here: the next step checks this runner's host before
+          # anything executes, and bootstrap.sh asks the seed for --version.
+          echo "path=$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
 
       # A tarball rather than a bare binary, because a bare binary is half a
       # compiler. `--link` shells out to scripts/build.sh and compiles
