@@ -1204,22 +1204,20 @@ export const satisfiesConstraint = (
   if (info === null || want === null) {
     return false;
   }
-  if (info === want) {
-    return true;
-  }
-  return implementsDeclaration(info, want);
+  return info === want || implementsDeclaration(info, want);
 };
 
 /**
  * Whether `cls`'s `implements` clause names the declaration `iface`.
  * `implementsNames` holds names, resolved in the module that collected `cls`'s
- * members — its `origin`, which is its template's for an instantiation. A
- * plain interface named there is one that module declares, because an
- * imported one cannot be implemented (NL2079), so it is `iface` exactly when
- * the names agree and `iface` was declared there too. An instantiated
- * interface's name is unique across the program (`generic_class_clash`), so
- * its name is its identity. Anything else answers no, which is a refusal at
- * the request rather than a layout taken from the wrong declaration.
+ * members: its `origin`, which is its template's for an instantiation. A plain
+ * interface resolved there is one that module declares, because implementing an
+ * imported interface is refused today (NL2079, a pass-1 ordering limit rather
+ * than a rule; wp18 §15.6), so the names agreeing and `iface` being declared
+ * there is identity. An instantiated interface's name is unique across the
+ * program (`generic_class_clash`). If NL2079 is ever lifted this refuses the
+ * newly legal case rather than accepting a stranger; recording the resolved
+ * `StructInfo` beside the name is the fix then.
  */
 const implementsDeclaration = (cls: StructInfo, iface: StructInfo): boolean => {
   if (iface.instance === null && iface.origin !== cls.origin) {
