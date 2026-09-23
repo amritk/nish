@@ -1,0 +1,1 @@
+Argument 1 of `new Box<i32>`: expected i32, got string
