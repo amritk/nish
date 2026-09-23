@@ -27,6 +27,7 @@ cases/arr_path_root added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs_compound added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs_field added after R6: no rewriter to freeze it with
+cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with

@@ -2951,10 +2951,10 @@ const has = (s: string, sub: string): boolean => s.startsWith(sub) || s.endsWith
 
 ```llvm
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
-declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
-declare i64 @llvm.smin.i64(i64, i64) #4
-declare i64 @llvm.smax.i64(i64, i64) #4
+declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare i64 @llvm.smin.i64(i64, i64) #5
+declare i64 @llvm.smax.i64(i64, i64) #5
 
 define internal noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
@@ -2991,7 +2991,7 @@ entry:
   ret i8* %10
 }
 
-define internal noundef zeroext i1 @has(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #0 {
+define internal noundef zeroext i1 @has(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #2 {
 entry:
   %0 = call zeroext i1 @nish_str_at(i8* %s, i64 0, i8* %sub)
   br i1 %0, label %lor.end, label %lor.rhs
@@ -3010,11 +3010,12 @@ lor.end:
   ret i1 %7
 }
 
-attributes #0 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn memory(argmem: read) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn memory(argmem: read) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end str_bytes -->
 

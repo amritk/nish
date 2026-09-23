@@ -338,20 +338,27 @@ export const emitFromCharCode = (emitter: Emitter, expr: Node): string => {
 /**
  * The runtime symbols a string byte method calls, for the attribute fixpoint.
  *
- * `slice` can also reach `nish_panic_slice`, which is `noreturn`, so a caller
- * keeps `willreturn` only when the check is not emitted at all — the same rule
- * `a[i]` follows with `nish_panic_index`.
+ * `slice` can also reach `nish_panic_slice`, and an unproven `charCodeAt`
+ * reaches `nish_panic_index` through `emitRangeCheck`. Both are `noreturn`, so
+ * a caller keeps `willreturn` only when the check is not emitted at all — the
+ * same rule `a[i]` follows. `proven` is the call's `nodeProvenIndex` verdict,
+ * read here because `emitCharCodeAt` reads it: an omitted callee is a
+ * `willreturn` LLVM may use to delete the panic (#183).
  */
-export const stringConstructCallees = (name: string, uncheckedIndexing: boolean): string[] => {
+export const stringConstructCallees = (name: string, uncheckedIndexing: boolean, proven: boolean): string[] => {
   const out: string[] = [];
-  if (name === "substring") {
+  if (name === "charCodeAt") {
+    if (!uncheckedIndexing && !proven) {
+      out.push("nish_panic_index");
+    }
+  } else if (name === "substring") {
     out.push("nish_str_new");
   } else if (name === "slice") {
     out.push("nish_str_new");
     if (!uncheckedIndexing) {
       out.push("nish_panic_slice");
     }
-  } else if (name !== "charCodeAt") {
+  } else {
     out.push("nish_str_at");
   }
   return out;

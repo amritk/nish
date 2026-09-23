@@ -905,9 +905,11 @@ class FactCollector {
     }
     if (node.kind === N_CALL && isStringMethodCall(program, node)) {
       // The byte methods all read the string's bytes; `substring` and `slice`
-      // also allocate, and `slice` can reach its panic.
+      // also allocate, and `slice` and an unproven `charCodeAt` can reach a panic.
       this.facts.readsMemory = true;
-      this.addCallees(stringConstructCallees(node.children[0].text, this.opts.uncheckedIndexing));
+      this.addCallees(
+        stringConstructCallees(node.children[0].text, this.opts.uncheckedIndexing, program.nodeProvenIndex[node.id])
+      );
       return;
     }
     if (node.kind === N_MEMBER && program.nodeTypes[node.children[0].id] === T_STRING) {
