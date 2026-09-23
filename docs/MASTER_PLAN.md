@@ -606,8 +606,8 @@ failure.
   wearing the syntax of error handling. `panic(message)` is the replacement for
   a broken invariant.
 - One monomorphised `%struct.nish_result.<T>.<E>` per payload pair, laid out
-  as a `class` is, without generics in the language: the checker instantiates
-  the pair it sees.
+  as a `class` is, without needing user generics (which WP18 added later): the
+  checker instantiates the pair it sees.
 - The ambient declarations in `runtime/nish.d.ts` keep an Nish program
   type-checkable by `tsc`.
 
