@@ -90,16 +90,14 @@ class Tools {
   opt: boolean;
   /** `env(1)`, and specifically an `env` that honours `-u`. See `hasEnvTool`. */
   env: boolean;
-  /** Whether that compiler is a Node entry point. */
-  node: boolean;
 
   constructor(clang: boolean, llvmAs: boolean, opt: boolean, env: boolean, compiler: string) {
     this.clang = clang;
     this.llvmAs = llvmAs;
     this.opt = opt;
     this.env = env;
-    this.node = compiler.endsWith(".js") || compiler.endsWith(".mjs") || compiler.endsWith(".cjs");
-    this.compiler = this.node ? ["node", compiler] : [compiler];
+    const node = compiler.endsWith(".js") || compiler.endsWith(".mjs") || compiler.endsWith(".cjs");
+    this.compiler = node ? ["node", compiler] : [compiler];
   }
 }
 

@@ -19,9 +19,9 @@
 #   NISH_BOOTSTRAP=~/nish-0.6.0-linux-x86_64 scripts/bootstrap.sh --verify
 #
 # Unset, the seed is build/seed/bin/nish, the last release as
-# `scripts/fetch-seed.sh` unpacks it -- which `npm run build` runs first. With
-# neither, this stops and says which command gives it one: a compiler has to
-# come from somewhere, and the only place left is a release.
+# `scripts/fetch-seed.sh` unpacks it, and this runs that script first. When the
+# fetch fails it stops and says so: a compiler has to come from somewhere, and
+# the only place left is a release.
 #
 # stage2 is what this installs, because it is the first binary in the chain
 # that no part of the seed emitted: the seed built the compiler that built it,
@@ -126,7 +126,7 @@ The seed is NISH_BOOTSTRAP=<path> when it is set — a released `nish` binary, o
 a .js/.mjs entry point run under node — and build/seed/bin/nish, the release
 scripts/fetch-seed.sh unpacks, when it is not:
 
-  bash scripts/fetch-seed.sh && scripts/bootstrap.sh
+  scripts/bootstrap.sh
   NISH_BOOTSTRAP=~/nish-0.6.0-linux-x86_64 scripts/bootstrap.sh --verify
 EOF
   exit "${1:-2}"
@@ -179,12 +179,12 @@ seed_die() {
   exit 3
 }
 
-# Unset: the release scripts/fetch-seed.sh leaves in build/seed.
+# Unset: the release scripts/fetch-seed.sh leaves in build/seed, fetched
+# first when it is not there (a no-op, without the network, when it is).
 if [ -z "$seed_given" ]; then
-  if [ ! -e build/seed/bin/nish ]; then
-    echo "bootstrap: no seed: NISH_BOOTSTRAP is unset and build/seed/bin/nish is missing" >&2
-    echo "bootstrap: run \`bash scripts/fetch-seed.sh\` to fetch the last release into build/seed" >&2
-    echo "bootstrap: (\`npm run build\` does both), or set NISH_BOOTSTRAP=<nish>" >&2
+  if ! sh scripts/fetch-seed.sh >&2 || [ ! -e build/seed/bin/nish ]; then
+    echo "bootstrap: no seed: NISH_BOOTSTRAP is unset and scripts/fetch-seed.sh could not" >&2
+    echo "bootstrap: fetch the last release into build/seed; set NISH_BOOTSTRAP=<nish>" >&2
     exit 3
   fi
   seed_given="$PWD/build/seed/bin/nish"

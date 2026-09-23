@@ -202,22 +202,19 @@ jobs:
           prefix="$(brew --prefix llvm@18)"
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
-      - name: Install dependencies
-        run: npm ci
-
       # The seed: the previous release's compiler for this row's host, which
-      # builds this release's stage1 (WP19 G3). Downloaded the way ci.yml's
-      # `bootstrap` job downloads it, from the newest published release that
-      # is not this tag -- a re-run after this tag's release exists must not
-      # seed from itself. Every target in .github/seed-targets.json has been
-      # attached since 0.4.0, so the previous release carries every row's
-      # asset; a target added later needs its first release seeded some other
-      # way, and this step says so rather than building with nothing.
-      - name: Download the seed (the previous release)
-        id: seed
+      # builds this release's stage1 (WP19 G3), fetched into build/seed by
+      # scripts/fetch-seed.sh -- the download every local run and CI's test
+      # job use -- where scripts/bootstrap.sh takes it as its default seed.
+      # "Previous" is the newest published release that is not this tag, so a
+      # re-run after this tag's release exists does not seed from itself.
+      # Every target in .github/seed-targets.json has been attached since
+      # 0.4.0, so that release carries every row's asset; a target added later
+      # needs its first release seeded some other way, and the fetch fails
+      # rather than building with nothing.
+      - name: Fetch the seed (the previous release)
         env:
           GH_TOKEN: ${{ github.token }}
-          ASSET: ${{ matrix.target.asset }}
         run: |
           previous="$(gh api "repos/$GITHUB_REPOSITORY/releases" |
             jq -r --arg self "$GITHUB_REF_NAME" '[.[] | select((.draft or .prerelease) | not) | select(.tag_name != $self)][0].tag_name // empty')"
@@ -225,15 +222,7 @@ jobs:
             echo "::error::there is no earlier release to seed $GITHUB_REF_NAME from"
             exit 1
           fi
-          tarball="nish-${previous#v}-$ASSET.tar.gz"
-          if ! gh release download "$previous" --repo "$GITHUB_REPOSITORY" --pattern "$tarball" --dir "$RUNNER_TEMP"; then
-            echo "::error::$previous carries no $tarball, so this row has no seed. A target's first release has to be seeded by hand (docs/wp19-stage0-retirement.md §3)."
-            exit 1
-          fi
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
-          # Not run here: the next step checks this runner's host before
-          # anything executes, and bootstrap.sh asks the seed for --version.
-          echo "path=$RUNNER_TEMP/${tarball%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
+          bash scripts/fetch-seed.sh "${previous#v}"
 
       # A tarball rather than a bare binary, because a bare binary is half a
       # compiler. `--link` shells out to scripts/build.sh and compiles
@@ -261,7 +250,6 @@ jobs:
           ASSET: ${{ matrix.target.asset }}
           HOST: ${{ matrix.target.host }}
           RUNNER_LABEL: ${{ matrix.target.runner }}
-          NISH_BOOTSTRAP: ${{ steps.seed.outputs.path }}
         run: |
           host="$(uname -s)-$(uname -m)"
           if [ "$host" != "$HOST" ]; then

@@ -28,7 +28,7 @@
     "docs/INSTALL.md"
   ],
   "scripts": {
-    "build": "bash scripts/fetch-seed.sh && bash scripts/bootstrap.sh",
+    "build": "bash scripts/bootstrap.sh",
     "postinstall": "node scripts/postinstall.mjs",
     "bootstrap": "bash scripts/bootstrap.sh",
     "compile": "build/nish",

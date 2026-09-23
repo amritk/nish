@@ -45,8 +45,7 @@
  *   - not the wording of diagnostics, and not the dumps. A program both
  *     compilers refuse is counted and named apart (there is no artefact on
  *     either side); its message is pinned by the `.err` fragments checked in
- *     beside it, which `tests/self/reject_oracle.js` reads and which survive
- *     stage0. A program compiled with `--emit-ast` or `--emit-checked` writes
+ *     beside it, which `tests/self/reject_oracle.js` reads. A program compiled with `--emit-ast` or `--emit-checked` writes
  *     no artefact either, and its stdout is pinned by the `<name>.stdout`
  *     golden beside it. Both are counted in the summary rather than folded
  *     into a skip count;
@@ -113,8 +112,8 @@ const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
  * native binary. This is `scripts/bootstrap.sh`'s rule for `NISH_BOOTSTRAP`
  * (WP19 G3), character for character, so that one path spells a seed in both
  * places: the kind is the suffix, deliberately not the executable bit, because
- * the bit describes the download — `dist/index.js` ships 0644 and a binary out
- * of a release tarball can arrive without `+x` — and the suffix is what
+ * the bit describes the download — a binary out of a release tarball can
+ * arrive without `+x` — and the suffix is what
  * whoever built the seed chose.
  */
 const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
@@ -130,10 +129,6 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
  * the working directory, which is where `compile` below spawns both of them.
  * The first candidate holding `scripts/build.sh` wins, which is the predicate
  * the compilers use, checked here against the filesystem instead of assumed.
- *
- * stage0 answers from `import.meta.dirname` (`src/version.ts`) and a Node entry
- * point is `<root>/dist/index.js`, so `<dirname>/..` is its root as well and
- * one rule covers both kinds of compiler.
  */
 function packageRootOf(file) {
   const candidates = [path.join(path.dirname(file), "..")];

@@ -4990,9 +4990,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } }
     );
 
-  // A seed guaranteed to differ: the seed this
-  // run was built with, wrapped so that it emits `--unchecked-indexing`,
-  // which removes the bounds checks from the IR it writes for `self/` -- the
+  // A seed guaranteed to differ: the seed this run was built with, wrapped so
+  // that it emits `--unchecked-indexing`, which removes the bounds checks
+  // from the IR it writes for `self/` -- the
   // same shape of difference a codegen improvement makes, and the shape that
   // broke this run when the first one landed. A released seed differs from
   // HEAD already, but by however much codegen moved since that release, which
@@ -6019,17 +6019,9 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     const config = path.join(ambientDir, `tsconfig.${name}.json`);
     fs.writeFileSync(
       config,
-      JSON.stringify({
-        compilerOptions: {
-          strict: true,
-          noEmit: true,
-          target: "ES2022",
-          lib: ["ES2022"],
-          types: [],
-          moduleDetection: "force",
-        },
-        files: [declarations, ...files],
-      })
+      // The options are `npm run check`'s, so the two cannot drift apart;
+      // `include: []` drops its file list for this project's own.
+      JSON.stringify({ extends: path.join(root, "tsconfig.json"), include: [], files: [declarations, ...files] })
     );
     const r = spawnSync("node", [tscBin, "-p", config], { cwd: root, encoding: "utf8" });
     return { ok: r.status === 0, output: `${r.stdout}${r.stderr}` };
@@ -9114,7 +9106,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
 // rewrite in tests/differential/goldens/, typed when it was frozen by the checker of the
 // day -- is run under Node with runtime/shim.mjs; stdout and exit status must agree byte
 // for byte. Discrepancies listed in known-failures.txt are reported but do not fail.
-if ((!only || "differential".includes(only))) {
+if (!only || "differential".includes(only)) {
   const diffRunner = path.join(import.meta.dirname, "differential", "run.js");
   const compilerArgs = ["--compiler", path.relative(root, NISH)];
   const d = spawnSync("node", [diffRunner, "--quick", "--frozen", ...compilerArgs], { cwd: root, encoding: "utf8" });

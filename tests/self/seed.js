@@ -6,8 +6,8 @@
  * Every check that runs stage1 has to *have* a stage1 first, and building one
  * takes a compiler. That compiler is the **seed**, the last released `nish`
  * (WP19 G2.3): `tests/run.js` builds the compiler under test with it, and the
- * oracles (`lexer_oracle.js`, `parser_oracle.js`, `support_oracle.js`,
- * `reject_oracle.js`) build their binaries with it.
+ * oracles build their binaries with it (`reject_oracle.js` through this
+ * module, the others through `seedWithoutStage0` in `tests/self/goldens.js`).
  *
  * **The order, and why it is this one.**
  *
@@ -33,7 +33,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-/** The repository root, resolved without asking any module that might not survive R6. */
+/** The repository root. */
 const root = path.resolve(import.meta.dirname, "..", "..");
 
 /**

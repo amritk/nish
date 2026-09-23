@@ -177,8 +177,8 @@ const isDiagnosticCode = (code: string): boolean => {
 /**
  * Whether `text` holds an indented `at ...` line, which is what a Node stack
  * frame looks like. `--help` and every diagnostic are prose; a stack frame in
- * either is a crash report that leaked, and under `NISH_DEBUG=1` it is the thing
- * being asked for.
+ * either is a crash report that leaked, and so is one under `NISH_DEBUG=1`, where a
+ * native compiler says it has no stack instead.
  */
 const hasStackFrame = (text: string): boolean => {
   for (const line of splitLines(text)) {
@@ -200,13 +200,11 @@ class Cli {
   head: string[];
   /** What the report calls it. */
   label: string;
-  /** Whether it is a Node entry point. */
-  node: boolean;
 
   constructor(spec: string) {
     this.label = spec;
-    this.node = spec.endsWith(".js") || spec.endsWith(".mjs") || spec.endsWith(".cjs");
-    this.head = this.node ? ["node", spec] : [spec];
+    const node = spec.endsWith(".js") || spec.endsWith(".mjs") || spec.endsWith(".cjs");
+    this.head = node ? ["node", spec] : [spec];
   }
 
   /**
