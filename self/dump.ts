@@ -149,7 +149,13 @@ const structText = (table: TypeTable, info: StructInfo, out: string[]): void => 
   const exported = info.exported ? " exported" : "";
   out.push(`struct ${table.typeName(info.type)} (${kind}) size=${info.size} align=${info.align}${exported}`);
   if (info.implementsNames.length > 0) {
-    out.push(`  implements ${info.implementsNames.join(", ")}`);
+    // `implementsNames` holds the mangled names the checker compares; the dump
+    // spells them the way a diagnostic does (`Container<i32>`, WP18 §6.7).
+    const spelled: string[] = [];
+    for (const name of info.implementsNames) {
+      spelled.push(table.typeName(table.structOf(name)));
+    }
+    out.push(`  implements ${spelled.join(", ")}`);
   }
   for (const field of info.fields) {
     const parts: string[] = [];

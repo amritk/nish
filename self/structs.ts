@@ -601,13 +601,13 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
         }
         ctx.error(
           cls.decl.children[0],
-          `Class \`${cls.name}\` does not implement \`${iface.name}\`: field ${i + 1} is ${describeField(ctx, want)} in \`${iface.name}\` but ${describeField(ctx, got)} in \`${cls.name}\` (the interface's fields must be the class's first fields, in order)`
+          `Class \`${spelled(ctx, cls)}\` does not implement \`${spelled(ctx, iface)}\`: field ${i + 1} is ${describeField(ctx, want)} in \`${spelled(ctx, iface)}\` but ${describeField(ctx, got)} in \`${spelled(ctx, cls)}\` (the interface's fields must be the class's first fields, in order)`
         );
         return;
       }
       ctx.error(
         cls.decl.children[0],
-        `Class \`${cls.name}\` does not implement \`${iface.name}\`: it lacks field ${describeField(ctx, want)} (the interface's fields must be the class's first fields, in order)`
+        `Class \`${spelled(ctx, cls)}\` does not implement \`${spelled(ctx, iface)}\`: it lacks field ${describeField(ctx, want)} (the interface's fields must be the class's first fields, in order)`
       );
       return;
     }

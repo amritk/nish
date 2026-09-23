@@ -2556,7 +2556,7 @@ function Holder<Circle>.area(this: Holder<Circle>): i32 -> @Holder$$Circle.area 
 program tests/cases/gen_constraint_generic_bound.ts
 module tests/cases/gen_constraint_generic_bound.ts (entry)
 struct Cell (class) size=16 align=8
-  implements Container$i32
+  implements Container<i32>
   field value: i32 index=0 offset=0
   field label: string index=1 offset=8
   constructor -> @Cell.constructor
@@ -2752,7 +2752,7 @@ module tests/cases/gen_implements.ts (entry)
 struct Container<i32> (interface) size=4 align=4
   field value: i32 index=0 offset=0
 struct Box<i32> (class) size=8 align=4
-  implements Container$i32
+  implements Container<i32>
   field value: i32 index=0 offset=0
   field extra: i32 index=1 offset=4
   constructor -> @Box$i32.constructor

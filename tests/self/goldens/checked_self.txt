@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 425687 dump lines live, 64 distinct modules.
+# 64 programs, 425891 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -5696,9 +5696,9 @@ function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @col
   callee 571:3 reportWastefulPadding -> @reportWastefulPadding
 function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.error CheckedProgram.struct describeField nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
-  pointer ctx: size=160 writesThrough=true captured=false passedTo=CheckContext.error#0 describeField#0 describeField#0 CheckContext.error#0 describeField#0
-  pointer cls: size=112 writesThrough=false captured=false
+  calls: CheckContext.error CheckedProgram.struct describeField nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 spelled
+  pointer ctx: size=160 writesThrough=true captured=false passedTo=CheckContext.error#0 spelled#0 spelled#0 describeField#0 spelled#0 describeField#0 spelled#0 CheckContext.error#0 spelled#0 spelled#0 describeField#0
+  pointer cls: size=112 writesThrough=false captured=false passedTo=spelled#1 spelled#1 spelled#1
   stackSites=0 stackLocals=0
   local 582:14 name: string (const)
   local 583:11 iface: StructInfo | null (const)
@@ -5707,10 +5707,16 @@ function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImpl
   local 595:13 want: FieldInfo (const)
   local 597:15 got: FieldInfo (const)
   callee 602:9 CheckContext.error -> @CheckContext.error
-  callee 604:92 describeField -> @describeField
-  callee 604:145 describeField -> @describeField
+  callee 604:22 spelled -> @spelled
+  callee 604:66 spelled -> @spelled
+  callee 604:110 describeField -> @describeField
+  callee 604:143 spelled -> @spelled
+  callee 604:172 describeField -> @describeField
+  callee 604:204 spelled -> @spelled
   callee 608:7 CheckContext.error -> @CheckContext.error
-  callee 610:87 describeField -> @describeField
+  callee 610:20 spelled -> @spelled
+  callee 610:64 spelled -> @spelled
+  callee 610:105 describeField -> @describeField
 function describeField(ctx: CheckContext, field: FieldInfo): string -> @describeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeTable.typeName nish_str_concat
@@ -18942,36 +18948,40 @@ function signatureText(table: TypeTable, sig: FunctionSig): string -> @signature
   callee 144:54 TypeTable.typeName -> @TypeTable.typeName
 function structText(table: TypeTable, info: StructInfo, out: string[]): void -> @structText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: StringMap.keyAt TypeTable.typeName nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
+  calls: StringMap.keyAt TypeTable.structOf TypeTable.typeName nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
+  pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.structOf#0 TypeTable.typeName#0
   pointer info: size=112 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
-  stackSites=1 stackLocals=1
+  stackSites=2 stackLocals=2
   local 148:9 kind: string (const)
   local 149:9 exported: string (const)
   callee 150:22 TypeTable.typeName -> @TypeTable.typeName
-  local 154:14 field: FieldInfo (const)
-  local 155:11 parts: string[] (const)
-  local 162:11 extras: string (const)
-  callee 164:33 TypeTable.typeName -> @TypeTable.typeName
-  local 167:9 ctor: FunctionSig | null (const)
-  local 171:7 i: i32 (let)
-  callee 173:26 StringMap.keyAt -> @StringMap.keyAt
+  local 154:11 spelled: string[] (const)
+  local 155:16 name: string (const)
+  callee 156:20 TypeTable.typeName -> @TypeTable.typeName
+  callee 156:35 TypeTable.structOf -> @TypeTable.structOf
+  local 160:14 field: FieldInfo (const)
+  local 161:11 parts: string[] (const)
+  local 168:11 extras: string (const)
+  callee 170:33 TypeTable.typeName -> @TypeTable.typeName
+  local 173:9 ctor: FunctionSig | null (const)
+  local 177:7 i: i32 (let)
+  callee 179:26 StringMap.keyAt -> @StringMap.keyAt
 function constantSyntax(table: TypeTable, info: ConstInfo): string -> @constantSyntax
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: jsonQuote nish_str_from_f64 nish_str_from_i64
   pointer table: size=72 writesThrough=false captured=false
   pointer info: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 181:12 jsonQuote -> @jsonQuote
+  callee 187:12 jsonQuote -> @jsonQuote
 function position(source: SourceFile, offset: i32): string -> @position
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: offset
   calls: SourceFile.columnOf SourceFile.lineOf nish_str_concat nish_str_from_i32
   pointer source: size=24 writesThrough=false captured=false passedTo=SourceFile.lineOf#0 SourceFile.columnOf#0
   stackSites=0 stackLocals=0
-  callee 199:6 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 199:31 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 205:6 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 205:31 SourceFile.columnOf -> @SourceFile.columnOf
 function bodyTables(program: CheckedProgram, source: SourceFile, table: TypeTable, sig: FunctionSig, out: string[]): void -> @bodyTables
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_panic_index walkBody
@@ -18981,8 +18991,8 @@ function bodyTables(program: CheckedProgram, source: SourceFile, table: TypeTabl
   pointer sig: size=88 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=walkBody#4
   stackSites=0 stackLocals=0
-  local 213:9 body: Node (const)
-  callee 217:5 walkBody -> @walkBody
+  local 219:9 body: Node (const)
+  callee 223:5 walkBody -> @walkBody
 function walkBody(program: CheckedProgram, source: SourceFile, table: TypeTable, node: Node, out: string[]): void -> @walkBody
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckedProgram.struct TypeTable.typeName nish_array_grow nish_panic_index nish_str_concat position walkBody
@@ -18992,18 +19002,18 @@ function walkBody(program: CheckedProgram, source: SourceFile, table: TypeTable,
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=walkBody#4
   stackSites=0 stackLocals=0
-  local 229:11 local: Local | null (const)
-  local 231:13 kind: string (const)
-  callee 233:20 position -> @position
-  callee 233:67 TypeTable.typeName -> @TypeTable.typeName
-  local 237:11 callee: FunctionSig | null (const)
-  callee 239:28 position -> @position
-  local 244:11 info: StructInfo | null (const)
-  callee 244:18 CheckedProgram.struct -> @CheckedProgram.struct
-  local 246:13 ctor: FunctionSig | null (const)
-  callee 248:30 position -> @position
-  local 252:14 child: Node (const)
-  callee 253:5 walkBody -> @walkBody
+  local 235:11 local: Local | null (const)
+  local 237:13 kind: string (const)
+  callee 239:20 position -> @position
+  callee 239:67 TypeTable.typeName -> @TypeTable.typeName
+  local 243:11 callee: FunctionSig | null (const)
+  callee 245:28 position -> @position
+  local 250:11 info: StructInfo | null (const)
+  callee 250:18 CheckedProgram.struct -> @CheckedProgram.struct
+  local 252:13 ctor: FunctionSig | null (const)
+  callee 254:30 position -> @position
+  local 258:14 child: Node (const)
+  callee 259:5 walkBody -> @walkBody
 function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void -> @dumpModule
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.definedIn TypeTable.typeName bodyTables constantSyntax factsText jsonQuote nish_alloc_struct nish_array_grow nish_str_concat signatureText structText
@@ -19012,48 +19022,48 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer out: size=0 writesThrough=true captured=false passedTo=structText#2 factsText#3 bodyTables#4
   stackSites=1 stackLocals=1
-  local 266:9 program: CheckedProgram (const)
-  local 267:9 source: SourceFile (const)
-  local 271:9 pkg: string (const)
-  local 273:14 imp: ImportBinding (const)
-  local 274:11 struct: StructInfo | null (const)
-  local 275:11 constant: ConstInfo | null (const)
-  local 276:11 builtin: BuiltinExport | null (const)
-  local 277:11 sig: FunctionSig | null (const)
-  local 278:11 template: TemplateInfo | null (const)
-  local 279:11 structTemplate: StructTemplateInfo | null (const)
-  local 280:9 what: string (let)
-  local 294:13 kindWord: string (const)
-  callee 299:46 jsonQuote -> @jsonQuote
-  local 301:14 info: ConstInfo (const)
-  local 305:11 tag: string (const)
-  callee 306:37 TypeTable.typeName -> @TypeTable.typeName
-  callee 306:68 constantSyntax -> @constantSyntax
-  local 308:14 info: StructInfo (const)
-  callee 310:7 structText -> @structText
-  local 313:9 entry: FunctionSig | null (const)
-  local 314:14 sig: FunctionSig (const)
-  callee 315:10 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 318:11 tags: string[] (const)
-  local 333:11 instance: Instantiation | null (const)
-  local 337:11 suffix: string (const)
-  callee 338:26 signatureText -> @signatureText
-  local 339:11 f: FunctionFacts | null (const)
-  callee 339:15 FactsTable.get -> @FactsTable.get
-  callee 341:7 factsText -> @factsText
-  callee 344:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee 346:5 bodyTables -> @bodyTables
-  callee 348:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 272:9 program: CheckedProgram (const)
+  local 273:9 source: SourceFile (const)
+  local 277:9 pkg: string (const)
+  local 279:14 imp: ImportBinding (const)
+  local 280:11 struct: StructInfo | null (const)
+  local 281:11 constant: ConstInfo | null (const)
+  local 282:11 builtin: BuiltinExport | null (const)
+  local 283:11 sig: FunctionSig | null (const)
+  local 284:11 template: TemplateInfo | null (const)
+  local 285:11 structTemplate: StructTemplateInfo | null (const)
+  local 286:9 what: string (let)
+  local 300:13 kindWord: string (const)
+  callee 305:46 jsonQuote -> @jsonQuote
+  local 307:14 info: ConstInfo (const)
+  local 311:11 tag: string (const)
+  callee 312:37 TypeTable.typeName -> @TypeTable.typeName
+  callee 312:68 constantSyntax -> @constantSyntax
+  local 314:14 info: StructInfo (const)
+  callee 316:7 structText -> @structText
+  local 319:9 entry: FunctionSig | null (const)
+  local 320:14 sig: FunctionSig (const)
+  callee 321:10 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 324:11 tags: string[] (const)
+  local 339:11 instance: Instantiation | null (const)
+  local 343:11 suffix: string (const)
+  callee 344:26 signatureText -> @signatureText
+  local 345:11 f: FunctionFacts | null (const)
+  callee 345:15 FactsTable.get -> @FactsTable.get
+  callee 347:7 factsText -> @factsText
+  callee 350:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee 352:5 bodyTables -> @bodyTables
+  callee 354:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function checkedText(compilation: Compilation): string -> @checkedText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Compilation.analyze dumpModule nish_alloc_struct nish_str_concat
   pointer compilation: size=88 writesThrough=true captured=false passedTo=Compilation.analyze#0
   stackSites=1 stackLocals=1
-  local 363:9 facts: FactsTable (const)
-  callee 363:17 Compilation.analyze -> @Compilation.analyze
-  local 364:9 out: string[] (const)
-  local 365:14 unit: ModuleUnit (const)
-  callee 366:5 dumpModule -> @dumpModule
+  local 369:9 facts: FactsTable (const)
+  callee 369:17 Compilation.analyze -> @Compilation.analyze
+  local 370:9 out: string[] (const)
+  local 371:14 unit: ModuleUnit (const)
+  callee 372:5 dumpModule -> @dumpModule
 module self/interop_abi.ts
 import analyzeFunctions from "./attributes" -> function @analyzeFunctions
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
