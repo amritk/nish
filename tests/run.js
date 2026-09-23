@@ -2166,7 +2166,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const classStoreLl = path.join(buildDir, "arr_header_hoist_record_class.ll");
   if (fs.existsSync(classStoreLl)) {
     const ir = fs.readFileSync(classStoreLl, "utf8");
-    const fn = ir.slice(ir.indexOf("@Grid.sumAndStamp("));
+    const fn = ir.slice(ir.search(/^define[^\n]*@Grid\.sumAndStamp\(/m));
     const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
     const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
     check(
