@@ -1,0 +1,134 @@
+{
+  "version": "0.8.0",
+  "date": "2026-09-23",
+  "tag": "v0.8.0",
+  "range": {
+    "from": "v0.7.0",
+    "to": "40ba644"
+  },
+  "entries": [
+    {
+      "id": "record-the-r6-deletion-s-measurement-151",
+      "type": "docs",
+      "scope": "wp19",
+      "breaking": false,
+      "title": "record the R6 deletion's measurement",
+      "body": "* docs(wp19): recount self/ and order the test job's steps as ci.yml runs them\n\nMASTER_PLAN §4 now gives `self/` as 64 modules and 35,601 lines, with the\ncommands that count them. wp10-ci's `test (ubuntu-latest)` row lists\n`npm run check` before the seed is fetched, and names the build of\n`build/nish` with the seed, which is the order of ci.yml's `test` job.\n\nRefs: docs/wp10-ci.md, docs/MASTER_PLAN.md#4-what-exists-today\n\n* docs(wp19): record the R6 deletion's measurement\n\nThe R6 row of wp19-stage0-retirement.md and the M6 row of MASTER_PLAN.md\nhad a placeholder where the measurement of the deletion was to go. It is\nnow there, dated: the undegraded `npm test` on `main` at `ad02409`, the\npublished package's file count, `npm run check` failing when a\n`@ts-expect-error` is removed from `self/`, and the lines the deletion\nremoved. The command sits beside each number.\n\nMeasured: 2106 passed, 0 failed, 1 skipped (wasi sysroot), no DEGRADED line\nRefs: docs/wp19-stage0-retirement.md#5-order",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d0c75f7"
+      ],
+      "pr": 151,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "let-nish-cmp-remove-each-compiler-s-own",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "let nish-cmp remove each compiler's own version from the DWARF producer",
+      "body": "A `-g` build records `producer: \"nish <version>\"`. nish-cmp compares the\nlast release against HEAD, and HEAD carries the next version from the\ncommit that bumps it, so every release turned the seven `dbg_*` cases red:\non the release pull request itself, and on `main` and every branch after\nit until the release was published and became the seed. That is what held\n0.7.0 back.\n\nnish-cmp now removes each side's *own* version, as its `--version` prints\nit, and only inside a `producer:` string, the way it already removes each\nside's own package root. A candidate that records any version but its own\nstill differs. `selfCheckVersions` drives the rewrite over fabricated inputs\non every run and from `npm test`, and the summary counts the files that\nneeded it. `tests/run.js`'s `normaliseProducer` already does the same for\nthe goldens.",
+      "metrics": [
+        "514/514 programs agree against the v0.6.0 seed, 7 equal after each compiler's own producer version, 0 undeclared (was 507/514, 7 undeclared)"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/nish-cmp.js selfCheckVersions"
+      ],
+      "commits": [
+        "5232437"
+      ],
+      "pr": 156,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "prove-bounds-through-toi32-length-and-compile-std",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove bounds through toI32(length) and compile std/text silent",
+      "body": "* perf(checker): prove bounds through toI32(length) and compile std/text silent\n\nThe bounds proof now reads the builtin `toI32(w.length)` as `w.length`.\nThat is the hoist a program has to write to compile in both number\nmodes: under `--number-mode f64` a `.length` is an `f64`, so\n`const n: i32 = toI32(s.length)` is the only spelling an `i32` cursor\ncan be compared against. It now proves what `const n = s.length` proves,\nin the hoist, in a loop condition and in a length guard. It is sound in\nboth modes: in i32 mode the conversion is the identity, and in f64 mode\nit is a saturating `fptosi` of an exact integer, which answers the\nlength or less and never a negative. Only the builtin counts. A user\nfunction named `toI32` wins over the builtin and may answer anything, so\nit proves nothing. The builtin converts inline and calls nothing, so,\nunlike any other call, it no longer drops the array-length facts. A\nsecond hoisted `toI32(ys.length)` used to undo the first.\n\nWith that, and four local rewrites in `std/text.ts`, a program that\nimports `nish/text` compiles with no performance warning from the\nlibrary, where every import used to print ten. The rewrites are guards\nthat always hold and prove a `substring` bound (`splitLines`,\n`splitWhitespace`, `replaceAll`), and two length tests in place of a\nternary minimum in `firstDifference`. The behaviour is unchanged. Those\nchecks are proven away, not hidden: the library's IR goes from six\nbounds-check sites to one (in `trimEnd`, at a computed index, which was\nnever reported) and from 40 clamp intrinsic calls to 28.\n\nMeasured: std/text.ts warnings on an importer, 10 -> 0 in i32 mode and 10 -> 0 in f64 mode\nRefs: docs/LANGUAGE.md#element-access, docs/IR_COOKBOOK.md\nTests: tests/cases/perf_bounds_toi32, tests/cases/perf_bounds_toi32_f64, tests/cases/perf_bounds_toi32_loop, tests/cases/perf_bounds_toi32_user\n\n* test(self): regenerate the corpus stores for the toI32 bounds cases\n\n`tests/self/goldens/checked.txt` gains the four new\n`perf_bounds_toi32*` programs and the `str_bounds_toi32` cookbook\nsnippet. `checked_self.txt` moves only inside `self/bounds.ts`, for its\nnew function and the lines after it. `tests/differential/goldens/unfrozen.txt`\nregisters the four new cases, which have no frozen rewrite. Each file was\nwritten by its own tool (`node tests/self/goldens.js --update`,\n`node tests/differential/goldens.js --update`), and the diff was read\nbefore it was committed.\n\n* refactor(checker): name the calls that call nothing, and guard std/text on its hoisted length\n\nThe walk and the loop-effect scan now ask one predicate, `callsNothing`,\nwhich call leaves the array-length facts standing (`charCodeAt` and the\nbuiltin `toI32`), so the two cannot drift apart. The `splitLines` and\n`splitWhitespace` guards compare `start` strictly against the hoisted\n`length` rather than converting `text.length` again: the strict test\ngoes through the hoist the same way the loop condition does, still\nalways holds, and costs one compare. `tests/self/goldens/checked_self.txt`\nmoves with the lines of `self/bounds.ts`.\n\nTests: tests/cases/perf_bounds_toi32, tests/cases/perf_bounds_toi32_f64\n\n* test(self): declare the toI32 bounds proof's nish-cmp differences\n\n`tests/nish-cmp.js` fails on any IR difference from the last release that\n`DECLARED` does not name. This change moves 16 files on purpose, and each\nnow has a narrow entry, one program and one file, with the sentence\nsaying why:\n\n- the new `perf_bounds_toi32*` cases and the `str_bounds_toi32` cookbook\n  snippet;\n- `text.ll` in every `std/text` importer;\n- `testing.ll` in every `std/testing` importer, whose own\n  `toI32(x.length)` hoists are now proven;\n- `main.ll` of the two `std_text` programs.\n\nEach entry names the words `CHANGELOG.md` now carries under\n`[Unreleased]`. The 7 `dbg_*` differences, the `producer` string left by\nthe 0.7.0 bump, are not this change's and stay undeclared.\n\nRefs: tests/nish-cmp.js",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "72a4b16"
+      ],
+      "pr": 154,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "constrained-type-parameters-wp18-g6-157",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "title": "constrained type parameters (WP18 G6)",
+      "body": "A generic function, class or interface may now constrain a type parameter\nwith a declared class or interface: `<T extends Shape>`, or an instantiation\nwith its arguments written out, `<T extends Container<i32>>`. Through a `T`\nthe template may read, write and call exactly the constraint's members, and\nevery instantiation is checked against the constraint where it was\nrequested: at the call that inferred it, after `new`, in an annotation, a\nfield, an array element, a `Result` payload, a nested instantiation or an\n`implements` target. A type argument satisfies a constraint when it is the\nconstraint itself or a class that `implements` it.\n\nThe lowering does not change. `areaOf<T extends Shape>` at `T = Circle` is\nstill its own `define` reading field 0 of `%struct.Circle`, with no bitcast\nto `%struct.Shape` and no vtable, and every existing golden is byte-identical.\n\nMember access is decided by where a value came from, not by its type.\nDuring an instantiation `T` is already `Point`, so each value carries the\ntype its template wrote (its \"origin\"), and `p.x` is refused only when `p`'s\norigin is a type parameter. At `T = Point`, `<T>(p: T, q: Point)` refuses\n`p.x` and accepts `q.x`. Origins follow a value through locals, `new Box<T>`,\narray literals and elements, fields and methods of a generic class, a\n`Result`'s payload and a generic call that hands its argument back; an\nexpression kind added later fails closed. A refusal is reported once per\ntemplate, however many instantiations reach it. docs/wp18-generics.md §15.6\nrecords the mechanism and the alternatives that were set aside.\n\nA constraint that is not a class or interface (NL2327), or that mentions a\ntype parameter (NL2326), is refused at the declaration. An unsatisfied\nconstraint is NL2328, a member of an unconstrained parameter NL2329, and a\nmember the constraint does not declare NL2330. The old \"not supported yet\"\nrefusal is gone and its code, NL2294, is retired. The eight new programs the\nv0.6.0 seed cannot parse are declared to nish-cmp.\n\nBREAKING CHANGE: reading, writing or calling a member through an\nunconstrained type parameter is now refused (``Cannot read `x` of `T`: an\nunconstrained type parameter has no members``). It used to compile whenever\nevery instantiation happened to have the member. The fix is to name the\nmembers with a constraint, `<T extends Point>`, where `Point` is a class or\ninterface that declares them.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#generic-functions"
+      ],
+      "tests": [
+        "tests/cases/gen_constraint"
+      ],
+      "commits": [
+        "60b3b8a"
+      ],
+      "pr": 157,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "give-each-differential-run-its-own-working-directory",
+      "type": "test",
+      "breaking": false,
+      "title": "give each differential run its own working directory",
+      "body": "The differential runner builds and runs every whole program eight at a\ntime, and every run shared the repository root as its working directory.\n`io_nish_import` and its twin `io_nish_import_global` both write\n`build/test/io_nish_import.txt` and read it back. They have to use the\nsame path, because `tests/run.js` requires the two to emit identical IR.\nWhen one twin truncated the file while the other was reading it, the read\ncame back empty and the comparison failed at random: 2 runs in 40 on the\nio_nish_import pair alone.\n\nEach side of each program (the native binary and the Node rewrite) now\nruns in `build/test/differential/<name>/<side>-cwd`. That directory is a\nstand-in for the repository root: it has a private `build/`, with the\nempty `build/test/` and `build/test/differential/` the corpus assumes,\nand every other top-level entry is a symlink back to the checkout. So a\nprogram that reads a checked-in file by a root-relative path, as\n`corpus/io_streams` does, still finds it, and anything a program writes\nunder `build/` stays private to that run. No source file changes, which\nmatters because the frozen rewrites hash their sources. The native and\nNode runs no longer see each other's leftovers either.\n\nA new check in `tests/run.js` asserts that the twins' scratch files\nlanded in their own directories. It fails on every run if the isolation\nis removed, where the race it replaces failed only occasionally.",
+      "metrics": [
+        "io_nish_import pair at --jobs 16, 3 failures in 300 runs before, 0 in 900 after; full corpus at --jobs 8, 0 unexpected failures in 20 runs"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/cases/io_nish_import",
+        "tests/cases/io_nish_import_global"
+      ],
+      "commits": [
+        "b87628b"
+      ],
+      "pr": 159,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "hold-std-and-examples-to-zero-performance-warnings",
+      "type": "test",
+      "breaking": false,
+      "title": "hold std/ and examples/ to zero performance warnings and ratchet self/",
+      "body": "`npm test` now fails when anything that ships carries a performance\nwarning. Every `std/` module and every `examples/` program, discovered from\nits directory, is compiled under `--json` in both number modes, and any\n`\"severity\":\"performance\"` object fails the run, naming its\n`file:line:col` and `NL9xxx` code. The compiler's own source is not at zero\nyet, so `self/compile.ts` is held to `tests/perf-baseline.json` instead: a\ncount per file and per code, read from the `--json` of the compile the\nself-hosting section already makes. More warnings fails and prints the\nones of the file and code that grew; fewer fails until the baseline is\nlowered, so the cap only moves down.\n\nThe sixteen warnings `std/json` and `std/testing` carried, and the five in\n`examples/argv.ts` and `examples/arrays.ts`, are proven away rather than\nsilenced: guards the bounds proof reads, a string skip written as a flag\nin the scanning loop instead of a cursor assigned a callee's answer, a loop\nbounded by both lengths it indexes, and an element read into a local\nbefore a call can drop what the loop condition proved. Every answer the\ntwo modules give is unchanged, both still compile under\n`--number-mode f64`, and `tests/link/std_json` now pins the nested-string\nskip with committed cases.\n\n`tests/nish-cmp.js` now accepts a declared difference's words from the\nrelease section `scripts/changelog-gen.mjs` would render for the commits\nsince the last release, as well as from `CHANGELOG.md`, so a pull request\nnames its output change through its own subject instead of a hand-written\n`[Unreleased]` line the next release would duplicate. It runs the\ngenerator's own command line without `--write`, fetches the history and\ntags a shallow checkout lacks, and fails loudly when the range still\ncannot be read.",
+      "metrics": [
+        "std/ and examples/ 21 -> 0 performance warnings; self/compile.ts baseline 89 after #157 (NL9007 69, NL9010 11, NL9009 4, NL9002 3, NL9003 2)"
+      ],
+      "refs": [
+        ".claude/testing.md",
+        "docs/wp10-ci.md"
+      ],
+      "tests": [
+        "tests/run.js (performance gate",
+        "performance ratchet)",
+        "tests/perf-baseline.json",
+        "tests/link/std_json"
+      ],
+      "commits": [
+        "40ba644"
+      ],
+      "pr": 158,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    }
+  ]
+}

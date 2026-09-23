@@ -26,6 +26,27 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-23
+
+### Breaking changes
+
+- checker: Constrained type parameters (WP18 G6) ([#157](https://github.com/amritk/nish/pull/157))
+
+### Performance
+
+- checker: Prove bounds through toI32(length) and compile std/text silent ([#154](https://github.com/amritk/nish/pull/154))
+
+### Documentation
+
+- wp19: Record the R6 deletion's measurement ([#151](https://github.com/amritk/nish/pull/151))
+
+### Tests
+
+- self: Let nish-cmp remove each compiler's own version from the DWARF producer ([#156](https://github.com/amritk/nish/pull/156))
+- Give each differential run its own working directory ([#159](https://github.com/amritk/nish/pull/159))
+- Hold std/ and examples/ to zero performance warnings and ratchet self/ ([#158](https://github.com/amritk/nish/pull/158))
+
+
 ### Breaking changes
 
 - checker: Constrained type parameters (WP18 G6) ([#157](https://github.com/amritk/nish/pull/157))
@@ -277,3 +298,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.5.0]: https://github.com/amritk/nish/releases/tag/v0.5.0
 [0.6.0]: https://github.com/amritk/nish/releases/tag/v0.6.0
 [0.7.0]: https://github.com/amritk/nish/releases/tag/v0.7.0
+[0.8.0]: https://github.com/amritk/nish/releases/tag/v0.8.0
