@@ -4,14 +4,21 @@
 # a line out when its program is gone. The rewriter that wrote the store was
 # stage0's and is deleted, so a line here is coverage lost, not a task deferred:
 # the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).
+cases/arr_bounds_break_for added after R6: no rewriter to freeze it with
+cases/arr_bounds_break_for_string added after R6: no rewriter to freeze it with
+cases/arr_bounds_break_while added after R6: no rewriter to freeze it with
+cases/arr_bounds_break_while_string added after R6: no rewriter to freeze it with
 cases/arr_bounds_cond_assign added after R6: no rewriter to freeze it with
 cases/arr_bounds_cond_effect added after R6: no rewriter to freeze it with
 cases/arr_bounds_continue_do added after R6: no rewriter to freeze it with
 cases/arr_bounds_continue_for added after R6: no rewriter to freeze it with
+cases/arr_bounds_continue_nested added after R6: no rewriter to freeze it with
 cases/arr_bounds_continue_proven added after R6: no rewriter to freeze it with
+cases/arr_bounds_continue_switch added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
+cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with

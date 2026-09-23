@@ -123,7 +123,7 @@ import {
   N_WHILE,
   Node,
 } from "./nodes";
-import { CheckedProgram } from "./program";
+import { CheckedProgram, inlineElementStruct } from "./program";
 import { Local, STORAGE_LOCAL } from "./symbols";
 import { T_I32, T_I64, T_STRING, TypeTable, isUnsigned } from "./types";
 
@@ -1147,12 +1147,21 @@ export class BoundsWalk {
    * the end of the body rather than from the end of the body alone (#181).
    */
   continues: State[];
+  /**
+   * The state at each `break` of the innermost loop or `switch` being walked.
+   * A `break` leaves a `for` or `while` with the body's writes applied, past
+   * the condition that re-established a fact about them, so the state after
+   * the loop is the join of these and the condition's exit (#181's `break`
+   * counterpart).
+   */
+  breaks: State[];
 
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx;
     this.unproven = [];
     this.paths = [];
     this.continues = [];
+    this.breaks = [];
     this.loops = 0;
     this.uncheckedIndexing = uncheckedIndexing;
   }
@@ -1552,9 +1561,10 @@ const isBoundsAssignment = (op: string): boolean => {
  * Whether an element store writes a struct in place. An array of records keeps
  * its elements inline (WP15 §2a) and `const r = rs[0]` is an interior pointer,
  * so `rs[0] = other` rewrites `r.xs` with no field name anywhere in the
- * statement. An array of classes holds pointers and a store there changes no
- * object, but the two are told apart by a layout rule this walk has no reason
- * to restate, so any struct element counts.
+ * statement. An array of classes holds pointers, so `nodes[i] = spare` stores a
+ * pointer and rewrites no object; `inlineElementStruct` is the layout rule that
+ * tells the two apart, and it is asked rather than restated. An element whose
+ * type the checker did not record counts, because nothing says it is a pointer.
  *
  * The header hoist in `self/emit_arrays.ts` (`storedFields`) asks the same
  * question about a field load it would lift out of a loop, and reads this
@@ -1562,7 +1572,7 @@ const isBoundsAssignment = (op: string): boolean => {
  */
 export const storesRecord = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
   const type = program.nodeTypes[access.id];
-  return type < 0 || table.isStruct(type);
+  return type < 0 || inlineElementStruct(program, table, type) !== null;
 };
 
 /**
@@ -1829,6 +1839,22 @@ const continueJoin = (walk: BoundsWalk, end: State, exits: boolean): State => {
 };
 
 /**
+ * The state after a `for` or `while`: what holds where the condition fails,
+ * joined with every `break` out of the body. Written into `exit`, which is the
+ * condition's state and so the one the enclosing block goes on in.
+ */
+const breakJoin = (walk: BoundsWalk, exit: State): void => {
+  if (walk.breaks.length === 0) {
+    return;
+  }
+  let joined = exit;
+  for (const b of walk.breaks) {
+    joined = intersect(joined, b);
+  }
+  copyInto(exit, joined);
+};
+
+/**
  * Walk one statement, returning whether control definitely leaves it. That
  * answer is what makes the early-exit guard work: after
  * `if (i >= s.length) { return 0; }` the negation of the test holds for the
@@ -1891,9 +1917,13 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // state `forgetAcross` left, so its states are collected only to keep them
     // away from an enclosing loop's update.
     const outer = walk.continues;
+    const outerBreaks = walk.breaks;
     walk.continues = [];
+    walk.breaks = [];
     walkBoundsStatement(walk, body, stmt.children[1]);
+    breakJoin(walk, state);
     walk.continues = outer;
+    walk.breaks = outerBreaks;
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1902,11 +1932,17 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     forgetAcross(walk, state, stmt);
     walk.loops = walk.loops + 1;
     const body = cloneState(state);
+    // The state after a `do/while` is the one `forgetAcross` left, which never
+    // saw the condition's facts, so a `break` has nothing to take back; its
+    // states are collected only to keep them away from an enclosing loop.
     const outer = walk.continues;
+    const outerBreaks = walk.breaks;
     walk.continues = [];
+    walk.breaks = [];
     const exits = walkBoundsStatement(walk, body, stmt.children[0]);
     const condition = continueJoin(walk, body, exits);
     walk.continues = outer;
+    walk.breaks = outerBreaks;
     walkExpression(walk, condition, stmt.children[1]);
     walk.loops = walk.loops - 1;
     return false;
@@ -1934,10 +1970,14 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
       addFacts(body, conditionFacts(walk, state, cond).whenTrue);
     }
     const outer = walk.continues;
+    const outerBreaks = walk.breaks;
     walk.continues = [];
+    walk.breaks = [];
     const exits = walkBoundsStatement(walk, body, stmt.children[3]);
     const update = continueJoin(walk, body, exits);
+    breakJoin(walk, state);
     walk.continues = outer;
+    walk.breaks = outerBreaks;
     if (stmt.children[2].kind !== N_EMPTY) {
       walkExpression(walk, update, stmt.children[2]);
     }
@@ -1950,10 +1990,15 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     forgetAcross(walk, state, stmt);
     walk.loops = walk.loops + 1;
     const body = cloneState(state);
+    // As with `do/while`, the state after the loop never saw a fact the loop
+    // re-establishes, so a `break` is only kept away from an enclosing loop.
     const outer = walk.continues;
+    const outerBreaks = walk.breaks;
     walk.continues = [];
+    walk.breaks = [];
     walkBoundsStatement(walk, body, stmt.children[2]);
     walk.continues = outer;
+    walk.breaks = outerBreaks;
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1971,6 +2016,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_BREAK) {
+    walk.breaks.push(cloneState(state));
     return true;
   }
 
@@ -1985,6 +2031,11 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // one above it, so each is walked from the state the whole `switch` is
     // sound under and nothing it decided survives past the closing brace.
     forgetAcross(walk, state, stmt);
+    // A `break` in a clause leaves the `switch`, not a loop around it, and the
+    // state after the `switch` is already the pruned one, so its states go no
+    // further. A `continue` does reach the loop, and stays in its frame.
+    const outerBreaks = walk.breaks;
+    walk.breaks = [];
     for (const clause of stmt.children[1].children) {
       const clauseState = cloneState(state);
       const body = clause.kind === N_CASE ? clause.children[1] : clause.children[0];
@@ -1994,6 +2045,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
         }
       }
     }
+    walk.breaks = outerBreaks;
     return false;
   }
 

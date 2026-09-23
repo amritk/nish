@@ -2213,7 +2213,16 @@ that, for a local and a path alike:
     the index or calls anything takes the proof away from the update or the
     condition (`arr_path_continue_for`, `arr_path_continue_do`,
     `arr_bounds_continue_for`, `arr_bounds_continue_do`), and one that does
-    none of that keeps it (`arr_bounds_continue_proven`);
+    none of that keeps it (`arr_bounds_continue_proven`). A `continue` in a
+    `switch` clause reaches the loop's update (`arr_bounds_continue_switch`),
+    and one in an inner loop reaches only the inner update
+    (`arr_bounds_continue_nested`);
+  - the code after a `for` or a `while` is reached where the condition fails
+    *and* from every `break`, which leaves with the body's writes applied. A
+    fact the condition re-established about something the body then changed
+    does not survive the loop (`arr_bounds_break_for`, `arr_bounds_break_while`,
+    `arr_bounds_break_for_string`, `arr_bounds_break_while_string`). A `break`
+    in a `switch` clause leaves only the `switch`;
   - `r.unwrapOr(d)` evaluates `d` and `r.expect(m)` evaluates `m` only when
     `r` is an `Err`, so neither argument proves anything after the call. What
     `d` might undo is undone, and `m` is followed by the exit
@@ -2231,8 +2240,10 @@ path or resize the array, and a path fact ends at:
     holder — `g.xs = ys` ends `h.xs`'s facts even where `g` is a different
     object, because the name is compared rather than the aliasing guessed
     (`arr_path_reassign`, `arr_path_alias_store`);
-  - a store of a whole element into an array of structs, which rewrites a
-    record in place with no field name written (`arr_path_record_store`);
+  - a store of a whole element into an array of inline records, which
+    rewrites a record in place with no field name written
+    (`arr_path_record_store`). An array of classes holds pointers, so a store
+    there rewrites no object and ends nothing;
   - an assignment to the root (`arr_path_root`);
   - **any call** and any `new`, for a string path as well as an array one: a
     callee may `push` or `pop` the array or store a new value in the field,
@@ -2250,8 +2261,10 @@ removed. `arr_path_hold` pins where the fact holds, and
 `tests/cases/arr_header_hoist` pins the measured point of it: a loop over
 `h.xs` compiles to the loop `const xs = h.xs` does, with one bounds check fewer
 than before and so one loop exit fewer. The hoist that lifts `h.xs` out of the
-loop refuses a loop that stores a whole element into an array of structs, by
-the same rule the proof drops its path facts by (`arr_header_hoist_record_store`).
+loop refuses a loop that stores a whole element into an array of inline
+records, by the same rule the proof drops its path facts by
+(`arr_header_hoist_record_store`), and keeps hoisting through a store into an
+array of classes (`arr_header_hoist_record_class`).
 A path the proof cannot take keeps its
 check without a warning, because the rewrite the warning would name is that
 `const xs = h.xs` hoist.

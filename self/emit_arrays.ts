@@ -315,7 +315,7 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
 /**
  * Collect the field names `loop` stores to into `names`, and answer whether it
  * can store to a field it cannot name -- a `new`, a call to a user function
- * that writes memory, or an element store into an array of structs, which
+ * that writes memory, or an element store into an array of inline records, which
  * rewrites a record in place (`storesRecord` in `self/bounds.ts`, the rule the
  * bounds proof drops its path facts by).
  *

@@ -2129,6 +2129,15 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_bounds_continue_for", "a rebind before `continue`, in a `for` update, on a local", "", "7 >= 1"],
     ["arr_path_continue_do", "a call before `continue`, in a `do/while` condition", "", "3 >= 1"],
     ["arr_bounds_continue_do", "a rebind before `continue`, in a `do/while` condition, on a local", "", "3 >= 1"],
+    ["arr_bounds_continue_nested", "an outer `continue` before an inner loop with its own", "", "7 >= 1"],
+    ["arr_bounds_continue_switch", "a `continue` inside a `switch` clause", "", "7 >= 1"],
+    // #181's `break` counterpart: a `break` leaves a `for` or `while` past the
+    // condition that re-established a fact, so the state after the loop is the
+    // join of the condition's exit and every `break`.
+    ["arr_bounds_break_for", "a move before `break`, after a `for` condition", "", "1000 >= 3"],
+    ["arr_bounds_break_while", "a rebind before `break`, after a `while` condition", "", "5 >= 1"],
+    ["arr_bounds_break_for_string", "a bound moved before a guarded `break`, on a string", "", "3 >= 3"],
+    ["arr_bounds_break_while_string", "a bound moved before `break`, on a string", "", "50 >= 3"],
     // #182: an argument evaluated on the `Err` path alone proves nothing after the call.
     ["arr_bounds_lazy_unwrap_or", "an `unwrapOr` fallback that did not run", "", "50 >= 3"],
     ["arr_bounds_lazy_expect", "an `expect` message that did not run", "", "50 >= 3"],
@@ -2149,6 +2158,21 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         String(run.stderr).includes(`index out of range: ${message}`) &&
         String(run.stdout).trim() === stdout,
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // #180's rule stops at inline records: an element store into an array of
+  // classes stores a pointer, so `this.src` and `this.nodes` keep their headers
+  // in the preheader and the loop reloads no field of `this`.
+  const classStoreLl = path.join(buildDir, "arr_header_hoist_record_class.ll");
+  if (fs.existsSync(classStoreLl)) {
+    const ir = fs.readFileSync(classStoreLl, "utf8");
+    const fn = ir.slice(ir.indexOf("@Grid.sumAndStamp("));
+    const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
+    const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
+    check(
+      "arr_header_hoist_record_class: a class-element store leaves both headers hoisted",
+      reloads === 0,
+      `${reloads} array header loads inside the loop`
     );
   }
   // The declared-type rule on its own: `narrowed` and `plain` are one loop over
