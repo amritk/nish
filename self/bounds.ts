@@ -125,7 +125,7 @@ import {
 } from "./nodes";
 import { CheckedProgram } from "./program";
 import { Local, STORAGE_LOCAL } from "./symbols";
-import { T_I32, T_I64, T_STRING, isUnsigned } from "./types";
+import { T_I32, T_I64, T_STRING, TypeTable, isUnsigned } from "./types";
 
 /** The largest bound the fold carries; a literal past it is answered "not a bound". */
 const I32_MAX: i64 = 2147483647;
@@ -1140,11 +1140,19 @@ export class BoundsWalk {
   uncheckedIndexing: boolean;
   /** The property paths this body's facts have been keyed by, in first-use order. */
   paths: PathHolder[];
+  /**
+   * The state at each `continue` of the innermost loop being walked. A
+   * `continue` jumps to the `for` update or the `do/while` condition with its
+   * branch's effects applied, so those are walked from the join of these and
+   * the end of the body rather than from the end of the body alone (#181).
+   */
+  continues: State[];
 
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx;
     this.unproven = [];
     this.paths = [];
+    this.continues = [];
     this.loops = 0;
     this.uncheckedIndexing = uncheckedIndexing;
   }
@@ -1160,6 +1168,24 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
     return false;
   }
   return ctx.program.nodeTypes[callee.children[0].id] === T_STRING;
+};
+
+/**
+ * `r.unwrapOr(d)` or `r.expect(m)` on a `Result`, whose one argument
+ * `self/emit_result.ts` evaluates on the `Err` path only, or "" for any other
+ * call. The names are the checker's (`checkResultMethod` in `self/result.ts`);
+ * they are matched here rather than through the emitter's `resultMethodName`,
+ * because a checker module does not reach into the emitter.
+ */
+const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
+  const callee = unwrapBoundsParens(call.children[0]);
+  if (callee.kind !== N_MEMBER || call.children[1].children.length !== 1) {
+    return "";
+  }
+  if (callee.text !== "unwrapOr" && callee.text !== "expect") {
+    return "";
+  }
+  return ctx.table.isResult(ctx.program.nodeTypes[callee.children[0].id]) ? callee.text : "";
 };
 
 /**
@@ -1388,6 +1414,19 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     // may reach back. The receiver's length is read before either, so the
     // holder is dropped the moment an argument rebinds it — a literal `0`
     // still folds after that, because no string has a negative length.
+    const lazy = lazyResultMethod(ctx, e);
+    if (lazy !== "") {
+      // The argument runs on the `Err` path alone. `unwrapOr`'s fallback then
+      // joins the `Ok` path, so only what holds either way survives; `expect`'s
+      // message is followed by the exit, so nothing it did reaches past it.
+      const errPath = cloneState(state);
+      walkExpression(walk, errPath, e.children[1].children[0]);
+      if (lazy === "unwrapOr") {
+        copyInto(state, intersect(state, errPath));
+      }
+      forgetCallEffects(walk, state);
+      return;
+    }
     const clamped = isSubstringCall(ctx, e);
     let holder: Local | null = null;
     if (clamped) {
@@ -1516,10 +1555,14 @@ const isBoundsAssignment = (op: string): boolean => {
  * statement. An array of classes holds pointers and a store there changes no
  * object, but the two are told apart by a layout rule this walk has no reason
  * to restate, so any struct element counts.
+ *
+ * The header hoist in `self/emit_arrays.ts` (`storedFields`) asks the same
+ * question about a field load it would lift out of a loop, and reads this
+ * answer rather than a copy of it (#180).
  */
-const storesRecord = (ctx: CheckContext, access: Node): boolean => {
-  const type = ctx.program.nodeTypes[access.id];
-  return type < 0 || ctx.table.isStruct(type);
+export const storesRecord = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
+  const type = program.nodeTypes[access.id];
+  return type < 0 || table.isStruct(type);
 };
 
 /**
@@ -1611,7 +1654,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
         judge(walk, state, target, target.children[0], target.children[1]);
       }
     }
-    if (storesRecord(ctx, target)) {
+    if (storesRecord(ctx.program, ctx.table, target)) {
       forgetPaths(walk, state);
     }
     return;
@@ -1719,7 +1762,7 @@ const noteStoredField = (ctx: CheckContext, target: Node, effects: Effects): voi
   if (t.kind === N_MEMBER && effects.fields.indexOf(t.text) < 0) {
     effects.fields.push(t.text);
   }
-  if (t.kind === N_INDEX && storesRecord(ctx, t)) {
+  if (t.kind === N_INDEX && storesRecord(ctx.program, ctx.table, t)) {
     effects.records = true;
   }
 };
@@ -1764,6 +1807,26 @@ const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void =
 };
 
 // ---- Statements -------------------------------------------------------------------
+
+/**
+ * The state a `for` update or a `do/while` condition runs in: what holds at the
+ * end of the body and at every `continue` in it. A body that always leaves
+ * without a `continue` makes the update unreachable; it is still walked, from
+ * the end of the body, so the accesses in it are judged at all.
+ */
+const continueJoin = (walk: BoundsWalk, end: State, exits: boolean): State => {
+  let joined = end;
+  let k = 0;
+  if (exits && walk.continues.length > 0) {
+    joined = walk.continues[0];
+    k = 1;
+  }
+  while (k < walk.continues.length) {
+    joined = intersect(joined, walk.continues[k]);
+    k = k + 1;
+  }
+  return joined;
+};
 
 /**
  * Walk one statement, returning whether control definitely leaves it. That
@@ -1824,7 +1887,13 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     walkExpression(walk, state, stmt.children[0]);
     const body = cloneState(state);
     addFacts(body, conditionFacts(walk, state, stmt.children[0]).whenTrue);
+    // A `continue` here goes back to the condition, which was walked in the
+    // state `forgetAcross` left, so its states are collected only to keep them
+    // away from an enclosing loop's update.
+    const outer = walk.continues;
+    walk.continues = [];
     walkBoundsStatement(walk, body, stmt.children[1]);
+    walk.continues = outer;
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1833,8 +1902,12 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     forgetAcross(walk, state, stmt);
     walk.loops = walk.loops + 1;
     const body = cloneState(state);
-    walkBoundsStatement(walk, body, stmt.children[0]);
-    walkExpression(walk, body, stmt.children[1]);
+    const outer = walk.continues;
+    walk.continues = [];
+    const exits = walkBoundsStatement(walk, body, stmt.children[0]);
+    const condition = continueJoin(walk, body, exits);
+    walk.continues = outer;
+    walkExpression(walk, condition, stmt.children[1]);
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1860,9 +1933,13 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     if (cond.kind !== N_EMPTY) {
       addFacts(body, conditionFacts(walk, state, cond).whenTrue);
     }
-    walkBoundsStatement(walk, body, stmt.children[3]);
+    const outer = walk.continues;
+    walk.continues = [];
+    const exits = walkBoundsStatement(walk, body, stmt.children[3]);
+    const update = continueJoin(walk, body, exits);
+    walk.continues = outer;
     if (stmt.children[2].kind !== N_EMPTY) {
-      walkExpression(walk, body, stmt.children[2]);
+      walkExpression(walk, update, stmt.children[2]);
     }
     walk.loops = walk.loops - 1;
     return false;
@@ -1873,7 +1950,10 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     forgetAcross(walk, state, stmt);
     walk.loops = walk.loops + 1;
     const body = cloneState(state);
+    const outer = walk.continues;
+    walk.continues = [];
     walkBoundsStatement(walk, body, stmt.children[2]);
+    walk.continues = outer;
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1885,7 +1965,12 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return true;
   }
 
-  if (stmt.kind === N_BREAK || stmt.kind === N_CONTINUE) {
+  if (stmt.kind === N_CONTINUE) {
+    walk.continues.push(cloneState(state));
+    return true;
+  }
+
+  if (stmt.kind === N_BREAK) {
     return true;
   }
 

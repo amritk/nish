@@ -27,6 +27,7 @@
 // negative index fail too.
 
 import { HoistedHeader, isResizeCall } from "./attributes";
+import { storesRecord } from "./bounds";
 import { parseIntegerLiteral } from "./constants";
 import { Emitter, LoopTarget } from "./emit";
 import {
@@ -313,8 +314,10 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
 
 /**
  * Collect the field names `loop` stores to into `names`, and answer whether it
- * can store to a field it cannot name -- a `new`, or a call to a user function
- * that writes memory.
+ * can store to a field it cannot name -- a `new`, a call to a user function
+ * that writes memory, or an element store into an array of structs, which
+ * rewrites a record in place (`storesRecord` in `self/bounds.ts`, the rule the
+ * bounds proof drops its path facts by).
  *
  * A hoisted `h.xs` is a field load lifted into the preheader, so it stands only
  * while nothing in the loop puts a different array in that field. A store to a
@@ -333,6 +336,9 @@ const storedFields = (emitter: Emitter, node: Node, names: string[]): boolean =>
     const target = unwrapParens(node.children[0]);
     if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
       names.push(target.text);
+    }
+    if (target.kind === N_INDEX && storesRecord(emitter.program, emitter.table, target)) {
+      opaque = true; // a record rewritten in place, every field of it unnamed (#180)
     }
   } else if (node.kind === N_UNARY) {
     const target = unwrapParens(node.children[0]);

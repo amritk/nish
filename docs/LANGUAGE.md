@@ -2206,10 +2206,21 @@ that, for a local and a path alike:
     (`arr_bounds_store_rhs`, `arr_path_store_rhs`,
     `arr_path_store_rhs_compound`). A field store evaluates its receiver before
     its value, and `g.hs[i].n = (i = 0)` is judged that way round
-    (`arr_path_store_rhs_field`).
+    (`arr_path_store_rhs_field`);
+  - a `for` update and a `do/while` condition are reached from the end of the
+    body *and* from every `continue`, so they are judged against what holds
+    on all of those edges: a `continue` branch that rebinds the array, moves
+    the index or calls anything takes the proof away from the update or the
+    condition (`arr_path_continue_for`, `arr_path_continue_do`,
+    `arr_bounds_continue_for`, `arr_bounds_continue_do`), and one that does
+    none of that keeps it (`arr_bounds_continue_proven`);
+  - `r.unwrapOr(d)` evaluates `d` and `r.expect(m)` evaluates `m` only when
+    `r` is an `Err`, so neither argument proves anything after the call. What
+    `d` might undo is undone, and `m` is followed by the exit
+    (`arr_bounds_lazy_unwrap_or`, `arr_bounds_lazy_expect`).
 
-Both were unsound for locals before property paths existed; the fix and the
-tests cover both.
+All of these were unsound for locals before property paths existed; the fixes
+and the tests cover both.
 
 **A property path has to earn what a local gets for free**, because a field
 can be written through an alias and a local cannot. `h.xs.length` proves
@@ -2238,7 +2249,10 @@ program that proves `i < h.xs.length`, breaks it by one rule, and reads
 removed. `arr_path_hold` pins where the fact holds, and
 `tests/cases/arr_header_hoist` pins the measured point of it: a loop over
 `h.xs` compiles to the loop `const xs = h.xs` does, with one bounds check fewer
-than before and so one loop exit fewer. A path the proof cannot take keeps its
+than before and so one loop exit fewer. The hoist that lifts `h.xs` out of the
+loop refuses a loop that stores a whole element into an array of structs, by
+the same rule the proof drops its path facts by (`arr_header_hoist_record_store`).
+A path the proof cannot take keeps its
 check without a warning, because the rewrite the warning would name is that
 `const xs = h.xs` hoist.
 

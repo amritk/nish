@@ -2090,6 +2090,18 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_path_store_rhs_field", "`g.hs[i].n = (i = 0)`", "", "1000000 >= 2"],
     ["arr_path_store_rhs_compound", "`h.xs[i] += (i = 2)`", "", "1000000 >= 3"],
     ["arr_bounds_store_rhs", "`xs[i] = (i = 0)` on a local", "", "1000000 >= 3"],
+    // #181: a `continue` reaches the `for` update or the `do/while` condition
+    // with its branch's effects applied, so those are judged from the join of
+    // every `continue` and the end of the body.
+    ["arr_path_continue_for", "a field store before `continue`, in a `for` update", "", "7 >= 1"],
+    ["arr_bounds_continue_for", "a rebind before `continue`, in a `for` update, on a local", "", "7 >= 1"],
+    ["arr_path_continue_do", "a call before `continue`, in a `do/while` condition", "", "3 >= 1"],
+    ["arr_bounds_continue_do", "a rebind before `continue`, in a `do/while` condition, on a local", "", "3 >= 1"],
+    // #182: an argument evaluated on the `Err` path alone proves nothing after the call.
+    ["arr_bounds_lazy_unwrap_or", "an `unwrapOr` fallback that did not run", "", "50 >= 3"],
+    ["arr_bounds_lazy_expect", "an `expect` message that did not run", "", "50 >= 3"],
+    // #180: the header hoist counts a whole-record store the way the proof does.
+    ["arr_header_hoist_record_store", "a whole-record store under a hoisted `const` view", "1", "1 >= 1"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
     if (!fs.existsSync(ll)) continue;
