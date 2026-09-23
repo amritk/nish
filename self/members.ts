@@ -135,7 +135,7 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   if (field === null) {
     const hint = info.method(expr.text) !== null ? " (it is a method; call it)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    ctx.errorAtProperty(expr, `Unknown field \`${expr.text}\` on ${kind} \`${info.name}\`${hint}`);
+    ctx.errorAtProperty(expr, `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`${hint}`);
     return T_ERROR;
   }
   return field.type;
@@ -185,10 +185,10 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (method === null) {
     const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${kind} \`${info.name}\`${hint}`);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`${hint}`);
     return T_ERROR;
   }
-  checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope, false);
+  checkMethodArguments(ctx, expr, method, args, `${ctx.table.typeName(info.type)}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
 };
@@ -343,7 +343,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
     }
     const field = info.field(prop.text);
     if (field === null) {
-      ctx.error(prop, `\`${info.name}\` has no field \`${prop.text}\``);
+      ctx.error(prop, `\`${ctx.table.typeName(info.type)}\` has no field \`${prop.text}\``);
       continue;
     }
     let duplicate = false;
@@ -364,7 +364,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       const spelled = ctx.table.typeName(field.type);
       ctx.error(
         value,
-        `Field \`${prop.text}\` of \`${info.name}\` expects a value of type ${spelled}, got ${ctx.table.typeName(got)}`
+        `Field \`${prop.text}\` of \`${ctx.table.typeName(info.type)}\` expects a value of type ${spelled}, got ${ctx.table.typeName(got)}`
       );
     }
   }
@@ -376,7 +376,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       }
     }
     if (!set) {
-      ctx.error(expr, `Object literal for \`${info.name}\` is missing field \`${field.name}\``);
+      ctx.error(expr, `Object literal for \`${ctx.table.typeName(info.type)}\` is missing field \`${field.name}\``);
       return want;
     }
   }
@@ -422,14 +422,14 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   const field = info.field(target.text);
   if (field === null) {
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    ctx.errorAtProperty(target, `Unknown field \`${target.text}\` on ${kind} \`${info.name}\``);
+    ctx.errorAtProperty(target, `Unknown field \`${target.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\``);
     return T_ERROR;
   }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {
     const where = info.kind === STRUCT_CLASS ? " outside its constructor" : "";
     return ctx.errorType(
       target,
-      `Cannot assign to readonly field \`${field.name}\` of \`${info.name}\`${where}`
+      `Cannot assign to readonly field \`${field.name}\` of \`${ctx.table.typeName(info.type)}\`${where}`
     );
   }
   return assignInto(ctx, expr, scope, null, field.type, field.name, "field");
