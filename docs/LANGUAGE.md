@@ -1963,6 +1963,24 @@ program as written:
     length guard (`if (w.length >= 4)`) or an array literal of known size
     gives.
 
+    **`toI32(w.length)` is `w.length`** wherever a length appears above: in
+    the hoist `const n: i32 = toI32(w.length)`, in `i < toI32(w.length)` and
+    in a length guard. It is the spelling that compiles in both number modes
+    — under `--number-mode f64` `.length` is an `f64`, and `i < w.length`
+    with an `i32` `i` is a type error — so a program written for both
+    (`std/text` is one) keeps every proof the bare hoist gets. It is sound in
+    both: in i32 mode the conversion is the identity, and in f64 mode it is a
+    saturating `fptosi` of an exact integer, which can only answer the length
+    or less, never a negative. Only the builtin counts: a user function named
+    `toI32` wins over the builtin and may answer anything, so it proves
+    nothing (`tests/cases/perf_bounds_toi32_user`, which panics on the pass
+    past the end), and neither does `toI32` of anything that is not a bare
+    length (`perf_bounds_toi32_loop`). The builtin converts inline and calls
+    nothing, so unlike any other call it leaves the array-length facts
+    standing, and `const m: i32 = toI32(ys.length)` does not undo the
+    `const n: i32 = toI32(xs.length)` above it (`perf_bounds_toi32`,
+    `perf_bounds_toi32_f64`).
+
 A fact ends where it stops being true: at any assignment to `i` that is not
 `i = i + <non-negative literal>` (`i++` and `i += n` included), at any
 assignment to `w`, and — for an **array** — at any call, because a callee

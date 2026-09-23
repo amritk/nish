@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 427 programs, 7812 dump lines.
+# 432 programs, 7907 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3989,6 +3989,97 @@ function test(): i32 -> @test [exported]
   local 29:7 m: i32 (let)
   local 37:9 at: i32 (const)
   local 41:14 x: i32 (const)
+program tests/cases/perf_bounds_toi32.ts
+module tests/cases/perf_bounds_toi32.ts (entry)
+function countCode(s: string, code: i32): i32 -> @countCode
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 10:9 n: i32 (const)
+  local 11:7 count: i32 (let)
+  local 12:7 i: i32 (let)
+function dot(xs: i32[], ys: i32[]): i32 -> @dot
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 23:9 xn: i32 (const)
+  local 24:9 yn: i32 (const)
+  local 25:7 total: i32 (let)
+  local 26:7 i: i32 (let)
+function tails(s: string, from: i32[]): string[] -> @tails
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_array_grow nish_str_new
+  pointer from: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 35:9 out: string[] (const)
+  local 36:14 k: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: countCode dot nish_alloc_struct nish_print nish_str_from_i32 tails
+  stackSites=3 stackLocals=0
+  callee 45:15 countCode -> @countCode
+  callee 46:15 dot -> @dot
+  callee 47:15 tails -> @tails
+program tests/cases/perf_bounds_toi32_f64.ts --number-mode f64
+module tests/cases/perf_bounds_toi32_f64.ts (entry)
+function countCode(s: string, code: i32): i32 -> @countCode
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 13:9 n: i32 (const)
+  local 14:7 count: i32 (let)
+  local 15:7 i: i32 (let)
+function dot(xs: i32[], ys: i32[]): i32 -> @dot
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.fptosi.sat.i32.f64
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 26:9 xn: i32 (const)
+  local 27:9 yn: i32 (const)
+  local 28:7 total: i32 (let)
+  local 29:7 i: i32 (let)
+function tails(s: string, from: i32[]): string[] -> @tails
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: llvm.fptosi.sat.i32.f64 nish_array_grow nish_str_new
+  pointer from: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 38:9 out: string[] (const)
+  local 39:14 k: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: countCode dot nish_alloc_struct nish_print nish_str_from_i32 tails
+  stackSites=3 stackLocals=0
+  callee 48:15 countCode -> @countCode
+  callee 49:15 dot -> @dot
+  callee 50:15 tails -> @tails
+program tests/cases/perf_bounds_toi32_loop.ts
+module tests/cases/perf_bounds_toi32_loop.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 6:9 s: string (const)
+  local 7:9 xs: i32[] (const)
+  local 10:9 lastIndex: i32 (const)
+  local 11:7 codes: i32 (let)
+  local 12:7 i: i32 (let)
+  local 19:9 bound: i32 (const)
+  local 20:7 total: i32 (let)
+  local 21:7 j: i32 (let)
+program tests/cases/perf_bounds_toi32_user.ts
+module tests/cases/perf_bounds_toi32_user.ts (entry)
+function toI32(n: i32): i32 -> @toI32
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 toI32
+  stackSites=0 stackLocals=0
+  local 10:9 s: string (const)
+  local 11:9 n: i32 (const)
+  callee 11:18 toI32 -> @toI32
+  local 12:7 i: i32 (let)
 program tests/cases/perf_clamp.ts
 module tests/cases/perf_clamp.ts (entry)
 function test(): i32 -> @test [exported]
@@ -6092,6 +6183,15 @@ function countDigits(n: i32): i32 -> @countDigits
   stackSites=0 stackLocals=0
   local 2:7 digits: i32 (let)
   local 3:7 rest: i32 (let)
+program docs/cookbook/str_bounds_toi32.ts --number-mode f64
+module docs/cookbook/str_bounds_toi32.ts (entry)
+function countCode(s: string, code: i32): i32 -> @countCode
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 2:9 n: i32 (const)
+  local 3:7 count: i32 (let)
+  local 4:7 i: i32 (let)
 program docs/cookbook/str_bytes.ts
 module docs/cookbook/str_bytes.ts (entry)
 function firstByte(s: string): i32 -> @firstByte

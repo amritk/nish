@@ -3306,6 +3306,95 @@ attributes #1 = { nounwind willreturn readonly }
 ```
 <!-- cookbook:end arr_bounds_proven -->
 
+### A hoisted `toI32(s.length)`: the proof in both number modes
+
+Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can
+compare an `i32` cursor against is `const n: i32 = toI32(s.length)`. The
+checker reads the builtin `toI32` of a length as that length (WP15 §2,
+`self/bounds.ts` `lengthOfLocal`): the `sitofp` of the header and the
+saturating `llvm.fptosi.sat.i32.f64` answer the length, or less for a string
+past `2^31 - 1` bytes, and never a negative. So `i < n` proves
+`s.charCodeAt(i)` as it does in i32 mode, and the read is a plain load with
+no compare and no `nish_panic_index`. In i32 mode the same source hoists the
+header's `trunc` alone. A user function named `toI32` is not the builtin and
+proves nothing. Pinned by `tests/cases/perf_bounds_toi32` and
+`perf_bounds_toi32_f64`, with `perf_bounds_toi32_loop` and
+`perf_bounds_toi32_user` as the shapes that keep their check.
+
+<!-- cookbook:begin str_bounds_toi32 -->
+Compiled with `--number-mode f64`.
+
+```ts
+const countCode = (s: string, code: i32): i32 => {
+  const n: i32 = toI32(s.length);
+  let count: i32 = 0;
+  let i: i32 = 0;
+  while (i < n) {
+    if (toI32(s.charCodeAt(i)) === code) {
+      count += 1;
+    }
+    i += 1;
+  }
+  return count;
+};
+```
+
+```llvm
+declare i32 @llvm.fptosi.sat.i32.f64(double) #1
+
+define internal noundef i32 @countCode(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %code) #0 {
+entry:
+  %n.addr = alloca i32, align 4
+  %count.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = sitofp i64 %1 to double
+  %3 = call i32 @llvm.fptosi.sat.i32.f64(double %2)
+  store i32 %3, i32* %n.addr, align 4
+  store i32 0, i32* %count.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %while.cond
+
+while.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = load i32, i32* %n.addr, align 4
+  %6 = icmp slt i32 %4, %5
+  br i1 %6, label %while.body, label %while.end
+
+while.body:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = sext i32 %7 to i64
+  %9 = getelementptr inbounds i8, i8* %s, i64 8
+  %10 = getelementptr inbounds i8, i8* %9, i64 %8
+  %11 = load i8, i8* %10, align 1
+  %12 = uitofp i8 %11 to double
+  %13 = call i32 @llvm.fptosi.sat.i32.f64(double %12)
+  %14 = icmp eq i32 %13, %code
+  br i1 %14, label %if.then, label %if.end
+
+if.then:
+  %15 = load i32, i32* %count.addr, align 4
+  %16 = add nsw i32 %15, 1
+  store i32 %16, i32* %count.addr, align 4
+  br label %if.end
+
+if.end:
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %19 = load i32, i32* %count.addr, align 4
+  ret i32 %19
+}
+
+attributes #0 = { nounwind readonly }
+attributes #1 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end str_bounds_toi32 -->
+
 ### An array in a class field: the header hoisted into the preheader
 
 A loop over an array held in a **class field** reads the header through a field

@@ -61,7 +61,13 @@ export const splitLines = (text: string): string[] => {
   let i: i32 = 0;
   while (i < length) {
     if (toI32(text.charCodeAt(i)) === NEWLINE) {
-      lines.push(text.substring(start, i));
+      // `start` is never negative and never passes `i`, which is below
+      // `length`, so this test always holds. It is written because it is what
+      // proves `start` within `text`: the clamp on that bound is dead once it
+      // is proven, and the emitter drops it.
+      if (start >= 0 && start < length) {
+        lines.push(text.substring(start, i));
+      }
       start = i + 1;
     }
     i += 1;
@@ -85,7 +91,9 @@ export const splitWhitespace = (text: string): string[] => {
   let i: i32 = 0;
   while (i < length) {
     if (isTextBlankByte(toI32(text.charCodeAt(i)))) {
-      if (start >= 0) {
+      // `start` is `-1` or a byte already passed, so the second half always
+      // holds when the first does; it proves the bound, as in `splitLines`.
+      if (start >= 0 && start < length) {
         parts.push(text.substring(start, i));
         start = -1;
       }
@@ -149,7 +157,10 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
   let rest = text;
   while (true) {
     const at: i32 = toI32(rest.indexOf(needle));
-    if (at < 0) {
+    // `indexOf` never answers past `rest.length`, so the second half never
+    // holds; it is written because its negation is what proves `at` within
+    // `rest` for the `substring` below, as in `splitLines`.
+    if (at < 0 || at > toI32(rest.length)) {
       parts.push(rest);
       return parts.join(replacement);
     }
@@ -168,13 +179,15 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
 export const firstDifference = (left: string[], right: string[]): i32 => {
   const leftLength: i32 = toI32(left.length);
   const rightLength: i32 = toI32(right.length);
-  const shorter: i32 = leftLength < rightLength ? leftLength : rightLength;
   let i: i32 = 0;
-  while (i < shorter) {
+  // Two tests rather than one against the shorter length: each proves `i`
+  // within one of the arrays, and a minimum taken with a ternary proves
+  // neither. The loop ends with `i` at the shorter length.
+  while (i < leftLength && i < rightLength) {
     if (left[i] !== right[i]) {
       return i;
     }
     i += 1;
   }
-  return leftLength === rightLength ? -1 : shorter;
+  return leftLength === rightLength ? -1 : i;
 };

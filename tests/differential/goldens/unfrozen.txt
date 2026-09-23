@@ -4,3 +4,7 @@
 # a line out when its program is gone. The rewriter that wrote the store was
 # stage0's and is deleted, so a line here is coverage lost, not a task deferred:
 # the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).
+cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
+cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
+cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
+cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
