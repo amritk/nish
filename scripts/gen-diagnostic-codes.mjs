@@ -4,6 +4,10 @@
  *
  *   node scripts/gen-diagnostic-codes.mjs --check    exit 1 if the registry is malformed
  *   node scripts/gen-diagnostic-codes.mjs            the same, then the next free code per band
+ *   node scripts/gen-diagnostic-codes.mjs --check F  check the registry in file F instead
+ *
+ * The third form is for `tests/run.js`, which hands it a copy of the registry
+ * with one line broken to show that each rule below is really enforced.
  *
  * **The registry is kept by hand now.** It used to be generated: this script
  * scanned `src/` for every diagnostic message, cut each at its interpolations,
@@ -34,6 +38,16 @@
  *     contains ("Cannot assign to `length` of " before "Cannot assign ").
  *   - **No fragment too short to identify a rule** (ten characters, trimmed),
  *     which would match half the suite.
+ *   - **Every string in a table is half of a pair.** `codeFor` in
+ *     `self/codes.ts` reads each table as one flat array and steps through it
+ *     by two, so a fragment added without its code line -- or a code without
+ *     its fragment -- shifts every pairing after it, and from there on
+ *     messages get their neighbour's code. The pair reader cannot see that:
+ *     it matches a fragment line followed by a code line, and a stray line is
+ *     simply not a match. So each table's strings are counted on their own
+ *     and have to come to twice its pairs ([#107](https://github.com/amritk/nish/issues/107)).
+ *   - **The `NL9xxx` codes run from `NL9001` with no gap**, one per WP15
+ *     section 8 rule, so a missing number is a rule that lost its code.
  *   - **`RULE_COUNT` is the number of entries.**
  *
  * A fragment is the longest literal run of its message's template -- the rule
@@ -49,7 +63,7 @@ import { fileURLToPath } from "node:url";
 import { parseCodesRegistry } from "./codes-registry.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REGISTRY = path.join(ROOT, "self", "codes.ts");
+const REGISTRY = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join(ROOT, "self", "codes.ts");
 
 /** The bands a table entry may use. Band 0 is constants, never a table row. */
 const BANDS = new Set(["1", "2", "3", "4", "9"]);
@@ -70,6 +84,15 @@ const tableText = (text, name) => {
   return close < 0 ? null : text.slice(open, close + 1);
 };
 
+/**
+ * How many strings one table holds: every literal after the line that opens
+ * it. That is what `codeFor` steps through two at a time, so it is counted on
+ * its own rather than read off the pairs -- a stray literal is exactly what
+ * the pair reader skips.
+ */
+const STRING = /"(?:[^"\\]|\\.)*"/g;
+const literalCount = (body) => body.slice(body.indexOf("\n")).match(STRING)?.length ?? 0;
+
 /** The order the compilers rely on: longest fragment first, then `localeCompare`. */
 const inOrder = (a, b) => b.fragment.length - a.fragment.length || a.fragment.localeCompare(b.fragment);
 
@@ -87,7 +110,15 @@ const problems = (text) => {
       continue;
     }
     try {
-      tables.push({ name, perf, pairs: parseCodesRegistry(body, `self/codes.ts ${name}`) });
+      const pairs = parseCodesRegistry(body, `self/codes.ts ${name}`);
+      const literals = literalCount(body);
+      if (literals !== 2 * pairs.length) {
+        found.push(
+          `\`${name}\` holds ${literals} strings and ${pairs.length} fragment/code pairs: a string ` +
+            "without its other half shifts every later pairing `codeFor` makes"
+        );
+      }
+      tables.push({ name, perf, pairs });
     } catch (err) {
       found.push(err.message);
     }
@@ -122,6 +153,15 @@ const problems = (text) => {
         found.push(`${code} is out of order in \`${name}\`: it has to come before ${pairs[i - 1].code}`);
       }
     }
+  }
+
+  const perfCodes = tables
+    .filter((t) => t.perf)
+    .flatMap((t) => t.pairs.map((p) => Number(p.code.slice(3))))
+    .sort((a, b) => a - b);
+  const gap = perfCodes.findIndex((n, i) => n !== i + 1);
+  if (gap >= 0) {
+    found.push(`\`performanceRules\` has no NL${9000 + gap + 1} in its place: its codes run from NL9001 with no gap`);
   }
 
   const seen = (key) => {

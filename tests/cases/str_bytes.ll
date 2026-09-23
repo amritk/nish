@@ -43,7 +43,7 @@ entry:
   ret i8* %10
 }
 
-define noundef i32 @test() #1 {
+define noundef i32 @test() #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %h.addr = alloca i8*, align 8
@@ -84,7 +84,7 @@ entry:
   ret i32 %29
 }
 
-attributes #0 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
 attributes #3 = { nounwind willreturn readnone }

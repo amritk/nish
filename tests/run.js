@@ -711,6 +711,36 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.stdout + codesGen.stderr
   );
 
+  // ...and that it refuses what `codeFor` would misread (issue #107). The live
+  // registry is copied with one line broken, and `--check` has to reject each
+  // copy and name the table. A stray string with no other half is skipped by
+  // the pair reader, so it would pass for well-formed while every later rule
+  // took its neighbour's code; a gap in NL9xxx is a performance rule that lost
+  // its number.
+  const codesLive = fs.readFileSync(path.join(root, "self", "codes.ts"), "utf8");
+  const codesStray = '  "a fragment that nobody gave a code to",\n';
+  const codesMutations = [
+    ["a stray fragment in diagnosticRules", "diagnosticRules", (t) =>
+      t.replace("export const diagnosticRules = (): string[] => [\n", (open) => open + codesStray)],
+    ["a stray fragment in performanceRules", "performanceRules", (t) =>
+      t.replace("export const performanceRules = (): string[] => [\n", (open) => open + codesStray)],
+    ["a gap in the NL9xxx codes", "performanceRules", (t) => t.replace('"NL9010",', '"NL9011",')],
+  ];
+  for (const [i, [what, table, mutate]] of codesMutations.entries()) {
+    const copy = path.join(buildDir, `codes-mutation-${i}.ts`);
+    const mutated = mutate(codesLive);
+    fs.writeFileSync(copy, mutated);
+    const r = spawnSync("node", [path.join(root, "scripts", "gen-diagnostic-codes.mjs"), "--check", copy], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      `codes: --check rejects ${what}`,
+      mutated !== codesLive && r.status === 1 && r.stderr.includes(`\`${table}\``),
+      mutated === codesLive ? "the mutation did not apply" : r.stdout + r.stderr
+    );
+  }
+
   // The parse itself is `scripts/codes-registry.js`, shared with the
   // generator and with `tests/diagnostic_coverage.js` -- three copies of one
   // regex is how the first two drifted apart (issue #96), and that module's
@@ -794,15 +824,17 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // Five, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`: the whole-program rules -- a duplicate export, a
-  // duplicate import, a duplicate internal name and an export a module does
-  // not have -- are uncoded and always were, and stage1 answers the empty
-  // statement of `tests/wordings/nl2260_empty_statement` with ``Unsupported
-  // statement `;` ``, which quotes the statement and has no words of its own.
-  // They are named on stdout by the run, so shrinking this backlog means giving
-  // one of those messages a literal run of its own.
-  const UNCODED_BACKLOG = 5;
+  // Two, because the tool walks the `tests/link/` negatives as well as
+  // `tests/cases/reject_*`: an import of a name a module does not export
+  // (`tests/link/unknown_export`) is uncoded and always was, and stage1 answers
+  // the empty statement of `tests/wordings/nl2260_empty_statement` with
+  // ``Unsupported statement `;` ``, which quotes the statement and has no words
+  // of its own. It was five until #174 gave the duplicate-symbol wordings --
+  // a duplicate export, the same one reached through an import, and a
+  // duplicate internal name -- codes of their own (NL3024, NL3026). They are
+  // named on stdout by the run, so shrinking this backlog means giving one of
+  // those messages a registry entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 2;
   const wordings = spawnSync(
     "node",
     [
@@ -1997,6 +2029,29 @@ const panicCount = (ir, fn) =>
   ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(/call void @nish_panic_index/g) ?? [])
     .length;
 
+// #183: a function that can reach `nish_panic_index` through an unproven
+// `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
+// profile's optimiser deleted the loop that panics and the program exited 0.
+// The link goes through `--profile speed` itself rather than `linkNative`, so
+// the check covers the pipeline a user's build runs.
+if (has("clang") && (!only || "attr_panic_charcodeat".includes(only))) {
+  const exe = path.join(buildDir, "attr_panic_charcodeat");
+  const link = spawnSync(
+    NISH,
+    [path.join(casesDir, "attr_panic_charcodeat.ts"), "--link", exe, "--profile", "speed"],
+    { cwd: root, encoding: "utf8" }
+  );
+  const run = link.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : null;
+  check(
+    "attr_panic_charcodeat: --profile speed keeps the panic of an unproven charCodeAt (exit 1, `5 >= 0`)",
+    run !== null &&
+      run.status === 1 &&
+      run.stderr.includes("index out of range: 5 >= 0") &&
+      run.stdout.trim() === "before",
+    run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : link.stderr
+  );
+}
+
 if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   if (has("opt")) {
     for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
@@ -2090,6 +2145,34 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_path_store_rhs_field", "`g.hs[i].n = (i = 0)`", "", "1000000 >= 2"],
     ["arr_path_store_rhs_compound", "`h.xs[i] += (i = 2)`", "", "1000000 >= 3"],
     ["arr_bounds_store_rhs", "`xs[i] = (i = 0)` on a local", "", "1000000 >= 3"],
+    // #181: a `continue` reaches the `for` update or the `do/while` condition
+    // with its branch's effects applied, so those are judged from the join of
+    // every `continue` and the end of the body.
+    ["arr_path_continue_for", "a field store before `continue`, in a `for` update", "", "7 >= 1"],
+    ["arr_bounds_continue_for", "a rebind before `continue`, in a `for` update, on a local", "", "7 >= 1"],
+    ["arr_path_continue_do", "a call before `continue`, in a `do/while` condition", "", "3 >= 1"],
+    ["arr_bounds_continue_do", "a rebind before `continue`, in a `do/while` condition, on a local", "", "3 >= 1"],
+    ["arr_bounds_continue_nested", "an outer `continue` before an inner loop with its own", "", "7 >= 1"],
+    ["arr_bounds_continue_switch", "a `continue` inside a `switch` clause", "", "7 >= 1"],
+    // #181's `break` counterpart: a `break` leaves a `for` or `while` past the
+    // condition that re-established a fact, so the state after the loop is the
+    // join of the condition's exit and every `break`.
+    ["arr_bounds_break_for", "a move before `break`, after a `for` condition", "", "1000 >= 3"],
+    ["arr_bounds_break_while", "a rebind before `break`, after a `while` condition", "", "5 >= 1"],
+    ["arr_bounds_break_for_string", "a bound moved before a guarded `break`, on a string", "", "3 >= 3"],
+    ["arr_bounds_break_while_string", "a bound moved before `break`, on a string", "", "50 >= 3"],
+    // #182: an argument evaluated on the `Err` path alone proves nothing after the call.
+    ["arr_bounds_lazy_unwrap_or", "an `unwrapOr` fallback that did not run", "", "50 >= 3"],
+    ["arr_bounds_lazy_expect", "an `expect` message that did not run", "", "50 >= 3"],
+    // #180: the header hoist counts a whole-record store the way the proof does.
+    ["arr_header_hoist_record_store", "a whole-record store under a hoisted `const` view", "1", "1 >= 1"],
+    ["arr_header_hoist_record_view", "a whole-record store under a class field's view", "", "1 >= 1"],
+    // A generic's instantiations are proved against their own verdicts: one
+    // that stores a pointer or a value proves `r.xs[i]`, the `Rec` one must not.
+    ["arr_bounds_generic_instances", "a record store in `walk<Rec>`, beside `walk<Box>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_prim", "a record store in `walk<Rec>`, beside `walk<i32>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_method", "a record store in `Store<Rec>.walk`, beside `Store<Box>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_iface", "a record store through `Cell<Rec>`, beside `Cell<string>`", "15", "1 >= 1"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
     if (!fs.existsSync(ll)) continue;
@@ -2105,6 +2188,36 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         String(run.stderr).includes(`index out of range: ${message}`) &&
         String(run.stdout).trim() === stdout,
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // #180's rule stops at inline records: an element store into an array of
+  // classes stores a pointer, so `this.src` and `this.nodes` keep their headers
+  // in the preheader and the loop reloads no field of `this`.
+  const classStoreLl = path.join(buildDir, "arr_header_hoist_record_class.ll");
+  if (fs.existsSync(classStoreLl)) {
+    const ir = fs.readFileSync(classStoreLl, "utf8");
+    const fn = ir.slice(ir.search(/^define[^\n]*@Grid\.sumAndStamp\(/m));
+    const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
+    const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
+    check(
+      "arr_header_hoist_record_class: a class-element store leaves both headers hoisted",
+      reloads === 0,
+      `${reloads} array header loads inside the loop`
+    );
+  }
+  // And it stops at what the store can reach: a whole-record store into `rs`
+  // rewrites a `Rec` slot, and `g.src` is read off a class, so its header stays
+  // in the preheader.
+  const classRootLl = path.join(buildDir, "arr_header_hoist_record_class_root.ll");
+  if (fs.existsSync(classRootLl)) {
+    const ir = fs.readFileSync(classRootLl, "utf8");
+    const fn = ir.slice(ir.search(/^define[^\n]*@stamp\(/m));
+    const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
+    const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
+    check(
+      "arr_header_hoist_record_class_root: a record store leaves a class-rooted header hoisted",
+      reloads === 0,
+      `${reloads} array header loads inside the loop`
     );
   }
   // The declared-type rule on its own: `narrowed` and `plain` are one loop over

@@ -24,7 +24,7 @@ entry:
   ret i1 true
 }
 
-define internal noundef i32 @code(%struct.Text* noundef nonnull align 8 dereferenceable(8) nocapture %t, i32 noundef %i) #0 {
+define internal noundef i32 @code(%struct.Text* noundef nonnull align 8 dereferenceable(8) nocapture %t, i32 noundef %i) #1 {
 entry:
   %0 = icmp sge i32 %i, 0
   br i1 %0, label %land.rhs.1, label %land.end.1
@@ -75,7 +75,7 @@ if.end:
   ret i32 %20
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %Text.obj = alloca %struct.Text, align 8
   %arena.mark = call i64 @nish_arena_mark()

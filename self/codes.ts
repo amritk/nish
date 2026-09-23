@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 424;
+export const RULE_COUNT: i32 = 430;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -61,10 +61,18 @@ export const diagnosticRules = (): string[] => [
   "NL2326",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
+  "; a constructor or method is named after its class, so two classes that share a name anywhere in the program cannot both declare it, whether or not either is exported; rename one of the classes",
+  "NL3022",
+  "; a constructor or method is named after its class, so two classes that share a name within one package cannot both declare it, whether or not either is exported; rename one of the classes",
+  "NL3023",
   "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
   "NL2039",
+  "; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol",
+  "NL3027",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
+  "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
+  "NL3026",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
   "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",
@@ -205,6 +213,8 @@ export const diagnosticRules = (): string[] => [
   "NL2140",
   "Only relative import specifiers are supported (`./x` or `../x`), got `",
   "NL2227",
+  "; exported names must be unique within the package that declares them",
+  "NL3025",
   ".isErr()`, or use `.orReturn()`, `.unwrapOr(v)` or `.expect(message)`",
   "NL2032",
   "Only top-level function declarations are supported in Phase 1 (found ",
@@ -333,6 +343,8 @@ export const diagnosticRules = (): string[] => [
   "NL1053",
   " cannot be optional (every field has a fixed slot)",
   "NL2015",
+  "; exported names must be unique across the program",
+  "NL3024",
   "` has no initializer and no constructor assigns it",
   "NL2066",
   "` returns void and can only be used as a statement",

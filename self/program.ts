@@ -289,17 +289,19 @@ export class StructInstantiation {
 export class Instantiation {
   /**
    * The generic function or generic method this specialises (a *request*), or
-   * `null` when it is a method or constructor of an instantiated generic class
-   * collected with its class — which needs the overlay and the type bindings
-   * for exactly the same reason and has no template of its own, because the
-   * class is the template (WP18 G5).
+   * `null` when it is a non-generic method or the constructor of an
+   * instantiated generic class, collected with its class — which needs the
+   * overlay and the type bindings for exactly the same reason and has no
+   * template of its own, because the class is the template (WP18 G5). A
+   * generic method of a generic class has both this and `owner`: its own type
+   * parameters come from the template, its class's from the owner (WP18 G8).
    */
   template: TemplateInfo | null;
   /**
    * The instantiated class whose parameters are bound in this body: the class
    * a collected member belongs to, or the receiver of a generic method (WP18
-   * G8). `null` for a free function and for a generic method of a declared
-   * class.
+   * G8), set alongside `template` when that method is itself generic. `null`
+   * for a free function and for a generic method of a declared class.
    */
   owner: StructInstantiation | null;
   /** One concrete type id per entry of `template.typeParams`, in that order. */
@@ -313,6 +315,15 @@ export class Instantiation {
   nodeCallees: (FunctionSig | null)[];
   nodeCoercions: i32[];
   nodeCaseValues: i64[];
+  /**
+   * The bounds proofs over this body (`self/bounds.ts`), kept per
+   * instantiation like every table above: `rs[0] = x` stores a pointer when
+   * `T` is a class and rewrites a record in place when `T` is one, so the same
+   * template node can be proven in `walk$Box` and not in `walk$Rec`. A table
+   * shared by the template's node ids would let either verdict decide both.
+   */
+  nodeProvenIndex: boolean[];
+  nodeProvenClamp: boolean[];
   /**
    * The instantiation whose body asked for this one, or `null` for one
    * requested from ordinary code. The chain is what the termination rule walks
@@ -332,6 +343,8 @@ export class Instantiation {
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
     this.nodeCoercions = new Array<i32>(nodeCount);
     this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.nodeProvenIndex = new Array<boolean>(nodeCount);
+    this.nodeProvenClamp = new Array<boolean>(nodeCount);
     this.from = null;
     let i = 0;
     while (i < nodeCount) {
@@ -841,6 +854,8 @@ export class CheckedProgram {
   savedNodeCallees: (FunctionSig | null)[];
   savedNodeCoercions: i32[];
   savedNodeCaseValues: i64[];
+  savedNodeProvenIndex: boolean[];
+  savedNodeProvenClamp: boolean[];
   /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
   enums: StringMap;
   enumList: EnumInfo[];
@@ -891,6 +906,10 @@ export class CheckedProgram {
    * `nish_panic_index` out of the callee set — which is the whole of what the
    * proof buys, and the reason it lives in a table the emitter reads rather
    * than in a decision the emitter makes.
+   *
+   * Inside a generic's body this is the instantiation's own table, which
+   * `enterInstance` installs, and so is `nodeProvenClamp`: one type argument's
+   * proof says nothing about another's.
    */
   nodeProvenIndex: boolean[];
   /**
@@ -949,6 +968,8 @@ export class CheckedProgram {
     this.savedNodeCallees = [];
     this.savedNodeCoercions = [];
     this.savedNodeCaseValues = [];
+    this.savedNodeProvenIndex = [];
+    this.savedNodeProvenClamp = [];
     this.enums = new StringMap();
     this.enumList = [];
     this.entryMain = null;
@@ -1151,12 +1172,16 @@ export class CheckedProgram {
     this.savedNodeCallees = this.nodeCallees;
     this.savedNodeCoercions = this.nodeCoercions;
     this.savedNodeCaseValues = this.nodeCaseValues;
+    this.savedNodeProvenIndex = this.nodeProvenIndex;
+    this.savedNodeProvenClamp = this.nodeProvenClamp;
     this.nodeTypes = info.nodeTypes;
     this.nodeLocals = info.nodeLocals;
     this.nodeConstants = info.nodeConstants;
     this.nodeCallees = info.nodeCallees;
     this.nodeCoercions = info.nodeCoercions;
     this.nodeCaseValues = info.nodeCaseValues;
+    this.nodeProvenIndex = info.nodeProvenIndex;
+    this.nodeProvenClamp = info.nodeProvenClamp;
     this.activeInstance = info;
   }
 
@@ -1168,6 +1193,8 @@ export class CheckedProgram {
     this.nodeCallees = this.savedNodeCallees;
     this.nodeCoercions = this.savedNodeCoercions;
     this.nodeCaseValues = this.savedNodeCaseValues;
+    this.nodeProvenIndex = this.savedNodeProvenIndex;
+    this.nodeProvenClamp = this.savedNodeProvenClamp;
     this.activeInstance = null;
   }
 

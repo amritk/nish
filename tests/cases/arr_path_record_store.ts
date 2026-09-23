@@ -7,10 +7,9 @@
 //
 // `r` is a `let` so that the emitter's header hoist (#104) leaves the loop
 // alone and the bounds proof is the only thing under test. Spelled `const`, the
-// hoist lifts `r.xs` above the loop because its store scan does not count a
-// whole-record element store either, and the loop reads the replaced array --
-// prints "1 2 3" where `--plain` panics. That is the hoist's to fix, not this
-// file's.
+// hoist once lifted `r.xs` above the loop because its store scan did not count
+// a whole-record element store, and the loop read the replaced array (#180);
+// `arr_header_hoist_record_store` is that program, and pins the fix.
 interface Rec {
   xs: i32[];
 }

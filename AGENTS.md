@@ -88,7 +88,12 @@ Every `--json` object is flat:
   `self/codes.ts`, and it is **kept by hand**: a new diagnostic gets the next
   free number in its band, and a number is never moved or handed out twice.
   `node scripts/gen-diagnostic-codes.mjs --check` validates its format and that
-  every code is unique, and `npm test` runs it.
+  every code is unique, and `npm test` runs it. The driver's whole-program
+  refusals carry codes like any other: a symbol two modules both define is
+  NL3022–NL3027 (a class's constructor or method, an exported function, a
+  private one; each across the program or within one package), and
+  `tests/nish/cli.ts` checks them from the `tests/link/` programs that
+  provoke them.
 - A failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is still one JSON line,
   `{"severity","code","message"}`. Under `--json` you never have to read stderr
