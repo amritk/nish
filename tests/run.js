@@ -711,6 +711,36 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.stdout + codesGen.stderr
   );
 
+  // ...and that it refuses what `codeFor` would misread (issue #107). The live
+  // registry is copied with one line broken, and `--check` has to reject each
+  // copy and name the table. A stray string with no other half is skipped by
+  // the pair reader, so it would pass for well-formed while every later rule
+  // took its neighbour's code; a gap in NL9xxx is a performance rule that lost
+  // its number.
+  const codesLive = fs.readFileSync(path.join(root, "self", "codes.ts"), "utf8");
+  const codesStray = '  "a fragment that nobody gave a code to",\n';
+  const codesMutations = [
+    ["a stray fragment in diagnosticRules", "diagnosticRules", (t) =>
+      t.replace("export const diagnosticRules = (): string[] => [\n", (open) => open + codesStray)],
+    ["a stray fragment in performanceRules", "performanceRules", (t) =>
+      t.replace("export const performanceRules = (): string[] => [\n", (open) => open + codesStray)],
+    ["a gap in the NL9xxx codes", "performanceRules", (t) => t.replace('"NL9010",', '"NL9011",')],
+  ];
+  for (const [i, [what, table, mutate]] of codesMutations.entries()) {
+    const copy = path.join(buildDir, `codes-mutation-${i}.ts`);
+    const mutated = mutate(codesLive);
+    fs.writeFileSync(copy, mutated);
+    const r = spawnSync("node", [path.join(root, "scripts", "gen-diagnostic-codes.mjs"), "--check", copy], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      `codes: --check rejects ${what}`,
+      mutated !== codesLive && r.status === 1 && r.stderr.includes(`\`${table}\``),
+      mutated === codesLive ? "the mutation did not apply" : r.stdout + r.stderr
+    );
+  }
+
   // The parse itself is `scripts/codes-registry.js`, shared with the
   // generator and with `tests/diagnostic_coverage.js` -- three copies of one
   // regex is how the first two drifted apart (issue #96), and that module's
