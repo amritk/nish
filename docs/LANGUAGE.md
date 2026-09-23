@@ -806,9 +806,9 @@ program twice, with one golden between them.
   side is reported where it is written rather than never.
 - **Generic aliases are forbidden**, unlike a generic *function*: an alias
   only renames a type that already exists, so there is nothing for a type
-  argument to apply to. `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
-  (`tests/cases/reject_type_alias_generic`).
+  argument to apply to. There is no message of its own: the parser reads
+  `type Box` and expects `=`, so `type Box<T> = T[]` is the syntax error
+  `` expected `=`, found `<` `` (NL0001, `tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
   (`tests/cases/reject_type_alias_builtin`). A keyword like `string` is
@@ -1266,6 +1266,43 @@ export const main = (): i32 => {
   `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
   (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
   unaffected — only names that become symbols are restricted.
+- **An instantiation is spelled as written wherever a person reads it, and
+  mangled wherever a machine does.** Every diagnostic, the `--emit-checked`
+  dump and the `-g` DWARF `name` say `identity<i32>`, `identity<Box<i32>>`,
+  `Box<i32>` and `Box<i32>.get`; the symbol, the `%struct` name, the DWARF
+  `linkageName` and a header's `NISH_SYMBOL` binding keep `identity$i32`,
+  `identity$$Box$i32` and `Box$i32`. Every instantiation's `DISubprogram` carries
+  the template's `line`, so a breakpoint in a generic body has one address per
+  instantiation, as a C++ template's does (`tests/cases/dbg_generic`). A
+  polymorphic-recursion chain through a class reads
+  `` `grow<i32>` asks for `grow<Box<i32>>` ``
+  (`tests/cases/reject_generic_recursion_through_class`).
+- **An exported instantiation reaches a host as `nish_gen_<name>`.** Its symbol
+  holds a `$`, and a `.` when an argument is an array, a nullable or a `Result`
+  (`identity$arr.i32`), so neither C nor JavaScript can spell it. `--emit-header`
+  declares `nish_gen_identity_i32` and `nish_gen_identity_arr_i32`, bound to the
+  symbols with `NISH_SYMBOL`, and `--emit-dts`, the wasm loader and `--emit-napi`
+  export the same names; the comment above each says which instantiation it is.
+  An instantiated class is `struct nish_gen_Box_i32` with methods such as
+  `nish_gen_Box_i32_get`. A user name cannot start with `nish_`, so no
+  declaration of the program can take one of these names — a user
+  `identity_i32` beside `identity<i32>` is two C functions
+  (`tests/cases/interop_generic_fn`, `interop_generic_collision`). The sidecars
+  declare instantiations only: `identity<T>` itself has no symbol, so nothing
+  declares it.
+- **An exported generic that nothing instantiates is refused when a sidecar is
+  asked for.** It has no symbol, so a header, a `.d.ts` or an N-API shim would
+  leave it out without a word. With any of `--emit-header`, `--emit-dts`,
+  `--emit-napi` or `--emit-napi-async` it is
+  `` `identity` is generic, so it has no single C signature: a generic function becomes a symbol only where it is instantiated, and this program instantiates none ``
+  (NL4007), and for a class
+  `` `Box` is generic, so it has no single C layout: a generic class becomes a struct only where it is instantiated, and this program instantiates none ``
+  (`tests/cases/reject_interop_generic_unused`); without a sidecar flag the same
+  program compiles. The same flags refuse two functions whose C names collapse
+  to one, which only a method's `.`-joined name can still cause —
+  `Point.shifted` beside a function `Point_shifted`:
+  `` `Point.shifted` and `Point_shifted` are both `Point_shifted` in C, so a header that declared both would not compile: rename one of them ``
+  (NL4008, `tests/cases/reject_interop_generic_clash`).
 - **A template may be exported and instantiated from another module, and each
   instantiation is defined exactly once**, in the module that declares the
   template. Everywhere else it is a `declare` carrying that definition's
@@ -1340,14 +1377,25 @@ export const main = (): i32 => {
   was inferred or written, and reported in that module:
   `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` ``
   (`tests/cases/reject_generic_unsatisfied_constraint`,
-  `tests/link/generic_constraint_import_unsatisfied`). Every position a type
+  `tests/link/generic_constraint_import_unsatisfied`). **The constraint is a
+  declaration, not a name**: a module that declares a `Shape` of its own has not
+  satisfied another module's `<T extends Shape>`, whatever fields the two
+  share — neither with that `Shape` itself nor with a class that implements it —
+  and a same-named class does not satisfy a class constraint either. The
+  request is refused in those words at the call in the asking module
+  (`tests/link/generic_constraint_same_name`, `…_same_name_fields`,
+  `…_same_name_itself`, `…_same_name_class`). The constraint may still be the
+  asking module's own declaration when the template's module imports that very
+  declaration (`tests/link/generic_constraint_import_back`).
+  Every position a type
   argument can be written in is a request of its own — a field, an array
   element, a `Result` arm, inside another instantiation, an `implements`
   clause (`reject_generic_unsatisfied_constraint_positions`).
-- **Not supported yet**, each with its own message: a default type argument
-  (`<T = string>`), and type parameters on a constructor or a type alias. A generic
-  `main` is refused too: the entry point is called by the C runtime, which has
-  no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
+- **Not supported yet**: a default type argument (`<T = string>`) and type
+  parameters on a constructor, each with its own message, and type parameters
+  on a type alias, which is the parser's plain `` expected `=`, found `<` ``.
+  A generic `main` is refused too, in words of its own: the entry point is
+  called by the C runtime, which has no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
   that mentions the parameter it constrains, and a bound that is "any type with
   a method `compare`" are not planned on this path. The design and the
   milestones are in [wp18-generics.md](wp18-generics.md).
@@ -1423,6 +1471,15 @@ export const main = (): i32 => {
   do: one `new Box<T>(v)` in a body that does not escape is an entry-block
   `alloca` at `T = i32` and an arena bump at `T = string` when the box is
   returned — one source line, two memory behaviours (`tests/cases/gen_stack`).
+- **It is named as written, and linked as mangled.** A diagnostic says
+  `` Unknown field `nope` on class `Box<i32>` `` and
+  `` Argument 1 of `Box<i32>.set`: expected i32, got string ``
+  (`tests/cases/reject_generic_member_display`, `reject_generic_implements_display`,
+  `reject_generic_ctor_display`), and `-g` names the composite type `Box<i32>`
+  and its methods `Box<i32>.get`, with `Box$i32.get` as the `linkageName`
+  (`tests/cases/dbg_generic`). In a header it is `struct nish_gen_Box_i32`; the
+  rule for both is the generic function's
+  ([Generic functions](#generic-functions)).
 - **A class or interface may constrain its parameters** with the rules a
   generic function's follow. Its own methods read the constraint's members
   through a field of that type — `this.item.area` in `class Holder<T extends
@@ -3118,7 +3175,7 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
+| type parameters on a type alias | `` expected `=`, found `<` `` (a syntax error; a generic function, class, interface or method is monomorphised, and an alias only renames a type that already exists) | `reject_type_alias_generic` |
 | type parameters on a constructor | `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) `` (a syntax error; a *method* may declare its own, see [Generic methods](#generic-methods)) | `reject_generic_method_constructor` |
 | a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
 | type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
