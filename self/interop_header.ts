@@ -20,6 +20,7 @@ import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "./branding";
 import { Compilation, ModuleUnit } from "./compilation";
 import {
   banner,
+  cAliasReason,
   cFieldType,
   cFunctionName,
   cParamName,
@@ -211,16 +212,7 @@ export const generateHeader = (compilation: Compilation, fns: ExternalFunction[]
       continue;
     }
     const name = cFunctionName(fn.sig.name);
-    // Three reasons a symbol cannot be spelled in C, and the comment says
-    // which: a method (`Point.shifted`), a symbol inside a package
-    // (`hash.helper`, WP21 S1), or a name that is a C keyword.
-    let why = "a C keyword";
-    if (fn.sig.owner !== null) {
-      why = "a method";
-    } else if (fn.sig.name.indexOf(".") >= 0) {
-      why = "in a package";
-    }
-    const alias = name.label.length > 0 ? ` (${why}: call it as ${name.ident})` : "";
+    const alias = name.label.length > 0 ? ` (${cAliasReason(fn.sig)}: call it as ${name.ident})` : "";
     lines.push(`/* ${source}${alias}${elementNotes(table, fn)} */`);
     lines.push(`${proto};`);
   }

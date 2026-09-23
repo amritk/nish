@@ -29,7 +29,8 @@ import { Compilation, ModuleUnit } from "./compilation";
 import { StringMap, StringSet } from "./map";
 import { ROOT_PACKAGE } from "./packages";
 import { basename } from "./paths";
-import { FunctionSig } from "./program";
+import { N_IDENT, Node } from "./nodes";
+import { FunctionSig, STRUCT_CLASS } from "./program";
 import { ResultLayout, resultLayout } from "./result";
 import { StringBuilder } from "./strings";
 import {
@@ -627,26 +628,181 @@ export class CName {
  * Methods and constructors (`Point.shifted`, `Point.constructor`, WP2) are
  * declared the same way as `Point_shifted` / `Point_constructor`, taking the
  * object pointer first: a C host may call them on objects it holds.
+ *
+ * An instantiation (WP18 G8) is spelled the way `cStructName` spells an
+ * instantiated class, and for the same two reasons: `identity$i32` collapsed
+ * to `identity_i32` is a name the program may well have declared itself, and
+ * `wrap_arr<i32>` and `wrap<i32[]>` (`wrap_arr$i32`, `wrap$arr.i32`) collapse
+ * onto one another unless the user's own `_` is escaped. So every symbol with a `$` in it --
+ * a generic function's instantiation, or a method of an instantiated class --
+ * becomes `nish_gen_` and the escaped collapse: `nish_gen_identity_i32`,
+ * `nish_gen_Box_i32_get`. `nish_` is reserved for every declared function and
+ * class, so no name the program wrote can take one of these.
+ *
+ * What is left is the `.`-only collapse of a method, which is not injective
+ * (`Point.shifted` and a function called `Point_shifted`) and never was;
+ * `cNameClashes` finds that and the driver refuses it, rather than write a
+ * header that declares one identifier twice.
  */
 export const cFunctionName = (symbol: string): CName => {
-  // `.` from a method and `$` from a generic instantiation (WP18) are both
-  // legal LLVM and illegal C, so both collapse to `_` and the declaration is
-  // bound to the real symbol with an asm label.
-  if (symbol.indexOf(".") >= 0 || symbol.indexOf("$") >= 0) {
-    const ident = new StringBuilder();
-    let i = 0;
-    while (i < symbol.length) {
-      const c = symbol.charCodeAt(i);
-      ident.addChar(c === CHAR_DOT || c === CHAR_DOLLAR ? CHAR_UNDERSCORE : c);
-      i = i + 1;
-    }
-    return new CName(ident.toText(), ` NISH_SYMBOL("${symbol}")`);
+  if (symbol.indexOf("$") >= 0) {
+    return new CName(`nish_gen_${collapseSeparators(symbol, true)}`, ` NISH_SYMBOL("${symbol}")`);
+  }
+  if (symbol.indexOf(".") >= 0) {
+    return new CName(collapseSeparators(symbol, false), ` NISH_SYMBOL("${symbol}")`);
   }
   if (!isCReserved(symbol)) {
     return new CName(symbol, "");
   }
   return new CName(`${symbol}_`, ` NISH_SYMBOL("${symbol}")`);
 };
+
+/**
+ * The name a JavaScript host calls a function by, in the `.d.ts`, the wasm
+ * loader and the N-API addon alike (WP18 G8).
+ *
+ * A declared function keeps its own name, byte for byte what it always was.
+ * An instantiation takes its C identifier, `nish_gen_identity_i32`: `$` is a
+ * legal JavaScript identifier character, but the mangling's `.` is not
+ * (`identity<i32[]>` is `identity$arr.i32`), so the symbol itself cannot be the
+ * name. Reusing the C spelling rather than inventing a third keeps it
+ * injective for the reasons `cFunctionName` gives, keeps it clear of every
+ * declared name (the `nish_` prefix), and means a host reading the header and
+ * one reading the `.d.ts` call the same instantiation by the same name. The
+ * comment above each declaration says which instantiation it is.
+ */
+export const jsExportName = (sig: FunctionSig): string => sig.name.indexOf("$") >= 0 ? cFunctionName(sig.name).ident : sig.name;
+
+/**
+ * Why a function is declared under a C name that is not its symbol, for the
+ * comment above it; `""` when the name is the symbol. An instantiation says
+ * which template it came from, since the C name alone does not read as one.
+ */
+export const cAliasReason = (sig: FunctionSig): string => {
+  const owner = sig.owner;
+  if (owner !== null) {
+    const generic = owner.instance;
+    return generic === null ? "a method" : `a method of an instantiation of ${generic.template.sourceName}`;
+  }
+  const instance = sig.instance;
+  if (instance !== null) {
+    const template = instance.template;
+    if (template !== null) {
+      return `an instantiation of ${template.sourceName}`;
+    }
+  }
+  if (sig.name.indexOf(".") >= 0) {
+    return "in a package";
+  }
+  return "a C keyword";
+};
+
+/**
+ * Pairs of functions that the C sidecars would declare under one identifier,
+ * as `[first, second, ...]`: the rest of `cFunctionName`'s promise, checked
+ * rather than assumed. Only a function with a C prototype is declared at all,
+ * and `main` never is.
+ */
+export const cNameClashes = (table: TypeTable, fns: ExternalFunction[]): ExternalFunction[] => {
+  const seen = new StringMap();
+  const declared: ExternalFunction[] = [];
+  const out: ExternalFunction[] = [];
+  for (const fn of fns) {
+    if (fn.sig.name === "main" || cPrototype(table, fn.sig, fn.writtenParams).length === 0) {
+      continue;
+    }
+    const ident = cFunctionName(fn.sig.name).ident;
+    const at = seen.get(ident, -1);
+    if (at >= 0 && at < declared.length) {
+      out.push(declared[at]);
+      out.push(fn);
+    } else {
+      seen.set(ident, declared.length);
+      declared.push(fn);
+    }
+  }
+  return out;
+};
+
+/**
+ * What a sidecar refuses to describe, reported into the compilation's sink;
+ * true when there is nothing to refuse. `cSidecar` is whether a header or an
+ * N-API shim -- the two files that declare C prototypes -- was asked for.
+ *
+ * Two refusals, both about a name a host would reach for:
+ *
+ *   - **An exported generic that this program never instantiates**
+ *     (`docs/wp18-generics.md` §8, message 9). It has no symbol, so every
+ *     sidecar would silently leave it out and a host expecting `identity`
+ *     would find nothing. Only the root package's templates count, because
+ *     only its exports are described (`externalFunctions`).
+ *   - **Two functions with one C identifier** (`cNameClashes`), which a header
+ *     would declare twice and which would not compile.
+ */
+export const acceptsSidecars = (compilation: Compilation, fns: ExternalFunction[], cSidecar: boolean): boolean => {
+  let ok = true;
+  for (const unit of compilation.modules) {
+    const program = unit.checker.program;
+    if (program.packageName !== ROOT_PACKAGE) {
+      continue;
+    }
+    for (const template of program.templateList) {
+      if (template.origin === unit.source && template.exported && template.count === 0) {
+        reportUninstantiated(compilation, unit, template.sourceName, template.decl, "C signature", "function", "a symbol");
+        ok = false;
+      }
+    }
+    for (const template of program.structTemplateList) {
+      if (template.origin === unit.source && template.exported && template.count === 0) {
+        const kind = template.kind === STRUCT_CLASS ? "class" : "interface";
+        reportUninstantiated(compilation, unit, template.sourceName, template.decl, "C layout", kind, "a struct");
+        ok = false;
+      }
+    }
+  }
+  if (!cSidecar) {
+    return ok;
+  }
+  const clashes = cNameClashes(compilation.table, fns);
+  let i = 0;
+  while (i < clashes.length) {
+    const first = clashes[i].sig;
+    const second = clashes[i + 1];
+    const at = nameNodeOf(second.sig.decl);
+    compilation.sink.report(
+      second.unit.source,
+      at.start,
+      at.end,
+      `\`${first.sourceName}\` and \`${second.sig.sourceName}\` are both \`${cFunctionName(first.name).ident}\`` +
+        " in C, so a header that declared both would not compile: rename one of them"
+    );
+    ok = false;
+    i = i + 2;
+  }
+  return ok;
+};
+
+const reportUninstantiated = (
+  compilation: Compilation,
+  unit: ModuleUnit,
+  name: string,
+  decl: Node,
+  what: string,
+  kind: string,
+  becomes: string
+): void => {
+  const at = nameNodeOf(decl);
+  compilation.sink.report(
+    unit.source,
+    at.start,
+    at.end,
+    `\`${name}\` is generic, so it has no single ${what}: a generic ${kind} becomes ${becomes}` +
+      " only where it is instantiated, and this program instantiates none"
+  );
+};
+
+/** The identifier a declaration is named by, or the declaration when it has none. */
+const nameNodeOf = (decl: Node): Node => decl.children.length > 0 && decl.children[0].kind === N_IDENT ? decl.children[0] : decl;
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `""` when a type has no C spelling. */
 export const cPrototype = (table: TypeTable, sig: FunctionSig, writtenParams: StringSet): string => {

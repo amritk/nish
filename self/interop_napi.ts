@@ -58,6 +58,7 @@ import {
   cResultWord,
   cType,
   ExternalFunction,
+  jsExportName,
   POS_PARAM,
   POS_RETURN,
   pushAll,
@@ -739,8 +740,8 @@ const napiAsyncSkipReason = (table: TypeTable, p: Plan): string | null => {
  */
 const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   const sig = p.fn.sig;
-  const name = sig.name;
-  const jsName = `${sig.sourceName}Async`;
+  const name = jsExportName(sig);
+  const jsName = `${name}Async`;
   const n = sig.paramNames.length;
   const work = `nish_napi_work_${name}`;
   const isVoid = table.kindOf(sig.returnType) === T_VOID;
@@ -777,7 +778,7 @@ const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   lines.push("   * whole life. */");
   lines.push("  uint64_t nish_mark = nish_arena_mark();");
   const assign = isVoid ? "" : "nish_w->result = ";
-  lines.push(`  ${assign}${cFunctionName(name).ident}(${args.join(", ")});`);
+  lines.push(`  ${assign}${cFunctionName(sig.name).ident}(${args.join(", ")});`);
   lines.push("  nish_arena_release(nish_mark);");
   lines.push("}");
   lines.push("");
@@ -872,7 +873,7 @@ const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
 
 const napiWrapper = (table: TypeTable, p: Plan): string[] => {
   const sig = p.fn.sig;
-  const name = sig.name;
+  const name = jsExportName(sig);
   const n = sig.paramNames.length;
   const scoped = p.scoped;
   const mode = scoped ? FAIL_RELEASE : FAIL_THROW;
@@ -929,7 +930,7 @@ const napiWrapper = (table: TypeTable, p: Plan): string[] => {
     args.push(cParamName(sig.paramNames[i]));
     i = i + 1;
   }
-  const call = `${cFunctionName(name).ident}(${args.join(", ")})`;
+  const call = `${cFunctionName(sig.name).ident}(${args.join(", ")})`;
   lines.push("  napi_value out;");
   if (table.kindOf(sig.returnType) === T_VOID) {
     lines.push(`  ${call};`);
@@ -987,13 +988,13 @@ export const generateNapiShim = (
   if (asyncExports) {
     for (const p of plans) {
       const source = `${p.fn.unit.name}: ${tsSignature(table, p.fn.sig)}`;
-      const jsName = `${p.fn.sig.sourceName}Async`;
+      const jsName = `${jsExportName(p.fn.sig)}Async`;
       // `<name>Async` is a name in the same export namespace, so a program that
       // already exports it wins: an export the program asked for is not
       // shadowed by one this flag invented.
       let taken = false;
       for (const other of plans) {
-        if (other.fn.sig.sourceName === jsName) {
+        if (jsExportName(other.fn.sig) === jsName) {
           taken = true;
         }
       }
@@ -1283,7 +1284,7 @@ export const generateNapiShim = (
   }
   for (const p of asyncPlans) {
     const shown = tsSignature(table, p.fn.sig);
-    lines.push(`/* ${p.fn.unit.name}: ${shown} -- asynchronously, as \`${p.fn.sig.sourceName}Async\` */`);
+    lines.push(`/* ${p.fn.unit.name}: ${shown} -- asynchronously, as \`${jsExportName(p.fn.sig)}Async\` */`);
     pushAll(lines, napiAsyncWrapper(table, p));
   }
 
@@ -1292,10 +1293,12 @@ export const generateNapiShim = (
   lines.push("  napi_callback callback;");
   lines.push("} nish_napi_exports[] = {");
   for (const p of plans) {
-    lines.push(`  {"${p.fn.sig.sourceName}", nish_napi_${p.fn.sig.name}},`);
+    const js = jsExportName(p.fn.sig);
+    lines.push(`  {"${js}", nish_napi_${js}},`);
   }
   for (const p of asyncPlans) {
-    lines.push(`  {"${p.fn.sig.sourceName}Async", nish_napi_async_${p.fn.sig.name}},`);
+    const js = jsExportName(p.fn.sig);
+    lines.push(`  {"${js}Async", nish_napi_async_${js}},`);
   }
   lines.push('  {"nish_reset_arena", nish_napi_reset_arena},');
   lines.push('  {"nish_free_arena", nish_napi_free_arena},');

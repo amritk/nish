@@ -1,0 +1,1 @@
+--emit-napi build/test/wordings/nl4008_c_name_clash.napi.c

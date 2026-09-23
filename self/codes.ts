@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 416;
+export const RULE_COUNT: i32 = 418;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -169,6 +169,8 @@ export const diagnosticRules = (): string[] => [
   "NL2129",
   "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
   "NL2266",
+  "` in C, so a header that declared both would not compile: rename one of them",
+  "NL4008",
   "`: a constrained type parameter has only the members its constraint declares",
   "NL2330",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
@@ -211,6 +213,8 @@ export const diagnosticRules = (): string[] => [
   "NL2057",
   "` is not supported: inherited fields are read and written as `this.",
   "NL2085",
+  " only where it is instantiated, and this program instantiates none",
+  "NL4007",
   "Function names starting with `nish_` are reserved for the runtime",
   "NL2202",
   "; convert the error first: `if (r.isErr()) { return Err(...); }`",

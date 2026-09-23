@@ -1,0 +1,1 @@
+--emit-dts build/test/wordings/nl4007_generic_never_instantiated.d.ts

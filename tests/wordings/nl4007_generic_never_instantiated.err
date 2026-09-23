@@ -1,0 +1,1 @@
+`identity` is generic, so it has no single C signature: a generic function becomes a symbol only where it is instantiated, and this program instantiates none

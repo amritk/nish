@@ -31,7 +31,7 @@
 //                     string does not.
 
 import { Compilation } from "./compilation";
-import { banner, ExternalFunction, POS_PARAM, POS_RETURN, tsSignature } from "./interop_abi";
+import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignature } from "./interop_abi";
 import { wasmBridged, wasmSkipReason, wasmType } from "./interop_wasm";
 
 export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
@@ -90,7 +90,7 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
     count = count + 1;
     lines.push(`  /** ${fn.unit.name}: ${source} */`);
     lines.push(
-      `  ${fn.sig.name}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
+      `  ${jsExportName(fn.sig)}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
     );
   }
   if (count === 0) {

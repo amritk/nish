@@ -36,6 +36,7 @@ import {
   banner,
   endsWithFold,
   ExternalFunction,
+  jsExportName,
   POS_PARAM,
   POS_RETURN,
   pushAll,
@@ -443,8 +444,17 @@ const wasmReturned = (table: TypeTable, sig: FunctionSig, ret: TypedView | null,
   return wasmUnsignedOut(table, sig.returnType, call);
 };
 
+/**
+ * The raw export an entry calls. The wasm export is the LLVM symbol itself, and
+ * an instantiation's can hold the mangling's `.` (`sum$arr.i32`, WP18 G8),
+ * which a property access cannot spell, so that one is indexed by its string.
+ */
+const wasmRaw = (sig: FunctionSig): string => sig.name.indexOf(".") >= 0 ? `raw["${sig.name}"]` : `raw.${sig.name}`;
+
 const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   const sig = fn.sig;
+  const name = jsExportName(sig);
+  const raw = wasmRaw(sig);
   const ret = typedView(table, sig.returnType);
   const views: (TypedView | null)[] = [];
   let anyMask = false;
@@ -483,11 +493,11 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
         operands.push(wasmOperand(table, sig, params, i));
         i = i + 1;
       }
-      const call = `raw.${sig.name}(${operands.join(", ")})`;
-      lines.push(`${sig.name}: (${params.join(", ")}) => ${wasmReturned(table, sig, ret, call)},`);
+      const call = `${raw}(${operands.join(", ")})`;
+      lines.push(`${name}: (${params.join(", ")}) => ${wasmReturned(table, sig, ret, call)},`);
       return lines;
     }
-    lines.push(`${sig.name}: raw.${sig.name},`);
+    lines.push(`${name}: ${raw},`);
     return lines;
   }
 
@@ -499,15 +509,15 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
     if (view === null) {
       args.push(wasmOperand(table, sig, params, i));
     } else {
-      const name = sig.paramNames[i];
+      const param = sig.paramNames[i];
       body.push(
-        `const ${name}$ = arrayIn(${params[i]}, ${view.ctor}, ${view.elemSize}, "${sig.sourceName}: argument ${i + 1} (${name})");`
+        `const ${param}$ = arrayIn(${params[i]}, ${view.ctor}, ${view.elemSize}, "${sig.sourceName}: argument ${i + 1} (${param})");`
       );
-      args.push(`${name}$`);
+      args.push(`${param}$`);
     }
     i = i + 1;
   }
-  const call = `raw.${sig.name}(${args.join(", ")})`;
+  const call = `${raw}(${args.join(", ")})`;
   const isVoid = table.kindOf(sig.returnType) === T_VOID;
   const value = wasmReturned(table, sig, ret, call);
   const copyBacks: string[] = [];
@@ -527,7 +537,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
       body.push("return result;");
     }
   }
-  lines.push(`${sig.name}: (${params.join(", ")}) => scoped(() => {`);
+  lines.push(`${name}: (${params.join(", ")}) => scoped(() => {`);
   for (const line of body) {
     lines.push(`  ${line}`);
   }

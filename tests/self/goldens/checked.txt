@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 432 programs, 7906 dump lines.
+# 434 programs, 8000 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2898,6 +2898,102 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 2:9 lo: i32 (const)
   local 3:9 hi: i32 (const)
+program tests/cases/interop_generic_collision.ts
+module tests/cases/interop_generic_collision.ts (entry)
+function identity_i32(x: i32): i32 -> @identity_i32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: identity$i32 identity_i32
+  stackSites=0 stackLocals=0
+  callee 11:35 identity<i32> -> @identity$i32
+  callee 11:50 identity_i32 -> @identity_i32
+function identity<i32>(x: i32): i32 -> @identity$i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x
+  stackSites=0 stackLocals=0
+program tests/cases/interop_generic_fn.ts
+module tests/cases/interop_generic_fn.ts (entry)
+struct Box$i32 (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+  method get -> @Box$i32.get
+function firstOf(xs: readonly i32[]): i32 -> @firstOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: identity$roarr.i32 nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=true passedTo=identity$roarr.i32#0
+  stackSites=0 stackLocals=0
+  callee 24:46 identity<readonly i32[]> -> @identity$roarr.i32
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$i32.get(this: Box$i32): i32 -> @Box$i32.get [exported method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function orZero(b: Box$i32 | null): i32 -> @orZero
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: identity$opt.$Box$i32
+  pointer b: size=4 writesThrough=true captured=true passedTo=identity$opt.$Box$i32#0
+  stackSites=0 stackLocals=0
+  local 27:9 same: Box$i32 | null (const)
+  callee 27:16 identity<Box$i32 | null> -> @identity$opt.$Box$i32
+function okOr(r: Result<i32, i32>, other: i32): i32 -> @okOr
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: other r
+  calls: identity$res.i32.i32
+  stackSites=1 stackLocals=1
+  local 35:9 same: Result<i32, i32> (const)
+  callee 35:16 identity<Result<i32, i32>> -> @identity$res.i32.i32
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Box$i32.constructor Box$i32.get firstOf identity$$Box$i32 identity$arr.i32 identity$i32 identity$str nish_alloc_struct okOr orZero
+  stackSites=1 stackLocals=0
+  local 43:9 xs: i32[] (const)
+  local 44:9 box: Box$i32 (const)
+  callee 44:15 identity<Box$i32> -> @identity$$Box$i32
+  callee 46:5 identity<i32> -> @identity$i32
+  callee 47:5 identity<string> -> @identity$str
+  callee 48:5 identity<i32[]> -> @identity$arr.i32
+  callee 49:5 Box$i32.get -> @Box$i32.get
+  callee 50:5 orZero -> @orZero
+  callee 51:5 firstOf -> @firstOf
+  callee 52:5 okOr -> @okOr
+function identity<readonly i32[]>(x: readonly i32[]): readonly i32[] -> @identity$roarr.i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x
+  pointer x: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function identity<Box$i32 | null>(x: Box$i32 | null): Box$i32 | null -> @identity$opt.$Box$i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x
+  pointer x: size=4 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function identity<Result<i32, i32>>(x: Result<i32, i32>): Result<i32, i32> -> @identity$res.i32.i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=12
+  escaping: x
+  stackSites=0 stackLocals=0
+function identity<Box$i32>(x: Box$i32): Box$i32 -> @identity$$Box$i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=4
+  escaping: x
+  pointer x: size=4 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function identity<i32>(x: i32): i32 -> @identity$i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x
+  stackSites=0 stackLocals=0
+function identity<string>(x: string): string -> @identity$str [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x
+  stackSites=0 stackLocals=0
+function identity<i32[]>(x: i32[]): i32[] -> @identity$arr.i32 [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x
+  pointer x: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
 program tests/cases/io_files.ts
 module tests/cases/io_files.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

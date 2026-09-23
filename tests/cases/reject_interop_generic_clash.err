@@ -1,0 +1,1 @@
+:14:14: error: `Point.shifted` and `Point_shifted` are both `Point_shifted` in C, so a header that declared both would not compile: rename one of them

@@ -50,7 +50,7 @@ import { CLI, VERSION } from "./branding";
 import { Compilation } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
 import { checkedText } from "./dump";
-import { externalFunctions } from "./interop_abi";
+import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop_abi";
 import { generateDts } from "./interop_dts";
 import { generateHeader } from "./interop_header";
 import { generateNapiShim } from "./interop_napi";
@@ -556,6 +556,15 @@ export const main = (): number => {
   if (outputs.length === 0) {
     return 1;
   }
+  // A sidecar that cannot describe the program is refused before anything is
+  // written, so a failed compile leaves no IR behind that the header was meant
+  // to go with. No sidecar flag, no question asked (WP18 G8).
+  const cSidecar = opts.emitHeader.length > 0 || opts.emitNapi.length > 0 || opts.emitNapiAsync.length > 0;
+  const fns: ExternalFunction[] = cSidecar || opts.emitDts.length > 0 ? externalFunctions(compilation) : [];
+  if ((cSidecar || opts.emitDts.length > 0) && !acceptsSidecars(compilation, fns, cSidecar)) {
+    report(compilation, json);
+    return 1;
+  }
 
   let i = 0;
   while (i < emitted.length) {
@@ -569,7 +578,7 @@ export const main = (): number => {
     console.error(`wrote ${file}`);
     i = i + 1;
   }
-  if (!writeSidecars(compilation)) {
+  if (!writeSidecars(compilation, fns)) {
     return 1;
   }
   if (link.length === 0) {
@@ -780,13 +789,15 @@ const linkProgram = (
  * The WP8 sidecars, after the IR and in stage0's order: the header, the wasm
  * declarations, the loader that implements them, then the N-API shim. Each
  * reads the same signatures the IR was emitted from, and the one whole-program
- * fixpoint they share is run once here rather than once per generator.
+ * fixpoint they share is run once, by the caller, rather than once per
+ * generator: the caller needs the list first, to ask whether it can be
+ * described at all.
  *
  * The `wrote` lines go to stderr, as stage0's do, because a single-module
  * compile that named no output has the IR itself on stdout. Each sidecar's
  * directory is made the way the IR's is; false when one could not be.
  */
-const writeSidecars = (compilation: Compilation): boolean => {
+const writeSidecars = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
   const opts = compilation.opts;
   if (
     opts.emitHeader.length === 0 &&
@@ -796,7 +807,6 @@ const writeSidecars = (compilation: Compilation): boolean => {
   ) {
     return true;
   }
-  const fns = externalFunctions(compilation);
   if (opts.emitHeader.length > 0) {
     if (!makeDirectoryFor(opts.emitHeader)) {
       return false;
