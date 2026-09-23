@@ -1,0 +1,1 @@
+`T extends string` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's

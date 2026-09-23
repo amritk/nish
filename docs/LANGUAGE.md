@@ -1289,11 +1289,58 @@ export const main = (): i32 => {
   as soon as it is parsed and before any import is bound:
   `` `Point` in `./lib` takes no type arguments: only a generic class or interface is written with them ``
   (`tests/link/generic_import_plain`).
-- **Not supported yet**, each with its own message: a constrained parameter
-  (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
-  type argument (`<T = string>`), and type parameters on a method or a type
-  alias. A generic `main` is refused too: the entry point is called by the C
-  runtime, which has no type arguments to give it. The design and the
+- **A type parameter has no members until a constraint names them.** A
+  template may pass a `T` on, return it, store it, compare it and hand it to an
+  operator that works at the concrete type, but it may not read, write or call
+  a member through one, even when every instantiation it has would have that
+  member:
+  `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` ``
+  (`tests/cases/reject_generic_member_unconstrained`), and the call form
+  `` Cannot call `bump` of `T`: ... `` (`reject_generic_member_unconstrained_method`).
+  A value is `T`-typed however it reached the receiver: a local inferred from a
+  `T`, an element of a `T[]`, a `T | null` narrowed to `T`, a field of type `T`
+  read through `this`, and the result of a generic call that returns its
+  argument (`reject_generic_member_through_local`). What decides it is where
+  the value came from, never its type — at `T = Point` a `T` and a `Point` are
+  one type, and only the `T` is refused
+  (`reject_generic_member_same_type_local`).
+- **`<T extends Shape>` constrains a type parameter**, and then a `T` has
+  exactly `Shape`'s members: its fields, and its methods when `Shape` is a
+  class. Each instantiation still reads its own struct directly — `T` at
+  `Circle` reads field 0 of `%struct.Circle` and calls `@Circle.bump`, with no
+  `bitcast` and no vtable (`tests/cases/gen_constraint`,
+  `gen_constraint_method`). A member the concrete type has and the constraint
+  does not is refused, once for the template however many instantiations it
+  has, or the constraint would be decoration:
+  `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares ``
+  (`tests/cases/reject_generic_member_not_in_constraint`).
+- **A constraint is a declared class or interface**, or an instantiation of a
+  generic one written with concrete type arguments
+  (`T extends Container<i32>`, `tests/cases/gen_constraint_generic_bound`). It
+  is resolved once, in the template's own module, so a template imported from
+  another module carries its constraint with it
+  (`tests/link/generic_constraint_import`). Anything else is refused at the
+  constraint — a scalar, `string`, an array or a `Result`:
+  `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's ``
+  — and so is one that mentions a type parameter, which would mean something
+  different at every instantiation:
+  `` `U extends T` is not supported: a constraint cannot mention a type parameter, ... ``
+  (`tests/cases/reject_generic_constraint`).
+- **A type argument must satisfy its constraint**: it is the constraint
+  itself, or a class that `implements` it. Having fields of the same names is
+  not enough, because satisfying a constraint is a declaration, and a class
+  constraint is satisfied by that class alone because a class can only
+  `implements` an interface. It is checked at each request, where the argument
+  was inferred or written, and reported in that module:
+  `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` ``
+  (`tests/cases/reject_generic_unsatisfied_constraint`,
+  `tests/link/generic_constraint_import_unsatisfied`).
+- **Not supported yet**, each with its own message: a default type argument
+  (`<T = string>`), and type parameters on a method or a type alias. A generic
+  `main` is refused too: the entry point is called by the C runtime, which has
+  no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
+  that mentions the parameter it constrains, and a bound that is "any type with
+  a method `compare`" are not planned on this path. The design and the
   milestones are in [wp18-generics.md](wp18-generics.md).
 
 ### Generic classes and interfaces
@@ -1367,6 +1414,15 @@ export const main = (): i32 => {
   do: one `new Box<T>(v)` in a body that does not escape is an entry-block
   `alloca` at `T = i32` and an arena bump at `T = string` when the box is
   returned — one source line, two memory behaviours (`tests/cases/gen_stack`).
+- **A class or interface may constrain its parameters** with the rules a
+  generic function's follow. Its own methods read the constraint's members
+  through a field of that type — `this.item.area` in `class Holder<T extends
+  Shape>` is two loads, `item` and then `area` of `%struct.Circle`
+  (`tests/cases/gen_constraint_class`) — and every instantiation is checked
+  against the constraint where its type arguments are written, after `new` and
+  in an annotation
+  (`tests/cases/reject_generic_unsatisfied_constraint_class`,
+  `reject_generic_unsatisfied_constraint_annotation`).
 - **A field may not grow its own type argument.** `class Nest<T> { inner:
   Nest<T[]> | null }` asks for a strictly larger instantiation every time it is
   laid out:
@@ -2992,6 +3048,11 @@ messages are exact for the cases cited; other rows quote the checker
 | --- | --- | --- |
 | top-level statement other than function/class/interface/const/type/enum/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
 | type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
+| a member of an unconstrained type parameter | `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` `` | `reject_generic_member_unconstrained` |
+| a member the constraint does not declare | `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares `` | `reject_generic_member_not_in_constraint` |
+| a constraint that is not a class or interface | `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's `` | `reject_generic_constraint` |
+| a constraint that mentions a type parameter | `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out `` | `reject_generic_constraint` |
+| a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |

@@ -58,7 +58,7 @@ export const N_DEFAULT: i32 = 29; // children: BLOCK of the clause's statements
 
 // ---- Expressions -------------------------------------------------------------------
 
-export const N_IDENT: i32 = 30; // text: the name
+export const N_IDENT: i32 = 30; // text: the name; as a type parameter, its one child is the constraint (WP18 G6)
 export const N_NUMBER: i32 = 31; // text: the literal as written
 export const N_BIGINT: i32 = 32; // text: the literal as written, `n` and all
 export const N_STRING: i32 = 33; // text: the decoded bytes

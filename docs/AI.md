@@ -120,6 +120,7 @@ rejects. This table is the highest-value part of the page.
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
 | `type Pair<T>` (a generic alias), a generic method | `` Generic type parameters are forbidden on a type alias in Nish `` | a generic **function**, **class** and **interface** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
+| `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
@@ -402,9 +403,53 @@ export const main = (): i32 => {
   imported one may be renamed (`import { identity as id }`) without moving the
   symbol. A type-argument list on an imported name that is *not* a template is
   `` `Point` in `./lib` takes no type arguments ``.
-- **Not supported yet**, each with its own message: a constrained parameter
-  (`<T extends Shape>`), a default type argument (`<T = string>`), and type
-  parameters on a **method or type alias**. A generic `main` is refused.
+- **A type parameter has no members unless it is constrained.** Passing a `T`
+  on, returning it, storing it and comparing it are fine; `p.x`, `p.x = 1` and
+  `p.m()` through a `T` are `` Cannot read `x` of `T`: an unconstrained type
+  parameter has no members ``, even when every call passes a type with an `x`.
+  It is where the value came from that counts — a local copied from a `T`, an
+  element of a `T[]` and a narrowed `T | null` are all a `T` — never its type.
+
+```ts nish:err NL2329
+interface Point { x: i32; y: i32; }
+
+const getX = <T>(p: T): i32 => p.x;
+
+export const main = (): i32 => {
+  const p: Point = { x: 1, y: 2 };
+  return getX(p);
+};
+```
+
+- **`<T extends Shape>` gives `T` exactly `Shape`'s members**: its fields, and
+  its methods when `Shape` is a class. A constraint is a declared class or
+  interface (or `Container<i32>`, with its arguments written out) — never a
+  scalar, `string`, an array or another type parameter. Each instantiation still
+  reads its own struct directly, with no vtable.
+- **A type argument must satisfy the constraint**: be `Shape` itself, or a
+  class that declares `implements Shape`. Matching field names are not enough.
+  A class constraint is satisfied by that class alone. The refusal is at the
+  call: `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not
+  implement it ``.
+
+```ts nish:ok
+interface Shape { area: i32; }
+
+class Circle implements Shape {
+  area: i32;
+  radius: i32;
+  constructor(r: i32) { this.area = 3 * r * r; this.radius = r; }
+}
+
+const areaOf = <T extends Shape>(s: T): i32 => s.area;   // s.radius would be refused
+
+export const main = (): i32 => areaOf(new Circle(2)) - 12;
+```
+
+- **Not supported yet**, each with its own message: a default type argument
+  (`<T = string>`), and type parameters on a **method or type alias**. A
+  generic `main` is refused. There are no multiple bounds (`T extends A & B`)
+  and no bound that mentions another parameter.
 - **`$` may not appear in a function, class or interface name** — it is what
   separates a generic's name from its type arguments in the emitted symbol.
 
@@ -464,8 +509,11 @@ export const main = (): i32 => {
   holds one. Unlike a declared class it may be renamed on import, because the
   name that crosses the ABI is the template's. Named without its type arguments
   it is `` `Crate` is generic: it must be written with its type arguments ``.
-- **Not supported yet**: a constrained parameter and a generic method of its
-  own.
+- **A class or interface may constrain its parameters** — `class Holder<T
+  extends Shape>` — by the rules a function's follow: its methods may read
+  `this.item.area` through a field of type `T`, and `new Holder<Point>` or an
+  annotation `Holder<Point>` is refused unless `Point` satisfies `Shape`.
+- **Not supported yet**: a generic method of its own.
 
 ### Calling C
 

@@ -8,10 +8,11 @@
 // catches it in six; every one of those catches becomes a status test here.
 
 import { DiagnosticSink, SourceFile } from "./diagnostics";
-import { StringMap } from "./map";
+import { StringMap, StringSet } from "./map";
 import { Node } from "./nodes";
 import {
   CheckedProgram,
+  DeferredConstraint,
   FunctionSig,
   Instantiation,
   StructInfo,
@@ -77,6 +78,20 @@ export class CheckContext {
    * makes `class Nest<T> { inner: Nest<T[]> | null }` refusable by name.
    */
   currentStructInstance: StructInstantiation | null;
+  /**
+   * WP18 G6: pass 1 is still running, so a struct instantiation's constraints
+   * are written down in `deferredConstraints` rather than checked. Cleared once
+   * every import is bound, when every class a type argument can name has its
+   * `implements` clause.
+   */
+  constraintsDeferred: boolean;
+  deferredConstraints: DeferredConstraint[];
+  /**
+   * Node ids a once-per-template diagnostic has been reported against (WP18
+   * G6). A template's body is checked once per instantiation, and a mistake in
+   * it is the template's, so the second instantiation refuses it silently.
+   */
+  reportedOnce: StringSet;
   /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
   pending: Instantiation[];
   /**
@@ -144,6 +159,9 @@ export class CheckContext {
     this.typeBindings = new StringMap();
     this.currentInstance = null;
     this.currentStructInstance = null;
+    this.constraintsDeferred = true;
+    this.deferredConstraints = [];
+    this.reportedOnce = new StringSet();
     this.pending = [];
     this.pendingFinish = [];
   }
@@ -242,6 +260,27 @@ export class CheckContext {
    */
   performance(node: Node, message: string): void {
     this.sink.reportPerformance(this.source, node.start, node.end, message);
+  }
+
+  /**
+   * Report a mistake in a generic template's body the first time one of its
+   * instantiations reaches it, and refuse it without a word every time after
+   * (WP18 G6). The statement and the body are poisoned either way, exactly as
+   * `error` poisons them, so the second instantiation stops where the first
+   * one did rather than carrying on over a node whose type it never recorded.
+   */
+  errorOnce(node: Node, start: i32, message: string): void {
+    const key = `${node.id}`;
+    if (this.reportedOnce.has(key)) {
+      this.errored = true;
+    } else {
+      this.reportedOnce.add(key);
+      this.errorAtSpan(start, node.end, message);
+    }
+    const current = this.current;
+    if (current !== null) {
+      current.poisoned = true;
+    }
   }
 
   /** Report and answer the sentinel type, for the many callers that want both. */

@@ -16,6 +16,7 @@
 // and it keeps a `Local` free of a field that exists only to be its own key.
 
 import { StringMap } from "./map";
+import { Node } from "./nodes";
 
 /** A parameter is an SSA value; a `let` or `const` lives in an alloca slot. */
 export const STORAGE_PARAM: i32 = 0;
@@ -27,12 +28,46 @@ export class Local {
   type: i32;
   mutable: boolean;
   storage: i32;
+  /**
+   * The type as the *template* wrote it, when this local is declared in the
+   * body of an instantiation (WP18 G6), and `null` everywhere else. `type` is
+   * concrete — `T` is `Point` by the time a body is checked — so this is the
+   * only record that the local came from `T`, which is what decides whether a
+   * member may be read through it (`receiverParameter` in `self/generics.ts`).
+   */
+  origin: TypeOrigin | null;
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name;
     this.type = type;
     this.mutable = mutable;
     this.storage = storage;
+    this.origin = null;
+  }
+}
+
+/**
+ * A type as it was written in a generic declaration, before any binding
+ * (WP18 G6): the annotation node, and what each type parameter it can mention
+ * stands for.
+ *
+ * `names` is empty for an annotation written in the body being checked, whose
+ * parameters are the ones `ctx.typeBindings` binds. It is not empty for one
+ * reached through another declaration — the field `value: T` of `Box<T>`, read
+ * through a local declared `Box<U>` — and then `names[i]` stands for
+ * `args[i]`, which is itself an origin (`U`, here), or `null` for an argument
+ * that came from no type parameter at all. Substituting that way, rather than
+ * resolving, is what keeps a type parameter from ever becoming a type.
+ */
+export class TypeOrigin {
+  annotation: Node;
+  names: string[];
+  args: (TypeOrigin | null)[];
+
+  constructor(annotation: Node, names: string[], args: (TypeOrigin | null)[]) {
+    this.annotation = annotation;
+    this.names = names;
+    this.args = args;
   }
 }
 

@@ -9,8 +9,9 @@ information, and no generic code left in the binary.
 
 This note was the design, written before the code. **Generic functions have
 landed** — §15 records what shipped against what §11 planned, and where the
-implementation chose differently it says why. Generic classes, constraints and
-the whole-program half are still proposals. [LANGUAGE.md](LANGUAGE.md) stays
+implementation chose differently it says why. So have generic classes (§15.4),
+the whole-program half (§15.5) and constraints (§15.6); the peripheries of G8
+are what is left. [LANGUAGE.md](LANGUAGE.md) stays
 normative for what the language *is*; the rest of this file says what it should
 become and why.
 
@@ -1393,8 +1394,9 @@ The **whole-program rule** (G7) followed: a template may be exported, imported
 and instantiated from anywhere, each instantiation is defined once in the
 module that declares the template, and every other module `declare`s it. §15.5
 records what *it* decided differently, including the trap §16 marked, which is
-closed. Constraints (G6) and the peripheries (G8) are not done; §16 is the
-order to take them in.
+closed. Constraints (G6) followed, and §15.6 records how member access on a
+type parameter is decided. The peripheries (G8) are not done; §16 is the order
+to take them in.
 
 The acceptance test of §9 holds and is checked rather than asserted:
 `tests/cases/gen_identity.ll` is `str_param_passthrough.ll` with the symbol
@@ -1648,6 +1650,97 @@ first's layout instead of registering a clashing one, which is the miscompile
 that case exists to catch. stage1 made exactly that mistake first, and the
 reject oracle is what said so.
 
+### 15.6 G6, and what it decided
+
+**Member access is judged by where a value came from, not by its type.** §6.5
+put the check "at the template", and §15.1's second decision is what makes that
+harder than it reads: a template's body is only ever checked with `T` bound to
+a concrete type, so by the time `p.x` is looked at, `p` *is* a `Point`. "The
+receiver's type is `T`'s binding" is not a test for "the receiver came from
+`T`" — `<T>(p: T, q: Point): i32 => p.x + q.x` at `T = Point` gives `p` and `q`
+one type, and only `p.x` may be refused (`reject_generic_member_same_type_local`,
+which pins both directions with a mirrored second template).
+
+So a value carries a *type origin*: the annotation the template wrote, with the
+type parameters it may mention still as syntax. A parameter's origin is its
+annotation, a local's is its annotation or its initialiser's origin
+(`const q = p;` is still a `T`), and an expression's is worked out from its
+parts — through parentheses and a ternary, to the element of a `T[]`, to a field
+or method of `this` in a generic class (`this.value.x` where `value: T`), to a
+field or method of a value whose origin is `Box<U>` (with `Box`'s parameters
+standing for what was written), and to the result of a generic call whose
+return type is one of its own parameters (`identity(p)` is whatever `p` is).
+`T | null` narrowed to `T` is a `T` because the narrowing changes the type and
+not the origin. When the receiver's origin comes out as a bare type parameter
+of the body being checked, the member is looked up in that parameter's
+constraint first: no constraint is §8's message 8, and a member the constraint
+lacks is refused in the words `self/members.ts` already uses, with the
+parameter named beside the constraint. Everything past that is the ordinary
+lookup on the concrete type, which finds the same member at the same index,
+because an implementer's first fields are its interface's. That is why no
+golden moves: the check is a refusal and nothing else.
+
+Two alternatives were set aside. Checking the template once with each `T`
+bound to its constraint (or to an opaque, memberless type) is what §6.5 wrote,
+but a body checked at `T = Shape` asks for instantiations at `Shape`, lays out
+`Box<Shape>` if it names one, and refuses the operators that only work at the
+concrete type (`add<T>(a, b)` at `i32`) — so the check would need every other
+rule muted and every side effect undone, and a muted rule that poisons a
+statement hides the member access after it. Marking the *type* instead — an
+alias of `Point` that remembers it came from `T` — would put a type variable in
+the `TypeTable`, which is the one thing §15.1 kept out of it.
+
+**Once per template, and only when instantiated.** A member refusal is keyed by
+the member's node, so the second instantiation of a template refuses it without
+a second diagnostic (`reject_generic_member_not_in_constraint` has two templates,
+each instantiated twice, and exactly `2 errors`). Because the check runs while
+an instantiation is checked, a template nothing instantiates is never looked
+at, exactly as its body's other mistakes are not (§15.1, the termination rule).
+The *constraint* is different: it is resolved at the declaration, so a
+constraint that names nothing a constraint may name is reported whether or not
+the template is used.
+
+**Satisfaction is checked on the concrete type argument, at the request.** A
+call's inferred tuple, `new Box<X>`, an annotation and an `implements` clause
+all go through one check in `instantiateHere` / `instantiateStructHere`, before
+the tuple is looked up, so every request is held to the constraint and not only
+the first one to name a tuple. The argument passes when it is the constraint or
+a class whose `implements` names it — there is no inheritance, so nothing else
+has the constraint's members at the constraint's offsets. A request made from
+inside another template (`g<U extends Shape>` calling `f<T extends Shape>(u)`)
+is therefore checked at each of `g`'s instantiations, on `U`'s binding: sound,
+and reported per instantiation rather than once. Comparing `U`'s constraint
+with `T`'s would report once, and would need `U`'s origin at the request; that
+is a refinement this milestone did not need. One wrinkle is pass 1: an
+annotation `Holder<Circle>` above `class Circle implements Shape` is resolved
+before `Circle`'s `implements` clause is read, and an imported class has no
+members until its import binds, so a pass-1 request makes the instantiation
+and writes the check down, and pass 1b runs it
+(`reject_generic_unsatisfied_constraint_annotation`).
+
+**What a constraint may name.**
+
+| Constraint | Answer | Case |
+| --- | --- | --- |
+| a declared class or interface | accepted | `gen_constraint`, `gen_constraint_method` |
+| an instantiation with concrete arguments (`Container<i32>`) | accepted | `gen_constraint_generic_bound` |
+| a scalar, `string`, an array, a `Result`, a nullable | refused at the constraint (NL2327) | `reject_generic_constraint` |
+| another type parameter, or an instantiation that mentions one | refused at the constraint (NL2326) | `reject_generic_constraint`, `nl2326_constraint_mentions_parameter` |
+
+A constraint is resolved once, in the template's module, with no type
+parameter bound, so an imported template carries the constraint its own module
+resolved (`tests/link/generic_constraint_import`), and the refusal of an
+unsatisfying argument is reported in the module that wrote the request
+(`tests/link/generic_constraint_import_unsatisfied`). A class that satisfies
+another module's interface constraint has to `implements` it, and implementing
+an imported interface is refused today by the rule that reads `implements` in
+pass 1; the link case therefore instantiates at the imported types themselves.
+Multiple bounds, trait bounds and F-bounded constraints stay out, as §13 says.
+
+**Breaking.** A program that read a member of an unconstrained parameter
+compiled before this and does not now; the fix is the constraint the message
+names. Nothing in the corpus, `std/`, `examples/` or `docs/` did.
+
 ---
 
 ## 16. What is next, in order
@@ -1666,9 +1759,12 @@ reject oracle is what said so.
    and the two refusals that stood in for the milestone are deleted (their
    codes, NL2298 and NL2316, are retired in `tests/wordings/unreachable.txt`
    and reserved for ever, as every retired code is).
-3. **G6, constraints.** Member access on a constrained parameter admitted at the
-   template, satisfaction checked at each instantiation. Small next to G5, and
-   it wants G5 first because `<T extends Shape>` is most useful on a container.
+3. ~~**G6, constraints.**~~ **Landed** — §15.6 records what it decided: member
+   access is judged against the constraint while each instantiation is
+   checked, by where a value came from rather than by its type, and reported
+   once per template; satisfaction is checked at each request, against the
+   concrete type argument. The "not supported yet" refusal is gone and its
+   code, NL2294, is retired in `tests/wordings/unreachable.txt`.
 4. **G8, the peripheries.** `-g` naming (`dbg_generic`), the three interop
    sidecars and the C-name collision of §14 question 4, the differential
    rewrite's one-JS-function-per-instantiation, and the fuzzer learning to emit

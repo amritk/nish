@@ -126,6 +126,33 @@ export class FunctionSig {
 }
 
 /**
+ * What a template's `<T extends Shape>` clauses resolved to (WP18 G6): one
+ * struct type id per type parameter, in declaration order, or -1 for a
+ * parameter written without `extends` and for one whose constraint was
+ * refused. Resolved once, in the template's own module with no type parameter
+ * bound, the first time anybody asks — which is its declaration in pass 1, or
+ * an earlier request for it — so a bad constraint is reported once per
+ * template however many instantiations there are.
+ */
+export class ConstraintList {
+  types: i32[];
+  resolved: boolean;
+  /** Set while the list is being resolved, so a constraint that names its own template does not loop. */
+  resolving: boolean;
+
+  constructor() {
+    this.types = [];
+    this.resolved = false;
+    this.resolving = false;
+  }
+
+  /** The constraint of parameter `index`, or -1 when it has none (or is not resolved yet). */
+  at(index: i32): i32 {
+    return index >= 0 && index < this.types.length ? this.types[index] : -1;
+  }
+}
+
+/**
  * A generic function declaration (WP18). Nothing about it is resolved: the
  * parameter and return annotations mention `typeParams`, so they mean nothing
  * until an instantiation binds them, and a template therefore has no signature,
@@ -136,6 +163,8 @@ export class TemplateInfo {
   sourceName: string;
   /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
   typeParams: string[];
+  /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
+  constraints: ConstraintList;
   /** The `N_FUNCTION` node, in either spelling. */
   decl: Node;
   origin: SourceFile;
@@ -156,6 +185,7 @@ export class TemplateInfo {
   constructor(sourceName: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName;
     this.typeParams = [];
+    this.constraints = new ConstraintList();
     this.decl = decl;
     this.origin = origin;
     this.exported = false;
@@ -177,6 +207,8 @@ export class StructTemplateInfo {
   kind: i32;
   /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
   typeParams: string[];
+  /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
+  constraints: ConstraintList;
   /** The `N_CLASS` or `N_INTERFACE` node. */
   decl: Node;
   origin: SourceFile;
@@ -190,6 +222,7 @@ export class StructTemplateInfo {
     this.sourceName = sourceName;
     this.kind = kind;
     this.typeParams = [];
+    this.constraints = new ConstraintList();
     this.decl = decl;
     this.origin = origin;
     this.exported = false;
@@ -535,6 +568,26 @@ export class DeferredInstance {
 
   constructor(imp: ImportBinding, args: i32[], at: Node) {
     this.imp = imp;
+    this.args = args;
+    this.at = at;
+  }
+}
+
+/**
+ * A struct instantiation whose constraints could not be checked when it was
+ * requested (WP18 G6), because the request came from pass 1: `Holder<Circle>`
+ * in a signature above `class Circle implements Shape` is resolved before
+ * Circle's `implements` clause has been read, and an imported class has no
+ * members here until its import is bound. The instantiation is made anyway, as
+ * every declaration-level request is, and the check runs in pass 1b.
+ */
+export class DeferredConstraint {
+  template: StructTemplateInfo;
+  args: i32[];
+  at: Node;
+
+  constructor(template: StructTemplateInfo, args: i32[], at: Node) {
+    this.template = template;
     this.args = args;
     this.at = at;
   }

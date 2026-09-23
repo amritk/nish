@@ -1,0 +1,1 @@
+:11:36: error: Cannot call `bump` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Counter>`

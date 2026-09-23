@@ -121,7 +121,6 @@ reject_fn_nested	expected an expression, found `function`
 reject_fn_two_names	expected `;`, found `,`
 reject_generator	expected a name, found `*`
 reject_generic_abstract	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
-reject_generic_constraint	a constrained type parameter (`T extends ...`) is not supported yet
 reject_generic_declare_class	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_generic_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_generic_interface_extends	expected `{`, found `extends`

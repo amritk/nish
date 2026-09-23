@@ -1,0 +1,3 @@
+:20:60: error: Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares
+:22:66: error: Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares
+2 errors
