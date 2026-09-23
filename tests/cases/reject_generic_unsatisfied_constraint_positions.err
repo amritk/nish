@@ -1,7 +1,7 @@
 :26:9: error: `T` of `Holder` requires `T extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`
 :29:22: error: `T` of `Holder` requires `T extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`
 :31:26: error: `T` of `Holder` requires `T extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`
-:33:20: error: `T` of `Holder` requires `T extends Shape`, and `Holder$$Point` does not implement it; pass a class or interface that declares `implements Shape`
+:33:20: error: `T` of `Holder` requires `T extends Shape`, and `Holder<Point>` does not implement it; pass a class or interface that declares `implements Shape`
 :33:27: error: `T` of `Holder` requires `T extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`
 :35:26: error: `T` of `Holder2` requires `T extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`
 6 errors

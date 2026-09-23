@@ -196,6 +196,11 @@ export class TypeTable {
    * the three that write have to ask the extra question.
    */
   readonlys: boolean[];
+  /**
+   * The source spelling of an instantiated struct (`Box<i32>` for `Box$i32`,
+   * WP18 §6.7), or empty. Read only by `typeName`; symbols keep the name.
+   */
+  displays: string[];
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap;
   /**
@@ -213,6 +218,7 @@ export class TypeTable {
     this.errs = [];
     this.states = [];
     this.readonlys = [];
+    this.displays = [];
     this.index = new StringMap();
     let scalar = 0;
     while (scalar < T_FIRST_DERIVED) {
@@ -222,6 +228,7 @@ export class TypeTable {
       this.errs.push(-1);
       this.states.push(R_UNKNOWN);
       this.readonlys.push(false);
+      this.displays.push("");
       scalar = scalar + 1;
     }
   }
@@ -277,6 +284,7 @@ export class TypeTable {
     this.errs.push(err);
     this.states.push(state);
     this.readonlys.push(ro);
+    this.displays.push("");
     this.index.set(key, id);
     return id;
   }
@@ -297,6 +305,11 @@ export class TypeTable {
 
   structOf(name: string): i32 {
     return this.intern(K_STRUCT, -1, name);
+  }
+
+  /** Record `display` as the spelling `typeName` gives the struct id `type`. */
+  setDisplayName(type: i32, display: string): void {
+    this.displays[type] = display;
   }
 
   /** The type a numeric `enum` declaration names (WP23); identity is the declared name. */
@@ -362,9 +375,11 @@ export class TypeTable {
    * distinct `Result<T, E>` and two different ones can never share a layout.
    * Every constructor writes its tag before its operands, which makes the
    * encoding unambiguous without separators of its own: `res.res.i32.str.str`
-   * can only be read one way. A class name is prefixed with `$` because that
-   * character cannot appear in a TypeScript identifier, so a `Result` over a
-   * class called `res` cannot collide with the constructor.
+   * can only be read one way. A class name is prefixed with `$`, which no
+   * constructor tag starts with, so a `Result` over a class called `res` cannot
+   * collide with the constructor. `$` is legal in a TypeScript identifier; it is
+   * the checker that refuses it in a declared name, which is what keeps the
+   * instantiation symbols of `instanceSymbol` apart from every written one.
    */
   mangle(type: i32): string {
     switch (this.kinds[type]) {
@@ -560,7 +575,7 @@ export class TypeTable {
           ? `readonly ${this.typeName(this.refs[type])}[]`
           : `${this.typeName(this.refs[type])}[]`;
       case K_STRUCT:
-        return this.names[type];
+        return this.displays[type].length > 0 ? this.displays[type] : this.names[type];
       case K_ENUM:
         return this.names[type];
       case K_NULLABLE:

@@ -280,6 +280,66 @@ const DECLARED = [
     changelog: "Constrained type parameters (WP18 G6)",
     why: "a new program: constrained templates imported from another module, which the reference compiler refuses to parse",
   },
+  {
+    program: "tests/cases/dbg_generic.ts",
+    file: "dbg_generic.ll",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "a new program: with -g the reference compiler names the class `Box$i32` and its methods `Box$i32.get`, where HEAD writes `Box<i32>`, `Box<i32>.get` and `identity<Box<i32>>`",
+  },
+  {
+    program: "tests/cases/perf_padding_quiet.ts",
+    file: "perf_padding_quiet.h",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comment above the exported `Cell<f64>` constructor names it as written, where the reference wrote the symbol `Cell$f64.constructor`",
+  },
+  {
+    program: "tests/cases/perf_padding_quiet.ts",
+    file: "perf_padding_quiet.d.ts",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comment above the exported `Cell<f64>` constructor names it as written, where the reference wrote the symbol `Cell$f64.constructor`",
+  },
+  {
+    program: "tests/cases/perf_padding_quiet.ts",
+    file: "perf_padding_quiet.napi.c",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comment above the exported `Cell<f64>` constructor names it as written, where the reference wrote the symbol `Cell$f64.constructor`",
+  },
+  {
+    program: "tests/link/generic_import/main.ts",
+    file: "main.h",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comments above the methods of `Box<i32>` name them as written, where the reference wrote their mangled symbols",
+  },
+  {
+    program: "tests/link/generic_import/main.ts",
+    file: "main.d.ts",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comments above the methods of `Box<i32>` name them as written, where the reference wrote their mangled symbols",
+  },
+  {
+    program: "tests/link/generic_import/main.ts",
+    file: "main.napi.c",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comments above the methods of `Box<i32>` name them as written, where the reference wrote their mangled symbols",
+  },
+  {
+    program: "tests/link/generic_import_chain/main.ts",
+    file: "main.h",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comments above the methods of `Box<Pair<i32>>` and `Pair<i32>` name them as written, where the reference wrote their mangled symbols",
+  },
+  {
+    program: "tests/link/generic_import_chain/main.ts",
+    file: "main.d.ts",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comments above the methods of `Box<Pair<i32>>` and `Pair<i32>` name them as written, where the reference wrote their mangled symbols",
+  },
+  {
+    program: "tests/link/generic_import_chain/main.ts",
+    file: "main.napi.c",
+    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+    why: "the comments above the methods of `Box<Pair<i32>>` and `Pair<i32>` name them as written, where the reference wrote their mangled symbols",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

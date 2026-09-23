@@ -135,6 +135,12 @@ const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldI
 };
 
 /**
+ * How a diagnostic names this struct: its declared name, or `Box<i32>` for an
+ * instantiation, whose `name` is the mangled `Box$i32` (WP18 §6.7).
+ */
+const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeName(info.type);
+
+/**
  * WP15 section 8, the tenth rule: a struct whose declared field order costs it
  * bytes of padding that a different order would not spend. The message names
  * the current size, the achievable size and the order that reaches it, which
@@ -198,7 +204,7 @@ const reportWastefulPadding = (ctx: CheckContext, info: StructInfo, floor: i32):
     : "";
   ctx.performance(
     info.decl.children[0],
-    `\`${info.name}\` is ${info.size} bytes and would be ${packed} with the same fields in a different ` +
+    `\`${spelled(ctx, info)}\` is ${info.size} bytes and would be ${packed} with the same fields in a different ` +
       `order, so ${info.size - packed} bytes of every value are padding the alignment rules insert and nothing ` +
       `reads: declare the fields widest first — \`${order}\`${alsoImplementers}`
   );
@@ -277,9 +283,9 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
 /** One field of a class or interface, appended to `owner`. */
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
-  const what = `Field \`${name}\` of ${kindWord(owner)} \`${owner.name}\``;
+  const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``;
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
-    ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${owner.name}\``);
+    ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${spelled(ctx, owner)}\``);
     return;
   }
   // The three member headers the parser flags rather than refuses
@@ -379,21 +385,22 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
+  const shown = spelled(ctx, owner);
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
-    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${owner.name}\``);
+    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${shown}\``);
     return;
   }
   // As in `collectField` above, and worth the repetition rather than a shared
   // helper: the two sentences differ, and so does the order — stage0 reads a
   // method's modifiers before its `?` (`rejectMethodModifiers`), so
   // `readonly m?()` is about the modifier and not about the marker.
-  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${owner.name}\``)) return;
+  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${shown}\``)) return;
   if ((decl.flags & FLAG_OPTIONAL) !== 0) {
-    ctx.error(decl, `${what} of class \`${owner.name}\` cannot be optional`);
+    ctx.error(decl, `${what} of class \`${shown}\` cannot be optional`);
     return;
   }
   const symbol = `${owner.name}.${name}`;
-  const sig = new FunctionSig(symbol, symbol, decl);
+  const sig = new FunctionSig(symbol, `${shown}.${name}`, decl);
   sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
@@ -403,7 +410,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(
       decl.children[0],
-      `${what} of class \`${owner.name}\` needs an explicit return type annotation`
+      `${what} of class \`${shown}\` needs an explicit return type annotation`
     );
     sig.returnType = T_ERROR;
   } else {
@@ -416,8 +423,9 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
 };
 
 const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  const shown = spelled(ctx, owner);
   if (owner.ctor !== null) {
-    ctx.error(decl, `Class \`${owner.name}\` has more than one constructor (no overloads)`);
+    ctx.error(decl, `Class \`${shown}\` has more than one constructor (no overloads)`);
     return;
   }
   // stage0 reads a constructor's modifiers with the same function it reads a
@@ -434,10 +442,10 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   // initializer and no constructor assigns it` — advice about a constructor
   // that is right there. stage0 says one thing here because it throws out of
   // the class, and this is that, without the throw.
-  const modifiers = `Constructor of class \`${owner.name}\``;
+  const modifiers = `Constructor of class \`${shown}\``;
   rejectMemberModifiers(ctx, decl, modifiers);
   const symbol = `${owner.name}.constructor`;
-  const sig = new FunctionSig(symbol, symbol, decl);
+  const sig = new FunctionSig(symbol, `${shown}.constructor`, decl);
   sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
@@ -502,7 +510,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       // should.
       ctx.error(
         extendsName,
-        `\`extends\` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of \`${info.name}\` and \`implements\` an interface to convert between them`
+        `\`extends\` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of \`${spelled(ctx, info)}\` and \`implements\` an interface to convert between them`
       );
       // Stop here, which is what stage0's `throw` out of pass 1b leaves
       // behind: the struct is registered but has no members and no layout.
@@ -593,13 +601,13 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
         }
         ctx.error(
           cls.decl.children[0],
-          `Class \`${cls.name}\` does not implement \`${iface.name}\`: field ${i + 1} is ${describeField(ctx, want)} in \`${iface.name}\` but ${describeField(ctx, got)} in \`${cls.name}\` (the interface's fields must be the class's first fields, in order)`
+          `Class \`${spelled(ctx, cls)}\` does not implement \`${spelled(ctx, iface)}\`: field ${i + 1} is ${describeField(ctx, want)} in \`${spelled(ctx, iface)}\` but ${describeField(ctx, got)} in \`${spelled(ctx, cls)}\` (the interface's fields must be the class's first fields, in order)`
         );
         return;
       }
       ctx.error(
         cls.decl.children[0],
-        `Class \`${cls.name}\` does not implement \`${iface.name}\`: it lacks field ${describeField(ctx, want)} (the interface's fields must be the class's first fields, in order)`
+        `Class \`${spelled(ctx, cls)}\` does not implement \`${spelled(ctx, iface)}\`: it lacks field ${describeField(ctx, want)} (the interface's fields must be the class's first fields, in order)`
       );
       return;
     }

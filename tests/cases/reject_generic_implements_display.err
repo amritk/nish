@@ -1,0 +1,1 @@
+Class `Box<i32>` does not implement `Container<i32>`: field 1 is `value: i32` in `Container<i32>` but `other: i32` in `Box<i32>`

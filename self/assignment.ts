@@ -102,7 +102,7 @@ const checkReads = (
     if (!isTarget && cls.field(field) !== null && !assigned.fields.has(field)) {
       ctx.error(
         node,
-        `Field \`${field}\` is read before it is assigned in the constructor of \`${cls.name}\``
+        `Field \`${field}\` is read before it is assigned in the constructor of \`${ctx.table.typeName(cls.type)}\``
       );
     }
     return; // the only children are `this` and the member name
@@ -112,7 +112,7 @@ const checkReads = (
     if (missing !== null) {
       ctx.error(
         node.children[0],
-        `Cannot call \`this.${node.children[0].text}()\` in the constructor of \`${cls.name}\` before field \`${missing.name}\` is assigned`
+        `Cannot call \`this.${node.children[0].text}()\` in the constructor of \`${ctx.table.typeName(cls.type)}\` before field \`${missing.name}\` is assigned`
       );
     }
     for (const arg of node.children[1].children) {
@@ -125,7 +125,7 @@ const checkReads = (
     if (missing !== null) {
       ctx.error(
         node,
-        `\`this\` cannot be used as a value in the constructor of \`${cls.name}\` before field \`${missing.name}\` is assigned`
+        `\`this\` cannot be used as a value in the constructor of \`${ctx.table.typeName(cls.type)}\` before field \`${missing.name}\` is assigned`
       );
     }
     return;
@@ -142,7 +142,7 @@ const checkReads = (
 const requireAll = (ctx: CheckContext, cls: StructInfo, assigned: Assigned, at: Node): void => {
   const missing = missingField(cls, assigned);
   if (missing !== null) {
-    ctx.error(at, `Constructor of \`${cls.name}\` returns before field \`${missing.name}\` is assigned`);
+    ctx.error(at, `Constructor of \`${ctx.table.typeName(cls.type)}\` returns before field \`${missing.name}\` is assigned`);
   }
 };
 
@@ -274,7 +274,7 @@ export const checkDefiniteAssignment = (ctx: CheckContext, cls: StructInfo): voi
       if (!assigned.fields.has(cls.fields[i].name)) {
         ctx.error(
           cls.fields[i].decl.children[0],
-          `Field \`${cls.fields[i].name}\` of class \`${cls.name}\` has no initializer and no constructor assigns it`
+          `Field \`${cls.fields[i].name}\` of class \`${ctx.table.typeName(cls.type)}\` has no initializer and no constructor assigns it`
         );
         return;
       }
@@ -291,7 +291,7 @@ export const checkDefiniteAssignment = (ctx: CheckContext, cls: StructInfo): voi
   if (missing !== null) {
     ctx.error(
       missing.decl.children[0],
-      `Field \`${missing.name}\` of class \`${cls.name}\` is not definitely assigned in the constructor`
+      `Field \`${missing.name}\` of class \`${ctx.table.typeName(cls.type)}\` is not definitely assigned in the constructor`
     );
   }
 };
