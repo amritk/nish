@@ -64,7 +64,20 @@
  *     a comparison whose own logic nothing exercises is the gap
  *     `docs/wp19-stage0-retirement.md` §5a records about every other oracle
  *     here. What is *not* set aside is anything else on those lines: a path
- *     that is not under the compiler's own root is compared as it stands.
+ *     that is not under the compiler's own root is compared as it stands;
+ *   - not **each compiler's own version in the DWARF `producer`**. A `-g`
+ *     build records `producer: "nish <version>"`, and the reference is the
+ *     *last* release while HEAD already carries the next version number from
+ *     the moment the release pull request bumps it — so without this, every
+ *     `-g` case goes red at every release, on the release pull request and on
+ *     every branch after it until the release is published and becomes the
+ *     seed. `tests/run.js`'s `normaliseProducer` lets the same digits go for
+ *     the goldens. It is removed the way the root is: each side's *own*
+ *     version, as its `--version` prints it, and only inside a `producer:`
+ *     string, so a candidate that records any version but its own — the
+ *     reference's, a stale constant — still differs. `withoutOwnVersion` does
+ *     it, `selfCheckVersions` drives it over fabricated inputs on every run,
+ *     and the summary counts the files that needed it.
  *
  * **A difference must be named in `CHANGELOG.md`.** `DECLARED` below is how:
  * an entry names the program and the file that may differ, the sentence saying
@@ -192,10 +205,58 @@ function selfCheckRoots() {
 }
 
 /**
+ * `text` with one compiler's own version removed from the DWARF `producer`, so
+ * `producer: "nish 0.6.0"` from the 0.6.0 seed and `producer: "nish 0.7.0"`
+ * from a 0.7.0 HEAD both read `producer: "<own version>"`.
+ *
+ * `ownVersion` is the compiler's whole `--version` line, which is the string
+ * `self/debug.ts` writes (`${CLI} ${VERSION}`), and the match carries both
+ * quotes: a version that merely begins with it (`nish 0.6.0-rc.1`), the other
+ * compiler's version, and the same words anywhere but a `producer:` are all
+ * left alone. Nothing else is rewritten.
+ */
+function withoutOwnVersion(text, ownVersion) {
+  if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) return text;
+  return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"');
+}
+
+/**
+ * `withoutOwnVersion` over inputs a corpus cannot produce, on every run, for
+ * the reason `selfCheckRoots` gives: it is the other piece of comparison logic
+ * here that can make two differing files look equal. Returns the reason it
+ * failed, or null.
+ */
+function selfCheckVersions() {
+  const unit = (producer) =>
+    `!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "${producer}", isOptimized: false)`;
+  const cases = [
+    [unit("nish 0.6.0"), "nish 0.6.0", unit("<own version>")],
+    // Another compiler's version is not this one's to forgive: a candidate
+    // that records the reference's version, or a stale one, must still differ.
+    [unit("nish 0.6.0"), "nish 0.7.0", unit("nish 0.6.0")],
+    // A version that only begins with this one's is a different version.
+    [unit("nish 0.6.0-rc.1"), "nish 0.6.0", unit("nish 0.6.0-rc.1")],
+    // The same words outside a `producer:` are the program's, not the compiler's.
+    ['@.str = private constant [10 x i8] c"nish 0.6.0"', "nish 0.6.0", '@.str = private constant [10 x i8] c"nish 0.6.0"'],
+    // No version at all: every caller's fallback, and it must change nothing.
+    [unit("nish 0.6.0"), null, unit("nish 0.6.0")],
+    ["", "", ""],
+  ];
+  for (const [text, ownVersion, want] of cases) {
+    const got = withoutOwnVersion(text, ownVersion);
+    if (got !== want) {
+      return `withoutOwnVersion(${JSON.stringify(text)}, ${JSON.stringify(ownVersion)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+    }
+  }
+  return null;
+}
+
+/**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
  * the program's own. `label` is what the report calls it — the path as the
  * caller spelled it rather than the absolute one, so a summary line stays
- * readable and can be pasted back.
+ * readable and can be pasted back. `version` is its `--version` line, which
+ * `withoutOwnVersion` removes from the DWARF `producer`.
  *
  * A compiler that cannot answer `--version` is refused here rather than three
  * hundred compilations later: a binary built for another platform or a `.js`
@@ -216,8 +277,9 @@ function resolveCompiler(spec, role) {
       return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
     }
   }
-  if (compile(compiler, ["--version"]).status !== 0) return refuse("is not runnable (`--version` failed)");
-  return compiler;
+  const version = compile(compiler, ["--version"]);
+  if (version.status !== 0) return refuse("is not runnable (`--version` failed)");
+  return { ...compiler, version: (version.stdout ?? "").trim() };
 }
 
 /**
@@ -320,7 +382,9 @@ function excerpt(want, got, limit) {
  *   `{ dump }`         — its own flags ask for a dump, so neither side writes an artefact
  *   `{ refused }`      — both compilers refuse it; the message is `reject_oracle.js`'s
  *   `{ differences }`  — `[{ surface, detail }]`, where `surface` is the file name or "exit"
- *   `{ files, lines }` — they agree, over this many files and IR lines
+ *   `{ files, lines, rooted, versioned }` — they agree, over this many files
+ *                      and IR lines, this many of them only once each side's
+ *                      own root, or own version, was removed
  *
  * The program is given the flags it is compiled with everywhere else, from its
  * `.args` sidecar or its `// smoke: args` line (`tests/self/corpus.js`): two
@@ -388,6 +452,7 @@ function compare(pair, work, file, options = {}) {
   const differences = [];
   let lines = 0;
   let rooted = 0;
+  let versioned = 0;
   for (const name of [...new Set([...want.keys(), ...got.keys()])].sort()) {
     const a = want.get(name);
     const b = got.get(name);
@@ -412,10 +477,21 @@ function compare(pair, work, file, options = {}) {
     // that says a comparison happened must say what it set aside.
     const wantText = a.toString("utf8");
     const gotText = b.toString("utf8");
-    if (
-      withoutOwnRoot(wantText, pair.reference.packageRoot) === withoutOwnRoot(gotText, pair.candidate.packageRoot)
-    ) {
+    const wantRooted = withoutOwnRoot(wantText, pair.reference.packageRoot);
+    const gotRooted = withoutOwnRoot(gotText, pair.candidate.packageRoot);
+    if (wantRooted === gotRooted) {
       rooted++;
+      if (name.endsWith(".ll")) lines += wantText.split("\n").length;
+      continue;
+    }
+    // The reference is the last release and the candidate is HEAD, which
+    // carries the next version from the commit that bumps it, so a `-g` build
+    // records a different `producer` on each side. Counted apart for the same
+    // reason as the root.
+    if (
+      withoutOwnVersion(wantRooted, pair.reference.version) === withoutOwnVersion(gotRooted, pair.candidate.version)
+    ) {
+      versioned++;
       if (name.endsWith(".ll")) lines += wantText.split("\n").length;
       continue;
     }
@@ -426,7 +502,7 @@ function compare(pair, work, file, options = {}) {
     });
   }
   if (differences.length > 0) return { differences };
-  return { files: want.size, lines, rooted };
+  return { files: want.size, lines, rooted, versioned };
 }
 
 /**
@@ -539,13 +615,18 @@ function main(argv) {
     return 0;
   }
 
-  // Before anything is compiled: the one piece of comparison logic here that
-  // can make two differing files look equal, driven over inputs no corpus
-  // produces. A run whose own comparison is broken must say so instead of
+  // Before anything is compiled: the two pieces of comparison logic here that
+  // can make two differing files look equal — each side's own root and each
+  // side's own producer version — driven over inputs no corpus produces. A run whose own comparison is broken must say so instead of
   // agreeing about three hundred programs.
   const selfCheck = selfCheckRoots();
   if (selfCheck !== null) {
     process.stderr.write(`nish-cmp: its own package-root comparison is wrong: ${selfCheck}\n`);
+    return 2;
+  }
+  const selfCheckVersion = selfCheckVersions();
+  if (selfCheckVersion !== null) {
+    process.stderr.write(`nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`);
     return 2;
   }
 
@@ -585,6 +666,7 @@ function main(argv) {
   let files = 0;
   let lines = 0;
   let rooted = 0;
+  let versioned = 0;
   for (const file of inputs) {
     const program = path.relative(root, file);
     const result = compare(pair, work, file, options);
@@ -603,6 +685,7 @@ function main(argv) {
       files += result.files;
       lines += result.lines;
       rooted += result.rooted ?? 0;
+      versioned += result.versioned ?? 0;
       if (verbose) process.stdout.write(`  ok   ${program} (${result.files} files)\n`);
     }
   }
@@ -674,6 +757,14 @@ function main(argv) {
     );
   }
 
+  if (versioned > 0) {
+    process.stdout.write(
+      `note: ${versioned} file(s) agree once each compiler's own version is removed from the DWARF ` +
+        `producer (reference "${pair.reference.version}", candidate "${pair.candidate.version}"): a \`-g\` build ` +
+        `records the version of the compiler that wrote it. Every other byte of those files is compared as it stands.\n`
+    );
+  }
+
   const compared = inputs.length - refused.length - dumps.length;
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
@@ -683,10 +774,11 @@ function main(argv) {
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
   const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
   const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : "";
+  const versionedNote = versioned > 0 ? `, ${versioned} equal after each compiler's own producer version` : "";
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${dumpNote}${rootedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+      `${refusedNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   );
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
 }
@@ -701,5 +793,7 @@ export {
   resolvePair,
   seedFromEnvironment,
   selfCheckRoots,
+  selfCheckVersions,
   withoutOwnRoot,
+  withoutOwnVersion,
 };

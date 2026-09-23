@@ -33,7 +33,7 @@ import { createRequire } from "node:module";
 import { parseCodesRegistry } from "../scripts/codes-registry.js";
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js";
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js";
-import { packageRootOf, selfCheckRoots, withoutOwnRoot } from "./nish-cmp.js";
+import { packageRootOf, selfCheckRoots, selfCheckVersions, withoutOwnRoot } from "./nish-cmp.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
 import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
@@ -4868,6 +4868,17 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish") === "/opt/nish-old/std/a.ts",
     `${withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish")} | ` +
       `${withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish")}`
+  );
+  // The other thing two releases cannot agree about: a `-g` build records
+  // `producer: "nish <version>"`, and the reference is the last release while
+  // HEAD carries the next number from the commit that bumps it. Measured
+  // against the v0.6.0 seed on the 0.7.0 bump, that is seven undeclared
+  // differences, one line each, all in `dbg_*` cases -- the same digits
+  // `normaliseProducer` lets go for the goldens.
+  check(
+    "nish-cmp: its own producer-version normalisation is right (stand-in inputs, not the corpus)",
+    selfCheckVersions() === null,
+    String(selfCheckVersions())
   );
 
   // The same equality on programs nobody wrote. The corpus is checked in and
