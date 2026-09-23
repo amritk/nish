@@ -20,6 +20,8 @@
     "!scripts/arrow-verify.mjs",
     "!scripts/arrowify.mjs",
     "!scripts/fetch-seed.sh",
+    "!scripts/check-pr-body.mjs",
+    "!scripts/check-pr-body.test.mjs",
     "std",
     "README.md",
     "LICENSE",
