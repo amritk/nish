@@ -917,7 +917,7 @@ export class Compilation {
         if (previousSig === null) {
           message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`;
         } else {
-          message = clashMessage(sig, previousSig, previousModule.name, unit.packageName);
+          message = clashMessage(this.table, sig, previousSig, previousModule.name, unit.name, unit.packageName);
         }
         // Reported, not thrown: every clash is listed.
         const at2 = nameNode(sig);
@@ -1055,15 +1055,39 @@ const describePackage = (packageName: string): string => packageName === ROOT_PA
 /**
  * The wording of a duplicate-symbol rejection (WP21 S1).
  *
- * Two spellings of one rule, and the split is not decoration: in a program of
+ * Two spellings of each rule, and the split is not decoration: in a program of
  * one package "unique across the program" is the whole truth and is the
  * sentence this compiler has always printed, while in a program of several it
  * would be wrong -- the point of package-scoped symbols is that the *other*
  * package may use the name freely. Each spelling is written out in full rather
  * than assembled from a shared fragment, because a diagnostic's literal run is
- * what `scripts/gen-diagnostic-codes.mjs` keys its stable `NL` code on.
+ * what its stable `NL` code in `self/codes.ts` is keyed on.
+ *
+ * A constructor or method is a symbol named after its class, so two classes
+ * that share a name collide here only when both declare the same member: two
+ * same-named classes with fields alone compile. That sentence names the class
+ * and both files rather than the symbol `Base.constructor`, which is not a name
+ * the reader wrote (#174).
  */
-const clashMessage = (sig: FunctionSig, previous: FunctionSig, previousFile: string, packageName: string): string => {
+const clashMessage = (
+  table: TypeTable,
+  sig: FunctionSig,
+  previous: FunctionSig,
+  previousFile: string,
+  file: string,
+  packageName: string
+): string => {
+  const owner = sig.owner;
+  if (owner !== null) {
+    const member = sig.decl.kind === N_CONSTRUCTOR
+      ? "is declared with a constructor"
+      : `declares method \`${sig.decl.children[0].text}\``;
+    const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`;
+    if (packageName === ROOT_PACKAGE) {
+      return `${both}; a constructor or method is named after its class, so two classes that share a name anywhere in the program cannot both declare it, whether or not either is exported; rename one of the classes`;
+    }
+    return `${both}; a constructor or method is named after its class, so two classes that share a name within one package cannot both declare it, whether or not either is exported; rename one of the classes`;
+  }
   const where = `\`${sig.sourceName}\` is also defined in ${previousFile}`;
   if (sig.exported && previous.exported) {
     if (packageName === ROOT_PACKAGE) {

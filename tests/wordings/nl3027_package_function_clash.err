@@ -1,0 +1,1 @@
+Function `hidden` is also defined in tests/wordings/nl3_clash/node_modules/clash_internal/index.ts; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol

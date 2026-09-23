@@ -1,0 +1,1 @@
+main.ts:13:20: error: Cannot initialize Shape variable `s` with Circle
