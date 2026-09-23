@@ -9,9 +9,9 @@ to it; where they disagree, LANGUAGE.md wins.
 
 wp15 §9 item 6 shipped the analysis and not the syntax, because `integer<0, 255>`
 "needs the generics of item 8". Those generics have landed
-([wp18-generics.md](wp18-generics.md#15-what-landed) §15), and so have G8's
-code stages (#163 to #168). Only its docs stage, which closes WP18 in
-`docs/LANGUAGE.md`, remains. The type argument this note needs is
+([wp18-generics.md](wp18-generics.md#15-what-landed) §15), and so has all of
+G8: its code stages (#163 to #168) and its docs stage (#169), which recorded
+G8 in wp18 §15.7 and closed WP18. The type argument this note needs is
 not one WP18 has, though: every WP18 type argument is a type, and a bound is a
 number. §4 is that difference.
 
@@ -453,7 +453,9 @@ by path. They compose with this and neither depends on the other.
 
 ## 9. Interop and `-g`
 
-Every spelling here is one G8 already chose.
+Every spelling here is one G8 already chose, as
+[wp18-generics.md](wp18-generics.md#157-g8-the-peripheries-and-what-it-decided)
+§15.7 and LANGUAGE.md's generics rules now record it.
 
 | Surface | `getByte(buf: u8[], i: integer<0, 255>): u8` | `Box<integer<0, 255>>` |
 | --- | --- | --- |
@@ -507,8 +509,9 @@ a subrange type without changing anything a user writes.
 
 ## 10. Stages, the freeze, and the acceptance program
 
-WP31 starts after G8's docs stage merges, because both edit `docs/LANGUAGE.md`.
-It depends on G8's code for two things: `TypeTable.setDisplayName` (#164),
+Nothing stands between WP31 and W1 now: G8's docs stage merged as #169, so
+the two no longer compete for `docs/LANGUAGE.md`. WP31 builds on G8's code for
+two things: `TypeTable.setDisplayName` (#164),
 which with `instanceDisplayName` spells `Box<integer<0, 255>>`, and
 `cStructName` / `jsExportName` (#165), which name it.
 
