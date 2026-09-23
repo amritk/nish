@@ -119,6 +119,8 @@ Threads (WP20 T1–T4, WP29 P1) are 1.1 and out of scope.
 
 **Owns:** [`self/manifest.ts`](../../self/manifest.ts), [`self/compilation.ts`](../../self/compilation.ts), [`self/packages.ts`](../../self/packages.ts), [`self/codes.ts`](../../self/codes.ts) (NL3xxx band only), [`AGENTS.md`](../../AGENTS.md) (codes table rows), `tests/link/package_*/**` (new cases only), `tests/cases/reject_package_*`, `tests/wordings/**` (new NL3xxx files only), [`tests/nish/cli.ts`](../../tests/nish/cli.ts), [`docs/wp21-packages.md`](../../docs/wp21-packages.md), plus the shared-append files.
 
+**Amended 2026-09-23T16:40Z** (round 1 of #178 found both forced by the change): also `tests/self/goldens/**` (regenerated only — `checked_self.txt` moves with every `self/` edit) and `tests/nish-cmp.js` (`DECLARED` entries for this stage's new cases only, shared-append).
+
 This is WP21 S3's resolution half: §5c, §6 and §10d's "one diagnostic, not four". Each case below gets the next free NL3xxx number, a `tests/link/package_*` case, and a `--json` code assertion.
 
 | Case | Message must name |
@@ -140,6 +142,8 @@ This is WP21 S3's resolution half: §5c, §6 and §10d's "one diagnostic, not fo
 ## Property-path bounds
 
 **Owns:** [`self/bounds.ts`](../../self/bounds.ts), [`self/attributes.ts`](../../self/attributes.ts), [`self/emit_arrays.ts`](../../self/emit_arrays.ts) (only if the emitter must read a new side-table entry), `tests/cases/arr_header_hoist.*`, `tests/cases/arr_path_*`, `tests/cases/perf_bounds_*` (regenerated goldens only), [`bench/hoist_field.ts`](../../bench/hoist_field.ts) (read, measure), [`docs/wp15-performance.md`](../../docs/wp15-performance.md), plus the shared-append files.
+
+**Amended 2026-09-23T16:40Z**, pre-emptively, for the same reason as package-diagnostics: also `tests/self/goldens/**` (regenerated only), `tests/nish-cmp.js` (`DECLARED` entries for this stage's new cases only, shared-append) and `tests/perf-baseline.json` (only if the ratchet moves down).
 
 This stage implements #106 as that issue states it.
 
