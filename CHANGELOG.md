@@ -26,6 +26,38 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-23
+
+### Breaking changes
+
+- interop: Export generic instantiations under valid, injective names (WP18 G8) ([#165](https://github.com/amritk/nish/pull/165))
+
+### Added
+
+- checker: Spell an instantiated class as written, in diagnostics and -g (WP18 G8) ([#164](https://github.com/amritk/nish/pull/164))
+- checker: Generic methods on classes (WP18 §14 q7) ([#168](https://github.com/amritk/nish/pull/168))
+- checker: WP21 S3 — specific diagnostics at the package boundary ([#178](https://github.com/amritk/nish/pull/178))
+- std: Pair<A, B> as a standard-library type ([#172](https://github.com/amritk/nish/pull/172))
+
+### Fixed
+
+- checker: Hold a constraint to its declaration, not its name (#161) ([#167](https://github.com/amritk/nish/pull/167))
+
+### Performance
+
+- checker: Key bounds length facts by property path ([#179](https://github.com/amritk/nish/pull/179))
+
+### Documentation
+
+- Record WP18 G8 as landed and close WP18 ([#169](https://github.com/amritk/nish/pull/169))
+- Retire the last "no generics" claims and keep WP18 §16 to deferrals ([#177](https://github.com/amritk/nish/pull/177))
+- WP31 — ranged integer types, designed for after G8 ([#171](https://github.com/amritk/nish/pull/171))
+
+### Tests
+
+- Teach the fuzzer to emit generic functions and classes ([#163](https://github.com/amritk/nish/pull/163))
+
+
 ### Breaking changes
 
 - interop: Export generic instantiations under valid, injective names (WP18 G8)
@@ -323,3 +355,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.6.0]: https://github.com/amritk/nish/releases/tag/v0.6.0
 [0.7.0]: https://github.com/amritk/nish/releases/tag/v0.7.0
 [0.8.0]: https://github.com/amritk/nish/releases/tag/v0.8.0
+[0.9.0]: https://github.com/amritk/nish/releases/tag/v0.9.0

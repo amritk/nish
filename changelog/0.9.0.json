@@ -1,0 +1,262 @@
+{
+  "version": "0.9.0",
+  "date": "2026-09-23",
+  "tag": "v0.9.0",
+  "range": {
+    "from": "v0.8.0",
+    "to": "0f4211f"
+  },
+  "entries": [
+    {
+      "id": "teach-the-fuzzer-to-emit-generic-functions-and",
+      "type": "test",
+      "breaking": false,
+      "title": "teach the fuzzer to emit generic functions and classes",
+      "body": "Most generated programs now declare a generic function `pick<T>`, a\ngeneric class `Cell<T>`, sometimes a generic function over it,\n`trade<T>`, and a plain class `Pt`. Each is instantiated at two or three\nof `i32`, `boolean`, `string` and `Pt`, and a final pass calls every\ninstantiation, so the seed and HEAD are held to byte-identical IR over\nmonomorphised code too.\n\nThe generic lines draw from a second random stream derived from the\nseed, so every line a seed printed before is still printed, in order.",
+      "metrics": [
+        "300/300 programs agree between the seed (0.8.0) and HEAD; 747 of 1000 seeds have generics"
+      ],
+      "refs": [
+        "docs/wp18-generics.md §16"
+      ],
+      "tests": [
+        "tests/differential/fuzz.js"
+      ],
+      "commits": [
+        "674bb16"
+      ],
+      "pr": 163,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "spell-an-instantiated-class-as-written-in-diagnostics",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+      "body": "An instantiated class is now `Box<i32>` wherever a person reads it:\n- every diagnostic, including the member, method-argument, object-literal,\n  definite-assignment, `implements` and cross-package clash messages;\n- the `--emit-checked` dump;\n- the `-g` DWARF `name` of its composite type and of its methods\n  (`Box<i32>.get`).\n\nThe mangled spelling `Box$i32` is kept wherever a machine reads it: symbols,\n`%struct` names, DWARF `linkageName`, sidecars and every table key.\n\nThe display spelling lives in a side table on the `TypeTable`, set once where\nan instantiation is minted, so `typeName` answers it and `mangle` and `nameOf`\nnever change. The debug type cache is keyed on the mangled name, which stays\ninjective.\n\nA polymorphic-recursion chain through a class now reads\n`grow<i32>` asks for `grow<Box<i32>>`. No non-debug IR byte moved: every\nexisting `gen_*` golden is unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/wp18-generics.md §6.7",
+        "§16"
+      ],
+      "tests": [
+        "tests/cases/dbg_generic",
+        "tests/cases/reject_generic_recursion_through_class",
+        "tests/cases/reject_generic_member_display",
+        "tests/cases/reject_generic_implements_display",
+        "tests/cases/reject_generic_ctor_display",
+        "tests/link/package_generic_class_clash"
+      ],
+      "commits": [
+        "76d3a9d"
+      ],
+      "pr": 164,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "hold-a-constraint-to-its-declaration-not-its",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "hold a constraint to its declaration, not its name (#161)",
+      "body": "A type argument now satisfies `T extends Shape` only when it is that\n`Shape` declaration, or a class that implements it. Before this, the\ncheck compared names, and struct type ids are interned by name. So a\nmodule that declared its own `Shape` or `Base` could stand in for the\ntemplate's. Depending on the fields, the program then failed inside the\ntemplate, in the wrong module, or compiled while reading one\ndeclaration's layout as another's. Both interface and class constraints\nwere affected.\n\nEvery such request is now refused with NL2328 at the call in the asking\nmodule, in its existing wording.\n\nThe argument is compared by `StructInfo` object identity, which each\ndeclaration has once and every importer shares. Implementing a plain\ninterface is compared by declaring module, which is sound while\nimplementing an imported interface stays refused (NL2079). The code\nnames that dependency.",
+      "metrics": [],
+      "refs": [
+        "docs/wp18-generics.md §15.6"
+      ],
+      "tests": [
+        "tests/link/generic_constraint_same_name",
+        "tests/link/generic_constraint_same_name_fields",
+        "tests/link/generic_constraint_same_name_itself",
+        "tests/link/generic_constraint_same_name_class",
+        "tests/link/generic_constraint_import_back"
+      ],
+      "commits": [
+        "1a270af"
+      ],
+      "pr": 167,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "export-generic-instantiations-under-valid-injective-names-wp18",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": true,
+      "title": "export generic instantiations under valid, injective names (WP18 G8)",
+      "body": "An exported generic's instantiations now appear in every sidecar under\nnames that compile and cannot collide.\n\nIn a C header an instantiation is `nish_gen_<collapse>`, for example\n`nish_gen_identity_i32` or `nish_gen_identity_arr_i32`. It is bound to\nits symbol with `NISH_SYMBOL`, and the comment says which instantiation\nit is. Because `nish_` is reserved for user functions and classes, a\nuser's `identity_i32` can no longer produce a second declaration of the\nsame C name. Any remaining clash, which only a `.`-joined method name\ncan still produce, is refused with NL4008, naming both symbols.\n\n`.d.ts`, the wasm loader and N-API export the same identifier. Before\nthis, an array, nullable or `Result` argument put a `.` into the\nmangled name, so those exports were not valid JavaScript identifiers.\n\nAn exported generic that nothing instantiates has no symbol at all. It\nis now refused with NL4007 when any sidecar is requested, rather than\nbeing missing from the output without a word. A plain `.ll` compile is\nunchanged.\n\nBREAKING CHANGE: an exported instantiation's C, `.d.ts`, wasm-loader\nand N-API names change from the plain collapse (`identity_i32`) to\n`nish_gen_identity_i32`, so call the new name. A program with an\nexported but uninstantiated generic, or with two symbols that collapse\nto one C name, is now refused when a sidecar is requested (NL4007,\nNL4008). Instantiate the generic or stop exporting it, and rename one\nof the clashing symbols.",
+      "metrics": [],
+      "refs": [
+        "docs/wp18-generics.md §6.8",
+        "§8",
+        "§14"
+      ],
+      "tests": [
+        "tests/cases/interop_generic_fn",
+        "tests/cases/interop_generic_collision",
+        "tests/cases/reject_interop_generic_unused",
+        "tests/cases/reject_interop_generic_clash",
+        "tests/wordings/nl4007_generic_never_instantiated",
+        "tests/wordings/nl4008_c_name_clash"
+      ],
+      "commits": [
+        "3a4e28f"
+      ],
+      "pr": 165,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "generic-methods-on-classes-wp18-14-q7-168",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "generic methods on classes (WP18 §14 q7)",
+      "body": "A method of a class, generic or not, may now declare type parameters of\nits own:\n`class Box<T> { pair<U>(u: U): Pair<T, U> }`. They are inferred from the\narguments, exactly as a generic function's are; type arguments are never\nwritten at the call.\n\nEach (receiver instantiation × method tuple) is monomorphised into one\n`define`, named `Box$i32.pair$str`, and displayed as\n`Box<i32>.pair<string>` in diagnostics and `-g`.\n\nThe generic-function rules all apply:\n- the termination check, over the receiver and the method tuple together;\n- constraints, checked by declaration identity;\n- the whole-program rule, one definition in the declaring module;\n- NL4007 for an exported but never-instantiated generic method when a\n  sidecar is requested.\n\nRefused, each with a stable code:\n- a method type parameter that shadows the class's own (NL2331);\n- an uninferable method type parameter;\n- a generic constructor;\n- polymorphic recursion through a method;\n- a `$` in a generic method's name. That name is the base of every\n  instantiation's symbol, so a `$` there would let two methods mint one\n  symbol. An instantiation that did so anyway would now be an internal\n  error rather than a wrong call.\n\n`self/` does not use the construct, and every existing `gen_*` golden is\nunchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/wp18-generics.md §15.8",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/cases/gen_method",
+        "tests/cases/gen_method_generic_class",
+        "tests/cases/gen_method_constraint",
+        "tests/cases/gen_method_export",
+        "tests/cases/dbg_generic_method",
+        "tests/cases/reject_generic_method_*",
+        "tests/link/generic_method_import"
+      ],
+      "commits": [
+        "08b83df"
+      ],
+      "pr": 168,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "record-wp18-g8-as-landed-and-close-wp18",
+      "type": "docs",
+      "breaking": false,
+      "title": "record WP18 G8 as landed and close WP18",
+      "body": "The normative and user-facing docs now describe generics as they are.\n\n- LANGUAGE.md and AI.md state:\n  - how an instantiated class is spelled (`Box<i32>` in diagnostics and\n    `-g`, `Box$i32` in symbols);\n  - how an exported instantiation appears in each sidecar\n    (`nish_gen_<collapse>`), and NL4007 and NL4008;\n  - that a constraint is satisfied by declaration, not by name.\n- The stale \"not supported\" claims are gone from README.md, llms.txt,\n  MASTER_PLAN.md and LANGUAGE.md.\n- wp18-generics.md:\n  - gains §15.7 for G8;\n  - marks which of §15.2's original refusals later milestones lifted;\n  - answers §14's questions 4 and 5;\n  - closes §16 with the deliberate deferrals (contextual-return inference,\n    call-site type arguments, discriminated unions, the Node-side\n    differential rewrite, and lifting NL2079) and the known follow-ups.\n\nFixes #160.",
+      "metrics": [],
+      "refs": [
+        "docs/wp18-generics.md §15.7",
+        "§16"
+      ],
+      "tests": [],
+      "commits": [
+        "312441a"
+      ],
+      "pr": 169,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "retire-the-last-no-generics-claims-and-keep",
+      "type": "docs",
+      "breaking": false,
+      "title": "retire the last \"no generics\" claims and keep WP18 §16 to deferrals",
+      "body": "No document now says in the present tense that generics, constraints or\ngeneric methods are unsupported.\n\n- std/README.md drops generics from the restrictions that shape a std/ API.\n- wp26-stdlib.md §3c and its docs/README.md index entry are now\n  historical. The assertions stay one per type because a single `eq<T>`\n  would need a generic `toString` to report as precisely, and WP18 did not\n  add one.\n- wp24-async.md, the `Result<T, E>` paragraph in LANGUAGE.md, wp16-results.md\n  §3 and MASTER_PLAN.md now say that WP18 has landed.\n- wp18-generics.md §16 lists only deliberate deferrals. The two known\n  issues move to a new §15.9, linked to #173 and #175.\n\nStatements about Nish-0, the subset self/ is written in, are unchanged:\nthey are still true under the rolling freeze.",
+      "metrics": [],
+      "refs": [
+        "#160",
+        "docs/wp18-generics.md §15.9",
+        "§16"
+      ],
+      "tests": [],
+      "commits": [
+        "e7d5306"
+      ],
+      "pr": 177,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "wp31-ranged-integer-types-designed-for-after-g8",
+      "type": "docs",
+      "breaking": false,
+      "title": "WP31 — ranged integer types, designed for after G8",
+      "body": "A design note, with nothing built yet, for `integer<Lo, Hi>`: the declared form of the ranged types that WP15 item 6 shipped the analysis for but not the syntax. It decides the surface and semantics now, so building it is a build and not a decision.\n\n- **Spelling.** `type integer<Lo extends number, Hi extends number> = number` in `nish.d.ts`, proved under `tsc --strict`.\n- **The literal type argument.** A numeric literal is a type argument in exactly one place, the bounds of `integer`, and is refused everywhere else.\n- **Representation.** Always an `i32`, in both number modes.\n- **Entering the range.** A checked entry that the bounds-check facts elide, instead of a compile error for unproven values. This is a native-panic, Node-silent divergence, and W1 records it.\n- **Leaving the range.** Arithmetic widens to `i32`.\n- **Bounds facts.** The declared range is a fact the type answers in `self/bounds.ts`, so no fact can be forgotten.\n- **Interop and `-g`.** G8's names at the host boundary and a DWARF typedef.\n- **Stages.** Four build stages (W1 to W4), with an acceptance program that says in advance where the gain is not.",
+      "metrics": [],
+      "refs": [
+        "docs/wp31-ranged-integers.md",
+        "docs/wp15-performance.md#2-zero-cost-safety-the-bounds-check-pipeline"
+      ],
+      "tests": [],
+      "commits": [
+        "62a4e25"
+      ],
+      "pr": 171,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "wp21-s3-specific-diagnostics-at-the-package-boundary",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "WP21 S3 — specific diagnostics at the package boundary",
+      "body": "Resolving a package through the `nish` export condition used to fail with one message, NL3014, whatever went wrong. Each cause now names what actually went wrong and has its own stable `--json` code:\n\n- **NL3017**: the package offers Nish only in the other number mode. The message names both modes.\n- **NL3018**: its `engines.nish` floor is above this compiler. The message names both versions.\n- **NL3019**: `engines.nish` is not a range this compiler reads. Only `>=X.Y.Z` and `>=X.Y` are accepted, and no other shape is silently taken as met.\n- **NL3020**: `exports` declares no Nish condition at all (the plain npm package).\n- **NL3021**: the manifest is not well-formed JSON, and no entry point could be read from it.\n\nNL3014 stays for everything else, with its wording unchanged. The floor is checked first, then the entry point, and only when no entry resolves, whether the manifest is JSON at all (wp21 §11). A manifest the reader got a file from before a syntax error still compiles, as it did under S2. The `engines.nish` boundary is tested at the running compiler's own version, derived at test time, so it stays on the boundary after each release.\n\nThe rest of S3 is recorded as not done: package identity through a symlink, the builtin-without-runtime diagnostic, and blaming a dependency for its own compile error.",
+      "metrics": [],
+      "refs": [
+        "docs/wp21-packages.md#11-s3-as-built"
+      ],
+      "tests": [
+        "tests/link/package_other_mode",
+        "package_other_mode_f64",
+        "package_engines_floor",
+        "package_engines_range",
+        "package_engines_met",
+        "package_no_condition",
+        "package_malformed",
+        "package_no_subpath",
+        "package_nested_condition; tests/nish/cli.ts"
+      ],
+      "commits": [
+        "925dcd9"
+      ],
+      "pr": 178,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "pair-a-b-as-a-standard-library-type",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "Pair<A, B> as a standard-library type",
+      "body": "* feat(std): Pair<A, B> as a standard-library type\n\n`std/pair.ts` exports `interface Pair<A, B> { first: A; second: B; }`,\nexactly the design in wp23 §5.2. It is an interface with no constructor\nhelper and no new grammar. A program imports it as\n`import { Pair } from \"nish/pair\"` and returns two values from one call\nas an object literal at the return. It is meant for returning two\nvalues, not for storing two values side by side.\n\nThe two refusals a caller meets are the checker's existing ones: a\nswapped instantiation (NL2236) and a literal missing `second` (NL2078).\n`self/` does not use the module (the rolling freeze).\n\nwp26 §2 had argued that a two-field interface does not earn a module.\nIt now records why that answer was reversed. Nish types are nominal, so\na `Pair` that every program declares for itself is a different type in\nevery program. A shared type only works if it lives in one place.\n\nRefs: docs/wp23-language-surface.md §5, docs/LANGUAGE.md\nTests: tests/cases/reject_std_pair_swapped, tests/cases/reject_std_pair_missing\n\n* test(std): round-trip nish/pair across a module boundary\n\nThese are the five positive programs for `Pair<A, B>`. Each one lives in\ntests/link/, because an import from `std/` writes two modules. Each\nreturns a `Pair` from a sibling `lib.ts`, so that every case also holds\nan imported `declare` to its `define`:\n\n- scalars;\n- a string and an `f64` under --number-mode f64;\n- an array;\n- a nested `Pair`;\n- a `Pair` held in a class field and in an array.\n\nAdding a module to `std/` also moves two lists:\n\n- `stdModuleNames()` in self/std_modules.ts, which names the modules in\n  the \"not part of the standard library\" diagnostic;\n- the three presence gates in release.yml.\n\ntests/nish-cmp.js declares the five programs, because the 0.8.0 seed has\nno `std/pair.ts`.\n\nTests: tests/link/std_pair_scalar, tests/link/std_pair_f64, tests/link/std_pair_array, tests/link/std_pair_nested, tests/link/std_pair_held\n\n* docs(std): name nish/pair in the std/README.md index row",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "80e0541"
+      ],
+      "pr": 172,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "key-bounds-length-facts-by-property-path-179",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "key bounds length facts by property path",
+      "body": "* perf(checker): key bounds length facts by property path\n\n`self/bounds.ts` keyed every length fact by variable, so `const xs = h.xs`\nproved `xs[i]` in range while `h.xs.length` proved nothing about `h.xs[i]`.\nA loop over an array held in a class field therefore kept a bounds check\nthe hand-hoisted loop did not, and that check was the second loop exit #104\nmeasured as the whole of the remaining gap.\n\nA length holder may now be a **property path**: a root local, parameter or\n`this`, then field reads (`h.xs`, `this.state.idx`). Each path is interned per\nbody as a stand-in `Local`, so every existing fact family holds it without a\nsecond copy of the machinery. A field can be written through an alias, so a\npath fact is dropped by a store to any field named on the path (by name, through\nany holder), by a whole-record element store, by an assignment to the root, and\nby any call or `new`, string paths included. It is never built through a link\nwhose declared type is nullable. The fixpoint's `resizesArray` is not consulted:\nit runs after the checker, and a callee that stores `h.xs = shorter` resizes\nnothing anyway.\n\nEach rule has a program in `tests/cases/arr_path_*` that proves the fact, breaks\nit by that rule alone and must panic; each reads past the array with its rule\nremoved. `@fieldScale` in `arr_header_hoist` is now `@constScale` register for\nregister.\n\nMeasured: 2.38x on bench/hoist_field.ts's field scan (577 ms -> 242 ms, level\nwith param 243 ms and hoisted 243 ms; loop alignment pinned, taskset -c 0,\nminimum of 7 rounds over 4 alternating runs, x86-64 clang 18 --profile speed);\nself/bounds.ts under opt -O2: in-loop bounds-check exits 110 -> 87\nRefs: docs/wp15-performance.md#2c, docs/LANGUAGE.md#element-access\nTests: tests/cases/arr_path_*, tests/cases/arr_header_hoist\n\n* refactor(checker): tighten the property-path bounds helpers\n\nOne `forgetCallEffects` states what a call drops, where three sites paired\ntwo calls by hand. `collectEffects` notes a stored field in the branch that\nalready recognises the write. Every rebind goes through `forgetLocal`.\n`pathHolder` resolves the root once, and `PathHolder` keeps no key that its\nholder's name already spells. The harness shares one `panicCount`. None of\nthis changes a verdict or a golden `.ll`.\n\n* test(self): declare the IR that property-path bounds facts move\n\n`tests/nish-cmp.js` compares the 0.8.0 seed with HEAD and fails on a\ndifference nobody declared. Keying length facts by property path proves\naccesses through fields, so these programs legitimately move: every `self/`\nprogram, `bench/hoist_field.ts`, `arr_header_hoist`, the new `arr_path_hold`\nand `arr_path_nullable`, the `arr_bounds_path` cookbook snippet, and\n`tests/link/reachable_struct`, whose `this.entries[0]` sits behind a length\nguard. The seven must-panic `arr_path_*` programs still match the seed byte\nfor byte.\n\n* fix(checker): prove an index only where its facts still hold\n\nTwo orderings in the bounds walk were unsound for locals before property\npaths existed, and property paths inherited them with an ordinary method call\nas the trigger.\n\nA condition's facts were added back from the syntax after the condition was\nwalked, so in `a && b` and `a || b` a fact `a` proved came back even where `b`\nhad killed it: `i < this.items.length && this.trim()` proved\n`this.items[i]` after `trim` popped, and `i < xs.length && drain(xs) > 0`\ndid the same to a local. An earlier operand's facts now pass through\n`forgetAcross` of the later operand, the same pruning a loop's entry state gets.\n\nAn element store was judged after its value was walked, but `a[i] = v`\nreads `i` before `v`, so `xs[i] = (i = 0)` was proven against the new `i`\nand stored through the old one. A compound store is now judged before its\nvalue, as the emitter checks it; a plain store loses its proof when the\nvalue can rebind the index, the array local or the path; and a field store\nwalks its receiver before its value, as the emitter evaluates it.\n\nEach form has a must-panic round trip, and each reads or writes past the array\nwith the fix removed. The fix costs no proof on self/ (1,374 bounds checks\nbefore and after) and leaves bench/hoist_field.ts's IR byte-identical.\n\nTests: tests/cases/arr_path_cond_*, arr_path_store_rhs*, arr_bounds_cond_*, arr_bounds_store_rhs\nRefs: docs/LANGUAGE.md#element-access",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0f4211f"
+      ],
+      "pr": 179,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    }
+  ]
+}
