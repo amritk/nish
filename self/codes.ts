@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 418;
+export const RULE_COUNT: i32 = 419;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -139,6 +139,8 @@ export const diagnosticRules = (): string[] => [
   "NL2279",
   "` is not a module constant, and a module constant's value must be known at compile time",
   "NL2080",
+  "`: a class's type parameters are in scope in its methods, and a diagnostic that names `",
+  "NL2331",
   "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
   "NL2226",
   "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",

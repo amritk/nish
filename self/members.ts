@@ -13,7 +13,7 @@ import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
-import { instantiateWritten, refuseParameterMember } from "./generics";
+import { checkGenericCall, instantiateWritten, refuseParameterMember } from "./generics";
 import { assignInto, checkExpression } from "./expressions";
 import {
   N_ARRAY,
@@ -133,7 +133,8 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   }
   const field = info.field(expr.text);
   if (field === null) {
-    const hint = info.method(expr.text) !== null ? " (it is a method; call it)" : "";
+    const isMethod = info.method(expr.text) !== null || info.methodTemplate(expr.text) !== null;
+    const hint = isMethod ? " (it is a method; call it)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
     ctx.errorAtProperty(expr, `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`${hint}`);
     return T_ERROR;
@@ -183,6 +184,12 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   const method = info.method(access.text); // own first, then the base chain: static dispatch
   if (method === null) {
+    // WP18 G8: a generic method is a template on its receiver, and a call of
+    // one is a call of a generic function whose first parameter is `this`.
+    const template = info.methodTemplate(access.text);
+    if (template !== null) {
+      return checkGenericCall(ctx, expr, template, scope);
+    }
     const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
     ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`${hint}`);

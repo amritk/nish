@@ -22,6 +22,7 @@ import {
   checkDeferredConstraints,
   collectStructTypeParamNames,
   collectTypeParamNames,
+  declareMethodTypeParameters,
   instantiateStruct,
   isGenericFunction,
   isGenericStruct,
@@ -182,6 +183,10 @@ export class Checker {
         if (template !== null && template.decl === stmt) {
           resolveStructTemplateConstraints(template);
         }
+        // WP18 G8: the rules about a generic method that are its declaration's,
+        // once per class, for the reason the constraints above are resolved
+        // here: a generic class's members are collected once per instantiation.
+        declareMethodTypeParameters(this.ctx, stmt);
       } else if (stmt.kind === N_MODULE_CONST) {
         this.collectConstants(stmt);
       } else if (stmt.kind === N_FUNCTION) {
@@ -538,8 +543,10 @@ export class Checker {
       // order the bodies are checked and the emitter walks it the same way. A
       // method of an instantiated class is the exception: `collectStructMembers`
       // appended it where a declared class's method is appended, which keeps an
-      // instantiated class's functions together and in member order.
-      if (info.owner === null) {
+      // instantiated class's functions together and in member order. An
+      // instantiation of a generic method (WP18 G8) is a request, not a member
+      // collected with its class, so it is appended here like a function's.
+      if (info.owner === null || info.template !== null) {
         this.program.functions.push(info.sig);
       }
       this.checkInstanceBody(info);

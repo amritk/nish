@@ -1,0 +1,1 @@
+:20:35: error: `U` of `Scale.apply` requires `U extends Shape`, and `Point` does not implement it; pass a class or interface that declares `implements Shape`

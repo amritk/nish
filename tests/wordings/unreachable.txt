@@ -82,7 +82,7 @@ NL1050  retired at R6: stage1's parser refuses reject_regex before the rule is s
 NL1051  retired at R6: stage1's parser refuses reject_as_any before the rule is stated
 NL1052  retired at R6: stage1's parser refuses reject_as_unknown before the rule is stated
 NL1054  retired at R6: stage1's parser refuses reject_type_alias_generic before the rule is stated
-NL1055  retired at R6: stage1's parser refuses reject_generic_method before the rule is stated
+NL1055  retired: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
 NL2018  retired at R6: stage1's parser refuses reject_cls_anonymous, nl2018_anonymous_class before the rule is stated
 NL2033  retired at R6: stage1's parser refuses reject_side_effect_import before the rule is stated
 NL2038  retired at R6: stage1's parser refuses reject_type_keyof, nl2038_keyof_type before the rule is stated
@@ -153,7 +153,7 @@ NL2173  `async` functions are Phase 0's (NL1015)
 NL2174  `async` methods are Phase 0's (NL1015)
 NL2205  generators are Phase 0's (NL1044)
 NL2207  generic functions are Phase 0's (NL1054)
-NL2208  generic methods are Phase 0's (NL1055)
+NL2208  retired: `Generic methods are not supported`; generic methods compile since WP18 G8 (wp18 §15.8)
 NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
 NL2217  labelled `break` is Phase 0's (NL1046)
 NL2218  labelled `continue` is Phase 0's (NL1046)

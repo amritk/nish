@@ -1,0 +1,6 @@
+define noundef i32 @Holder.pick$i32(
+define noundef nonnull align 8 i8* @Box$i32.wrap$str(
+define noundef nonnull align 8 i8* @Holder.pick$str(
+declare noundef i32 @Holder.pick$i32(
+declare noundef nonnull align 8 i8* @Box$i32.wrap$str(
+declare noundef nonnull align 8 i8* @Holder.pick$str(

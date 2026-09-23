@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 435 programs, 8038 dump lines.
+# 441 programs, 8311 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1723,6 +1723,35 @@ function identity<Box<i32>>(x: Box<i32>): Box<i32> -> @identity$$Box$i32 [instan
   escaping: x
   pointer x: size=4 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+program tests/cases/dbg_generic_method.ts
+module tests/cases/dbg_generic_method.ts (entry)
+struct Box<i32> (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$i32.constructor Box$i32.pair$i32 Box$i32.pair$str
+  stackSites=1 stackLocals=1
+  local 20:9 b: Box<i32> (const)
+  callee 21:10 Box<i32>.pair<string> -> @Box$i32.pair$str
+  callee 21:26 Box<i32>.pair<i32> -> @Box$i32.pair$i32
+function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box<i32>.pair<string>(this: Box<i32>, other: string): i32 -> @Box$i32.pair$str [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: other
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 14:11 kept: string (const)
+function Box<i32>.pair<i32>(this: Box<i32>, other: i32): i32 -> @Box$i32.pair$i32 [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: other
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 14:11 kept: i32 (const)
 program tests/cases/dbg_locals.ts
 module tests/cases/dbg_locals.ts (entry)
 struct Point (class) size=8 align=4
@@ -2801,6 +2830,221 @@ function test(): i32 -> @test [exported]
   calls: nish_print
   stackSites=1 stackLocals=1
   local 10:9 p: Pair<i32, string> (const)
+program tests/cases/gen_method.ts
+module tests/cases/gen_method.ts (entry)
+struct Chooser (class) size=1 align=1
+  field flip: boolean index=0 offset=0 initialized
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Chooser.pick$i32 Chooser.pick$str nish_print
+  stackSites=1 stackLocals=1
+  local 17:9 c: Chooser (const)
+  local 18:9 first: i32 (const)
+  callee 18:22 Chooser.pick<i32> -> @Chooser.pick$i32
+  local 20:9 word: string (const)
+  callee 20:24 Chooser.pick<string> -> @Chooser.pick$str
+  callee 22:18 Chooser.pick<i32> -> @Chooser.pick$i32
+function Chooser.pick<i32>(this: Chooser, a: i32, b: i32): i32 -> @Chooser.pick$i32 [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  pointer this: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Chooser.pick<string>(this: Chooser, a: string, b: string): string -> @Chooser.pick$str [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  pointer this: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_method_constraint.ts
+module tests/cases/gen_method_constraint.ts (entry)
+struct Shape (interface) size=4 align=4
+  field area: i32 index=0 offset=0
+struct Circle (class) size=8 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  field radius: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=4 align=4
+  implements Shape
+  field area: i32 index=0 offset=0
+  constructor -> @Square.constructor
+struct Scale (class) size=4 align=4
+  field factor: i32 index=0 offset=0 initialized
+struct Tally<Square> (class) size=8 align=8
+  field base: Square index=0 offset=0
+  constructor -> @Tally$$Square.constructor
+function Circle.constructor(this: Circle, radius: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: radius
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Circle.constructor Scale.apply$$Circle Scale.apply$$Square Square.constructor Tally$$Square.constructor Tally$$Square.plus$$Circle nish_alloc_struct
+  stackSites=5 stackLocals=2
+  local 50:9 scale: Scale (const)
+  local 51:9 tally: Tally<Square> (const)
+  callee 51:35 new Square -> @Square.constructor
+  callee 52:10 Scale.apply<Circle> -> @Scale.apply$$Circle
+  callee 52:22 new Circle -> @Circle.constructor
+  callee 52:39 Scale.apply<Square> -> @Scale.apply$$Square
+  callee 52:51 new Square -> @Square.constructor
+  callee 52:68 Tally<Square>.plus<Circle> -> @Tally$$Square.plus$$Circle
+  callee 52:79 new Circle -> @Circle.constructor
+function Tally<Square>.constructor(this: Tally<Square>, base: Square): void -> @Tally$$Square.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: base
+  pointer this: size=8 writesThrough=true captured=false
+  pointer base: size=4 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Scale.apply<Circle>(this: Scale, u: Circle): i32 -> @Scale.apply$$Circle [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  pointer u: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Scale.apply<Square>(this: Scale, u: Square): i32 -> @Scale.apply$$Square [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  pointer u: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Tally<Square>.plus<Circle>(this: Tally<Square>, u: Circle): i32 -> @Tally$$Square.plus$$Circle [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=8 writesThrough=false captured=false
+  pointer u: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_method_export.ts
+module tests/cases/gen_method_export.ts (entry)
+struct Holder (class) size=1 align=1 exported
+  field flip: boolean index=0 offset=0 initialized
+struct Box<i32> (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+function run(h: Holder): i32 -> @run [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$i32.constructor Box$i32.with$bool Holder.pick$i32 Holder.pick$str
+  pointer h: size=1 writesThrough=false captured=false passedTo=Holder.pick$str#0 Holder.pick$i32#0
+  stackSites=1 stackLocals=1
+  local 28:9 s: string (const)
+  callee 28:21 Holder.pick<string> -> @Holder.pick$str
+  local 29:9 b: Box<i32> (const)
+  callee 30:10 Holder.pick<i32> -> @Holder.pick$i32
+  callee 30:25 Box<i32>.with<boolean> -> @Box$i32.with$bool
+function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.pick<string>(this: Holder, a: string, b: string): string -> @Holder.pick$str [exported method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  pointer this: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Holder.pick<i32>(this: Holder, a: i32, b: i32): i32 -> @Holder.pick$i32 [exported method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  pointer this: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box<i32>.with<boolean>(this: Box<i32>, other: boolean): i32 -> @Box$i32.with$bool [exported method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_method_generic_class.ts
+module tests/cases/gen_method_generic_class.ts (entry)
+struct Box<i32> (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+struct Box<string> (class) size=8 align=8
+  field value: string index=0 offset=0
+  constructor -> @Box$str.constructor
+struct Pair<i32, i32> (class) size=8 align=4
+  field first: i32 index=0 offset=0
+  field second: i32 index=1 offset=4
+  constructor -> @Pair$i32$i32.constructor
+struct Pair<i32, string> (class) size=16 align=8
+  field first: i32 index=0 offset=0
+  field second: string index=1 offset=8
+  constructor -> @Pair$i32$str.constructor
+struct Pair<string, i32> (class) size=16 align=8
+  field first: string index=0 offset=0
+  field second: i32 index=1 offset=8
+  constructor -> @Pair$str$i32.constructor
+struct Pair<string, string> (class) size=16 align=8
+  field first: string index=0 offset=0
+  field second: string index=1 offset=8
+  constructor -> @Pair$str$str.constructor
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: Box$i32.constructor Box$i32.pair$i32 Box$i32.pair$str Box$str.constructor Box$str.pair$i32 Box$str.pair$str nish_arena_mark nish_arena_release nish_print nish_str_concat
+  stackSites=2 stackLocals=2
+  local 30:9 n: Box<i32> (const)
+  local 31:9 s: Box<string> (const)
+  local 32:9 a: Pair<i32, i32> (const)
+  callee 32:13 Box<i32>.pair<i32> -> @Box$i32.pair$i32
+  local 33:9 b: Pair<i32, string> (const)
+  callee 33:13 Box<i32>.pair<string> -> @Box$i32.pair$str
+  local 34:9 c: Pair<string, i32> (const)
+  callee 34:13 Box<string>.pair<i32> -> @Box$str.pair$i32
+  local 35:9 d: Pair<string, string> (const)
+  callee 35:13 Box<string>.pair<string> -> @Box$str.pair$str
+  local 36:9 again: Pair<i32, i32> (const)
+  callee 36:17 Box<i32>.pair<i32> -> @Box$i32.pair$i32
+function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box<string>.constructor(this: Box<string>, value: string): void -> @Box$str.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Pair<i32, i32>.constructor(this: Pair<i32, i32>, first: i32, second: i32): void -> @Pair$i32$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: first second
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Pair<i32, string>.constructor(this: Pair<i32, string>, first: i32, second: string): void -> @Pair$i32$str.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: first second
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Pair<string, i32>.constructor(this: Pair<string, i32>, first: string, second: i32): void -> @Pair$str$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: first second
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Pair<string, string>.constructor(this: Pair<string, string>, first: string, second: string): void -> @Pair$str$str.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: first second
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box<i32>.pair<i32>(this: Box<i32>, other: i32): Pair<i32, i32> -> @Box$i32.pair$i32 [method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=8
+  escaping: other
+  calls: Pair$i32$i32.constructor nish_alloc_struct
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box<i32>.pair<string>(this: Box<i32>, other: string): Pair<i32, string> -> @Box$i32.pair$str [method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
+  escaping: other
+  calls: Pair$i32$str.constructor nish_alloc_struct
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box<string>.pair<i32>(this: Box<string>, other: i32): Pair<string, i32> -> @Box$str.pair$i32 [method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
+  escaping: other
+  calls: Pair$str$i32.constructor nish_alloc_struct
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box<string>.pair<string>(this: Box<string>, other: string): Pair<string, string> -> @Box$str.pair$str [method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
+  escaping: other
+  calls: Pair$str$str.constructor nish_alloc_struct
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 program tests/cases/gen_nested.ts
 module tests/cases/gen_nested.ts (entry)
 struct Box<i32> (class) size=4 align=4
@@ -5981,6 +6225,41 @@ function eq<i32>(a: i32, b: i32): boolean -> @eq$i32 [instance]
 function eq<string>(a: string, b: string): boolean -> @eq$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
+  stackSites=0 stackLocals=0
+program docs/cookbook/gen_method.ts
+module docs/cookbook/gen_method.ts (entry)
+struct Chooser (class) size=1 align=1
+  field flip: boolean index=0 offset=0 initialized
+struct Box<i32> (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$i32.constructor Box$i32.keep$str Chooser.pick$i32 Chooser.pick$str nish_print
+  stackSites=2 stackLocals=1
+  local 22:9 c: Chooser (const)
+  local 23:9 word: string (const)
+  callee 23:24 Chooser.pick<string> -> @Chooser.pick$str
+  callee 25:10 Chooser.pick<i32> -> @Chooser.pick$i32
+  callee 25:25 Box<i32>.keep<string> -> @Box$i32.keep$str
+function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Chooser.pick<string>(this: Chooser, a: string, b: string): string -> @Chooser.pick$str [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  pointer this: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Chooser.pick<i32>(this: Chooser, a: i32, b: i32): i32 -> @Chooser.pick$i32 [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: a b
+  pointer this: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box<i32>.keep<string>(this: Box<i32>, other: string): i32 -> @Box$i32.keep$str [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 program docs/cookbook/mem_arena_builtins.ts
 module docs/cookbook/mem_arena_builtins.ts (entry)

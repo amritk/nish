@@ -1,0 +1,3 @@
+:14:3: error: Cannot infer `U` for `Holder.make`: a type parameter is inferred from the arguments, and `U` appears in none of them; give `Holder.make` a parameter that mentions `U`
+:22:3: error: Cannot infer `E` for `Plain.empty`: a type parameter is inferred from the arguments, and `E` appears in none of them; give `Plain.empty` a parameter that mentions `E`
+2 errors

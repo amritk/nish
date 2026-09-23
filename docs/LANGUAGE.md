@@ -1198,9 +1198,9 @@ class Point {
   (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, type parameters on a *method* of its own
-  (`reject_generic_method`; the class's own parameters are in scope in every
-  method — see [Generic classes and interfaces](#generic-classes-and-interfaces)),
+  `declare class`, type parameters on the constructor
+  (`reject_generic_method_constructor`; a *method* may declare its own — see
+  [Generic methods](#generic-methods)),
   decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
@@ -1345,7 +1345,7 @@ export const main = (): i32 => {
   element, a `Result` arm, inside another instantiation, an `implements`
   clause (`reject_generic_unsatisfied_constraint_positions`).
 - **Not supported yet**, each with its own message: a default type argument
-  (`<T = string>`), and type parameters on a method or a type alias. A generic
+  (`<T = string>`), and type parameters on a constructor or a type alias. A generic
   `main` is refused too: the entry point is called by the C runtime, which has
   no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
   that mentions the parameter it constrains, and a bound that is "any type with
@@ -1448,8 +1448,82 @@ export const main = (): i32 => {
   and not the caller's. Named without its type arguments it is refused in the
   same words a locally declared template is
   (`tests/link/generic_import_no_args`).
-- **Not supported yet**: a constrained parameter (`<T extends Shape>`) and a
-  generic method of its own on a class.
+
+### Generic methods
+
+A method of a class — generic or not — may declare type parameters of its own,
+and it is compiled the way a generic function is: **one `define` per (receiver
+struct, method type-argument tuple)**, named by appending `$` and each of the
+method's mangled type arguments to the receiver's method symbol. The IR of an
+instantiation is the IR of the method somebody would have written for that type,
+with `this` first and the symbol renamed (`tests/cases/gen_method`).
+
+```typescript
+class Chooser {
+  flip: boolean = false;
+  pick<T>(a: T, b: T): T { return this.flip ? b : a; }
+}
+
+class Box<T> {
+  value: T;
+  constructor(value: T) { this.value = value; }
+  keep<U>(other: U): T { return this.value; }
+}
+
+const c = new Chooser();
+c.pick(1, 2);                    // @Chooser.pick$i32
+c.pick("a", "b");                // @Chooser.pick$str
+new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
+```
+
+- **The type arguments are inferred from the arguments**, exactly as a generic
+  function's are, and never written at the call: `h.get<i32>(7)` is
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` ``
+  (`tests/cases/reject_generic_method`). A method type parameter no parameter
+  mentions is refused at the declaration:
+  `` Cannot infer `U` for `Holder.make`: a type parameter is inferred from the arguments, and `U` appears in none of them; give `Holder.make` a parameter that mentions `U` ``
+  (`reject_generic_method_uninferable`).
+- **The receiver is part of the key.** On a generic class, `Box<i32>.pair<string>`
+  and `Box<string>.pair<string>` are two instantiations, and a tuple asked for
+  twice is one: two receivers times two method tuples are four `define`s and no
+  more (`tests/cases/gen_method_generic_class`). Inside the body the class's
+  parameters and the method's are both bound.
+- **A method's type parameter may not reuse a name of its class's**, because
+  both are in scope in its body and every `T` there would have two meanings:
+  `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name ``
+  (`reject_generic_method_shadow`, once per class however many times it is
+  instantiated).
+- **A method type parameter may be constrained**, with a generic function's
+  rules: a `U extends Shape` has exactly `Shape`'s members, read straight out of
+  the concrete struct (`tests/cases/gen_method_constraint`); an unconstrained
+  one has none, through a local, a field or another generic call alike
+  (`reject_generic_method_member`, `reject_generic_method_member_through_call`);
+  a type argument is held to the constraint at each call
+  (`reject_generic_method_unsatisfied`); and the constraint may mention no type
+  parameter, the class's included, because it is resolved once for every
+  receiver (`reject_generic_method_constraint_class_param`).
+- **Recursion terminates or is refused by name**, with a generic function's
+  rule and sentence: `` Monomorphising `Walker.walk` would not terminate: `Walker.walk<i32>` asks for `Walker.walk<i32[]>`, ... ``
+  (`reject_generic_method_recursion`).
+- **`-g` names an instantiation as written** — `Box<i32>.pair<string>` — and
+  links it as mangled, `Box$i32.pair$str` (`tests/cases/dbg_generic_method`).
+- **The whole-program rule holds**: a generic method of an exported class is
+  instantiated, and defined once, in the class's module, and every other module
+  that calls it `declare`s it (`tests/link/generic_method_import`).
+- **In the C header** an instantiation is declared under the `nish_gen_`
+  spelling a generic function's takes, bound to its symbol, with the object
+  first: `int32_t nish_gen_Holder_pick_i32(struct Holder *this_, int32_t a, int32_t b) NISH_SYMBOL("Holder.pick$i32");`
+  (`tests/cases/gen_method_export`). The wasm and N-API sidecars bridge no method.
+  An exported class's generic method that nothing calls has no symbol, so with a
+  sidecar flag it is refused:
+  `` `Holder.pick` is generic, so it has no single C signature: a generic method becomes a symbol only where it is instantiated, and this program instantiates none ``
+  (`reject_generic_method_unused`).
+- **A constructor has no type parameters of its own**: it takes its class's,
+  written after `new`. `constructor<T>()` is a syntax error
+  (`reject_generic_method_constructor`), as it is in TypeScript.
+- **`$` is refused in a method name where it could spell an instantiation** —
+  `pick$i32` beside a generic `pick` would be `pick<i32>`'s symbol
+  (`reject_generic_method_dollar`).
 
 ### Interfaces and object literals
 
@@ -3006,7 +3080,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | Construct | Message | Test |
 | --- | --- | --- |
 | type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
-| type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
+| type parameters on a constructor | `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) `` (a syntax error; a *method* may declare its own, see [Generic methods](#generic-methods)) | `reject_generic_method_constructor` |
 | a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
 | type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
@@ -3084,6 +3158,8 @@ messages are exact for the cases cited; other rows quote the checker
 | a constraint that is not a class or interface | `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's `` | `reject_generic_constraint` |
 | a constraint that mentions a type parameter | `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out `` | `reject_generic_constraint` |
 | a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
+| a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
+| type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |

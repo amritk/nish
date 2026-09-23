@@ -36,6 +36,7 @@ import {
   checkNew,
   checkObjectLiteral,
   isValueReceiver,
+  structOf,
 } from "./members";
 import {
   FLAG_POSTFIX,
@@ -62,6 +63,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes";
+import { TemplateInfo } from "./program";
 import { coercesTo } from "./structs";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
@@ -494,6 +496,32 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
         `Type arguments are not written at a call site in ${LANGUAGE}: \`${first}\` is inferred from the ` +
           `arguments, so write \`${template.sourceName}(...)\``
       );
+    }
+  }
+  // WP18 G8: the same shape through a receiver, `h.pick<i32>(x)`. Only a local
+  // or `this` is looked through, because checking a receiver here and again in
+  // `checkOperator` below is harmless for a name and not for an arbitrary
+  // expression.
+  if (op === "<" && expr.children[0].kind === N_MEMBER) {
+    const access = expr.children[0];
+    const receiver = access.children[0];
+    if (receiver.kind === N_IDENT || receiver.kind === N_THIS) {
+      const type = checkExpression(ctx, receiver, scope, -1);
+      let template: TemplateInfo | null = null;
+      if (type !== T_ERROR && ctx.table.isStruct(type)) {
+        const info = structOf(ctx, type);
+        if (info !== null) {
+          template = info.methodTemplate(access.text);
+        }
+      }
+      if (template !== null) {
+        const first = template.typeParams.length > 0 ? template.typeParams[0] : "T";
+        return ctx.errorType(
+          expr.children[1],
+          `Type arguments are not written at a call site in ${LANGUAGE}: \`${first}\` is inferred from the ` +
+            `arguments, so write \`${ctx.textOf(access)}(...)\``
+        );
+      }
     }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);

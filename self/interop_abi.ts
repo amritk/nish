@@ -30,7 +30,7 @@ import { StringMap, StringSet } from "./map";
 import { ROOT_PACKAGE } from "./packages";
 import { basename } from "./paths";
 import { N_CONSTRUCTOR, Node } from "./nodes";
-import { FunctionSig, STRUCT_CLASS } from "./program";
+import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program";
 import { ResultLayout, resultLayout } from "./result";
 import { StringBuilder } from "./strings";
 import {
@@ -680,16 +680,19 @@ export const jsExportName = (sig: FunctionSig): string => cStructName(sig.name);
  */
 export const cAliasReason = (sig: FunctionSig): string => {
   const owner = sig.owner;
+  const instance = sig.instance;
+  // WP18 G8: an instantiation of a generic method names the method it came
+  // from, as written (`Holder.pick`), before anything about its receiver.
+  const template: TemplateInfo | null = instance === null ? null : instance.template;
+  if (owner !== null && template !== null) {
+    return `an instantiation of the generic method ${template.sourceName}`;
+  }
   if (owner !== null) {
     const generic = owner.instance;
     return generic === null ? "a method" : `a method of an instantiation of ${generic.template.sourceName}`;
   }
-  const instance = sig.instance;
-  if (instance !== null) {
-    const template = instance.template;
-    if (template !== null) {
-      return `an instantiation of ${template.sourceName}`;
-    }
+  if (template !== null) {
+    return `an instantiation of ${template.sourceName}`;
   }
   if (sig.name.indexOf(".") >= 0) {
     return "in a package";
@@ -760,6 +763,24 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
         ok = false;
       }
     }
+    // WP18 G8: a generic method of an exported class. It is minted once per
+    // receiver, so it is one declaration however many templates it has, and it
+    // is uninstantiated only when none of them was ever called.
+    const seen = new StringSet();
+    for (const template of program.methodTemplateList) {
+      const key = `${template.decl.id}`;
+      if (template.origin !== unit.source || !template.exported || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      if (!methodInstantiated(program.methodTemplateList, template.decl)) {
+        // Named as declared, `Box.pick`, not after whichever receiver minted it.
+        const owner = template.owner;
+        const shown = owner === null ? template.sourceName : `${owner.decl.children[0].text}.${template.decl.children[0].text}`;
+        reportUninstantiated(compilation, unit, shown, template.decl, "C signature", "method", "a symbol");
+        ok = false;
+      }
+    }
   }
   const clashes = cNameClashes(compilation.table, cDeclared);
   let i = 0;
@@ -778,6 +799,16 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
     i = i + 2;
   }
   return ok;
+};
+
+/** Whether any receiver's template of the generic method `decl` has an instantiation. */
+const methodInstantiated = (templates: TemplateInfo[], decl: Node): boolean => {
+  for (const template of templates) {
+    if (template.decl === decl && template.count > 0) {
+      return true;
+    }
+  }
+  return false;
 };
 
 const reportUninstantiated = (

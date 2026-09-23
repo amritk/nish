@@ -124,7 +124,7 @@ reject_generic_abstract	a module holds only `function`, `class`, `interface`, `c
 reject_generic_declare_class	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_generic_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_generic_interface_extends	expected `{`, found `extends`
-reject_generic_method	a type annotation is required
+reject_generic_method_constructor	a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)
 reject_iface_extends	expected `{`, found `extends`
 reject_iface_index_signature	an interface holds only annotated fields
 reject_iface_member_unsupported	an interface holds only annotated fields

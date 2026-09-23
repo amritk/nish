@@ -159,8 +159,26 @@ export class ConstraintList {
  * no symbol and no entry in `functions`.
  */
 export class TemplateInfo {
-  /** The identifier as written; what every diagnostic about the template names. */
+  /**
+   * The identifier as written; what every diagnostic about the template names.
+   * A generic method's reads `Owner.method`, with the owner as `typeName`
+   * spells it (`Box<i32>.pick`), so its instantiations display as
+   * `Box<i32>.pick<string>` (WP18 G8).
+   */
   sourceName: string;
+  /**
+   * The name an instantiation's symbol is built on, before the package prefix
+   * and the `$` arguments: the source name for a function, and the receiver's
+   * method symbol `Box$i32.pick` for a generic method (WP18 G8).
+   */
+  symbolName: string;
+  /**
+   * The receiver of a generic method (WP18 G8), or `null` for a function. A
+   * method template is minted per receiver struct — once for a declared class,
+   * once per instantiation of a generic one — so one template is one
+   * (receiver × method) and its instantiations are keyed by the method tuple.
+   */
+  owner: StructInfo | null;
   /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
   typeParams: string[];
   /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
@@ -184,6 +202,8 @@ export class TemplateInfo {
 
   constructor(sourceName: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName;
+    this.symbolName = sourceName;
+    this.owner = null;
     this.typeParams = [];
     this.constraints = new ConstraintList();
     this.decl = decl;
@@ -364,6 +384,13 @@ export class StructInfo {
   /** Method source name -> index into `methodSigs`, in declaration order. */
   methodIndex: StringMap;
   methodSigs: FunctionSig[];
+  /**
+   * Generic methods (WP18 G8), by source name -> index into `methodTemplateList`.
+   * A generic method has no signature until a call picks its type arguments, so
+   * it is a template here rather than an entry of `methodSigs`.
+   */
+  methodTemplates: StringMap;
+  methodTemplateList: TemplateInfo[];
   /** The explicit constructor; without one, `new` stores the field initializers inline. */
   ctor: FunctionSig | null;
   /**
@@ -412,6 +439,8 @@ export class StructInfo {
     this.align = 1;
     this.methodIndex = new StringMap();
     this.methodSigs = [];
+    this.methodTemplates = new StringMap();
+    this.methodTemplateList = [];
     this.ctor = null;
     this.implementsNames = [];
     this.implemented = false;
@@ -431,6 +460,12 @@ export class StructInfo {
   method(name: string): FunctionSig | null {
     const at = this.methodIndex.get(name, -1);
     return at < 0 ? null : this.methodSigs[at];
+  }
+
+  /** The generic method called `name` (WP18 G8), or `null` when there is none. */
+  methodTemplate(name: string): TemplateInfo | null {
+    const at = this.methodTemplates.get(name, -1);
+    return at < 0 ? null : this.methodTemplateList[at];
   }
 
 }
@@ -775,6 +810,20 @@ export class CheckedProgram {
   structTemplateList: StructTemplateInfo[];
   structInstantiations: StringMap;
   structInstantiationList: StructInstantiation[];
+  /**
+   * Every generic-method template this module minted (WP18 G8), one per
+   * (receiver struct, method), in the order they were collected. The sidecars
+   * read it for message 9: a method nothing instantiates has no symbol.
+   */
+  methodTemplateList: TemplateInfo[];
+  /**
+   * One constraint list per generic method *declaration*, by the method node's
+   * id -> index into `methodConstraintLists` (WP18 G8). Shared by every
+   * receiver the method is minted for, so a constraint is resolved, and a bad
+   * one reported, once per declaration rather than once per instantiated class.
+   */
+  methodConstraints: StringMap;
+  methodConstraintLists: ConstraintList[];
   /** Non-null while an instantiation's side tables are installed. */
   activeInstance: Instantiation | null;
   /** The module's own tables, held aside while `activeInstance` is installed. */
@@ -882,6 +931,9 @@ export class CheckedProgram {
     this.structTemplateList = [];
     this.structInstantiations = new StringMap();
     this.structInstantiationList = [];
+    this.methodTemplateList = [];
+    this.methodConstraints = new StringMap();
+    this.methodConstraintLists = [];
     this.activeInstance = null;
     this.savedNodeTypes = [];
     this.savedNodeLocals = [];
@@ -914,6 +966,19 @@ export class CheckedProgram {
       this.nodeBuiltins.push("");
       i = i + 1;
     }
+  }
+
+  /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */
+  methodConstraintList(decl: Node): ConstraintList {
+    const key = `${decl.id}`;
+    const at = this.methodConstraints.get(key, -1);
+    if (at >= 0) {
+      return this.methodConstraintLists[at];
+    }
+    const list = new ConstraintList();
+    this.methodConstraints.set(key, this.methodConstraintLists.length);
+    this.methodConstraintLists.push(list);
+    return list;
   }
 
   /** The struct called `name` in this module, or `null`. */

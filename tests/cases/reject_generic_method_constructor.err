@@ -1,0 +1,1 @@
+a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)

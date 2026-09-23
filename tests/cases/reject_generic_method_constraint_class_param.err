@@ -1,0 +1,1 @@
+:15:18: error: `U extends Box<T>` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out
