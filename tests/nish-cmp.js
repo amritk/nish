@@ -344,7 +344,7 @@ const DECLARED = [
     program: "tests/link/generic_constraint_import/main.ts",
     file: "main.h",
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword; and the comment above the exported `Cell<f64>` constructor names it as written, where the reference wrote the symbol `Cell$f64.constructor`",
+    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
   },
   {
     program: "tests/cases/perf_padding_quiet.ts",
@@ -362,7 +362,7 @@ const DECLARED = [
     program: "tests/link/generic_import/main.ts",
     file: "main.h",
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword; and the comments above the methods of `Box<i32>` name them as written, where the reference wrote their mangled symbols",
+    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword; and the comments above the methods of `Box<i32>` and `Box<Point>` name them as written, where the reference wrote their mangled symbols",
   },
   {
     program: "tests/link/generic_import/main.ts",
@@ -374,13 +374,13 @@ const DECLARED = [
     program: "tests/link/generic_import/main.ts",
     file: "main.mjs",
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol; and the comments above the methods of `Box<i32>` name them as written, where the reference wrote their mangled symbols",
+    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
   },
   {
     program: "tests/link/generic_import/main.ts",
     file: "main.napi.c",
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`; and the comments above the methods of `Box<i32>` name them as written, where the reference wrote their mangled symbols",
+    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`; and the comments above the methods of `Box<i32>` and `Box<Point>` name them as written, where the reference wrote their mangled symbols",
   },
   {
     program: "tests/link/generic_import_chain/main.ts",
@@ -398,7 +398,7 @@ const DECLARED = [
     program: "tests/link/generic_import_chain/main.ts",
     file: "main.mjs",
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol; and the comments above the methods of `Box<Pair<i32>>` and `Pair<i32>` name them as written, where the reference wrote their mangled symbols",
+    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
   },
   {
     program: "tests/link/generic_import_chain/main.ts",
@@ -428,7 +428,7 @@ const DECLARED = [
     program: "tests/link/generic_two_importers/main.ts",
     file: "main.napi.c",
     changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`; and the comments above the methods of `Box<Pair<i32>>` and `Pair<i32>` name them as written, where the reference wrote their mangled symbols",
+    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
   },
 ];
 
