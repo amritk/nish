@@ -119,7 +119,7 @@ rejects. This table is the highest-value part of the page.
 | `undefined` | forbidden | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
-| `type Pair<T>` (a generic alias) | `` Generic type parameters are forbidden on a type alias in Nish `` | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
+| `type Pair<T>` (a generic alias) | `` expected `=`, found `<` `` (a syntax error) | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
 | `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
@@ -433,6 +433,10 @@ export const main = (): i32 => {
   A class constraint is satisfied by that class alone. The refusal is at the
   call: `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not
   implement it ``.
+- **A constraint is a declaration, not a name.** A `Shape` your module declares
+  is not the `Shape` another module's `<T extends Shape>` names, even with the
+  same fields, so implementing your own is refused the same way; import the
+  template's `Shape` instead.
 
 ```ts nish:ok
 interface Shape { area: i32; }
@@ -448,12 +452,33 @@ const areaOf = <T extends Shape>(s: T): i32 => s.area;   // s.radius would be re
 export const main = (): i32 => areaOf(new Circle(2)) - 12;
 ```
 
-- **Not supported yet**, each with its own message: a default type argument
-  (`<T = string>`), and type parameters on a **constructor or type alias**. A
-  generic `main` is refused. There are no multiple bounds (`T extends A & B`)
+- **Not supported yet**: a default type argument (`<T = string>`) and type
+  parameters on a **constructor**, each with its own message, and a generic
+  **type alias**, which is only the syntax error `` expected `=`, found `<` ``.
+  A generic `main` is refused. There are no multiple bounds (`T extends A & B`)
   and no bound that mentions another parameter.
 - **`$` may not appear in a function, class or interface name** — it is what
   separates a generic's name from its type arguments in the emitted symbol.
+- **Read `identity<i32>` in a message, `identity$i32` in the IR.** Diagnostics,
+  `--emit-checked` and the `-g` debug names spell an instantiation as written
+  (`identity<Box<i32>>`, `Box<i32>.get`); symbols and `%struct` names are
+  mangled (`@identity$$Box$i32`, `%struct.Box$i32`).
+- **A host calls an exported instantiation as `nish_gen_…`**: `identity<i32>`
+  is `nish_gen_identity_i32` in the C header, the `.d.ts`, the wasm loader and
+  the N-API addon, and `identity<i32[]>` is `nish_gen_identity_arr_i32`. There
+  is no `identity` to call — only the instantiations the program makes.
+- **With a sidecar flag, an exported generic must be instantiated.** Nothing
+  instantiated means no symbol, so `--emit-header`, `--emit-dts` and
+  `--emit-napi` refuse it (NL4007) rather than leave it out; call it somewhere,
+  or do not export it. The same flags refuse two names that are one C
+  identifier, such as a method `Point.shifted` and a function `Point_shifted`
+  (NL4008).
+
+```ts nish:err NL4007 --emit-dts build/docs-ai/nl4007.d.ts
+export const identity = <T>(x: T): T => x;   // exported, never called
+
+export const main = (): i32 => 0;
+```
 
 ### Generic classes and interfaces
 
@@ -1015,7 +1040,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined`, `?.`, `??`, a cast, a
-   callback, a generic *alias* or *method*, or `extends`?
+   callback, a generic *alias*, or `extends`?
 9. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
