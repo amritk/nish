@@ -21,9 +21,8 @@
  *
  * Nothing here is rewritten, so **nothing here is frozen either** (WP19 G2.4):
  * the Node side is the `.ts` on disk and the native side only needs *a*
- * compiler. `--compiler` names one, and without it `compilerFor` answers stage0
- * while there is a stage0 and the seed afterwards, which is the whole of what
- * this check needs to outlive `src/`.
+ * compiler. `--compiler` names one, and without it `compilerFor` answers the
+ * seed, which is the whole of what this check needs to outlive `src/`.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";

@@ -1,0 +1,6 @@
+# Differential programs with no frozen rewrite, so nothing compares them against Node.
+# One `<program> <reason>` per line. `node tests/differential/goldens.js --update`
+# moves a program here when it has no record or its record went stale, and takes
+# a line out when its program is gone. The rewriter that wrote the store was
+# stage0's and is deleted, so a line here is coverage lost, not a task deferred:
+# the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).

@@ -337,6 +337,24 @@ function goldenPath(file) {
   return path.join(GOLDENS, file);
 }
 
+/**
+ * The seed this file's rule allows: `given` (a `--seed` value), then
+ * `NISH_BOOTSTRAP`, then `build/nish`, and no fourth answer. Exported because
+ * the oracles that outlive stage0 (`lexer_oracle.js`, `parser_oracle.js`,
+ * `support_oracle.js`) follow the same rule since R6 took their stage0
+ * fallback away, and one spelling of it is enough.
+ */
+const seedWithoutStage0 = (given) => {
+  const spec = given ?? defaultSeedSpec();
+  if (spec === null) {
+    return {
+      error:
+        "no seed compiler: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` to leave one in build/nish",
+    };
+  }
+  return resolveSeed(spec);
+};
+
 /** `--seed` and `--lines` take a value; everything else is a flag or a golden's name. */
 function parse(argv) {
   const options = { update: false, verbose: false, lines: 10, seed: undefined, names: [] };
@@ -362,14 +380,7 @@ function main(argv) {
     return 2;
   }
 
-  const spec = given ?? defaultSeedSpec();
-  if (spec === null || spec === undefined) {
-    process.stderr.write(
-      "no seed compiler: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` to leave one in build/nish\n"
-    );
-    return 2;
-  }
-  const seed = resolveSeed(spec);
+  const seed = seedWithoutStage0(given);
   if (seed.error !== undefined) {
     process.stderr.write(`${seed.error}\n`);
     return 2;
@@ -430,4 +441,4 @@ function main(argv) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
-export { GOLDEN_SET, defaultSeedSpec, resolveSeed };
+export { GOLDEN_SET, defaultSeedSpec, resolveSeed, seedWithoutStage0 };

@@ -1,18 +1,16 @@
 /**
  * Shared machinery for the differential harness (WP13): program discovery,
- * native build + run, rewrite + Node run, byte-for-byte comparison, a small
- * process pool, and the known-failures list. Used by run.js, fuzz.js, and the
+ * native build + run, frozen rewrite + Node run, byte-for-byte comparison, a
+ * small process pool, and the known-failures list. Used by run.js and the
  * WP13 block of tests/run.js.
  *
- * **Neither half of a comparison names stage0 any more** (WP19 G2.4). The
- * native half takes whatever compiler `compilerFor` resolves — `dist/index.js`
- * while there is one, the seed otherwise — and the Node half takes either the
- * live rewriter or the frozen rewrites in `tests/differential/goldens/`. Both
- * fall back with a note on stderr rather than silently, because a run that
- * proved something weaker than its summary line suggests is worse than a run
- * that refused. `rewrite.js` is therefore imported lazily: it drives stage0's
- * `Compilation` at module scope, so a static import here would stop this file
- * loading at all in a tree where `src/` has been deleted.
+ * **Neither half of a comparison is stage0 any more** (WP19 G2.4, R6). The
+ * native half takes the compiler `compilerFor` resolves -- `--compiler`, then
+ * the seed -- and the Node half takes the frozen rewrites in
+ * `tests/differential/goldens/`, the only source of JavaScript left now that
+ * the rewriter, which drove stage0's checker, is gone. A program with no frozen
+ * rewrite is compared against nothing and says so: it is either named in
+ * `goldens/unfrozen.txt` or it is a failure.
  */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -25,7 +23,7 @@ import { pool } from "../pool.js";
 // The seed resolution is the one the WP14 oracles use (G2.3), so "the compiler
 // that is not stage0" is spelled once in the repository.
 import { defaultSeedSpec, resolveSeed } from "../self/seed.js";
-import { loadRewriter, materialize, readStore, rewriteOptions, staleness } from "./goldens.js";
+import { materialize, readRegister, readStore, REGISTER, staleness } from "./goldens.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const casesDir = path.join(root, "tests", "cases");
@@ -130,78 +128,46 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-/** `dist/index.js`, spelled the way `resolveSeed` wants it. */
-const STAGE0 = path.join("dist", "index.js");
-
 /**
- * The compiler that builds the native half of every comparison.
- *
- * It used to be `dist/index.js` and nothing else, which is what made this
- * oracle stage0's twice over: once for the binary and once for the rewrite.
- * Only the rewrite needs stage0's checker, so the binary is built by whatever
- * compiler is resolved here — `--compiler <path>`, then stage0 while there is a
- * stage0, then the seed (`NISH_BOOTSTRAP`, then `build/nish`). Stage0 stays the
- * default on purpose while it lives: the native side of the published claim is
- * the shipped compiler's codegen, and switching that quietly would change what
- * the summary line means.
+ * The compiler that builds the native half of every comparison: `--compiler
+ * <path>`, then the seed (`NISH_BOOTSTRAP`, then `build/nish`). It used to
+ * default to stage0's `dist/index.js`, the shipped compiler while there was
+ * one; R6 deletes it, and `tests/run.js` names the stage1 it built.
  */
 const compilerFor = (spec) => {
-  if (spec !== undefined && spec !== null) return resolveSeed(spec);
-  if (fs.existsSync(path.join(root, STAGE0))) return resolveSeed(STAGE0);
-  const seed = defaultSeedSpec();
-  if (seed === null) {
+  const named = spec ?? defaultSeedSpec();
+  if (named === null) {
     return {
       error:
-        "no compiler: there is no dist/index.js, so pass --compiler <nish>, set NISH_BOOTSTRAP, " +
+        "no compiler: pass --compiler <nish>, set NISH_BOOTSTRAP, " +
         "or run `npm run bootstrap` to leave one in build/nish",
     };
   }
-  process.stderr.write(`note: no dist/index.js, so the native side is built with the seed (${seed}).\n`);
-  return resolveSeed(seed);
+  return resolveSeed(named);
 };
 
 /**
- * The Node half's source of JavaScript: the live rewriter, or the frozen
- * rewrites checked in under `tests/differential/goldens/`.
- *
- * `frozen: true` demands the store, `false` demands the live rewriter, and
- * neither takes the live one while it exists and the store when it does not —
- * with a note, because the two are not equally strong. The live rewriter reads
- * today's source; the store is a recording, and a recording of a program that
- * has since changed is a lie the guard in `goldens.js` turns into a hard
- * failure rather than a verdict.
+ * The Node half's source of JavaScript: the frozen rewrites checked in under
+ * `tests/differential/goldens/`. A recording of a program that has since
+ * changed is a lie, and the guard in `goldens.js` turns it into a hard failure
+ * rather than a verdict; a program the register names has no recording at all
+ * and is reported as not compared.
  */
-const rewriterFor = async ({ frozen } = {}) => {
-  if (frozen !== true) {
-    const live = await loadRewriter();
-    if (live.error === undefined) {
-      return {
-        label: "live rewrite",
-        rewrite: (prog, dir) => live.rewriteProgram(prog.entry, rewriteOptions(prog.args), dir),
-      };
-    }
-    if (frozen === false) return { error: live.error };
-    process.stderr.write(
-      `note: ${live.error}\n` +
-        "      the Node side is the frozen rewrite in tests/differential/goldens/ (WP19 G2.4).\n"
-    );
-  }
+const rewriterFor = () => {
   const store = readStore();
   if (store.error !== undefined) return { error: store.error };
+  const register = readRegister();
   return {
     label: "frozen rewrite",
+    // Why the register says this program has no frozen rewrite, or null.
+    unfrozen: (prog) =>
+      !store.programs.has(prog.name) && register.has(prog.name) ? register.get(prog.name) : null,
     rewrite: (prog, dir) => {
       const record = store.programs.get(prog.name);
       if (record === undefined) {
-        // A generated program is the one case where this is not somebody's
-        // oversight: the fuzzer invents its corpus from a seed, so a reference
-        // for it has to be *computed* and there is nothing a store could hold.
-        // That is why the fuzz differential against Node dies with the
-        // rewriter rather than being frozen with everything else.
         throw stale(
-          prog.kind === "fuzz"
-            ? `${prog.name} is generated, so no store can hold its rewrite: the fuzz differential against Node needs the rewriter (wp19 §6 item 6)`
-            : `${prog.name} has no frozen rewrite: run \`npm run test:update\` while stage0 exists`
+          `${prog.name} has no frozen rewrite and is not in ${path.relative(root, REGISTER)}: ` +
+            "`node tests/differential/goldens.js --update` registers it"
         );
       }
       const why = staleness(record, prog, store.bodies);
@@ -222,25 +188,20 @@ const stale = (message) => {
   return e;
 };
 
-/** The compiler and rewriter a caller did not name, resolved once per process. */
-let shared = null;
-
-const sharedContext = async () => {
-  if (shared === null) shared = { compiler: compilerFor(), rewriter: await rewriterFor({}) };
-  return shared;
-};
-
 /**
  * Build, run, rewrite, run, compare. Never throws; the result carries
- *   verdict: "match" | "mismatch" | "compile-error" | "rewrite-error" | "stale-golden"
+ *   verdict: "match" | "mismatch" | "compile-error" | "rewrite-error" | "stale-golden" | "unfrozen"
  * plus both sides' `{ status, signal, stdout, stderr }` when they ran.
+ * `context` is `{ compiler, rewriter }`, from `compilerFor` and `rewriterFor`.
  */
-async function runProgram(prog, options = {}) {
+async function runProgram(prog, context) {
   const t0 = Date.now();
-  const context =
-    options.compiler !== undefined && options.rewriter !== undefined ? options : await sharedContext();
   const refused = context.compiler.error ?? context.rewriter.error;
   if (refused !== undefined) return { prog, verdict: "compile-error", detail: refused, ms: Date.now() - t0 };
+  // Asked before anything is built: a registered program is compared against
+  // nothing, so building it would only spend the time.
+  const why = context.rewriter.unfrozen(prog);
+  if (why !== null) return { prog, verdict: "unfrozen", detail: why, ms: Date.now() - t0 };
 
   const work = path.join(buildDir, prog.name.replace(/[\\/]/g, "_"));
   fs.rmSync(work, { recursive: true, force: true });
@@ -260,9 +221,7 @@ async function runProgram(prog, options = {}) {
   if (cc.status !== 0) {
     return { prog, verdict: "compile-error", detail: String(cc.stderr), ms: Date.now() - t0 };
   }
-  const argv = prog.argv ?? []; // fuzz programs carry no command line
-  const env = prog.env ?? process.env; // and no environment of their own either
-  const native = await run(exe, argv, { env });
+  const native = await run(exe, prog.argv, { env: prog.env });
 
   let js;
   try {
@@ -276,7 +235,7 @@ async function runProgram(prog, options = {}) {
       return { prog, verdict: "stale-golden", detail: e.message, native, ms: Date.now() - t0 };
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }
-  const node = await run("node", [js.entry, ...argv], { env });
+  const node = await run("node", [js.entry, ...prog.argv], { env: prog.env });
 
   const same =
     native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);

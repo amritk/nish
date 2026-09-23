@@ -1,1 +1,1 @@
-Interface inheritance (`extends`) is not supported; list every field
+syntax error: expected `{`, found `extends`

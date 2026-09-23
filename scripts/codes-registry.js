@@ -1,23 +1,23 @@
 /**
  * The diagnostic-code registry, read back out of a `codes.ts`.
  *
- * `src/codes.ts` and `self/codes.ts` hold the same table in the same order --
- * a fragment line, then the `NL####` line that names its rule -- and three
- * places in this repository read it back: `scripts/gen-diagnostic-codes.mjs`,
- * which preserves every number it has already handed out;
- * `tests/diagnostic_coverage.js`, which asks which codes the suite reaches;
- * and the `codes:` checks in `tests/run.js`, which require the two compilers
- * to hold the same table. This module is that parse, once, so the copies
- * cannot drift apart again
- * ([issue #96](https://github.com/amritk/nish/issues/96)).
+ * `self/codes.ts` holds the table -- a fragment line, then the `NL####` line
+ * that names its rule -- and `src/codes.ts` holds the same one for as long as
+ * stage0 exists. Three places in this repository read it back:
+ * `scripts/gen-diagnostic-codes.mjs`, which checks the registry's shape, its
+ * order and that no number is used twice; `tests/diagnostic_coverage.js`,
+ * which asks which codes the suite reaches; and the `codes:` checks in
+ * `tests/run.js`. This module is that parse, once, so the copies cannot drift
+ * apart again ([issue #96](https://github.com/amritk/nish/issues/96)).
  *
- * It lives here rather than under `tests/` for two reasons. The emitter that
- * writes this format is `rows()` in `gen-diagnostic-codes.mjs`, next door, and
- * #96 was the two halves drifting apart -- WP22 stage C changed what the
- * emitter wrote and no reader followed -- so the reader belongs beside the
- * writer. And `scripts/` ships in the npm tarball while `tests/` does not, so
- * a shared module under `tests/` would leave the shipped generator importing a
- * path the package cannot resolve, which `tests/run.js` refuses
+ * It lives here rather than under `tests/` for two reasons. The format was
+ * written by `rows()` in the generator next door until the registry was
+ * frozen and kept by hand (R6), and #96 was the writer and the readers
+ * drifting apart -- WP22 stage C changed what the emitter wrote and no reader
+ * followed -- so the reader belongs beside the checker. And `scripts/` ships in
+ * the npm tarball while `tests/` does not, so a shared module under `tests/`
+ * would leave the shipped checker importing a path the package cannot
+ * resolve, which `tests/run.js` refuses
  * (`npm pack ships no script whose imports it cannot resolve`).
  *
  * Two properties are the whole point of having it, and both are here because

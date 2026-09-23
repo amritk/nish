@@ -1,1 +1,1 @@
-Index signatures are not supported in class `Table` (object layout is fixed)
+syntax error: a class member is a field, a method or a constructor, found `[`
