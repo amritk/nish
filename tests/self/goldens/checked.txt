@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 466 programs, 8933 dump lines.
+# 466 programs, 8959 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -546,6 +546,7 @@ function main(): i32 -> @nish_main [exported entry]
   calls: Box$i32.constructor Box$i32.take nish_print nish_str_from_i32
   stackSites=1 stackLocals=1
   local 26:9 b: Box<i32> (const)
+  callee 26:13 new Box<i32> -> @Box$i32.constructor
   callee 27:18 Box<i32>.take -> @Box$i32.take
 function Box<i32>.constructor(this: Box<i32>, items: i32[]): void -> @Box$i32.constructor [constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
@@ -2325,6 +2326,7 @@ function test(): i32 -> @test [exported]
   calls: Box$i32.constructor Box$i32.get identity$$Box$i32 identity$i32 identity$str nish_alloc_struct
   stackSites=0 stackLocals=0
   local 21:9 b: Box<i32> (const)
+  callee 21:13 new Box<i32> -> @Box$i32.constructor
   callee 21:26 identity<i32> -> @identity$i32
   local 22:9 s: string (const)
   callee 22:21 identity<string> -> @identity$str
@@ -2363,6 +2365,7 @@ function test(): i32 -> @test [exported]
   calls: Box$i32.constructor Box$i32.pair$i32 Box$i32.pair$str
   stackSites=1 stackLocals=1
   local 20:9 b: Box<i32> (const)
+  callee 20:13 new Box<i32> -> @Box$i32.constructor
   callee 21:10 Box<i32>.pair<string> -> @Box$i32.pair$str
   callee 21:26 Box<i32>.pair<i32> -> @Box$i32.pair$i32
 function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [constructor instance]
@@ -3075,6 +3078,7 @@ function test(): i32 -> @test [exported]
   calls: Box$i32.constructor Box$i32.get
   stackSites=1 stackLocals=1
   local 17:9 b: Box<i32> (const)
+  callee 17:13 new Box<i32> -> @Box$i32.constructor
   callee 18:10 Box<i32>.get -> @Box$i32.get
 function Box<i32>.constructor(this: Box<i32>, v: i32): void -> @Box$i32.constructor [constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
@@ -3096,6 +3100,7 @@ function test(): i32 -> @test [exported]
   calls: Box$str.constructor Box$str.get nish_print
   stackSites=1 stackLocals=1
   local 15:9 b: Box<string> (const)
+  callee 15:13 new Box<string> -> @Box$str.constructor
   callee 16:15 Box<string>.get -> @Box$str.get
 function Box<string>.constructor(this: Box<string>, v: string): void -> @Box$str.constructor [constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
@@ -3126,6 +3131,7 @@ function test(): i32 -> @test [exported]
   calls: Box$$Point.constructor Box$$Point.get Point.constructor nish_alloc_struct
   stackSites=1 stackLocals=1
   local 24:9 b: Box<Point> (const)
+  callee 24:13 new Box<Point> -> @Box$$Point.constructor
   callee 24:28 new Point -> @Point.constructor
   local 25:9 p: Point (const)
   callee 25:13 Box<Point>.get -> @Box$$Point.get
@@ -3200,6 +3206,7 @@ function test(): i32 -> @test [exported]
   calls: Circle.constructor Holder$$Circle.area Holder$$Circle.constructor nish_alloc_struct
   stackSites=1 stackLocals=1
   local 32:9 held: Holder<Circle> (const)
+  callee 32:16 new Holder<Circle> -> @Holder$$Circle.constructor
   callee 32:35 new Circle -> @Circle.constructor
   callee 33:10 Holder<Circle>.area -> @Holder$$Circle.area
 function Holder<Circle>.constructor(this: Holder<Circle>, item: Circle): void -> @Holder$$Circle.constructor [constructor instance]
@@ -3368,6 +3375,7 @@ function makeGeneric(v: i32): Box<i32> -> @makeGeneric [exported]
   escaping: v
   calls: Box$i32.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
+  callee 25:50 new Box<i32> -> @Box$i32.constructor
 function makeDeclared(v: i32): Box_i32 -> @makeDeclared [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=8
   escaping: v
@@ -3424,6 +3432,7 @@ function test(): i32 -> @test [exported]
   calls: Box$i32.constructor valueOf
   stackSites=1 stackLocals=1
   local 21:9 b: Box<i32> (const)
+  callee 21:13 new Box<i32> -> @Box$i32.constructor
   callee 22:10 valueOf -> @valueOf
 function Box<i32>.constructor(this: Box<i32>, v: i32): void -> @Box$i32.constructor [constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
@@ -3517,6 +3526,7 @@ function test(): i32 -> @test [exported]
   stackSites=5 stackLocals=2
   local 50:9 scale: Scale (const)
   local 51:9 tally: Tally<Square> (const)
+  callee 51:17 new Tally<Square> -> @Tally$$Square.constructor
   callee 51:35 new Square -> @Square.constructor
   callee 52:10 Scale.apply<Circle> -> @Scale.apply$$Circle
   callee 52:22 new Circle -> @Circle.constructor
@@ -3560,6 +3570,7 @@ function run(h: Holder): i32 -> @run [exported]
   local 28:9 s: string (const)
   callee 28:21 Holder.pick<string> -> @Holder.pick$str
   local 29:9 b: Box<i32> (const)
+  callee 29:13 new Box<i32> -> @Box$i32.constructor
   callee 30:10 Holder.pick<i32> -> @Holder.pick$i32
   callee 30:25 Box<i32>.with<boolean> -> @Box$i32.with$bool
 function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [exported constructor instance]
@@ -3610,7 +3621,9 @@ function test(): i32 -> @test [exported]
   calls: Box$i32.constructor Box$i32.pair$i32 Box$i32.pair$str Box$str.constructor Box$str.pair$i32 Box$str.pair$str nish_arena_mark nish_arena_release nish_print nish_str_concat
   stackSites=2 stackLocals=2
   local 30:9 n: Box<i32> (const)
+  callee 30:13 new Box<i32> -> @Box$i32.constructor
   local 31:9 s: Box<string> (const)
+  callee 31:13 new Box<string> -> @Box$str.constructor
   local 32:9 a: Pair<i32, i32> (const)
   callee 32:13 Box<i32>.pair<i32> -> @Box$i32.pair$i32
   local 33:9 b: Pair<i32, string> (const)
@@ -3657,24 +3670,28 @@ function Box<i32>.pair<i32>(this: Box<i32>, other: i32): Pair<i32, i32> -> @Box$
   calls: Pair$i32$i32.constructor nish_alloc_struct
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee 25:12 new Pair<i32, i32> -> @Pair$i32$i32.constructor
 function Box<i32>.pair<string>(this: Box<i32>, other: string): Pair<i32, string> -> @Box$i32.pair$str [method instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
   escaping: other
   calls: Pair$i32$str.constructor nish_alloc_struct
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee 25:12 new Pair<i32, string> -> @Pair$i32$str.constructor
 function Box<string>.pair<i32>(this: Box<string>, other: i32): Pair<string, i32> -> @Box$str.pair$i32 [method instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
   escaping: other
   calls: Pair$str$i32.constructor nish_alloc_struct
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee 25:12 new Pair<string, i32> -> @Pair$str$i32.constructor
 function Box<string>.pair<string>(this: Box<string>, other: string): Pair<string, string> -> @Box$str.pair$str [method instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
   escaping: other
   calls: Pair$str$str.constructor nish_alloc_struct
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee 25:12 new Pair<string, string> -> @Pair$str$str.constructor
 program tests/cases/gen_nested.ts
 module tests/cases/gen_nested.ts (entry)
 struct Box<i32> (class) size=4 align=4
@@ -3690,7 +3707,9 @@ function test(): i32 -> @test [exported]
   calls: Box$$Box$i32.constructor Box$$Box$i32.get Box$i32.constructor Box$i32.get nish_alloc_struct
   stackSites=1 stackLocals=1
   local 15:9 inner: Box<i32> (const)
+  callee 15:17 new Box<i32> -> @Box$i32.constructor
   local 16:9 outer: Box<Box<i32>> (const)
+  callee 16:17 new Box<Box<i32>> -> @Box$$Box$i32.constructor
   callee 17:10 Box<i32>.get -> @Box$i32.get
   callee 17:10 Box<Box<i32>>.get -> @Box$$Box$i32.get
 function Box<i32>.constructor(this: Box<i32>, v: i32): void -> @Box$i32.constructor [constructor instance]
@@ -3762,6 +3781,7 @@ function sumOf(v: i32): i32 -> @sumOf
   calls: Box$i32.constructor
   stackSites=1 stackLocals=1
   local 14:9 local: Box<i32> (const)
+  callee 14:17 new Box<i32> -> @Box$i32.constructor
 function Box<string>.constructor(this: Box<string>, v: string): void -> @Box$str.constructor [constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: v
@@ -3772,6 +3792,7 @@ function escaping(v: string): Box<string> -> @escaping
   escaping: v
   calls: Box$str.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
+  callee 18:46 new Box<string> -> @Box$str.constructor
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: escaping nish_arena_mark nish_arena_release nish_print sumOf
@@ -3868,6 +3889,7 @@ function test(): i32 -> @test [exported]
   local 43:9 xs: i32[] (const)
   local 44:9 box: Box<i32> (const)
   callee 44:15 identity<Box<i32>> -> @identity$$Box$i32
+  callee 44:24 new Box<i32> -> @Box$i32.constructor
   callee 46:5 identity<i32> -> @identity$i32
   callee 47:5 identity<string> -> @identity$str
   callee 48:5 identity<i32[]> -> @identity$arr.i32
@@ -5291,6 +5313,7 @@ function test(): i32 -> @test [exported]
   local 66:9 v: Unavoidable (const)
   local 67:9 e: Entry (const)
   local 68:9 c: Cell<f64> (const)
+  callee 68:13 new Cell<f64> -> @Cell$f64.constructor
 function Cell<f64>.constructor(this: Cell<f64>, value: f64): void -> @Cell$f64.constructor [exported constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: value
@@ -6777,7 +6800,9 @@ function main(): i32 -> @nish_main [exported entry]
   calls: Box$i32.constructor Box$i32.get Box$str.constructor Box$str.get nish_print
   stackSites=2 stackLocals=2
   local 14:9 n: Box<i32> (const)
+  callee 14:13 new Box<i32> -> @Box$i32.constructor
   local 15:9 s: Box<string> (const)
+  callee 15:13 new Box<string> -> @Box$str.constructor
   callee 16:15 Box<string>.get -> @Box$str.get
   callee 17:10 Box<i32>.get -> @Box$i32.get
 function Box<i32>.constructor(this: Box<i32>, v: i32): void -> @Box$i32.constructor [constructor instance]
@@ -6889,6 +6914,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee 23:24 Chooser.pick<string> -> @Chooser.pick$str
   callee 25:10 Chooser.pick<i32> -> @Chooser.pick$i32
   callee 25:25 Box<i32>.keep<string> -> @Box$i32.keep$str
+  callee 25:25 new Box<i32> -> @Box$i32.constructor
 function Box<i32>.constructor(this: Box<i32>, value: i32): void -> @Box$i32.constructor [constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: value
