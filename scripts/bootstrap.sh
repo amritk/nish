@@ -7,28 +7,21 @@
 # The chain is the one docs/wp14-selfhost.md §1 defines, with the seed as a
 # parameter rather than a fixture (docs/wp19-stage0-retirement.md §3, G3):
 #
-#   seed     whatever compiles stage1              NISH_BOOTSTRAP, or stage0
+#   seed     whatever compiles stage1              NISH_BOOTSTRAP, or build/seed
 #   stage1   self/, built by the seed
 #   stage2   self/, built by stage1                the default output
 #   stage3   self/, built by stage2                --verify only
 #
 # NISH_BOOTSTRAP=<path> names the seed, the way GOROOT_BOOTSTRAP names the Go
 # that builds Go. It is either a released `nish`, executed directly, or a Node
-# entry point (`.js`, `.mjs`, `.cjs`), executed as `node <path>`:
+# entry point (`.js`, `.mjs`, `.cjs`) wrapping one, executed as `node <path>`:
 #
-#   NISH_BOOTSTRAP=~/nish-0.1.0-linux-x86_64 scripts/bootstrap.sh --verify
-#   NISH_BOOTSTRAP=dist/index.js             scripts/bootstrap.sh
+#   NISH_BOOTSTRAP=~/nish-0.6.0-linux-x86_64 scripts/bootstrap.sh --verify
 #
-# Unset, the seed is stage0 — `node dist/index.js` — which is what a fresh
-# checkout has and what `npm test` bootstraps with. That is the whole point of
-# the parameter: stage0 stays the default answer without being the only one, so
-# the same script builds `self/` from a released binary and from `src/`.
-#
-# Naming this checkout's own `dist/index.js` is that same seed spelled a second
-# way, and is treated as stage0 for it. What `--verify` asserts below depends
-# on what the seed *is*, not on whether a variable happened to be set, and the
-# example above would otherwise drop the strongest equality in the file without
-# saying so.
+# Unset, the seed is build/seed/bin/nish, the last release as
+# `scripts/fetch-seed.sh` unpacks it -- which `npm run build` runs first. With
+# neither, this stops and says which command gives it one: a compiler has to
+# come from somewhere, and the only place left is a release.
 #
 # stage2 is what this installs, because it is the first binary in the chain
 # that no part of the seed emitted: the seed built the compiler that built it,
@@ -38,7 +31,7 @@
 #
 # --verify runs the equalities the proof is made of, byte for byte:
 #
-#   IR(seed, self/)   == IR(stage1, self/)     asserted for a stage0 seed only
+#   IR(seed, self/)   == IR(stage1, self/)     reported, never asserted
 #   IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
 #   stage3 == stage2                           as files, on ELF and on Mach-O
 #                                              alike; see below for what the
@@ -65,32 +58,19 @@
 # `tests/run.js` can drive both platforms' branches -- and its header has the
 # measurement, byte offsets and all.
 #
-# The first one is asserted only when the seed is stage0. The reason is not
-# that it is a weaker claim with another seed — it is a different claim with
-# another seed, and the two are worth keeping apart:
+# The first one is reported and not asserted. With a released seed it is one
+# implementation at two points in time: the IR HEAD emits for `self/` is the
+# IR the last release emitted for it. Nothing in that sentence is about
+# bootstrapping. It is a freeze on codegen between releases, and it fails on
+# exactly the changes a release cycle exists to carry: the first improvement to
+# land broke it, when a flow-sensitive bounds analysis proved 46 of `self/`'s
+# 1,206 index checks redundant and 20 of 56 modules "differed" because the
+# optimisation worked. So the difference is reported, and the report is
+# information about this release rather than a verdict on the bootstrap.
 #
-#   seed = stage0    `src/` in TypeScript and `self/` in Nish are two
-#                    independently written implementations of the same source
-#                    revision, and they emit the same IR for that revision.
-#                    That is the second half of Wheeler's diverse
-#                    double-compiling, it is the strongest thing this
-#                    repository asserts, and it is why a Thompson-style
-#                    backdoor cannot presently hide in either compiler
-#                    (docs/wp14-selfhost.md §1, wp19-stage0-retirement.md §1).
-#
-#   seed = a         one implementation at two points in time: the IR HEAD
-#   released `nish`  emits for `self/` is the IR the last release emitted for
-#                    it. Nothing in that sentence is about bootstrapping. It is
-#                    a freeze on codegen between releases, and it fails on
-#                    exactly the changes a release cycle exists to carry: the
-#                    first improvement to land broke it, when a flow-sensitive
-#                    bounds analysis proved 46 of `self/`'s 1,206 index checks
-#                    redundant and 20 of 56 modules "differed" because the
-#                    optimisation worked.
-#
-# So a seed that is not stage0 has that difference reported to it and not
-# asserted, and the report is information about this release rather than a
-# verdict on the bootstrap.
+# While `src/` existed, a stage0 seed made the same comparison the second half
+# of Wheeler's diverse double-compiling, and it was asserted there
+# (docs/wp19-stage0-retirement.md §1, G6). That claim went with `src/`.
 #
 # What the seeded run buys is not that equality. The rolling freeze — "a
 # construct added in 0.N cannot be used by `self/` until 0.(N+1)" — is enforced
@@ -107,8 +87,8 @@
 # directories and links through `scripts/build.sh` itself, so nothing has to
 # stand between it and a build (docs/wp14-selfhost.md §7a).
 #
-# Needs a runnable seed (Node and a built dist/ when that is stage0), and
-# clang + lld on PATH for the links (docs/INSTALL.md).
+# Needs a runnable seed, and clang + lld on PATH for the links
+# (docs/INSTALL.md).
 set -euo pipefail
 
 # Read the seed before the `cd` below moves us: a relative NISH_BOOTSTRAP is
@@ -138,17 +118,16 @@ Builds the self-hosted compiler. The seed builds stage1, stage1 builds stage2
 emits for self/ and the stage2/stage3 binaries, byte for byte. The result is
 the command line itself: -o, --link, --profile and the rest.
 
-IR(seed) == IR(stage1) is asserted only when the seed is stage0, where it is
-two independent implementations of one revision agreeing. With any other seed
-that comparison asks whether codegen has changed since the seed was built, so
-it is reported and not asserted; IR(stage1) == IR(stage2) and stage3 == stage2
-are asserted whatever the seed is.
+IR(seed) == IR(stage1) asks whether codegen has changed since the seed was
+built, so it is reported and not asserted; IR(stage1) == IR(stage2) and
+stage3 == stage2 are asserted whatever the seed is.
 
 The seed is NISH_BOOTSTRAP=<path> when it is set — a released `nish` binary, or
-a .js/.mjs entry point run under node — and stage0 (dist/index.js) when it is
-not:
+a .js/.mjs entry point run under node — and build/seed/bin/nish, the release
+scripts/fetch-seed.sh unpacks, when it is not:
 
-  NISH_BOOTSTRAP=~/nish-0.1.0-linux-x86_64 scripts/bootstrap.sh --verify
+  bash scripts/fetch-seed.sh && scripts/bootstrap.sh
+  NISH_BOOTSTRAP=~/nish-0.6.0-linux-x86_64 scripts/bootstrap.sh --verify
 EOF
   exit "${1:-2}"
 }
@@ -195,58 +174,48 @@ run_seed() {
 }
 
 seed_die() {
-  echo "bootstrap: NISH_BOOTSTRAP=$seed $1" >&2
+  echo "bootstrap: $seed_origin $seed $1" >&2
   echo "bootstrap: the seed is a released \`nish\` binary, or a .js/.mjs entry point run under node" >&2
   exit 3
 }
 
-if [ -n "$seed_given" ]; then
-  seed=$seed_given
-  # The kind is decided by the extension, and deliberately not by the
-  # executable bit or by sniffing the bytes. The bit describes the download
-  # rather than the file — dist/index.js ships 0644, and a binary unpacked from
-  # a release tarball or pulled out of a CI artifact can arrive without +x —
-  # whereas the suffix is the one thing whoever built the seed chose. Anything
-  # with no suffix is a binary, which is how a released `nish` arrives.
-  case "$seed" in
-    *.js|*.mjs|*.cjs) seed_kind=node; seed_label="NISH_BOOTSTRAP seed (node $seed)" ;;
-    *) seed_kind=native; seed_label="NISH_BOOTSTRAP seed ($seed)" ;;
-  esac
-  seed_name=seed
-  seed_is_stage0=0
-  [ -e "$seed" ] || seed_die "does not exist"
-  [ -f "$seed" ] || seed_die "is not a file"
-  if [ "$seed_kind" = native ]; then
-    [ -x "$seed" ] || seed_die "is not executable"
-  else
-    [ -r "$seed" ] || seed_die "is not readable"
-    command -v node >/dev/null 2>&1 || seed_die "needs node on PATH, which is not there"
-  fi
-  # A seed that cannot answer `--version` cannot compile self/ either — a
-  # binary built for another platform, a .js that is not a compiler — and
-  # finding that out here names the variable and the path the caller set, where
-  # finding it out in the stage1 link names a temporary file three stages deep.
-  run_seed --version >/dev/null 2>&1 || seed_die "is not runnable (\`--version\` failed)"
-  # A seed that is this checkout's own dist/index.js *is* stage0, however it
-  # was spelled, so it gets stage0's equalities. The question `--verify` asks
-  # is about the seed, not about the variable: see the header.
-  if [ "$(cd "$(dirname "$seed")" && pwd -P)/$(basename "$seed")" = "$(pwd -P)/dist/index.js" ]; then
-    seed_is_stage0=1
-    seed_label="stage0 (node dist/index.js, named by NISH_BOOTSTRAP)"
-    seed_name=stage0
-  fi
-else
-  # Unset: the seed is stage0, the only compiler a fresh checkout has.
-  seed=dist/index.js
-  seed_kind=node
-  seed_label="stage0 (node dist/index.js)"
-  seed_name=stage0
-  seed_is_stage0=1
-  if [ ! -f "$seed" ]; then
-    echo "bootstrap: dist/index.js is missing; run \`npm run build\` first (stage0 is the seed)" >&2
+# Unset: the release scripts/fetch-seed.sh leaves in build/seed.
+if [ -z "$seed_given" ]; then
+  if [ ! -e build/seed/bin/nish ]; then
+    echo "bootstrap: no seed: NISH_BOOTSTRAP is unset and build/seed/bin/nish is missing" >&2
+    echo "bootstrap: run \`bash scripts/fetch-seed.sh\` to fetch the last release into build/seed" >&2
+    echo "bootstrap: (\`npm run build\` does both), or set NISH_BOOTSTRAP=<nish>" >&2
     exit 3
   fi
+  seed_given="$PWD/build/seed/bin/nish"
+  seed_origin="the released seed"
+else
+  seed_origin="NISH_BOOTSTRAP seed"
 fi
+seed=$seed_given
+# The kind is decided by the extension, and deliberately not by the
+# executable bit or by sniffing the bytes. The bit describes the download
+# rather than the file — a binary unpacked from a release tarball or pulled
+# out of a CI artifact can arrive without +x —
+# whereas the suffix is the one thing whoever built the seed chose. Anything
+# with no suffix is a binary, which is how a released `nish` arrives.
+case "$seed" in
+  *.js|*.mjs|*.cjs) seed_kind=node; seed_label="$seed_origin (node $seed)" ;;
+  *) seed_kind=native; seed_label="$seed_origin ($seed)" ;;
+esac
+[ -e "$seed" ] || seed_die "does not exist"
+[ -f "$seed" ] || seed_die "is not a file"
+if [ "$seed_kind" = native ]; then
+  [ -x "$seed" ] || seed_die "is not executable"
+else
+  [ -r "$seed" ] || seed_die "is not readable"
+  command -v node >/dev/null 2>&1 || seed_die "needs node on PATH, which is not there"
+fi
+# A seed that cannot answer `--version` cannot compile self/ either — a
+# binary built for another platform, a .js that is not a compiler — and
+# finding that out here names the variable and the path the caller set, where
+# finding it out in the stage1 link names a temporary file three stages deep.
+run_seed --version >/dev/null 2>&1 || seed_die "is not runnable (\`--version\` failed)"
 if ! command -v clang >/dev/null 2>&1 && [ -z "${CC:-}" ]; then
   echo "bootstrap: needs clang on PATH to link the stages (see docs/INSTALL.md)" >&2
   exit 3
@@ -273,17 +242,16 @@ compare_ir() {
   say "  $label: $(ls "$a"/*.ll | wc -l | tr -d ' ') modules identical"
 }
 
-# The same comparison for a seed that is not stage0, where it is reported and
-# never asserted. What it measures then is whether codegen has moved since the
-# seed was built, which is a fact about this release rather than a property of
-# the bootstrap — the header says why, at length, because the two claims read
-# alike and are not alike. Nothing in here exits.
+# IR(seed) vs IR(stage1), reported and never asserted. What it measures is
+# whether codegen has moved since the seed was built, which is a fact about
+# this release rather than a property of the bootstrap — the header says why.
+# Nothing in here exits.
 survey_ir() {
   local a="$1" b="$2" total=0 differing=0 name
   if ! diff <(cd "$a" && ls ./*.ll) <(cd "$b" && ls ./*.ll) >/dev/null; then
     say "  note: IR(seed) vs IR(stage1): the two emitted different module sets."
-    say "        Not a bootstrap failure: with a seed that is not stage0 this"
-    say "        comparison is not asserted (see the header of this script)."
+    say "        Not a bootstrap failure: this comparison is not asserted"
+    say "        (see the header of this script)."
     return 0
   fi
   for name in "$a"/*.ll; do
@@ -292,15 +260,13 @@ survey_ir() {
   done
   if [ "$differing" -eq 0 ]; then
     say "  note: IR(seed) vs IR(stage1): all $total modules identical."
-    say "        Not asserted, because the seed is not stage0: codegen simply"
-    say "        has not moved for self/ since the seed was built."
+    say "        Not asserted: codegen simply has not moved for self/ since"
+    say "        the seed was built."
   else
     say "  note: IR(seed) vs IR(stage1): $differing of $total modules differ."
     say "        Not a bootstrap failure. Codegen has moved for self/ since the"
-    say "        seed was built, which is what a release carries; only a stage0"
-    say "        seed makes this comparison the diverse-double-compiling claim,"
-    say "        and it is asserted there and nowhere else. See the header of"
-    say "        this script and docs/wp19-stage0-retirement.md §3, G3."
+    say "        seed was built, which is what a release carries. See the header"
+    say "        of this script and docs/wp19-stage0-retirement.md §3, G3."
   fi
 }
 
@@ -360,14 +326,8 @@ fi
 if [ "$build_to" -ge 2 ]; then
   say "stage2: self/ compiled by stage1"
   link_stage "$work/stage1" stage2
-  # The seed equality, asserted for stage0 and reported for anything else.
-  if [ "$verify" -eq 1 ]; then
-    if [ "$seed_is_stage0" -eq 1 ]; then
-      compare_ir "$work/stage1.modules" "$work/stage2.modules" "IR($seed_name) == IR(stage1)"
-    else
-      survey_ir "$work/stage1.modules" "$work/stage2.modules"
-    fi
-  fi
+  # The seed equality, reported and not asserted.
+  [ "$verify" -eq 1 ] && survey_ir "$work/stage1.modules" "$work/stage2.modules"
 fi
 
 if [ "$build_to" -ge 3 ]; then

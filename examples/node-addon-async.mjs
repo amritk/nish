@@ -4,7 +4,7 @@
 // synchronous as it was and `spinAsync` runs the same call on libuv's thread
 // pool, so a long call no longer blocks Node's event loop.
 //
-//   node dist/index.js tests/self/interop_async.ts -o build/spin.ll \
+//   build/nish tests/self/interop_async.ts -o build/spin.ll \
 //     --emit-napi-async build/spin_napi.c --threads
 //   scripts/build.sh build/spin.ll runtime/runtime.c build/spin_napi.c \
 //     -o build/spin.node --profile napi --threads

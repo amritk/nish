@@ -3,14 +3,11 @@
  *
  *   import { linkWith, seedForOracle } from "./seed.js";
  *
- * Every oracle that compares stage1 with something has to *have* a stage1
- * first, and building one takes a compiler. Which compiler that is used to be
- * a constant in each oracle — `dist/index.js`, stage0 — and WP19 G2.3 is the
- * gate that says it may not stay one: the oracles that survive stage0's
- * deletion (`lexer_oracle.js`, `parser_oracle.js`, `support_oracle.js`,
- * `reject_oracle.js`) have to build their binary with the **seed**, the last
- * released `nish`, and stay green. An oracle that cannot even link its subject
- * without stage0 does not survive stage0 whatever it compares against.
+ * Every check that runs stage1 has to *have* a stage1 first, and building one
+ * takes a compiler. That compiler is the **seed**, the last released `nish`
+ * (WP19 G2.3): `tests/run.js` builds the compiler under test with it, and the
+ * oracles (`lexer_oracle.js`, `parser_oracle.js`, `support_oracle.js`,
+ * `reject_oracle.js`) build their binaries with it.
  *
  * **The order, and why it is this one.**
  *
@@ -26,14 +23,11 @@
  *      compiler this tree built was asked for by whoever built it, and the
  *      download is only ever the default.
  *
- * `tests/self/goldens.js` stops there and refuses: it is the tool whose whole
- * point is that stage0 is nowhere in it, so one more answer would be the
- * dependency the gate exists to remove. The four oracles above are not that
- * tool — they still compare against stage0's own parser, scanner and escapes
- * while it lives — so `seedForOracle` has a fifth answer, `dist/index.js`,
- * and *says so on stderr* when it uses it. A hand-run oracle in a fresh clone
- * keeps working; a run that quietly proved something weaker than it looks does
- * not exist. After R6 the fifth answer has nothing to point at and goes.
+ * `tests/self/goldens.js` stops there and refuses. `seedForOracle` has one
+ * more step: with none of the four in place it runs `scripts/fetch-seed.sh`,
+ * *says so on stderr*, and uses the release it unpacked, so a fresh clone runs
+ * `npm test` without a separate command first. Where the download fails, the
+ * answer is an error naming every way to supply a seed.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -48,9 +42,6 @@ const root = path.resolve(import.meta.dirname, "..", "..");
  * path spells a seed in both places.
  */
 const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
-
-/** Stage0, the answer of last resort while there is a stage0 to be the answer. */
-const STAGE0 = path.join("dist", "index.js");
 
 /** A spawnable compiler: `cmd` plus what comes before the program's own arguments. */
 function resolveSeed(spec) {
@@ -107,29 +98,29 @@ function withoutSeed(argv) {
 }
 
 /**
- * The seed for one of the four surviving oracles: the order above, then
- * stage0, announced. The announcement is the point — an oracle that fell back
- * has proved that stage1 agrees with stage0 *and* was built by it, which is a
- * weaker run than the same summary line usually means.
+ * The seed for `tests/run.js` and the oracles: the order above, then the
+ * release `scripts/fetch-seed.sh` fetches, announced — the download is the
+ * one step here that reaches the network, and a run should say when it did.
  */
 function seedForOracle(argv) {
   const named = namedSeedSpec(argv);
   const spec = named ?? defaultSeedSpec();
   if (spec !== null) return resolveSeed(spec);
-  if (!fs.existsSync(path.join(root, STAGE0))) {
+  process.stderr.write("note: no seed in the tree, so scripts/fetch-seed.sh is fetching the last release\n");
+  const fetched = spawnSync("sh", [path.join(root, "scripts", "fetch-seed.sh")], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  if (fetched.status !== 0 || !fs.existsSync(path.join(root, FETCHED))) {
     return {
       error:
         "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, run `bash scripts/fetch-seed.sh` " +
-        "to fetch the last release into build/seed, or run `npm run bootstrap` to leave " +
-        "one in build/nish (and there is no dist/index.js to fall back to)",
+        "to fetch the last release into build/seed (it just failed), or run `npm run build` " +
+        "to leave one in build/nish",
     };
   }
-  process.stderr.write(
-    `note: no seed named, so stage0 (${STAGE0}) built the binary under test. ` +
-      "Pass --seed <nish>, set NISH_BOOTSTRAP or run `bash scripts/fetch-seed.sh` " +
-      "for the run WP19 G2.3 asks for.\n"
-  );
-  return resolveSeed(STAGE0);
+  return resolveSeed(FETCHED);
 }
 
 function spawnSeed(seed, args, options = {}) {

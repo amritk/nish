@@ -2,8 +2,7 @@
 // `node:worker_threads` worker, so the browser path can be exercised (and
 // tested) without a browser.
 //
-//   node dist/index.js self/compile.ts --link build/nish.wasm --profile wasi
-//   build/nish self/compile.ts --link build/nish.wasm --profile wasi   (or with stage1)
+//   build/nish self/compile.ts --link build/nish.wasm --profile wasi
 //   node web/compile.mjs build/nish.wasm examples/add.ts
 //   node web/compile.mjs build/nish.wasm examples/nbody.ts --number-mode f64
 //

@@ -1,5 +1,5 @@
 // The unsigned widths as *arrays* across the wasm and N-API boundaries
-// (WP30), for `tests/self/interop_oracle.js`.
+// (WP30), for `tests/nish-cmp.js`.
 //
 // `interop_unsigned.ts` is the scalar half and says it has no arrays, because
 // that is what lets it link under `--profile wasm` with nothing but its own

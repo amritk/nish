@@ -1,5 +1,5 @@
 // The unsigned widths across the wasm boundary (WP8/WP15), for
-// `tests/self/interop_oracle.js` and the WP8 section of `tests/run.js`.
+// `tests/nish-cmp.js` and the WP8 section of `tests/run.js`.
 //
 // The wasm ABI has only i32 / i64 / f32 / f64, so `u8`, `u16` and `u32` all
 // travel in the same value type as an `i32` and a `u64` in the same one as an

@@ -3,17 +3,16 @@
  *
  *     build/nish-runner [substring] [--compiler <nish>]
  *
- * The compiler under test defaults to stage0 (`dist/index.js`, under `node`);
- * `--compiler build/nish` runs the same cases through a native one. A Node entry
- * point (`.js`, `.mjs`, `.cjs`) runs under `node` and anything else directly,
- * the rule `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`.
+ * The compiler under test defaults to `build/nish`, what `npm run build` leaves
+ * behind; `--compiler <nish>` names another. A Node entry point (`.js`, `.mjs`,
+ * `.cjs`) runs under `node` and anything else directly, the rule
+ * `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`.
  *
  * `tests/run.js` is the suite of record and this is not a replacement for it: it
  * covers section A, the golden cases in `tests/cases/`, and the `tests/link/`
  * programs, and none of the pipeline checks — no interop sidecars, no layout
  * assertions, no wasm profiles, no packaging, no differential rewrite, no
- * self-hosting oracles, and none of the fourteen flag variations
- * `tests/self/parity.js` runs. What it is, is a demonstration that the language
+ * self-hosting checks. What it is, is a demonstration that the language
  * can host its own harness: discovery, subprocesses, captured output and a
  * report, with no Node in the program.
  *
@@ -66,14 +65,13 @@ import { Suite } from "../../std/testing";
 import { replaceAll, splitLines, splitWhitespace, trim } from "../../std/text";
 
 const CASES: string = "tests/cases";
-const REGISTER: string = "tests/self/stage1_only.txt";
 const LINKS: string = "tests/link";
 const WORK: string = "build/nish-cases";
 /** `tests/run.js`'s own build directory, which some cases write into by that literal path. */
 const CASE_WORK: string = "build/test";
 const LINK_WORK: string = "build/nish-link";
-/** The compiler nobody named: stage0, the one `npm run build` leaves behind. */
-const DEFAULT_CLI: string = "dist/index.js";
+/** The compiler nobody named: the one `npm run build` leaves behind. */
+const DEFAULT_CLI: string = "build/nish";
 /** How many of the slowest cases the closing report names. */
 const SLOWEST: i32 = 5;
 
@@ -85,14 +83,14 @@ const SLOWEST: i32 = 5;
  * that cannot change while the run is in progress.
  */
 class Tools {
-  /** The argv prefix that runs the compiler under test: `["node", "dist/index.js"]`, or just a binary. */
+  /** The argv prefix that runs the compiler under test: `["node", "<entry>.js"]`, or just a binary. */
   compiler: string[];
   clang: boolean;
   llvmAs: boolean;
   opt: boolean;
   /** `env(1)`, and specifically an `env` that honours `-u`. See `hasEnvTool`. */
   env: boolean;
-  /** Whether that compiler is a Node entry point, which today means stage0. */
+  /** Whether that compiler is a Node entry point. */
   node: boolean;
 
   constructor(clang: boolean, llvmAs: boolean, opt: boolean, env: boolean, compiler: string) {
@@ -251,42 +249,6 @@ const stripHeader = (ir: string): string[] => {
 /** Whether the program declares its own entry, in either spelling (WP22). */
 const hasEntry = (source: string): boolean =>
   source.indexOf("export const main") >= 0 || source.indexOf("export function main") >= 0;
-
-/**
- * The case names of the stage1-only register (`tests/self/stage1_only.txt`,
- * WP19 §1a). A registered case is one stage0 has no implementation of, so when
- * this runner spawns stage0 it is skipped by name rather than failed:
- * `tests/run.js` compiles those with a stage1 binary, and so does this runner
- * when `--compiler` names one.
- */
-const stage1OnlyNames = (): string[] => {
-  const names: string[] = [];
-  const text = readFileSyncOrNull(REGISTER);
-  if (text === null) {
-    return names;
-  }
-  for (const line of splitLines(text)) {
-    const entry = trim(line);
-    if (entry.length === 0 || entry.startsWith("#")) {
-      continue;
-    }
-    const fields = splitWhitespace(entry);
-    if (fields.length > 0) {
-      names.push(fields[0]);
-    }
-  }
-  return names;
-};
-
-/** Whether `name` is one of `names`: the language has no `Array.includes`. */
-const includesName = (names: string[], name: string): boolean => {
-  for (const candidate of names) {
-    if (candidate === name) {
-      return true;
-    }
-  }
-  return false;
-};
 
 /** Every `<name>.ts` in `tests/cases`, sorted, with the extension removed. */
 const caseNames = (): string[] => {
@@ -720,13 +682,8 @@ export const main = (): number => {
   }
 
   const slow = new Slowest();
-  const stage1OnlyCases = stage1OnlyNames();
   for (const name of caseNames()) {
     if (filter.length > 0 && name.indexOf(filter) < 0) {
-      continue;
-    }
-    if (tools.node && includesName(stage1OnlyCases, name)) {
-      t.skip(name, "stage1-only (tests/self/stage1_only.txt): this runner spawns stage0");
       continue;
     }
     const at = monotonicNanos();

@@ -1,5 +1,5 @@
 // The driver for `self/symbols.ts` (docs/wp14-selfhost.md, milestone S3),
-// against `src/checker/scope.ts` through `tests/self/symbols_oracle.js`.
+// checked against stage0 until R6; `tests/self/goldens/symbols.txt` is its output.
 //
 // The script below is one every Nish program with a nullable exercises:
 // shadowing in a nested block, a narrowing that holds through the chain, an

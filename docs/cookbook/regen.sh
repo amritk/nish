@@ -6,12 +6,13 @@
 #                                     is up to date (exit 1 when it is not)
 #
 # Every snippet `docs/cookbook/<name>.ts` is compiled with
-# `node dist/index.js <name>.ts -o build/cookbook/<name>/ [flags]`, where the
-# flags come from `docs/cookbook/<name>.args` when that file exists.
+# `build/nish <name>.ts -o build/cookbook/<name>/ [flags]`, where the flags
+# come from `docs/cookbook/<name>.args` when that file exists. `build/nish` is
+# what `npm run build` leaves, and it is built here when it is missing.
 # `NISH=<compiler>` compiles them with another compiler instead, run as
 # scripts/nish-compiler.sh says (a native `nish` directly, a .js under node):
 #
-#   NISH=build/nish docs/cookbook/regen.sh --check
+#   NISH=build/nish-test docs/cookbook/regen.sh --check
 #
 # The module header (`; ModuleID`, `source_filename`) is stripped exactly as
 # tests/run.js does for the goldens, and the result replaces everything between
@@ -21,7 +22,8 @@
 #
 # in the doc: the flags line (if any), the TypeScript source in a ```ts fence,
 # and the IR in a ```llvm fence. A snippet with no marker is reported and
-# skipped; a marker with no snippet is an error. Needs Node only (no LLVM).
+# skipped; a marker with no snippet is an error. Emitting IR needs no LLVM;
+# building build/nish when it is missing does.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -33,9 +35,9 @@ out=build/cookbook
 mkdir -p "$out"
 # shellcheck source=scripts/nish-compiler.sh
 . scripts/nish-compiler.sh
-nish_compiler "${NISH:-dist/index.js}"
-# Only stage0 is built here: a compiler named in NISH is the caller's to provide.
-[ -n "${NISH:-}" ] || [ -f dist/index.js ] || npm run build >/dev/null
+nish_compiler "${NISH:-build/nish}"
+# Only the default is built here: a compiler named in NISH is the caller's to provide.
+[ -n "${NISH:-}" ] || [ -x build/nish ] || npm run build >/dev/null
 
 tmp="$out/IR_COOKBOOK.md.new"
 cp "$doc" "$tmp"

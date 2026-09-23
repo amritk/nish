@@ -7,7 +7,6 @@
   },
   "files": {
     "includes": [
-      "src/**",
       "bin/**/*.js",
       "self/**/*.ts",
       "std/**/*.ts",
@@ -19,7 +18,6 @@
       "bench/**/*.ts",
       "bench/**/*.mjs",
       "web/**/*.mjs",
-      "!**/dist",
       "!**/build",
       "!**/node_modules",
       "!tests/cases"
@@ -131,7 +129,6 @@
     },
     {
       "includes": [
-        "src/**",
         "self/**/*.ts",
         "tests/**/*.js",
         "docs/*.mjs",

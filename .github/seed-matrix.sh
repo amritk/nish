@@ -157,8 +157,8 @@ echo "rows=$rows" >> "$out"
 # the last released `nish` and with the compiler HEAD builds -- and requires
 # every byte to match, so what it wants is a seed rather than a platform
 # sweep. It is the successor to `ir_oracle.js` and `interop_oracle.js`, which
-# run on Linux and die with stage0 (docs/wp19-stage0-retirement.md §2B), so
-# the Linux rows are the ones it inherits. macOS is left out on a measurement
+# ran on Linux and were deleted with stage0 (docs/wp19-stage0-retirement.md
+# §2B), so the Linux rows are the ones it inherits. macOS is left out on a measurement
 # rather than a preference: the checks that keep `macos-latest` out of the
 # `test` matrix encode an ELF assumption (§5a item 3), and a gate is the wrong
 # place to discover that. Derived from `rows` rather than named, so a Linux

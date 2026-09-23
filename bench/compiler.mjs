@@ -1,5 +1,5 @@
 // The compiler a bench script builds with: `--compiler <path>` when the command
-// line names one, stage0 (`dist/index.js`) otherwise.
+// line names one, `build/nish` (what `npm run build` leaves) otherwise.
 //
 //   node bench/run.mjs --compiler build/nish --validate
 //
@@ -23,7 +23,7 @@ export const compilerFrom = (argv) => {
     console.error("--compiler needs a path");
     process.exit(2);
   }
-  const spec = at >= 0 ? path.resolve(argv[at + 1]) : path.join("dist", "index.js");
+  const spec = at >= 0 ? path.resolve(argv[at + 1]) : path.join("build", "nish");
   const compiler = resolveSeed(spec);
   if (compiler.error !== undefined) {
     const hint = at >= 0 ? "" : "; run `npm run build` first, or pass --compiler <nish>";

@@ -41,7 +41,6 @@
       "Bash(node tests/run.js:*)",
       "Bash(node tests/differential/run.js:*)",
       "Bash(node tests/differential/fuzz.js:*)",
-      "Bash(node dist/index.js:*)",
       "Bash(build/nish:*)",
       "Bash(build/seed/bin/nish:*)",
       "Bash(node docs/check-links.mjs)",

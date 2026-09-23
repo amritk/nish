@@ -13,7 +13,6 @@ node_modules/
 # entry (WP21 S2) is only a demonstration if the package it imports is laid out
 # the way npm lays one out.
 !docs/cookbook/node_modules/
-dist/
 build/
 web/*.wasm
 *.o

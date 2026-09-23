@@ -1,5 +1,5 @@
 // A fixture for the WP8 N-API bridge (the interop section of `tests/run.js`)
-// and for `tests/self/interop_oracle.js`: the numeric widths at a *plain*
+// and for `tests/nish-cmp.js`: the numeric widths at a *plain*
 // parameter and a plain return.
 //
 // `interop_payloads.ts` next door carries the narrow widths inside a packed

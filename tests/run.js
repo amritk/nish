@@ -472,7 +472,7 @@ for (const [at, name] of selectedCases.entries()) {
     check(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr));
   }
 
-  if (fs.existsSync(side("out")) && HAS_CLANG) {
+  if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C;
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
     // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
@@ -855,71 +855,69 @@ if (!only || "diagnostics".includes(only)) {
         .join("\n")
   );
 
-  if (HAS_CLANG) {
-    const dbgSrc = path.join(buildDir, "dbg_main.ts");
-    fs.writeFileSync(
-      dbgSrc,
-      "function fib(n: number): number {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n\nexport function main(): number {\n  const x = fib(10);\n  return x - 55;\n}\n"
-    );
-    const exe = path.join(buildDir, "dbg_main");
-    const link = spawnSync(NISH, [dbgSrc, "-g", "--link", exe, "--profile", "debug"], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    check(
-      "-g --link --profile debug builds a binary that exits 0",
-      link.status === 0 && spawnSync(exe).status === 0,
-      link.stderr
-    );
-    if (link.status === 0) {
-      // `lineTableOf` is what makes this one check on two object formats: it
-      // answers with the file the platform put the table in, and the assertion
-      // under it is the same sentence either way.
-      const table = lineTableOf(exe);
-      const dumpers = [
-        ["llvm-dwarfdump", ["--debug-line", table.file]],
-        ["objdump", ["--dwarf=decodedline", table.file]],
-      ];
-      const tool = dumpers.find(([t]) => has(t));
-      if (!tool) {
-        skip("-g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
-      } else {
-        const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" });
-        const out = dump.stdout;
-        // A row of the line table for our file: `<address> <line> <column> ...` (dwarfdump) or `dbg_main.ts <line> <addr>` (objdump).
-        const hasRow =
-          tool[0] === "llvm-dwarfdump"
-            ? /^0x[0-9a-f]+\s+[1-9]\d*\s+\d+/m.test(out)
-            : /dbg_main\.ts\s+[1-9]\d*\s+0x/.test(out);
-        check(
-          `${tool[0]}: the line table names dbg_main.ts and has at least one row (read from ${table.where})`,
-          dump.status === 0 && out.includes("dbg_main.ts") && hasRow,
-          out.slice(0, 2000) + dump.stderr
-        );
-      }
+  const dbgSrc = path.join(buildDir, "dbg_main.ts");
+  fs.writeFileSync(
+    dbgSrc,
+    "function fib(n: number): number {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n\nexport function main(): number {\n  const x = fib(10);\n  return x - 55;\n}\n"
+  );
+  const exe = path.join(buildDir, "dbg_main");
+  const link = spawnSync(NISH, [dbgSrc, "-g", "--link", exe, "--profile", "debug"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "-g --link --profile debug builds a binary that exits 0",
+    link.status === 0 && spawnSync(exe).status === 0,
+    link.stderr
+  );
+  if (link.status === 0) {
+    // `lineTableOf` is what makes this one check on two object formats: it
+    // answers with the file the platform put the table in, and the assertion
+    // under it is the same sentence either way.
+    const table = lineTableOf(exe);
+    const dumpers = [
+      ["llvm-dwarfdump", ["--debug-line", table.file]],
+      ["objdump", ["--dwarf=decodedline", table.file]],
+    ];
+    const tool = dumpers.find(([t]) => has(t));
+    if (!tool) {
+      skip("-g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
+    } else {
+      const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" });
+      const out = dump.stdout;
+      // A row of the line table for our file: `<address> <line> <column> ...` (dwarfdump) or `dbg_main.ts <line> <addr>` (objdump).
+      const hasRow =
+        tool[0] === "llvm-dwarfdump"
+          ? /^0x[0-9a-f]+\s+[1-9]\d*\s+\d+/m.test(out)
+          : /dbg_main\.ts\s+[1-9]\d*\s+0x/.test(out);
+      check(
+        `${tool[0]}: the line table names dbg_main.ts and has at least one row (read from ${table.where})`,
+        dump.status === 0 && out.includes("dbg_main.ts") && hasRow,
+        out.slice(0, 2000) + dump.stderr
+      );
     }
-    // The speed profile keeps the DWARF too: -g disables the strip step of
-    // build.sh. Read through `lineTableOf` for the reason the check above does:
-    // on Mach-O the stripping the profile would have done is `-Wl,-x` on the
-    // executable, and the table `-g` produced is in the bundle next to it, so
-    // looking only at the executable would report every Darwin build as
-    // stripped whether or not it was.
-    const speed = spawnSync(NISH, [dbgSrc, "-g", "--link", `${exe}.speed`], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    const speedTable = speed.status === 0 ? lineTableOf(`${exe}.speed`) : null;
-    const symbols =
-      speedTable !== null && has("llvm-dwarfdump")
-        ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], { encoding: "utf8" }).stdout
-        : "";
-    check(
-      "-g --link (speed profile) is not stripped: the line table survives " +
-        `(read from ${speedTable === null ? "the linked binary" : speedTable.where})`,
-      speed.status === 0 && (!has("llvm-dwarfdump") || symbols.includes("dbg_main.ts")),
-      speed.stderr + symbols.slice(0, 500)
-    );
   }
+  // The speed profile keeps the DWARF too: -g disables the strip step of
+  // build.sh. Read through `lineTableOf` for the reason the check above does:
+  // on Mach-O the stripping the profile would have done is `-Wl,-x` on the
+  // executable, and the table `-g` produced is in the bundle next to it, so
+  // looking only at the executable would report every Darwin build as
+  // stripped whether or not it was.
+  const speed = spawnSync(NISH, [dbgSrc, "-g", "--link", `${exe}.speed`], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const speedTable = speed.status === 0 ? lineTableOf(`${exe}.speed`) : null;
+  const symbols =
+    speedTable !== null && has("llvm-dwarfdump")
+      ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], { encoding: "utf8" }).stdout
+      : "";
+  check(
+    "-g --link (speed profile) is not stripped: the line table survives " +
+      `(read from ${speedTable === null ? "the linked binary" : speedTable.where})`,
+    speed.status === 0 && (!has("llvm-dwarfdump") || symbols.includes("dbg_main.ts")),
+    speed.stderr + symbols.slice(0, 500)
+  );
 }
 
 // ---- WP15 §8: the `performance` diagnostic class -----------------------------------
@@ -1409,7 +1407,7 @@ for (const name of linkTests) {
   fs.rmSync(outDir, { recursive: true, force: true });
   const r = spawnSync(
     NISH,
-    [side("main.ts"), "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : []), ...args],
+    [side("main.ts"), "-o", outDir, "--link", exe, ...args],
     { cwd: root }
   );
   const stderr = String(r.stderr);
@@ -1424,7 +1422,7 @@ for (const name of linkTests) {
     continue;
   }
   if (r.status !== 0) {
-    check(`link/${name}: compiles${HAS_CLANG ? " and links" : ""}`, false, stderr);
+    check(`link/${name}: compiles and links`, false, stderr);
     continue;
   }
 
@@ -1492,16 +1490,14 @@ for (const name of linkTests) {
     );
   }
 
-  if (HAS_CLANG) {
-    const run = spawnSync(exe);
-    const wantCode = Number(read("expected.code").trim());
-    const wantOut = fs.existsSync(side("expected.out")) ? read("expected.out").trim() : "";
-    check(
-      `link/${name}: exits with ${wantCode} and stdout matches expected.out`,
-      run.status === wantCode && String(run.stdout).trim() === wantOut,
-      `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
-    );
-  }
+  const run = spawnSync(exe);
+  const wantCode = Number(read("expected.code").trim());
+  const wantOut = fs.existsSync(side("expected.out")) ? read("expected.out").trim() : "";
+  check(
+    `link/${name}: exits with ${wantCode} and stdout matches expected.out`,
+    run.status === wantCode && String(run.stdout).trim() === wantOut,
+    `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
+  );
 }
 
 /**
@@ -1581,7 +1577,7 @@ if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
   const exe = path.join(buildDir, "link", "package_above-app");
   const r = spawnSync(
     NISH,
-    ["main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    ["main.ts", "-o", outDir, "--link", exe],
     { cwd: path.join(aboveDir, "src"), encoding: "utf8" }
   );
   const ir =
@@ -1601,7 +1597,7 @@ if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
     r.status === 0 && missing.length === 0,
     r.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${r.stdout}${r.stderr}`
   );
-  if (HAS_CLANG && r.status === 0) {
+  if (r.status === 0) {
     const run = spawnSync(exe);
     const want = Number(fs.readFileSync(path.join(aboveDir, "expected.code"), "utf8").trim());
     check(
@@ -1637,7 +1633,7 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
   const exe = path.join(buildDir, "link", "package_doubled-app");
   const inside = spawnSync(
     NISH,
-    ["main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    ["main.ts", "-o", outDir, "--link", exe],
     { cwd: doubledApp, encoding: "utf8" }
   );
   const ir =
@@ -1657,7 +1653,7 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
     inside.status === 0 && missing.length === 0,
     inside.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${inside.stdout}${inside.stderr}`
   );
-  if (HAS_CLANG && inside.status === 0) {
+  if (inside.status === 0) {
     const run = spawnSync(exe);
     const want = Number(fs.readFileSync(path.join(doubledDir, "expected.code"), "utf8").trim());
     check(
@@ -1814,7 +1810,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     }
   }
   const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
-  if (HAS_CLANG && fs.existsSync(panicLl)) {
+  if (fs.existsSync(panicLl)) {
     const exe = path.join(buildDir, "arr_bounds_panic");
     const cc = linkNative(exe, panicLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -1831,7 +1827,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   // on the way in, but the callee pops through the same array, so the fact dies at
   // the call and the access after it still panics.
   const shrinkLl = path.join(buildDir, "arr_bounds_shrink_panic.ll");
-  if (HAS_CLANG && fs.existsSync(shrinkLl)) {
+  if (fs.existsSync(shrinkLl)) {
     const exe = path.join(buildDir, "arr_bounds_shrink_panic");
     const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "-o", exe], {
       cwd: root,
@@ -2096,7 +2092,7 @@ if (!only || "strings".includes(only) || only.startsWith("str")) {
     }
   }
   const slicePanicLl = path.join(buildDir, "str_slice_panic.ll");
-  if (HAS_CLANG && fs.existsSync(slicePanicLl)) {
+  if (fs.existsSync(slicePanicLl)) {
     const exe = path.join(buildDir, "str_slice_panic");
     const cc = spawnSync("clang", ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "-o", exe], {
       cwd: root,
@@ -2158,7 +2154,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
       !/alloca %struct\.(Pair|Point|Counter), align/.test(nsIr),
     String(ns.stderr) || nsIr
   );
-  if (HAS_CLANG && ns.status === 0) {
+  if (ns.status === 0) {
     const exe = path.join(buildDir, "mem_stack_struct_nostack");
     const cc = linkNative(exe, noStackLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -2169,7 +2165,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
     );
   }
   const scopeExe = path.join(buildDir, "mem_scope_dynamic_array");
-  if (HAS_CLANG && fs.existsSync(scopeExe)) {
+  if (fs.existsSync(scopeExe)) {
     const run = spawnSync(scopeExe);
     const lines = String(run.stdout).trim().split("\n");
     check(
@@ -2452,77 +2448,73 @@ if (!only || "layout".includes(only)) {
       fromC.size === 18 && fromIr.size === 18 && diffs.length === 0,
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
-    if (HAS_CLANG) {
-      // WP25: the C header lists every class with its flattened fields; one that
-      // `implements` an interface must therefore have the size the compiler (and
-      // structs.c) computed.
-      const headerCheck = path.join(buildDir, "layout_header_check.c");
-      fs.writeFileSync(
+    // WP25: the C header lists every class with its flattened fields; one that
+    // `implements` an interface must therefore have the size the compiler (and
+    // structs.c) computed.
+    const headerCheck = path.join(buildDir, "layout_header_check.c");
+    fs.writeFileSync(
+      headerCheck,
+      [
+        '#include "layout_structs.h"',
+        ...[...fromC].map(([n, s]) => `_Static_assert(sizeof(struct ${n}) == ${s}, "${n}");`),
+        "int main(void) { return 0; }",
+        "",
+      ].join("\n")
+    );
+    const hc = spawnSync(
+      "clang",
+      [
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fsyntax-only",
+        `-I${buildDir}`,
+        "-Iruntime",
         headerCheck,
-        [
-          '#include "layout_structs.h"',
-          ...[...fromC].map(([n, s]) => `_Static_assert(sizeof(struct ${n}) == ${s}, "${n}");`),
-          "int main(void) { return 0; }",
-          "",
-        ].join("\n")
-      );
-      const hc = spawnSync(
-        "clang",
-        [
-          "-std=c11",
-          "-Wall",
-          "-Wextra",
-          "-Werror",
-          "-fsyntax-only",
-          `-I${buildDir}`,
-          "-Iruntime",
-          headerCheck,
-        ],
-        { cwd: root }
-      );
+      ],
+      { cwd: root }
+    );
+    check(
+      `layout: --emit-header declares the ${fromC.size} structs (flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror`,
+      hc.status === 0 && fs.readFileSync(layoutH, "utf8").includes("struct M {"),
+      String(hc.stderr)
+    );
+    const exe = path.join(buildDir, "layout_structs");
+    // Named as sources rather than linked against the prebuilt objects, and
+    // that is the point: `-Wall -Wextra -Werror` on this line covers the two
+    // runtime translation units as well as `structs.c`. Swapping them for
+    // objects to save a third of a second would take the warning flags off
+    // the runtime, which is a check, not an overhead.
+    const cc = spawnSync(
+      "clang",
+      [
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-override-module",
+        "-O2",
+        layoutC,
+        layoutLl,
+        ...RUNTIME_C,
+        "-o",
+        exe,
+      ],
+      { cwd: root }
+    );
+    check(
+      "layout: structs.c compiles with -std=c11 -Wall -Wextra -Werror (sizes agree with clang)",
+      cc.status === 0,
+      String(cc.stderr)
+    );
+    if (cc.status === 0) {
+      const run = spawnSync(exe);
       check(
-        `layout: --emit-header declares the ${fromC.size} structs (flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror`,
-        hc.status === 0 && fs.readFileSync(layoutH, "utf8").includes("struct M {"),
-        String(hc.stderr)
+        "layout: every field offset agrees with clang at run time",
+        run.status === 0 && String(run.stdout).trim() === "layout ok",
+        `${run.stdout}${run.stderr}`
       );
-    }
-    if (HAS_CLANG) {
-      const exe = path.join(buildDir, "layout_structs");
-      // Named as sources rather than linked against the prebuilt objects, and
-      // that is the point: `-Wall -Wextra -Werror` on this line covers the two
-      // runtime translation units as well as `structs.c`. Swapping them for
-      // objects to save a third of a second would take the warning flags off
-      // the runtime, which is a check, not an overhead.
-      const cc = spawnSync(
-        "clang",
-        [
-          "-std=c11",
-          "-Wall",
-          "-Wextra",
-          "-Werror",
-          "-Wno-override-module",
-          "-O2",
-          layoutC,
-          layoutLl,
-          ...RUNTIME_C,
-          "-o",
-          exe,
-        ],
-        { cwd: root }
-      );
-      check(
-        "layout: structs.c compiles with -std=c11 -Wall -Wextra -Werror (sizes agree with clang)",
-        cc.status === 0,
-        String(cc.stderr)
-      );
-      if (cc.status === 0) {
-        const run = spawnSync(exe);
-        check(
-          "layout: every field offset agrees with clang at run time",
-          run.status === 0 && String(run.stdout).trim() === "layout ok",
-          `${run.stdout}${run.stderr}`
-        );
-      }
     }
   }
   if (HAS_OPT) {
@@ -2547,7 +2539,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     ["u_div_zero_panic", "attempt to divide by zero", "before"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!HAS_CLANG || !fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) continue;
     const exe = path.join(buildDir, name);
     const cc = linkNative(exe, ll, { libm: true });
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -2567,7 +2559,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
 // prebuilt objects, deliberately: what they assert *is* that the two
 // translation units "compile warning-free together", so compiling them is the
 // check and a cached object would skip it. Two links is what that costs.
-if (!only && HAS_CLANG) {
+if (!only) {
   const rt = spawnSync(
     "clang",
     [
@@ -2910,8 +2902,6 @@ if (!only && HAS_CLANG) {
     skip(`skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`
     );
   }
-} else if (!HAS_CLANG) {
-  skip("clang not installed: native round trips and pipeline checks skipped");
 }
 
 // ---- WP7: the runtime .text budgets ------------------------------------------------
@@ -3036,7 +3026,6 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         `runtime .text budgets: measured on linux-x64 and this host is ${host}; ` +
         "a byte-exact ceiling is a fact about one target and one compiler version"
       );
-    if (!HAS_CLANG) return "clang not installed: the runtime .text budgets are not measured";
     if (!has("size"))
       return "size (binutils or llvm) not installed: the runtime .text budgets are not measured";
     return null;
@@ -3102,28 +3091,24 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 // what a handful of cases already prove — one golden, one native round trip and
 // three rejections. `npm run test:nish` is the full pass.
 if (!only || "nish-runner".includes(only)) {
-  if (!HAS_CLANG) {
-    skip("the golden runner written in Nish (clang not found, and it links)");
-  } else {
-    const irDir = path.join(buildDir, "nish-runner.ir") + path.sep;
-    const runnerExe = path.join(buildDir, "nish-runner");
-    const built = spawnSync(NISH, [path.join("tests", "nish", "run.ts"), "-o", irDir, "--link", runnerExe], {
-      cwd: root,
-    });
-    if (check("tests/nish/run.ts compiles and links", built.status === 0, String(built.stderr))) {
-      // cwd is the repository root because the runner addresses `tests/cases` and
-      // the compiler by relative path: there is no `cwd` builtin for it to build
-      // an absolute one from, which is also why it folds `<root>/` out of a
-      // golden rather than into its own output. `--compiler` names the compiler
-      // under test, where the runner's own default is stage0.
-      const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH)], { cwd: root });
-      const report = String(ran.stdout);
-      check(
-        "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
-        ran.status === 0 && / 0 failed, /.test(report),
-        report + String(ran.stderr)
-      );
-    }
+  const irDir = path.join(buildDir, "nish-runner.ir") + path.sep;
+  const runnerExe = path.join(buildDir, "nish-runner");
+  const built = spawnSync(NISH, [path.join("tests", "nish", "run.ts"), "-o", irDir, "--link", runnerExe], {
+    cwd: root,
+  });
+  if (check("tests/nish/run.ts compiles and links", built.status === 0, String(built.stderr))) {
+    // cwd is the repository root because the runner addresses `tests/cases` and
+    // the compiler by relative path: there is no `cwd` builtin for it to build
+    // an absolute one from, which is also why it folds `<root>/` out of a
+    // golden rather than into its own output. `--compiler` names the compiler
+    // under test, where the runner's own default is build/nish.
+    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH)], { cwd: root });
+    const report = String(ran.stdout);
+    check(
+      "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
+      ran.status === 0 && / 0 failed, /.test(report),
+      report + String(ran.stderr)
+    );
   }
 }
 
@@ -3140,26 +3125,22 @@ if (!only || "nish-runner".includes(only)) {
 // the same pass by hand, and `build/nish-cli build/nish` points it at the
 // self-hosted compiler.
 if (!only || "nish-cli".includes(only) || "contract".includes(only)) {
-  if (!HAS_CLANG) {
-    skip("the CLI contract checked in Nish (clang not found, and it links)");
-  } else {
-    const irDir = path.join(buildDir, "nish-cli.ir") + path.sep;
-    const cliExe = path.join(buildDir, "nish-cli");
-    const built = spawnSync(NISH, [path.join("tests", "nish", "cli.ts"), "-o", irDir, "--link", cliExe], {
-      cwd: root,
-    });
-    if (check("tests/nish/cli.ts compiles and links", built.status === 0, String(built.stderr))) {
-      // cwd is the repository root: the harness addresses the compiler and
-      // `package.json` by relative path, as the golden runner addresses the
-      // corpus. Its one argument is the compiler to hold to the contract.
-      const ran = spawnSync(cliExe, [path.relative(root, NISH)], { cwd: root, encoding: "utf8" });
-      const report = String(ran.stdout);
-      check(
-        "a Nish program reading the CLI's own output agrees with its documented contract",
-        ran.status === 0 && / 0 failed, /.test(report),
-        report + String(ran.stderr)
-      );
-    }
+  const irDir = path.join(buildDir, "nish-cli.ir") + path.sep;
+  const cliExe = path.join(buildDir, "nish-cli");
+  const built = spawnSync(NISH, [path.join("tests", "nish", "cli.ts"), "-o", irDir, "--link", cliExe], {
+    cwd: root,
+  });
+  if (check("tests/nish/cli.ts compiles and links", built.status === 0, String(built.stderr))) {
+    // cwd is the repository root: the harness addresses the compiler and
+    // `package.json` by relative path, as the golden runner addresses the
+    // corpus. Its one argument is the compiler to hold to the contract.
+    const ran = spawnSync(cliExe, [path.relative(root, NISH)], { cwd: root, encoding: "utf8" });
+    const report = String(ran.stdout);
+    check(
+      "a Nish program reading the CLI's own output agrees with its documented contract",
+      ran.status === 0 && / 0 failed, /.test(report),
+      report + String(ran.stderr)
+    );
   }
 }
 
@@ -3381,92 +3362,90 @@ if (!only || "interop".includes(only)) {
     entryHeader || entry.stderr
   );
 
-  if (HAS_CLANG) {
-    const cxx = spawnSync("clang", [
-      "-std=c++17",
-      "-x",
-      "c++",
-      "-Wall",
-      "-Wextra",
-      "-Werror",
-      "-fsyntax-only",
-      path.join(runtimeDir, "nish.h"),
-    ]);
-    const c11 = spawnSync("clang", [
-      ...strictC,
-      "-pedantic",
-      "-fsyntax-only",
-      "-x",
-      "c",
-      path.join(runtimeDir, "nish.h"),
-    ]);
-    check(
-      "nish.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17",
-      cxx.status === 0 && c11.status === 0,
-      String(cxx.stderr) + String(c11.stderr)
-    );
-    const wasmRt = spawnSync("clang", [
-      "--target=wasm32-unknown-unknown",
-      "-std=c11",
-      "-Wall",
-      "-Wextra",
-      "-Werror",
-      "-pedantic",
-      "-mbulk-memory",
-      "-fsyntax-only",
-      path.join(runtimeDir, "runtime_wasm.c"),
-    ]);
-    check(
-      "runtime/runtime_wasm.c compiles for wasm32 under -std=c11 -Wall -Wextra -Werror -pedantic",
-      wasmRt.status === 0,
-      String(wasmRt.stderr)
-    );
+  const cxx = spawnSync("clang", [
+    "-std=c++17",
+    "-x",
+    "c++",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-fsyntax-only",
+    path.join(runtimeDir, "nish.h"),
+  ]);
+  const c11 = spawnSync("clang", [
+    ...strictC,
+    "-pedantic",
+    "-fsyntax-only",
+    "-x",
+    "c",
+    path.join(runtimeDir, "nish.h"),
+  ]);
+  check(
+    "nish.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17",
+    cxx.status === 0 && c11.status === 0,
+    String(cxx.stderr) + String(c11.stderr)
+  );
+  const wasmRt = spawnSync("clang", [
+    "--target=wasm32-unknown-unknown",
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-pedantic",
+    "-mbulk-memory",
+    "-fsyntax-only",
+    path.join(runtimeDir, "runtime_wasm.c"),
+  ]);
+  check(
+    "runtime/runtime_wasm.c compiles for wasm32 under -std=c11 -Wall -Wextra -Werror -pedantic",
+    wasmRt.status === 0,
+    String(wasmRt.stderr)
+  );
 
-    for (const stem of ["add", "strings", "export_fn", "export_strict", "export_loose", "multi"]) {
-      if (!fs.existsSync(sidecar(stem, "h"))) continue;
-      const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar(stem, "h")]);
-      check(`${stem}.h compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
-    }
-
-    // A C driver that calls through the generated header, including the keyword-named `double`.
-    const driver = path.join(interopDir, "header_driver.c");
-    fs.writeFileSync(
-      driver,
-      [
-        "#include <stdio.h>",
-        '#include "add.h"',
-        '#include "export_fn.h"',
-        "int main(void) {",
-        "  nish_str *s = nish_str_from_i32(add(40, 2));",
-        '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
-        "  nish_free_arena();",
-        "  return 0;",
-        "}",
-        "",
-      ].join("\n")
-    );
-    const exe = path.join(interopDir, "header_driver");
-    const cc = spawnSync(
-      "clang",
-      [
-        ...strictC,
-        "-O2",
-        sidecar("add", "ll"),
-        sidecar("export_fn", "ll"),
-        path.join(runtimeDir, "runtime.c"),
-        driver,
-        "-o",
-        exe,
-      ],
-      { cwd: root }
-    );
-    const run = cc.status === 0 ? spawnSync(exe) : null;
-    check(
-      "a -Werror C driver links through the generated headers and runtime.c",
-      run !== null && String(run.stdout).trim() === "add(40, 2) = 42; double_(21) = 42; next(20) = 41",
-      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
-    );
+  for (const stem of ["add", "strings", "export_fn", "export_strict", "export_loose", "multi"]) {
+    if (!fs.existsSync(sidecar(stem, "h"))) continue;
+    const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar(stem, "h")]);
+    check(`${stem}.h compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
   }
+
+  // A C driver that calls through the generated header, including the keyword-named `double`.
+  const driver = path.join(interopDir, "header_driver.c");
+  fs.writeFileSync(
+    driver,
+    [
+      "#include <stdio.h>",
+      '#include "add.h"',
+      '#include "export_fn.h"',
+      "int main(void) {",
+      "  nish_str *s = nish_str_from_i32(add(40, 2));",
+      '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
+      "  nish_free_arena();",
+      "  return 0;",
+      "}",
+      "",
+    ].join("\n")
+  );
+  const exe = path.join(interopDir, "header_driver");
+  const cc = spawnSync(
+    "clang",
+    [
+      ...strictC,
+      "-O2",
+      sidecar("add", "ll"),
+      sidecar("export_fn", "ll"),
+      path.join(runtimeDir, "runtime.c"),
+      driver,
+      "-o",
+      exe,
+    ],
+    { cwd: root }
+  );
+  const run = cc.status === 0 ? spawnSync(exe) : null;
+  check(
+    "a -Werror C driver links through the generated headers and runtime.c",
+    run !== null && String(run.stdout).trim() === "add(40, 2) = 42; double_(21) = 42; next(20) = 41",
+    String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+  );
 
   // TypeScript declarations for the wasm build.
   const addDts = fs.existsSync(sidecar("add", "d.ts")) ? fs.readFileSync(sidecar("add", "d.ts"), "utf8") : "";
@@ -3517,9 +3496,7 @@ if (!only || "interop".includes(only)) {
       stringsShim.includes('{"nish_reset_arena", nish_napi_reset_arena},'),
     stringsShim
   );
-  if (!HAS_CLANG) {
-    // nothing to build
-  } else if (!hasNodeHeaders) {
+  if (!hasNodeHeaders) {
     skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`
     );
   } else {
@@ -3610,7 +3587,7 @@ if (!only || "interop".includes(only)) {
       genHeaderText.includes("struct Box_i32 *makeDeclared(int32_t v);"),
     genHeaderText
   );
-  if (HAS_CLANG && genHeader.status === 0) {
+  if (genHeader.status === 0) {
     const syn = spawnSync("clang", [
       ...strictC,
       "-pedantic",
@@ -3727,9 +3704,7 @@ if (!only || "interop".includes(only)) {
     shimPlain
   );
 
-  if (!HAS_CLANG) {
-    skip("clang not found: the asynchronous N-API addon is not built or run");
-  } else if (!hasNodeHeaders) {
+  if (!hasNodeHeaders) {
     skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the asynchronous N-API addon is skipped`);
   } else if (shimAsync.length === 0) {
     check("interop_async.napi.c compiles and runs", false, "--emit-napi-async wrote no file");
@@ -3862,7 +3837,7 @@ if (!only || "interop".includes(only)) {
     const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("res_export", "d.ts")], { cwd: root });
     check("res_export.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr));
   }
-  if (HAS_CLANG && res.status === 0) {
+  if (res.status === 0) {
     const syn = spawnSync("clang", [...strictC, "-pedantic", "-fsyntax-only", "-x", "c", sidecar("res_export", "h")]);
     check(
       "res_export.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
@@ -3924,7 +3899,7 @@ if (!only || "interop".includes(only)) {
       ),
     resShim
   );
-  if (HAS_CLANG && res.status === 0) {
+  if (res.status === 0) {
     if (hasNodeHeaders) {
       const addon = path.join(interopDir, "res_export.node");
       const b = spawnSync(
@@ -4086,19 +4061,19 @@ if (!only || "interop".includes(only)) {
     skipsShim || skips.stderr
   );
 
-  if (HAS_CLANG && widths.status === 0) {
+  if (widths.status === 0) {
     const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("interop_widths", "h")]);
     check("interop_widths.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
   }
   // The shim needs node_api.h to compile at all, so this is the same skip the
   // other addon checks take when the Node headers are not installed.
-  if (HAS_CLANG && hasNodeHeaders && widths.status === 0 && skips.status === 0) {
+  if (hasNodeHeaders && widths.status === 0 && skips.status === 0) {
     for (const stem of ["interop_widths", "napi_skips"]) {
       const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar(stem, "napi.c")]);
       check(`${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
     }
   }
-  if (HAS_CLANG && widths.status === 0 && hasNodeHeaders) {
+  if (widths.status === 0 && hasNodeHeaders) {
     const addon = path.join(interopDir, "interop_widths.node");
     const b = spawnSync(
       "bash",
@@ -4312,7 +4287,7 @@ if (!only || "interop".includes(only)) {
       String(r.stdout) + String(r.stderr)
     );
   }
-  if (HAS_CLANG && has("wasm-ld")) {
+  if (has("wasm-ld")) {
     const wasm = path.join(interopDir, "interop_unsigned.wasm");
     const w =
       unsigned.status === 0
@@ -4388,7 +4363,7 @@ if (!only || "interop".includes(only)) {
     const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("arrays", "d.ts")], { cwd: root });
     check("arrays.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr));
   }
-  if (HAS_CLANG && arrays.status === 0) {
+  if (arrays.status === 0) {
     const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("arrays", "h")]);
     check("arrays.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
     const driver = path.join(interopDir, "arrays_driver.c");
@@ -4424,7 +4399,7 @@ if (!only || "interop".includes(only)) {
       String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
     );
   }
-  if (HAS_CLANG && arrays.status === 0 && (has("wasm-ld") || hasNodeHeaders)) {
+  if (arrays.status === 0 && (has("wasm-ld") || hasNodeHeaders)) {
     const wasm = path.join(interopDir, "arrays.wasm");
     const addon = path.join(interopDir, "arrays.node");
     const stringsAddon = path.join(interopDir, "strings.node");
@@ -4723,950 +4698,939 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // with the `typescript` scanner's over the whole corpus. The oracle links a
   // binary, so it needs clang; without one this is skipped like every other
   // toolchain-dependent check.
-  if (HAS_CLANG) {
-    const oracle = spawnSync("node", [path.join(root, "tests", "lexer_oracle.js"), "--seed", seedSpec], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    const summary = oracle.stdout.trim().split("\n").pop() ?? "";
-    check(
-      `self/lexer.ts agrees with the typescript scanner (${summary})`,
-      oracle.status === 0,
-      `${oracle.stdout}${oracle.stderr}`
-    );
+  const oracle = spawnSync("node", [path.join(root, "tests", "lexer_oracle.js"), "--seed", seedSpec], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const summary = oracle.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `self/lexer.ts agrees with the typescript scanner (${summary})`,
+    oracle.status === 0,
+    `${oracle.stdout}${oracle.stderr}`
+  );
 
-    // The one thing the oracle cannot judge: the scanner recovers from a
-    // lexical error and this lexer stops, so the message and the position it
-    // stops at are a golden of their own.
-    const dumper = path.join(buildDir, "self", "dump_tokens");
-    const built = spawnSync(NISH, [path.join(selfDir, "dump_tokens.ts"), "--link", dumper], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    if (check("self/dump_tokens.ts links", built.status === 0, built.stderr)) {
-      const errorsTs = path.join(root, "tests", "lexer", "errors.ts");
-      const run = spawnSync(dumper, [errorsTs], { cwd: root, encoding: "utf8" });
-      const want = fs.readFileSync(path.join(root, "tests", "lexer", "errors.out"), "utf8");
-      check(
-        "self/lexer.ts stops at a lexical error with its message and position",
-        run.stdout === want && run.status === 1,
-        `exit ${run.status}\n${run.stdout}`
-      );
-    }
-
-    // S2: the same shape one level up. Every positive program in the corpus
-    // must parse to the tree the `typescript` parser builds, span for span;
-    // the files the oracle skips are the forbidden constructs Nish-0 has
-    // no grammar for yet, and that count is the S2 gate's own measurement.
-    const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js"), "--seed", seedSpec], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    const parserSummary = parserOracle.stdout.trim().split("\n").pop() ?? "";
+  // The one thing the oracle cannot judge: the scanner recovers from a
+  // lexical error and this lexer stops, so the message and the position it
+  // stops at are a golden of their own.
+  const dumper = path.join(buildDir, "self", "dump_tokens");
+  const built = spawnSync(NISH, [path.join(selfDir, "dump_tokens.ts"), "--link", dumper], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (check("self/dump_tokens.ts links", built.status === 0, built.stderr)) {
+    const errorsTs = path.join(root, "tests", "lexer", "errors.ts");
+    const run = spawnSync(dumper, [errorsTs], { cwd: root, encoding: "utf8" });
+    const want = fs.readFileSync(path.join(root, "tests", "lexer", "errors.out"), "utf8");
     check(
-      `self/parser.ts agrees with the typescript parser (${parserSummary})`,
-      parserOracle.status === 0,
-      `${parserOracle.stdout}${parserOracle.stderr}`
+      "self/lexer.ts stops at a lexical error with its message and position",
+      run.stdout === want && run.status === 1,
+      `exit ${run.status}\n${run.stdout}`
     );
+  }
 
-    // And the half of the parser the oracle cannot see: recovery. A failed
-    // parse is an `N_ERROR` node and a diagnostic, and the declaration after
-    // it still parses (docs/wp14-selfhost.md §3a D1).
-    const astDumper = path.join(buildDir, "self", "dump_ast");
-    const builtAst = spawnSync(NISH, [path.join(selfDir, "dump_ast.ts"), "--link", astDumper], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    if (check("self/dump_ast.ts links", builtAst.status === 0, builtAst.stderr)) {
-      // Relative, because the diagnostics quote the path they were given and
-      // the golden cannot hold this machine's checkout directory.
-      const recovery = spawnSync(astDumper, ["tests/parser/recovery.ts"], { cwd: root, encoding: "utf8" });
-      const wantOut = fs.readFileSync(path.join(root, "tests", "parser", "recovery.out"), "utf8");
-      const wantErr = fs.readFileSync(path.join(root, "tests", "parser", "recovery.err"), "utf8");
-      check(
-        "self/parser.ts reports a syntax error and keeps parsing what follows",
-        recovery.stdout === wantOut && recovery.stderr === wantErr && recovery.status === 1,
-        `exit ${recovery.status}\n${recovery.stdout}${recovery.stderr}`
-      );
-    }
+  // S2: the same shape one level up. Every positive program in the corpus
+  // must parse to the tree the `typescript` parser builds, span for span;
+  // the files the oracle skips are the forbidden constructs Nish-0 has
+  // no grammar for yet, and that count is the S2 gate's own measurement.
+  const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js"), "--seed", seedSpec], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const parserSummary = parserOracle.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `self/parser.ts agrees with the typescript parser (${parserSummary})`,
+    parserOracle.status === 0,
+    `${parserOracle.stdout}${parserOracle.stderr}`
+  );
 
-    // Wave C: the support library the checker and the emitter are written
-    // over (docs/wp14-selfhost.md §3). It has no counterpart in `src/` to
-    // diff phase by phase, so each function is matched with something that
-    // already exists — stage0's own IR escape and f64 hex, `node:path` for
-    // the module-identity hazard of §3a D3, and `JSON.stringify` / `Map` for
-    // the rest.
-    const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js"), "--seed", seedSpec], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    const supportSummary = supportOracle.stdout.trim().split("\n").pop() ?? "";
+  // And the half of the parser the oracle cannot see: recovery. A failed
+  // parse is an `N_ERROR` node and a diagnostic, and the declaration after
+  // it still parses (docs/wp14-selfhost.md §3a D1).
+  const astDumper = path.join(buildDir, "self", "dump_ast");
+  const builtAst = spawnSync(NISH, [path.join(selfDir, "dump_ast.ts"), "--link", astDumper], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (check("self/dump_ast.ts links", builtAst.status === 0, builtAst.stderr)) {
+    // Relative, because the diagnostics quote the path they were given and
+    // the golden cannot hold this machine's checkout directory.
+    const recovery = spawnSync(astDumper, ["tests/parser/recovery.ts"], { cwd: root, encoding: "utf8" });
+    const wantOut = fs.readFileSync(path.join(root, "tests", "parser", "recovery.out"), "utf8");
+    const wantErr = fs.readFileSync(path.join(root, "tests", "parser", "recovery.err"), "utf8");
     check(
-      `self/ support library agrees with node and stage0 (${supportSummary})`,
-      supportOracle.status === 0,
-      `${supportOracle.stdout}${supportOracle.stderr}`
+      "self/parser.ts reports a syntax error and keeps parsing what follows",
+      recovery.stdout === wantOut && recovery.stderr === wantErr && recovery.status === 1,
+      `exit ${recovery.status}\n${recovery.stdout}${recovery.stderr}`
     );
+  }
 
-    // WP19 G2.4: the four comparisons that held stage1 against stage0 --
-    // the type model, the diagnostics, the scope chain and the checker's whole
-    // dump -- written down. They were green when they were retired, so stage1's
-    // output *is* the agreed behaviour; `tests/self/goldens/` is that output
-    // checked in, and `goldens.js` compares stage1's live answer against it.
-    //
-    // The seed is `seedSpec` above, passed in rather than looked up, so the tool
-    // builds with the seed the rest of the run was built with.
-    const goldens = spawnSync(
-      "node",
-      [
-        path.join(root, "tests", "self", "goldens.js"),
-        ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
-        "--seed",
-        seedSpec,
-      ],
-      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
-    );
-    const goldensSummary = goldens.stdout.trim().split("\n").pop() ?? "";
-    check(
-      `self/ prints what tests/self/goldens/ records, with no stage0 in it (${goldensSummary})`,
-      goldens.status === 0,
-      `${goldens.stdout}${goldens.stderr}`
-    );
+  // Wave C: the support library the checker and the emitter are written
+  // over (docs/wp14-selfhost.md §3). It has no counterpart in `src/` to
+  // diff phase by phase, so each function is matched with something that
+  // already exists — stage0's IR escape and f64 hex, recorded in a golden
+  // while it was in the tree, `node:path` for
+  // the module-identity hazard of §3a D3, and `JSON.stringify` / `Map` for
+  // the rest.
+  const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js"), "--seed", seedSpec], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const supportSummary = supportOracle.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `self/ support library agrees with node and stage0's recorded answers (${supportSummary})`,
+    supportOracle.status === 0,
+    `${supportOracle.stdout}${supportOracle.stderr}`
+  );
 
-    // The other half of milestone S3: refusing the programs it should, for the
-    // reason each case names. A dump comparison cannot see that, so every
-    // `reject_*` case and every `tests/link/` negative is run through
-    // `self/dump_checked.ts` and its own expected fragments are required of the
-    // output -- the assertion section A makes of the driver, made of the checker
-    // on its own.
-    const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js"), "--seed", seedSpec], {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    const rejectSummary = rejectOracle.stdout.trim().split("\n").pop() ?? "";
-    check(
-      `self/ refuses every negative case with the message it pins (${rejectSummary})`,
-      rejectOracle.status === 0,
-      `${rejectOracle.stdout}${rejectOracle.stderr}`
-    );
+  // WP19 G2.4: the four comparisons that held stage1 against stage0 --
+  // the type model, the diagnostics, the scope chain and the checker's whole
+  // dump -- written down. They were green when they were retired, so stage1's
+  // output *is* the agreed behaviour; `tests/self/goldens/` is that output
+  // checked in, and `goldens.js` compares stage1's live answer against it.
+  //
+  // The seed is `seedSpec` above, passed in rather than looked up, so the tool
+  // builds with the seed the rest of the run was built with.
+  const goldens = spawnSync(
+    "node",
+    [
+      path.join(root, "tests", "self", "goldens.js"),
+      ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
+      "--seed",
+      seedSpec,
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  const goldensSummary = goldens.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `self/ prints what tests/self/goldens/ records, with no stage0 in it (${goldensSummary})`,
+    goldens.status === 0,
+    `${goldens.stdout}${goldens.stderr}`
+  );
 
-    // WP19 G2.1: the successor to the IR and interop oracles, which held stage1
-    // against stage0 and retired with it (`docs/wp19-stage0-retirement.md` §2B).
-    // `nish-cmp` compares the **last released** `nish` with HEAD over the same
-    // corpus, byte for byte — Go's `toolstash -cmp` — and a difference has to
-    // be named in `CHANGELOG.md` before it goes green.
-    //
-    // It needs a released `nish` to compare with, so without `NISH_BOOTSTRAP`
-    // it skips rather than runs, and the skip is counted and says why: a
-    // comparison against nothing that reported PASS would be exactly the
-    // green-run-proving-less problem the summary at the bottom of this file
-    // exists to expose. Set `NISH_BOOTSTRAP` to the seed -- the variable
-    // `scripts/bootstrap.sh` reads -- and it runs. Budget about three minutes
-    // for it when it does: it is the whole corpus twice.
-    // The gate's own comparison logic, driven here because the gate itself
-    // skips on any machine with no seed -- which is most of them, and is the
-    // shape `.claude/selfhost.md` warns about: a guard nothing exercises. It is
-    // the one piece of that tool that can make two DIFFERING files look equal,
-    // so it is the piece worth a stand-in (`reject_oracle.js`'s `selfCheck` and
-    // `scripts/verify-binaries.sh` are the precedent).
-    //
-    // Why the tool needs it at all: two compilers are never installed in one
-    // directory, and a module reached as `nish/<name>` is named by the path the
-    // compiler found it at, so the seed writes its own unpacked path where HEAD
-    // writes `std/text.ts`. Measured against the v0.5.0 seed, that is four
-    // undeclared differences over two programs and nothing else -- a red gate
-    // for a property no cross-install comparison can have.
-    check(
-      "nish-cmp: its own package-root normalisation is right (stand-in inputs, not the corpus)",
-      selfCheckRoots() === null,
-      String(selfCheckRoots())
-    );
-    check(
-      "nish-cmp: a compiler's own root is derived the way the compiler derives it",
-      packageRootOf(NISH) === root && packageRootOf(path.join(root, "build", "self", "compile")) === root,
-      `build/nish-test -> ${packageRootOf(NISH)}, ` +
-        `build/self/compile -> ${packageRootOf(path.join(root, "build", "self", "compile"))}, root is ${root}`
-    );
-    check(
-      "nish-cmp: removing a root leaves the module path, and a sibling directory alone",
-      withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish") === "; ModuleID = 'std/text.ts'" &&
-        withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish") === "/opt/nish-old/std/a.ts",
-      `${withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish")} | ` +
-        `${withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish")}`
-    );
+  // The other half of milestone S3: refusing the programs it should, for the
+  // reason each case names. A dump comparison cannot see that, so every
+  // `reject_*` case and every `tests/link/` negative is run through
+  // `self/dump_checked.ts` and its own expected fragments are required of the
+  // output -- the assertion section A makes of the driver, made of the checker
+  // on its own.
+  const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js"), "--seed", seedSpec], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const rejectSummary = rejectOracle.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `self/ refuses every negative case with the message it pins (${rejectSummary})`,
+    rejectOracle.status === 0,
+    `${rejectOracle.stdout}${rejectOracle.stderr}`
+  );
 
-    // The same equality on programs nobody wrote. The corpus is checked in and
-    // therefore finite and adapted-to; the WP13 fuzzer generates random
-    // straight-line programs, and here the released `nish` and HEAD are each
-    // asked for the IR of every one and the texts compared byte for byte,
-    // module set included (`fuzz.js --stage1`, docs/wp13-differential.md "The
-    // fuzzer"). Sixteen programs from one fixed seed, which is a time budget
-    // rather than a coverage judgement -- about a third of a second each, plus
-    // one link. A failure reproduces from the summary line.
-    // Both need the released compiler, so both wait for the same variable and
-    // share one counted skip without it.
-    if (!process.env.NISH_BOOTSTRAP) {
+  // WP19 G2.1: the successor to the IR and interop oracles, which held stage1
+  // against stage0 and retired with it (`docs/wp19-stage0-retirement.md` §2B).
+  // `nish-cmp` compares the **last released** `nish` with HEAD over the same
+  // corpus, byte for byte — Go's `toolstash -cmp` — and a difference has to
+  // be named in `CHANGELOG.md` before it goes green.
+  //
+  // It needs a released `nish` to compare with, so without `NISH_BOOTSTRAP`
+  // it skips rather than runs, and the skip is counted and says why: a
+  // comparison against nothing that reported PASS would be exactly the
+  // green-run-proving-less problem the summary at the bottom of this file
+  // exists to expose. Set `NISH_BOOTSTRAP` to the seed -- the variable
+  // `scripts/bootstrap.sh` reads -- and it runs. Budget about three minutes
+  // for it when it does: it is the whole corpus twice.
+  // The gate's own comparison logic, driven here because the gate itself
+  // skips on any machine with no seed -- which is most of them, and is the
+  // shape `.claude/selfhost.md` warns about: a guard nothing exercises. It is
+  // the one piece of that tool that can make two DIFFERING files look equal,
+  // so it is the piece worth a stand-in (`reject_oracle.js`'s `selfCheck` and
+  // `scripts/verify-binaries.sh` are the precedent).
+  //
+  // Why the tool needs it at all: two compilers are never installed in one
+  // directory, and a module reached as `nish/<name>` is named by the path the
+  // compiler found it at, so the seed writes its own unpacked path where HEAD
+  // writes `std/text.ts`. Measured against the v0.5.0 seed, that is four
+  // undeclared differences over two programs and nothing else -- a red gate
+  // for a property no cross-install comparison can have.
+  check(
+    "nish-cmp: its own package-root normalisation is right (stand-in inputs, not the corpus)",
+    selfCheckRoots() === null,
+    String(selfCheckRoots())
+  );
+  check(
+    "nish-cmp: a compiler's own root is derived the way the compiler derives it",
+    packageRootOf(NISH) === root && packageRootOf(path.join(root, "build", "self", "compile")) === root,
+    `build/nish-test -> ${packageRootOf(NISH)}, ` +
+      `build/self/compile -> ${packageRootOf(path.join(root, "build", "self", "compile"))}, root is ${root}`
+  );
+  check(
+    "nish-cmp: removing a root leaves the module path, and a sibling directory alone",
+    withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish") === "; ModuleID = 'std/text.ts'" &&
+      withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish") === "/opt/nish-old/std/a.ts",
+    `${withoutOwnRoot("; ModuleID = '/opt/nish/std/text.ts'", "/opt/nish")} | ` +
+      `${withoutOwnRoot("/opt/nish-old/std/a.ts", "/opt/nish")}`
+  );
+
+  // The same equality on programs nobody wrote. The corpus is checked in and
+  // therefore finite and adapted-to; the WP13 fuzzer generates random
+  // straight-line programs, and here the released `nish` and HEAD are each
+  // asked for the IR of every one and the texts compared byte for byte,
+  // module set included (`fuzz.js --stage1`, docs/wp13-differential.md "The
+  // fuzzer"). Sixteen programs from one fixed seed, which is a time budget
+  // rather than a coverage judgement -- about a third of a second each, plus
+  // one link. A failure reproduces from the summary line.
+  // Both need the released compiler, so both wait for the same variable and
+  // share one counted skip without it.
+  if (!process.env.NISH_BOOTSTRAP) {
+    skip(
+      "NISH_BOOTSTRAP is unset: there is no released nish to compare HEAD against, so " +
+        "tests/nish-cmp.js (WP19 G2) and tests/differential/fuzz.js --stage1 did not run"
+    );
+  } else {
+    // `cmpSince` in .github/seed-targets.json names the first release this gate
+    // may be asked about, and CI's `seeds` job gives nish-cmp no row for an
+    // older one; the same rule here, read from the same field, so a run seeded
+    // with such a release reports a counted skip rather than a red it was
+    // told in advance to expect. The note beside the field says why.
+    const cmpSince = JSON.parse(
+      fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
+    ).cmpSince;
+    const released = resolveSeed(process.env.NISH_BOOTSTRAP);
+    const seedVersion =
+      released.error === undefined
+        ? /^nish (\S+)$/m.exec(spawnSeed(released, ["--version"]).stdout ?? "")?.[1]
+        : undefined;
+    if (seedVersion !== undefined && !notAfter(cmpSince, seedVersion)) {
       skip(
-        "NISH_BOOTSTRAP is unset: there is no released nish to compare HEAD against, so " +
-          "tests/nish-cmp.js (WP19 G2) and tests/differential/fuzz.js --stage1 did not run"
+        `NISH_BOOTSTRAP is nish ${seedVersion}, older than cmpSince ${cmpSince} in .github/seed-targets.json, ` +
+          "so tests/nish-cmp.js (WP19 G2) and tests/differential/fuzz.js --stage1 did not run"
       );
     } else {
-      // `cmpSince` in .github/seed-targets.json names the first release this gate
-      // may be asked about, and CI's `seeds` job gives nish-cmp no row for an
-      // older one; the same rule here, read from the same field, so a run seeded
-      // with such a release reports a counted skip rather than a red it was
-      // told in advance to expect. The note beside the field says why.
-      const cmpSince = JSON.parse(
-        fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
-      ).cmpSince;
-      const released = resolveSeed(process.env.NISH_BOOTSTRAP);
-      const seedVersion =
-        released.error === undefined
-          ? /^nish (\S+)$/m.exec(spawnSeed(released, ["--version"]).stdout ?? "")?.[1]
-          : undefined;
-      if (seedVersion !== undefined && !notAfter(cmpSince, seedVersion)) {
-        skip(
-          `NISH_BOOTSTRAP is nish ${seedVersion}, older than cmpSince ${cmpSince} in .github/seed-targets.json, ` +
-            "so tests/nish-cmp.js (WP19 G2) and tests/differential/fuzz.js --stage1 did not run"
-        );
-      } else {
-        const nishCmp = spawnSync("node", [path.join(root, "tests", "nish-cmp.js")], {
-          cwd: root,
-          encoding: "utf8",
-          maxBuffer: 64 * 1024 * 1024,
-        });
-        const nishCmpSummary = nishCmp.stdout.trim().split("\n").pop() ?? "";
-        check(
-          `the released nish and HEAD write the same bytes (${nishCmpSummary})`,
-          nishCmp.status === 0,
-          `${nishCmp.stdout}${nishCmp.stderr}`
-        );
-
-        const stage1FuzzSeed = 20261001;
-        const stage1Fuzz = spawnSync(
-          "node",
-          [
-            path.join(root, "tests", "differential", "fuzz.js"),
-            "--stage1",
-            "--seed",
-            String(stage1FuzzSeed),
-            "--count",
-            "16",
-          ],
-          { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
-        );
-        const stage1FuzzSummary =
-          stage1Fuzz.stdout
-            .trim()
-            .split("\n")
-            .filter((l) => l.startsWith("fuzz: stage1 seed="))
-            .pop() ?? "";
-        check(
-          `the released nish and HEAD emit the same IR for random programs (${stage1FuzzSummary || `seed=${stage1FuzzSeed}`})`,
-          stage1Fuzz.status === 0,
-          `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
-        );
-      }
-    }
-
-    // S5, and the claim the work package exists for: `self/` compiles `self/`.
-    // stage1 is `self/` built by the seed, stage2 is `self/` built by stage1,
-    // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the
-    // fixed point -- nothing about the seed leaks into the result any more --
-    // and stage3 must be byte-identical to stage2 so the binaries are compared
-    // as well as the text. Three links, so it is the slowest check here.
-    const bootstrap = spawnSync("node", [path.join(root, "tests", "self", "bootstrap.js"), "--seed", seedSpec], {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? "";
-    check(
-      `self/ compiles self/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
-      bootstrap.status === 0,
-      `${bootstrap.stdout}${bootstrap.stderr}`
-    );
-
-    // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts is
-    // decided by what the seed is, and this check is what stops that from
-    // drifting back.
-    //
-    // `IR(seed) == IR(stage1)` is two different claims wearing one spelling.
-    // With stage0 as the seed it is diverse double-compiling -- two
-    // independently written implementations of this revision emitting the same
-    // IR for it -- and it is asserted. With a released binary as the seed the
-    // same comparison asks whether codegen has changed since that release,
-    // which forbids every improvement a release cycle exists to carry and says
-    // nothing about the bootstrap, so it is reported and not asserted.
-    // `IR(stage1) == IR(stage2)` and `stage3 == stage2` are properties of the
-    // working tree alone and are asserted for every seed.
-    //
-    // The run uses the debug profile, where three stages cost about eight
-    // seconds rather than the speed profile's minutes; what is under test is
-    // the decision, not the code the linker produced.
-    const seedWork = (name) => path.join(buildDir, "seed-equality", name);
-    const runBootstrap = (name, env) =>
-      spawnSync(
-        "bash",
-        [
-          path.join(root, "scripts", "bootstrap.sh"),
-          "--verify",
-          "--profile", "debug",
-          "--work", seedWork(name),
-          "-o", path.join(seedWork(name), "nish"),
-        ],
-        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } }
+      const nishCmp = spawnSync("node", [path.join(root, "tests", "nish-cmp.js")], {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const nishCmpSummary = nishCmp.stdout.trim().split("\n").pop() ?? "";
+      check(
+        `the released nish and HEAD write the same bytes (${nishCmpSummary})`,
+        nishCmp.status === 0,
+        `${nishCmp.stdout}${nishCmp.stderr}`
       );
 
-    // A seed that is not stage0, and one guaranteed to differ: the seed this
-    // run was built with, wrapped so that it emits `--unchecked-indexing`,
-    // which removes the bounds checks from the IR it writes for `self/` -- the
-    // same shape of difference a codegen improvement makes, and the shape that
-    // broke this run when the first one landed. A released seed differs from
-    // HEAD already, but by however much codegen moved since that release, which
-    // may be nothing; the wrapper is what makes the difference certain. It still
-    // builds a working stage1, so the fixed point is untouched and stays
-    // asserted.
-    //
-    // The difference has to actually be there: a run where nothing differs
-    // would pass this check while proving nothing, so the count is read out of
-    // the note and required to be non-zero.
-    const perturbedSeed = seedWork("seed-unchecked.mjs");
-    fs.mkdirSync(path.dirname(perturbedSeed), { recursive: true });
-    fs.writeFileSync(
-      perturbedSeed,
-      `// Generated by tests/run.js: the seed, emitting IR without bounds checks.\n` +
-        `import { spawnSync } from "node:child_process";\n` +
-        `const args = process.argv.slice(2);\n` +
-        `const asking = args.includes("--version") || args.includes("--help");\n` +
-        `const r = spawnSync(${JSON.stringify(seed.cmd)}, [...${JSON.stringify(seed.prefix)}, ...args,` +
-        ` ...(asking ? [] : ["--unchecked-indexing"])], { stdio: "inherit" });\n` +
-        `process.exit(r.status === null ? 70 : r.status);\n`
-    );
-    const released = runBootstrap("released", { NISH_BOOTSTRAP: perturbedSeed });
-    const note = /note: IR\(seed\) vs IR\(stage1\): (\d+) of (\d+) modules differ/.exec(released.stdout);
-    check(
-      `a seed that emits different IR has the difference reported and not asserted (${
-        note ? `${note[1]} of ${note[2]} modules` : "no note printed"
-      })`,
-      released.status === 0 &&
-        note !== null &&
-        Number(note[1]) > 0 &&
-        released.stdout.includes("Not a bootstrap failure") &&
-        /IR\(stage1\) == IR\(stage2\): \d+ modules identical/.test(released.stdout) &&
-        released.stdout.includes("stage3 == stage2: byte-identical binaries"),
-      `${released.status}:\n${released.stdout}${released.stderr}`
-    );
+      const stage1FuzzSeed = 20261001;
+      const stage1Fuzz = spawnSync(
+        "node",
+        [
+          path.join(root, "tests", "differential", "fuzz.js"),
+          "--stage1",
+          "--seed",
+          String(stage1FuzzSeed),
+          "--count",
+          "16",
+        ],
+        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+      );
+      const stage1FuzzSummary =
+        stage1Fuzz.stdout
+          .trim()
+          .split("\n")
+          .filter((l) => l.startsWith("fuzz: stage1 seed="))
+          .pop() ?? "";
+      check(
+        `the released nish and HEAD emit the same IR for random programs (${stage1FuzzSummary || `seed=${stage1FuzzSeed}`})`,
+        stage1Fuzz.status === 0,
+        `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
+      );
+    }
+  }
 
-    // The deployment path (docs/wp14-selfhost.md §7). The check above proves
-    // the fixed point and then deletes every compiler it built; this one
-    // proves the artifact: `scripts/bootstrap.sh` builds a compiler you can
-    // keep, and that compiler is the whole command line — the output planning,
-    // the directory creation and the link step included, which is D4 reversed
-    // (§7a). Everything below runs the binary itself, with no wrapper in the
-    // way. One stage rather than three, because what is under test here is the
-    // recipe and the driver, not the equalities.
-    const shipDir = path.join(buildDir, "selfhost");
-    fs.rmSync(shipDir, { recursive: true, force: true });
-    const compiler = path.join(shipDir, "nish");
-    const shipped = spawnSync(
+  // S5, and the claim the work package exists for: `self/` compiles `self/`.
+  // stage1 is `self/` built by the seed, stage2 is `self/` built by stage1,
+  // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the
+  // fixed point -- nothing about the seed leaks into the result any more --
+  // and stage3 must be byte-identical to stage2 so the binaries are compared
+  // as well as the text. Three links, so it is the slowest check here.
+  const bootstrap = spawnSync("node", [path.join(root, "tests", "self", "bootstrap.js"), "--seed", seedSpec], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? "";
+  check(
+    `self/ compiles self/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
+    bootstrap.status === 0,
+    `${bootstrap.stdout}${bootstrap.stderr}`
+  );
+
+  // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts, and
+  // this check is what stops that from drifting.
+  //
+  // `IR(seed) == IR(stage1)` asks whether codegen has changed since the seed
+  // was released, which forbids every improvement a release cycle exists to
+  // carry and says nothing about the bootstrap, so it is reported and not
+  // asserted. (While stage0 was a seed the same comparison was diverse
+  // double-compiling, and was asserted; that went with `src/`.)
+  // `IR(stage1) == IR(stage2)` and `stage3 == stage2` are properties of the
+  // working tree alone and are asserted for every seed.
+  //
+  // The run uses the debug profile, where three stages cost about eight
+  // seconds rather than the speed profile's minutes; what is under test is
+  // the decision, not the code the linker produced.
+  const seedWork = (name) => path.join(buildDir, "seed-equality", name);
+  const runBootstrap = (name, env) =>
+    spawnSync(
       "bash",
       [
         path.join(root, "scripts", "bootstrap.sh"),
-        "--stages", "1",
+        "--verify",
         "--profile", "debug",
-        "--work", shipDir,
-        "-o", compiler,
-        "--quiet",
+        "--work", seedWork(name),
+        "-o", path.join(seedWork(name), "nish"),
       ],
-      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NISH_BOOTSTRAP: seedSpec } }
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } }
     );
-    if (
-      check(
-        "scripts/bootstrap.sh builds the self-hosted compiler from source",
-        shipped.status === 0 && fs.existsSync(compiler),
-        `${shipped.stdout}${shipped.stderr}`
-      )
-    ) {
 
-      // One module: the IR lands next to the binary as `<exe>.ll`, which is
-      // where stage0's `--link` puts it too.
-      const hello = path.join(shipDir, "hello");
-      const one = spawnSync(
-        compiler,
-        ["examples/hello.ts", "--link", hello, "--profile", "debug"],
-        { cwd: root, encoding: "utf8" }
-      );
-      const ranHello = one.status === 0 ? spawnSync(hello, [], { encoding: "utf8" }) : null;
-      check(
-        "the self-hosted compiler: the self-hosted compiler links and runs examples/hello.ts",
-        one.status === 0 &&
-          fs.existsSync(`${hello}.ll`) &&
-          ranHello !== null &&
-          ranHello.status === 0 &&
-          ranHello.stdout === "hello from Nish\n",
-        `${one.stdout}${one.stderr}${ranHello ? `ran: ${ranHello.status} ${JSON.stringify(ranHello.stdout)}` : ""}`
-      );
+  // A seed guaranteed to differ: the seed this
+  // run was built with, wrapped so that it emits `--unchecked-indexing`,
+  // which removes the bounds checks from the IR it writes for `self/` -- the
+  // same shape of difference a codegen improvement makes, and the shape that
+  // broke this run when the first one landed. A released seed differs from
+  // HEAD already, but by however much codegen moved since that release, which
+  // may be nothing; the wrapper is what makes the difference certain. It still
+  // builds a working stage1, so the fixed point is untouched and stays
+  // asserted.
+  //
+  // The difference has to actually be there: a run where nothing differs
+  // would pass this check while proving nothing, so the count is read out of
+  // the note and required to be non-zero.
+  const perturbedSeed = seedWork("seed-unchecked.mjs");
+  fs.mkdirSync(path.dirname(perturbedSeed), { recursive: true });
+  fs.writeFileSync(
+    perturbedSeed,
+    `// Generated by tests/run.js: the seed, emitting IR without bounds checks.\n` +
+      `import { spawnSync } from "node:child_process";\n` +
+      `const args = process.argv.slice(2);\n` +
+      `const asking = args.includes("--version") || args.includes("--help");\n` +
+      `const r = spawnSync(${JSON.stringify(seed.cmd)}, [...${JSON.stringify(seed.prefix)}, ...args,` +
+      ` ...(asking ? [] : ["--unchecked-indexing"])], { stdio: "inherit" });\n` +
+      `process.exit(r.status === null ? 70 : r.status);\n`
+  );
+  const released = runBootstrap("released", { NISH_BOOTSTRAP: perturbedSeed });
+  const note = /note: IR\(seed\) vs IR\(stage1\): (\d+) of (\d+) modules differ/.exec(released.stdout);
+  check(
+    `a seed that emits different IR has the difference reported and not asserted (${
+      note ? `${note[1]} of ${note[2]} modules` : "no note printed"
+    })`,
+    released.status === 0 &&
+      note !== null &&
+      Number(note[1]) > 0 &&
+      released.stdout.includes("Not a bootstrap failure") &&
+      /IR\(stage1\) == IR\(stage2\): \d+ modules identical/.test(released.stdout) &&
+      released.stdout.includes("stage3 == stage2: byte-identical binaries"),
+    `${released.status}:\n${released.stdout}${released.stderr}`
+  );
 
-      // Two modules: the compiler makes the `<exe>.modules/` directory itself
-      // now, and `main()` returns the exit code.
-      const multi = path.join(shipDir, "multi");
-      const many = spawnSync(
-        compiler,
-        ["examples/multi/main.ts", "--link", multi, "--profile", "debug"],
-        { cwd: root, encoding: "utf8" }
-      );
-      const ranMulti = many.status === 0 ? spawnSync(multi, [], { encoding: "utf8" }) : null;
-      const emitted = fs.existsSync(`${multi}.modules`)
-        ? fs.readdirSync(`${multi}.modules`).filter((f) => f.endsWith(".ll")).sort()
-        : [];
-      check(
-        "the self-hosted compiler: a program with imports links from <exe>.modules/ and exits 49",
-        many.status === 0 &&
-          emitted.join(",") === "main.ll,math.ll" &&
-          ranMulti !== null &&
-          ranMulti.status === 49,
-        `${many.stdout}${many.stderr}modules: ${emitted.join(",")}${ranMulti ? ` exit ${ranMulti.status}` : ""}`
-      );
+  // The deployment path (docs/wp14-selfhost.md §7). The check above proves
+  // the fixed point and then deletes every compiler it built; this one
+  // proves the artifact: `scripts/bootstrap.sh` builds a compiler you can
+  // keep, and that compiler is the whole command line — the output planning,
+  // the directory creation and the link step included, which is D4 reversed
+  // (§7a). Everything below runs the binary itself, with no wrapper in the
+  // way. One stage rather than three, because what is under test here is the
+  // recipe and the driver, not the equalities.
+  const shipDir = path.join(buildDir, "selfhost");
+  fs.rmSync(shipDir, { recursive: true, force: true });
+  const compiler = path.join(shipDir, "nish");
+  const shipped = spawnSync(
+    "bash",
+    [
+      path.join(root, "scripts", "bootstrap.sh"),
+      "--stages", "1",
+      "--profile", "debug",
+      "--work", shipDir,
+      "-o", compiler,
+      "--quiet",
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NISH_BOOTSTRAP: seedSpec } }
+  );
+  if (
+    check(
+      "scripts/bootstrap.sh builds the self-hosted compiler from source",
+      shipped.status === 0 && fs.existsSync(compiler),
+      `${shipped.stdout}${shipped.stderr}`
+    )
+  ) {
 
-      // `-g` reaches both halves: the compiler puts the DWARF in the `.ll` and
-      // hands `-g` to
-      // scripts/build.sh, so the DWARF in the .ll survives the link instead of
-      // being stripped with the profile. A `.debug_info` section in the linked
-      // binary is the end-to-end proof; the metadata in the IR is what the
-      // oracle compares byte for byte.
-      const dbgExe = path.join(shipDir, "hello-g");
-      const withG = spawnSync(
-        compiler,
-        ["examples/hello.ts", "--link", dbgExe, "--profile", "debug", "-g"],
-        { cwd: root, encoding: "utf8" }
-      );
-      const dbgIr = fs.existsSync(`${dbgExe}.ll`) ? fs.readFileSync(`${dbgExe}.ll`, "utf8") : "";
-      const dwarf = withG.status === 0 && HAS_LLVM_DWARFDUMP
-        ? spawnSync("llvm-dwarfdump", ["--debug-info", dbgExe], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
-        : null;
-      // Without llvm-dwarfdump, read the section table clang already wrote.
-      const hasDwarf = dwarf
-        ? dwarf.status === 0 && dwarf.stdout.includes("DW_TAG_compile_unit")
-        : withG.status === 0 && fs.readFileSync(dbgExe).includes("debug_info");
-      check(
-        "the self-hosted compiler: -g reaches the compiler and the linked program carries DWARF",
-        withG.status === 0 &&
-          dbgIr.includes("!llvm.dbg.cu") &&
-          dbgIr.includes("distinct !DISubprogram(name: \"main\"") &&
-          hasDwarf,
-        `${withG.status}: ${withG.stdout}${withG.stderr}${dwarf ? dwarf.stdout.slice(0, 400) : ""}`
-      );
+    // One module: the IR lands next to the binary as `<exe>.ll`, which is
+    // where stage0's `--link` puts it too.
+    const hello = path.join(shipDir, "hello");
+    const one = spawnSync(
+      compiler,
+      ["examples/hello.ts", "--link", hello, "--profile", "debug"],
+      { cwd: root, encoding: "utf8" }
+    );
+    const ranHello = one.status === 0 ? spawnSync(hello, [], { encoding: "utf8" }) : null;
+    check(
+      "the self-hosted compiler: the self-hosted compiler links and runs examples/hello.ts",
+      one.status === 0 &&
+        fs.existsSync(`${hello}.ll`) &&
+        ranHello !== null &&
+        ranHello.status === 0 &&
+        ranHello.stdout === "hello from Nish\n",
+      `${one.stdout}${one.stderr}${ranHello ? `ran: ${ranHello.status} ${JSON.stringify(ranHello.stdout)}` : ""}`
+    );
 
-      // stage1 answers `--version` itself: `self/branding.ts` carries the
-      // version as a constant because stage1 cannot read `package.json`, so
-      // this is what catches the two drifting apart at the next release bump.
-      const ourVersion = spawnSync(compiler, ["--version"], { cwd: root, encoding: "utf8" });
-      check(
-        "the self-hosted compiler: --version names the release package.json does",
-        ourVersion.status === 0 &&
-          ourVersion.stdout ===
-            `nish ${JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version}\n`,
-        JSON.stringify(ourVersion.stdout)
-      );
+    // Two modules: the compiler makes the `<exe>.modules/` directory itself
+    // now, and `main()` returns the exit code.
+    const multi = path.join(shipDir, "multi");
+    const many = spawnSync(
+      compiler,
+      ["examples/multi/main.ts", "--link", multi, "--profile", "debug"],
+      { cwd: root, encoding: "utf8" }
+    );
+    const ranMulti = many.status === 0 ? spawnSync(multi, [], { encoding: "utf8" }) : null;
+    const emitted = fs.existsSync(`${multi}.modules`)
+      ? fs.readdirSync(`${multi}.modules`).filter((f) => f.endsWith(".ll")).sort()
+      : [];
+    check(
+      "the self-hosted compiler: a program with imports links from <exe>.modules/ and exits 49",
+      many.status === 0 &&
+        emitted.join(",") === "main.ll,math.ll" &&
+        ranMulti !== null &&
+        ranMulti.status === 49,
+      `${many.stdout}${many.stderr}modules: ${emitted.join(",")}${ranMulti ? ` exit ${ranMulti.status}` : ""}`
+    );
 
-      // `--json` is the editor-facing diagnostic shape: the objects, their
-      // order and their spans. A multi-error program is the case worth
-      // pinning, because it is also the one that proves stage1 collected every
-      // error rather than stopping at the first.
-      //
-      // The `.err` sidecars cannot see a whole span on their own -- they are
-      // matched as substrings, so the caret run they pin fixes a start column
-      // but not an end one, and the two compilers once printed the same
-      // sentence for `reject_ffi_pointer_array` while spanning it on `CPtr[]`
-      // and on `CPtr` respectively (WP27 S2). A case joins this list when its
-      // span is the property under test, and the spans are written out here,
-      // `line:column-endLine:endColumn` per object, because they were agreed
-      // between the two compilers before stage0 retired and nothing else pins
-      // them now.
-      const jsonCases = [
-        ["reject_multi_error", ["2:10-2:18 NL2231", "6:19-6:20 NL2185", "11:10-11:16 NL2231"]],
-        ["reject_ffi_pointer_array", ["21:18-21:22 NL2323"]],
-        ["reject_ffi_pointer_type_argument_fn", ["22:13-22:18 NL2323"]],
-      ];
-      for (const [jsonName, spans] of jsonCases) {
-        const jsonCase = path.join("tests", "cases", `${jsonName}.ts`);
-        const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
-        let got = [];
-        try {
-          got = ourJson.stdout
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line))
-            .map((o) => `${o.line}:${o.column}-${o.endLine}:${o.endColumn} ${o.code}`);
-        } catch {
-          got = ["(stdout is not one JSON object per line)"];
-        }
-        check(
-          `the self-hosted compiler: ${jsonName}'s --json diagnostics carry the spans they are pinned to`,
-          ourJson.status === 1 && ourJson.stderr === "" && got.join(", ") === spans.join(", "),
-          `wanted ${spans.join(", ")}\ngot ${got.join(", ")}\n${ourJson.stdout}${ourJson.stderr}`
-        );
-      }
+    // `-g` reaches both halves: the compiler puts the DWARF in the `.ll` and
+    // hands `-g` to
+    // scripts/build.sh, so the DWARF in the .ll survives the link instead of
+    // being stripped with the profile. A `.debug_info` section in the linked
+    // binary is the end-to-end proof; the metadata in the IR is what the
+    // oracle compares byte for byte.
+    const dbgExe = path.join(shipDir, "hello-g");
+    const withG = spawnSync(
+      compiler,
+      ["examples/hello.ts", "--link", dbgExe, "--profile", "debug", "-g"],
+      { cwd: root, encoding: "utf8" }
+    );
+    const dbgIr = fs.existsSync(`${dbgExe}.ll`) ? fs.readFileSync(`${dbgExe}.ll`, "utf8") : "";
+    const dwarf = withG.status === 0 && HAS_LLVM_DWARFDUMP
+      ? spawnSync("llvm-dwarfdump", ["--debug-info", dbgExe], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+      : null;
+    // Without llvm-dwarfdump, read the section table clang already wrote.
+    const hasDwarf = dwarf
+      ? dwarf.status === 0 && dwarf.stdout.includes("DW_TAG_compile_unit")
+      : withG.status === 0 && fs.readFileSync(dbgExe).includes("debug_info");
+    check(
+      "the self-hosted compiler: -g reaches the compiler and the linked program carries DWARF",
+      withG.status === 0 &&
+        dbgIr.includes("!llvm.dbg.cu") &&
+        dbgIr.includes("distinct !DISubprogram(name: \"main\"") &&
+        hasDwarf,
+      `${withG.status}: ${withG.stdout}${withG.stderr}${dwarf ? dwarf.stdout.slice(0, 400) : ""}`
+    );
 
-      // WP21 S2: the walk up to `node_modules` has to reach the directories
-      // Node reaches, and the working directory is what makes that hard.
-      // `tests/link/package_above` installs the package *above* the directory
-      // the compiler is run in -- `proj/node_modules` beside `proj/src/main.ts`,
-      // which is what npm produces -- and is compiled the way that program is
-      // compiled, `nish main.ts` from `src/`. stage1 has no `process.cwd()`
-      // (WP19 §A3) and climbs past `.` by spelling `..`, so a stage1 that
-      // stopped where `dirname` stops answered `` Cannot find package
-      // `pkg_above` `` for a program that resolves. The two modules are the
-      // entry and the package it found.
-      const aboveSrc = path.join(root, "tests", "link", "package_above", "src");
-      if (fs.existsSync(path.join(aboveSrc, "main.ts"))) {
-        const ourDir = path.join(shipDir, "package_above-stage1") + path.sep;
-        fs.rmSync(ourDir, { recursive: true, force: true });
-        const ourAbove = spawnSync(compiler, ["main.ts", "-o", ourDir], {
-          cwd: aboveSrc,
-          encoding: "utf8",
-        });
-        const ourModules = llFilesIn(ourDir);
-        check(
-          "the self-hosted compiler: a package above the working directory resolves",
-          ourAbove.status === 0 && ourModules.join(",") === "index.ll,main.ll",
-          `stage1 ${ourAbove.status}: ${ourAbove.stdout}${ourAbove.stderr}modules [${ourModules.join(" ")}]`
-        );
-      }
+    // stage1 answers `--version` itself: `self/branding.ts` carries the
+    // version as a constant because stage1 cannot read `package.json`, so
+    // this is what catches the two drifting apart at the next release bump.
+    const ourVersion = spawnSync(compiler, ["--version"], { cwd: root, encoding: "utf8" });
+    check(
+      "the self-hosted compiler: --version names the release package.json does",
+      ourVersion.status === 0 &&
+        ourVersion.stdout ===
+          `nish ${JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version}\n`,
+      JSON.stringify(ourVersion.stdout)
+    );
 
-      // WP21 S2, the other half of that walk: an ancestor the module's own name
-      // does not spell. `tests/link/package_doubled` installs the package one
-      // `node_modules` inside another and is compiled from inside
-      // `node_modules/app`, so the ancestor is `..` -- a directory named without
-      // being named. Node steps over a `node_modules` ancestor and so does the
-      // compiler wherever the name spells one, but `..` spells nothing, and the
-      // compiler has no way to learn what it is: stage1 has no `process.cwd()`
-      // (WP19 §A3) and the language has no `statSync`, which is what naming a
-      // directory from below would take. So it searches it, and finds the
-      // package, which is the answer stage0 gave too while there was one.
-      const doubledSrc = path.join(root, "tests", "link", "package_doubled", "node_modules", "app");
-      if (fs.existsSync(path.join(doubledSrc, "main.ts"))) {
-        const ourDir = path.join(shipDir, "package_doubled-stage1") + path.sep;
-        fs.rmSync(ourDir, { recursive: true, force: true });
-        const ourDoubled = spawnSync(compiler, ["main.ts", "-o", ourDir], {
-          cwd: doubledSrc,
-          encoding: "utf8",
-        });
-        const ourDoubledModules = llFilesIn(ourDir);
-        check(
-          "the self-hosted compiler: a `node_modules` ancestor no name spells is searched",
-          ourDoubled.status === 0 && ourDoubledModules.join(",") === "index.ll,main.ll",
-          `stage1 ${ourDoubled.status}: ${ourDoubled.stdout}${ourDoubled.stderr}` +
-            `modules [${ourDoubledModules.join(" ")}]`
-        );
-
-        // The same tree named from its root, where the compiler *can* read the
-        // ancestor's name and steps over it: the package is not found, and the
-        // refusal says where it looked.
-        const doubledRoot = path.join(root, "tests", "link", "package_doubled");
-        const doubledEntry = path.join("node_modules", "app", "main.ts");
-        const ourNamed = spawnSync(compiler, [doubledEntry, "-o", ourDir], {
-          cwd: doubledRoot,
-          encoding: "utf8",
-        });
-        check(
-          "the self-hosted compiler: a `node_modules` ancestor the name spells is stepped over",
-          ourNamed.status === 1 &&
-            ourNamed.stderr.includes(
-              "error: Cannot find package `@nish-absent/zed`; no `node_modules` directory above the importing module has it"
-            ),
-          `stage1 ${ourNamed.status}: ${ourNamed.stderr}`
-        );
-      }
-
-      // WP21 S2's declared limitation: a package reached through a symlink is a
-      // second package, because a module path is joined rather than resolved --
-      // an open decision about what a package's identity is, not a missing
-      // builtin (`self/compilation.ts`, TODO(WP21 S3); `docs/wp21-packages.md`
-      // §10d).
-      const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
-      const symlinkApp = path.join(symlinkSrc, "app");
-      if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
-        const symlinkNeedle = fs
-          .readFileSync(path.join(symlinkSrc, "expected.err"), "utf8")
-          .trim();
-        const outDir = path.join(shipDir, "package_symlink-stage1") + path.sep;
-        fs.rmSync(outDir, { recursive: true, force: true });
-        const ourSymlink = spawnSync(compiler, ["main.ts", "-o", outDir], {
-          cwd: symlinkApp,
-          encoding: "utf8",
-        });
-        check(
-          "the self-hosted compiler: a symlinked copy is a second package",
-          ourSymlink.status === 1 && ourSymlink.stderr.includes(symlinkNeedle),
-          `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}`
-        );
-      }
-
-      // WP15 §8 through the driver (WP19 G1). The analysis is pinned by the
-      // performance section and the checked goldens already; what this pins is
-      // the half that is the driver's -- that it prints the warnings at all,
-      // on stderr, as JSON objects on stdout under `--json`, and not at all
-      // under `--no-warn-performance`. A warning changes no exit code, so the
-      // compile that carries it is a successful one. `wrote <file>` is dropped:
-      // it names a path in a temporary directory.
-      const perfCase = path.join("tests", "cases", "perf_str_concat_loop.ts");
-      const perfOut = (dir) => path.join(shipDir, dir, "perf.ll");
-      const withoutWrote = (text) =>
-        text.split("\n").filter((line) => !line.startsWith("wrote ")).join("\n");
-      const ourPerf = spawnSync(compiler, [perfCase, "-o", perfOut("perf1")], { cwd: root, encoding: "utf8" });
-      const ourPerfJson = spawnSync(compiler, [perfCase, "-o", perfOut("perf1j"), "--json"], { cwd: root, encoding: "utf8" });
-      const ourPerfOff = spawnSync(
-        compiler,
-        [perfCase, "-o", perfOut("perf1q"), "--no-warn-performance"],
-        { cwd: root, encoding: "utf8" }
-      );
-      check(
-        "the self-hosted compiler: the performance warnings are printed, and --no-warn-performance silences them",
-        ourPerf.status === 0 &&
-          ourPerf.stderr.includes("performance: `out` is rebuilt") &&
-          withoutWrote(ourPerf.stderr).trimEnd().endsWith("4 performance warnings") &&
-          ourPerfJson.status === 0 &&
-          ourPerfJson.stdout.split("\n").filter(Boolean).length === 4 &&
-          ourPerfJson.stdout
-            .split("\n")
-            .filter(Boolean)
-            .every((line) => JSON.parse(line).severity === "performance") &&
-          ourPerfOff.status === 0 &&
-          withoutWrote(ourPerfOff.stderr).trim() === "",
-        `ours:\n${ourPerf.stderr}\nours --json:\n${ourPerfJson.stdout}\nours --no-warn-performance:\n${ourPerfOff.stderr}`
-      );
-
-      // `--emit-checked` through the driver, rather than through the
-      // `dump_checked` entry `tests/self/goldens.js` spawns: the same text has
-      // to come out of both, which is why one `self/dump.ts` writes it for
-      // both, and the entry's is the one the goldens hold. A whole program is
-      // dumped module by module, the entry named as one.
-      const dumpCase = path.join("examples", "multi", "main.ts");
-      const ourDump = spawnSync(compiler, [dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
-      const dumpEntry = path.join(shipDir, "dump_checked");
-      const dumpBuilt = spawnSync(compiler, ["self/dump_checked.ts", "--link", dumpEntry, "--profile", "debug"], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      const viaEntry =
-        dumpBuilt.status === 0
-          ? spawnSync(dumpEntry, [dumpCase], { cwd: root, encoding: "utf8" })
-          : { status: dumpBuilt.status, stdout: "", stderr: `could not link self/dump_checked.ts:\n${dumpBuilt.stderr}` };
-      check(
-        "the self-hosted compiler: --emit-checked dumps a whole program as the dump entry does",
-        ourDump.status === 0 &&
-          viaEntry.status === 0 &&
-          ourDump.stdout === viaEntry.stdout &&
-          ourDump.stdout.includes("module examples/multi/main.ts (entry)") &&
-          ourDump.stdout.includes("module examples/multi/math.ts"),
-        `driver:\n${ourDump.stdout}${ourDump.stderr}\ndump entry ${viaEntry.status}:\n${viaEntry.stdout}${viaEntry.stderr}`
-      );
-
-      // No flag is stage0's by name any more (`--emit-ast` was the last, WP19
-      // R1), so what this pins is the property the refusal was really about: a
-      // flag the compiler does not know is refused rather than quietly
-      // dropped, because a build that asked for something must not come out
-      // without it and without being told. It answers exit 2, which is the
-      // usage-error code the CLI contract fixes.
-      const refused = spawnSync(compiler, ["examples/hello.ts", "--emit-sidecar"], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      check(
-        "the self-hosted compiler: an unknown flag is refused, not ignored",
-        refused.status === 2 && refused.stderr.includes("--emit-sidecar"),
-        `stage1 ${refused.status}: ${refused.stdout}${refused.stderr}`
-      );
-
-      // The `--help` contract: a request that succeeded goes to stdout with
-      // exit 0, a refusal to stderr with exit 2. It is the shape that is pinned
-      // here; the WP12 block pins the text.
-      const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8" });
-      const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8" });
-      check(
-        "the self-hosted compiler: --help answers on stdout with exit 0, and a usage error on stderr with exit 2",
-        ourHelp.status === 0 &&
-          ourHelp.stdout.includes("usage:") &&
-          ourHelp.stderr === "" &&
-          ourRefusal.status === 2 &&
-          ourRefusal.stderr.includes("usage:") &&
-          ourRefusal.stdout === "",
-        `help ${ourHelp.status}:\n${ourHelp.stdout}${ourHelp.stderr}\nrefusal ${ourRefusal.status}:\n${ourRefusal.stdout}${ourRefusal.stderr}`
-      );
-
-      // The interop sidecars, and the directory each one needs. The bytes
-      // themselves are the WP8 section's business.
-      const sidecarDir = path.join(shipDir, "interop");
-      const sidecarFiles = ["add.h", "add.d.ts", "add.mjs", "add.napi.c"];
-      const sidecars = spawnSync(
-        compiler,
-        [
-          "examples/add.ts",
-          "-o", path.join(shipDir, "add.ll"),
-          "--emit-header", path.join(sidecarDir, "add.h"),
-          "--emit-dts", path.join(sidecarDir, "add.d.ts"),
-          "--emit-napi", path.join(sidecarDir, "add.napi.c"),
-        ],
-        { cwd: root, encoding: "utf8" }
-      );
-      const wrote = sidecarFiles.filter((f) => fs.existsSync(path.join(sidecarDir, f)));
-      const selfHeader = wrote.includes("add.h")
-        ? fs.readFileSync(path.join(sidecarDir, "add.h"), "utf8")
-        : "";
-      check(
-        "the self-hosted compiler: the interop sidecars are passed through and their directory made",
-        sidecars.status === 0 &&
-          wrote.length === sidecarFiles.length &&
-          selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
-        `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
-      );
-
-      // ---- The command line answers the way stage0's did, not merely close
-      // to it. Each of these was a silent divergence while there were two
-      // compilers to compare: a flag stage1 accepted and ignored, an input it
-      // dropped, a stream it wrote the wrong way down.
-
-      // An unknown `--number-mode` refused rather than quietly meaning i32:
-      // the failure mode is a program that compiles, in the other arithmetic.
-      const badMode = spawnSync(
-        compiler,
-        ["examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused.ll")],
-        { cwd: root, encoding: "utf8" }
-      );
-      check(
-        "the self-hosted compiler: an unknown --number-mode is refused",
-        badMode.status === 2 &&
-          !fs.existsSync(path.join(shipDir, "unused.ll")),
-        `stage1 ${badMode.status}: ${badMode.stderr}`
-      );
-
-      // Every positional is a root, as it is for stage0. Before this the last
-      // one won and the others were compiled into nothing.
-      const rootsDir = path.join(shipDir, "roots");
-      const roots = spawnSync(
-        compiler,
-        ["examples/hello.ts", "examples/add.ts", "-o", `${rootsDir}/`],
-        { cwd: root, encoding: "utf8" }
-      );
-      const rootsWrote = fs.existsSync(rootsDir) ? fs.readdirSync(rootsDir).sort() : [];
-      check(
-        "the self-hosted compiler: every file named on the command line is a root",
-        roots.status === 0 && rootsWrote.join(",") === "add.ll,hello.ll",
-        `${roots.status}: ${roots.stdout}${roots.stderr}wrote: ${rootsWrote.join(",")}`
-      );
-
-      // stdout carries the IR and the `--json` diagnostics and nothing else,
-      // so `wrote <file>` goes to stderr. A build script that pipes the IR
-      // somewhere must not find chatter mixed into it.
-      const chatterDir = path.join(shipDir, "chatter");
-      const chatter = spawnSync(
-        compiler,
-        ["examples/hello.ts", "-o", `${chatterDir}/`],
-        { cwd: root, encoding: "utf8" }
-      );
-      check(
-        "the self-hosted compiler: `wrote <file>` goes to stderr",
-        chatter.status === 0 && chatter.stdout === "" && chatter.stderr.includes("wrote "),
-        `stage1 out=${JSON.stringify(chatter.stdout)} err=${JSON.stringify(chatter.stderr)}`
-      );
-
-      // A root that cannot be opened is a driver failure, not a diagnostic
-      // with a span: stage0 answers exit 1 with `error: ...` on stderr, and
-      // one flat object on stdout under `--json`. The errno itself stays
-      // stage0's — Node names it and the runtime's read does not.
-      const missing = spawnSync(
-        compiler,
-        [path.join(shipDir, "no_such_file.ts"), "-o", path.join(shipDir, "nope.ll")],
-        { cwd: root, encoding: "utf8" }
-      );
-      const missingJson = spawnSync(
-        compiler,
-        [path.join(shipDir, "no_such_file.ts"), "--json", "-o", path.join(shipDir, "nope.ll")],
-        { cwd: root, encoding: "utf8" }
-      );
-      let missingObject = null;
+    // `--json` is the editor-facing diagnostic shape: the objects, their
+    // order and their spans. A multi-error program is the case worth
+    // pinning, because it is also the one that proves stage1 collected every
+    // error rather than stopping at the first.
+    //
+    // The `.err` sidecars cannot see a whole span on their own -- they are
+    // matched as substrings, so the caret run they pin fixes a start column
+    // but not an end one, and the two compilers once printed the same
+    // sentence for `reject_ffi_pointer_array` while spanning it on `CPtr[]`
+    // and on `CPtr` respectively (WP27 S2). A case joins this list when its
+    // span is the property under test, and the spans are written out here,
+    // `line:column-endLine:endColumn` per object, because they were agreed
+    // between the two compilers before stage0 retired and nothing else pins
+    // them now.
+    const jsonCases = [
+      ["reject_multi_error", ["2:10-2:18 NL2231", "6:19-6:20 NL2185", "11:10-11:16 NL2231"]],
+      ["reject_ffi_pointer_array", ["21:18-21:22 NL2323"]],
+      ["reject_ffi_pointer_type_argument_fn", ["22:13-22:18 NL2323"]],
+    ];
+    for (const [jsonName, spans] of jsonCases) {
+      const jsonCase = path.join("tests", "cases", `${jsonName}.ts`);
+      const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+      let got = [];
       try {
-        missingObject = JSON.parse(missingJson.stdout.trim());
-      } catch {}
-      check(
-        "the self-hosted compiler: an unreadable root exits 1 and --json makes it an object",
-        missing.status === 1 &&
-          missing.stderr.startsWith("error: cannot open ") &&
-          missingJson.status === 1 &&
-          missingObject !== null &&
-          missingObject.severity === "error" &&
-          missingObject.message.startsWith("cannot open "),
-        `${missing.status}: ${missing.stderr}json ${missingJson.status}: ${missingJson.stdout}`
-      );
-
-      // `--link` on a program with no entry point: stage0 refuses it before it
-      // emits anything, with exit 1 and a message naming what to declare.
-      // Reaching clang instead costs a link and answers `undefined reference
-      // to main` with exit 3.
-      const noMain = spawnSync(
-        compiler,
-        ["tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main"), "--profile", "debug"],
-        { cwd: root, encoding: "utf8" }
-      );
-      check(
-        "the self-hosted compiler: --link without `export const main` is refused before anything is linked",
-        noMain.status === 1 && noMain.stderr.includes("export const main"),
-        `stage1 ${noMain.status}: ${noMain.stderr}`
-      );
-
-      // An unknown profile refused before the compile rather than after it, as
-      // stage0 validates `PROFILES` before it reads a file.
-      const badProfile = spawnSync(
-        compiler,
-        ["examples/hello.ts", "--link", path.join(shipDir, "bad"), "--profile", "turbo"],
-        { cwd: root, encoding: "utf8" }
-      );
-      check(
-        "the self-hosted compiler: an unknown --profile is refused before anything is compiled",
-        badProfile.status === 2 && badProfile.stderr.includes("unknown profile"),
-        `${badProfile.status}: ${badProfile.stdout}${badProfile.stderr}`
-      );
-
-      // `-o <dir>/` writes into the directory it was given; it does not empty
-      // it first: `-o build/` must not take the rest of `build/` with it.
-      const keepDir = path.join(shipDir, "keep");
-      fs.mkdirSync(keepDir, { recursive: true });
-      fs.writeFileSync(path.join(keepDir, "keep.txt"), "not the compiler's\n");
-      const keep = spawnSync(
-        compiler,
-        ["examples/hello.ts", "-o", `${keepDir}/`],
-        { cwd: root, encoding: "utf8" }
-      );
-      check(
-        "the self-hosted compiler: -o <dir>/ writes into the directory, it does not clear it",
-        keep.status === 0 &&
-          fs.existsSync(path.join(keepDir, "keep.txt")) &&
-          fs.existsSync(path.join(keepDir, "hello.ll")),
-        `${keep.status}: ${keep.stdout}${keep.stderr}`
-      );
-
-      // ---- The three things §7a listed as still stage0's, closed. -----------
-
-      // `-o <dir>` for a directory that is already there, without the trailing
-      // slash: stage0 stats the path, and so does this now (`isDirectorySync`,
-      // WP14 §7a). The slash still names a directory that does not exist yet,
-      // so both spellings are checked, and a name that is *not* a directory
-      // must still be taken as a file.
-      const statDir = path.join(shipDir, "stat");
-      fs.mkdirSync(statDir, { recursive: true });
-      const intoDir = spawnSync(compiler, ["examples/hello.ts", "-o", statDir], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      const asFile = path.join(shipDir, "stat_file.ll");
-      const intoFile = spawnSync(compiler, ["examples/hello.ts", "-o", asFile], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      check(
-        "the self-hosted compiler: -o <existing dir> without the slash is the directory, as stage0 stats it",
-        intoDir.status === 0 &&
-          fs.existsSync(path.join(statDir, "hello.ll")) &&
-          intoFile.status === 0 &&
-          fs.existsSync(asFile),
-        `dir ${intoDir.status}: ${intoDir.stderr}file ${intoFile.status}: ${intoFile.stderr}`
-      );
-
-      // `--target host`: the machine answers, through `process.platform` and
-      // `process.arch`, and `self/target.ts` composes the triple from them. The
-      // module it writes has to be the one naming that triple outright writes --
-      // the whole module rather than the triple line, which keeps the check
-      // honest about the layout string too. A host with no triple of its own is
-      // refused with the list, and the WP9 block pins which one that is.
-      const hostTripleHere = HOST_TRIPLE;
-      const ourHost = path.join(shipDir, "host.ll");
-      const namedHost = path.join(shipDir, "host_named.ll");
-      const hostOurs = spawnSync(compiler, ["examples/hello.ts", "--target", "host", "-o", ourHost], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      const hostNamed = hostTripleHere
-        ? spawnSync(compiler, ["examples/hello.ts", "--target", hostTripleHere, "-o", namedHost], {
-            cwd: root,
-            encoding: "utf8",
-          })
-        : null;
-      check(
-        hostNamed !== null
-          ? `the self-hosted compiler: --target host writes the module --target ${hostTripleHere} writes`
-          : "the self-hosted compiler: --target host is refused on a host with no triple, naming the supported ones",
-        hostNamed !== null
-          ? hostOurs.status === 0 &&
-              hostNamed.status === 0 &&
-              stripHeader(fs.readFileSync(ourHost, "utf8")) === stripHeader(fs.readFileSync(namedHost, "utf8"))
-          : hostOurs.status === 2 && hostOurs.stderr.includes("supported: host,"),
-        `host ${hostOurs.status}: ${hostOurs.stderr}` +
-          (hostNamed !== null ? `named ${hostNamed.status}: ${hostNamed.stderr}` : "")
-      );
-
-      // `--emit-ast`, the last flag that was stage0's by name (WP19 R1, §2A).
-      // What it prints is deliberately *not* stage0's output: stage0 dumps the
-      // `typescript` package's node names and 1-based line:column spans, and
-      // this dumps the flattened vocabulary of `self/nodes.ts` with byte
-      // offsets, because that is the tree this compiler actually has. So there
-      // is no oracle between the two — there is a golden per compiler, over
-      // the same input file, and this is stage1's. The check is that the flag
-      // is answered (exit 0, no IR written) and that the tree is the one
-      // `tests/self/dump_ast.golden` records.
-      const astOut = path.join(shipDir, "ast");
-      fs.mkdirSync(astOut, { recursive: true });
-      const astRun = spawnSync(compiler, ["tests/cases/dump_ast.ts", "--emit-ast", "-o", `${astOut}/`], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      const astGoldenFile = path.join(root, "tests", "self", "dump_ast.golden");
-      const astGolden = fs.existsSync(astGoldenFile) ? fs.readFileSync(astGoldenFile, "utf8") : "";
-      if (process.env.UPDATE_GOLDENS === "1" && astRun.status === 0 && astRun.stdout !== astGolden) {
-        fs.writeFileSync(astGoldenFile, astRun.stdout);
+        got = ourJson.stdout
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .map((o) => `${o.line}:${o.column}-${o.endLine}:${o.endColumn} ${o.code}`);
+      } catch {
+        got = ["(stdout is not one JSON object per line)"];
       }
       check(
-        "the self-hosted compiler: --emit-ast prints its own tree and writes no IR",
-        astRun.status === 0 &&
-          astRun.stdout === fs.readFileSync(astGoldenFile, "utf8") &&
-          fs.readdirSync(astOut).length === 0,
-        `${astRun.status}: ${astRun.stderr}--- stdout\n${astRun.stdout}`
-      );
-
-      // A broken invariant answers 70 (`EX_SOFTWARE`) and stage0's report,
-      // less the two halves a self-hosted compiler honestly has not got: the
-      // input files, which live in a `process.argv` that only a program with
-      // an entry `main` may read, and the stack, which needs the `try`/`catch`
-      // the language does not have. `tests/self/ice.ts` calls the report
-      // directly, because an invariant nothing reaches cannot be provoked from
-      // a command line, and stage1 builds it, so what prints this is stage1's
-      // code compiled by stage1.
-      const iceVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
-      const iceExe = path.join(shipDir, "ice");
-      const iceBuild = spawnSync(compiler, ["tests/self/ice.ts", "--link", iceExe, "--profile", "debug"], {
-        cwd: root,
-        encoding: "utf8",
-      });
-      const ice = iceBuild.status === 0 ? spawnSync(iceExe, [], { cwd: root, encoding: "utf8" }) : null;
-      check(
-        "the self-hosted compiler: an internal error exits 70 and says what it cannot show",
-        ice !== null &&
-          ice.status === 70 &&
-          ice.stderr.startsWith(`nish ${iceVersion}: internal compiler error\n`) &&
-          ice.stderr.includes("  emitter: no callee recorded for `f`\n") &&
-          ice.stderr.includes("NISH_DEBUG=1 adds nothing") &&
-          ice.stderr.includes("This is a bug in nish, not in your program."),
-        `${iceBuild.status}: ${iceBuild.stderr}${ice ? `ran ${ice.status}: ${ice.stderr}` : ""}`
+        `the self-hosted compiler: ${jsonName}'s --json diagnostics carry the spans they are pinned to`,
+        ourJson.status === 1 && ourJson.stderr === "" && got.join(", ") === spans.join(", "),
+        `wanted ${spans.join(", ")}\ngot ${got.join(", ")}\n${ourJson.stdout}${ourJson.stderr}`
       );
     }
-  } else {
-    // Everything from the lexer oracle down links a stage1 binary, so without
-    // clang none of it runs. Say so: the WP14 block is the self-hosting proof,
-    // and a run that quietly leaves it out reports the 55 compile-gate passes
-    // above as though the fixed point had been checked. WP12 and WP13 print
-    // their skip for the same reason.
-    skip("clang not installed: the self-hosting oracles and the bootstrap are skipped");
+
+    // WP21 S2: the walk up to `node_modules` has to reach the directories
+    // Node reaches, and the working directory is what makes that hard.
+    // `tests/link/package_above` installs the package *above* the directory
+    // the compiler is run in -- `proj/node_modules` beside `proj/src/main.ts`,
+    // which is what npm produces -- and is compiled the way that program is
+    // compiled, `nish main.ts` from `src/`. stage1 has no `process.cwd()`
+    // (WP19 §A3) and climbs past `.` by spelling `..`, so a stage1 that
+    // stopped where `dirname` stops answered `` Cannot find package
+    // `pkg_above` `` for a program that resolves. The two modules are the
+    // entry and the package it found.
+    const aboveSrc = path.join(root, "tests", "link", "package_above", "src");
+    if (fs.existsSync(path.join(aboveSrc, "main.ts"))) {
+      const ourDir = path.join(shipDir, "package_above-stage1") + path.sep;
+      fs.rmSync(ourDir, { recursive: true, force: true });
+      const ourAbove = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+        cwd: aboveSrc,
+        encoding: "utf8",
+      });
+      const ourModules = llFilesIn(ourDir);
+      check(
+        "the self-hosted compiler: a package above the working directory resolves",
+        ourAbove.status === 0 && ourModules.join(",") === "index.ll,main.ll",
+        `stage1 ${ourAbove.status}: ${ourAbove.stdout}${ourAbove.stderr}modules [${ourModules.join(" ")}]`
+      );
+    }
+
+    // WP21 S2, the other half of that walk: an ancestor the module's own name
+    // does not spell. `tests/link/package_doubled` installs the package one
+    // `node_modules` inside another and is compiled from inside
+    // `node_modules/app`, so the ancestor is `..` -- a directory named without
+    // being named. Node steps over a `node_modules` ancestor and so does the
+    // compiler wherever the name spells one, but `..` spells nothing, and the
+    // compiler has no way to learn what it is: stage1 has no `process.cwd()`
+    // (WP19 §A3) and the language has no `statSync`, which is what naming a
+    // directory from below would take. So it searches it, and finds the
+    // package, which is the answer stage0 gave too while there was one.
+    const doubledSrc = path.join(root, "tests", "link", "package_doubled", "node_modules", "app");
+    if (fs.existsSync(path.join(doubledSrc, "main.ts"))) {
+      const ourDir = path.join(shipDir, "package_doubled-stage1") + path.sep;
+      fs.rmSync(ourDir, { recursive: true, force: true });
+      const ourDoubled = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+        cwd: doubledSrc,
+        encoding: "utf8",
+      });
+      const ourDoubledModules = llFilesIn(ourDir);
+      check(
+        "the self-hosted compiler: a `node_modules` ancestor no name spells is searched",
+        ourDoubled.status === 0 && ourDoubledModules.join(",") === "index.ll,main.ll",
+        `stage1 ${ourDoubled.status}: ${ourDoubled.stdout}${ourDoubled.stderr}` +
+          `modules [${ourDoubledModules.join(" ")}]`
+      );
+
+      // The same tree named from its root, where the compiler *can* read the
+      // ancestor's name and steps over it: the package is not found, and the
+      // refusal says where it looked.
+      const doubledRoot = path.join(root, "tests", "link", "package_doubled");
+      const doubledEntry = path.join("node_modules", "app", "main.ts");
+      const ourNamed = spawnSync(compiler, [doubledEntry, "-o", ourDir], {
+        cwd: doubledRoot,
+        encoding: "utf8",
+      });
+      check(
+        "the self-hosted compiler: a `node_modules` ancestor the name spells is stepped over",
+        ourNamed.status === 1 &&
+          ourNamed.stderr.includes(
+            "error: Cannot find package `@nish-absent/zed`; no `node_modules` directory above the importing module has it"
+          ),
+        `stage1 ${ourNamed.status}: ${ourNamed.stderr}`
+      );
+    }
+
+    // WP21 S2's declared limitation: a package reached through a symlink is a
+    // second package, because a module path is joined rather than resolved --
+    // an open decision about what a package's identity is, not a missing
+    // builtin (`self/compilation.ts`, TODO(WP21 S3); `docs/wp21-packages.md`
+    // §10d).
+    const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
+    const symlinkApp = path.join(symlinkSrc, "app");
+    if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
+      const symlinkNeedle = fs
+        .readFileSync(path.join(symlinkSrc, "expected.err"), "utf8")
+        .trim();
+      const outDir = path.join(shipDir, "package_symlink-stage1") + path.sep;
+      fs.rmSync(outDir, { recursive: true, force: true });
+      const ourSymlink = spawnSync(compiler, ["main.ts", "-o", outDir], {
+        cwd: symlinkApp,
+        encoding: "utf8",
+      });
+      check(
+        "the self-hosted compiler: a symlinked copy is a second package",
+        ourSymlink.status === 1 && ourSymlink.stderr.includes(symlinkNeedle),
+        `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}`
+      );
+    }
+
+    // WP15 §8 through the driver (WP19 G1). The analysis is pinned by the
+    // performance section and the checked goldens already; what this pins is
+    // the half that is the driver's -- that it prints the warnings at all,
+    // on stderr, as JSON objects on stdout under `--json`, and not at all
+    // under `--no-warn-performance`. A warning changes no exit code, so the
+    // compile that carries it is a successful one. `wrote <file>` is dropped:
+    // it names a path in a temporary directory.
+    const perfCase = path.join("tests", "cases", "perf_str_concat_loop.ts");
+    const perfOut = (dir) => path.join(shipDir, dir, "perf.ll");
+    const withoutWrote = (text) =>
+      text.split("\n").filter((line) => !line.startsWith("wrote ")).join("\n");
+    const ourPerf = spawnSync(compiler, [perfCase, "-o", perfOut("perf1")], { cwd: root, encoding: "utf8" });
+    const ourPerfJson = spawnSync(compiler, [perfCase, "-o", perfOut("perf1j"), "--json"], { cwd: root, encoding: "utf8" });
+    const ourPerfOff = spawnSync(
+      compiler,
+      [perfCase, "-o", perfOut("perf1q"), "--no-warn-performance"],
+      { cwd: root, encoding: "utf8" }
+    );
+    check(
+      "the self-hosted compiler: the performance warnings are printed, and --no-warn-performance silences them",
+      ourPerf.status === 0 &&
+        ourPerf.stderr.includes("performance: `out` is rebuilt") &&
+        withoutWrote(ourPerf.stderr).trimEnd().endsWith("4 performance warnings") &&
+        ourPerfJson.status === 0 &&
+        ourPerfJson.stdout.split("\n").filter(Boolean).length === 4 &&
+        ourPerfJson.stdout
+          .split("\n")
+          .filter(Boolean)
+          .every((line) => JSON.parse(line).severity === "performance") &&
+        ourPerfOff.status === 0 &&
+        withoutWrote(ourPerfOff.stderr).trim() === "",
+      `ours:\n${ourPerf.stderr}\nours --json:\n${ourPerfJson.stdout}\nours --no-warn-performance:\n${ourPerfOff.stderr}`
+    );
+
+    // `--emit-checked` through the driver, rather than through the
+    // `dump_checked` entry `tests/self/goldens.js` spawns: the same text has
+    // to come out of both, which is why one `self/dump.ts` writes it for
+    // both, and the entry's is the one the goldens hold. A whole program is
+    // dumped module by module, the entry named as one.
+    const dumpCase = path.join("examples", "multi", "main.ts");
+    const ourDump = spawnSync(compiler, [dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
+    const dumpEntry = path.join(shipDir, "dump_checked");
+    const dumpBuilt = spawnSync(compiler, ["self/dump_checked.ts", "--link", dumpEntry, "--profile", "debug"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const viaEntry =
+      dumpBuilt.status === 0
+        ? spawnSync(dumpEntry, [dumpCase], { cwd: root, encoding: "utf8" })
+        : { status: dumpBuilt.status, stdout: "", stderr: `could not link self/dump_checked.ts:\n${dumpBuilt.stderr}` };
+    check(
+      "the self-hosted compiler: --emit-checked dumps a whole program as the dump entry does",
+      ourDump.status === 0 &&
+        viaEntry.status === 0 &&
+        ourDump.stdout === viaEntry.stdout &&
+        ourDump.stdout.includes("module examples/multi/main.ts (entry)") &&
+        ourDump.stdout.includes("module examples/multi/math.ts"),
+      `driver:\n${ourDump.stdout}${ourDump.stderr}\ndump entry ${viaEntry.status}:\n${viaEntry.stdout}${viaEntry.stderr}`
+    );
+
+    // No flag is stage0's by name any more (`--emit-ast` was the last, WP19
+    // R1), so what this pins is the property the refusal was really about: a
+    // flag the compiler does not know is refused rather than quietly
+    // dropped, because a build that asked for something must not come out
+    // without it and without being told. It answers exit 2, which is the
+    // usage-error code the CLI contract fixes.
+    const refused = spawnSync(compiler, ["examples/hello.ts", "--emit-sidecar"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      "the self-hosted compiler: an unknown flag is refused, not ignored",
+      refused.status === 2 && refused.stderr.includes("--emit-sidecar"),
+      `stage1 ${refused.status}: ${refused.stdout}${refused.stderr}`
+    );
+
+    // The `--help` contract: a request that succeeded goes to stdout with
+    // exit 0, a refusal to stderr with exit 2. It is the shape that is pinned
+    // here; the WP12 block pins the text.
+    const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8" });
+    const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8" });
+    check(
+      "the self-hosted compiler: --help answers on stdout with exit 0, and a usage error on stderr with exit 2",
+      ourHelp.status === 0 &&
+        ourHelp.stdout.includes("usage:") &&
+        ourHelp.stderr === "" &&
+        ourRefusal.status === 2 &&
+        ourRefusal.stderr.includes("usage:") &&
+        ourRefusal.stdout === "",
+      `help ${ourHelp.status}:\n${ourHelp.stdout}${ourHelp.stderr}\nrefusal ${ourRefusal.status}:\n${ourRefusal.stdout}${ourRefusal.stderr}`
+    );
+
+    // The interop sidecars, and the directory each one needs. The bytes
+    // themselves are the WP8 section's business.
+    const sidecarDir = path.join(shipDir, "interop");
+    const sidecarFiles = ["add.h", "add.d.ts", "add.mjs", "add.napi.c"];
+    const sidecars = spawnSync(
+      compiler,
+      [
+        "examples/add.ts",
+        "-o", path.join(shipDir, "add.ll"),
+        "--emit-header", path.join(sidecarDir, "add.h"),
+        "--emit-dts", path.join(sidecarDir, "add.d.ts"),
+        "--emit-napi", path.join(sidecarDir, "add.napi.c"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    );
+    const wrote = sidecarFiles.filter((f) => fs.existsSync(path.join(sidecarDir, f)));
+    const selfHeader = wrote.includes("add.h")
+      ? fs.readFileSync(path.join(sidecarDir, "add.h"), "utf8")
+      : "";
+    check(
+      "the self-hosted compiler: the interop sidecars are passed through and their directory made",
+      sidecars.status === 0 &&
+        wrote.length === sidecarFiles.length &&
+        selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
+      `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
+    );
+
+    // ---- The command line answers the way stage0's did, not merely close
+    // to it. Each of these was a silent divergence while there were two
+    // compilers to compare: a flag stage1 accepted and ignored, an input it
+    // dropped, a stream it wrote the wrong way down.
+
+    // An unknown `--number-mode` refused rather than quietly meaning i32:
+    // the failure mode is a program that compiles, in the other arithmetic.
+    const badMode = spawnSync(
+      compiler,
+      ["examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused.ll")],
+      { cwd: root, encoding: "utf8" }
+    );
+    check(
+      "the self-hosted compiler: an unknown --number-mode is refused",
+      badMode.status === 2 &&
+        !fs.existsSync(path.join(shipDir, "unused.ll")),
+      `stage1 ${badMode.status}: ${badMode.stderr}`
+    );
+
+    // Every positional is a root, as it is for stage0. Before this the last
+    // one won and the others were compiled into nothing.
+    const rootsDir = path.join(shipDir, "roots");
+    const roots = spawnSync(
+      compiler,
+      ["examples/hello.ts", "examples/add.ts", "-o", `${rootsDir}/`],
+      { cwd: root, encoding: "utf8" }
+    );
+    const rootsWrote = fs.existsSync(rootsDir) ? fs.readdirSync(rootsDir).sort() : [];
+    check(
+      "the self-hosted compiler: every file named on the command line is a root",
+      roots.status === 0 && rootsWrote.join(",") === "add.ll,hello.ll",
+      `${roots.status}: ${roots.stdout}${roots.stderr}wrote: ${rootsWrote.join(",")}`
+    );
+
+    // stdout carries the IR and the `--json` diagnostics and nothing else,
+    // so `wrote <file>` goes to stderr. A build script that pipes the IR
+    // somewhere must not find chatter mixed into it.
+    const chatterDir = path.join(shipDir, "chatter");
+    const chatter = spawnSync(
+      compiler,
+      ["examples/hello.ts", "-o", `${chatterDir}/`],
+      { cwd: root, encoding: "utf8" }
+    );
+    check(
+      "the self-hosted compiler: `wrote <file>` goes to stderr",
+      chatter.status === 0 && chatter.stdout === "" && chatter.stderr.includes("wrote "),
+      `stage1 out=${JSON.stringify(chatter.stdout)} err=${JSON.stringify(chatter.stderr)}`
+    );
+
+    // A root that cannot be opened is a driver failure, not a diagnostic
+    // with a span: stage0 answers exit 1 with `error: ...` on stderr, and
+    // one flat object on stdout under `--json`. The errno itself stays
+    // stage0's — Node names it and the runtime's read does not.
+    const missing = spawnSync(
+      compiler,
+      [path.join(shipDir, "no_such_file.ts"), "-o", path.join(shipDir, "nope.ll")],
+      { cwd: root, encoding: "utf8" }
+    );
+    const missingJson = spawnSync(
+      compiler,
+      [path.join(shipDir, "no_such_file.ts"), "--json", "-o", path.join(shipDir, "nope.ll")],
+      { cwd: root, encoding: "utf8" }
+    );
+    let missingObject = null;
+    try {
+      missingObject = JSON.parse(missingJson.stdout.trim());
+    } catch {}
+    check(
+      "the self-hosted compiler: an unreadable root exits 1 and --json makes it an object",
+      missing.status === 1 &&
+        missing.stderr.startsWith("error: cannot open ") &&
+        missingJson.status === 1 &&
+        missingObject !== null &&
+        missingObject.severity === "error" &&
+        missingObject.message.startsWith("cannot open "),
+      `${missing.status}: ${missing.stderr}json ${missingJson.status}: ${missingJson.stdout}`
+    );
+
+    // `--link` on a program with no entry point: stage0 refuses it before it
+    // emits anything, with exit 1 and a message naming what to declare.
+    // Reaching clang instead costs a link and answers `undefined reference
+    // to main` with exit 3.
+    const noMain = spawnSync(
+      compiler,
+      ["tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main"), "--profile", "debug"],
+      { cwd: root, encoding: "utf8" }
+    );
+    check(
+      "the self-hosted compiler: --link without `export const main` is refused before anything is linked",
+      noMain.status === 1 && noMain.stderr.includes("export const main"),
+      `stage1 ${noMain.status}: ${noMain.stderr}`
+    );
+
+    // An unknown profile refused before the compile rather than after it, as
+    // stage0 validates `PROFILES` before it reads a file.
+    const badProfile = spawnSync(
+      compiler,
+      ["examples/hello.ts", "--link", path.join(shipDir, "bad"), "--profile", "turbo"],
+      { cwd: root, encoding: "utf8" }
+    );
+    check(
+      "the self-hosted compiler: an unknown --profile is refused before anything is compiled",
+      badProfile.status === 2 && badProfile.stderr.includes("unknown profile"),
+      `${badProfile.status}: ${badProfile.stdout}${badProfile.stderr}`
+    );
+
+    // `-o <dir>/` writes into the directory it was given; it does not empty
+    // it first: `-o build/` must not take the rest of `build/` with it.
+    const keepDir = path.join(shipDir, "keep");
+    fs.mkdirSync(keepDir, { recursive: true });
+    fs.writeFileSync(path.join(keepDir, "keep.txt"), "not the compiler's\n");
+    const keep = spawnSync(
+      compiler,
+      ["examples/hello.ts", "-o", `${keepDir}/`],
+      { cwd: root, encoding: "utf8" }
+    );
+    check(
+      "the self-hosted compiler: -o <dir>/ writes into the directory, it does not clear it",
+      keep.status === 0 &&
+        fs.existsSync(path.join(keepDir, "keep.txt")) &&
+        fs.existsSync(path.join(keepDir, "hello.ll")),
+      `${keep.status}: ${keep.stdout}${keep.stderr}`
+    );
+
+    // ---- The three things §7a listed as still stage0's, closed. -----------
+
+    // `-o <dir>` for a directory that is already there, without the trailing
+    // slash: stage0 stats the path, and so does this now (`isDirectorySync`,
+    // WP14 §7a). The slash still names a directory that does not exist yet,
+    // so both spellings are checked, and a name that is *not* a directory
+    // must still be taken as a file.
+    const statDir = path.join(shipDir, "stat");
+    fs.mkdirSync(statDir, { recursive: true });
+    const intoDir = spawnSync(compiler, ["examples/hello.ts", "-o", statDir], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const asFile = path.join(shipDir, "stat_file.ll");
+    const intoFile = spawnSync(compiler, ["examples/hello.ts", "-o", asFile], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      "the self-hosted compiler: -o <existing dir> without the slash is the directory, as stage0 stats it",
+      intoDir.status === 0 &&
+        fs.existsSync(path.join(statDir, "hello.ll")) &&
+        intoFile.status === 0 &&
+        fs.existsSync(asFile),
+      `dir ${intoDir.status}: ${intoDir.stderr}file ${intoFile.status}: ${intoFile.stderr}`
+    );
+
+    // `--target host`: the machine answers, through `process.platform` and
+    // `process.arch`, and `self/target.ts` composes the triple from them. The
+    // module it writes has to be the one naming that triple outright writes --
+    // the whole module rather than the triple line, which keeps the check
+    // honest about the layout string too. A host with no triple of its own is
+    // refused with the list, and the WP9 block pins which one that is.
+    const hostTripleHere = HOST_TRIPLE;
+    const ourHost = path.join(shipDir, "host.ll");
+    const namedHost = path.join(shipDir, "host_named.ll");
+    const hostOurs = spawnSync(compiler, ["examples/hello.ts", "--target", "host", "-o", ourHost], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const hostNamed = hostTripleHere
+      ? spawnSync(compiler, ["examples/hello.ts", "--target", hostTripleHere, "-o", namedHost], {
+          cwd: root,
+          encoding: "utf8",
+        })
+      : null;
+    check(
+      hostNamed !== null
+        ? `the self-hosted compiler: --target host writes the module --target ${hostTripleHere} writes`
+        : "the self-hosted compiler: --target host is refused on a host with no triple, naming the supported ones",
+      hostNamed !== null
+        ? hostOurs.status === 0 &&
+            hostNamed.status === 0 &&
+            stripHeader(fs.readFileSync(ourHost, "utf8")) === stripHeader(fs.readFileSync(namedHost, "utf8"))
+        : hostOurs.status === 2 && hostOurs.stderr.includes("supported: host,"),
+      `host ${hostOurs.status}: ${hostOurs.stderr}` +
+        (hostNamed !== null ? `named ${hostNamed.status}: ${hostNamed.stderr}` : "")
+    );
+
+    // `--emit-ast`, the last flag that was stage0's by name (WP19 R1, §2A).
+    // What it prints is deliberately *not* stage0's output: stage0 dumps the
+    // `typescript` package's node names and 1-based line:column spans, and
+    // this dumps the flattened vocabulary of `self/nodes.ts` with byte
+    // offsets, because that is the tree this compiler actually has. So there
+    // is no oracle between the two — there is a golden per compiler, over
+    // the same input file, and this is stage1's. The check is that the flag
+    // is answered (exit 0, no IR written) and that the tree is the one
+    // `tests/self/dump_ast.golden` records.
+    const astOut = path.join(shipDir, "ast");
+    fs.mkdirSync(astOut, { recursive: true });
+    const astRun = spawnSync(compiler, ["tests/cases/dump_ast.ts", "--emit-ast", "-o", `${astOut}/`], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const astGoldenFile = path.join(root, "tests", "self", "dump_ast.golden");
+    const astGolden = fs.existsSync(astGoldenFile) ? fs.readFileSync(astGoldenFile, "utf8") : "";
+    if (process.env.UPDATE_GOLDENS === "1" && astRun.status === 0 && astRun.stdout !== astGolden) {
+      fs.writeFileSync(astGoldenFile, astRun.stdout);
+    }
+    check(
+      "the self-hosted compiler: --emit-ast prints its own tree and writes no IR",
+      astRun.status === 0 &&
+        astRun.stdout === fs.readFileSync(astGoldenFile, "utf8") &&
+        fs.readdirSync(astOut).length === 0,
+      `${astRun.status}: ${astRun.stderr}--- stdout\n${astRun.stdout}`
+    );
+
+    // A broken invariant answers 70 (`EX_SOFTWARE`) and stage0's report,
+    // less the two halves a self-hosted compiler honestly has not got: the
+    // input files, which live in a `process.argv` that only a program with
+    // an entry `main` may read, and the stack, which needs the `try`/`catch`
+    // the language does not have. `tests/self/ice.ts` calls the report
+    // directly, because an invariant nothing reaches cannot be provoked from
+    // a command line, and stage1 builds it, so what prints this is stage1's
+    // code compiled by stage1.
+    const iceVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+    const iceExe = path.join(shipDir, "ice");
+    const iceBuild = spawnSync(compiler, ["tests/self/ice.ts", "--link", iceExe, "--profile", "debug"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const ice = iceBuild.status === 0 ? spawnSync(iceExe, [], { cwd: root, encoding: "utf8" }) : null;
+    check(
+      "the self-hosted compiler: an internal error exits 70 and says what it cannot show",
+      ice !== null &&
+        ice.status === 70 &&
+        ice.stderr.startsWith(`nish ${iceVersion}: internal compiler error\n`) &&
+        ice.stderr.includes("  emitter: no callee recorded for `f`\n") &&
+        ice.stderr.includes("NISH_DEBUG=1 adds nothing") &&
+        ice.stderr.includes("This is a bug in nish, not in your program."),
+      `${iceBuild.status}: ${iceBuild.stderr}${ice ? `ran ${ice.status}: ${ice.stderr}` : ""}`
+    );
   }
 }
 
@@ -5678,32 +5642,30 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
 // every user-level integer add/sub/mul but nothing else.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
-  if (HAS_CLANG) {
-    // The Nish side is built by the compiler under test, where the bench's own
-    // default is stage0.
-    const v = spawnSync(
-      "node",
-      [
-        path.join(root, "bench", "run.mjs"),
-        "--compiler",
-        path.relative(root, NISH),
-        "--validate",
-        "--only",
-        "fib,sieve",
-        "--n",
-        "fib=25,sieve=100000",
-      ],
-      { cwd: root, encoding: "utf8" }
-    );
-    check(
-      "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc)",
-      v.status === 0 &&
-        v.stdout.includes("checksums agree") &&
-        v.stdout.includes("fib: 75025") &&
-        v.stdout.includes("sieve: 191840"),
-      `${v.stdout}${v.stderr}`
-    );
-  }
+  // The Nish side is built by the compiler under test, where the bench's own
+  // default is build/nish.
+  const v = spawnSync(
+    "node",
+    [
+      path.join(root, "bench", "run.mjs"),
+      "--compiler",
+      path.relative(root, NISH),
+      "--validate",
+      "--only",
+      "fib,sieve",
+      "--n",
+      "fib=25,sieve=100000",
+    ],
+    { cwd: root, encoding: "utf8" }
+  );
+  check(
+    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc)",
+    v.status === 0 &&
+      v.stdout.includes("checksums agree") &&
+      v.stdout.includes("fib: 75025") &&
+      v.stdout.includes("sieve: 191840"),
+    `${v.stdout}${v.stderr}`
+  );
   const targetLl = path.join(buildDir, "opt_target_triple.ll");
   if (has("opt") && fs.existsSync(targetLl)) {
     const ir = fs.readFileSync(targetLl, "utf8");
@@ -6112,7 +6074,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     [
       "arr_struct_push_copy.ts",
       // The `pop` divergence the declarations already document (the note at
-      // runtime/nish.d.ts, and the `self/` check below, which strips the same
+      // runtime/nish.d.ts, and the `self/` check below, which expects the same
       // error): `a.pop()` is `T` here because an empty array panics, and
       // `T | undefined` in lib.es5, so reading a field of the popped element
       // is TS18048 and nothing this side can say changes that. The case reads
@@ -6140,21 +6102,13 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const selfCheck = typeCheck("stage1", selfModules);
   // `a.pop()` is `T` here and `T | undefined` in lib.es5 (the foot of
   // runtime/nish.d.ts says why it stays that way), so the one call in
-  // `self/checker.ts` that pops without a null check is the only diagnostic
-  // this may report. Anything else is a hole in the declarations.
-  const selfErrors = selfCheck.output
-    .split("\n")
-    .filter((line) => line.includes(": error TS"));
-  // `selfCheck.ok` has to be part of the predicate: a tsc that fell over before
-  // it checked anything (a bad config, TS18003, a spawn failure) produces no
-  // `error TS` lines at all, and `[].every(...)` is `true` — a check that passes
-  // by having tested nothing. So: either tsc was clean, or the only things it
-  // said are the one divergence the declarations document.
-  const isPopDivergence = (line) =>
-    line.includes("TS2345") && line.includes("| undefined") && line.includes("self/checker.ts");
+  // `self/checker.ts` that pops without a null check carries a
+  // `@ts-expect-error` -- which is also what `npm run check` holds it to: if
+  // the error goes away, the unused directive is an error of its own. Anything
+  // tsc reports here is a hole in the declarations.
   check(
-    `tsc accepts self/ against the ambient declarations, bar the documented \`pop\` divergence (${selfModules.length} modules)`,
-    selfCheck.ok || (selfErrors.length > 0 && selfErrors.every(isPopDivergence)),
+    `tsc accepts self/ against the ambient declarations, the documented \`pop\` divergence expected in place (${selfModules.length} modules)`,
+    selfCheck.ok,
     selfCheck.output
   );
 
@@ -6624,416 +6578,412 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       check(`npm pack excludes ${f}`, !files.includes(f));
     }
 
-    if (!HAS_CLANG) {
-      skip("package install + --link from another cwd (clang not found)");
-    } else {
-      const tarball = path.join(pkgDir, info.filename);
-      const prefix = path.join(pkgDir, "prefix");
-      const install = spawnSync(
-        npm,
-        [
-          "install",
-          "--prefix",
-          prefix,
-          "--no-audit",
-          "--no-fund",
-          "--prefer-offline",
-          "--ignore-scripts",
-          tarball,
-        ],
-        { cwd: pkgDir, encoding: "utf8" }
+    const tarball = path.join(pkgDir, info.filename);
+    const prefix = path.join(pkgDir, "prefix");
+    const install = spawnSync(
+      npm,
+      [
+        "install",
+        "--prefix",
+        prefix,
+        "--no-audit",
+        "--no-fund",
+        "--prefer-offline",
+        "--ignore-scripts",
+        tarball,
+      ],
+      { cwd: pkgDir, encoding: "utf8" }
+    );
+    check(
+      "npm install <tarball> --prefix <tmp> succeeds",
+      install.status === 0,
+      install.stdout + install.stderr
+    );
+    if (install.status === 0) {
+      const bin = path.join(prefix, "node_modules", ".bin", "nish");
+      const work = path.join(pkgDir, "elsewhere");
+      fs.mkdirSync(work, { recursive: true });
+      fs.writeFileSync(
+        path.join(work, "hello.ts"),
+        'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n'
       );
+
+      // ---- no platform package: the refusal ----------------------------------------
+      // Nothing was installed beside the main package -- npm skipped four
+      // `optionalDependencies` whose `os`/`cpu` did not match or that the registry does
+      // not carry yet -- so this is the state a user on musl, FreeBSD or a 32-bit
+      // anything installs into. Until 0.6.0 it was the *fallback* path, and every check
+      // below ran through it: this block proved the tarball's Node compiler rather than
+      // the compiler a user on a supported platform gets, which is wp19 §5a item 1's
+      // sentence about this very harness -- "the path the harness takes works and the
+      // path a user gets does not". The fallback is gone by decision
+      // (docs/wp12-release.md, "Which compiler the package ships"), so what has to be
+      // true here is that the command says what happened, names the platforms that do
+      // have a binary, and exits non-zero. Watched failing against the old launcher,
+      // which answered `nish <version>` and exited 0.
+      const refused = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+      const namesEvery = seedAssets.every((a) => refused.stderr.includes(a));
       check(
-        "npm install <tarball> --prefix <tmp> succeeds",
-        install.status === 0,
-        install.stdout + install.stderr
+        "with no prebuilt binary installed, nish refuses, names every supported platform, and exits 3",
+        refused.status === 3 && namesEvery && refused.stdout.trim() === "",
+        `exit ${refused.status}, stdout ${JSON.stringify(refused.stdout)}, stderr ${JSON.stringify(refused.stderr)}`
       );
-      if (install.status === 0) {
-        const bin = path.join(prefix, "node_modules", ".bin", "nish");
-        const work = path.join(pkgDir, "elsewhere");
-        fs.mkdirSync(work, { recursive: true });
-        fs.writeFileSync(
-          path.join(work, "hello.ts"),
-          'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n'
+      // And it says where to go next rather than only that it will not work. This is
+      // the *installed but missing* branch, whose remedy is a reinstall; the
+      // unsupported-platform branch is a different sentence and is asserted above,
+      // by name, because no runner here is an unsupported platform.
+      check(
+        "the refusal names the package npm should have installed, and a remedy",
+        refused.stderr.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`) &&
+          refused.stderr.includes("Reinstall") &&
+          refused.stderr.includes("docs/INSTALL.md"),
+        JSON.stringify(refused.stderr)
+      );
+      // The machine-readable half of the same refusal, and it is a contract rather
+      // than a nicety: AGENTS.md's "Machine-readable surfaces" says a failure with no
+      // source position is still one JSON line and that under `--json` you never have
+      // to read stderr to find out why a run failed. The first version of this change
+      // broke that -- the refusal was prose on stderr on every path -- and it is
+      // reachable on a fully supported platform, because this is the state
+      // `--no-optional` or a lockfile without the optional entries installs into. The
+      // shape is `self/compile.ts`'s own for the same code: the object on stdout,
+      // nothing on stderr, so a tool reading stdout gets objects and nothing else.
+      const refusedJson = spawnSync(bin, ["--json", "hello.ts"], { cwd: work, encoding: "utf8" });
+      let refusedObj = null;
+      try {
+        const lines = refusedJson.stdout.trim().split("\n").filter(Boolean);
+        refusedObj = lines.length === 1 ? JSON.parse(lines[0]) : null;
+      } catch {
+        refusedObj = null;
+      }
+      check(
+        "with no prebuilt binary installed, `nish --json` is still one NL0002 object on stdout, exit 3",
+        refusedJson.status === 3 &&
+          refusedObj !== null &&
+          refusedObj.severity === "error" &&
+          refusedObj.code === "NL0002" &&
+          typeof refusedObj.message === "string" &&
+          refusedObj.message.length > 0 &&
+          refusedJson.stderr === "",
+        `exit ${refusedJson.status}, stdout ${JSON.stringify(refusedJson.stdout)}, ` +
+          `stderr ${JSON.stringify(refusedJson.stderr)}`
+      );
+      // And the object says which of the three situations it is, in the field a tool
+      // keys on plus the prose it carries -- the code is shared with a missing clang,
+      // deliberately (one band for "a program that had to run would not"), so the
+      // message is what separates them.
+      check(
+        "the --json refusal names the missing platform package in its message",
+        refusedObj !== null &&
+          typeof refusedObj.message === "string" &&
+          refusedObj.message.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`),
+        refusedObj === null ? "no object" : JSON.stringify(refusedObj.message)
+      );
+      // Nothing is compiled on the way to either refusal: the message is the whole of
+      // what happens, so a machine with no C toolchain gets the same answer. Asked of
+      // a command line that *would* write -- an explicit `-o` and a `--link` -- rather
+      // than of an empty directory, because "no files appeared" is only an assertion
+      // when something was asked for.
+      const askedToWrite = spawnSync(bin, ["hello.ts", "-o", "out.ll", "--link", "outbin"], {
+        cwd: work,
+        encoding: "utf8",
+      });
+      check(
+        "a refusal writes nothing, even asked for an -o and a --link",
+        askedToWrite.status === 3 &&
+          !fs.existsSync(path.join(work, "out.ll")) &&
+          !fs.existsSync(path.join(work, "outbin")),
+        `exit ${askedToWrite.status}, directory now holds ${fs.readdirSync(work).join(", ")}`
+      );
+
+      // ---- the launcher hands over to a prebuilt binary ----------------------------
+      // The path a user on a supported platform actually gets, and the one G5's round
+      // trip is about: pack, install into a temporary prefix, and link a hello-world
+      // from an unrelated directory. It needs a platform package, so the checks below
+      // make one -- twice over, because the two halves want different things from it.
+      //
+      // First a REAL compiler, staged the way `release.yml` stages one: the binary at
+      // `bin/nish` with `runtime/`, `scripts/` and `std/` beside it. That layout is the
+      // whole reason the postinstall swap execs the binary where it lies, and it is
+      // what lets `--link` find `build.sh` and both runtime translation units one level
+      // up from `argv[0]`. This is the half that used to run on the fallback and now
+      // runs on the product.
+      //
+      // Then a STUB, for the launcher's own contract -- argv through, status back,
+      // signal re-raised, a broken install named. A stub answers those in milliseconds
+      // and says exactly what it was asked; whether the binary it hands to is a correct
+      // compiler is the bootstrap section's question, and `npm run bootstrap` asks it.
+      const hostAsset = assetFor(process.platform, process.arch);
+      if (hostAsset === null) {
+        // Counted, and counted once: everything from here to the end of this
+        // block is the supported-platform path, and a run that could not build
+        // a compiler to stage has not tested it. The `skip` names the reason so
+        // a green summary cannot be read as this having been exercised.
+        skip(`the installed package hands over to a prebuilt compiler (no asset for ${process.platform}/${process.arch})`);
+      } else {
+        // ---- a platform package built the way `release.yml` builds one ------------
+        // The staging is `release.yml`'s `binaries` job, line for line: `bin/nish`,
+        // `runtime/`, `std/`, and **`scripts/build.sh` alone** rather than the whole
+        // of `scripts/` -- copying the directory would be a harness that stages more
+        // than a release does, and the whole point of this block is that it stops
+        // approximating the product.
+        //
+        // Then `scripts/platform-package.mjs` writes the manifest, and `npm pack`
+        // makes the tarball, and `npm install` installs it. That matters for one
+        // reason above all: the generator's own `files` list is what shipped without
+        // `std` from 0.1.1 to 0.4.0, so every release carried a compiler that could
+        // not import its own standard library (wp19 §5a item 1). Hand-writing the
+        // manifest and copying into `node_modules` -- which is what this block did
+        // when it was first written -- exercises neither the generator nor `files`,
+        // and a check that reads the generator's source for the string "std" passes
+        // while `"scripts"` is deleted from the same list. Packing is what makes
+        // `files` load-bearing here.
+        const stage = path.join(pkgDir, "stage");
+        fs.rmSync(stage, { recursive: true, force: true });
+        fs.mkdirSync(path.join(stage, "bin"), { recursive: true });
+        fs.mkdirSync(path.join(stage, "scripts"), { recursive: true });
+        for (const dir of ["runtime", "std"]) {
+          fs.cpSync(path.join(root, dir), path.join(stage, dir), { recursive: true });
+        }
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(stage, "scripts", "build.sh"));
+        fs.copyFileSync(path.join(root, "LICENSE"), path.join(stage, "LICENSE"));
+        fs.copyFileSync(path.join(root, "docs", "INSTALL.md"), path.join(stage, "INSTALL.md"));
+        const stagedBinary = path.join(stage, "bin", "nish");
+        fs.copyFileSync(NISH, stagedBinary);
+        fs.chmodSync(stagedBinary, 0o755);
+        const generated = spawnSync(
+          process.execPath,
+          [path.join(root, "scripts", "platform-package.mjs"), stage, hostAsset],
+          { cwd: root, encoding: "utf8" }
+        );
+        check(
+          `scripts/platform-package.mjs writes the manifest for ${hostAsset}`,
+          generated.status === 0 && fs.existsSync(path.join(stage, "package.json")),
+          generated.stdout + generated.stderr
+        );
+        const platformTar = spawnSync(npm, ["pack", "--json", "--pack-destination", pkgDir], {
+          cwd: stage,
+          encoding: "utf8",
+        });
+        check(
+          "npm pack turns that stage directory into a platform package",
+          platformTar.status === 0,
+          platformTar.stdout + platformTar.stderr
+        );
+        // What the generator's `files` actually shipped, rather than what its
+        // source text mentions. `std/` is the entry four releases went without.
+        const packed = platformTar.status === 0 ? JSON.parse(platformTar.stdout)[0] : { files: [] };
+        const packedPaths = packed.files.map((f) => f.path);
+        const wantedInPlatform = [
+          "bin/nish",
+          "runtime/runtime.c",
+          "runtime/runtime_os.c",
+          "runtime/nish.h",
+          "scripts/build.sh",
+          ...fs
+            .readdirSync(path.join(root, "std"))
+            .filter((f) => f.endsWith(".ts"))
+            .map((f) => `std/${f}`),
+        ];
+        const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f));
+        check(
+          `the platform package ships a whole compiler (${packedPaths.length} files, ${wantedInPlatform.length} required)`,
+          platformTar.status === 0 && missingFromPlatform.length === 0,
+          missingFromPlatform.join("\n")
+        );
+        const addPlatform =
+          platformTar.status === 0
+            ? spawnSync(
+                npm,
+                [
+                  "install",
+                  "--prefix",
+                  prefix,
+                  "--no-audit",
+                  "--no-fund",
+                  "--no-save",
+                  "--prefer-offline",
+                  "--ignore-scripts",
+                  path.join(pkgDir, packed.filename),
+                ],
+                { cwd: pkgDir, encoding: "utf8" }
+              )
+            : { status: 1, stdout: "", stderr: "nothing to install" };
+        check(
+          "npm install <platform tarball> into the same prefix succeeds",
+          addPlatform.status === 0,
+          addPlatform.stdout + addPlatform.stderr
+        );
+        const platformDir = path.join(prefix, "node_modules", ...`${manifest.name}-${hostAsset}`.split("/"));
+        {
+          const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+          check(
+            "installed nish --version works from an unrelated cwd",
+            ver.status === 0 && ver.stdout.trim() === `nish ${info.version}`,
+            ver.stdout + ver.stderr
+          );
+          const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
+          check(
+            "installed nish hello.ts --link works from an unrelated cwd",
+            link.status === 0 && fs.existsSync(path.join(work, "hello")),
+            link.stderr
+          );
+          if (link.status === 0) {
+            const hello = spawnSync(path.join(work, "hello"), [], { cwd: work, encoding: "utf8" });
+            check(
+              "the binary linked by the installed package runs",
+              hello.status === 0 && hello.stdout.trim() === "hello from a global install",
+              hello.stdout + hello.stderr
+            );
+          }
+          const ir = spawnSync(
+            bin,
+            [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")],
+            { cwd: work, encoding: "utf8" }
+          );
+          check(
+            "installed nish compiles examples/add.ts to IR from an unrelated cwd",
+            ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
+            ir.stderr
+          );
+          // A program that imports the standard library, through the installed package,
+          // by its package specifier. `std/` travels in the platform package as well as
+          // in the main one -- four releases shipped a compiler that could not import
+          // its own standard library (wp19 §5a item 1) -- and the specifier resolves
+          // against the compiler's own root, which here is inside that package rather
+          // than inside a checkout. With the Node fallback gone this is the only path
+          // that answers it, so it is asserted rather than assumed.
+          fs.writeFileSync(
+            path.join(work, "std.ts"),
+            'import { trim } from "nish/text";\n' +
+              "export function main(): number {\n" +
+              '  console.log(trim("  ok  "));\n' +
+              "  return 0;\n}\n"
+          );
+          const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" });
+          const stdRan =
+            stdLink.status === 0
+              ? spawnSync(path.join(work, "stdhello"), [], { cwd: work, encoding: "utf8" })
+              : null;
+          check(
+            "installed nish compiles and links a program importing nish/text",
+            stdLink.status === 0 && stdRan !== null && stdRan.status === 0 && stdRan.stdout.trim() === "ok",
+            stdLink.stderr + (stdRan === null ? "" : stdRan.stdout + stdRan.stderr)
+          );
+        }
+
+        // ---- the launcher's own contract, on a stub --------------------------------
+        // The real compiler above answered "is the product correct". These answer
+        // "does the launcher get out of the way", which wants a program that says
+        // exactly what it was handed and costs milliseconds. It replaces the binary
+        // inside the package npm just installed, so everything the launcher resolves
+        // is still resolved the way a user's install resolves it.
+        const stub = path.join(platformDir, "bin", "nish");
+        fs.writeFileSync(stub, '#!/bin/sh\necho "stub $*"\nexit 42\n');
+        fs.chmodSync(stub, 0o755);
+        const handed = spawnSync(bin, ["--version", "x"], { cwd: work, encoding: "utf8" });
+        check(
+          "installed nish runs the prebuilt binary when one is installed, with argv and exit code intact",
+          handed.status === 42 && handed.stdout.trim() === "stub --version x",
+          `exit ${handed.status}, stdout ${JSON.stringify(handed.stdout)}`
+        );
+        // A signal is re-raised rather than folded into an exit code, so a crash or an
+        // interrupt reaches the shell as what it was. `process.exitCode` cannot carry
+        // one, so a launcher that forgot this would make `nish` the one command in a
+        // pipeline that turned SIGINT into an ordinary status.
+        fs.writeFileSync(stub, "#!/bin/sh\nkill -TERM $$\n");
+        fs.chmodSync(stub, 0o755);
+        const signalled = spawnSync(bin, [], { cwd: work, encoding: "utf8" });
+        check(
+          "a prebuilt binary killed by a signal reaches the caller as that signal",
+          signalled.signal === "SIGTERM",
+          `signal ${signalled.signal}, status ${signalled.status}`
+        );
+        // Installed but unstartable is a broken install, not an unsupported platform,
+        // and the two get different advice: reinstall the package, rather than "this
+        // machine has no compiler and will not have one". There is nothing to fall
+        // back to any more -- this used to answer `nish <version>` out of `dist/` with
+        // a warning above it -- so the reason has to be in the refusal itself.
+        fs.writeFileSync(stub, "not a binary\n");
+        fs.chmodSync(stub, 0o644);
+        const broken = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+        check(
+          "a prebuilt binary that will not start is refused with the reason, and exits 3",
+          broken.status === 3 &&
+            broken.stdout.trim() === "" &&
+            broken.stderr.includes("could not be started") &&
+            broken.stderr.includes("Reinstall"),
+          `exit ${broken.status}, stdout ${JSON.stringify(broken.stdout)}, stderr ${JSON.stringify(broken.stderr)}`
         );
 
-        // ---- no platform package: the refusal ----------------------------------------
-        // Nothing was installed beside the main package -- npm skipped four
-        // `optionalDependencies` whose `os`/`cpu` did not match or that the registry does
-        // not carry yet -- so this is the state a user on musl, FreeBSD or a 32-bit
-        // anything installs into. Until 0.6.0 it was the *fallback* path, and every check
-        // below ran through it: this block proved the tarball's Node compiler rather than
-        // the compiler a user on a supported platform gets, which is wp19 §5a item 1's
-        // sentence about this very harness -- "the path the harness takes works and the
-        // path a user gets does not". The fallback is gone by decision
-        // (docs/wp12-release.md, "Which compiler the package ships"), so what has to be
-        // true here is that the command says what happened, names the platforms that do
-        // have a binary, and exits non-zero. Watched failing against the old launcher,
-        // which answered `nish <version>` and exited 0.
-        const refused = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
-        const namesEvery = seedAssets.every((a) => refused.stderr.includes(a));
-        check(
-          "with no prebuilt binary installed, nish refuses, names every supported platform, and exits 3",
-          refused.status === 3 && namesEvery && refused.stdout.trim() === "",
-          `exit ${refused.status}, stdout ${JSON.stringify(refused.stdout)}, stderr ${JSON.stringify(refused.stderr)}`
-        );
-        // And it says where to go next rather than only that it will not work. This is
-        // the *installed but missing* branch, whose remedy is a reinstall; the
-        // unsupported-platform branch is a different sentence and is asserted above,
-        // by name, because no runner here is an unsupported platform.
-        check(
-          "the refusal names the package npm should have installed, and a remedy",
-          refused.stderr.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`) &&
-            refused.stderr.includes("Reinstall") &&
-            refused.stderr.includes("docs/INSTALL.md"),
-          JSON.stringify(refused.stderr)
-        );
-        // The machine-readable half of the same refusal, and it is a contract rather
-        // than a nicety: AGENTS.md's "Machine-readable surfaces" says a failure with no
-        // source position is still one JSON line and that under `--json` you never have
-        // to read stderr to find out why a run failed. The first version of this change
-        // broke that -- the refusal was prose on stderr on every path -- and it is
-        // reachable on a fully supported platform, because this is the state
-        // `--no-optional` or a lockfile without the optional entries installs into. The
-        // shape is `self/compile.ts`'s own for the same code: the object on stdout,
-        // nothing on stderr, so a tool reading stdout gets objects and nothing else.
-        const refusedJson = spawnSync(bin, ["--json", "hello.ts"], { cwd: work, encoding: "utf8" });
-        let refusedObj = null;
-        try {
-          const lines = refusedJson.stdout.trim().split("\n").filter(Boolean);
-          refusedObj = lines.length === 1 ? JSON.parse(lines[0]) : null;
-        } catch {
-          refusedObj = null;
-        }
-        check(
-          "with no prebuilt binary installed, `nish --json` is still one NL0002 object on stdout, exit 3",
-          refusedJson.status === 3 &&
-            refusedObj !== null &&
-            refusedObj.severity === "error" &&
-            refusedObj.code === "NL0002" &&
-            typeof refusedObj.message === "string" &&
-            refusedObj.message.length > 0 &&
-            refusedJson.stderr === "",
-          `exit ${refusedJson.status}, stdout ${JSON.stringify(refusedJson.stdout)}, ` +
-            `stderr ${JSON.stringify(refusedJson.stderr)}`
-        );
-        // And the object says which of the three situations it is, in the field a tool
-        // keys on plus the prose it carries -- the code is shared with a missing clang,
-        // deliberately (one band for "a program that had to run would not"), so the
-        // message is what separates them.
-        check(
-          "the --json refusal names the missing platform package in its message",
-          refusedObj !== null &&
-            typeof refusedObj.message === "string" &&
-            refusedObj.message.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`),
-          refusedObj === null ? "no object" : JSON.stringify(refusedObj.message)
-        );
-        // Nothing is compiled on the way to either refusal: the message is the whole of
-        // what happens, so a machine with no C toolchain gets the same answer. Asked of
-        // a command line that *would* write -- an explicit `-o` and a `--link` -- rather
-        // than of an empty directory, because "no files appeared" is only an assertion
-        // when something was asked for.
-        const askedToWrite = spawnSync(bin, ["hello.ts", "-o", "out.ll", "--link", "outbin"], {
+        // ---- the postinstall swap ---------------------------------------
+        // The shim above is correct and costs node's startup on every
+        // invocation -- 94 ms against the binary's own 2.7 ms, measured, so
+        // about 80 seconds across a suite that spawns a compiler per case.
+        // `scripts/postinstall.mjs` removes it by replacing `bin/nish` with
+        // the binary it would otherwise spawn. The install above ran with
+        // `--ignore-scripts`, which is why the shim was still there to test;
+        // this drives the script directly, which is also the honest way to
+        // test it, because what it has to do is the same whether npm ran it
+        // or a person did.
+        fs.writeFileSync(stub, '#!/bin/sh\necho "swapped $* from $0"\nexit 7\n');
+        fs.chmodSync(stub, 0o755);
+        const installed = path.join(prefix, "node_modules", ...manifest.name.split("/"));
+        const swap = spawnSync(process.execPath, [path.join(installed, "scripts", "postinstall.mjs")], {
           cwd: work,
           encoding: "utf8",
         });
         check(
-          "a refusal writes nothing, even asked for an -o and a --link",
-          askedToWrite.status === 3 &&
-            !fs.existsSync(path.join(work, "out.ll")) &&
-            !fs.existsSync(path.join(work, "outbin")),
-          `exit ${askedToWrite.status}, directory now holds ${fs.readdirSync(work).join(", ")}`
+          "postinstall replaces the node shim with an exec of the prebuilt binary",
+          swap.status === 0 && fs.readFileSync(path.join(installed, "bin", "nish"), "utf8").startsWith("#!/bin/sh"),
+          swap.stdout + swap.stderr
         );
-
-        // ---- the launcher hands over to a prebuilt binary ----------------------------
-        // The path a user on a supported platform actually gets, and the one G5's round
-        // trip is about: pack, install into a temporary prefix, and link a hello-world
-        // from an unrelated directory. It needs a platform package, so the checks below
-        // make one -- twice over, because the two halves want different things from it.
+        const swapped = spawnSync(bin, ["a"], { cwd: work, encoding: "utf8" });
+        check(
+          "the swapped bin runs the binary with no node in front of it",
+          swapped.status === 7 && swapped.stdout.startsWith("swapped a from "),
+          `exit ${swapped.status}, stdout ${JSON.stringify(swapped.stdout)}`
+        );
+        // The regression this file did not have, and the reason the swap is an
+        // `exec` rather than a copy of the binary into the main package.
         //
-        // First a REAL compiler, staged the way `release.yml` stages one: the binary at
-        // `bin/nish` with `runtime/`, `scripts/` and `std/` beside it. That layout is the
-        // whole reason the postinstall swap execs the binary where it lies, and it is
-        // what lets `--link` find `build.sh` and both runtime translation units one level
-        // up from `argv[0]`. This is the half that used to run on the fallback and now
-        // runs on the product.
+        // npm links the command as `.bin/nish -> ../@amritk/nish/bin/nish`, so
+        // a user always invokes it through a symlink -- `bin` above is that
+        // symlink, deliberately. The native compiler resolves `build.sh` and
+        // `runtime/` from `argv[0]`'s directory and does not follow one
+        // (wp19 §5a item 4), so a binary *copied* next to the main package is
+        // reached as `node_modules/.bin/nish`, looks for them in
+        // `node_modules/`, and every `--link` fails -- while `--version` and
+        // `-o` keep working, which is what makes it a trap rather than an
+        // outage. Execing the binary where it was installed means `argv[0]`
+        // is a real path inside its own package, next to the `runtime/` and
+        // `scripts/` staged and smoke-tested beside it.
         //
-        // Then a STUB, for the launcher's own contract -- argv through, status back,
-        // signal re-raised, a broken install named. A stub answers those in milliseconds
-        // and says exactly what it was asked; whether the binary it hands to is a correct
-        // compiler is the bootstrap section's question, and `npm run bootstrap` asks it.
-        const hostAsset = assetFor(process.platform, process.arch);
-        if (hostAsset === null) {
-          // Counted, and counted once: everything from here to the end of this
-          // block is the supported-platform path, and a run that could not build
-          // a compiler to stage has not tested it. The `skip` names the reason so
-          // a green summary cannot be read as this having been exercised.
-          skip(`the installed package hands over to a prebuilt compiler (no asset for ${process.platform}/${process.arch})`);
-        } else {
-          // ---- a platform package built the way `release.yml` builds one ------------
-          // The staging is `release.yml`'s `binaries` job, line for line: `bin/nish`,
-          // `runtime/`, `std/`, and **`scripts/build.sh` alone** rather than the whole
-          // of `scripts/` -- copying the directory would be a harness that stages more
-          // than a release does, and the whole point of this block is that it stops
-          // approximating the product.
-          //
-          // Then `scripts/platform-package.mjs` writes the manifest, and `npm pack`
-          // makes the tarball, and `npm install` installs it. That matters for one
-          // reason above all: the generator's own `files` list is what shipped without
-          // `std` from 0.1.1 to 0.4.0, so every release carried a compiler that could
-          // not import its own standard library (wp19 §5a item 1). Hand-writing the
-          // manifest and copying into `node_modules` -- which is what this block did
-          // when it was first written -- exercises neither the generator nor `files`,
-          // and a check that reads the generator's source for the string "std" passes
-          // while `"scripts"` is deleted from the same list. Packing is what makes
-          // `files` load-bearing here.
-          const stage = path.join(pkgDir, "stage");
-          fs.rmSync(stage, { recursive: true, force: true });
-          fs.mkdirSync(path.join(stage, "bin"), { recursive: true });
-          fs.mkdirSync(path.join(stage, "scripts"), { recursive: true });
-          for (const dir of ["runtime", "std"]) {
-            fs.cpSync(path.join(root, dir), path.join(stage, dir), { recursive: true });
-          }
-          fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(stage, "scripts", "build.sh"));
-          fs.copyFileSync(path.join(root, "LICENSE"), path.join(stage, "LICENSE"));
-          fs.copyFileSync(path.join(root, "docs", "INSTALL.md"), path.join(stage, "INSTALL.md"));
-          const stagedBinary = path.join(stage, "bin", "nish");
-          fs.copyFileSync(NISH, stagedBinary);
-          fs.chmodSync(stagedBinary, 0o755);
-          const generated = spawnSync(
-            process.execPath,
-            [path.join(root, "scripts", "platform-package.mjs"), stage, hostAsset],
-            { cwd: root, encoding: "utf8" }
-          );
-          check(
-            `scripts/platform-package.mjs writes the manifest for ${hostAsset}`,
-            generated.status === 0 && fs.existsSync(path.join(stage, "package.json")),
-            generated.stdout + generated.stderr
-          );
-          const platformTar = spawnSync(npm, ["pack", "--json", "--pack-destination", pkgDir], {
-            cwd: stage,
-            encoding: "utf8",
-          });
-          check(
-            "npm pack turns that stage directory into a platform package",
-            platformTar.status === 0,
-            platformTar.stdout + platformTar.stderr
-          );
-          // What the generator's `files` actually shipped, rather than what its
-          // source text mentions. `std/` is the entry four releases went without.
-          const packed = platformTar.status === 0 ? JSON.parse(platformTar.stdout)[0] : { files: [] };
-          const packedPaths = packed.files.map((f) => f.path);
-          const wantedInPlatform = [
-            "bin/nish",
-            "runtime/runtime.c",
-            "runtime/runtime_os.c",
-            "runtime/nish.h",
-            "scripts/build.sh",
-            ...fs
-              .readdirSync(path.join(root, "std"))
-              .filter((f) => f.endsWith(".ts"))
-              .map((f) => `std/${f}`),
-          ];
-          const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f));
-          check(
-            `the platform package ships a whole compiler (${packedPaths.length} files, ${wantedInPlatform.length} required)`,
-            platformTar.status === 0 && missingFromPlatform.length === 0,
-            missingFromPlatform.join("\n")
-          );
-          const addPlatform =
-            platformTar.status === 0
-              ? spawnSync(
-                  npm,
-                  [
-                    "install",
-                    "--prefix",
-                    prefix,
-                    "--no-audit",
-                    "--no-fund",
-                    "--no-save",
-                    "--prefer-offline",
-                    "--ignore-scripts",
-                    path.join(pkgDir, packed.filename),
-                  ],
-                  { cwd: pkgDir, encoding: "utf8" }
-                )
-              : { status: 1, stdout: "", stderr: "nothing to install" };
-          check(
-            "npm install <platform tarball> into the same prefix succeeds",
-            addPlatform.status === 0,
-            addPlatform.stdout + addPlatform.stderr
-          );
-          const platformDir = path.join(prefix, "node_modules", ...`${manifest.name}-${hostAsset}`.split("/"));
-          {
-            const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
-            check(
-              "installed nish --version works from an unrelated cwd",
-              ver.status === 0 && ver.stdout.trim() === `nish ${info.version}`,
-              ver.stdout + ver.stderr
-            );
-            const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
-            check(
-              "installed nish hello.ts --link works from an unrelated cwd",
-              link.status === 0 && fs.existsSync(path.join(work, "hello")),
-              link.stderr
-            );
-            if (link.status === 0) {
-              const hello = spawnSync(path.join(work, "hello"), [], { cwd: work, encoding: "utf8" });
-              check(
-                "the binary linked by the installed package runs",
-                hello.status === 0 && hello.stdout.trim() === "hello from a global install",
-                hello.stdout + hello.stderr
-              );
-            }
-            const ir = spawnSync(
-              bin,
-              [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")],
-              { cwd: work, encoding: "utf8" }
-            );
-            check(
-              "installed nish compiles examples/add.ts to IR from an unrelated cwd",
-              ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
-              ir.stderr
-            );
-            // A program that imports the standard library, through the installed package,
-            // by its package specifier. `std/` travels in the platform package as well as
-            // in the main one -- four releases shipped a compiler that could not import
-            // its own standard library (wp19 §5a item 1) -- and the specifier resolves
-            // against the compiler's own root, which here is inside that package rather
-            // than inside a checkout. With the Node fallback gone this is the only path
-            // that answers it, so it is asserted rather than assumed.
-            fs.writeFileSync(
-              path.join(work, "std.ts"),
-              'import { trim } from "nish/text";\n' +
-                "export function main(): number {\n" +
-                '  console.log(trim("  ok  "));\n' +
-                "  return 0;\n}\n"
-            );
-            const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" });
-            const stdRan =
-              stdLink.status === 0
-                ? spawnSync(path.join(work, "stdhello"), [], { cwd: work, encoding: "utf8" })
-                : null;
-            check(
-              "installed nish compiles and links a program importing nish/text",
-              stdLink.status === 0 && stdRan !== null && stdRan.status === 0 && stdRan.stdout.trim() === "ok",
-              stdLink.stderr + (stdRan === null ? "" : stdRan.stdout + stdRan.stderr)
-            );
-          }
-
-          // ---- the launcher's own contract, on a stub --------------------------------
-          // The real compiler above answered "is the product correct". These answer
-          // "does the launcher get out of the way", which wants a program that says
-          // exactly what it was handed and costs milliseconds. It replaces the binary
-          // inside the package npm just installed, so everything the launcher resolves
-          // is still resolved the way a user's install resolves it.
-          const stub = path.join(platformDir, "bin", "nish");
-          fs.writeFileSync(stub, '#!/bin/sh\necho "stub $*"\nexit 42\n');
-          fs.chmodSync(stub, 0o755);
-          const handed = spawnSync(bin, ["--version", "x"], { cwd: work, encoding: "utf8" });
-          check(
-            "installed nish runs the prebuilt binary when one is installed, with argv and exit code intact",
-            handed.status === 42 && handed.stdout.trim() === "stub --version x",
-            `exit ${handed.status}, stdout ${JSON.stringify(handed.stdout)}`
-          );
-          // A signal is re-raised rather than folded into an exit code, so a crash or an
-          // interrupt reaches the shell as what it was. `process.exitCode` cannot carry
-          // one, so a launcher that forgot this would make `nish` the one command in a
-          // pipeline that turned SIGINT into an ordinary status.
-          fs.writeFileSync(stub, "#!/bin/sh\nkill -TERM $$\n");
-          fs.chmodSync(stub, 0o755);
-          const signalled = spawnSync(bin, [], { cwd: work, encoding: "utf8" });
-          check(
-            "a prebuilt binary killed by a signal reaches the caller as that signal",
-            signalled.signal === "SIGTERM",
-            `signal ${signalled.signal}, status ${signalled.status}`
-          );
-          // Installed but unstartable is a broken install, not an unsupported platform,
-          // and the two get different advice: reinstall the package, rather than "this
-          // machine has no compiler and will not have one". There is nothing to fall
-          // back to any more -- this used to answer `nish <version>` out of `dist/` with
-          // a warning above it -- so the reason has to be in the refusal itself.
-          fs.writeFileSync(stub, "not a binary\n");
-          fs.chmodSync(stub, 0o644);
-          const broken = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
-          check(
-            "a prebuilt binary that will not start is refused with the reason, and exits 3",
-            broken.status === 3 &&
-              broken.stdout.trim() === "" &&
-              broken.stderr.includes("could not be started") &&
-              broken.stderr.includes("Reinstall"),
-            `exit ${broken.status}, stdout ${JSON.stringify(broken.stdout)}, stderr ${JSON.stringify(broken.stderr)}`
-          );
-
-          // ---- the postinstall swap ---------------------------------------
-          // The shim above is correct and costs node's startup on every
-          // invocation -- 94 ms against the binary's own 2.7 ms, measured, so
-          // about 80 seconds across a suite that spawns a compiler per case.
-          // `scripts/postinstall.mjs` removes it by replacing `bin/nish` with
-          // the binary it would otherwise spawn. The install above ran with
-          // `--ignore-scripts`, which is why the shim was still there to test;
-          // this drives the script directly, which is also the honest way to
-          // test it, because what it has to do is the same whether npm ran it
-          // or a person did.
-          fs.writeFileSync(stub, '#!/bin/sh\necho "swapped $* from $0"\nexit 7\n');
-          fs.chmodSync(stub, 0o755);
-          const installed = path.join(prefix, "node_modules", ...manifest.name.split("/"));
-          const swap = spawnSync(process.execPath, [path.join(installed, "scripts", "postinstall.mjs")], {
-            cwd: work,
-            encoding: "utf8",
-          });
-          check(
-            "postinstall replaces the node shim with an exec of the prebuilt binary",
-            swap.status === 0 && fs.readFileSync(path.join(installed, "bin", "nish"), "utf8").startsWith("#!/bin/sh"),
-            swap.stdout + swap.stderr
-          );
-          const swapped = spawnSync(bin, ["a"], { cwd: work, encoding: "utf8" });
-          check(
-            "the swapped bin runs the binary with no node in front of it",
-            swapped.status === 7 && swapped.stdout.startsWith("swapped a from "),
-            `exit ${swapped.status}, stdout ${JSON.stringify(swapped.stdout)}`
-          );
-          // The regression this file did not have, and the reason the swap is an
-          // `exec` rather than a copy of the binary into the main package.
-          //
-          // npm links the command as `.bin/nish -> ../@amritk/nish/bin/nish`, so
-          // a user always invokes it through a symlink -- `bin` above is that
-          // symlink, deliberately. The native compiler resolves `build.sh` and
-          // `runtime/` from `argv[0]`'s directory and does not follow one
-          // (wp19 §5a item 4), so a binary *copied* next to the main package is
-          // reached as `node_modules/.bin/nish`, looks for them in
-          // `node_modules/`, and every `--link` fails -- while `--version` and
-          // `-o` keep working, which is what makes it a trap rather than an
-          // outage. Execing the binary where it was installed means `argv[0]`
-          // is a real path inside its own package, next to the `runtime/` and
-          // `scripts/` staged and smoke-tested beside it.
-          //
-          // The stub prints its own `$0`, so this asserts the thing the failure
-          // was about -- which directory the compiler will resolve from -- and
-          // not merely that something ran.
-          const ranFrom = (swapped.stdout.split(" from ")[1] ?? "").trim();
-          check(
-            "the swapped bin execs the binary inside its own platform package, not a copy beside the main one",
-            ranFrom.startsWith(platformDir + path.sep),
-            `the swapped bin ran ${JSON.stringify(ranFrom)}, which is not under ${platformDir}; ` +
-              "a compiler reached through npm's .bin symlink from there cannot find scripts/build.sh"
-          );
-          // Every way this can go wrong has to leave a working compiler, because
-          // the shim it replaces is one and npm fails an install on a non-zero
-          // postinstall. Removing the platform package is the reachable version
-          // of "there is nothing to swap in" -- the same answer a read-only
-          // node_modules or an unsupported platform gets.
-          fs.rmSync(platformDir, { recursive: true, force: true });
-          const nothing = spawnSync(process.execPath, [path.join(installed, "scripts", "postinstall.mjs")], {
-            cwd: work,
-            encoding: "utf8",
-          });
-          check(
-            "postinstall with no platform package to swap in succeeds rather than failing the install",
-            nothing.status === 0,
-            nothing.stdout + nothing.stderr
-          );
-        }
+        // The stub prints its own `$0`, so this asserts the thing the failure
+        // was about -- which directory the compiler will resolve from -- and
+        // not merely that something ran.
+        const ranFrom = (swapped.stdout.split(" from ")[1] ?? "").trim();
+        check(
+          "the swapped bin execs the binary inside its own platform package, not a copy beside the main one",
+          ranFrom.startsWith(platformDir + path.sep),
+          `the swapped bin ran ${JSON.stringify(ranFrom)}, which is not under ${platformDir}; ` +
+            "a compiler reached through npm's .bin symlink from there cannot find scripts/build.sh"
+        );
+        // Every way this can go wrong has to leave a working compiler, because
+        // the shim it replaces is one and npm fails an install on a non-zero
+        // postinstall. Removing the platform package is the reachable version
+        // of "there is nothing to swap in" -- the same answer a read-only
+        // node_modules or an unsupported platform gets.
+        fs.rmSync(platformDir, { recursive: true, force: true });
+        const nothing = spawnSync(process.execPath, [path.join(installed, "scripts", "postinstall.mjs")], {
+          cwd: work,
+          encoding: "utf8",
+        });
+        check(
+          "postinstall with no platform package to swap in succeeds rather than failing the install",
+          nothing.status === 0,
+          nothing.stdout + nothing.stderr
+        );
       }
     }
   }
@@ -7463,49 +7413,45 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     // 0.6.0, one release after the builtin, which is what the rolling freeze costs; the
     // two `argv0-symlink-*` checks above are that call site driven end to end, and this
     // one is the builtin itself, which is what they would fail through.
-    if (!HAS_CLANG) {
-      skip("realpathSync against a real symlink (clang not found, and the program has to link)");
-    } else {
-      const rp = path.join(buildDir, "realpath-symlink");
-      fs.rmSync(rp, { recursive: true, force: true });
-      fs.mkdirSync(rp, { recursive: true });
-      fs.writeFileSync(path.join(rp, "target.txt"), "x\n");
-      fs.symlinkSync("target.txt", path.join(rp, "link.txt"));
-      fs.mkdirSync(path.join(rp, "sub"), { recursive: true });
-      fs.symlinkSync("..", path.join(rp, "sub", "up"));
-      fs.writeFileSync(
-        path.join(rp, "probe.ts"),
-        [
-          "export function main(): number {",
-          '  const target = realpathSync("target.txt");',
-          "  if (target === null) {",
-          '    console.log("target: <null>");',
-          "    return 1;",
-          "  }",
-          '  const link = realpathSync("link.txt");',
-          '  console.log(`same: ${link !== null && link === target}`);',
-          '  const viaDir = realpathSync("sub/up/target.txt");',
-          '  console.log(`viaDir: ${viaDir !== null && viaDir === target}`);',
-          '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
-          "  return 0;",
-          "}",
-          "",
-        ].join("\n")
-      );
-      const built = spawnSync(NISH, ["probe.ts", "--link", "probe"], { cwd: rp, encoding: "utf8" });
+    const rp = path.join(buildDir, "realpath-symlink");
+    fs.rmSync(rp, { recursive: true, force: true });
+    fs.mkdirSync(rp, { recursive: true });
+    fs.writeFileSync(path.join(rp, "target.txt"), "x\n");
+    fs.symlinkSync("target.txt", path.join(rp, "link.txt"));
+    fs.mkdirSync(path.join(rp, "sub"), { recursive: true });
+    fs.symlinkSync("..", path.join(rp, "sub", "up"));
+    fs.writeFileSync(
+      path.join(rp, "probe.ts"),
+      [
+        "export function main(): number {",
+        '  const target = realpathSync("target.txt");',
+        "  if (target === null) {",
+        '    console.log("target: <null>");',
+        "    return 1;",
+        "  }",
+        '  const link = realpathSync("link.txt");',
+        '  console.log(`same: ${link !== null && link === target}`);',
+        '  const viaDir = realpathSync("sub/up/target.txt");',
+        '  console.log(`viaDir: ${viaDir !== null && viaDir === target}`);',
+        '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    );
+    const built = spawnSync(NISH, ["probe.ts", "--link", "probe"], { cwd: rp, encoding: "utf8" });
+    check(
+      "realpathSync: a program using it compiles and links",
+      built.status === 0,
+      `${built.stdout}${built.stderr}`
+    );
+    if (built.status === 0) {
+      const ran = spawnSync(path.join(rp, "probe"), [], { cwd: rp, encoding: "utf8" });
       check(
-        "realpathSync: a program using it compiles and links",
-        built.status === 0,
-        `${built.stdout}${built.stderr}`
+        "realpathSync: a symlink and its target resolve to one path, through a directory link too",
+        ran.status === 0 && ran.stdout === "same: true\nviaDir: true\nmissing: true\n",
+        `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
       );
-      if (built.status === 0) {
-        const ran = spawnSync(path.join(rp, "probe"), [], { cwd: rp, encoding: "utf8" });
-        check(
-          "realpathSync: a symlink and its target resolve to one path, through a directory link too",
-          ran.status === 0 && ran.stdout === "same: true\nviaDir: true\nmissing: true\n",
-          `exit ${ran.status}, stdout ${JSON.stringify(ran.stdout)}`
-        );
-      }
     }
 
     {
@@ -9168,7 +9114,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
 // rewrite in tests/differential/goldens/, typed when it was frozen by the checker of the
 // day -- is run under Node with runtime/shim.mjs; stdout and exit status must agree byte
 // for byte. Discrepancies listed in known-failures.txt are reported but do not fail.
-if ((!only || "differential".includes(only)) && HAS_CLANG) {
+if ((!only || "differential".includes(only))) {
   const diffRunner = path.join(import.meta.dirname, "differential", "run.js");
   const compilerArgs = ["--compiler", path.relative(root, NISH)];
   const d = spawnSync("node", [diffRunner, "--quick", "--frozen", ...compilerArgs], { cwd: root, encoding: "utf8" });
@@ -9205,8 +9151,6 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     u.status === 0,
     u.stdout + u.stderr
   );
-} else if (!HAS_CLANG) {
-  skip("clang not installed: differential tests skipped");
 }
 
 // ---- The gate on the prebuilt runtime objects ------------------------------------
@@ -9228,7 +9172,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
 // assumed on every platform; if it ever turns out to be platform-specific the
 // honest narrowing is a counted skip, the way the `.text` budgets have one, and
 // not a weaker comparison.
-if (HAS_CLANG && linkSpecimens.size > 0) {
+if (linkSpecimens.size > 0) {
   for (const [key, spec] of linkSpecimens) {
     const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`;
     const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`);
@@ -9255,7 +9199,7 @@ if (HAS_CLANG && linkSpecimens.size > 0) {
 // ... mismatches non-TLS definition" -- and this is where that is written down,
 // because it is the property the whole cache rests on.
 const threadsLl = path.join(buildDir, "mem_threads_arena.ll");
-if (HAS_CLANG && fs.existsSync(threadsLl)) {
+if (fs.existsSync(threadsLl)) {
   const rt = runtimeObjects([]);
   const exe = path.join(buildDir, "runtime-obj", "threads_against_default");
   const cc =

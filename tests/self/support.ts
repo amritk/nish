@@ -2,7 +2,7 @@
 // prints what `self/strings.ts`, `self/map.ts` and `self/paths.ts` compute for
 // every case in `tests/self/cases.txt` plus the ranges generated below, and
 // `tests/self/support_oracle.js` prints the same thing from Node — from
-// `dist/` for the two escapes stage0 already implements, from `node:path` for
+// its golden for the answers recorded from stage0, from `node:path` for
 // the path functions, and from `JSON.stringify`, `Buffer.compare` and `Map`
 // for the rest — and diffs.
 //

@@ -152,7 +152,7 @@ gate.
 
   ```bash
   npm run build
-  node dist/index.js bench/hoist_field.ts -o build/hoistir/ --link build/hoist --profile speed
+  build/nish bench/hoist_field.ts -o build/hoistir/ --link build/hoist --profile speed
   taskset -c 2 build/hoist
   ```
 

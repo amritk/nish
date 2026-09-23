@@ -1,7 +1,7 @@
 // The driver for `self/types.ts` (docs/wp14-selfhost.md, milestone S3),
-// against `src/types.ts` through `tests/self/types_oracle.js`.
+// checked against stage0 until R6; `tests/self/goldens/types.txt` is its output.
 //
-// The model is the same one, written differently: `src/` compares types
+// The model is stage0's, written differently: stage0 compared types
 // structurally with `sameType`, and stage1 interns them so that equality is
 // `===` on an id. Everything a type is asked about downstream — its LLVM
 // type, its alignment, how a diagnostic spells it, and what may be assigned
