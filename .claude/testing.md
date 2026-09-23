@@ -154,6 +154,51 @@ number to turn a red line green; a budget is raised only deliberately, by a
 commit that carries the fresh measurement and the reason for it
 (`docs/wp7-runtime.md` §"Runtime additions and budget").
 
+## The performance gate
+
+What ships is held to **no performance warning at all**. `tests/run.js`
+discovers every `std/*.ts` module and every `examples/*.ts` program (and the
+`main.ts` of each directory under `examples/`) from the directory, compiles
+each with `--json` under `--number-mode i32` and again under `f64`, and fails
+on any object whose `severity` is `"performance"`, naming its
+`file:line:col`, its `NL9xxx` code and its message. A new module or example is
+gated the day it lands, with no list to edit.
+
+- **Prove the check away; never silence it.** The gate passes no
+  `--no-warn-performance`, and neither may a gated source. The warnings are
+  true — the check or the clamp is really in the IR — so what clears one is a
+  guard the prover reads (`if (at < 0 || at >= length)` before the loop, a loop
+  bounded by each length it indexes rather than by their minimum, a hoisted
+  `const n: i32 = toI32(xs.length)`), or reading an element into a local once
+  before a call can drop the length fact. `std/json.ts` and
+  `examples/arrays.ts` carry worked examples, each with the reason in a
+  comment. A guard that is always true in practice still says what the proof
+  needs, and costs a compare where the check cost a branch to a panic.
+- **A program written for one number mode** is listed in `PERF_GATE_REFUSED`
+  with the code that refuses it in the other (`examples/nbody.ts` under `i32`,
+  `NL2008`). A refusal for any other code fails, and so does a listed program
+  that starts compiling, until it comes off the list and the gate holds it.
+
+**`self/` is ratcheted rather than zeroed**, because the compiler's own source
+still carries warnings. The self-hosting section already compiles
+`self/compile.ts` alone with the compiler under test; it does so under
+`--json`, and the ratchet counts that compile's warnings — no compile of its
+own — against `tests/perf-baseline.json`, which holds the allowed count per
+file and per code. Two checks read it:
+
+- **More than the baseline fails** and prints every warning of the file and
+  code that grew; the new one is among them.
+- **Fewer than the baseline fails too**, with the count to write. A warning
+  proven away is progress, and lowering the number in the same change is what
+  stops the next one taking its place for free, so the cap only moves down.
+  Edit `tests/perf-baseline.json` by hand: set the named file's code to the
+  count the failure prints, and delete a file or code that reaches zero. A
+  refactor that moves a warning from one file to another trips both checks at
+  once, and the fix is the same edit.
+
+Both are counted from `--json` by `code` rather than from the report, for the
+reason the next section gives: the report stops at 20.
+
 ## Testing a Nish program in Nish
 
 Everything above is the harness that tests the *compiler*. A program the

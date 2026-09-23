@@ -708,6 +708,30 @@ takes whatever code the registry resolves for its text, or `NL0000`. The human
 report still goes to stderr in the internal-error case, because a crash is
 worth seeing twice.
 
+## Performance warnings in CI
+
+A performance warning never changes the exit code, so nothing in CI failed on
+one until the `npm test` gate: `std/`, which is compiled into every program
+that imports it, and `examples/` carried twenty between them unnoticed
+(`std/json.ts` 14, `std/testing.ts` 2, `examples/arrays.ts` 3,
+`examples/argv.ts` 2 on 72a4b16, after `std/text.ts`'s ten were proven away).
+There is no workflow step and no `--deny-warnings` flag: the gate is checks in
+`tests/run.js`, so the `test` job runs it through `npm test` and a local run
+fails the same way.
+
+| What | Held to | Read from |
+| --- | --- | --- |
+| every `std/*.ts`, `examples/*.ts` and `examples/*/main.ts`, discovered from the directory | **zero**, in both number modes where the program compiles | `--json`, `severity` `"performance"`; a failure names `file:line:col` and the `NL9xxx` code |
+| `self/compile.ts` | `tests/perf-baseline.json`, per file and per code — 85 on 72a4b16 (NL9007 65, NL9010 11, NL9009 4, NL9002 3, NL9003 2) | the `--json` of the compile the self-hosting section already makes |
+
+**Lowering the baseline.** When a change proves a `self/` warning away, the
+ratchet's second check fails with `self/<file>.ts NL9xxx: N, the baseline says
+M; set it to N in tests/perf-baseline.json`. Make that edit in the same change
+(and delete an entry that reaches zero). A count above the baseline fails the
+first check, which prints every warning of that file and code; the fix is the
+code, not the number. `.claude/testing.md`, "The performance gate", has the
+rest, including how a program written for one number mode is recorded.
+
 ## `--emit-ast` and `--emit-checked`
 
 Both write to stdout instead of IR (`self/ast_text.ts` and `self/dump.ts`);

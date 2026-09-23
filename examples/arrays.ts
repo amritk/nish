@@ -11,6 +11,11 @@
 //
 // The types are spelled explicitly (i32 / f64) so the module means the same
 // thing in both number modes.
+//
+// A loop that writes `out[i]` is bounded by `out.length` as well as by the
+// input's: the two are equal, but the compiler proves an index in range only
+// against the length the condition names, and `new Float64Array(xs.length)`
+// does not tell it that `out` is as long as `xs`.
 
 /** Sum of a Float64Array: the host passes the whole buffer once. */
 export const sumF64 = (xs: Float64Array): f64 => {
@@ -32,7 +37,7 @@ export const sumI32 = (xs: Int32Array): i32 => {
 /** A new array: the host gets a copy (wasm) or a fresh typed array (N-API). */
 export const scale = (xs: Float64Array, k: f64): Float64Array => {
   const out = new Float64Array(xs.length);
-  for (let i = 0; i < xs.length; i++) {
+  for (let i = 0; i < xs.length && i < out.length; i++) {
     out[i] = xs[i] * k;
   }
   return out;
@@ -40,7 +45,7 @@ export const scale = (xs: Float64Array, k: f64): Float64Array => {
 
 export const squares = (n: i32): Int32Array => {
   const out = new Int32Array(n);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < out.length; i++) {
     out[i] = i * i;
   }
   return out;
@@ -56,7 +61,13 @@ export const fill = (xs: Int32Array, v: i32): void => {
 export const widen = (xs: Int32Array): BigInt64Array => {
   const out = new BigInt64Array(xs.length);
   for (let i = 0; i < xs.length; i++) {
-    out[i] = toI64(xs[i]);
+    // Converted first and stored under its own test: `toI64` is a call, and a
+    // call may change an array's length, so a bound tested before it no longer
+    // proves `out[i]` in range after it.
+    const wide = toI64(xs[i]);
+    if (i < out.length) {
+      out[i] = wide;
+    }
   }
   return out;
 };

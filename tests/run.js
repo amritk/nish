@@ -1359,6 +1359,92 @@ if (!only || "performance".includes(only)) {
     );
   }
 
+  // The zero gate. What ships is held to no performance warning at all: every
+  // module of the standard library, which is compiled into each program that
+  // imports it, and every example, which is what a reader copies. Both are
+  // discovered from their directories, so a module or an example added later
+  // is gated the day it lands without anybody editing a list, and each is
+  // compiled in both number modes, because a warning can be one mode's alone.
+  // The warnings are read from `--json` by their `severity` and `code`, never
+  // from the report, whose wording may change and whose length is capped
+  // (`.claude/testing.md`). A check proven away is what clears this; there is
+  // no `--no-warn-performance` anywhere in it, and none in the gated sources.
+  //
+  // A few programs are written for one number mode and do not compile in the
+  // other at all. Each is named with the diagnostic code that refuses it, so a
+  // refusal for any other reason still fails, and a listed program that starts
+  // compiling fails too, until it comes off the list and the gate holds it.
+  const PERF_GATE_REFUSED = new Map([
+    ["examples/argv.ts f64", "NL2140"], // `main` answers `number`, which is f64 there
+    ["examples/arrays.ts f64", "NL2021"], // `i * i` is f64 there, and `out` is an Int32Array
+    ["examples/hello.ts f64", "NL2140"],
+    ["examples/multi/main.ts f64", "NL2140"],
+    ["examples/nbody.ts i32", "NL2008"], // written for f64 (its `// smoke: args` line): `Math.sqrt` of an i32
+  ]);
+  const gateSources = [
+    ...fs
+      .readdirSync(path.join(root, "std"))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => `std/${f}`),
+    ...fs
+      .readdirSync(path.join(root, "examples"), { withFileTypes: true })
+      .flatMap((entry) =>
+        entry.isDirectory()
+          ? fs.existsSync(path.join(root, "examples", entry.name, "main.ts"))
+            ? [`examples/${entry.name}/main.ts`]
+            : []
+          : entry.name.endsWith(".ts")
+            ? [`examples/${entry.name}`]
+            : []
+      ),
+  ].sort();
+  const gateRuns = gateSources.flatMap((source) => ["i32", "f64"].map((mode) => ({ source, mode })));
+  const gateResults = await pool(gateRuns, defaultJobs(), ({ source, mode }) =>
+    spawnAsync(
+      NISH,
+      [source, "-o", `${path.join(buildDir, "perf_gate", mode, source.replace(/[/.]/g, "_"))}/`, "--number-mode", mode, "--json"],
+      { cwd: root, encoding: "utf8" }
+    )
+  );
+  /** Every `--json` object a compile printed; a line that does not parse is kept as an error so it cannot pass. */
+  const diagnosticsOf = (stdout) =>
+    String(stdout)
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return { severity: "error", code: "unparsed", message: line };
+        }
+      });
+  const where = (d) => `${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`;
+  for (const [at, { source, mode }] of gateRuns.entries()) {
+    const result = gateResults[at];
+    const diagnostics = diagnosticsOf(result.stdout);
+    const refusedBy = PERF_GATE_REFUSED.get(`${source} ${mode}`);
+    if (refusedBy !== undefined) {
+      const codes = diagnostics.filter((d) => d.severity === "error").map((d) => d.code);
+      check(
+        `performance gate: ${source} is written for the other number mode and does not compile under --number-mode ${mode} (${refusedBy}, as recorded)`,
+        result.status === 1 && codes.includes(refusedBy),
+        result.status === 0
+          ? `it compiles now: take "${source} ${mode}" out of PERF_GATE_REFUSED in tests/run.js so the gate holds it`
+          : `refused for another reason than ${refusedBy}:\n${diagnostics.map(where).join("\n")}${result.stderr}`
+      );
+      continue;
+    }
+    const warnings = diagnostics.filter((d) => d.severity === "performance");
+    check(
+      `performance gate: ${source} compiles with no performance warning (--number-mode ${mode})`,
+      result.status === 0 && warnings.length === 0,
+      result.status !== 0
+        ? `it does not compile:\n${diagnostics.map(where).join("\n")}${result.stderr}`
+        : `${warnings.length} performance warning(s); prove each check away rather than silencing it ` +
+            `(.claude/testing.md, "The performance gate"):\n${warnings.map(where).join("\n")}`
+    );
+  }
+
   // The flag decides what is printed and nothing else.
   const off = compile("perf_str_concat_loop", "perf_str_off.ll", ["--no-warn-performance"]);
   check(
@@ -4661,22 +4747,93 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // are legal (docs/wp22-arrow-functions.md).
   const out = path.join(buildDir, "self");
   fs.mkdirSync(out, { recursive: true });
+  // `self/compile.ts` is compiled under `--json`, which moves its report to
+  // stdout as one object per diagnostic: the performance ratchet below counts
+  // that compile's warnings, so the count costs no compile of its own.
+  const RATCHETED = "compile.ts";
   const compileSelf = (names) =>
-    spawnSync(NISH, [...names.map((m) => path.join(selfDir, m)), "-o", `${out}/`], {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    spawnSync(
+      NISH,
+      [
+        ...names.map((m) => path.join(selfDir, m)),
+        "-o",
+        `${out}/`,
+        ...(names.length === 1 && names[0] === RATCHETED ? ["--json"] : []),
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
   const declaresMain = (m) =>
     /^export (function main\b|const main\s*=)/m.test(fs.readFileSync(path.join(selfDir, m), "utf8"));
   const entries = modules.filter(declaresMain);
   const groups = [modules.filter((m) => !declaresMain(m)), ...entries.map((m) => [m])];
-  const batched = groups.every((g) => g.length === 0 || compileSelf(g).status === 0);
+  let ratchetedRun = null;
+  const batched = groups.every((g) => {
+    if (g.length === 0) return true;
+    const r = compileSelf(g);
+    if (g.length === 1 && g[0] === RATCHETED) ratchetedRun = r;
+    return r.status === 0;
+  });
   for (const m of modules) {
     // `batched` is the whole answer when it is true; when it is false one of
     // the groups failed and every module is compiled alone to find out which.
     const r = batched ? null : compileSelf([m]);
-    check(`self/${m} compiles`, batched || r.status === 0, batched ? "" : r.stderr);
+    if (r !== null && m === RATCHETED) ratchetedRun = r;
+    check(`self/${m} compiles`, batched || r.status === 0, batched ? "" : `${r.stderr}${r.stdout}`);
+  }
+
+  // The performance ratchet. `std/` and `examples/` are held to zero warnings
+  // (the performance gate above); the compiler's own source is not there yet,
+  // so it is held to the count it has, per file and per code, in
+  // tests/perf-baseline.json, and the count may only fall. A warning more than
+  // the baseline fails and names the warnings of that file and code, among
+  // which the new one is. A warning fewer fails too, asking for the baseline to
+  // come down to the new count, because a cap that is never lowered lets the
+  // next warning in for free. Counted from `--json` by `code`, never from the
+  // report, which stops printing at 20 (`.claude/testing.md`).
+  if (ratchetedRun === null) {
+    check(`performance ratchet: self/${RATCHETED} was compiled, so its warnings can be counted`, false);
+  } else {
+    const baselineFile = path.join(root, "tests", "perf-baseline.json");
+    const baseline = JSON.parse(fs.readFileSync(baselineFile, "utf8")).counts;
+    const warnings = String(ratchetedRun.stdout)
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map((line) => JSON.parse(line))
+      .filter((d) => d.severity === "performance");
+    const actual = {};
+    for (const d of warnings) {
+      actual[d.file] ??= {};
+      actual[d.file][d.code] = (actual[d.file][d.code] ?? 0) + 1;
+    }
+    const over = [];
+    const under = [];
+    for (const file of [...new Set([...Object.keys(baseline), ...Object.keys(actual)])].sort()) {
+      const want = baseline[file] ?? {};
+      const got = actual[file] ?? {};
+      for (const code of [...new Set([...Object.keys(want), ...Object.keys(got)])].sort()) {
+        const allowed = want[code] ?? 0;
+        const count = got[code] ?? 0;
+        if (count > allowed) {
+          const named = warnings
+            .filter((d) => d.file === file && d.code === code)
+            .map((d) => `        ${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`);
+          over.push(`${file} ${code}: ${count}, the baseline allows ${allowed}; one of these is new:\n${named.join("\n")}`);
+        } else if (count < allowed) {
+          under.push(`${file} ${code}: ${count}, the baseline says ${allowed}; set it to ${count} in tests/perf-baseline.json`);
+        }
+      }
+    }
+    const total = warnings.length;
+    check(
+      `performance ratchet: self/${RATCHETED} has no performance warning past tests/perf-baseline.json (${total} today)`,
+      ratchetedRun.status === 0 && over.length === 0,
+      ratchetedRun.status !== 0 ? `${ratchetedRun.stdout}${ratchetedRun.stderr}` : over.join("\n")
+    );
+    check(
+      `performance ratchet: tests/perf-baseline.json is lowered to self/${RATCHETED}'s count wherever the count fell`,
+      ratchetedRun.status === 0 && under.length === 0,
+      `${under.join("\n")}\nA warning proven away is progress; the baseline comes down with it so it cannot come back.`
+    );
   }
   // Module constants are the reason `self/` can name its token kinds at all: if
   // one ever became a global, every kind would cost a load on the lexer's hot path.

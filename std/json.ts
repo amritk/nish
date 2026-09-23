@@ -91,8 +91,17 @@ const JSON_HEX_BASE: i32 = 16;
 const jsonIsBlankByte = (code: i32): boolean =>
   code === JSON_SPACE || code === JSON_TAB || code === JSON_NEWLINE || code === JSON_CARRIAGE_RETURN;
 
-/** The first index at or after `from` that is not blank, or the length. */
+/**
+ * The first index at or after `from` that is not blank, or the length.
+ *
+ * Every caller hands in an index it has already found, so `from` is never
+ * negative; the guard says so in a form the bounds proof reads, and is what
+ * lets the loop below read `text` without a check.
+ */
 const jsonSkipBlank = (text: string, from: i32): i32 => {
+  if (from < 0) {
+    return from;
+  }
   const length: i32 = toI32(text.length);
   let i: i32 = from;
   while (i < length && jsonIsBlankByte(toI32(text.charCodeAt(i)))) {
@@ -109,6 +118,9 @@ const jsonSkipBlank = (text: string, from: i32): i32 => {
  */
 const jsonEndOfString = (text: string, at: i32): i32 => {
   const length: i32 = toI32(text.length);
+  if (at < 0) {
+    return -1;
+  }
   let i: i32 = at + 1;
   while (i < length) {
     const code: i32 = toI32(text.charCodeAt(i));
@@ -130,13 +142,16 @@ const jsonEndOfString = (text: string, at: i32): i32 => {
  *
  * A string ends at its quote and an object or array at the closer that brings
  * the depth back to zero, with strings inside it skipped whole so that a `}` in
- * a message cannot close it. Anything else — a number, `true`, `false`, `null` —
+ * a message cannot close it. The skip is written into the one loop, as a
+ * flag, rather than as a call to `jsonEndOfString` that moves the cursor to
+ * wherever it answers: a cursor that only ever steps forward keeps the lower
+ * bound the bounds proof needs, and one assigned a callee's answer does not. Anything else — a number, `true`, `false`, `null` —
  * ends at the first byte that cannot be part of it, which is the comma, the
  * closer or the blank that follows.
  */
 const jsonEndOfValue = (text: string, at: i32): i32 => {
   const length: i32 = toI32(text.length);
-  if (at >= length) {
+  if (at < 0 || at >= length) {
     return -1;
   }
   const first: i32 = toI32(text.charCodeAt(at));
@@ -145,18 +160,25 @@ const jsonEndOfValue = (text: string, at: i32): i32 => {
   }
   if (first === JSON_OPEN_BRACE || first === JSON_OPEN_BRACKET) {
     let depth: i32 = 0;
+    let inString: boolean = false;
     let i: i32 = at;
     while (i < length) {
       const code: i32 = toI32(text.charCodeAt(i));
-      if (code === JSON_QUOTE) {
-        const end: i32 = jsonEndOfString(text, i);
-        if (end < 0) {
-          return -1;
+      if (inString) {
+        // `jsonEndOfString`'s rule: a backslash takes the byte after it along.
+        if (code === JSON_BACKSLASH) {
+          i += 2;
+          continue;
         }
-        i = end;
+        if (code === JSON_QUOTE) {
+          inString = false;
+        }
+        i += 1;
         continue;
       }
-      if (code === JSON_OPEN_BRACE || code === JSON_OPEN_BRACKET) {
+      if (code === JSON_QUOTE) {
+        inString = true;
+      } else if (code === JSON_OPEN_BRACE || code === JSON_OPEN_BRACKET) {
         depth += 1;
       } else if (code === JSON_CLOSE_BRACE || code === JSON_CLOSE_BRACKET) {
         depth -= 1;
@@ -249,6 +271,12 @@ const jsonUtf8 = (code: i32): string => {
  * reading of anything else.
  */
 const jsonUnescape = (text: string, at: i32, end: i32): string => {
+  // Both callers pass the inside of a literal `jsonEndOfString` found, so
+  // `0 <= at` and `end <= text.length` always hold. Saying so here is what
+  // proves every read below in range and drops the `substring` clamps.
+  if (at < 0 || end > toI32(text.length)) {
+    return "";
+  }
   let i: i32 = at;
   while (i < end && toI32(text.charCodeAt(i)) !== JSON_BACKSLASH) {
     i += 1;
@@ -263,7 +291,14 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
       i += 1;
       continue;
     }
-    parts.push(text.substring(start, i));
+    // `start === i` is an escape straight after another, and the empty run
+    // between them adds nothing to the join. The `start >= 0` half is always
+    // true — `start` is `at` or a cursor that has only moved forward — and is
+    // there because `start` is reassigned in the loop, which is where the
+    // bounds proof stops following it.
+    if (start >= 0 && start < i) {
+      parts.push(text.substring(start, i));
+    }
     // A trailing backslash has nothing after it: `0` is no escape letter, so it
     // falls to the default below and stands for itself.
     const letter: i32 = i + 1 < end ? toI32(text.charCodeAt(i + 1)) : 0;
@@ -327,19 +362,26 @@ export const jsonField = (object: string, name: string): string | null => {
     return null;
   }
   i = jsonSkipBlank(object, i + 1);
-  while (i < length && toI32(object.charCodeAt(i)) === JSON_QUOTE) {
+  // `jsonSkipBlank` never answers a negative index for a non-negative one, but
+  // the bounds proof does not look inside a callee, so every cursor it answers
+  // is tested for `i < 0` beside `i >= length`: the pair is what lets each read
+  // below go without a check.
+  while (i >= 0 && i < length && toI32(object.charCodeAt(i)) === JSON_QUOTE) {
     const keyEnd: i32 = jsonEndOfString(object, i);
     if (keyEnd < 0) {
       return null;
     }
     const key: string = jsonUnescape(object, i + 1, keyEnd - 1);
     i = jsonSkipBlank(object, keyEnd);
-    if (i >= length || toI32(object.charCodeAt(i)) !== JSON_COLON) {
+    if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COLON) {
       return null;
     }
     const valueAt: i32 = jsonSkipBlank(object, i + 1);
     const valueEnd: i32 = jsonEndOfValue(object, valueAt);
-    if (valueEnd < 0) {
+    // `jsonEndOfValue` answers `-1` for a `valueAt` outside the object and never
+    // answers past its end, so the last three tests change no answer: they are
+    // the range the value's first byte and its `substring` are proved in.
+    if (valueEnd < 0 || valueAt < 0 || valueAt >= length || valueEnd > toI32(object.length)) {
       return null;
     }
     if (key === name) {
@@ -349,7 +391,7 @@ export const jsonField = (object: string, name: string): string | null => {
       return object.substring(valueAt, valueEnd);
     }
     i = jsonSkipBlank(object, valueEnd);
-    if (i >= length || toI32(object.charCodeAt(i)) !== JSON_COMMA) {
+    if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COMMA) {
       return null;
     }
     i = jsonSkipBlank(object, i + 1);
