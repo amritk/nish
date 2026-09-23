@@ -104,11 +104,11 @@ that are *not* this package.
   an arrow bound to a module-level `const`, a function is never a value, there
   is no `try` / `catch`, and there are no optional or default parameters. Those
   three are what shape an API here more than any style preference — see the
-  header of `testing.ts` for what they did to that one. Generics arrived after
-  it (WP18), and `pair.ts` is the first module to export a generic type; a
-  generic *function* here would be monomorphised into each importer like any
-  other, but `testing.ts` still has one assertion per type because it was
-  written first ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3c).
+  header of `testing.ts` for what they did to that one, which was written before
+  WP18 added generic functions and classes
+  ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#generic-functions)) and still has
+  one assertion per type ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3c).
+  `pair.ts` is the first module here to export a generic type.
 - **Ship it with a `tests/link/` case.** `tests/link/<name>/` is the only place a
   multi-module program is exercised end to end, and it is also what puts the
   module into the corpus the stage1 oracles read

@@ -254,16 +254,20 @@ program is an expression statement. An assertion's failure is data for the
 report, not an error travelling to a caller, so the type that says "handle me"
 is the wrong type for it.
 
-### 3c. There are no generics, so there is one assertion per type
+### 3c. There were no generics, so there is one assertion per type
 
 `eqBool`, `eqI32`, `eqI64`, `eqF64`, `nearF64`, `eqStr`, plus `ok`. Not one
-`eq`, because the language has no type parameters
-([wp18-generics.md](wp18-generics.md) is the proposal, not the present tense).
+`eq`, because when this was decided the language had no type parameters.
+WP18 has since landed generic functions, classes and methods
+([wp18-generics.md](wp18-generics.md) §15,
+[LANGUAGE.md](LANGUAGE.md#generic-functions)), and the assertions are still
+one per type. The argument below is about the failure message and the float
+comparison, not about the absence of a type parameter, so it stands: one
+`eq<T>` could only report as precisely as these do with a generic `toString`,
+which WP18 did not add (§7, question 7).
 
-(That was the present tense when `std/testing` was written. Generic functions,
-classes and interfaces have since landed under WP18, and `std/pair` is the first
-module to export one; whether `std/testing` should grow a generic `eq` is a
-question for its next importer, not something `Pair` changes.)
+`std/pair` is the first module to export a generic type, and it does not change
+this: it is a type with no function beside it.
 
 The alternative was available and was refused: a single `eq(name, actual,
 expected)` over strings, with every caller interpolating. It would report
@@ -630,7 +634,8 @@ Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surfa
    `toString`, which the language does not have and which
    [wp18-generics.md](wp18-generics.md) does not propose.
    **Recommendation: leave the API alone when WP18 lands.** Four names that
-   report precisely beat one that reports `expected "3", got "4"`.
+   report precisely beat one that reports `expected "3", got "4"`. WP18 has
+   landed without a generic `toString`, and the API was left alone.
 
 ---
 

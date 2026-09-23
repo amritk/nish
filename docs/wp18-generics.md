@@ -2071,6 +2071,21 @@ compiles with no sidecar flag).
 **`self/`** does not use generic methods (the rolling freeze), so the bootstrap
 input is unchanged and its fixed point with it.
 
+### 15.9 Known issues
+
+Two defects found in review of G8 and generic methods, recorded here rather
+than in §16 because neither is a decision to defer — each is a bug with an
+issue that tracks it:
+
+- `coercesTo` in `self/structs.ts` decides that a class converts to an interface
+  by comparing the interface's *name* with the names in `implementsNames`, the
+  shape #161 fixed for constraints (#173).
+- The constructor-argument message of an instantiation names the template —
+  `` Argument 1 of `new Box`: expected i32, got string `` for `new Box<i32>("x")`
+  — rather than `new Box<i32>`, and `--emit-checked` prints no `callee` line
+  for the `new` of a generic instantiation. #175 tracks both, with the comment on
+  `Instantiation.template`.
+
 ---
 
 ## 16. WP18 is closed: what stays deferred
@@ -2104,13 +2119,3 @@ would bring it back.
    *Trigger:* a program that needs it. The same change then has to record the
    resolved `StructInfo` beside each `implements` name, so that
    `implementsDeclaration` in `self/generics.ts` compares declarations.
-
-Known follow-ups, found in review and not fixed here:
-
-- `coercesTo` in `self/structs.ts` decides that a class converts to an interface
-  by comparing the interface's *name* with the names in `implementsNames`, the
-  shape #161 fixed for constraints.
-- The constructor-argument message of an instantiation names the template —
-  `` Argument 1 of `new Box`: expected i32, got string `` for `new Box<i32>("x")`
-  — rather than `new Box<i32>`, and `--emit-checked` prints no `callee` line
-  for the `new` of a generic instantiation.
