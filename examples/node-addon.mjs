@@ -3,7 +3,7 @@
 // full -O3 machine code, the C runtime (strings, arena) linked in, and Node's
 // stable ABI so the .node file survives Node upgrades.
 //
-//   build/nish examples/add.ts -o build/add.ll --emit-napi build/add_napi.c
+//   nish examples/add.ts -o build/add.ll --emit-napi build/add_napi.c
 //   scripts/build.sh build/add.ll runtime/runtime.c build/add_napi.c -o build/add.node --profile napi
 //   node examples/node-addon.mjs build/add.node
 //
