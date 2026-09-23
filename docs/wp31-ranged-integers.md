@@ -312,6 +312,38 @@ an unchecked entry could fold away a clamp that JavaScript requires.
 **`--wrapping`** changes nothing about an entry. It only decides whether the
 `i32` arithmetic *before* the entry wraps.
 
+**Under Node the check does not exist, and that is a recorded divergence.**
+`integer<Lo, Hi>` is a plain `number` alias in `runtime/nish.d.ts`, so it is
+erased when the same source runs under Node. A program that fails an entry
+check exits 1 natively and runs to completion under Node, and §7's
+`for (let i: integer<0, 255> = 0; i < 256; i++)` is exactly that program. It is
+the same class of divergence as "`a[i]` is unchecked"
+([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md#what-stays-divergent)) and as checked
+division in `tests/differential/known-failures.txt`: only a program that
+leaves the range can tell the two apart, and native is the one that is right
+about the type. W1 records it in three places, because each of the three
+oracles reads its own list:
+
+- a bullet under "What stays divergent" in `docs/RUN_UNDER_NODE.md`, in the
+  words of the `a[i]` one: out of range is silent under Node and an exit-1
+  panic natively;
+- a `KNOWN` entry in `tests/differential/unmodified.js` for W1's panicking
+  case, which carries `--number-mode f64` so that runner compares it (it reads
+  only f64-mode programs with an entry point, and would otherwise report the
+  divergence as unexpected);
+- a line in `tests/differential/known-failures.txt` under the "By design"
+  heading of the division panics, naming the same case. Today that list is
+  inert for it: the rewriter was stage0's and is deleted, so a case added after
+  R6 has no frozen rewrite and `node tests/differential/goldens.js --update`
+  puts it in `tests/differential/goldens/unfrozen.txt` instead (wp19 §6). The
+  entry is written anyway, so that the divergence is already declared when a
+  stage1-typed rewriter brings that oracle back.
+
+The rule for the corpus is therefore the one the division panics follow: a
+program that fails an entry check is a `tests/cases/` panic case with its
+divergence declared, never a `tests/differential/corpus/` program, whose job is
+to agree with Node.
+
 ---
 
 ## 7. Leaving the range
@@ -482,7 +514,7 @@ which with `instanceDisplayName` spells `Box<integer<0, 255>>`, and
 
 | Stage | Commit | Delivers | Tests |
 | --- | --- | --- | --- |
-| **W1** | `feat(checker)!: ranged integer types (WP31)` | `N_TYPE_LITERAL` and its oracle mapping. `K_RANGED`, `typeName` and `mangle`. The refusals of §4 and the `integer` name rule. The entry rules of §6, with every entry checked, since nothing is elided yet. The widening of §7. The `declare function` refusal. The `-g` typedef. The `runtime/nish.d.ts` line. The rule in `docs/LANGUAGE.md` under Types, `docs/AI.md`, a cookbook entry and a `CHANGELOG.md` line. | `rng_param`, `rng_generic`, `rng_widen` (`.ll` and `.out`); `rng_entry_panic` (exit 1, stderr); `dbg_rng`; a `reject_rng_*` case and a `tests/wordings/` program for each new code |
+| **W1** | `feat(checker)!: ranged integer types (WP31)` | `N_TYPE_LITERAL` and its oracle mapping. `K_RANGED`, `typeName` and `mangle`. The refusals of §4 and the `integer` name rule. The entry rules of §6, with every entry checked, since nothing is elided yet. The widening of §7. The `declare function` refusal. The `-g` typedef. The `runtime/nish.d.ts` line. The rule in `docs/LANGUAGE.md` under Types, `docs/AI.md`, a cookbook entry and a `CHANGELOG.md` line. The Node divergence of §6, in `docs/RUN_UNDER_NODE.md`, `tests/differential/unmodified.js`'s `KNOWN` and `tests/differential/known-failures.txt`. | `rng_param`, `rng_generic`, `rng_widen` (`.ll` and `.out`); `rng_entry_panic` (exit 1, stderr) and `rng_entry_panic_f64`, the f64-mode twin the unmodified runner compares; `dbg_rng`; a `reject_rng_*` case and a `tests/wordings/` program for each new code |
 | **W2** | `perf(checker): prove range entries and index through declared ranges (WP31)` | §8: the two queries, `nodeProvenRange`, the unsigned upper bounds, the `toI32(u8)` fact, and the new `performance` code. | `perf_rng_loop`, `perf_rng_quiet`, `arr_bounds_ranged`, and `perf_rng_counter`, which is §7's trap: a warning, then a panic at run time |
 | **W3** | `feat(interop): ranged parameters at the host boundary (WP31)` | §9: the prologue check under the linkage condition, the N-API and wasm `RangeError`, and the comments in the header and `.d.ts`. | `interop_rng_*`: the header under `clang -std=c11 -Wall -Wextra -Werror -pedantic`, the `.d.ts` under `tsc --noEmit`, and a Node call that must throw |
 | **W4** | `docs(wp31): record the ranged-integer measurements` | the acceptance program below, committed to `bench/`, and its numbers written into this note and into wp15 item 6 | the programs themselves, and their checksums in `bench/run.mjs` if they join the suite |
