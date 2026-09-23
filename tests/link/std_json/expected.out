@@ -24,6 +24,16 @@ PASS  a nested object comes back as its text
 PASS  so does an array
 PASS  a field after both is still found
 PASS  a field of a nested object is not a field of this one
+PASS  a brace in a nested string closes nothing
+PASS  and the field after it is found
+PASS  a bracket in a nested string closes nothing
+PASS  and the field after it is found
+PASS  an escaped quote in a nested string ends nothing
+PASS  and the field after it is found
+PASS  a doubled backslash does not escape a nested string's quote
+PASS  and the field after it is found
+PASS  a nested string that never ends leaves its value unended
+PASS  and nothing after it answers
 PASS  a boolean is its own bytes
 PASS  so is false
 PASS  a null value
@@ -37,4 +47,4 @@ PASS  an empty string
 PASS  a key with no value
 PASS  an unterminated string
 PASS  a truncated object still answers the field before the cut
-json: 39 passed, 0 failed, 0 skipped
+json: 49 passed, 0 failed, 0 skipped
