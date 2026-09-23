@@ -2068,6 +2068,45 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
     );
   }
+  // Two orderings the walk got wrong for locals before paths existed, and paths
+  // then inherited (#179's review). A later `&&` / `||` operand's effects have
+  // to kill an earlier operand's facts, and `a[i] = v` reads `i` before `v` and
+  // checks after it. Each program proves an index, breaks the proof inside the
+  // condition or the stored value, and reads or writes anyway; each read past
+  // the array, or wrote a million slots past it, before the fix.
+  for (const [name, rule, stdout, message] of [
+    ["arr_path_cond_call", "a call in a later `&&` operand", "", "5 >= 1"],
+    ["arr_path_cond_store", "a field store in a later `&&` operand", "", "5 >= 1"],
+    ["arr_path_cond_root", "a root reassignment in a later `&&` operand", "", "5 >= 1"],
+    ["arr_path_cond_or", "a call in a later `||` operand", "", "5 >= 1"],
+    ["arr_path_cond_ternary", "a call in a later operand of a ternary's test", "", "5 >= 1"],
+    ["arr_path_cond_while", "a call in a later operand of a `while` test", "1", "1 >= 1"],
+    ["arr_path_cond_string", "a string field replaced by a later operand", "", "3 >= 1"],
+    ["arr_path_cond_generic", "a call in a later operand, in a generic class", "", "5 >= 1"],
+    ["arr_path_cond_f64", "a call in a later operand, under --number-mode f64", "", "5 >= 1"],
+    ["arr_bounds_cond_effect", "a `pop` in a later operand, on a local", "", "2 >= 2"],
+    ["arr_bounds_cond_assign", "a rebind in a later operand, on a local", "", "2 >= 1"],
+    ["arr_path_store_rhs", "`h.xs[i] = (i = 0)`", "", "1000000 >= 3"],
+    ["arr_path_store_rhs_field", "`g.hs[i].n = (i = 0)`", "", "1000000 >= 2"],
+    ["arr_path_store_rhs_compound", "`h.xs[i] += (i = 2)`", "", "1000000 >= 3"],
+    ["arr_bounds_store_rhs", "`xs[i] = (i = 0)` on a local", "", "1000000 >= 3"],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const exe = path.join(buildDir, name);
+    // The f64 case exports `test`, so it is driven the way a `.out` case is.
+    const hasMain = /\bexport\s+const\s+main\s*=/.test(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"));
+    const cc = linkNative(exe, ll, { driver: hasMain ? null : DRIVER_C });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      `${name}: ${rule} takes the proof away, so the access panics`,
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes(`index out of range: ${message}`) &&
+        String(run.stdout).trim() === stdout,
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
   // The declared-type rule on its own: `narrowed` and `plain` are one loop over
   // a `Holder | null` narrowed by a guard and over a `Holder`. Only the second
   // may lose its check. The round trip above cannot show this, because the

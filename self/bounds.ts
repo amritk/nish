@@ -939,12 +939,12 @@ const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFa
   if (op === "&&") {
     const l = conditionFacts(walk, state, left);
     const r = conditionFacts(walk, state, right);
-    return factsFrom(concatFacts(l.whenTrue, r.whenTrue), []);
+    return factsFrom(concatFacts(survivingFacts(walk, l.whenTrue, right), r.whenTrue), []);
   }
   if (op === "||") {
     const l = conditionFacts(walk, state, left);
     const r = conditionFacts(walk, state, right);
-    return factsFrom([], concatFacts(l.whenFalse, r.whenFalse));
+    return factsFrom([], concatFacts(survivingFacts(walk, l.whenFalse, right), r.whenFalse));
   }
   if (op === "===") {
     return factsFrom(equalityFacts(walk, left, right), []);
@@ -967,6 +967,55 @@ const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFa
     return factsFrom(orderFacts(walk, state, right, left, false), orderFacts(walk, state, left, right, true));
   }
   return new ConditionFacts();
+};
+
+/**
+ * What of `facts` still holds once `later` has run: the left operand's half of
+ * `a && b` and `a || b`, which is evaluated *before* the right operand and
+ * has to survive whatever the right operand does.
+ *
+ * The walk applies the right operand's effects as it goes, but every caller
+ * then adds the whole condition's facts back from the syntax, after the walk,
+ * so a fact the right operand killed came back to life:
+ * `i < this.items.length && this.trim()` proved `this.items[i]` after `trim`
+ * had popped, and `i < xs.length && xs.pop() > 0` did the same to a local.
+ * This drops those facts by the same rules that prune a loop's entry state,
+ * because "everything `later` can do" is exactly what `forgetAcross` models.
+ */
+const survivingFacts = (walk: BoundsWalk, facts: Fact[], later: Node): Fact[] => {
+  const scratch = new State();
+  addFacts(scratch, facts);
+  forgetAcross(walk, scratch, later);
+  return factsOf(scratch);
+};
+
+/** The facts `state` holds, as the facts that would rebuild it. */
+const factsOf = (state: State): Fact[] => {
+  const out: Fact[] = [];
+  for (const v of state.nonNegative) {
+    out.push(new Fact(FACT_NON_NEGATIVE, v, null, 0));
+  }
+  let k = 0;
+  while (k < state.belowIndex.length) {
+    out.push(new Fact(FACT_BELOW, state.belowIndex[k], state.belowHolder[k], 0));
+    k = k + 1;
+  }
+  k = 0;
+  while (k < state.atMostIndex.length) {
+    out.push(new Fact(FACT_AT_MOST, state.atMostIndex[k], state.atMostHolder[k], 0));
+    k = k + 1;
+  }
+  k = 0;
+  while (k < state.maxIndexVar.length) {
+    out.push(new Fact(FACT_MAX_INDEX, state.maxIndexVar[k], null, state.maxIndexValue[k]));
+    k = k + 1;
+  }
+  k = 0;
+  while (k < state.minLengthVar.length) {
+    out.push(new Fact(FACT_MIN_LENGTH, state.minLengthVar[k], null, state.minLengthValue[k]));
+    k = k + 1;
+  }
+  return out;
 };
 
 const concatFacts = (a: Fact[], b: Fact[]): Fact[] => {
@@ -1473,6 +1522,47 @@ const storesRecord = (ctx: CheckContext, access: Node): boolean => {
   return type < 0 || ctx.table.isStruct(type);
 };
 
+/**
+ * Whether evaluating `value` can change what the access `target` reads before
+ * it: the index local, the array local, or a path's root or any field on it.
+ * `a[i] = value` reads those two before `value` and checks after it, so a
+ * proof stated in the state after `value` is a proof about them only while
+ * `value` leaves them alone. A call needs no case here: it cannot reach a
+ * local, and it already drops every path and array length it could.
+ */
+const rebindsAccess = (walk: BoundsWalk, value: Node, target: Node): boolean => {
+  const ctx = walk.ctx;
+  const effects = new Effects();
+  collectEffects(ctx, value, effects);
+  const index = localOf(ctx.program, target.children[1]);
+  if (index !== null && (contains(effects.stepped, index) || contains(effects.clobbered, index))) {
+    return true;
+  }
+  const receiver = unwrapBoundsParens(target.children[0]);
+  const local = localOf(ctx.program, receiver);
+  if (local !== null) {
+    return contains(effects.clobbered, local);
+  }
+  const holder = pathHolder(walk, receiver);
+  if (holder === null) {
+    return false;
+  }
+  for (const path of walk.paths) {
+    if (path.holder !== holder) {
+      continue;
+    }
+    if (effects.records || contains(effects.clobbered, path.root)) {
+      return true;
+    }
+    for (const field of effects.fields) {
+      if (path.fields.indexOf(field) >= 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 /** Assignments and the short-circuit operators; every other binary is left then right. */
 const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   const ctx = walk.ctx;
@@ -1501,25 +1591,42 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
 
   const target = unwrapBoundsParens(left);
   if (target.kind === N_INDEX) {
-    // The emitter evaluates the array, the index and the value, and only then
-    // writes the check — so a call in the value is a call the check comes
-    // after, and the proof has to survive it.
     walkExpression(walk, state, target.children[0]);
     walkExpression(walk, state, target.children[1]);
-    walkExpression(walk, state, right);
-    judge(walk, state, target, target.children[0], target.children[1]);
+    if (op !== "=") {
+      // `a[i] op= v` checks, loads and only then evaluates `v`
+      // (`emitElementAssignment`), so the check is judged before `v` runs.
+      judge(walk, state, target, target.children[0], target.children[1]);
+      walkExpression(walk, state, right);
+    } else {
+      // `a[i] = v` reads the array and the index, evaluates `v`, and only then
+      // checks — with the index and the array it read *before* `v`. So a call
+      // in the value is one the proof has to survive, which judging after it
+      // gives; and a value that writes the index or rebinds the array makes
+      // the state after it describe something the store does not use, so
+      // there is no proof at all: `xs[i] = (i = 0)` checked the new `i` and
+      // stored through the old one.
+      walkExpression(walk, state, right);
+      if (!rebindsAccess(walk, right, target)) {
+        judge(walk, state, target, target.children[0], target.children[1]);
+      }
+    }
     if (storesRecord(ctx, target)) {
       forgetPaths(walk, state);
     }
     return;
   }
 
-  walkExpression(walk, state, right);
   if (target.kind === N_MEMBER) {
+    // `recv.f = v` evaluates the receiver, and every check inside it, before
+    // `v` (`emitFieldAssignment`), so the receiver is walked first: walking it
+    // second judged `g.hs[i]` in `g.hs[i].n = (i = 0)` against the new `i`.
     walkExpression(walk, state, target.children[0]);
+    walkExpression(walk, state, right);
     forgetPathsThrough(walk, state, target.text);
     return;
   }
+  walkExpression(walk, state, right);
   const v = localOf(ctx.program, target);
   if (v === null) {
     return;

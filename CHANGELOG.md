@@ -42,7 +42,7 @@ hand — the git log is the working account until a release turns it into one.
 
 ### Performance
 
-- checker: Key bounds length facts by property path (#106)
+- checker: Key bounds length facts by property path (#106), and stop proving an index a later `&&` / `||` operand or a stored value invalidates — which also closes those holes for plain locals
 
 ### Documentation
 

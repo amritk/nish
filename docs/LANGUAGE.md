@@ -2171,6 +2171,28 @@ flag changes (`tests/cases/opt_wrapping` pins both halves). An `f64` index is ne
 not a bound on its truncation. `tests/cases/arr_bounds_proven` and
 `perf_bounds_quiet` pin the proofs; the surviving checks warn, below.
 
+**A fact is taken where it is true, and only then.** Two orderings decide
+that, for a local and a path alike:
+
+  - in `a && b` and `a || b`, `a`'s facts are proved before `b` runs, so they
+    reach the code the condition guards only if nothing `b` does can undo
+    them. A call, an assignment or a field store in `b` drops them by the
+    rules below, and `i < xs.length && xs.pop() > 0` proves nothing about
+    `xs[i]` (`arr_bounds_cond_effect`, `arr_bounds_cond_assign`, and the path
+    forms `arr_path_cond_*`: a call, a store, a root reassignment, `||`, a
+    ternary, a `while`, a string path, a generic class and f64 mode);
+  - an element store is judged where its check runs against the values it
+    stores through. `a[i] op= v` checks before `v` runs and is judged there.
+    `a[i] = v` reads `a` and `i`, runs `v`, then checks, so it is proved only if
+    `v` leaves `i` and `a` alone: `xs[i] = (i = 0)` keeps its check
+    (`arr_bounds_store_rhs`, `arr_path_store_rhs`,
+    `arr_path_store_rhs_compound`). A field store evaluates its receiver before
+    its value, and `g.hs[i].n = (i = 0)` is judged that way round
+    (`arr_path_store_rhs_field`).
+
+Both were unsound for locals before property paths existed; the fix and the
+tests cover both.
+
 **A property path has to earn what a local gets for free**, because a field
 can be written through an alias and a local cannot. `h.xs.length` proves
 `h.xs[i]` only while nothing between the test and the access can rebind the

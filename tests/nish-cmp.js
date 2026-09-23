@@ -550,6 +550,27 @@ const DECLARED = [
     changelog: "Key bounds length facts by property path",
     why: "`this.entries.length > 0 ? this.entries[0] : null` in lib.ts is proven by the guard on the path, so lib.ll drops its `nish_panic_index` and main.ll's declarations of lib's methods regroup their attributes",
   },
+  // The local forms of the two ordering holes #179's review found. The seed
+  // proves each of these accesses and reads or writes past the array; HEAD keeps
+  // the check, so the difference is the fix.
+  {
+    program: "tests/cases/arr_bounds_cond_effect.ts",
+    file: "arr_bounds_cond_effect.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "a new program: `i < xs.length && drain(xs) > 0` no longer proves `xs[i]`, which the reference compiler proves and reads past",
+  },
+  {
+    program: "tests/cases/arr_bounds_cond_assign.ts",
+    file: "arr_bounds_cond_assign.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "a new program: `i < xs.length && (xs = short).length > 0` no longer proves `xs[i]`, which the reference compiler proves and reads past",
+  },
+  {
+    program: "tests/cases/arr_bounds_store_rhs.ts",
+    file: "arr_bounds_store_rhs.ll",
+    changelog: "Key bounds length facts by property path",
+    why: "a new program: `xs[i] = (i = 0)` keeps its check, which the reference compiler drops and writes past the array",
+  },
   {
     program: "docs/cookbook/arr_bounds_path.ts",
     file: "arr_bounds_path.ll",
