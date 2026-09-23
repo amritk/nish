@@ -741,7 +741,7 @@ reading the prose — which was the point of a code in the first place.
 | `NL3019` | `engines.nish` is not a range this compiler reads. | `tests/link/package_engines_range` |
 | `NL3020` | The entry declares no Nish condition in any spelling — §6's `lodash` case. | `tests/link/package_not_nish`, `package_no_condition` |
 | `NL3021` | The manifest is not well-formed JSON, *and* no entry point could be read out of it. Named with the manifest's path, line and column. | `tests/link/package_malformed` |
-| `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow. | `tests/link/package_no_subpath` |
+| `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow — a nested condition object included, since the `nish` row may be inside it. | `tests/link/package_no_subpath`, `package_nested_condition` |
 
 `tests/nish/cli.ts` compiles each case with `--json` and holds its code, and
 `tests/link/package_engines_met` is the floor that is met and compiles.

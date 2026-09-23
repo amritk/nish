@@ -645,6 +645,7 @@ const checkPackageBoundary = (t: Suite, cli: Cli): void => {
   checkPackageCode(t, cli, "package_not_nish", none, "NL3020");
   checkPackageCode(t, cli, "package_malformed", none, "NL3021");
   checkPackageCode(t, cli, "package_no_subpath", none, "NL3014");
+  checkPackageCode(t, cli, "package_nested_condition", none, "NL3014");
 };
 
 export const main = (): number => {

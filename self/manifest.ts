@@ -61,6 +61,7 @@
 // is a name no other module can use — which the bootstrap found the moment this
 // file arrived. The stage0 twin keeps the same names so the two stay diffable.
 
+import { isDigit } from "./lexer";
 import { splitByte } from "./strings";
 
 const TAB: i32 = 9;
@@ -74,7 +75,6 @@ const MINUS: i32 = 45;
 const DOT: i32 = 46;
 const SLASH: i32 = 47;
 const DIGIT_ZERO: i32 = 48;
-const DIGIT_NINE: i32 = 57;
 const COLON: i32 = 58;
 const UPPER_E: i32 = 69;
 const LOWER_A: i32 = 97;
@@ -271,8 +271,19 @@ export class ManifestEntry {
   }
 }
 
-/** Whether `object` has a key that begins with `.`, which makes it a subpath map rather than a condition map. */
-const manifestHasSubpathKey = (object: string): boolean => {
+/** `manifestHasKeyOrValue` asks for a key that begins with `.`. */
+const SCAN_SUBPATH_KEY: i32 = 0;
+
+/** `manifestHasKeyOrValue` asks for a value that is an object or an array. */
+const SCAN_NESTED_VALUE: i32 = 1;
+
+/**
+ * Whether `object` has a key or a value of the kind `scan` names. A `.` key
+ * makes it a subpath map rather than a condition map; a nested value is a
+ * condition this reader does not follow, so a map that has one cannot be said
+ * to declare no Nish condition — the `nish` row may be inside it.
+ */
+const manifestHasKeyOrValue = (object: string, scan: i32): boolean => {
   let i = manifestSkipBlank(object, 0);
   if (i < 0 || i >= object.length || object.charCodeAt(i) !== OPEN_BRACE) {
     return false;
@@ -283,14 +294,21 @@ const manifestHasSubpathKey = (object: string): boolean => {
     if (keyEnd < 0) {
       return false;
     }
-    if (object.substring(i + 1, keyEnd - 1).startsWith(".")) {
+    if (scan === SCAN_SUBPATH_KEY && object.substring(i + 1, keyEnd - 1).startsWith(".")) {
       return true;
     }
     i = manifestSkipBlank(object, keyEnd);
     if (i < 0 || i >= object.length || object.charCodeAt(i) !== COLON) {
       return false;
     }
-    const valueEnd = manifestEndOfValue(object, manifestSkipBlank(object, i + 1));
+    const valueAt = manifestSkipBlank(object, i + 1);
+    if (scan === SCAN_NESTED_VALUE && valueAt >= 0 && valueAt < object.length) {
+      const first = object.charCodeAt(valueAt);
+      if (first === OPEN_BRACE || first === OPEN_BRACKET) {
+        return true;
+      }
+    }
+    const valueEnd = manifestEndOfValue(object, valueAt);
     if (valueEnd < 0) {
       return false;
     }
@@ -348,10 +366,8 @@ export const nishExportEntry = (
   // to a failure below, where a subpath map without `.` must not be reported
   // as a condition map that forgot its condition.
   let conditions = forSubpath;
-  let shorthand = false;
   if (conditions.length === 0 && subpath === ".") {
     conditions = exports;
-    shorthand = true;
   }
   if (conditions.length === 0) {
     return new ManifestEntry(MANIFEST_NO_FILE, "");
@@ -364,7 +380,7 @@ export const nishExportEntry = (
     const target = manifestTarget(selected);
     return target === null ? new ManifestEntry(MANIFEST_NO_FILE, "") : new ManifestEntry(MANIFEST_FOUND, target);
   }
-  if (shorthand && manifestHasSubpathKey(exports)) {
+  if (forSubpath.length === 0 && manifestHasKeyOrValue(exports, SCAN_SUBPATH_KEY)) {
     return new ManifestEntry(MANIFEST_NO_FILE, "");
   }
   // A string where the conditions would be is a target with no condition on
@@ -380,6 +396,12 @@ export const nishExportEntry = (
   }
   if (manifestField(conditions, other).length > 0) {
     return new ManifestEntry(MANIFEST_OTHER_MODE, "");
+  }
+  // `{"node": {"nish": "./x.ts"}}` may well declare the condition, one level
+  // down where this reader does not look, so it is not a claim that the
+  // package has none.
+  if (manifestHasKeyOrValue(conditions, SCAN_NESTED_VALUE)) {
+    return new ManifestEntry(MANIFEST_NO_FILE, "");
   }
   return new ManifestEntry(MANIFEST_NOT_NISH, "");
 };
@@ -403,7 +425,7 @@ const MANIFEST_DEPTH_LIMIT: i32 = 256;
 
 /** Whether `code` may appear in a JSON number or in `true` / `false` / `null`. */
 const manifestIsScalarByte = (code: i32): boolean =>
-  (code >= DIGIT_ZERO && code <= DIGIT_NINE) ||
+  isDigit(code) ||
   (code >= LOWER_A && code <= LOWER_Z) ||
   code === MINUS ||
   code === PLUS ||
@@ -476,7 +498,7 @@ const manifestCheckValue = (text: string, at: i32, depth: i32): i32 => {
     j = j + 1;
   }
   const word = text.substring(i, j);
-  const numeric = first === MINUS || (first >= DIGIT_ZERO && first <= DIGIT_NINE);
+  const numeric = first === MINUS || isDigit(first);
   if (j === i || (!numeric && word !== "true" && word !== "false" && word !== "null")) {
     return -1 - i;
   }
@@ -530,7 +552,7 @@ const manifestReadNumber = (text: string, at: i32, next: i32[]): i32 => {
   let value = 0;
   while (i >= 0 && i < text.length) {
     const code = text.charCodeAt(i);
-    if (code < DIGIT_ZERO || code > DIGIT_NINE) {
+    if (!isDigit(code)) {
       break;
     }
     if (i - at >= 9) {
@@ -597,7 +619,7 @@ export const manifestEngineCheck = (manifest: string, condition: string, version
   if (raw.charCodeAt(0) !== QUOTE) {
     return ENGINE_UNREADABLE;
   }
-  const range = manifestEngineRange(manifest, condition);
+  const range = raw.substring(1, raw.length - 1);
   const next: i32[] = [0];
   const opAt = manifestSkipBlank(range, 0);
   if (!range.substring(opAt, range.length).startsWith(">=")) {
