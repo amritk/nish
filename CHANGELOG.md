@@ -46,6 +46,7 @@ hand — the git log is the working account until a release turns it into one.
 ### Documentation
 
 - Record WP18 G8 as landed and close WP18
+- Retire the last "no generics" claims and keep WP18 §16 to deferrals
 
 ## [0.8.0] - 2026-09-23
 

@@ -101,7 +101,8 @@ The reasoning, the six-target table and the measurements are in
 
 ## 3. Monomorphisation without generics
 
-Nish has no user generics and this package does not add them.
+Nish had no user generics when this package landed, and it did not add them;
+WP18 added them later ([wp18-generics.md](wp18-generics.md) §15).
 `Result<T, E>` is a built-in type constructor, in the same way `Array<T>` is:
 `resolveTypeNode` recognises the name, resolves the two arguments, and returns
 a `{ kind: "result", ok, err, state }`.

@@ -101,9 +101,12 @@ that are *not* this package.
   may declare those names itself.
 - **It is an Nish program**, so the constraints are the language's: a function is
   an arrow bound to a module-level `const`, a function is never a value, there
-  are no generics, no `try` / `catch`, and no optional or default parameters.
-  Those four are what shape an API here more than any style preference — see the
-  header of `testing.ts` for what they did to that one.
+  is no `try` / `catch`, and there are no optional or default parameters. Those
+  three are what shape an API here more than any style preference — see the
+  header of `testing.ts` for what they did to that one, which was written before
+  WP18 added generic functions and classes
+  ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#generic-functions)) and still has
+  one assertion per type ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3c).
 - **Ship it with a `tests/link/` case.** `tests/link/<name>/` is the only place a
   multi-module program is exercised end to end, and it is also what puts the
   module into the corpus the stage1 oracles read
