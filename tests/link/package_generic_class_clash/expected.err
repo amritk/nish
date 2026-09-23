@@ -1,1 +1,1 @@
-a class or interface name is still program-wide, so two packages cannot both declare one
+Class `Holder<i32>` is declared in package the program itself and again in package `pkg_a`; a class or interface name is still program-wide, so two packages cannot both declare one
