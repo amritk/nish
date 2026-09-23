@@ -129,11 +129,12 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
 | Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `--unchecked-indexing`), `.length`, `push`, `for...of` | [Arrays](docs/LANGUAGE.md#array-literals) |
 | Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout | [Classes](docs/LANGUAGE.md#classes) |
+| Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
 | Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `Arena.reset/mark/release/used` for explicit control | [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
 | `T \| null` | for class, interface, array and string types; `=== null`, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io`, which is the same builtin under a name nothing can shadow | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
-| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic classes, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
+| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic type aliases, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 Semantics that differ from JavaScript on purpose: signed integer overflow is
 undefined behaviour (`--wrapping` restores two's-complement wrapping; the
 unsigned widths wrap either way), integer division by zero panics instead of
@@ -502,9 +503,10 @@ reference counting for objects that must outlive an arena reset, and dynamic
 dispatch — which would be a trait object over an interface, since inheritance
 was removed ([docs/wp25-inheritance.md](docs/wp25-inheritance.md)) and every
 method call names one symbol today.
-Generic *functions* compile — each instantiation becomes its own specialised
-function ([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic
-classes, closures, `try`/`catch` and labelled `break`/`continue` are refusals
+Generic functions, classes, interfaces and methods compile — each
+instantiation becomes its own specialised function or struct
+([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic type aliases,
+closures, `try`/`catch` and labelled `break`/`continue` are refusals
 rather than gaps, each with the message and the idiom to use instead
 ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
 Release engineering (`--version`, exit codes, npm packaging, tag-driven
