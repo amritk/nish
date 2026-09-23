@@ -1,0 +1,1 @@
+main.ts:10:32: error: `T` of `f` requires `T extends Base`, and `Base` does not implement it; pass `Base` itself, because a class constraint is satisfied by that class alone

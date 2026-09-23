@@ -293,6 +293,12 @@ const DECLARED = [
     why: "a new negative: the importer's own same-named `Shape` passed as the argument, which shares lib's type id and which the reference compiler compiled",
   },
   {
+    program: "tests/link/generic_constraint_same_name_class/main.ts",
+    file: "exit",
+    changelog: "Hold a constraint to its declaration, not its name",
+    why: "a new negative: the importer's own same-named `Base` class passed to a `T extends Base` bound on lib's class, which shares its type id and which the reference compiler compiled",
+  },
+  {
     program: "tests/cases/dbg_generic.ts",
     file: "dbg_generic.ll",
     changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
