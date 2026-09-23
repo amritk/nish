@@ -634,25 +634,25 @@ const DECLARED = [
   {
     program: "tests/cases/arr_bounds_break_for.ts",
     file: "arr_bounds_break_for.ll",
-    changelog: "Bounds proofs join every break into the state after a loop",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
     why: "a new program: a `break` after the body moves `i` keeps the check on `xs[i]` after the `for`, which the reference compiler drops because the condition proved it",
   },
   {
     program: "tests/cases/arr_bounds_break_while.ts",
     file: "arr_bounds_break_while.ll",
-    changelog: "Bounds proofs join every break into the state after a loop",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
     why: "a new program: a `break` after the body rebinds `xs` keeps the check on `xs[5]` after the `while`, which the reference compiler drops because the condition proved it",
   },
   {
     program: "tests/cases/arr_bounds_break_for_string.ts",
     file: "arr_bounds_break_for_string.ll",
-    changelog: "Bounds proofs join every break into the state after a loop",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
     why: "a new program: a guarded `break` after the body moves `k` keeps the check on `s.charCodeAt(i)` under `i < k`, which the reference compiler drops",
   },
   {
     program: "tests/cases/arr_bounds_break_while_string.ts",
     file: "arr_bounds_break_while_string.ll",
-    changelog: "Bounds proofs join every break into the state after a loop",
+    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
     why: "a new program: a `break` after the body moves `k` keeps the check on `s.charCodeAt(i)` under `i < k`, which the reference compiler drops",
   },
   {
