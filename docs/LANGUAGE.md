@@ -421,8 +421,8 @@ export const main = (): i32 => {
 ### The type
 
 `Result<T, E>` is a built-in type constructor with exactly two arguments — the
-same kind of thing `Array<T>` is, not a user generic, which Nish still does
-not have (`` `Result` needs exactly two type arguments, e.g. `Result<number, string>` ``,
+same kind of thing `Array<T>` is, built in rather than a user
+[generic class](#generic-classes-and-interfaces) (`` `Result` needs exactly two type arguments, e.g. `Result<number, string>` ``,
 `tests/cases/reject_result_type_args`).
 
 - `T` may be `void`: `Result<void, E>` is the fallible operation with nothing

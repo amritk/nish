@@ -260,7 +260,9 @@ is a compiler-generated struct per async function, which is what
 not a third built-in family beside `Array<T>` and `Result<T, E>`
 ([wp18-generics.md](wp18-generics.md) §6.1).
 
-What is genuinely lost without generics is every operation that holds pending
+What is genuinely lost without generics — as the language stood when this note
+was written; WP18 has since landed them ([wp18-generics.md](wp18-generics.md)
+§15), which is what the table's "after WP18" row now waits on — is every operation that holds pending
 work *as data*: no array of futures, so no general `join` or `select`, and no
 storing one in a field. A fixed-arity `awaitAll(a, b)` over known call sites is
 expressible; a work queue is not. That is a real restriction on how much
@@ -559,8 +561,9 @@ re-argue the case. **The trigger is I/O, not syntax.**
 - A **wasm host** that wants a Nish module to yield mid-function, once JSPI
   is ordinary. That is a different design (the host owns the loop) and would be
   its own note, not this one.
-- WP18 landing, which would make A4 — futures held as data, `join`, `select` —
-  expressible. Worth having and still not a trigger: a promise with nothing to
+- WP18 landing, which makes A4 — futures held as data, `join`, `select` —
+  expressible. It has since landed ([wp18-generics.md](wp18-generics.md) §15);
+  worth having and still not a trigger: a promise with nothing to
   promise is still nothing.
 
 None of this is pre-1.0. M4 freezes the language reference (MASTER_PLAN §9) and
@@ -629,7 +632,7 @@ The promise as a first-class value does not.**
 
 | What a JavaScript programmer expects | Reachable? | What it needs |
 | --- | --- | --- |
-| `async function f()` and `await g()` | **yes** | A2, then A3. No generics (§4.1) |
+| `async function f()` and `await g()` | **yes** | A2, then A3. Needs no generics (§4.1) |
 | `await` on a known call site, sequentially | **yes** | the same |
 | fixed-arity `awaitAll(f(), g())` over known calls | **yes** | the same — both callees are static, so no type is named |
 | homogeneous `awaitAll(fs)` over an array of pending calls | **yes, after WP18** | futures held as data — A4 |
