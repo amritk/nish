@@ -1017,17 +1017,52 @@ and their `.ll` goldens are byte-identical files.
     package write `nish` above `nish-f64` and never have its f64 source
     compiled, with nothing said about it — the silent mismatch this spelling
     exists to make loud.
-  - **Presence of the condition is the claim.** A package that offers this
-    compiler no file for the subpath asked for is
-    `` Package `plainjs` has no Nish entry point: its `exports` gave this
-    compiler no file to compile for `.` `` (`tests/link/package_not_nish`) —
-    which is what an ordinary npm package gets, in words that name what is
-    missing. The sentence reports what the compiler came away with rather than
-    what the manifest declares, because the two are not the same thing: a
-    `nish-f64` that names something other than a file outranks a `nish` that is
-    there and correct, and is what the message is about. A package that is not
-    installed at all is `` Cannot find package `@x/y` ``
+  - **Presence of the condition is the claim, and every failure to find it
+    names its cause** (`docs/wp21-packages.md` §6, §11). Each is refused at
+    the import, before a byte of the package is checked, with its own `--json`
+    code:
+    - A package whose entry offers no Nish condition in any spelling — an
+      ordinary npm package, with `import` and `require` rows or a bare
+      `".": "./index.js"` — is `` Package `plainjs` has no Nish entry point:
+      its `exports` gave this compiler no file to compile for `.`, because that
+      entry declares none of the conditions this compiler compiles source from
+      (`nish`, `nish-i32`, `nish-f64`) `` (`NL3020`,
+      `tests/link/package_not_nish`, `tests/link/package_no_condition`).
+    - A package that offers only the *other* mode's condition is
+      `` Package `pkg_f64` supports Nish in f64 mode only: its `exports` offers
+      `nish-f64` for `.` and neither `nish-i32` nor `nish`, and this program is
+      compiling in i32 (`--number-mode i32`) `` (`NL3017`,
+      `tests/link/package_other_mode`, and the reverse in
+      `tests/link/package_other_mode_f64`).
+    - A `package.json` that is not well-formed JSON, when no entry point could
+      be read out of it, names the manifest and the line and column where it
+      breaks: `` Package `pkg_broken` has a malformed manifest:
+      …/package.json:4:3 is not well-formed JSON `` (`NL3021`,
+      `tests/link/package_malformed`). One the reader got a file out of before
+      the break compiles, as it always has.
+    - Anything else — no `exports` at all, no key for the subpath asked for, or
+      a value the reader does not follow — is `` Package `pkg_one` has no Nish
+      entry point: its `exports` gave this compiler no file to compile for
+      `./extra` `` (`NL3014`, `tests/link/package_no_subpath`). The sentence
+      reports what the compiler came away with rather than what the manifest
+      declares, because a `nish-f64` that names something other than a file
+      outranks a `nish` that is there and correct, and is what the message is
+      about.
+
+    A package that is not installed at all is `` Cannot find package `@x/y` ``
     (`tests/cases/reject_bare_package`).
+  - **A compiler floor goes in `engines.nish`**, npm's slot for it, and it is
+    checked whether or not the entry point resolves. The one range read is a
+    floor, `>=X.Y.Z` or `>=X.Y`, blanks allowed around the version; a package
+    whose floor is above this compiler is `` Package `pkg_future` needs a
+    newer compiler: its `engines.nish` asks for `>=999.0.0` and this is nish
+    0.8.0 `` (`NL3018`, `tests/link/package_engines_floor`), and one met
+    compiles (`tests/link/package_engines_met`). Any other shape — a caret, a
+    tilde, an upper bound, a bare version, a value that is not a string — is
+    refused rather than taken as met, because a floor the compiler cannot read
+    is one it cannot claim to meet: `` declares `engines.nish` as `^0.1.0`,
+    which is not a range this compiler reads `` (`NL3019`,
+    `tests/link/package_engines_range`).
   - **A package is where its path says, and a symlink is not followed.** One
     package installed twice, or reached both directly and through a symlink —
     pnpm's layout, and npm's whenever it cannot hoist — is two packages of one

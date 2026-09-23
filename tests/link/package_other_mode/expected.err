@@ -1,0 +1,1 @@
+supports Nish in f64 mode only: its `exports` offers `nish-f64` for `.` and neither `nish-i32` nor `nish`, and this program is compiling in i32 (`--number-mode i32`)
