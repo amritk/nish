@@ -197,12 +197,8 @@ export class TypeTable {
    */
   readonlys: boolean[];
   /**
-   * How a diagnostic spells a struct id, where that differs from its name: an
-   * instantiated class is `Box$i32` to LLVM and `Box<i32>` to the person who
-   * wrote it (WP18 §6.7). Empty for every other id, which `typeName` reads as
-   * "the name is the spelling". It is written once, by `setDisplayName` where
-   * the instantiation is created, and read only by `typeName`: `nameOf`,
-   * `mangle` and every symbol keep the mangled name.
+   * The source spelling of an instantiated struct (`Box<i32>` for `Box$i32`,
+   * WP18 §6.7), or empty. Read only by `typeName`; symbols keep the name.
    */
   displays: string[];
   /** The interning index: a key built by `derivedKey` -> the id it names. */

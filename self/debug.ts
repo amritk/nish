@@ -319,11 +319,8 @@ export class DebugInfo {
    * There is no pointee type this compiler can honestly name, and DWARF spells
    * that `baseType: null` — `void *`, as clang writes it.
    *
-   * It is memoised here rather than in `typeKeys` because those keys used to
-   * be `TypeTable.typeName`, which spells the foreign pointer `CPtr`, and a
-   * `class CPtr` — legal, though unreachable by that name — would have shared
-   * the entry. The mangling keeps the two apart now (`$CPtr` is the class),
-   * and a field of its own still costs nothing.
+   * It is memoised in a field of its own rather than in `typeKeys`, so no
+   * struct key can ever share its entry.
    */
   foreignPointer(): string {
     if (this.cptr === "") {

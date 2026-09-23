@@ -180,6 +180,18 @@ export const instanceDisplayName = (table: TypeTable, base: string, args: i32[])
 };
 
 /**
+ * The struct id of one class instantiation, with its source spelling recorded
+ * beside it (WP18 §6.7): `Box$i32` to LLVM, `Box<i32>` to `typeName`. Every
+ * place that mints an instantiated struct id goes through here, so the id never
+ * exists without its display name.
+ */
+export const instanceStructType = (table: TypeTable, base: string, args: i32[]): i32 => {
+  const type = table.structOf(instanceSymbol(table, base, args));
+  table.setDisplayName(type, instanceDisplayName(table, base, args));
+  return type;
+};
+
+/**
  * The canonical form of an inferred type argument: a `Result` narrowed to one
  * arm is the same type as the un-narrowed one, and the mangling already ignores
  * the proof, so the tuple has to as well or two ids would ask for one symbol.
@@ -478,7 +490,7 @@ export const deferInstantiation = (ctx: CheckContext, imp: ImportBinding, writte
     }
   }
   ctx.program.deferredInstances.push(new DeferredInstance(imp, args, at));
-  return ctx.table.structOf(instanceSymbol(ctx.table, imp.importedName, args));
+  return instanceStructType(ctx.table, imp.importedName, args);
 };
 
 /**
@@ -758,12 +770,9 @@ export const instantiateStructHere = (
     bindings.set(template.typeParams[i], args[i]);
     i = i + 1;
   }
-  const info = new StructInfo(name, template.kind, ctx.table.structOf(name), template.decl, template.origin);
+  const type = instanceStructType(ctx.table, template.sourceName, args);
+  const info = new StructInfo(name, template.kind, type, template.decl, template.origin);
   info.exported = template.exported;
-  // WP18 §6.7: `Box<i32>` in every diagnostic, the dump and `-g`, while the
-  // symbol and `%struct` stay `Box$i32`. Set before the members are collected,
-  // because their names and messages are built from it.
-  ctx.table.setDisplayName(info.type, instanceDisplayName(ctx.table, template.sourceName, args));
   const instance = new StructInstantiation(template, args, info, bindings);
   instance.from = site.fromStruct;
   template.count = template.count + 1;

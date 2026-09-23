@@ -385,21 +385,22 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
+  const shown = spelled(ctx, owner);
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
-    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${spelled(ctx, owner)}\``);
+    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${shown}\``);
     return;
   }
   // As in `collectField` above, and worth the repetition rather than a shared
   // helper: the two sentences differ, and so does the order — stage0 reads a
   // method's modifiers before its `?` (`rejectMethodModifiers`), so
   // `readonly m?()` is about the modifier and not about the marker.
-  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${spelled(ctx, owner)}\``)) return;
+  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${shown}\``)) return;
   if ((decl.flags & FLAG_OPTIONAL) !== 0) {
-    ctx.error(decl, `${what} of class \`${spelled(ctx, owner)}\` cannot be optional`);
+    ctx.error(decl, `${what} of class \`${shown}\` cannot be optional`);
     return;
   }
   const symbol = `${owner.name}.${name}`;
-  const sig = new FunctionSig(symbol, `${spelled(ctx, owner)}.${name}`, decl);
+  const sig = new FunctionSig(symbol, `${shown}.${name}`, decl);
   sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
@@ -409,7 +410,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(
       decl.children[0],
-      `${what} of class \`${spelled(ctx, owner)}\` needs an explicit return type annotation`
+      `${what} of class \`${shown}\` needs an explicit return type annotation`
     );
     sig.returnType = T_ERROR;
   } else {
@@ -422,8 +423,9 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
 };
 
 const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  const shown = spelled(ctx, owner);
   if (owner.ctor !== null) {
-    ctx.error(decl, `Class \`${spelled(ctx, owner)}\` has more than one constructor (no overloads)`);
+    ctx.error(decl, `Class \`${shown}\` has more than one constructor (no overloads)`);
     return;
   }
   // stage0 reads a constructor's modifiers with the same function it reads a
@@ -440,10 +442,10 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   // initializer and no constructor assigns it` — advice about a constructor
   // that is right there. stage0 says one thing here because it throws out of
   // the class, and this is that, without the throw.
-  const modifiers = `Constructor of class \`${spelled(ctx, owner)}\``;
+  const modifiers = `Constructor of class \`${shown}\``;
   rejectMemberModifiers(ctx, decl, modifiers);
   const symbol = `${owner.name}.constructor`;
-  const sig = new FunctionSig(symbol, `${spelled(ctx, owner)}.constructor`, decl);
+  const sig = new FunctionSig(symbol, `${shown}.constructor`, decl);
   sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
