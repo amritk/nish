@@ -61,11 +61,11 @@ export const splitLines = (text: string): string[] => {
   let i: i32 = 0;
   while (i < length) {
     if (toI32(text.charCodeAt(i)) === NEWLINE) {
-      // `start` is never negative and never passes `i`, so this test always
-      // holds. It is written because it is what proves `start` within
-      // `text`: the clamp on that bound is dead once it is proven, and the
-      // emitter drops it.
-      if (start >= 0 && start <= toI32(text.length)) {
+      // `start` is never negative and never passes `i`, which is below
+      // `length`, so this test always holds. It is written because it is what
+      // proves `start` within `text`: the clamp on that bound is dead once it
+      // is proven, and the emitter drops it.
+      if (start >= 0 && start < length) {
         lines.push(text.substring(start, i));
       }
       start = i + 1;
@@ -93,7 +93,7 @@ export const splitWhitespace = (text: string): string[] => {
     if (isTextBlankByte(toI32(text.charCodeAt(i)))) {
       // `start` is `-1` or a byte already passed, so the second half always
       // holds when the first does; it proves the bound, as in `splitLines`.
-      if (start >= 0 && start <= toI32(text.length)) {
+      if (start >= 0 && start < length) {
         parts.push(text.substring(start, i));
         start = -1;
       }

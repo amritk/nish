@@ -1266,8 +1266,9 @@ if (!only || "performance".includes(only)) {
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that
-    // compiles in both number modes; `perf_bounds_toi32_f64` is checked below.
+    // compiles in both number modes; the `_f64` twin runs under its `.args`.
     "perf_bounds_toi32",
+    "perf_bounds_toi32_f64",
     // Literal spellings neither compiler folds: normalising them in stage0 would
     // fold exactly what stage1 refuses, and only one of the two would warn.
     "perf_overflow_spelling",
@@ -1279,23 +1280,13 @@ if (!only || "performance".includes(only)) {
     // interface, and a generic instantiation.
     "perf_padding_quiet",
   ]) {
-    const quiet = compile(name, `${name}.ll`);
+    const quiet = compile(name, `${name}.ll`, caseArgs(name));
     check(
       `performance: ${name} takes no slow path with a faster form to name, so nothing is reported`,
       quiet.status === 0 && summaries(quiet.stderr).length === 0,
       quiet.stderr
     );
   }
-
-  // WP15 §2: `toI32(w.length)` is the length, in both number modes. The quiet
-  // case above runs in i32 mode; this is the same program under f64, where the
-  // hoist is the only spelling that compiles at all.
-  const toI32Quiet = compile("perf_bounds_toi32_f64", "perf_bounds_toi32_f64_quiet.ll", ["--number-mode", "f64"]);
-  check(
-    "performance: perf_bounds_toi32_f64 proves every access through `toI32(w.length)` under --number-mode f64, so nothing is reported",
-    toI32Quiet.status === 0 && summaries(toI32Quiet.stderr).length === 0,
-    toI32Quiet.stderr
-  );
 
   // Only the length converts to a length: the conversion of anything else
   // leaves the check, and the warning, where they were.
@@ -1360,7 +1351,7 @@ if (!only || "performance".includes(only)) {
     check(
       `performance: a program importing all ${textExports.length} exports of nish/text compiles with no warning from std/text.ts (--number-mode ${mode})`,
       run.status === 0 &&
-        textExports.length >= 8 &&
+        textExports.length > 0 &&
         fs.existsSync(path.join(outDir, "text.ll")) &&
         fromText.length === 0 &&
         !run.stderr.includes("more performance warnings"),

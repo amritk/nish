@@ -934,6 +934,16 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
 };
 
 /**
+ * A call that is lowered inline and calls nothing, so it cannot reach an array
+ * and move its `len`: the one exception to "any call drops every array length
+ * fact". `charCodeAt` is a load. The builtin `toI32` is a cast or one
+ * `llvm.fptosi.sat`, and without it `const m: i32 = toI32(ys.length)` would
+ * drop the fact `const n: i32 = toI32(xs.length)` recorded one line above.
+ * The walk and the loop-effect scan both ask this, so they cannot disagree.
+ */
+const callsNothing = (ctx: CheckContext, call: Node): boolean => isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call);
+
+/**
  * Record the verdict for one access. A proof goes into the side table the
  * emitter reads; the absence of one inside a loop goes on the list the WP15 §8
  * walk reports from, but only for the shape the analysis could have proved —
@@ -1161,14 +1171,9 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
       }
     }
     if (isCharCodeAt(ctx, e)) {
-      // `charCodeAt` is inlined to a load; it calls nothing and mutates nothing.
       judge(walk, state, e, callee.children[0], e.children[1].children[0]);
-      return;
     }
-    if (isBuiltinToI32(ctx.program, e)) {
-      // A cast or one `llvm.fptosi.sat` inline: nothing is called that could
-      // hold an array. Without this, `const m = toI32(ys.length)` would drop
-      // the fact `const n = toI32(xs.length)` recorded one line above it.
+    if (callsNothing(ctx, e)) {
       return;
     }
     // `nish_str_new` is a callee like any other, so the array lengths go here
@@ -1372,7 +1377,7 @@ const collectEffects = (ctx: CheckContext, node: Node, stepped: Local[], clobber
   if (node.kind === N_NEW) {
     calls = true;
   }
-  if (node.kind === N_CALL && !isCharCodeAt(ctx, node) && !isBuiltinToI32(ctx.program, node)) {
+  if (node.kind === N_CALL && !callsNothing(ctx, node)) {
     calls = true;
   }
   if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
