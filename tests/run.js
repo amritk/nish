@@ -3766,6 +3766,273 @@ if (!only || "interop".includes(only)) {
     );
   }
 
+  // ---- WP18 G8: exported instantiations, named for C and JavaScript ------------------
+  // An instantiation's symbol holds `$`, and a `.` when an argument is an array, a
+  // readonly array, a nullable or a `Result` (`identity$arr.i32`). C can spell neither
+  // and JavaScript cannot spell the `.`, so every sidecar calls an instantiation by its
+  // C name, `nish_gen_` and the escaped collapse, which a declared name cannot take
+  // (`nish_` is reserved). The fixture instantiates `identity` at each mangling tag, a
+  // class and a string, and each sidecar is compiled by the tool a host would use and
+  // then called: clang for the header, tsc for the `.d.ts`, Node for the wasm loader
+  // and the addon.
+  const genFnSrc = "tests/cases/interop_generic_fn.ts";
+  const genFn = emit(genFnSrc, [
+    "--emit-header",
+    sidecar("interop_generic_fn", "h"),
+    "--emit-dts",
+    sidecar("interop_generic_fn", "d.ts"),
+    "--emit-napi",
+    sidecar("interop_generic_fn", "napi.c"),
+  ]);
+  check("interop_generic_fn: every sidecar is written", genFn.status === 0, genFn.stderr);
+  const genFnText = (ext) =>
+    genFn.status === 0 && fs.existsSync(sidecar("interop_generic_fn", ext))
+      ? fs.readFileSync(sidecar("interop_generic_fn", ext), "utf8")
+      : "";
+  const genFnHeader = genFnText("h");
+  const genFnJsNames = [
+    "nish_gen_identity_i32",
+    "nish_gen_identity_arr_i32",
+    "nish_gen_identity_roarr_i32",
+    "nish_gen_identity_res_i32_i32",
+  ];
+  check(
+    "interop_generic_fn.h declares each instantiation as nish_gen_<escaped collapse>, bound to its symbol",
+    genFnHeader.includes('int32_t nish_gen_identity_i32(int32_t x) NISH_SYMBOL("identity$i32");') &&
+      genFnHeader.includes('nish_array *nish_gen_identity_arr_i32(nish_array *x) NISH_SYMBOL("identity$arr.i32");') &&
+      genFnHeader.includes("nish_gen_identity_roarr_i32(const nish_array *x) NISH_SYMBOL(\"identity$roarr.i32\");") &&
+      genFnHeader.includes('NISH_SYMBOL("identity$opt.$Box$i32");') &&
+      genFnHeader.includes("nish_gen_identity_opt__Box_i32(") &&
+      genFnHeader.includes('nish_gen_identity_res_i32_i32(nish_result_i32_i32_word x) NISH_SYMBOL("identity$res.i32.i32");') &&
+      genFnHeader.includes('nish_str *nish_gen_identity_str(const nish_str *x) NISH_SYMBOL("identity$str");') &&
+      genFnHeader.includes('int32_t nish_gen_Box_i32_get(struct nish_gen_Box_i32 *this_) NISH_SYMBOL("Box$i32.get");'),
+    genFnHeader
+  );
+  check(
+    "interop_generic_fn.h says an instantiation is one, and never calls it a C keyword",
+    genFnHeader.includes("(an instantiation of identity: call it as nish_gen_identity_i32)") &&
+      genFnHeader.includes("(a method of an instantiation of Box: call it as nish_gen_Box_i32_get)") &&
+      !genFnHeader.includes("a C keyword"),
+    genFnHeader
+  );
+  if (genFn.status === 0) {
+    const syn = spawnSync("clang", [...strictC, "-pedantic", "-fsyntax-only", "-x", "c", sidecar("interop_generic_fn", "h")]);
+    check(
+      "interop_generic_fn.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    );
+    const genDriver = path.join(interopDir, "interop_generic_fn_driver.c");
+    fs.writeFileSync(
+      genDriver,
+      [
+        "#include <stdio.h>",
+        '#include "interop_generic_fn.h"',
+        "int main(void) {",
+        "  int32_t buf[3] = {7, 8, 9};",
+        "  nish_array xs = {3, 3, (char *)buf};",
+        "  struct nish_gen_Box_i32 box = {5};",
+        "  nish_array *same = nish_gen_identity_arr_i32(&xs);",
+        "  nish_str *s = nish_gen_identity_str(nish_str_from_i32(nish_gen_identity_i32(41)));",
+        "  nish_result_i32_i32_word r = {1, {.value = 6}};",
+        '  printf("%s %d %d %d %d\\n", s->data, ((int32_t *)same->data)[2], nish_gen_Box_i32_get(nish_gen_identity__Box_i32(&box)),',
+        "         nish_gen_identity_opt__Box_i32(NULL) == NULL, nish_gen_identity_res_i32_i32(r).as.value);",
+        "  nish_free_arena();",
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    );
+    const genExe = path.join(interopDir, "interop_generic_fn_driver");
+    const cc = spawnSync(
+      "clang",
+      [...strictC, "-O2", sidecar("interop_generic_fn", "ll"), path.join(runtimeDir, "runtime.c"), genDriver, "-o", genExe],
+      { cwd: root }
+    );
+    const run = cc.status === 0 ? spawnSync(genExe) : null;
+    check(
+      "a -Werror C driver calls every kind of instantiation through interop_generic_fn.h",
+      run !== null && String(run.stdout).trim() === "41 9 5 1 6",
+      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+    );
+  }
+
+  const genFnDts = genFnText("d.ts");
+  const members = [...genFnDts.matchAll(/^ {2}([^\s/*(]+)\(/gm)].map((m) => m[1]);
+  check(
+    "interop_generic_fn.d.ts names every export with an identifier, an array argument's included",
+    genFnJsNames.every((name) => members.includes(name)) &&
+      members.every((name) => /^[A-Za-z_][A-Za-z0-9_$]*$/.test(name)),
+    genFnDts
+  );
+  if (genFnDts.length > 0) {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop_generic_fn", "d.ts")], { cwd: root });
+    check("interop_generic_fn.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr));
+  }
+  if (genFn.status === 0 && has("wasm-ld")) {
+    const genWasm = path.join(interopDir, "interop_generic_fn.wasm");
+    const w = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_generic_fn", "ll"),
+        "runtime/runtime_wasm.c",
+        "-o",
+        genWasm,
+        "--profile",
+        "wasm",
+      ],
+      { cwd: root }
+    );
+    const script = [
+      'import { readFileSync } from "node:fs";',
+      `const api = await (await import(${JSON.stringify(sidecar("interop_generic_fn", "mjs"))})).load(readFileSync(${JSON.stringify(genWasm)}));`,
+      "console.log([api.nish_gen_identity_i32(7), Array.from(api.nish_gen_identity_arr_i32(new Int32Array([1, 2]))).join(','),",
+      "  Array.from(api.nish_gen_identity_roarr_i32(new Int32Array([3]))).join(','),",
+      "  JSON.stringify(api.nish_gen_identity_res_i32_i32({ ok: false, error: 9 }))].join(' '));",
+    ].join("\n");
+    const r = w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+    check(
+      "wasm: the companion loader calls each instantiation by its JavaScript name, `.`-mangled ones included",
+      r !== null && String(r.stdout).trim() === '7 1,2 3 {"ok":false,"error":9}',
+      String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    );
+  }
+  const genFnShim = genFnText("napi.c");
+  check(
+    "interop_generic_fn.napi.c exports and wraps each instantiation under its C name",
+    genFnJsNames.every((name) => genFnShim.includes(`{"${name}", nish_napi_${name}},`)) &&
+      genFnShim.includes('{"nish_gen_identity_str", nish_napi_nish_gen_identity_str},') &&
+      !/nish_napi_[A-Za-z0-9_]*[$.]/.test(genFnShim),
+    genFnShim
+  );
+  if (genFn.status === 0 && !hasNodeHeaders) {
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): interop_generic_fn addon build skipped`);
+  } else if (genFn.status === 0) {
+    const syn = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar("interop_generic_fn", "napi.c")]);
+    check("interop_generic_fn.napi.c compiles under -std=c11 -Wall -Wextra -Werror", syn.status === 0, String(syn.stderr));
+    const genAddon = path.join(interopDir, "interop_generic_fn.node");
+    const b = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_generic_fn", "ll"),
+        "runtime/runtime.c",
+        sidecar("interop_generic_fn", "napi.c"),
+        "-o",
+        genAddon,
+        "--profile",
+        "napi",
+      ],
+      { cwd: root }
+    );
+    const script = [
+      `const api = require(${JSON.stringify(genAddon)});`,
+      "let err = ''; try { api.nish_gen_identity_i32('x'); } catch (e) { err = e.message; }",
+      "console.log([api.nish_gen_identity_i32(7), api.nish_gen_identity_str('caf\\u00e9'),",
+      "  Array.from(api.nish_gen_identity_arr_i32(new Int32Array([1, 2]))).join(','), err].join(' | '));",
+    ].join("\n");
+    const r = b.status === 0 ? spawnSync("node", ["-e", script], { cwd: root }) : null;
+    check(
+      "napi: the addon calls each instantiation by the name the .d.ts gives it",
+      r !== null &&
+        String(r.stdout).trim() === "7 | café | 1,2 | nish_gen_identity_i32: argument 1 (x) must be a number",
+      String(b.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    );
+  }
+
+  // A declared `identity_i32` beside `identity<i32>`: before G8 both were `identity_i32`
+  // in C, and the header declared it twice with two meanings.
+  const genClash = emit("tests/cases/interop_generic_collision.ts", [
+    "--emit-header",
+    sidecar("interop_generic_collision", "h"),
+  ]);
+  const genClashText =
+    genClash.status === 0 ? fs.readFileSync(sidecar("interop_generic_collision", "h"), "utf8") : "";
+  check(
+    "interop_generic_collision.h declares the user's identity_i32 and identity<i32> as two functions",
+    genClashText.includes("int32_t identity_i32(int32_t x);") &&
+      genClashText.includes('int32_t nish_gen_identity_i32(int32_t x) NISH_SYMBOL("identity$i32");'),
+    genClash.stderr + genClashText
+  );
+  if (genClash.status === 0) {
+    const clashDriver = path.join(interopDir, "interop_generic_collision_driver.c");
+    fs.writeFileSync(
+      clashDriver,
+      [
+        "#include <stdio.h>",
+        '#include "interop_generic_collision.h"',
+        "int main(void) {",
+        '  printf("%d %d\\n", identity_i32(40), nish_gen_identity_i32(40));',
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    );
+    const clashExe = path.join(interopDir, "interop_generic_collision_driver");
+    const cc = spawnSync(
+      "clang",
+      [
+        ...strictC,
+        "-pedantic",
+        sidecar("interop_generic_collision", "ll"),
+        path.join(runtimeDir, "runtime.c"),
+        clashDriver,
+        "-o",
+        clashExe,
+      ],
+      { cwd: root }
+    );
+    const run = cc.status === 0 ? spawnSync(clashExe) : null;
+    check(
+      "a -pedantic C driver calls both identity_i32 and nish_gen_identity_i32 through one header",
+      run !== null && String(run.stdout).trim() === "41 40",
+      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+    );
+  }
+
+  // §8 message 9 is a property of the *sidecar*, not of the program: every sidecar flag
+  // refuses an exported generic nothing instantiates and writes nothing, and the same
+  // program with no sidecar flag compiles.
+  const unusedSrc = "tests/cases/reject_interop_generic_unused.ts";
+  for (const [flag, ext] of [
+    ["--emit-header", "h"],
+    ["--emit-dts", "d.ts"],
+    ["--emit-napi", "napi.c"],
+  ]) {
+    const out = sidecar("reject_interop_generic_unused", ext);
+    fs.rmSync(out, { force: true });
+    fs.rmSync(sidecar("reject_interop_generic_unused", "ll"), { force: true });
+    const r = emit(unusedSrc, [flag, out]);
+    check(
+      `${flag} refuses an exported generic with no instantiation, and writes neither the IR nor the sidecar`,
+      r.status === 1 &&
+        r.stderr.includes("`identity` is generic, so it has no single C signature") &&
+        r.stderr.includes("`Box` is generic, so it has no single C layout") &&
+        !fs.existsSync(out) &&
+        !fs.existsSync(sidecar("reject_interop_generic_unused", "ll")),
+      r.stderr
+    );
+  }
+  // NL4008 is about C prototypes, so only a file that declares both halves refuses: the
+  // header declares every function, and the N-API shim only those it bridges, which a
+  // method taking a `Point` is not.
+  const clashNapi = emit("tests/cases/reject_interop_generic_clash.ts", [
+    "--emit-napi",
+    sidecar("reject_interop_generic_clash", "napi.c"),
+  ]);
+  check(
+    "--emit-napi alone accepts a method/function C-name pair the shim bridges neither half of",
+    clashNapi.status === 0 && fs.existsSync(sidecar("reject_interop_generic_clash", "napi.c")),
+    clashNapi.stderr
+  );
+  const unusedPlain = emit(unusedSrc, []);
+  check(
+    "the same program with no sidecar flag compiles: message 9 is about the sidecar",
+    unusedPlain.status === 0 && fs.existsSync(sidecar("reject_interop_generic_unused", "ll")),
+    unusedPlain.stderr
+  );
+
   // ---- WP24 A1: asynchronous N-API exports (--emit-napi-async) --------------------
   // The shim runs the Nish function on whatever thread N-API handed it, which for a
   // `require()`d addon is Node's main thread, so a 200 ms call blocked Node's event

@@ -50,10 +50,10 @@ import { CLI, VERSION } from "./branding";
 import { Compilation } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
 import { checkedText } from "./dump";
-import { externalFunctions } from "./interop_abi";
+import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop_abi";
 import { generateDts } from "./interop_dts";
 import { generateHeader } from "./interop_header";
-import { generateNapiShim } from "./interop_napi";
+import { generateNapiShim, napiBridges } from "./interop_napi";
 import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
 import { dirname } from "./paths";
@@ -543,6 +543,16 @@ export const main = (): number => {
     );
     return 1;
   }
+  // A sidecar that cannot describe the program is refused before any IR is
+  // emitted or written, so a failed compile leaves nothing behind that the
+  // header was meant to go with. No sidecar flag, no question asked (WP18 G8).
+  const anySidecar =
+    opts.emitHeader.length > 0 || opts.emitDts.length > 0 || opts.emitNapi.length > 0 || opts.emitNapiAsync.length > 0;
+  const fns: ExternalFunction[] = anySidecar ? externalFunctions(compilation) : [];
+  if (anySidecar && !acceptsSidecars(compilation, cDeclared(compilation, fns))) {
+    report(compilation, json);
+    return 1;
+  }
   const emitted = compilation.emit();
   const stems: string[] = [];
   const paths: string[] = [];
@@ -569,7 +579,7 @@ export const main = (): number => {
     console.error(`wrote ${file}`);
     i = i + 1;
   }
-  if (!writeSidecars(compilation)) {
+  if (anySidecar && !writeSidecars(compilation, fns)) {
     return 1;
   }
   if (link.length === 0) {
@@ -777,26 +787,41 @@ const linkProgram = (
 };
 
 /**
+ * The functions a C sidecar will declare a prototype for, which are the ones
+ * whose C names must not clash: all of them when a header is written, and
+ * otherwise only those the N-API shim bridges, since it declares nothing else.
+ */
+const cDeclared = (compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] => {
+  const opts = compilation.opts;
+  if (opts.emitHeader.length > 0) {
+    return fns;
+  }
+  if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0) {
+    return [];
+  }
+  const out: ExternalFunction[] = [];
+  for (const fn of fns) {
+    if (napiBridges(compilation.table, fn)) {
+      out.push(fn);
+    }
+  }
+  return out;
+};
+
+/**
  * The WP8 sidecars, after the IR and in stage0's order: the header, the wasm
  * declarations, the loader that implements them, then the N-API shim. Each
  * reads the same signatures the IR was emitted from, and the one whole-program
- * fixpoint they share is run once here rather than once per generator.
+ * fixpoint they share is run once, by the caller, rather than once per
+ * generator: the caller needs the list first, to ask whether it can be
+ * described at all. Only called when at least one sidecar was asked for.
  *
  * The `wrote` lines go to stderr, as stage0's do, because a single-module
  * compile that named no output has the IR itself on stdout. Each sidecar's
  * directory is made the way the IR's is; false when one could not be.
  */
-const writeSidecars = (compilation: Compilation): boolean => {
+const writeSidecars = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
   const opts = compilation.opts;
-  if (
-    opts.emitHeader.length === 0 &&
-    opts.emitDts.length === 0 &&
-    opts.emitNapi.length === 0 &&
-    opts.emitNapiAsync.length === 0
-  ) {
-    return true;
-  }
-  const fns = externalFunctions(compilation);
   if (opts.emitHeader.length > 0) {
     if (!makeDirectoryFor(opts.emitHeader)) {
       return false;
