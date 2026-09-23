@@ -372,9 +372,7 @@ function selfCheckVersions() {
 }
 
 /** `git` in the repository, as `spawnSync` answers it: the caller reads the status. */
-function git(args) {
-  return spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-}
+const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
 /**
  * The release section `scripts/changelog-gen.mjs` would write for the commits
@@ -396,7 +394,7 @@ function git(args) {
  * is still missing afterwards. A run with no release tag at all has no seed to
  * compare with either, since the seed *is* the last release.
  */
-function pendingNotes() {
+const pendingNotes = () => {
   const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"]);
   const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true";
   if (shallow()) git(["fetch", "--quiet", "--unshallow", "--tags", "origin"]);
@@ -417,11 +415,11 @@ function pendingNotes() {
     return { error: `scripts/changelog-gen.mjs could not render ${tag.stdout.trim()}..HEAD: ${rendered.stderr.trim()}` };
   }
   return { text: rendered.stdout };
-}
+};
 
 /**
- * Where a declaration's words are found: `"changelog"`, `"pending"`, or null
- * when they are in neither and the declaration does not hold.
+ * Whether a declaration's words are in the release notes: `CHANGELOG.md`, or
+ * the pending section.
  *
  * `pending` is `pendingNotes()`'s answer, or null when it was never asked for
  * because every declaration was already named in `CHANGELOG.md`. Only its
@@ -429,44 +427,41 @@ function pendingNotes() {
  * the generator lists the unconventional subjects it skipped — is not the
  * release notes carrying them.
  */
-function whereNamed(words, changelogText, pending) {
-  if (changelogText.includes(words)) return "changelog";
-  if (pending !== null && pending.text !== undefined && pending.text.includes(words)) return "pending";
-  return null;
-}
+const isNamed = (words, changelogText, pending) =>
+  changelogText.includes(words) || (pending?.text?.includes(words) ?? false);
 
 /**
- * `whereNamed` over inputs no repository produces, on every run, for the reason
+ * `isNamed` over inputs no repository produces, on every run, for the reason
  * `selfCheckRoots` gives: it decides whether a declared difference is excused,
  * so a mistake in it passes a difference nobody wrote up. Returns the reason it
  * failed, or null.
  */
-function selfCheckNotes() {
+const selfCheckNotes = () => {
   const words = "Prove bounds through toI32(length)";
   const released = `## [0.7.0] - 2026-09-22\n\n### Performance\n\n- checker: ${words} (#154)\n`;
   const pending = { text: `### Performance\n\n- checker: ${words} (\`72a4b16\`)\n` };
   const cases = [
     // Released: the file carries it, whatever the pending notes say.
-    [words, released, null, "changelog"],
-    [words, released, { error: "shallow" }, "changelog"],
+    [words, released, null, true],
+    [words, released, { error: "shallow" }, true],
     // Unreleased: only the section the generator would render carries it.
-    [words, "## [Unreleased]\n", pending, "pending"],
+    [words, "## [Unreleased]\n", pending, true],
     // In neither: the declaration does not hold.
-    [words, "## [Unreleased]\n", { text: "### Tests\n\n- Something else\n" }, null],
+    [words, "## [Unreleased]\n", { text: "### Tests\n\n- Something else\n" }, false],
     // The pending notes could not be read: never a pass, even though the
     // error text quotes the words the way the generator's stderr would.
-    [words, "## [Unreleased]\n", { error: `skipped 1 commit: abc1234 ${words}` }, null],
+    [words, "## [Unreleased]\n", { error: `skipped 1 commit: abc1234 ${words}` }, false],
     // Not asked for at all.
-    [words, "## [Unreleased]\n", null, null],
+    [words, "## [Unreleased]\n", null, false],
   ];
   for (const [w, changelogText, notes, want] of cases) {
-    const got = whereNamed(w, changelogText, notes);
+    const got = isNamed(w, changelogText, notes);
     if (got !== want) {
-      return `whereNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `isNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
     }
   }
   return null;
-}
+};
 
 /**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
@@ -939,8 +934,8 @@ function main(argv) {
   const byReason = new Map();
   for (const row of declared) byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1);
   const reasons = [...byReason.keys()];
-  const pending = reasons.some((r) => whereNamed(r.changelog, changelogText, null) === null) ? pendingNotes() : null;
-  const unnamed = reasons.filter((r) => whereNamed(r.changelog, changelogText, pending) === null);
+  const pending = reasons.some((r) => !changelogText.includes(r.changelog)) ? pendingNotes() : null;
+  const unnamed = reasons.filter((r) => !isNamed(r.changelog, changelogText, pending));
   for (const [reason, count] of byReason) {
     const where = `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim();
     process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`);
@@ -951,7 +946,7 @@ function main(argv) {
         `for "${reason.changelog}"\n`
     );
   }
-  if (unnamed.length > 0 && pending !== null && pending.error !== undefined) {
+  if (unnamed.length > 0 && pending?.error !== undefined) {
     process.stdout.write(`  FAIL the pending release notes could not be read: ${pending.error}\n`);
   }
   // A declaration that covers nothing is not a failure — a single-program run
@@ -1021,7 +1016,7 @@ export {
   selfCheckNotes,
   selfCheckRoots,
   selfCheckVersions,
-  whereNamed,
+  isNamed,
   withoutOwnRoot,
   withoutOwnVersion,
 };

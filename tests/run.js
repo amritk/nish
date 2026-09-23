@@ -33,7 +33,8 @@ import { createRequire } from "node:module";
 import { parseCodesRegistry } from "../scripts/codes-registry.js";
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js";
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js";
-import { packageRootOf, selfCheckRoots, selfCheckVersions, withoutOwnRoot } from "./nish-cmp.js";
+import { programs as corpusPrograms } from "./self/corpus.js";
+import { packageRootOf, selfCheckNotes, selfCheckRoots, selfCheckVersions, withoutOwnRoot } from "./nish-cmp.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
 import { copyInto, diagnosticWords, diffEmitted, presentInTree, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
@@ -313,6 +314,25 @@ function stripHeader(ir) {
     .join("\n")
     .trim();
 }
+
+/**
+ * Every `--json` object a compile printed. A line that does not parse is kept
+ * as an error, so a garbled stream cannot read as a clean one.
+ */
+const diagnosticsOf = (stdout) =>
+  String(stdout)
+    .split("\n")
+    .filter((line) => line.startsWith("{"))
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return { severity: "error", code: "unparsed", message: line };
+      }
+    });
+
+/** One `--json` diagnostic as a report line: `file:line:col CODE message`. */
+const diagnosticLine = (d) => `${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`;
 
 /** A dotted version as numbers, for ordering releases. */
 const semver = (v) => v.split(".").map(Number);
@@ -1386,17 +1406,11 @@ if (!only || "performance".includes(only)) {
       .readdirSync(path.join(root, "std"))
       .filter((f) => f.endsWith(".ts"))
       .map((f) => `std/${f}`),
-    ...fs
-      .readdirSync(path.join(root, "examples"), { withFileTypes: true })
-      .flatMap((entry) =>
-        entry.isDirectory()
-          ? fs.existsSync(path.join(root, "examples", entry.name, "main.ts"))
-            ? [`examples/${entry.name}/main.ts`]
-            : []
-          : entry.name.endsWith(".ts")
-            ? [`examples/${entry.name}`]
-            : []
-      ),
+    // The corpus's own discovery, which already reads a directory with a
+    // `main.ts` as one program (`examples/multi/`).
+    ...corpusPrograms()
+      .map((file) => path.relative(root, file).split(path.sep).join("/"))
+      .filter((file) => file.startsWith("examples/")),
   ].sort();
   const gateRuns = gateSources.flatMap((source) => ["i32", "f64"].map((mode) => ({ source, mode })));
   const gateResults = await pool(gateRuns, defaultJobs(), ({ source, mode }) =>
@@ -1406,19 +1420,6 @@ if (!only || "performance".includes(only)) {
       { cwd: root, encoding: "utf8" }
     )
   );
-  /** Every `--json` object a compile printed; a line that does not parse is kept as an error so it cannot pass. */
-  const diagnosticsOf = (stdout) =>
-    String(stdout)
-      .split("\n")
-      .filter((line) => line.startsWith("{"))
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return { severity: "error", code: "unparsed", message: line };
-        }
-      });
-  const where = (d) => `${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`;
   for (const [at, { source, mode }] of gateRuns.entries()) {
     const result = gateResults[at];
     const diagnostics = diagnosticsOf(result.stdout);
@@ -1430,7 +1431,7 @@ if (!only || "performance".includes(only)) {
         result.status === 1 && codes.includes(refusedBy),
         result.status === 0
           ? `it compiles now: take "${source} ${mode}" out of PERF_GATE_REFUSED in tests/run.js so the gate holds it`
-          : `refused for another reason than ${refusedBy}:\n${diagnostics.map(where).join("\n")}${result.stderr}`
+          : `refused for another reason than ${refusedBy}:\n${diagnostics.map(diagnosticLine).join("\n")}${result.stderr}`
       );
       continue;
     }
@@ -1439,9 +1440,9 @@ if (!only || "performance".includes(only)) {
       `performance gate: ${source} compiles with no performance warning (--number-mode ${mode})`,
       result.status === 0 && warnings.length === 0,
       result.status !== 0
-        ? `it does not compile:\n${diagnostics.map(where).join("\n")}${result.stderr}`
+        ? `it does not compile:\n${diagnostics.map(diagnosticLine).join("\n")}${result.stderr}`
         : `${warnings.length} performance warning(s); prove each check away rather than silencing it ` +
-            `(.claude/testing.md, "The performance gate"):\n${warnings.map(where).join("\n")}`
+            `(.claude/testing.md, "The performance gate"):\n${warnings.map(diagnosticLine).join("\n")}`
     );
   }
 
@@ -4751,33 +4752,26 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // stdout as one object per diagnostic: the performance ratchet below counts
   // that compile's warnings, so the count costs no compile of its own.
   const RATCHETED = "compile.ts";
-  const compileSelf = (names) =>
-    spawnSync(
+  let ratchetedRun = null;
+  const compileSelf = (names) => {
+    const ratcheted = names.length === 1 && names[0] === RATCHETED;
+    const r = spawnSync(
       NISH,
-      [
-        ...names.map((m) => path.join(selfDir, m)),
-        "-o",
-        `${out}/`,
-        ...(names.length === 1 && names[0] === RATCHETED ? ["--json"] : []),
-      ],
+      [...names.map((m) => path.join(selfDir, m)), "-o", `${out}/`, ...(ratcheted ? ["--json"] : [])],
       { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
     );
+    if (ratcheted) ratchetedRun = r;
+    return r;
+  };
   const declaresMain = (m) =>
     /^export (function main\b|const main\s*=)/m.test(fs.readFileSync(path.join(selfDir, m), "utf8"));
   const entries = modules.filter(declaresMain);
   const groups = [modules.filter((m) => !declaresMain(m)), ...entries.map((m) => [m])];
-  let ratchetedRun = null;
-  const batched = groups.every((g) => {
-    if (g.length === 0) return true;
-    const r = compileSelf(g);
-    if (g.length === 1 && g[0] === RATCHETED) ratchetedRun = r;
-    return r.status === 0;
-  });
+  const batched = groups.every((g) => g.length === 0 || compileSelf(g).status === 0);
   for (const m of modules) {
     // `batched` is the whole answer when it is true; when it is false one of
     // the groups failed and every module is compiled alone to find out which.
     const r = batched ? null : compileSelf([m]);
-    if (r !== null && m === RATCHETED) ratchetedRun = r;
     check(`self/${m} compiles`, batched || r.status === 0, batched ? "" : `${r.stderr}${r.stdout}`);
   }
 
@@ -4795,11 +4789,12 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   } else {
     const baselineFile = path.join(root, "tests", "perf-baseline.json");
     const baseline = JSON.parse(fs.readFileSync(baselineFile, "utf8")).counts;
-    const warnings = String(ratchetedRun.stdout)
-      .split("\n")
-      .filter((line) => line.startsWith("{"))
-      .map((line) => JSON.parse(line))
-      .filter((d) => d.severity === "performance");
+    const warnings = diagnosticsOf(ratchetedRun.stdout)
+      .filter((d) => d.severity === "performance")
+      // The modules were named by absolute path, and a diagnostic names its
+      // file the way it was reached; the baseline is keyed by the repository's
+      // own spelling so it reads the same on every checkout.
+      .map((d) => ({ ...d, file: path.relative(root, path.resolve(root, d.file)).split(path.sep).join("/") }));
     const actual = {};
     for (const d of warnings) {
       actual[d.file] ??= {};
@@ -4816,10 +4811,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         if (count > allowed) {
           const named = warnings
             .filter((d) => d.file === file && d.code === code)
-            .map((d) => `        ${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`);
+            .map((d) => `        ${diagnosticLine(d)}`);
           over.push(`${file} ${code}: ${count}, the baseline allows ${allowed}; one of these is new:\n${named.join("\n")}`);
         } else if (count < allowed) {
-          under.push(`${file} ${code}: ${count}, the baseline says ${allowed}; set it to ${count} in tests/perf-baseline.json`);
+          const edit = count === 0 ? "remove it from" : `set it to ${count} in`;
+          under.push(`${file} ${code}: ${count}, the baseline says ${allowed}; ${edit} tests/perf-baseline.json`);
         }
       }
     }
@@ -5111,6 +5107,15 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     "nish-cmp: its own producer-version normalisation is right (stand-in inputs, not the corpus)",
     selfCheckVersions() === null,
     String(selfCheckVersions())
+  );
+  // And the lookup that decides whether a declared difference is excused: its
+  // words may be in CHANGELOG.md or in the section scripts/changelog-gen.mjs
+  // would render for the commits not yet released, and a pending section that
+  // could not be read excuses nothing.
+  check(
+    "nish-cmp: a declaration's words are found in CHANGELOG.md or the pending release notes, and nowhere else (stand-in inputs)",
+    selfCheckNotes() === null,
+    String(selfCheckNotes())
   );
 
   // The same equality on programs nobody wrote. The corpus is checked in and

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 425 programs, 7686 dump lines.
+# 425 programs, 7685 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4830,55 +4830,54 @@ function main(): i32 -> @nish_main [exported entry]
   local 11:9 args: string[] (const)
   local 13:7 sum: i32 (let)
   local 14:12 i: i32 (let)
-  local 15:11 n: f64 (const)
-  local 17:11 parsed: string (const)
+  local 18:11 arg: string (const)
+  local 19:11 n: f64 (const)
+  local 21:11 parsed: string (const)
 program examples/arrays.ts
 module examples/arrays.ts (entry)
 function sumF64(xs: f64[]): f64 -> @sumF64 [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 17:7 total: f64 (let)
-  local 18:14 x: f64 (const)
+  local 22:7 total: f64 (let)
+  local 23:14 x: f64 (const)
 function sumI32(xs: i32[]): i32 -> @sumI32 [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 25:7 total: i32 (let)
-  local 26:14 x: i32 (const)
+  local 30:7 total: i32 (let)
+  local 31:14 x: i32 (const)
 function scale(xs: f64[], k: f64): f64[] -> @scale [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: nish_panic_index
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 34:9 out: f64[] (const)
-  local 35:12 i: i32 (let)
+  local 39:9 out: f64[] (const)
+  local 40:12 i: i32 (let)
 function squares(n: i32): i32[] -> @squares [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: n
-  calls: nish_panic_index
   stackSites=0 stackLocals=0
-  local 42:9 out: i32[] (const)
-  local 43:12 i: i32 (let)
+  local 47:9 out: i32[] (const)
+  local 48:12 i: i32 (let)
 function fill(xs: i32[], v: i32): void -> @fill [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: v
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 51:12 i: i32 (let)
+  local 56:12 i: i32 (let)
 function widen(xs: i32[]): i64[] -> @widen [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: nish_panic_index
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 57:9 out: i64[] (const)
-  local 58:12 i: i32 (let)
+  local 62:9 out: i64[] (const)
+  local 63:12 i: i32 (let)
+  local 67:11 wide: i64 (const)
 function sumI64(xs: i64[]): i64 -> @sumI64 [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 66:7 total: i64 (let)
-  local 67:14 x: i64 (const)
+  local 77:7 total: i64 (let)
+  local 78:14 x: i64 (const)
 program examples/hello.ts
 module examples/hello.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

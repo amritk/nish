@@ -142,12 +142,14 @@ const jsonEndOfString = (text: string, at: i32): i32 => {
  *
  * A string ends at its quote and an object or array at the closer that brings
  * the depth back to zero, with strings inside it skipped whole so that a `}` in
- * a message cannot close it. The skip is written into the one loop, as a
- * flag, rather than as a call to `jsonEndOfString` that moves the cursor to
- * wherever it answers: a cursor that only ever steps forward keeps the lower
- * bound the bounds proof needs, and one assigned a callee's answer does not. Anything else — a number, `true`, `false`, `null` —
+ * a message cannot close it. Anything else — a number, `true`, `false`, `null` —
  * ends at the first byte that cannot be part of it, which is the comma, the
  * closer or the blank that follows.
+ *
+ * The string skip inside an object is a flag in the one loop rather than a call
+ * to `jsonEndOfString` that moves the cursor to wherever it answers: a cursor
+ * that only ever steps forward keeps the lower bound the bounds proof needs,
+ * and one assigned a callee's answer does not.
  */
 const jsonEndOfValue = (text: string, at: i32): i32 => {
   const length: i32 = toI32(text.length);
