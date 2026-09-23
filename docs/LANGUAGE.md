@@ -1309,7 +1309,10 @@ export const main = (): i32 => {
   class. Each instantiation still reads its own struct directly — `T` at
   `Circle` reads field 0 of `%struct.Circle` and calls `@Circle.bump`, with no
   `bitcast` and no vtable (`tests/cases/gen_constraint`,
-  `gen_constraint_method`). A member the concrete type has and the constraint
+  `gen_constraint_method`). A field may be written through a `T` on the same
+  terms (`gen_constraint_write`), and each parameter answers from its own
+  constraint, so `<T extends Shape, U extends Counter>` reads `area` through a
+  `T` and calls `bump` through a `U` (`gen_constraint_two`). A member the concrete type has and the constraint
   does not is refused, once for the template however many instantiations it
   has, or the constraint would be decoration:
   `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares ``
