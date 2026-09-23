@@ -1,10 +1,11 @@
 # WP21: Packages
 
-**Stages S1 and S2 have landed; everything after them is proposed, and rough.**
-Package-scoped symbols exist in both compilers (§5a, and §9 for what exactly was
-built), and so does the resolution that gives them something to scope: a bare
-specifier resolves through `node_modules` and the `nish` export condition (§5b,
-and §10 for S2 as built). Nothing after that does.
+**Stages S1 and S2 have landed, and S3's resolution half; everything after them
+is proposed, and rough.** Package-scoped symbols exist (§5a, and §9 for what
+exactly was built), and so does the resolution that gives them something to
+scope: a bare specifier resolves through `node_modules` and the `nish` export
+condition (§5b, and §10 for S2 as built), and each way that can fail names its
+cause (§11). Nothing after that does.
 
 It is the plan of record for two questions that arrived together —
 "what would an extra `exports` condition alongside `cjs` and `esm` look like",
@@ -344,18 +345,30 @@ should not look alike.
 | ---: | --- | --- | --- |
 | S1 | Package-scoped symbols | — | **done**, §9. §5a. No language surface, and the diff turned out small rather than large: the root package's prefix is empty, so not one golden `.ll` moved. |
 | S2 | Bare specifiers and the `nish` condition | S1 | **done**, §10. §5b. The condition name landed in `branding.ts` on both sides. |
-| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact: the `NL3xxx` entries for a missing or mode-mismatched `nish` condition, a version floor from `engines.nish`, a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
+| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact. **The resolution half is done**, §11: a mode-mismatched, missing or malformed `nish` condition and an `engines.nish` floor each have their own `NL3xxx` code. **Left**: a builtin the target has no runtime for, a compile error attributed to a dependency rather than to the consumer, and the package-identity decision §10d leaves open. |
 | S4 | The build cache | S2 | Content-addressed by (package version, number mode, target, profile, compiler version). Invisible to the package author; a pure compile-time optimisation, and the answer to §3's stated cost. |
 | S5 | Prebuilt distribution | S4 | §7. Deferred, possibly permanently. |
 
 S1 was the only one with no design questions left open, which is why it went
-first, and it is done; S2 followed it and is done too. **S3 is the next stage
-and is the one to resist over-building**: §6 already talked one manifest out of
-existence, everything left in it is a message rather than a file, and S2 left it
-exactly one place to start — the single "has no Nish entry point" diagnostic
-that S2 answers every resolution failure with, carrying a `TODO(WP21 S3)` in
-`src/manifest.ts`, `self/manifest.ts` and both `compilation.ts` files. Nothing
-here is on the M4 critical path and none of it should delay the freeze.
+first, and it is done; S2 followed it and is done too. **S3 is the one to resist
+over-building**: §6 already talked one manifest out of existence, and everything
+left in it is a message rather than a file. Its resolution half split S2's single
+"has no Nish entry point" diagnostic into the causes §5c and §6 name (§11). What
+remains of it is three things, none of them a resolution failure:
+
+- **A builtin with no runtime on the target**: "`@scope/hash` calls
+  `readFileSync`, which the freestanding wasm profile has no runtime for" is a
+  whole-program diagnostic (§6), decided after every module is checked rather
+  than at the import.
+- **A compile error attributed to the dependency** (§6's "one diagnostic
+  obligation"): an error whose location is in `node_modules/<pkg>/…` should say
+  it is the dependency's, because the reader's next move is an upstream report.
+- **Package identity** — a symlinked package is still a second package, and
+  deciding identity by real directory or by manifest is one question with §7's
+  diamond. `tests/link/package_symlink` stays a refusal and the `TODO(WP21 S3)`
+  in `self/compilation.ts` stays with it (§10d).
+
+Nothing here is on the M4 critical path and none of it should delay the freeze.
 
 ## 9. S1 as built: package-scoped symbols
 
@@ -587,10 +600,9 @@ disappeared and `packages.ts` says so.
 
 - **One diagnostic, not four.** Every failure to find a Nish entry point — no
   `exports`, no such subpath, no `nish` condition, a shape the reader does not
-  understand — is `` Package `X` has no Nish entry point ``. S3 is the stage that
-  splits it into the specific ones §5c and §6 want, the mode mismatch named with
-  both modes among them, and a `TODO(WP21 S3)` sits at each of the four places
-  that would change.
+  understand — was `` Package `X` has no Nish entry point ``. S3 split it
+  (§11), and what is left of the one message is the residue: no `exports`, no
+  such subpath, or a shape the reader does not follow.
 
   One message does not license a false one, and the second clause of this one
   was: it said the package's `exports` `` declares no `nish` condition ``, which
@@ -601,8 +613,8 @@ disappeared and `packages.ts` says so.
   compiler no file to compile for `.` `` — which holds for every shape that
   reaches it. The registry calls that `NL3014`; the spelling it replaced never
   reached a release, so there is no number reserved for it.
-- **No `engines.nish` floor**, for the same reason: it is a message rather than
-  a file, and it is S3's.
+- **No `engines.nish` floor** at S2: it is a message rather than a file, and S3
+  added it (§11).
 - **No `realpath`, so a symlinked package is a second package.** Node's resolver
   realpaths what it finds, which is how one package reached both as
   `node_modules/shared` and as `node_modules/app2/node_modules/shared` — a
@@ -714,3 +726,69 @@ npm package, with `import`, `require` and `default` rows and no `nish` one.
 and `tests/cases/reject_bare_import` is a specifier that is neither relative nor
 a package name. `docs/cookbook/mod_package.ts` is the lowering, and it shows the
 only thing a package changes about the IR: the prefix on the imported symbol.
+
+## 11. S3 as built: the resolution diagnostics
+
+S2 answered every failure to find a Nish entry point with one sentence (§10d).
+S3's resolution half gives each cause §5c and §6 name its own message and its
+own `--json` code, so that a tool keyed on the code can tell them apart without
+reading the prose — which was the point of a code in the first place.
+
+| Code | Cause | Case |
+| --- | --- | --- |
+| `NL3017` | The entry offers only the other mode's condition: `nish-f64` and neither `nish-i32` nor `nish`, compiled in i32, or the reverse. Named with both modes, in §6's sentence. | `tests/link/package_other_mode`, `package_other_mode_f64` |
+| `NL3018` | `engines.nish` is a floor above this compiler, named with the floor and this compiler's version. | `tests/link/package_engines_floor` |
+| `NL3019` | `engines.nish` is not a range this compiler reads. | `tests/link/package_engines_range` |
+| `NL3020` | The entry declares no Nish condition in any spelling — §6's `lodash` case. | `tests/link/package_not_nish`, `package_no_condition` |
+| `NL3021` | The manifest is not well-formed JSON, *and* no entry point could be read out of it. Named with the manifest's path, line and column. | `tests/link/package_malformed` |
+| `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow — a nested condition object included, since the `nish` row may be inside it. | `tests/link/package_no_subpath`, `package_nested_condition` |
+
+`tests/nish/cli.ts` compiles each case with `--json` and holds its code, and
+`tests/link/package_engines_met` is the floor that is met and compiles. The
+boundary itself is tested at this compiler's own version rather than at a
+number written down: `cli.ts` reads `VERSION` from `self/branding.ts`, writes
+one package whose floor is that version, which must compile, and one whose
+floor is a patch above it, which must be refused as `NL3018` naming both the
+floor and the version — so the test still sits on the boundary after the next
+release moves it.
+
+**The order they are asked in is part of the rule.** The floor is read first
+and whether or not an entry point resolves: a package that names a newer
+compiler has said this one should not be trusted with its source, and a file
+that happens to resolve does not change that. Then the entry point; and only
+when there is none, whether the manifest is JSON at all — because the narrow
+reader (§10b) stops at the first break, so every other answer about a broken
+manifest is a guess about text it never read. A manifest the reader got a file
+out of before a break still compiles, exactly as under S2, which is why the
+well-formedness walk is only paid on the way to a failure.
+
+**`NL3020` keeps S2's sentence and adds the reason**, so
+`tests/link/package_not_nish`'s expectation, written for S2, still matches: the
+message says what the compiler came away with, then why. `NL3014`'s own wording
+is unchanged, and it is what the residue gets.
+
+**The floor is `>=X.Y.Z` or `>=X.Y` and nothing else.** npm's `engines` slot
+takes any semver range; this reader takes the one shape a *floor* needs, with
+blanks around the version allowed, and refuses every other one — a caret, a
+tilde, an upper bound, a `||`, a bare version, a value that is not a string —
+rather than read it as met. A floor the compiler cannot read is one it cannot
+claim to meet, and treating an unreadable one as satisfied is the silent
+acceptance §5c exists to prevent. The version it compares against is
+`VERSION` in `self/branding.ts`, the constant `--version` prints, with any
+prerelease tag on it ignored.
+
+**The mode mismatch is recognised by the other mode's condition alone.** The
+reader asks for this mode's condition, then plain `nish`, and only when both
+are absent does it ask whether the entry names the other mode's — so a
+package offering `nish` beside `nish-f64` is not a mismatch for an i32
+program, it is a package that compiles.
+
+**Why the malformed case names a position.** The reader has to find the break
+to decide that the manifest is broken, and the break is exactly what the
+package's author needs: `package.json:4:3` is where the missing comma is felt.
+The walk is a second, complete reader of the same narrow grammar rather than a
+JSON parser, for the reason §10b gives; it follows every value, nests at most
+256 deep, and reads a scalar as `true`, `false`, `null` or something that
+begins like a number.
+
+What S3 still owes is in §8.

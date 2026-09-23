@@ -1,0 +1,1 @@
+Package `pkg_nested` has no Nish entry point: its `exports` gave this compiler no file to compile for `.`

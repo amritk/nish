@@ -63,12 +63,23 @@ import {
   relativePath,
   resolveModule,
 } from "./paths";
-import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX } from "./branding";
-import { nishExportTarget } from "./manifest";
+import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX, VERSION } from "./branding";
+import {
+  ENGINE_TOO_OLD,
+  ENGINE_UNREADABLE,
+  MANIFEST_FOUND,
+  MANIFEST_NOT_NISH,
+  MANIFEST_OTHER_MODE,
+  manifestEngineCheck,
+  manifestEngineRange,
+  manifestMalformedAt,
+  nishExportEntry,
+} from "./manifest";
 import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
 import { RuntimeTable } from "./runtime";
 import { splitByte } from "./strings";
 import { TypeTable } from "./types";
+import { columnOf, lineOf } from "./lexer";
 import { validate } from "./validator";
 import { NUMBER_MODE_F64 } from "./context";
 
@@ -485,35 +496,74 @@ export class Compilation {
       failed.error = `Cannot find package \`${parsed.name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
       return failed;
     }
-    const manifest = readFileSyncOrNull(joinPath([packageDir, "package.json"]));
+    const manifestPath = joinPath([packageDir, "package.json"]);
+    const manifest = readFileSyncOrNull(manifestPath);
     const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32";
+    const otherMode = mode === "f64" ? "i32" : "f64";
     // `findPackageDir` only answers a directory whose manifest it could read, so
     // the null here is a file that vanished between the two reads. It takes the
     // same route as a manifest with nothing in it for us, which is the honest
     // answer: this compiler found no Nish entry point in that package.
-    let target: string | null = null;
-    if (manifest !== null) {
-      target = nishExportTarget(manifest, parsed.subpath, packageConditionFor(mode), PACKAGE_CONDITION);
+    const text = manifest === null ? "" : manifest;
+    // The floor is checked before the entry point, and whether or not there is
+    // one: a package that names a newer compiler has said this one should not
+    // be trusted with its source, and a file that happens to resolve does not
+    // change that (`docs/wp21-packages.md` §6).
+    const engine = manifestEngineCheck(text, PACKAGE_CONDITION, VERSION);
+    if (engine === ENGINE_TOO_OLD) {
+      failed.error = `Package \`${parsed.name}\` needs a newer compiler: its \`engines.${PACKAGE_CONDITION}\` asks for \`${manifestEngineRange(text, PACKAGE_CONDITION)}\` and this is ${CLI} ${VERSION}`;
+      return failed;
     }
-    if (target === null) {
-      // The package was found and is not an Nish package: its `exports` map has
-      // no `nish` condition for this subpath — or no `exports` at all, or one
-      // shaped in a way `manifest.ts` does not read. Saying it in these words is
-      // §6's point: a bare import of an ordinary npm package should fail naming
-      // the thing that is missing, not with a module-not-found that reads like
-      // the consumer mistyped their own file name. The second clause says what
-      // this compiler came away with rather than what the package declares,
-      // because the mode-qualified condition outranks the plain one (§10a): a
-      // manifest whose `nish-i32` names something that is not a file never
-      // reaches its perfectly good `nish` row, and a sentence about what the
-      // `exports` declares would send its author to a line that is correct.
+    if (engine === ENGINE_UNREADABLE) {
+      failed.error = `Package \`${parsed.name}\` declares \`engines.${PACKAGE_CONDITION}\` as \`${manifestEngineRange(text, PACKAGE_CONDITION)}\`, which is not a range this compiler reads: the one it accepts is a floor, \`>=X.Y.Z\` or \`>=X.Y\``;
+      return failed;
+    }
+    const entry = nishExportEntry(
+      text,
+      parsed.subpath,
+      packageConditionFor(mode),
+      PACKAGE_CONDITION,
+      packageConditionFor(otherMode)
+    );
+    if (entry.status !== MANIFEST_FOUND) {
+      // Each cause is named in its own words and carries its own code, which is
+      // §6's point: a bare import that fails at the package boundary should say
+      // what is missing, not read like a module-not-found the consumer typed.
       //
-      // TODO(WP21 S3): the boundary diagnostics split this one message into the
-      // specific ones — a package that offers Nish in the *other* number mode,
-      // named with both modes, and an `engines.nish` floor above this compiler.
+      // A manifest that is not JSON comes first, because the narrow scan stops
+      // at the break and everything it did not see — a condition after it, or
+      // the whole `exports` — makes each answer below a guess about text it
+      // never read. It is only asked once resolution has failed: a manifest the
+      // scan got a file out of compiles, as it did under S2. A manifest that
+      // vanished between the two reads is not malformed, only gone, and takes
+      // the general answer at the bottom.
+      const brokenAt = manifest === null ? -1 : manifestMalformedAt(text);
+      if (brokenAt >= 0) {
+        failed.error = `Package \`${parsed.name}\` has a malformed manifest: ${manifestPath}:${lineOf(text, brokenAt)}:${columnOf(text, brokenAt)} is not well-formed JSON, so this compiler could not read an entry point out of it`;
+        return failed;
+      }
+      if (entry.status === MANIFEST_OTHER_MODE) {
+        failed.error = `Package \`${parsed.name}\` supports ${LANGUAGE} in ${otherMode} mode only: its \`exports\` offers \`${packageConditionFor(otherMode)}\` for \`${parsed.subpath}\` and neither \`${packageConditionFor(mode)}\` nor \`${PACKAGE_CONDITION}\`, and this program is compiling in ${mode} (\`--number-mode ${mode}\`)`;
+        return failed;
+      }
+      // The second clause keeps S2's sentence and adds the cause, so the
+      // message a reader of S2 learned still matches: it says what this
+      // compiler came away with, then why.
+      if (entry.status === MANIFEST_NOT_NISH) {
+        failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\`, because that entry declares none of the conditions this compiler compiles source from (\`${PACKAGE_CONDITION}\`, \`${packageConditionFor(mode)}\`, \`${packageConditionFor(otherMode)}\`)`;
+        return failed;
+      }
+      // What is left: no `exports` at all, no key for this subpath, or a value
+      // `manifest.ts` does not follow. The second clause says what this
+      // compiler came away with rather than what the package declares, because
+      // the mode-qualified condition outranks the plain one (§10a): a manifest
+      // whose `nish-i32` names something that is not a file never reaches its
+      // perfectly good `nish` row, and a sentence about what the `exports`
+      // declares would send its author to a line that is correct.
       failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\``;
       return failed;
     }
+    const target = entry.target;
     // The manifest may name a file that is not there, which is the package's
     // own mistake and not the consumer's — but it is still a module that could
     // not be found, so the caller reports it as one.
