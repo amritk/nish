@@ -1168,8 +1168,7 @@ export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node):
     ctx.errored = false;
     const methodName = member.children[0].text;
     if (!isGenericFunction(member)) {
-      const cut = methodName.indexOf("$");
-      if (cut >= 0 && declaresGenericMethod(members, methodName.substring(0, cut))) {
+      if (methodName.indexOf("$") >= 0 && spellsGenericInstance(members, methodName)) {
         rejectDollarInSymbolName(ctx, methodName, "method", member.children[0]);
       }
       continue;
@@ -1231,10 +1230,13 @@ export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node):
   ctx.errored = false;
 };
 
-/** Whether `members` declares a generic method called `name`. */
-const declaresGenericMethod = (members: Node[], name: string): boolean => {
+/**
+ * Whether `name` starts with the name of a generic method of `members` and a
+ * `$`, which is how an instantiation of that method's symbol continues.
+ */
+const spellsGenericInstance = (members: Node[], name: string): boolean => {
   for (const member of members) {
-    if (member.kind === N_METHOD && member.children[0].text === name && isGenericFunction(member)) {
+    if (member.kind === N_METHOD && isGenericFunction(member) && name.startsWith(`${member.children[0].text}$`)) {
       return true;
     }
   }
