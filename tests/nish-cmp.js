@@ -112,7 +112,104 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  * paragraph in `CHANGELOG.md` to match, and it should feel like a bigger thing
  * to write than five narrow ones, because it is.
  */
-const DECLARED = [];
+const DECLARED = [
+  {
+    program: "tests/cases/perf_bounds_toi32.ts",
+    file: "perf_bounds_toi32.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "a new program: the `toI32(w.length)` hoist proven in i32 mode, which the reference compiler still checks",
+  },
+  {
+    program: "tests/cases/perf_bounds_toi32_f64.ts",
+    file: "perf_bounds_toi32_f64.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "a new program: the same hoist under --number-mode f64, which the reference compiler still checks",
+  },
+  {
+    program: "tests/cases/perf_bounds_toi32_loop.ts",
+    file: "perf_bounds_toi32_loop.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "a new program; its two loop checks stay, but `xs[0]` loses its check: the builtin `toI32` calls before it no longer drop the length its array literal proved",
+  },
+  {
+    program: "docs/cookbook/str_bounds_toi32.ts",
+    file: "str_bounds_toi32.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "the cookbook snippet for the `toI32(s.length)` hoist, whose check the reference compiler keeps",
+  },
+  {
+    program: "tests/link/std_text/main.ts",
+    file: "text.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
+  },
+  {
+    program: "tests/link/std_text/main.ts",
+    file: "testing.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/testing hoists `toI32(x.length)` too, so its checks are now proven",
+  },
+  {
+    program: "tests/link/std_text/main.ts",
+    file: "main.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "the imported std/text and std/testing functions' attributes change with their dropped panics",
+  },
+  {
+    program: "tests/link/std_text_f64/main.ts",
+    file: "text.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/text's checks and clamps are proven under --number-mode f64 as well",
+  },
+  {
+    program: "tests/link/std_text_f64/main.ts",
+    file: "testing.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/testing's `toI32(x.length)` hoists are proven under --number-mode f64 as well",
+  },
+  {
+    program: "tests/link/std_text_f64/main.ts",
+    file: "main.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "the imported std/text and std/testing functions' attributes change with their dropped panics",
+  },
+  {
+    program: "tests/link/std_testing/main.ts",
+    file: "testing.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
+  },
+  {
+    program: "tests/link/std_testing_fail/main.ts",
+    file: "testing.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
+  },
+  {
+    program: "tests/link/std_json/main.ts",
+    file: "testing.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
+  },
+  {
+    program: "tests/link/std_bare_specifier/main.ts",
+    file: "text.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
+  },
+  {
+    program: "tests/link/std_bare_specifier/main.ts",
+    file: "testing.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
+  },
+  {
+    program: "tests/link/std_package_scope/main.ts",
+    file: "text.ll",
+    changelog: "Prove bounds through toI32(length) and compile std/text silent",
+    why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
+  },
+];
 
 /** Differing files printed in full before the rest are only counted. */
 const MAX_ROWS = 20;
