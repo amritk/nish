@@ -41,6 +41,10 @@ hand — the git log is the working account until a release turns it into one.
 
 - checker: Hold a constraint to its declaration, not its name (#161)
 
+### Performance
+
+- checker: Key bounds length facts by property path (#106), and stop proving an index a later `&&` / `||` operand or a stored value invalidates — which also closes those holes for plain locals
+
 ### Documentation
 
 - Record WP18 G8 as landed and close WP18

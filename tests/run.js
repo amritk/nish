@@ -1992,6 +1992,11 @@ if (has("opt")) {
 //    `main` and the length is a known constant: the standalone `sum` keeps a hoisted
 //    length compare plus a per-iteration branch to the noreturn panic block, and LLVM
 //    18's loop vectoriser does not handle multi-exit loops (see docs/wp4-arrays.md).
+/** How many bounds checks function `fn` of module `ir` carries: its `nish_panic_index` calls. */
+const panicCount = (ir, fn) =>
+  ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(/call void @nish_panic_index/g) ?? [])
+    .length;
+
 if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   if (has("opt")) {
     for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
@@ -2032,6 +2037,88 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         String(run.stderr).includes("index out of range: 1 >= 1") &&
         String(run.stdout).split("\n").filter((l) => l.length > 0).join(",") === "2,1,1",
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // #106: a length fact keyed by a property path (`h.xs`, `this.state.idx`) is
+  // only as sound as the rules that drop it, so each rule has a program that
+  // proves `i < h.xs.length`, breaks it by that rule alone, and reads `h.xs[i]`
+  // anyway. Every one must still panic. Each was checked against a compiler
+  // with its rule removed, where it reads past the array instead of panicking.
+  for (const [name, rule, stdout] of [
+    ["arr_path_callee_pop", "a `pop` through a callee", "2 1"],
+    ["arr_path_callee_string", "a callee's store to a string field", "97"],
+    ["arr_path_reassign", "a store to `h.xs` in the loop", "1"],
+    ["arr_path_alias_shrink", "a `pop` through a second holder", "1"],
+    ["arr_path_alias_store", "a store to `xs` through an alias of `h`", "1"],
+    ["arr_path_record_store", "a whole-record store over the root's element", "1"],
+    ["arr_path_root", "a reassignment of the root", "1"],
+    ["arr_path_nullable", "a rebind of a root declared `Holder | null`", "1"],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const exe = path.join(buildDir, name);
+    const cc = linkNative(exe, ll);
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      `${name}: ${rule} drops the path fact, so the next access panics`,
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes("index out of range: 1 >= 1") &&
+        String(run.stdout).trim() === stdout,
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // Two orderings the walk got wrong for locals before paths existed, and paths
+  // then inherited (#179's review). A later `&&` / `||` operand's effects have
+  // to kill an earlier operand's facts, and `a[i] = v` reads `i` before `v` and
+  // checks after it. Each program proves an index, breaks the proof inside the
+  // condition or the stored value, and reads or writes anyway; each read past
+  // the array, or wrote a million slots past it, before the fix.
+  for (const [name, rule, stdout, message] of [
+    ["arr_path_cond_call", "a call in a later `&&` operand", "", "5 >= 1"],
+    ["arr_path_cond_store", "a field store in a later `&&` operand", "", "5 >= 1"],
+    ["arr_path_cond_root", "a root reassignment in a later `&&` operand", "", "5 >= 1"],
+    ["arr_path_cond_or", "a call in a later `||` operand", "", "5 >= 1"],
+    ["arr_path_cond_ternary", "a call in a later operand of a ternary's test", "", "5 >= 1"],
+    ["arr_path_cond_while", "a call in a later operand of a `while` test", "1", "1 >= 1"],
+    ["arr_path_cond_string", "a string field replaced by a later operand", "", "3 >= 1"],
+    ["arr_path_cond_generic", "a call in a later operand, in a generic class", "", "5 >= 1"],
+    ["arr_path_cond_f64", "a call in a later operand, under --number-mode f64", "", "5 >= 1"],
+    ["arr_bounds_cond_effect", "a `pop` in a later operand, on a local", "", "2 >= 2"],
+    ["arr_bounds_cond_assign", "a rebind in a later operand, on a local", "", "2 >= 1"],
+    ["arr_path_store_rhs", "`h.xs[i] = (i = 0)`", "", "1000000 >= 3"],
+    ["arr_path_store_rhs_field", "`g.hs[i].n = (i = 0)`", "", "1000000 >= 2"],
+    ["arr_path_store_rhs_compound", "`h.xs[i] += (i = 2)`", "", "1000000 >= 3"],
+    ["arr_bounds_store_rhs", "`xs[i] = (i = 0)` on a local", "", "1000000 >= 3"],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const exe = path.join(buildDir, name);
+    // The f64 case exports `test`, so it is driven the way a `.out` case is.
+    const hasMain = /\bexport\s+const\s+main\s*=/.test(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"));
+    const cc = linkNative(exe, ll, { driver: hasMain ? null : DRIVER_C });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      `${name}: ${rule} takes the proof away, so the access panics`,
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes(`index out of range: ${message}`) &&
+        String(run.stdout).trim() === stdout,
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // The declared-type rule on its own: `narrowed` and `plain` are one loop over
+  // a `Holder | null` narrowed by a guard and over a `Holder`. Only the second
+  // may lose its check. The round trip above cannot show this, because the
+  // root rule catches the same program; this is the rule by itself.
+  const nullableLl = path.join(buildDir, "arr_path_nullable.ll");
+  if (fs.existsSync(nullableLl)) {
+    const ir = fs.readFileSync(nullableLl, "utf8");
+    const panics = (fn) => panicCount(ir, fn);
+    check(
+      "arr_path_nullable: a path from a root declared `Holder | null` keeps its check, and the same path from a `Holder` does not",
+      panics("narrowed") === 1 && panics("plain") === 0,
+      `narrowed ${panics("narrowed")} bounds checks, plain ${panics("plain")}`
     );
   }
 
@@ -2124,39 +2211,41 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         headerScope !== undefined && body !== "" && loop !== "" && left.length === 0,
         `header scope ${headerScope}, left in the loop: ${left.join(" | ") || "(none)"}\n${body}`
       );
-      if (fn === "fieldScale") {
-        // The condition truncs the i64 length to the `number` width; the bounds
-        // check on the *same* array compares the i64 directly. Both must name
-        // one register — that is §2c's criterion, and the first `icmp ult` in
-        // the loop is this array's, since it is read before `dst` is written.
-        const condLen = loop.match(/%[0-9]+ = trunc i64 (%[0-9]+) to i32/)?.[1];
-        const checkLen = loop.match(/icmp ult i64 %[0-9]+, (%[0-9]+)/)?.[1];
-        check(
-          `arr_header_hoist: @${fn} feeds the loop condition and the bounds check one length`,
-          condLen !== undefined && condLen === checkLen,
-          `condition length ${condLen}, bounds-check length ${checkLen}\n${body}`
-        );
-      }
     }
-    // And the measured reason the two are still not the same program, which is
-    // not the hoist at all. `checker/bounds.ts` keys its length facts by
-    // *variable and never by a property path* — its own header says so, and for
-    // a sound reason: a local cannot be written through an alias, a field can.
-    // So `const xs = h.xs` proves `xs[i]` in range and `h.xs.length` proves
-    // nothing about `h.xs[i]`: `constScale` carries one bounds check and
-    // `fieldScale` two, and the second is the second loop exit that keeps the
-    // vectoriser away. Measured on `bench/hoist_field.ts`, dropping it by hand
-    // closes the whole 1.90x. The hoist above is what a *property path* holder
-    // would be proved against; the proof itself is that file's to make, so this
-    // pins the half that exists rather than asserting the gap, which a fix
-    // would have to delete.
-    const panics = (fn) =>
-      ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(
-        /call void @nish_panic_index/g
-      ) ?? []).length;
+    // §2c's criterion — one length value feeding the loop condition and every
+    // check that reads that array — is now met by there being *no* check on
+    // `h.xs` at all: `self/bounds.ts` keys length facts by property path too
+    // (#106), so `h.xs.length` proves `h.xs[i]` the way `xs.length` proves
+    // `xs[i]`. What is pinned is the strongest form of that: `@fieldScale`'s
+    // loop *is* `@constScale`'s, instruction for instruction once the registers
+    // are numbered from the top of the loop. The condition reads the preheader's
+    // `len`, and the one check left is `dst`'s, in both.
+    const loopOf = (fn) => {
+      const body = ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "";
+      const loop = body.slice(body.indexOf("\nwhile.cond:"));
+      const names = new Map();
+      return loop.replace(/%[0-9]+\b/g, (r) => {
+        if (!names.has(r)) {
+          names.set(r, `%v${names.size}`);
+        }
+        return names.get(r);
+      });
+    };
+    const fieldLoop = loopOf("fieldScale");
+    const constLoop = loopOf("constScale");
     check(
-      "arr_header_hoist: the checker's proof reaches @constScale's element read and not @fieldScale's",
-      panics("constScale") === 1 && panics("fieldScale") > panics("constScale"),
+      "arr_header_hoist: @fieldScale's loop is @constScale's, register for register",
+      fieldLoop.includes("while.cond:") && fieldLoop === constLoop,
+      `fieldScale:\n${fieldLoop}\nconstScale:\n${constLoop}`
+    );
+    // And the gap #104 measured and #106 closed, as a count so that it cannot
+    // silently reopen: `const xs = h.xs` and `h.xs` carry the same checks. Before
+    // #106 `fieldScale` carried two and `constScale` one, and the second was the
+    // second loop exit that kept the vectoriser away.
+    const panics = (fn) => panicCount(ir, fn);
+    check(
+      "arr_header_hoist: the checker's proof reaches @fieldScale's element read as it does @constScale's",
+      panics("constScale") === 1 && panics("fieldScale") === panics("constScale"),
       `constScale ${panics("constScale")} bounds checks, fieldScale ${panics("fieldScale")}`
     );
     // A `Holder | null` narrowed by a guard *inside* the loop: the preheader is

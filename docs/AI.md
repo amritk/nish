@@ -877,6 +877,10 @@ export const main = (): i32 => {
   `==` `!=` `**` unary `+`.
 - Element access `a[i]` needs an array and a numeric index, and is
   bounds-checked (negative indices fail too). String-keyed access is forbidden.
+  The check comes off where the compiler proves the index in range — a loop
+  condition `i < xs.length`, or `i < h.xs.length` on a field path — as long as
+  nothing between the test and the access calls a function, stores to a field
+  the path names, or reassigns its root.
 - Array literals need one element type; `[]` needs a contextual `T[]`. Holes
   and spread are not supported.
 - Template literals accept holes of type `string`, `number`, `i64`, `f64` or

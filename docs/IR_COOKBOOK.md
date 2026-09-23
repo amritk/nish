@@ -3450,6 +3450,103 @@ attributes #1 = { nounwind willreturn readonly }
 ```
 <!-- cookbook:end arr_bounds_proven -->
 
+### A proven index through a field: a property-path fact
+
+The same proof with the array held in a class field (#106). `i < h.xs.length`
+is a fact about the *path* `h.xs`, and `h.xs[i]` is judged against it the way
+`xs[i]` is against `xs.length`, so the loop has no compare, no branch and no
+panic block — and the header hoist (#104) reads `h.xs`, `len` and `data` once,
+in `entry`. The loop is the one `const xs = h.xs` compiles to. A path fact ends
+at any call, at any store to a field the path names (through any holder), at a
+whole-record element store and at an assignment to the root, which is why this
+loop has none of them.
+
+<!-- cookbook:begin arr_bounds_path -->
+```ts
+class Holder {
+  xs: i32[];
+  constructor(xs: i32[]) {
+    this.xs = xs;
+  }
+}
+
+const total = (h: Holder): i32 => {
+  let s = 0;
+  let i = 0;
+  while (i < h.xs.length) {
+    s = s + h.xs[i];
+    i = i + 1;
+  }
+  return s;
+};
+```
+
+```llvm
+%struct.Holder = type { %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+
+define internal void @Holder.constructor(%struct.Holder* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
+  store %struct.nish_array* %xs, %struct.nish_array** %0, align 8, !tbaa !4
+  ret void
+}
+
+define internal noundef i32 @total(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h) #1 {
+entry:
+  %s.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  store i32 0, i32* %s.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !8, !noalias !9
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !8, !noalias !9
+  br label %while.cond
+
+while.cond:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = trunc i64 %3 to i32
+  %8 = icmp slt i32 %6, %7
+  br i1 %8, label %while.body, label %while.end
+
+while.body:
+  %9 = load i32, i32* %s.addr, align 4
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = sext i32 %10 to i64
+  %12 = bitcast i8* %5 to i32*
+  %13 = getelementptr inbounds i32, i32* %12, i64 %11
+  %14 = load i32, i32* %13, align 4, !alias.scope !9, !noalias !8
+  %15 = add nsw i32 %9, %14
+  store i32 %15, i32* %s.addr, align 4
+  %16 = load i32, i32* %i.addr, align 4
+  %17 = add nsw i32 %16, 1
+  store i32 %17, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %18 = load i32, i32* %s.addr, align 4
+  ret i32 %18
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind readonly }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Holder", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"nish array"}
+!6 = !{!"header", !5}
+!7 = !{!"elements", !5}
+!8 = !{!6}
+!9 = !{!7}
+```
+<!-- cookbook:end arr_bounds_path -->
+
 ### A hoisted `toI32(s.length)`: the proof in both number modes
 
 Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can
