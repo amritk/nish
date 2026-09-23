@@ -63,7 +63,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes";
-import { TemplateInfo } from "./program";
+import { FieldInfo, StructInfo, TemplateInfo } from "./program";
 import { coercesTo } from "./structs";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
@@ -487,44 +487,64 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   // at a call site. The shape is recognised here so the message names the rule
   // instead of leaving "Unknown identifier `identity`" behind, and it points at
   // the type argument, where stage0's points.
-  if (op === "<" && expr.children[0].kind === N_IDENT) {
-    const template = ctx.template(expr.children[0].text);
+  if (op === "<") {
+    const template = callSiteTemplate(ctx, expr.children[0], scope);
     if (template !== null) {
-      const first = template.typeParams.length > 0 ? template.typeParams[0] : "T";
       return ctx.errorType(
         expr.children[1],
-        `Type arguments are not written at a call site in ${LANGUAGE}: \`${first}\` is inferred from the ` +
-          `arguments, so write \`${template.sourceName}(...)\``
+        `Type arguments are not written at a call site in ${LANGUAGE}: \`${template.typeParams[0]}\` is inferred ` +
+          `from the arguments, so write \`${ctx.textOf(expr.children[0])}(...)\``
       );
     }
   }
-  // WP18 G8: the same shape through a receiver, `h.pick<i32>(x)`. Only a local
-  // or `this` is looked through, because checking a receiver here and again in
-  // `checkOperator` below is harmless for a name and not for an arbitrary
-  // expression.
-  if (op === "<" && expr.children[0].kind === N_MEMBER) {
-    const access = expr.children[0];
-    const receiver = access.children[0];
-    if (receiver.kind === N_IDENT || receiver.kind === N_THIS) {
-      const type = checkExpression(ctx, receiver, scope, -1);
-      let template: TemplateInfo | null = null;
-      if (type !== T_ERROR && ctx.table.isStruct(type)) {
-        const info = structOf(ctx, type);
-        if (info !== null) {
-          template = info.methodTemplate(access.text);
-        }
-      }
-      if (template !== null) {
-        const first = template.typeParams.length > 0 ? template.typeParams[0] : "T";
-        return ctx.errorType(
-          expr.children[1],
-          `Type arguments are not written at a call site in ${LANGUAGE}: \`${first}\` is inferred from the ` +
-            `arguments, so write \`${ctx.textOf(access)}(...)\``
-        );
-      }
+  return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
+};
+
+/**
+ * The generic template `left` names when `left < ...` is really a call with
+ * its type arguments written out: a generic function, or since WP18 G8 a
+ * generic method through a path of names (`h.pick<i32>(x)`,
+ * `this.h.pick<i32>(x)`). The receiver's type is read off declarations rather
+ * than checked, because `checkOperator` checks it next and this runs on every
+ * `<` whose left side is a member, most of which are `this.count < n`.
+ */
+const callSiteTemplate = (ctx: CheckContext, left: Node, scope: Scope): TemplateInfo | null => {
+  if (left.kind === N_IDENT) {
+    return ctx.template(left.text);
+  }
+  if (left.kind !== N_MEMBER) {
+    return null;
+  }
+  const info = pathStruct(ctx, left.children[0], scope);
+  return info === null ? null : info.methodTemplate(left.text);
+};
+
+/**
+ * The class a path of names — a local, `this`, and fields read through them —
+ * has as its declared type, or `null` for anything else. Nothing is checked or
+ * recorded, which is what lets `callSiteTemplate` ask before the checker does.
+ */
+const pathStruct = (ctx: CheckContext, path: Node, scope: Scope): StructInfo | null => {
+  let type = -1;
+  if (path.kind === N_IDENT) {
+    const local = scope.lookup(path.text);
+    if (local !== null) {
+      type = local.type;
+    }
+  } else if (path.kind === N_THIS) {
+    const current = ctx.current;
+    const owner: StructInfo | null = current === null ? null : current.owner;
+    if (owner !== null) {
+      type = owner.type;
+    }
+  } else if (path.kind === N_MEMBER) {
+    const holder = pathStruct(ctx, path.children[0], scope);
+    const field: FieldInfo | null = holder === null ? null : holder.field(path.text);
+    if (field !== null) {
+      type = field.type;
     }
   }
-  return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
+  return type >= 0 && ctx.table.isStruct(type) ? structOf(ctx, type) : null;
 };
 
 /**

@@ -766,17 +766,22 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
     // WP18 G8: a generic method of an exported class. It is minted once per
     // receiver, so it is one declaration however many templates it has, and it
     // is uninstantiated only when none of them was ever called.
-    const seen = new StringSet();
+    const instantiated = new StringSet();
+    for (const template of program.methodTemplateList) {
+      if (template.count > 0) {
+        instantiated.add(`${template.decl.id}`);
+      }
+    }
+    const reported = new StringSet();
     for (const template of program.methodTemplateList) {
       const key = `${template.decl.id}`;
-      if (template.origin !== unit.source || !template.exported || seen.has(key)) {
+      const owner = template.owner;
+      if (owner === null || template.origin !== unit.source || !template.exported || instantiated.has(key)) {
         continue;
       }
-      seen.add(key);
-      if (!methodInstantiated(program.methodTemplateList, template.decl)) {
+      if (reported.add(key)) {
         // Named as declared, `Box.pick`, not after whichever receiver minted it.
-        const owner = template.owner;
-        const shown = owner === null ? template.sourceName : `${owner.decl.children[0].text}.${template.decl.children[0].text}`;
+        const shown = `${owner.decl.children[0].text}.${template.decl.children[0].text}`;
         reportUninstantiated(compilation, unit, shown, template.decl, "C signature", "method", "a symbol");
         ok = false;
       }
@@ -799,16 +804,6 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
     i = i + 2;
   }
   return ok;
-};
-
-/** Whether any receiver's template of the generic method `decl` has an instantiation. */
-const methodInstantiated = (templates: TemplateInfo[], decl: Node): boolean => {
-  for (const template of templates) {
-    if (template.decl === decl && template.count > 0) {
-      return true;
-    }
-  }
-  return false;
 };
 
 const reportUninstantiated = (

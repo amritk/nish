@@ -295,8 +295,7 @@ export const expandingAncestor = (
  * receiver is part of what an instantiation of a method is.
  */
 export const chainArguments = (template: TemplateInfo, args: i32[]): i32[] => {
-  const owner = template.owner;
-  const receiver: StructInstantiation | null = owner === null ? null : owner.instance;
+  const receiver = receiverOf(template);
   if (receiver === null) {
     return args;
   }
@@ -310,10 +309,19 @@ export const chainArguments = (template: TemplateInfo, args: i32[]): i32[] => {
   return out;
 };
 
+/**
+ * The instantiated class a generic method's receiver is (WP18 G8), whose
+ * parameters are bound in the method's body; `null` for a function and for a
+ * method of a declared class.
+ */
+const receiverOf = (template: TemplateInfo): StructInstantiation | null => {
+  const owner = template.owner;
+  return owner === null ? null : owner.instance;
+};
+
 /** The type parameter names `chainArguments` lines up with, in the same order. */
 const chainParameters = (template: TemplateInfo): string[] => {
-  const owner = template.owner;
-  const receiver: StructInstantiation | null = owner === null ? null : owner.instance;
+  const receiver = receiverOf(template);
   if (receiver === null) {
     return template.typeParams;
   }
@@ -940,7 +948,11 @@ export const instantiateHere = (
   if (!checkConstraints(site.asker, ctx, template.sourceName, template.typeParams, template.constraints, args, at)) {
     return null;
   }
-  const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + template.symbolName, args);
+  // A generic method's symbol builds on its receiver's method symbol,
+  // `Box$i32.pick` (WP18 G8, §15.8).
+  const owner = template.owner;
+  const base = owner === null ? template.sourceName : `${owner.name}.${template.decl.children[0].text}`;
+  const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args);
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
     return existing.sig;
@@ -989,22 +1001,15 @@ export const instantiateHere = (
     return null;
   }
 
-  const bindings = new StringMap();
   // WP18 G8: a generic method of an instantiated class sees the class's
   // parameters too, bound by the receiver, and its own beside them — the
   // shadowing rule keeps the two sets of names apart.
-  const owner = template.owner;
-  const receiver: StructInstantiation | null = owner === null ? null : owner.instance;
-  if (receiver !== null) {
-    let k = 0;
-    while (k < receiver.template.typeParams.length) {
-      bindings.set(receiver.template.typeParams[k], receiver.typeArgs[k]);
-      k = k + 1;
-    }
-  }
+  const bindings = new StringMap();
+  const names = chainParameters(template);
+  const bound = chainArguments(template, args);
   let i = 0;
-  while (i < template.typeParams.length) {
-    bindings.set(template.typeParams[i], args[i]);
+  while (i < names.length) {
+    bindings.set(names[i], bound[i]);
     i = i + 1;
   }
   // The template's own annotations, resolved once with its parameters bound:
@@ -1020,7 +1025,7 @@ export const instantiateHere = (
   sig.sourceName = display;
   sig.exported = template.exported;
   const info = new Instantiation(template, args, sig, bindings, ctx.program.nodeTypes.length);
-  info.owner = receiver;
+  info.owner = receiverOf(template);
   info.from = site.fromFunction;
   sig.instance = info;
   template.count = template.count + 1;
@@ -1190,29 +1195,7 @@ export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node):
     if (refused) {
       continue;
     }
-    const parameters = member.children[1];
-    for (const param of own) {
-      const names = new StringSet();
-      names.add(param);
-      let mentioned = false;
-      for (const declared of parameters.children) {
-        const annotation = declared.children[1];
-        if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
-          mentioned = true;
-        }
-      }
-      if (!mentioned) {
-        const shown = `${className}.${methodName}`;
-        ctx.error(
-          member.children[0],
-          `Cannot infer \`${param}\` for \`${shown}\`: a type parameter is inferred from the arguments, and ` +
-            `\`${param}\` appears in none of them; give \`${shown}\` a parameter that mentions \`${param}\``
-        );
-        refused = true;
-        break;
-      }
-    }
-    if (refused) {
+    if (refuseUninferable(ctx, member, own, `${className}.${methodName}`)) {
       continue;
     }
     // Resolved with the class's parameters counted as parameters, so a
@@ -1228,6 +1211,37 @@ export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node):
     resolveConstraints(ctx, ctx.program.methodConstraintList(member), list, all);
   }
   ctx.errored = false;
+};
+
+/**
+ * A type parameter is inferred from the arguments and from nothing else, so one
+ * that appears in no parameter of `decl` — a function's or a method's — can
+ * never be bound and the declaration could never be called. Reported once,
+ * against the declaration's name rather than against every call, and answers
+ * whether it was.
+ */
+export const refuseUninferable = (ctx: CheckContext, decl: Node, typeParams: string[], shown: string): boolean => {
+  const parameters = decl.children[1];
+  for (const param of typeParams) {
+    const names = new StringSet();
+    names.add(param);
+    let mentioned = false;
+    for (const declared of parameters.children) {
+      const annotation = declared.children[1];
+      if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+        mentioned = true;
+      }
+    }
+    if (!mentioned) {
+      ctx.error(
+        decl.children[0],
+        `Cannot infer \`${param}\` for \`${shown}\`: a type parameter is inferred from the arguments, and ` +
+          `\`${param}\` appears in none of them; give \`${shown}\` a parameter that mentions \`${param}\``
+      );
+      return true;
+    }
+  }
+  return false;
 };
 
 /**
@@ -1742,30 +1756,21 @@ const originOfMember = (ctx: CheckContext, receiver: Node, name: string, method:
 };
 
 /**
- * The origin of a call to a generic function: its declared return type, with
- * each of its type parameters standing for the argument it was inferred from —
- * `identity(p)` is whatever `p` is, and `first(xs)` is an element of `xs`. A
- * parameter inferred through any other shape stands for nothing, which is the
- * answer for a type that did not come from one of ours.
+ * The origin of a call to a generic function or a generic method: its declared
+ * return type, with each of its type parameters standing for the argument it
+ * was inferred from — `identity(p)` is whatever `p` is, and `first(xs)` is an
+ * element of `xs`. A parameter inferred through any other shape stands for
+ * nothing, which is the answer for a type that did not come from one of ours.
+ *
+ * A generic method of an instantiated class (WP18 G8) has the class's
+ * parameters in scope too, and they stand for what the receiver's origin says
+ * its type arguments are — `this` in a generic class is the class at its own
+ * parameters, an annotated `Box<U>` is `U` — and a receiver that says nothing
+ * makes them stand for nothing.
  */
 const originOfGenericCall = (ctx: CheckContext, call: Node, template: TemplateInfo, scope: Scope): TypeOrigin => {
   const args: (TypeOrigin | null)[] = [];
-  inferredOrigins(ctx, call, template, scope, args);
-  return new TypeOrigin(template.decl.children[2], template.typeParams, args);
-};
-
-/**
- * The origin of a call of a generic method (WP18 G8): `originOfGenericCall`,
- * with the receiver's class parameters in scope too. They stand for what the
- * receiver's origin says its type arguments are — `this` in a generic class is
- * the class at its own parameters, an annotated `Box<U>` is `U` — and a
- * receiver that says nothing makes them stand for nothing.
- */
-const originOfMethodCall = (ctx: CheckContext, call: Node, template: TemplateInfo, scope: Scope): TypeOrigin => {
-  const names: string[] = [];
-  const args: (TypeOrigin | null)[] = [];
-  const owner = template.owner;
-  const receiver: StructInstantiation | null = owner === null ? null : owner.instance;
+  const receiver = receiverOf(template);
   if (receiver !== null) {
     const at = substituted(originOf(ctx, call.children[0].children[0], scope));
     const shape: (TypeOrigin | null)[] = [];
@@ -1775,7 +1780,6 @@ const originOfMethodCall = (ctx: CheckContext, call: Node, template: TemplateInf
     }
     let k = 0;
     while (k < receiver.template.typeParams.length) {
-      names.push(receiver.template.typeParams[k]);
       if (shaped !== null && k < shape.length) {
         args.push(shape[k]);
       } else if (at !== null && at.unknown) {
@@ -1786,26 +1790,6 @@ const originOfMethodCall = (ctx: CheckContext, call: Node, template: TemplateInf
       k = k + 1;
     }
   }
-  for (const name of template.typeParams) {
-    names.push(name);
-  }
-  inferredOrigins(ctx, call, template, scope, args);
-  return new TypeOrigin(template.decl.children[2], names, args);
-};
-
-/**
- * For each of `template`'s own type parameters in order, the origin of the
- * argument it was inferred from, pushed onto `args`: `identity(p)` is whatever
- * `p` is, and `first(xs)` is an element of `xs`. A parameter inferred through
- * any other shape stands for nothing.
- */
-const inferredOrigins = (
-  ctx: CheckContext,
-  call: Node,
-  template: TemplateInfo,
-  scope: Scope,
-  args: (TypeOrigin | null)[]
-): void => {
   const parameters = template.decl.children[1];
   const written = call.children[1];
   for (const name of template.typeParams) {
@@ -1824,6 +1808,7 @@ const inferredOrigins = (
     }
     args.push(found);
   }
+  return new TypeOrigin(template.decl.children[2], chainParameters(template), args);
 };
 
 /** An array literal's origin: the literal, standing for its first element that came from somewhere. */
@@ -1893,7 +1878,7 @@ export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigi
         const instance: Instantiation | null = sig === null ? null : sig.instance;
         const template: TemplateInfo | null = instance === null ? null : instance.template;
         if (template !== null && template.owner !== null) {
-          return originOfMethodCall(ctx, expr, template, scope);
+          return originOfGenericCall(ctx, expr, template, scope);
         }
         return originOfMember(ctx, callee.children[0], callee.text, true, scope);
       }

@@ -1479,7 +1479,8 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 - **The type arguments are inferred from the arguments**, exactly as a generic
   function's are, and never written at the call: `h.get<i32>(7)` is
   `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` ``
-  (`tests/cases/reject_generic_method`). A method type parameter no parameter
+  (`tests/cases/reject_generic_method`, and through a field path,
+  `reject_generic_method_path_type_args`). A method type parameter no parameter
   mentions is refused at the declaration:
   `` Cannot infer `U` for `Holder.make`: a type parameter is inferred from the arguments, and `U` appears in none of them; give `Holder.make` a parameter that mentions `U` ``
   (`reject_generic_method_uninferable`).
@@ -1521,6 +1522,9 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 - **A constructor has no type parameters of its own**: it takes its class's,
   written after `new`. `constructor<T>()` is a syntax error
   (`reject_generic_method_constructor`), as it is in TypeScript.
+- **A generic method is a member like any other**, so a field or another method
+  of the same name is `` Duplicate member `pick` in class `Chooser` ``
+  (`reject_generic_method_field_clash`).
 - **`$` is refused in a method name where it could spell an instantiation** —
   `pick$i32` beside a generic `pick` would be `pick<i32>`'s symbol
   (`reject_generic_method_dollar`).

@@ -26,8 +26,8 @@ import {
   instantiateStruct,
   isGenericFunction,
   isGenericStruct,
-  mentionsTypeParam,
   parameterOrigin,
+  refuseUninferable,
   rejectDollarInSymbolName,
   resolveStructTemplateConstraints,
   resolveTemplateConstraints,
@@ -457,29 +457,7 @@ export class Checker {
       );
       return;
     }
-    // A type parameter is inferred from the arguments and from nothing else, so
-    // one that appears in no parameter can never be bound and the function
-    // could never be called. Reported here, once, against the declaration
-    // rather than against every call.
-    const parameters = stmt.children[1];
-    for (const param of template.typeParams) {
-      const names = new StringSet();
-      names.add(param);
-      let mentioned = false;
-      for (const declared of parameters.children) {
-        const annotation = declared.children[1];
-        if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
-          mentioned = true;
-        }
-      }
-      if (mentioned) {
-        continue;
-      }
-      this.ctx.error(
-        nameNode,
-        `Cannot infer \`${param}\` for \`${name}\`: a type parameter is inferred from the arguments, and ` +
-          `\`${param}\` appears in none of them; give \`${name}\` a parameter that mentions \`${param}\``
-      );
+    if (refuseUninferable(this.ctx, stmt, template.typeParams, name)) {
       return;
     }
     this.program.addTemplate(template);
@@ -545,8 +523,9 @@ export class Checker {
       // appended it where a declared class's method is appended, which keeps an
       // instantiated class's functions together and in member order. An
       // instantiation of a generic method (WP18 G8) is a request, not a member
-      // collected with its class, so it is appended here like a function's.
-      if (info.owner === null || info.template !== null) {
+      // collected with its class, so it has a template and is appended here
+      // like a function's.
+      if (info.template !== null) {
         this.program.functions.push(info.sig);
       }
       this.checkInstanceBody(info);

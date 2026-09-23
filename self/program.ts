@@ -167,12 +167,6 @@ export class TemplateInfo {
    */
   sourceName: string;
   /**
-   * The name an instantiation's symbol is built on, before the package prefix
-   * and the `$` arguments: the source name for a function, and the receiver's
-   * method symbol `Box$i32.pick` for a generic method (WP18 G8).
-   */
-  symbolName: string;
-  /**
    * The receiver of a generic method (WP18 G8), or `null` for a function. A
    * method template is minted per receiver struct — once for a declared class,
    * once per instantiation of a generic one — so one template is one
@@ -202,7 +196,6 @@ export class TemplateInfo {
 
   constructor(sourceName: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName;
-    this.symbolName = sourceName;
     this.owner = null;
     this.typeParams = [];
     this.constraints = new ConstraintList();
@@ -295,13 +288,19 @@ export class StructInstantiation {
  */
 export class Instantiation {
   /**
-   * The generic function this specialises, or `null` when it is a method or
-   * constructor of an instantiated generic class — which needs the overlay and
-   * the type bindings for exactly the same reason and has no template of its
-   * own, because the class is the template (WP18 G5).
+   * The generic function or generic method this specialises (a *request*), or
+   * `null` when it is a method or constructor of an instantiated generic class
+   * collected with its class — which needs the overlay and the type bindings
+   * for exactly the same reason and has no template of its own, because the
+   * class is the template (WP18 G5).
    */
   template: TemplateInfo | null;
-  /** The instantiated class this is a member of, or `null` for a free function. */
+  /**
+   * The instantiated class whose parameters are bound in this body: the class
+   * a collected member belongs to, or the receiver of a generic method (WP18
+   * G8). `null` for a free function and for a generic method of a declared
+   * class.
+   */
   owner: StructInstantiation | null;
   /** One concrete type id per entry of `template.typeParams`, in that order. */
   typeArgs: i32[];
@@ -460,6 +459,15 @@ export class StructInfo {
   method(name: string): FunctionSig | null {
     const at = this.methodIndex.get(name, -1);
     return at < 0 ? null : this.methodSigs[at];
+  }
+
+  /**
+   * Whether any member is called `name`: a field, a method or a generic method.
+   * One question for both member collectors, so a member table added later
+   * cannot be left out of one of them (WP18 G8 added the third).
+   */
+  hasMember(name: string): boolean {
+    return this.fieldIndex.has(name) || this.methodIndex.has(name) || this.methodTemplates.has(name);
   }
 
   /** The generic method called `name` (WP18 G8), or `null` when there is none. */

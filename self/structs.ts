@@ -285,7 +285,7 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``;
-  if (owner.field(name) !== null || owner.methodIndex.has(name)) {
+  if (owner.hasMember(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${spelled(ctx, owner)}\``);
     return;
   }
@@ -387,7 +387,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
   const shown = spelled(ctx, owner);
-  if (owner.field(name) !== null || owner.methodIndex.has(name) || owner.methodTemplates.has(name)) {
+  if (owner.hasMember(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${shown}\``);
     return;
   }
@@ -458,7 +458,6 @@ export const collectMethodSignature = (
 const declareMethodTemplate = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text;
   const template = new TemplateInfo(`${spelled(ctx, owner)}.${name}`, decl, ctx.source, ctx);
-  template.symbolName = `${owner.name}.${name}`;
   template.owner = owner;
   template.exported = owner.exported;
   template.typeParams = collectTypeParamNames(decl);

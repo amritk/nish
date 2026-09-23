@@ -1810,7 +1810,14 @@ declaration in the words a generic function's is, with the method named
 at a method call (`h.pick<i32>(x)`, which a one-token parser reads as
 `(h.pick < i32) > (x)`) get the function's call-site sentence
 (`reject_generic_method`, re-pointed here from the refusal this section
-removes).
+removes). The receiver is looked through when it is a path of names — a local,
+`this`, fields read through them (`reject_generic_method_path_type_args`) — by
+reading declared types rather than checking it, because the same test runs on
+every `this.count < n` and the operator check that follows checks the receiver
+anyway. A generic method is a member like any other, so a field of the same
+name is a duplicate member (`reject_generic_method_field_clash`); one
+`StructInfo.hasMember` answers for fields, methods and generic methods in both
+member collectors.
 
 **The key and the symbol.** One instantiation per (concrete receiver struct ×
 method tuple), which is one `define`: a method template is minted per receiver
