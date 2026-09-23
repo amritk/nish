@@ -107,7 +107,9 @@ Not accepted, each with the reason:
 - **Type parameters on a method of a non-generic class.** `class C { m<T>(x: T): T }`
   doubles the instantiation key (receiver type × method arguments) and buys
   nothing a generic class does not already give. A class's own parameters are
-  in scope in its methods; a method may not add more.
+  in scope in its methods; a method may not add more. *Reversed in §15.8:* a
+  method of any class may now declare its own type parameters, keyed exactly
+  that way.
 - **Default type parameters** (`<T = string>`). `Result<T, E>` is built-in and
   takes both arguments, so the shape wp15 §5 sketched them for does not arise.
   Cost: `Pair<i32>` is not shorthand for `Pair<i32, string>`.
@@ -1333,9 +1335,11 @@ and a `CHANGELOG.md` line.
   backtracking, and inference covers it.
 - **Contextual-return inference.** `function empty<T>(): T[]` cannot be called.
   Deferred with a stated trigger rather than refused forever.
-- **Generic methods on non-generic classes**, **default type parameters**,
-  **generic type aliases** (there are no type aliases), **variance
-  annotations**, **`keyof` / mapped / conditional types / `infer`**.
+- **Generic methods on non-generic classes** (*since added, §15.8*),
+  **default type parameters**, **generic type aliases** (there were no type
+  aliases then; non-generic ones have landed since, and a generic one is still
+  refused), **variance annotations**, **`keyof` / mapped / conditional types /
+  `infer`**.
 - **`class C<T> extends T`.**
 - **Retiring `Result<T, E>` and `Array<T>` into library code.** §6.1, against
   wp15 §5's aspiration, with the reason.
@@ -1505,11 +1509,26 @@ generic class or interface, a generic type alias, a generic method, a generic
 `main`, and instantiating a generic imported from another module.
 
 *Since superseded.* That list is the boundary as it stood when generic
-functions landed. A constrained parameter is supported (§15.6, G6), and so are
-generic classes and interfaces (§15.4), generics across modules (§15.5) and
-generic methods (§15.8); a generic type alias and a generic `main` are still
-refused. `docs/LANGUAGE.md` has the current rules.
+functions landed (G3/G4). Later milestones lifted four of its rules:
+- generic classes and interfaces, §15.4 (G5);
+- instantiating a generic imported from another module, §15.5 (G7);
+- a constrained parameter, §15.6 (G6);
+- a generic method, §15.8.
 
+These refusals still stand, each with its own message:
+- a generic type alias;
+- a generic `main`;
+- a default type argument (`<T = string>`);
+- type parameters on a constructor.
+
+Type arguments at a call site and an uninferable type parameter stay refused by
+design (§16). `docs/LANGUAGE.md` has the current rules.
+
+*Historical, as is the rest of this paragraph:* the stage0/stage1 comparison
+ended with WP19 R6. Three of the four cases below also changed meaning later.
+`reject_generic_class` now pins a template written without its type arguments,
+`reject_generic_method` pins type arguments at a method call, and
+`reject_generic_constraint` pins what a constraint may not name.
 `reject_generic_class`, `reject_type_alias_generic`, `reject_generic_method`
 and `reject_generic_constraint` are refused by stage1's *parser* rather than in
 the words stage0's Phase 0 writes, which is the declared difference
