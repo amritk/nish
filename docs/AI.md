@@ -119,7 +119,7 @@ rejects. This table is the highest-value part of the page.
 | `undefined` | forbidden | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
-| `type Pair<T>` (a generic alias) | `` Generic type parameters are forbidden on a type alias in Nish `` | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
+| `type Pair<T>` (a generic alias) | `` expected `=`, found `<` `` (a syntax error) | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
 | `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
@@ -452,9 +452,10 @@ const areaOf = <T extends Shape>(s: T): i32 => s.area;   // s.radius would be re
 export const main = (): i32 => areaOf(new Circle(2)) - 12;
 ```
 
-- **Not supported yet**, each with its own message: a default type argument
-  (`<T = string>`), and type parameters on a **constructor or type alias**. A
-  generic `main` is refused. There are no multiple bounds (`T extends A & B`)
+- **Not supported yet**: a default type argument (`<T = string>`) and type
+  parameters on a **constructor**, each with its own message, and a generic
+  **type alias**, which is only the syntax error `` expected `=`, found `<` ``.
+  A generic `main` is refused. There are no multiple bounds (`T extends A & B`)
   and no bound that mentions another parameter.
 - **`$` may not appear in a function, class or interface name** — it is what
   separates a generic's name from its type arguments in the emitted symbol.

@@ -806,9 +806,9 @@ program twice, with one golden between them.
   side is reported where it is written rather than never.
 - **Generic aliases are forbidden**, unlike a generic *function*: an alias
   only renames a type that already exists, so there is nothing for a type
-  argument to apply to. `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
-  (`tests/cases/reject_type_alias_generic`).
+  argument to apply to. There is no message of its own: the parser reads
+  `type Box` and expects `=`, so `type Box<T> = T[]` is the syntax error
+  `` expected `=`, found `<` `` (NL0001, `tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
   (`tests/cases/reject_type_alias_builtin`). A keyword like `string` is
@@ -1391,10 +1391,11 @@ export const main = (): i32 => {
   argument can be written in is a request of its own — a field, an array
   element, a `Result` arm, inside another instantiation, an `implements`
   clause (`reject_generic_unsatisfied_constraint_positions`).
-- **Not supported yet**, each with its own message: a default type argument
-  (`<T = string>`), and type parameters on a constructor or a type alias. A generic
-  `main` is refused too: the entry point is called by the C runtime, which has
-  no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
+- **Not supported yet**: a default type argument (`<T = string>`) and type
+  parameters on a constructor, each with its own message, and type parameters
+  on a type alias, which is the parser's plain `` expected `=`, found `<` ``.
+  A generic `main` is refused too, in words of its own: the entry point is
+  called by the C runtime, which has no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
   that mentions the parameter it constrains, and a bound that is "any type with
   a method `compare`" are not planned on this path. The design and the
   milestones are in [wp18-generics.md](wp18-generics.md).
@@ -3143,7 +3144,7 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
+| type parameters on a type alias | `` expected `=`, found `<` `` (a syntax error; a generic function, class, interface or method is monomorphised, and an alias only renames a type that already exists) | `reject_type_alias_generic` |
 | type parameters on a constructor | `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) `` (a syntax error; a *method* may declare its own, see [Generic methods](#generic-methods)) | `reject_generic_method_constructor` |
 | a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
 | type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |

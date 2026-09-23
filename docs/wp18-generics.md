@@ -1515,8 +1515,9 @@ functions landed (G3/G4). Later milestones lifted four of its rules:
 - a constrained parameter, §15.6 (G6);
 - a generic method, §15.8.
 
-These refusals still stand, each with its own message:
-- a generic type alias;
+These refusals still stand. The last three have messages of their own:
+- a generic type alias, which is the parser's plain syntax error
+  `` expected `=`, found `<` `` (`reject_type_alias_generic`);
 - a generic `main`;
 - a default type argument (`<T = string>`);
 - type parameters on a constructor.
