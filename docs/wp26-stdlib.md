@@ -1,10 +1,11 @@
 # WP26: The standard library
 
-**Landed.** `std/` exists, with three modules — [`std/testing`](../std/testing.ts),
+**Landed.** `std/` exists, with four modules — [`std/testing`](../std/testing.ts),
 a test runner a compiled program drives to check itself,
 [`std/text`](../std/text.ts), the string operations the language deliberately
-does not have, and [`std/json`](../std/json.ts), the value of one field of one
-flat JSON object — and two programs written on top of them:
+does not have, [`std/json`](../std/json.ts), the value of one field of one
+flat JSON object, and [`std/pair`](../std/pair.ts), the `Pair<A, B>` a function
+returns two values in — and two programs written on top of the first three:
 [`tests/nish/run.ts`](../tests/nish/run.ts), which runs this repository's golden
 cases and its `tests/link/` programs in the language it tests, and
 [`tests/nish/cli.ts`](../tests/nish/cli.ts), which reads the compiler's own
@@ -24,8 +25,9 @@ It also closes a sentence written down three notes ago.
 "There is no standard library today and this note does not propose creating one
 for a four-line type." There is one now, so the question changes shape rather
 than disappearing: §2 below is the rule that decides whether `Pair<A, B>` — or
-anything else — belongs in it, and the answer for a four-line interface is still
-no, for a reason this note can now state rather than assume.
+anything else — belongs in it. This note first answered no for a four-line
+interface; `nish/pair` is in the library now, and the end of §2 says what
+changed the answer.
 
 Read [wp21-packages.md](wp21-packages.md#2-the-decision) first. "Source is the
 distribution format" is the decision `std/` leans on entirely, and §1 here is
@@ -174,6 +176,18 @@ sufficient one, and §7 question 3 has the sufficient one: a module earns its
 place when more than one program would otherwise write the same loop. A
 two-field interface is not a loop.
 
+**That answer was reversed, and the reason is one this rule did not weigh.** A
+function in `std/` saves its importers a loop; a *type* in `std/` saves them a
+disagreement. Nish types are nominal — two interfaces with the same fields are
+two types, and an interface keeps its name across an import — so a `Pair`
+every program declares for itself is a different `Pair` in every program, and
+a package that returns one cannot hand it to a caller holding another. A
+vocabulary type is only shared if it lives in one place, and once WP18 G5 and
+G7 made a generic interface exportable, the library is that place.
+[wp23-language-surface.md](wp23-language-surface.md) §5 is the design and
+[`std/pair.ts`](../std/pair.ts) is the whole of it: the interface, with no
+function beside it, so the admission rule for functions above is untouched.
+
 ---
 
 ## 3. What the language's restrictions did to the API
@@ -251,6 +265,9 @@ one per type. The argument below is about the failure message and the float
 comparison, not about the absence of a type parameter, so it stands: one
 `eq<T>` could only report as precisely as these do with a generic `toString`,
 which WP18 did not add (§7, question 7).
+
+`std/pair` is the first module to export a generic type, and it does not change
+this: it is a type with no function beside it.
 
 The alternative was available and was refused: a single `eq(name, actual,
 expected)` over strings, with every caller interpolating. It would report

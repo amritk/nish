@@ -2,11 +2,11 @@
 
 **Every row is answered.** This note is the plan of record for the language
 additions that a review of the corpus found wanting and that no existing work
-package owns. Two of them (§2 non-generic `type` aliases, §3 numeric `enum`)
-**landed**; §7 to §9 are the items the same review looked at and **declined**;
-and §4 to §6, which stood as proposals while they were reviewed, are decided
-now — §4 **no**, §5 **yes, as a library type**, §6 **not scheduled**. Each of
-the three keeps the section that argued it and gains a decision paragraph under
+package owns. Three of them (§2 non-generic `type` aliases, §3 numeric `enum`,
+§5 `Pair<A, B>` in `std/`) **landed**; §7 to §9 are the items the same review
+looked at and **declined**; and §4 and §6, which stood as proposals while they
+were reviewed, are decided now — §4 **no**, §6 **not scheduled**. Each of
+§4 to §6 keeps the section that argued it and gains a decision paragraph under
 its heading saying what was decided and what would turn it; the argument is not
 restated, because the argument is what the section already is. Where the answer
 is genuinely open, §10 says so instead of inventing certainty.
@@ -448,7 +448,25 @@ true, and it needs no language change at all.
 
 ---
 
-## 5. Pairs and multiple return — **decided: a library type, and unblocked**
+## 5. Pairs and multiple return — **landed: `nish/pair`**
+
+**Landed.** [`std/pair.ts`](../std/pair.ts) is §5.2's interface exactly —
+`export interface Pair<A, B> { first: A; second: B; }` — with no constructor
+helper and no grammar, and a program imports it as
+`import { Pair } from "nish/pair"`. LANGUAGE.md has the rule. Five
+`tests/link/std_pair_*` programs return one across a module boundary — the
+`scanEscape` shape above (`std_pair_scalar`), `Pair<string, f64>` under
+`--number-mode f64`, `Pair<i32[], string>`, a nested `Pair`, and one held in a
+class field and an array — and run natively. The two refusals a
+caller meets are the checker's existing ones, with no new code:
+`reject_std_pair_swapped` (a `Pair<i32, string>` returned where a
+`Pair<string, i32>` is declared, NL2236) and `reject_std_pair_missing` (an
+object literal without `second`, NL2078). `self/lexer.ts`'s `scanEscape` still
+keeps its out-parameter field: `self/` may not import `nish/pair` until the
+release after this one carries it (the rolling freeze).
+
+The account below is the decision as it stood before the build, kept as it was
+written.
 
 **Decided: `Pair<A, B>` as a library type under WP18; no tuple syntax, and no
 special case in the grammar.** §5.4 is the argument.
@@ -917,11 +935,12 @@ reviewed before more code is written.
    program** (§5).~~ **Answered, because the premise expired.** This question
    turned on "there is no standard library today", and there is one now:
    [`std/`](../std/README.md) holds `testing`, `text` and `json`, and a program
-   reaches them as `nish/text`. wp18 §6.1's reasons for keeping `Result` and
-   `Array` out of library code still do not apply to `Pair` — it is an ordinary
-   two-field interface with no compiler knowledge behind it — and that is now an
-   argument for `std/` rather than against it, because `std/` is exactly where
-   a type like that belongs. Declaring it per program was only ever the answer
+   reaches them as `nish/text`. (It holds `pair` too now; §5 says where.)
+   wp18 §6.1's reasons for keeping `Result` and `Array` out of library code
+   still do not apply to `Pair` — it is an ordinary two-field interface with
+   no compiler knowledge behind it — and that is now an argument for `std/`
+   rather than against it, because `std/` is exactly where a type like that
+   belongs. Declaring it per program was only ever the answer
    while there was nowhere else to put it.
 
 6. **Whether a compile-time function parameter and a type parameter share one

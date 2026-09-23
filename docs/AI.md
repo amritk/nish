@@ -791,7 +791,7 @@ export const main = (): i32 => {
   imports, namespace imports, side-effect imports and type-only imports are all
   rejected.
 - A specifier is a relative path (`./x`, `../x`), a builtin module (`nish:fs`),
-  a standard-library module (`nish/text`), or a **package name** (`hash`,
+  a standard-library module (`nish/text`, `nish/pair`), or a **package name** (`hash`,
   `@scope/hash`, with a subpath after it if you want one).
 - **A package is resolved through `node_modules` and compiled from source.**
   The package's `package.json` must offer the file under the `nish` export
@@ -991,6 +991,11 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+When the two values need no names of their own, `import { Pair } from "nish/pair"`
+and return `Pair<A, B>`: an object literal `{ first, second }` at the return,
+exactly as above. It is for returning two values, not storing them — a struct
+kept in an array or a field wants named fields.
 
 **A map or a set** — neither exists. Use parallel arrays with a linear scan, or
 an array indexed by a small integer key, and write the lookup out.
