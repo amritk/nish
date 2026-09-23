@@ -143,7 +143,7 @@ This is WP21 S3's resolution half: §5c, §6 and §10d's "one diagnostic, not fo
 
 **Owns:** [`self/bounds.ts`](../../self/bounds.ts), [`self/attributes.ts`](../../self/attributes.ts), [`self/emit_arrays.ts`](../../self/emit_arrays.ts) (only if the emitter must read a new side-table entry), `tests/cases/arr_header_hoist.*`, `tests/cases/arr_path_*`, `tests/cases/perf_bounds_*` (regenerated goldens only), [`bench/hoist_field.ts`](../../bench/hoist_field.ts) (read, measure), [`docs/wp15-performance.md`](../../docs/wp15-performance.md), plus the shared-append files.
 
-**Amended 2026-09-23T16:40Z**, pre-emptively, for the same reason as package-diagnostics: also `tests/self/goldens/**` (regenerated only), `tests/nish-cmp.js` (`DECLARED` entries for this stage's new cases only, shared-append) and `tests/perf-baseline.json` (only if the ratchet moves down).
+**Amended 2026-09-23T16:40Z**, pre-emptively, for the same reason as package-diagnostics: also `tests/self/goldens/**` (regenerated only), `tests/nish-cmp.js` (`DECLARED` entries for this stage's new cases only, shared-append) and `tests/perf-baseline.json` (only if the ratchet moves down). **Amended again 2026-09-23T16:55Z** (draft #179): also `tests/differential/goldens/**` (regenerated only — a new `tests/cases` program registers in `unfrozen.txt`).
 
 This stage implements #106 as that issue states it.
 
