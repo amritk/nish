@@ -16,6 +16,7 @@
 // and it keeps a `Local` free of a field that exists only to be its own key.
 
 import { StringMap } from "./map";
+import { Node } from "./nodes";
 
 /** A parameter is an SSA value; a `let` or `const` lives in an alloca slot. */
 export const STORAGE_PARAM: i32 = 0;
@@ -27,14 +28,66 @@ export class Local {
   type: i32;
   mutable: boolean;
   storage: i32;
+  /**
+   * The type as the *template* wrote it, when this local is declared in the
+   * body of an instantiation (WP18 G6), and `null` everywhere else. `type` is
+   * concrete — `T` is `Point` by the time a body is checked — so this is the
+   * only record that the local came from `T`, which is what decides whether a
+   * member may be read through it (`refuseParameterMember` in `self/generics.ts`).
+   */
+  origin: TypeOrigin | null;
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name;
     this.type = type;
     this.mutable = mutable;
     this.storage = storage;
+    this.origin = null;
   }
 }
+
+/**
+ * A type as it was written in a generic declaration, before any binding
+ * (WP18 G6): the annotation node, and what each type parameter it can mention
+ * stands for.
+ *
+ * `names` is empty for an annotation written in the body being checked, whose
+ * parameters are the ones `ctx.typeBindings` binds. It is not empty for one
+ * reached through another declaration — the field `value: T` of `Box<T>`, read
+ * through a local declared `Box<U>` — and then `names[i]` stands for
+ * `args[i]`, which is itself an origin (`U`, here), or `null` for an argument
+ * that came from no type parameter at all. Substituting that way, rather than
+ * resolving, is what keeps a type parameter from ever becoming a type.
+ *
+ * Two expressions stand in for an annotation, because they spell the same
+ * shape: `new Box<U>(u)`, whose written type arguments are an annotation's,
+ * and an array literal, whose one argument is the origin of its elements.
+ */
+export class TypeOrigin {
+  annotation: Node;
+  names: string[];
+  args: (TypeOrigin | null)[];
+  /**
+   * The value came from an expression `originOf` has no case for, so where it
+   * came from is not known. It is refused as a type parameter's whenever its
+   * type is one's binding: failing closed, for the reason `originOf` gives.
+   */
+  unknown: boolean;
+
+  constructor(annotation: Node, names: string[], args: (TypeOrigin | null)[]) {
+    this.annotation = annotation;
+    this.names = names;
+    this.args = args;
+    this.unknown = false;
+  }
+}
+
+/** The origin of an expression nothing knows how to follow (see `TypeOrigin.unknown`). */
+export const unknownOrigin = (expr: Node): TypeOrigin => {
+  const origin = new TypeOrigin(expr, [], []);
+  origin.unknown = true;
+  return origin;
+};
 
 export class Scope {
   parent: Scope | null;

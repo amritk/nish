@@ -1,1 +1,3 @@
-a constrained type parameter (`T extends ...`) is not supported yet
+:4:26: error: `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's
+:6:28: error: `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out
+2 errors

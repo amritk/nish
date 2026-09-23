@@ -474,6 +474,114 @@ attributes #2 = { nounwind }
 ```
 <!-- cookbook:end gen_class -->
 
+### A constrained type parameter
+
+`<T extends Shape>` lets a template read `Shape`'s members through a `T`, and
+changes nothing about how it is lowered. `areaOf` is still one `define` per
+type argument, and each one reads its *own* struct: `areaOf$$Circle` loads
+field 0 of `%struct.Circle`, `areaOf$$Square` field 0 of `%struct.Square`.
+Because both classes `implements Shape`, `area` is their first field, so the
+index is the one `Shape` would have given — there is no `bitcast` to
+`%struct.Shape`, no vtable and no dictionary, and each function is the one a
+hand-written `areaOfCircle` would be. The constraint is a checker rule: it
+decides which members a `T` may name (only `Shape`'s, so `shape.radius` is
+refused even at `T = Circle`) and which type arguments a call may imply (a
+class that does not `implements Shape` is refused at the call).
+
+<!-- cookbook:begin gen_constraint -->
+```ts
+interface Shape {
+  area: i32;
+}
+
+class Circle implements Shape {
+  area: i32;
+  radius: i32;
+
+  constructor(radius: i32) {
+    this.area = 3 * radius * radius;
+    this.radius = radius;
+  }
+}
+
+class Square implements Shape {
+  area: i32;
+
+  constructor(side: i32) {
+    this.area = side * side;
+  }
+}
+
+const areaOf = <T extends Shape>(shape: T): i32 => shape.area;
+
+export const main = (): i32 => areaOf(new Circle(2)) + areaOf(new Square(3));
+```
+
+```llvm
+%struct.Shape = type { i32 }
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32 }
+
+declare void @nish_free_arena() #0
+
+define internal void @Circle.constructor(%struct.Circle* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %radius) #0 {
+entry:
+  %0 = mul nsw i32 3, %radius
+  %1 = mul nsw i32 %0, %radius
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %this, i32 0, i32 0
+  store i32 %1, i32* %2, align 4
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %this, i32 0, i32 1
+  store i32 %radius, i32* %3, align 4
+  ret void
+}
+
+define internal void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %side) #0 {
+entry:
+  %0 = mul nsw i32 %side, %side
+  %1 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 0
+  store i32 %0, i32* %1, align 4
+  ret void
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %Circle.obj = alloca %struct.Circle, align 8
+  %Square.obj = alloca %struct.Square, align 8
+  call void @Circle.constructor(%struct.Circle* %Circle.obj, i32 2)
+  %0 = call i32 @areaOf$$Circle(%struct.Circle* %Circle.obj)
+  call void @Square.constructor(%struct.Square* %Square.obj, i32 3)
+  %1 = call i32 @areaOf$$Square(%struct.Square* %Square.obj)
+  %2 = add nsw i32 %0, %1
+  ret i32 %2
+}
+
+define internal noundef i32 @areaOf$$Circle(%struct.Circle* noundef nonnull readonly align 8 dereferenceable(8) nocapture %shape) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Circle, %struct.Circle* %shape, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  ret i32 %1
+}
+
+define internal noundef i32 @areaOf$$Square(%struct.Square* noundef nonnull readonly align 8 dereferenceable(4) nocapture %shape) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Square, %struct.Square* %shape, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  ret i32 %1
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
+```
+<!-- cookbook:end gen_constraint -->
+
 ## Types
 
 ### `i64` and the explicit conversions

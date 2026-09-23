@@ -16,6 +16,7 @@ import { LANGUAGE } from "./branding";
 import { checkCondition, checkExpression, clearNarrowingsAssignedIn, narrow } from "./expressions";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
+import { declaredOrigin, elementOrigin } from "./generics";
 import { terminatesControlFlow } from "./builtins";
 import { rejectDiscardedResult } from "./result";
 import {
@@ -40,7 +41,7 @@ import {
   Node,
 } from "./nodes";
 import { caseValue } from "./constants";
-import { Local, STORAGE_LOCAL, Scope } from "./symbols";
+import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols";
 import { isInteger, T_BOOL, T_ERROR, T_VOID } from "./types";
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
@@ -198,7 +199,8 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
     const initializer = decl.children[2];
     if (initializer.kind === N_EMPTY) {
       ctx.error(decl, `Variable \`${name}\` must be initialized`);
-      declareLocal(ctx, scope, decl, name, declared < 0 ? T_ERROR : declared, mutable);
+      const origin = declaredOrigin(ctx, annotation, initializer, scope);
+      declareLocal(ctx, scope, decl, name, declared < 0 ? T_ERROR : declared, mutable, origin);
       continue;
     }
     const initType = checkExpression(ctx, initializer, scope, declared);
@@ -224,19 +226,25 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
     if (ctx.errored && (declared < 0 || declared === T_ERROR)) {
       continue;
     }
-    declareLocal(ctx, scope, decl, name, type, mutable);
+    declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope));
   }
 };
 
+/**
+ * `origin` is the type as a generic template wrote it, when the local is
+ * declared in an instantiation's body (WP18 G6), and `null` everywhere else.
+ */
 const declareLocal = (
   ctx: CheckContext,
   scope: Scope,
   decl: Node,
   name: string,
   type: i32,
-  mutable: boolean
+  mutable: boolean,
+  origin: TypeOrigin | null
 ): void => {
   const local = new Local(name, type, mutable, STORAGE_LOCAL);
+  local.origin = origin;
   if (!scope.declare(local)) {
     ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``);
     return;
@@ -354,8 +362,10 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
       element = ctx.table.refOf(iterable);
     }
   }
-  // `for (let x of a)` binds a mutable element, `for (const x of a)` does not.
-  declareLocal(ctx, outer, decl, name, element, (stmt.children[0].flags & FLAG_CONST) === 0);
+  // `for (let x of a)` binds a mutable element, `for (const x of a)` does not,
+  // and an element of a `T[]` came from `T` (WP18 G6).
+  const origin = elementOrigin(ctx, stmt.children[1], scope);
+  declareLocal(ctx, outer, decl, name, element, (stmt.children[0].flags & FLAG_CONST) === 0, origin);
   ctx.pushLoop(LOOP_ITERATION);
   checkStatement(ctx, stmt.children[2], outer.child());
   ctx.popLoop();

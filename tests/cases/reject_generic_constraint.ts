@@ -1,10 +1,8 @@
-// `<T extends Shape>` needs member access on a type parameter, which is its own
-// rule and its own milestone (WP18 §6.5, G6). Until then a type parameter is
-// passed on, returned and stored, and nothing else.
-interface Shape {
-  area: i32;
-}
+// WP18 G6: a constraint names a declared class or interface. A scalar has no
+// members to lend a type parameter, and a constraint that mentions another
+// type parameter would mean something different at every instantiation.
+const widen = <T extends i32>(a: T): T => a;
 
-const biggest = <T extends Shape>(a: T): i32 => a.area;
+const pick = <T, U extends T>(a: T, b: U): T => a;
 
 export const test = (): number => 0;

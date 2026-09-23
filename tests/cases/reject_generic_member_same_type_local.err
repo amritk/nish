@@ -1,0 +1,3 @@
+:14:12: error: Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+:19:12: error: Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>`
+2 errors

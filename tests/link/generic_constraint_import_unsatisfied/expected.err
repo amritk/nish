@@ -1,0 +1,1 @@
+`T` of `areaOf` requires `T extends Shape`, and `Point` does not implement it
