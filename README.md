@@ -208,7 +208,7 @@ dies with its frame, Rust refuses to compile it, Go falls back to the garbage
 collector, and Zig hands the question back to you and an allocator. Nish
 leaves the value in the arena, where it stays until `main` returns.
 
-So [`src/codegen/escape.ts`](src/codegen/escape.ts) and the whole-program fact
+So [`self/escape.ts`](self/escape.ts) and the whole-program fact
 fixpoint are optimisations and nothing else: a refusal costs memory and never
 correctness, and no program is rejected for a lifetime reason. The compiler
 says so out loud where the cost is real: assigning an allocation to a local

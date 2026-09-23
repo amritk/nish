@@ -580,10 +580,9 @@ release without the release going wrong and a gate nobody can fail is a wish.
 **Decided 2026-09-19: the package is `@amritk/nish`, and the command stays
 `nish`.** That is option (a) below, taken without the project rename option (b)
 would have carried. `package.json#name` is the scoped name; `bin.nish` is
-untouched, so [`src/branding.ts`](../src/branding.ts) and
-[`self/branding.ts`](../self/branding.ts) — the two files the whole compiler
-reads its name from — do not move, and nothing a user reads in a diagnostic
-changes.
+untouched, so [`self/branding.ts`](../self/branding.ts) — the file the whole
+compiler reads its name from (then one of two, with stage0's copy) — does not
+move, and nothing a user reads in a diagnostic changes.
 
 Verified free on the day it was taken, with the command below pointed at the
 scoped name: `https://registry.npmjs.org/@amritk%2Fnish` answered 404.
