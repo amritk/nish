@@ -637,7 +637,7 @@ export class CName {
  * a generic function's instantiation, or a method of an instantiated class --
  * becomes `nish_gen_` and the escaped collapse: `nish_gen_identity_i32`,
  * `nish_gen_Box_i32_get`. `nish_` is reserved for every declared function and
- * class, so no name the program wrote can take one of these.
+ * class, so a declared function's own name can never be one of these.
  *
  * What is left is the `.`-only collapse of a method, which is not injective
  * (`Point.shifted` and a function called `Point_shifted`) and never was;
@@ -698,36 +698,37 @@ export const cAliasReason = (sig: FunctionSig): string => {
 };
 
 /**
- * Pairs of functions that the C sidecars would declare under one identifier,
- * as `[first, second, ...]`: the rest of `cFunctionName`'s promise, checked
- * rather than assumed. Only a function with a C prototype is declared at all,
- * and `main` never is.
+ * Pairs of functions that a C sidecar would declare under one identifier, as
+ * `[first, second, ...]`: the rest of `cFunctionName`'s promise, checked
+ * rather than assumed. `declared` is what the sidecar declares; a function
+ * with no C prototype is never declared, and `main` never is.
  */
-export const cNameClashes = (table: TypeTable, fns: ExternalFunction[]): ExternalFunction[] => {
+export const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalFunction[] => {
   const seen = new StringMap();
-  const declared: ExternalFunction[] = [];
   const out: ExternalFunction[] = [];
-  for (const fn of fns) {
-    if (fn.sig.name === "main" || cPrototype(table, fn.sig, fn.writtenParams).length === 0) {
-      continue;
+  let i = 0;
+  while (i < declared.length) {
+    const fn = declared[i];
+    if (fn.sig.name !== "main" && cPrototype(table, fn.sig, fn.writtenParams).length > 0) {
+      const ident = cFunctionName(fn.sig.name).ident;
+      const at = seen.get(ident, -1);
+      if (at >= 0 && at < declared.length) {
+        out.push(declared[at]);
+        out.push(fn);
+      } else {
+        seen.set(ident, i);
+      }
     }
-    const ident = cFunctionName(fn.sig.name).ident;
-    const at = seen.get(ident, -1);
-    if (at >= 0 && at < declared.length) {
-      out.push(declared[at]);
-      out.push(fn);
-    } else {
-      seen.set(ident, declared.length);
-      declared.push(fn);
-    }
+    i = i + 1;
   }
   return out;
 };
 
 /**
  * What a sidecar refuses to describe, reported into the compilation's sink;
- * true when there is nothing to refuse. `cSidecar` is whether a header or an
- * N-API shim -- the two files that declare C prototypes -- was asked for.
+ * true when there is nothing to refuse. `cDeclared` is the functions a header
+ * or an N-API shim -- the two files that declare C prototypes -- will declare,
+ * and is empty when neither was asked for.
  *
  * Two refusals, both about a name a host would reach for:
  *
@@ -739,7 +740,7 @@ export const cNameClashes = (table: TypeTable, fns: ExternalFunction[]): Externa
  *   - **Two functions with one C identifier** (`cNameClashes`), which a header
  *     would declare twice and which would not compile.
  */
-export const acceptsSidecars = (compilation: Compilation, fns: ExternalFunction[], cSidecar: boolean): boolean => {
+export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFunction[]): boolean => {
   let ok = true;
   for (const unit of compilation.modules) {
     const program = unit.checker.program;
@@ -760,10 +761,7 @@ export const acceptsSidecars = (compilation: Compilation, fns: ExternalFunction[
       }
     }
   }
-  if (!cSidecar) {
-    return ok;
-  }
-  const clashes = cNameClashes(compilation.table, fns);
+  const clashes = cNameClashes(compilation.table, cDeclared);
   let i = 0;
   while (i < clashes.length) {
     const first = clashes[i].sig;

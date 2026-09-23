@@ -26,7 +26,7 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
-### Added
+### Breaking changes
 
 - interop: Export generic instantiations under valid, injective names (WP18 G8)
 

@@ -624,6 +624,9 @@ export class Plan {
   }
 }
 
+/** Whether the shim bridges `fn`, and so declares its C prototype. */
+export const napiBridges = (table: TypeTable, fn: ExternalFunction): boolean => fn.sig.name !== "main" && napiPlan(table, fn) !== null;
+
 const napiPlan = (table: TypeTable, fn: ExternalFunction): Plan | null => {
   const readers: Reader[] = [];
   let i = 0;

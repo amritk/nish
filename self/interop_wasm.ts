@@ -511,7 +511,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
     } else {
       const param = sig.paramNames[i];
       body.push(
-        `const ${param}$ = arrayIn(${params[i]}, ${view.ctor}, ${view.elemSize}, "${sig.sourceName}: argument ${i + 1} (${param})");`
+        `const ${param}$ = arrayIn(${params[i]}, ${view.ctor}, ${view.elemSize}, "${name}: argument ${i + 1} (${param})");`
       );
       args.push(`${param}$`);
     }

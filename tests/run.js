@@ -4014,6 +4014,18 @@ if (!only || "interop".includes(only)) {
       r.stderr
     );
   }
+  // NL4008 is about C prototypes, so only a file that declares both halves refuses: the
+  // header declares every function, and the N-API shim only those it bridges, which a
+  // method taking a `Point` is not.
+  const clashNapi = emit("tests/cases/reject_interop_generic_clash.ts", [
+    "--emit-napi",
+    sidecar("reject_interop_generic_clash", "napi.c"),
+  ]);
+  check(
+    "--emit-napi alone accepts a method/function C-name pair the shim bridges neither half of",
+    clashNapi.status === 0 && fs.existsSync(sidecar("reject_interop_generic_clash", "napi.c")),
+    clashNapi.stderr
+  );
   const unusedPlain = emit(unusedSrc, []);
   check(
     "the same program with no sidecar flag compiles: message 9 is about the sidecar",
