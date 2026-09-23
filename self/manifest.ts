@@ -274,11 +274,11 @@ export class ManifestEntry {
 /** Whether `object` has a key that begins with `.`, which makes it a subpath map rather than a condition map. */
 const manifestHasSubpathKey = (object: string): boolean => {
   let i = manifestSkipBlank(object, 0);
-  if (i >= object.length || object.charCodeAt(i) !== OPEN_BRACE) {
+  if (i < 0 || i >= object.length || object.charCodeAt(i) !== OPEN_BRACE) {
     return false;
   }
   i = manifestSkipBlank(object, i + 1);
-  while (i < object.length && object.charCodeAt(i) === QUOTE) {
+  while (i >= 0 && i < object.length && object.charCodeAt(i) === QUOTE) {
     const keyEnd = manifestEndOfString(object, i);
     if (keyEnd < 0) {
       return false;
@@ -287,7 +287,7 @@ const manifestHasSubpathKey = (object: string): boolean => {
       return true;
     }
     i = manifestSkipBlank(object, keyEnd);
-    if (i >= object.length || object.charCodeAt(i) !== COLON) {
+    if (i < 0 || i >= object.length || object.charCodeAt(i) !== COLON) {
       return false;
     }
     const valueEnd = manifestEndOfValue(object, manifestSkipBlank(object, i + 1));
@@ -295,7 +295,7 @@ const manifestHasSubpathKey = (object: string): boolean => {
       return false;
     }
     i = manifestSkipBlank(object, valueEnd);
-    if (i >= object.length || object.charCodeAt(i) !== COMMA) {
+    if (i < 0 || i >= object.length || object.charCodeAt(i) !== COMMA) {
       return false;
     }
     i = manifestSkipBlank(object, i + 1);
@@ -437,7 +437,7 @@ const manifestCheckValue = (text: string, at: i32, depth: i32): i32 => {
     if (j < text.length && text.charCodeAt(j) === close) {
       return j + 1;
     }
-    while (j < text.length) {
+    while (j >= 0 && j < text.length) {
       if (first === OPEN_BRACE) {
         if (text.charCodeAt(j) !== QUOTE) {
           return -1 - j;
@@ -447,7 +447,7 @@ const manifestCheckValue = (text: string, at: i32, depth: i32): i32 => {
           return -1 - j;
         }
         j = manifestSkipBlank(text, keyEnd);
-        if (j >= text.length || text.charCodeAt(j) !== COLON) {
+        if (j < 0 || j >= text.length || text.charCodeAt(j) !== COLON) {
           return -1 - j;
         }
         j = j + 1;
@@ -457,7 +457,7 @@ const manifestCheckValue = (text: string, at: i32, depth: i32): i32 => {
         return end;
       }
       j = manifestSkipBlank(text, end);
-      if (j >= text.length) {
+      if (j < 0 || j >= text.length) {
         return -1 - j;
       }
       const next = text.charCodeAt(j);
@@ -472,7 +472,7 @@ const manifestCheckValue = (text: string, at: i32, depth: i32): i32 => {
     return -1 - j;
   }
   let j = i;
-  while (j < text.length && manifestIsScalarByte(text.charCodeAt(j))) {
+  while (j >= 0 && j < text.length && manifestIsScalarByte(text.charCodeAt(j))) {
     j = j + 1;
   }
   const word = text.substring(i, j);
@@ -528,11 +528,15 @@ export const manifestEngineRange = (manifest: string, condition: string): string
 const manifestReadNumber = (text: string, at: i32, next: i32[]): i32 => {
   let i = at;
   let value = 0;
-  while (i < text.length && text.charCodeAt(i) >= DIGIT_ZERO && text.charCodeAt(i) <= DIGIT_NINE) {
+  while (i >= 0 && i < text.length) {
+    const code = text.charCodeAt(i);
+    if (code < DIGIT_ZERO || code > DIGIT_NINE) {
+      break;
+    }
     if (i - at >= 9) {
       return -1;
     }
-    value = value * 10 + (text.charCodeAt(i) - DIGIT_ZERO);
+    value = value * 10 + (code - DIGIT_ZERO);
     i = i + 1;
   }
   next[0] = i;
@@ -555,7 +559,10 @@ const manifestVersionParts = (text: string, at: i32, next: i32[]): i32[] => {
     }
     parts.push(value);
     i = next[0];
-    if (parts.length === 3 || i + 1 >= text.length || text.charCodeAt(i) !== DOT) {
+    if (parts.length === 3 || i < 0 || i >= text.length || i + 1 >= text.length) {
+      break;
+    }
+    if (text.charCodeAt(i) !== DOT) {
       break;
     }
     i = i + 1;
@@ -607,7 +614,7 @@ export const manifestEngineCheck = (manifest: string, condition: string, version
     return ENGINE_UNREADABLE;
   }
   let i = 0;
-  while (i < 3) {
+  while (i < 3 && i < running.length && i < floor.length) {
     if (running[i] > floor[i]) {
       return ENGINE_OK;
     }
