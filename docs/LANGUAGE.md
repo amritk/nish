@@ -985,6 +985,11 @@ and their `.ll` goldens are byte-identical files.
   `interface Pair<A, B> { first: A; second: B; }` and nothing else: a generic
   interface, so an object literal takes its type from the annotation and must
   set both fields, and there is no tuple syntax and no constructor behind it.
+  It crosses a module boundary like any exported interface, over scalars
+  (`tests/link/std_pair_scalar`), a string and an `f64` under
+  `--number-mode f64` (`std_pair_f64`), an array (`std_pair_array`), another
+  `Pair` (`std_pair_nested`), and held in a class field and an array
+  (`std_pair_held`).
   The instantiations are ordered — a `Pair<i32, string>` returned where a
   `Pair<string, i32>` is declared is `` Return type mismatch: function returns
   Pair<string, i32> but expression is Pair<i32, string> ``

@@ -118,7 +118,9 @@ that are *not* this package.
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
   message) — and `text.ts` and `json.ts` have `tests/link/std_text` and
   `tests/link/std_json`, each of which uses `Suite` to check the module, the way a
-  user would. `tests/link/std_text_f64` is the same corpus under
+  user would. `pair.ts` has five, `tests/link/std_pair_*`, one per shape of
+  instantiation, each returning a `Pair` from a sibling module and pinned by its
+  stdout. `tests/link/std_text_f64` is the same corpus under
   `--number-mode f64`, which is where a module that spelled its widths and forgot
   a `toI32` is caught.
 - **`std/` is not on the compiler's dependency list.** Nothing in `self/`

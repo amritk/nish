@@ -78,4 +78,4 @@ export const isStdModuleName = (name: string): boolean => {
  * arrangement that keeps `VERSION` in `branding.ts` honest against
  * `package.json`.
  */
-export const stdModuleNames = (): string => "json, testing, text";
+export const stdModuleNames = (): string => "json, pair, testing, text";

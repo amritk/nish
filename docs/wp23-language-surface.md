@@ -453,7 +453,11 @@ true, and it needs no language change at all.
 **Landed.** [`std/pair.ts`](../std/pair.ts) is §5.2's interface exactly —
 `export interface Pair<A, B> { first: A; second: B; }` — with no constructor
 helper and no grammar, and a program imports it as
-`import { Pair } from "nish/pair"`. LANGUAGE.md has the rule. The two refusals a
+`import { Pair } from "nish/pair"`. LANGUAGE.md has the rule. Five
+`tests/link/std_pair_*` programs return one across a module boundary — the
+`scanEscape` shape above (`std_pair_scalar`), `Pair<string, f64>` under
+`--number-mode f64`, `Pair<i32[], string>`, a nested `Pair`, and one held in a
+class field and an array — and run natively. The two refusals a
 caller meets are the checker's existing ones, with no new code:
 `reject_std_pair_swapped` (a `Pair<i32, string>` returned where a
 `Pair<string, i32>` is declared, NL2236) and `reject_std_pair_missing` (an

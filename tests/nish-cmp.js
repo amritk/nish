@@ -496,6 +496,36 @@ const DECLARED = [
     changelog: "Generic methods on classes (WP18 §14 q7)",
     why: "a new program: an exported class's generic methods called from two importers, which the reference compiler refuses at the method's type parameter list in lib.ts and HEAD compiles with one `define` per instantiation, in lib.ll",
   },
+  {
+    program: "tests/link/std_pair_scalar/main.ts",
+    file: "exit",
+    changelog: "Pair<A, B> as a standard-library type",
+    why: "a new program: a `Pair<i32, boolean>` returned across a module boundary, which the reference compiler refuses because its std/ has no pair.ts",
+  },
+  {
+    program: "tests/link/std_pair_f64/main.ts",
+    file: "exit",
+    changelog: "Pair<A, B> as a standard-library type",
+    why: "a new program: a `Pair<string, f64>` under --number-mode f64, which the reference compiler refuses because its std/ has no pair.ts",
+  },
+  {
+    program: "tests/link/std_pair_array/main.ts",
+    file: "exit",
+    changelog: "Pair<A, B> as a standard-library type",
+    why: "a new program: a `Pair<i32[], string>`, which the reference compiler refuses because its std/ has no pair.ts",
+  },
+  {
+    program: "tests/link/std_pair_nested/main.ts",
+    file: "exit",
+    changelog: "Pair<A, B> as a standard-library type",
+    why: "a new program: a nested `Pair<Pair<i32, i32>, string>`, which the reference compiler refuses because its std/ has no pair.ts",
+  },
+  {
+    program: "tests/link/std_pair_held/main.ts",
+    file: "exit",
+    changelog: "Pair<A, B> as a standard-library type",
+    why: "a new program: a `Pair<i32, boolean>` held in a class field and pushed into an array, which the reference compiler refuses because its std/ has no pair.ts",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */
