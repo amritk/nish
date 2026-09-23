@@ -1,0 +1,124 @@
+{
+  "version": "0.7.0",
+  "date": "2026-09-23",
+  "tag": "v0.7.0",
+  "range": {
+    "from": "v0.6.0",
+    "to": "ad02409"
+  },
+  "entries": [
+    {
+      "id": "fetch-a-released-seed-and-let-every-tool",
+      "type": "build",
+      "breaking": false,
+      "title": "fetch a released seed and let every tool take a stage1 compiler",
+      "body": "A fresh clone or agent session can now fetch the last released compiler with one command. Every tool that ran the TypeScript compiler through `dist/index.js` can be pointed at a native stage1 binary instead. Every default is unchanged. This is the first step of retiring stage0 (docs/wp19-stage0-retirement.md, R6).\n\n- `scripts/fetch-seed.sh` unpacks the last release into `build/seed/` through `install.sh`, so the download, the version check and the swap live in one place. It does nothing once a working seed is there. It also takes a version or `--force`.\n- `tests/fetch_seed.js` checks the script against a stand-in installer, with no network. It has 13 checks, and each branch was watched failing.\n- `tests/self/seed.js` looks in `build/seed/bin/nish` before falling back to stage0.\n- The Claude Code on the web session hook fetches the seed without blocking the session. The project settings allow `build/nish`, the fetched seed, and the fetch script.\n- `scripts/smoke.sh` and `docs/cookbook/regen.sh` take `NISH=<compiler>`, through the shared helper `scripts/nish-compiler.sh`. `bench/*.mjs` and `tests/nish/run.ts` take `--compiler <nish>`.\n- `tests/nish/cli.ts` checks whether the compiler has the simulated-internal-error hook, instead of assuming only stage0 has it.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/fetch_seed.js",
+        "npm test 2177 passed",
+        "0 failed",
+        "2 skipped (unchanged from main)"
+      ],
+      "commits": [
+        "a5b360b"
+      ],
+      "pr": 146,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "compile-every-golden-with-stage1-and-stop-comparing",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "compile every golden with stage1 and stop comparing against stage0",
+      "body": "The test suite and CI no longer need the TypeScript compiler.\n\nA released seed builds the self-hosted compiler once per run. That one binary compiles every golden case, and the parallel case runner cut `npm test` from about 15 minutes to about 4. The checks that compared the two compilers are gone. Their successors are `nish-cmp`, which checks the last release against HEAD, and the recorded goldens. The guards that read the TypeScript compiler's internals now read the self-hosted compiler: the runtime table against `nish.h`, the allocating builtins, the seed targets and the exit-70 path. This is the second step of retiring stage0 (docs/wp19-stage0-retirement.md, R6).\n\nThe self-hosted compiler now keeps four command-line promises that only the TypeScript compiler used to keep:\n\n- The usage text names the command `nish`. It used to say `compile`.\n- `--link` checks for the C compiler it will use (`CC`, else `clang`) before compiling anything. If the compiler is missing, it exits 3 with an install hint for each platform, and under `--json` it prints one NL0002 object. No IR is left behind.\n- Under `--json`, an internal compiler error is one NL0003 object on stdout, as the machine-readable contract requires.\n- `NISH_SIMULATE_ICE=1` exercises the real exit-70 path for tests.\n\nThe 89 parser refusals whose wording differed now expect the self-hosted compiler's sentence, and `dump_ast` expects its tree. CI's `batch-parity`, `parity-select` and `parity-changed` jobs and the nightly `parity.yml` are removed.",
+      "metrics": [
+        "npm test 2104 passed, 0 failed, 2 skipped in 4m01s (main: 15m15s); nish-cmp 514/514 programs agree against the 0.6.0 seed"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md",
+        "AGENTS.md"
+      ],
+      "tests": [
+        "tests/run.js",
+        "tests/nish/cli.ts",
+        "tests/self/bootstrap.js",
+        "tests/fetch_seed.js"
+      ],
+      "commits": [
+        "8c7f7f9"
+      ],
+      "pr": 145,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "take-the-surviving-test-tools-off-stage0-147",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "take the surviving test tools off stage0",
+      "body": "Every test tool that outlives the TypeScript compiler now runs on a released seed or on a compiler it is given. The answers only that compiler could give are recorded before it is deleted. This is the third step of retiring stage0 (docs/wp19-stage0-retirement.md, R6).\n\n- `tests/self/goldens/support.txt` records stage0's 340 answers: string escaping, float hex, package export targets and bare-specifier parsing. `support_oracle.js` checks against that file, so nothing is dropped when `dist/` is gone.\n- The diagnostic-code registry `self/codes.ts` is now kept by hand. `scripts/gen-diagnostic-codes.mjs --check` validates it:\n  - codes are well-formed and in their bands;\n  - no code or fragment is used twice;\n  - fragments are ordered, and none is under 10 characters;\n  - `RULE_COUNT` matches.\n\n  With no flags, the script prints the next free code in each band.\n- The differential suite runs on frozen rewrites and a named compiler only. A new register, `tests/differential/goldens/unfrozen.txt`, names any program without a frozen rewrite instead of skipping it silently. Fuzzing against Node, which needed the TypeScript rewriter, is gone. Fuzzing the seed against HEAD remains.\n- The 80 codes only stage0 could provoke are folded into `tests/wordings/unreachable.txt` as retired codes, each with its reason. The 41 parser-refused wording cases now pin the self-hosted parser's own sentence.\n- The lexer, parser and support oracles, `nish-cmp`, `diagnostic_coverage.js` and `scripts/arrow-verify.mjs` no longer fall back to stage0.",
+      "metrics": [
+        "npm test 2104 passed, 0 failed, 2 skipped; support 981/981 lines with dist/ removed; diagnostic coverage 265/411 codes, 146 unreachable with reasons, uncoded=5"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/self/support_oracle.js",
+        "tests/diagnostic_coverage.js",
+        "tests/differential/goldens.js",
+        "scripts/gen-diagnostic-codes.mjs --check"
+      ],
+      "commits": [
+        "22889af"
+      ],
+      "pr": 147,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "delete-stage0-the-typescript-compiler-150",
+      "type": "build",
+      "breaking": true,
+      "breakingNote": "the package no longer contains the TypeScript compiler (`dist/`), and `typescript` is no longer installed as a runtime dependency. Building from source needs a released `nish` seed (`scripts/fetch-seed.sh`) and clang.",
+      "title": "delete stage0, the TypeScript compiler",
+      "body": "Nish now has one compiler: the self-hosted one in `self/`. The TypeScript implementation in `src/`, which was the bootstrap seed and the second implementation the oracles compared against, is deleted. This completes the retirement of stage0 (docs/wp19-stage0-retirement.md, R6).\n\n- **Deleted.** Deleted along with `src/`: the six oracles that compared the two compilers (types, diagnostics, symbols, checked, IR, interop), `parity.js`, the stage1-only register, the differential rewriter and arrow-parity, and the `ddc` provenance job with `.github/ddc-tag.sh`. `ddc-0.6.0` is the last provenance tag taken while a second implementation existed.\n- **What replaced each oracle.** `nish-cmp` compares the last release with HEAD, byte for byte, over the whole corpus. `tests/self/goldens/` records what the other four oracles compared. The golden cases compile with the self-hosted compiler.\n- **Package.** `typescript` is no longer a runtime dependency; it stays a dev dependency for the lexer and parser oracles, the packaging checks, the codemod and `tsc` over the ambient declarations. The npm package ships 35 files, with no `src/`, no `dist/` and nothing that imports `typescript`. There is no Node compiler inside it: on a platform without a prebuilt binary, the launcher refuses (already true since 0.6.0).\n- **Scripts.**\n  - `npm run build` builds `build/nish` with the released seed that `scripts/fetch-seed.sh` downloads.\n  - `npm run check` is now `tsc --noEmit` over `self/`, `std/` and `tests/nish/` against `runtime/nish.d.ts`. It holds the one documented divergence (`pop`) with a `@ts-expect-error` and fails if that line's error ever goes away.\n  - `npm test` is `node tests/run.js`.\n- **Releases.** Release binaries are built from the previous release's seed, and `scripts/bootstrap.sh --verify` still asserts `IR(stage1) == IR(stage2)` and a byte-identical `stage3 == stage2`.",
+      "metrics": [
+        "npm test 2106 passed, 0 failed, 1 skipped (WASI) with NISH_BOOTSTRAP=0.6.0, 5m40s, nish-cmp green; npm pack 35 files; -33365 lines"
+      ],
+      "refs": [
+        "docs/wp19-stage0-retirement.md"
+      ],
+      "tests": [
+        "tests/run.js",
+        "tests/nish-cmp.js",
+        "scripts/bootstrap.sh --verify"
+      ],
+      "commits": [
+        "f3c3439"
+      ],
+      "pr": 150,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    },
+    {
+      "id": "describe-one-compiler-in-the-rules-and-the",
+      "type": "docs",
+      "breaking": false,
+      "title": "describe one compiler in the rules and the live documents",
+      "body": "* docs: describe one compiler in the rules and the live documents\n\nWP19 R6 deletes `src/`, the TypeScript compiler that seeded and checked\n`self/`. The rules and the live reference documents now describe the tree the\ndeletion leaves: one compiler, `self/`, built by the last released `nish`.\n\n- `CLAUDE.md`, `AGENTS.md` and `.claude/*.md`: a construct is implemented\n  once, in `self/`, under the rolling freeze. `npm run check` is an ambient\n  `tsc --noEmit` over `self/`, `std/` and `tests/nish/`. The seed comes from\n  `scripts/fetch-seed.sh`. `self/codes.ts` is the hand-kept code registry,\n  and the stage1-only register is gone.\n- `README.md` and `docs/{ARCHITECTURE,MASTER_PLAN,INSTALL,LANGUAGE,IR_COOKBOOK,wp10-ci,wp12-release}.md`\n  point at `self/` modules rather than `src/` ones, and describe CI and the\n  release without the parity, batch and ddc jobs. The two Markdown links into\n  `src/` now point into `self/`.\n- `docs/wp19-stage0-retirement.md` and MASTER_PLAN's M6 mark R6 done. They\n  record what the deletion removed and what replaced each oracle, and leave a\n  placeholder for the dated measurement.\n- Comments in `bin/`, `scripts/`, `runtime/` and `examples/` stop pointing\n  at `src/` and `dist/`.\n\nRefs: docs/wp19-stage0-retirement.md#5-order\nPart of #144\n\n* docs: correct the one-compiler rewrite where review found it wrong\n\nName only identifiers self/ defines, say the R6 gate is the 0.6.0 seed,\nfetch the seed in every build-from-source recipe, point a nish-cmp\ndifference at its DECLARED list, and mark wp12's pre-R6 decision records\nas superseded.\n\n* docs: tighten the one-compiler rules after review\n\nPoint the definition of done at CLAUDE.md instead of restating it, say that\nnpm test builds its own compiler and runs the fixed point, give the\none-case golden update, and drop two references to rules and oracles the\nrewrite removed.\n\n* docs(self): state the seed order tests/self/seed.js actually uses\n\nbuild/nish comes before the fetched release in build/seed/, as the merged\nseed plumbing resolves it.\n\n* docs: name self/ice.ts as the home of the NISH_SIMULATE_ICE hook\n\nThe harness stage put the hook beside the report it drives.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ad02409"
+      ],
+      "pr": 148,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-22"
+    }
+  ]
+}
