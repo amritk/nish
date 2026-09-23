@@ -598,7 +598,7 @@ const lengthHolder = (ctx: CheckContext, expr: Node): Local | null => {
 /**
  * A property path the walk holds length facts about: `root`, then `fields`
  * from the root outward. `holder` is the stand-in `Local` every fact family
- * keys on, interned once per path per body, so two spellings of `h.xs` meet on
+ * keys on, named `root.a.b` and interned once per path per body, so two spellings of `h.xs` meet on
  * one object and `forget` drops a path's facts the way it drops a variable's.
  * It is never bound to a node: `nodeLocals` cannot hand it out, so no
  * assignment can name it and the only way its facts go is the rules in the
@@ -606,13 +606,11 @@ const lengthHolder = (ctx: CheckContext, expr: Node): Local | null => {
  */
 export class PathHolder {
   root: Local;
-  key: string;
   fields: string[];
   holder: Local;
 
-  constructor(root: Local, key: string, fields: string[], holder: Local) {
+  constructor(root: Local, fields: string[], holder: Local) {
     this.root = root;
-    this.key = key;
     this.fields = fields;
     this.holder = holder;
   }
@@ -634,29 +632,27 @@ export class PathHolder {
  */
 const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
   let e = unwrapBoundsParens(expr);
-  if (e.kind !== N_MEMBER) {
-    return null;
-  }
   while (e.kind === N_MEMBER) {
     e = unwrapBoundsParens(e.children[0]);
   }
-  if (e.kind !== N_IDENT && e.kind !== N_THIS) {
-    return null;
-  }
-  const root = walk.ctx.program.nodeLocals[e.id];
   const fields: string[] = [];
   const type = declaredPathType(walk, expr, fields);
-  if (root === null || type < 0 || (!walk.ctx.table.isArray(type) && type !== T_STRING)) {
+  if (fields.length === 0 || type < 0 || (!walk.ctx.table.isArray(type) && type !== T_STRING)) {
     return null;
   }
-  const key = fields.join(".");
+  // `declaredPathType` answered, so `e` is an identifier or `this` with a local.
+  const root = walk.ctx.program.nodeLocals[e.id];
+  if (root === null) {
+    return null;
+  }
+  const name = `${root.name}.${fields.join(".")}`;
   for (const path of walk.paths) {
-    if (path.root === root && path.key === key) {
+    if (path.root === root && path.holder.name === name) {
       return path.holder;
     }
   }
-  const holder = new Local(`${root.name}.${key}`, type, false, STORAGE_LOCAL);
-  walk.paths.push(new PathHolder(root, key, fields, holder));
+  const holder = new Local(name, type, false, STORAGE_LOCAL);
+  walk.paths.push(new PathHolder(root, fields, holder));
   return holder;
 };
 
@@ -707,6 +703,17 @@ const forgetPaths = (walk: BoundsWalk, state: State): void => {
   for (const path of walk.paths) {
     forget(state, path.holder);
   }
+};
+
+/**
+ * What a call leaves: every array length, a callee holding the same array may
+ * move `len`; and every path, string or array, because a callee can store to
+ * any field it can reach. Array-typed paths go in the first half as well,
+ * which is harmless; the second is what takes the string ones.
+ */
+const forgetCallEffects = (walk: BoundsWalk, state: State): void => {
+  forgetArrayLengths(walk.ctx, state);
+  forgetPaths(walk, state);
 };
 
 /**
@@ -1355,8 +1362,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     // `nish_str_new` is a callee like any other, so the array lengths go here
     // whether or not this call was a `substring` — and every path goes, string
     // or array, because a callee can store to any field it can reach.
-    forgetArrayLengths(ctx, state);
-    forgetPaths(walk, state);
+    forgetCallEffects(walk, state);
     return;
   }
 
@@ -1364,8 +1370,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     for (const arg of e.children[2].children) {
       walkExpression(walk, state, arg);
     }
-    forgetArrayLengths(ctx, state); // a constructor body is a callee like any other
-    forgetPaths(walk, state);
+    forgetCallEffects(walk, state); // a constructor body is a callee like any other
     return;
   }
 
@@ -1405,7 +1410,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (e.text === "++") {
       applyAssignment(walk, state, v, null, true);
     } else {
-      forget(state, v);
+      forgetLocal(walk, state, v);
     }
     return;
   }
@@ -1557,16 +1562,15 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
     if (keepsLowerBound(ctx, v)) {
       forgetUpperBounds(state, v);
     } else {
-      forget(state, v);
+      forgetLocal(walk, state, v);
     }
   }
   for (const field of effects.fields) {
     forgetPathsThrough(walk, state, field);
   }
   if (effects.calls) {
-    forgetArrayLengths(ctx, state);
-  }
-  if (effects.calls || effects.records) {
+    forgetCallEffects(walk, state);
+  } else if (effects.records) {
     forgetPaths(walk, state);
   }
 };
@@ -1602,6 +1606,17 @@ const contains = (list: Local[], v: Local): boolean => {
   return false;
 };
 
+/** What a write to `target` does to paths: a field name it stores, or a whole record. */
+const noteStoredField = (ctx: CheckContext, target: Node, effects: Effects): void => {
+  const t = unwrapBoundsParens(target);
+  if (t.kind === N_MEMBER && effects.fields.indexOf(t.text) < 0) {
+    effects.fields.push(t.text);
+  }
+  if (t.kind === N_INDEX && storesRecord(ctx, t)) {
+    effects.records = true;
+  }
+};
+
 const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void => {
   const stepped = effects.stepped;
   const clobbered = effects.clobbered;
@@ -1611,17 +1626,8 @@ const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void =
   if (node.kind === N_CALL && !callsNothing(ctx, node)) {
     effects.calls = true;
   }
-  const written = node.kind === N_UNARY && (node.text === "++" || node.text === "--");
-  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || written) {
-    const target = unwrapBoundsParens(node.children[0]);
-    if (target.kind === N_MEMBER && effects.fields.indexOf(target.text) < 0) {
-      effects.fields.push(target.text);
-    }
-    if (target.kind === N_INDEX && storesRecord(ctx, target)) {
-      effects.records = true;
-    }
-  }
   if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
+    noteStoredField(ctx, node.children[0], effects);
     const v = localOf(ctx.program, node.children[0]);
     if (v !== null) {
       const steps =
@@ -1635,6 +1641,7 @@ const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void =
     }
   }
   if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    noteStoredField(ctx, node.children[0], effects);
     const v = localOf(ctx.program, node.children[0]);
     if (v !== null) {
       if (node.text === "++") {

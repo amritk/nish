@@ -1992,6 +1992,11 @@ if (has("opt")) {
 //    `main` and the length is a known constant: the standalone `sum` keeps a hoisted
 //    length compare plus a per-iteration branch to the noreturn panic block, and LLVM
 //    18's loop vectoriser does not handle multi-exit loops (see docs/wp4-arrays.md).
+/** How many bounds checks function `fn` of module `ir` carries: its `nish_panic_index` calls. */
+const panicCount = (ir, fn) =>
+  ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(/call void @nish_panic_index/g) ?? [])
+    .length;
+
 if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   if (has("opt")) {
     for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
@@ -2070,10 +2075,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const nullableLl = path.join(buildDir, "arr_path_nullable.ll");
   if (fs.existsSync(nullableLl)) {
     const ir = fs.readFileSync(nullableLl, "utf8");
-    const panics = (fn) =>
-      ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(
-        /call void @nish_panic_index/g
-      ) ?? []).length;
+    const panics = (fn) => panicCount(ir, fn);
     check(
       "arr_path_nullable: a path from a root declared `Holder | null` keeps its check, and the same path from a `Holder` does not",
       panics("narrowed") === 1 && panics("plain") === 0,
@@ -2190,19 +2192,18 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         return names.get(r);
       });
     };
+    const fieldLoop = loopOf("fieldScale");
+    const constLoop = loopOf("constScale");
     check(
       "arr_header_hoist: @fieldScale's loop is @constScale's, register for register",
-      loopOf("fieldScale").includes("while.cond:") && loopOf("fieldScale") === loopOf("constScale"),
-      `fieldScale:\n${loopOf("fieldScale")}\nconstScale:\n${loopOf("constScale")}`
+      fieldLoop.includes("while.cond:") && fieldLoop === constLoop,
+      `fieldScale:\n${fieldLoop}\nconstScale:\n${constLoop}`
     );
     // And the gap #104 measured and #106 closed, as a count so that it cannot
     // silently reopen: `const xs = h.xs` and `h.xs` carry the same checks. Before
     // #106 `fieldScale` carried two and `constScale` one, and the second was the
     // second loop exit that kept the vectoriser away.
-    const panics = (fn) =>
-      ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(
-        /call void @nish_panic_index/g
-      ) ?? []).length;
+    const panics = (fn) => panicCount(ir, fn);
     check(
       "arr_header_hoist: the checker's proof reaches @fieldScale's element read as it does @constScale's",
       panics("constScale") === 1 && panics("fieldScale") === panics("constScale"),
