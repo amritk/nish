@@ -25,7 +25,7 @@
  * command a build artifact of the compiler it is supposed to install. `bin/`
  * is what the tarball carries and what `bin.nish` points into, so the launcher
  * and its platform table now live where they ship, need no build step, and
- * survive the deletion of `src/` (`docs/wp19-stage0-retirement.md` R6). The
+ * survived the deletion of `src/` (`docs/wp19-stage0-retirement.md` R6). The
  * types they lose are not much of a loss for two string maps; what they gain is
  * that `npm pack` ships the same bytes this repository runs.
  */

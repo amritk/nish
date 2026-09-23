@@ -88,8 +88,8 @@ done
 # beside it. They were one file until the operating-system half was split out
 # for its own size budget, and the parallel half followed for the same reason
 # (each file's header comment says why), and a link line is where those splits
-# would otherwise leak: `nish --link` builds its command line in src/index.ts
-# and self/compile.ts, the published package's recipe in every document and
+# would otherwise leak: `nish --link` builds its command line in
+# self/compile.ts, the published package's recipe in every document and
 # README names runtime.c, and a user's own clang line does too. Pairing them
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because

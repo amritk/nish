@@ -7,9 +7,10 @@ typical use cases and edge cases.
 ## Setup
 
 There is no unit-test framework here — no Vitest, no `bun test`, no Jest. The
-suite is `tests/run.js`, a plain Node script that `npm test` runs after
-`npm run build`, printing one `PASS` / `FAIL` line per check. Almost every test
-is **data, not code**: a source file next to the output it must produce.
+suite is `tests/run.js`, a plain Node script that `npm test` runs. It first
+builds the compiler under test from `self/` with the seed and links it at
+`build/nish-test`, then prints one `PASS` / `FAIL` line per check. Almost every
+test is **data, not code**: a source file next to the output it must produce.
 
 - **Golden cases live in `tests/cases/`**, one `<name>.ts` per case, discovered
   automatically. The sidecar files decide what the case asserts:
@@ -32,14 +33,6 @@ is **data, not code**: a source file next to the output it must produce.
   - `<name>.stdout` — for dump flags (`--emit-ast`, `--emit-checked`): the
     compiler's stdout is the golden and no IR is written.
 
-  One thing about a case is decided away from the case, in
-  `tests/self/stage1_only.txt`: whether it is **stage1-only**. A case named
-  there is compiled by a stage1 binary built out of `self/` rather than by
-  stage0, and every stage0 oracle counts it as declared rather than skipping
-  it — which is how a construct can be implemented in `self/` alone instead of
-  twice (`docs/wp19-stage0-retirement.md` §1a). The file's header is the
-  contract; registering a case removes the second implementation and none of
-  the tests below.
 - **Naming is by family prefix**, matching the module that owns the construct:
   `cf_*` control flow, `cls_*` classes, `str_*` strings, `arr_*` arrays,
   `mem_*` memory, `math_*` / `div_*` / `i64_*` / `f64_*` numerics, `io_*` and
@@ -57,44 +50,30 @@ is **data, not code**: a source file next to the output it must produce.
   express the property (a byte budget, a vectorisation check, an ABI
   agreement).
 - **Differential tests** (`tests/differential/`) compile every whole program
-  natively and rewrite it to JavaScript from the checker's own types, then
-  compare stdout, exit status and signal byte for byte under Node.
-  `npm run test:diff` runs the full set; `node tests/differential/fuzz.js
-  --count 200` a larger random batch, printing the seed so a failure
-  reproduces with `--seed <s> --count 1`. A discrepancy that is a deliberate
-  semantic difference (documented in `docs/wp13-differential.md`) goes in
-  `known-failures.txt`; anything else is a bug. **The rewrite is stage0's**, so
-  the JavaScript is also checked in — `tests/differential/goldens/rewrites.txt`,
-  written by `npm run test:update` and verified on every run — and
-  `node tests/differential/run.js --frozen` is the same comparison with no
-  rewriter in it. A program whose source has changed since its rewrite was
-  frozen fails as `STALE` rather than being compared against the old one, and
-  `known-failures.txt` cannot excuse that.
+  natively and run the JavaScript rewrite of it under Node, then compare stdout,
+  exit status and signal byte for byte. The rewrite was typed by stage0's
+  checker, so it is **frozen** — `tests/differential/goldens/rewrites.txt` — and
+  nothing can regenerate it: a program whose source has changed since its
+  rewrite was frozen fails as `STALE` rather than being compared against the old
+  one, `known-failures.txt` cannot excuse that, and a corpus program with no
+  frozen rewrite is named in a register rather than silently skipped. `npm run
+  test:diff` runs the full set. `node tests/differential/fuzz.js --stage1
+  --count 200` compares the last release's IR with this tree's over a random
+  batch, printing the seed so a failure reproduces with `--seed <s> --count 1`.
+  A discrepancy that is a deliberate semantic difference (documented in
+  `docs/wp13-differential.md`) goes in `known-failures.txt`; anything else is a
+  bug.
 - **Minimize mocking.** There is nothing to mock: the compiler is a pure
   function from source to IR, and the runtime is exercised by running real
   binaries. Prefer a smaller golden to a stub.
-- **The golden cases are compiled in process, not one command per case.**
-  A `node dist/index.js <case>.ts -o out.ll` spends about 634 ms, of which
-  1.5 ms is compiling and ~473 ms is `import ts from "typescript"`; paid once
-  per case that was almost all of section A's wall clock. `tests/batch_worker.js`
-  drives `new Compilation({})` / `addRoot` / `check` / `emit` directly, sixty-four
-  cases to a process, and `tests/batch_compile.js` spawns those workers and hands
-  `run.js` a result in the shape `spawnSync` answers in. Three things to know
-  before touching it:
-  - **A `.args` flag has to be mapped.** `planOptions` in the worker turns the
-    sidecar into `CompilerOptions`. A flag it does not know is *not* ignored: the
-    case falls back to a real CLI spawn, so adding a flag costs performance
-    rather than correctness. Adding it to the map is the whole change.
-  - **The input path is handed over exactly as written.** `source_filename`
-    records it and `-g` puts it in a `DIFile`, so resolving or relativising it
-    would move every golden (`docs/wp19-stage0-retirement.md` §A3).
-  - **The fast path is gated on the slow one.** Every run compiles one case per
-    shape — each distinct `.args` spelling, each sidecar a case asserts through,
-    with and without a second module — through the CLI as well and compares the
-    exit status, stdout, stderr and the bytes of the module. `node tests/run.js
-    --verify-batch` does that for the whole corpus, and CI's `batch-parity` job
-    runs it on every pull request. Do not make section A faster without keeping
-    that comparison able to see it.
+- **The golden cases are compiled one process per case, many at a time.**
+  `build/nish-test` is a native binary with no start-up worth batching, so
+  section A spawns it per case through `tests/pool.js`, one job per core. The
+  input path is handed over exactly as written: `source_filename` records it
+  and `-g` puts it in a `DIFile`, so resolving or relativising it would move
+  every golden (`docs/wp19-stage0-retirement.md` §A3). The binary has to live
+  under the repository (`build/`), because `self/compile.ts` finds
+  `scripts/build.sh` and `std/` by climbing from its own path.
 - **The C a case links against is built once per run, not once per case.**
   `runtime/runtime.c`, `runtime/runtime_os.c` and `tests/driver.c` become object
   files on their first use and every `.out` case links against those: measured,
@@ -136,35 +115,27 @@ PR adding a construct is not finished without all of them:
 3. At least one negative test: a `reject_*.ts` + `.err` naming the exact
    message.
 4. `.args` for any flag the case depends on.
-5. Its `docs/LANGUAGE.md` rule, citing the case by name, and a cookbook entry.
-   A cookbook entry is compiled by stage0 (`docs/cookbook/regen.sh`), so a
-   stage1-only construct's entry waits until the seed has it — one release —
-   and the case in `tests/cases/` is what pins the lowering until then.
-6. Both implementations, or a line in the register. A construct written in
-   `src/` *and* `self/` is compared by the oracles byte for byte, which is the
-   strongest thing this repository can say about a lowering; a construct
-   written in `self/` alone is named in `tests/self/stage1_only.txt` and is
-   proved by its golden and by `nish-cmp.js` instead. Either is a decision
-   someone makes on purpose. What is not allowed is the third thing — a
-   construct in `self/` alone and *not* registered — because the oracles would
-   then skip its case in silence and the corpus would shrink without anyone
-   deciding it should.
+5. Its `docs/LANGUAGE.md` rule, citing the case by name, and a cookbook entry
+   (`docs/cookbook/regen.sh`).
+6. One implementation, in `self/`. There is no second compiler to compare it
+   with, so the golden and the native round trip are the proof, and
+   `tests/nish-cmp.js` — the last release against this tree — reports every
+   corpus program whose output the change moves, and fails unless its `DECLARED`
+   list names the difference (the header of `tests/nish-cmp.js` says what an
+   entry carries). `self/` may not use the construct in its own source until the
+   next release (the rolling freeze, `.claude/selfhost.md`).
 7. A case that *reaches* each new wording, not only a code for it.
    `tests/diagnostic_coverage.js` compiles the negatives, the `perf_*`
    positives and `tests/wordings/`, reads the code out of every `--json`
-   object, and requires each registry code to be provoked, named in
-   `tests/wordings/unreachable.txt` with a reason, or named in
-   `tests/wordings/stage0_only.txt` with the programs that provoke it under the
-   compiler that states the rule; `npm test` runs it over both compilers. After
-   R6 a wording no case reaches is proved by nothing at all, since the
-   comparison with stage0 is what proves it today
-   (`docs/wp19-stage0-retirement.md` §2B).
-8. A diagnostic code, if the construct can be refused: run
-   `node scripts/gen-diagnostic-codes.mjs` so `src/codes.ts` and `self/codes.ts`
-   pick the new message up. The generator appends and never renumbers, and
-   `npm test` fails while either file is stale. A message built entirely out of
-   interpolations gets `NL0000`; giving it a code means giving it words of its
-   own, not editing the table by hand.
+   object, and requires each registry code to be provoked or named in
+   `tests/wordings/unreachable.txt` with a reason. A wording no case reaches is
+   proved by nothing at all (`docs/wp19-stage0-retirement.md` §2B).
+8. A diagnostic code, if the construct can be refused: add the message's
+   fragment to `self/codes.ts` by hand with the next free number in its band.
+   A number is never moved or reused, and `node scripts/gen-diagnostic-codes.mjs
+   --check`, which `npm test` runs, fails on a duplicate or a malformed entry.
+   A message built entirely out of interpolations gets `NL0000`; giving it a
+   code means giving it words of its own.
 
 A golden is only worth what a human can read in it: keep each case small and
 about one thing, and hand-check the IR before committing it rather than
@@ -176,12 +147,12 @@ of `clang -Oz -c runtime/runtime.c` summed, and the same for
 `runtime/runtime_os.c`, which is neither file's source size and neither is
 `size`'s text column; they are separate so that a new syscall wrapper cannot
 move the core's ceiling — the runtime symbol table agreeing across
-`runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising `cf_sum_loop`)
-pin properties that have been broken before. When one fails, the change is what
-is wrong, not the test. Never delete a guard, and never move a number to turn a
-red line green; a budget is raised only deliberately, by a commit that carries
-the fresh measurement and the reason for it (`docs/wp7-runtime.md`
-§"Runtime additions and budget").
+`self/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising
+`cf_sum_loop`) pin properties that have been broken before. When one fails, the
+change is what is wrong, not the test. Never delete a guard, and never move a
+number to turn a red line green; a budget is raised only deliberately, by a
+commit that carries the fresh measurement and the reason for it
+(`docs/wp7-runtime.md` §"Runtime additions and budget").
 
 ## Testing a Nish program in Nish
 
@@ -262,10 +233,10 @@ It is not a replacement for this file's subject, and what it leaves out is now
 short enough to name: the cross-module `declare`/`define` attribute agreement,
 which needs a regular expression the language does not have, `UPDATE_GOLDENS`,
 which it must never do, and every pipeline check — interop sidecars, layout,
-wasm and napi profiles, packaging, the self-hosting oracles, the sixteen parity
-flag variations. `tests/run.js` is still what proves the compiler; the runner
-proves the language can host a harness. Its own header comment is the accurate
-description of what it covers; keep the two in step.
+wasm and napi profiles, packaging, the self-hosting oracles. `tests/run.js` is
+still what proves the compiler; the runner proves the language can host a
+harness. Its own header comment is the accurate description of what it covers;
+keep the two in step.
 
 ### The CLI contract in Nish
 
@@ -279,8 +250,8 @@ stdout carries objects and nothing else, and each exit-code band — 0, 1, 2, 3 
 70 — driven from outside the compiler.
 
 ```bash
-npm run test:cli                  # the default compiler, 69 checks in about nine seconds
-build/nish-cli build/nish         # the same contract, against the self-hosted one
+npm run test:cli                  # against build/nish
+build/nish-cli <compiler>         # the same contract, against any other build
 ```
 
 The point is not a second implementation of the WP12 block in `tests/run.js`. The
@@ -289,10 +260,10 @@ that program: it reads the objects with `std/json`, the streams with `std/text`,
 and the version it expects from `--version` out of `package.json` with the same
 `jsonField`, so the expectation cannot drift from the release. Unlike the golden
 runner it runs in full on every `npm test`, because it spawns eighteen compilers
-rather than four hundred. The three `NISH_SIMULATE_ICE` checks are stage0's — the
-hook is stage0's, and stage1 answers 70 with the same report
-([`self/ice.ts`](../self/ice.ts)) — so they are counted skips when the compiler
-under test is not a Node entry point.
+rather than four hundred. The exit-70 checks drive the `NISH_SIMULATE_ICE` hook
+in `self/ice.ts`, which makes the compiler take the path a broken invariant
+takes and print [`self/ice.ts`](../self/ice.ts)'s report; they are counted
+skips against a compiler that has no hook.
 
 ## Style & Best Practices
 
@@ -314,11 +285,11 @@ under test is not a Node entry point.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
-npm run test:update                 # write missing .ll goldens, tests/self/goldens/ and the rewrites
+npm run test:update                 # write missing .ll goldens and tests/self/goldens/
 npm run test:diff                   # the full differential set
-node tests/differential/fuzz.js --count 200
+node tests/differential/fuzz.js --stage1 --count 200
 node tests/self/goldens.js          # the stage1 goldens alone, ~13 s
-node tests/differential/goldens.js  # the frozen WP13 rewrites alone, ~2 s
+node tests/differential/goldens.js --fresh  # the frozen WP13 rewrites: hashes, orphans, counts
 npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
@@ -365,20 +336,18 @@ the run you intend to quote.
 
 **Count from the machine-readable form, or count the thing itself; never a line
 that mentions it.** The human-readable diagnostic report is capped:
-`formatErrorReport` and `formatWarningReport` in `src/diagnostics.ts` print at
-most `MAX_REPORTED_ERRORS`, which is 20, then `...and N more performance
-warnings`, then the total, and `DiagnosticSink.format` / `formatWarnings` in
-`self/diagnostics.ts` are the same shape with the same 20 passed in by
-`self/compile.ts`. The cap is the class's rule rather than an accident of the
-printer — `docs/LANGUAGE.md` states it for the warnings and `docs/wp10-ci.md`
-for the errors — and what follows from it is that a `grep -c` over the report
-answers 20 and keeps answering 20. Over the 60 modules of `self/` that do not
-declare `main`:
+`DiagnosticSink.format` / `formatWarnings` in `self/diagnostics.ts` print at
+most 20, the cap `self/compile.ts` passes in, then `...and N more performance
+warnings`, then the total. The cap is the class's rule rather than an accident
+of the printer — `docs/LANGUAGE.md` states it for the warnings and
+`docs/wp10-ci.md` for the errors — and what follows from it is that a `grep -c`
+over the report answers 20 and keeps answering 20. Over the 60 modules of
+`self/` that do not declare `main`:
 
 ```bash
 mods=$(for f in self/*.ts; do grep -qE '^export (function main\b|const main\s*=)' "$f" || echo "$f"; done)
-node dist/index.js $mods -o build/probe/ 2>&1 | grep -c "performance:"    # 20, the cap
-node dist/index.js $mods -o build/probe/ --json |
+build/nish $mods -o build/probe/ 2>&1 | grep -c "performance:"    # 20, the cap
+build/nish $mods -o build/probe/ --json |
   grep -c '"severity":"performance"'                                      # 67, the answer
 ```
 
@@ -396,57 +365,43 @@ spells them whether or not it calls them. Count the calls
 (`grep -cE "= call .*@llvm\.sm"`), or read `--json`; never the mention.
 
 `tests/self/goldens/` is the other family of checked-in golden here: the
-`--emit-checked` dump of the whole corpus, and the stdout of the three driver
-programs, as **stage1** prints them (WP19 gate G2.4). They exist because the
-four oracles that presently prove those outputs compare stage1 with stage0 and
-will prove nothing once `src/` is deleted. `npm run test:update` rewrites them
-along with the `.ll` goldens, and `node tests/self/goldens.js --update` alone;
-read `.claude/selfhost.md` before regenerating one, because regenerating from
-the wrong compiler is how a golden records a bug as the specification.
+`--emit-checked` dump of the whole corpus, the stdout of the three driver
+programs and the support library's answers, as **stage1** printed them while
+stage0 still agreed with it byte for byte (WP19 gate G2.4). They replaced the
+oracles that compared stage1 with stage0 and were deleted with it.
+`npm run test:update` rewrites them along with the `.ll` goldens, and
+`node tests/self/goldens.js --update` alone; read `.claude/selfhost.md` before
+regenerating one, because regenerating without reading the diff is how a
+golden records a bug as the specification.
 
 `tests/differential/goldens/` is the third: the JavaScript every whole program
-rewrites to, which the WP13 oracle compares against Node. It exists for the
-same reason and dies of the same cause — `tests/differential/rewrite.js` types
-its output with stage0's `Compilation` — and it is the one golden in the
-repository whose reference is stage0 rather than stage1, which
-`.claude/selfhost.md` states as the exception it is. `node
-tests/differential/goldens.js` rebuilds the whole store from the live rewriter
-and requires byte equality — about two seconds — and `--fresh` asks the half
-that outlives stage0 in under a tenth of one: the source hashes, the orphan
-records and the header's own counts, with no compiler at all.
+rewrites to, which the WP13 oracle compares against Node. It is the one golden
+in the repository that **cannot be regenerated** — the rewriter typed its output
+with stage0's checker and went with it — so it is frozen. `node
+tests/differential/goldens.js --fresh` checks what can still be checked without
+a rewriter, in under a tenth of a second: the source hashes, the orphan records
+and the header's own counts.
 
 `tests/wordings/` is the fourth: one small program per **diagnostic code**,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
 message in its `.err`. It exists because a `reject_*` case proves a rule and a
 wording gets proved only where somebody happened to write one down — when the
 gap was measured, 176 of the registry's 351 codes were reached by nothing that
-outlives stage0 (WP19 §2B, "The wording gap"). The registry grows, so the
+outlived stage0 (WP19 §2B, "The wording gap"). The registry grows, so the
 number to trust is the one the tool prints, not one written down here.
 `tests/diagnostic_coverage.js` runs it, and requires every registry code to be
-**provoked by a program, named in `tests/wordings/unreachable.txt` with a
-reason, or named in `tests/wordings/stage0_only.txt` with the programs that
-provoke it**, so a new diagnostic arrives with a case, with a sentence saying
-why it cannot have one, or with the programs the surviving compiler answers in
-its parser instead.
+**provoked by a program or named in `tests/wordings/unreachable.txt` with a
+reason**, so a new diagnostic arrives with a case or with a sentence saying why
+it cannot have one.
 
 ```bash
-node tests/diagnostic_coverage.js                       # the default compiler
-node tests/diagnostic_coverage.js --compiler build/nish --strict-refusals --require-coverage
+node tests/diagnostic_coverage.js --compiler build/nish --require-coverage
 node tests/diagnostic_coverage.js --report              # every code, covered or not
 node tests/diagnostic_coverage.js --update              # rewrite the .err pins
 ```
 
-Three lists sit beside the corpus and all three shrink rather than grow:
-`parser_refusals.txt` names the cases whose wording is stage0's because
-stage1's parser refuses the syntax first (§A3's declared class, and those
-wordings do not survive R6), `stage1_divergence.txt` names the ones where
-the two compilers do not agree at all, and `stage0_only.txt` carries those two
-per-case registers across to the per-code question the coverage gate asks —
-without it the gate can only be asked of stage0, which is not a compiler that
-outlives stage0 (WP19 §2B). Take the counts from the summary line the tool
-prints rather than from here — they move, and they have. `npm test` runs the
-tool over both compilers, the second with `--strict-refusals`, so a case that
-starts agreeing fails until its line is deleted.
+Take the counts from the summary line the tool prints rather than from here —
+they move, and they have.
 
 ## Example case
 

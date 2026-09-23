@@ -3102,7 +3102,7 @@ attributes #1 = { nounwind noreturn cold }
 
 The same lowering with no compare, no branch and no panic block, and with the
 safety unchanged — the checker proved the index in range rather than being told
-to trust it (WP15 §2.1/§2.2, `src/checker/bounds.ts`). The loop condition
+to trust it (WP15 §2.1/§2.2, `self/bounds.ts`). The loop condition
 proves `i`; the length guard proves the constant `0`. Neither function names
 `nish_panic_index`, so both keep `willreturn`.
 
@@ -3205,7 +3205,7 @@ load, and the §2b alias domains do not reach it: the second read sits in a
 bounds-checked block, where LLVM may not speculate it out. So the emitter does
 the hoist itself, wherever the whole-program fact
 `FunctionFacts.resizesArray` proves that nothing the loop reaches can `push`
-or `pop` (WP15 §2c candidate 2, `src/codegen/attributes.ts`). The field load,
+or `pop` (WP15 §2c candidate 2, `self/attributes.ts`). The field load,
 `len` and `data` are read once in the loop's preheader:
 
 ```llvm
@@ -3248,7 +3248,7 @@ The lowering is pinned by `tests/cases/arr_header_hoist.ts` and the checks
 
 **What this does not buy, and where that lives.** The loop above still carries
 *two* bounds checks where the same loop written `const xs = h.xs` carries one,
-because `src/checker/bounds.ts` keys its length facts by variable and never by
+because `self/bounds.ts` keys its length facts by variable and never by
 a property path — a local cannot be written through an alias, a field can. So
 `h.xs.length` proves nothing about `h.xs[i]`. That second check is a second
 loop exit and it is what keeps the vectoriser away; closing it is that file's
@@ -5625,7 +5625,7 @@ from them alone stays pure and two reads of one property fold into one.
 `isDirectorySync` is the `stat` beside them: the question `-o <dir>` asks, as a
 `boolean`, which is why the snippet below can ask it before it asks for the
 directory to be made. `--target host` maps the same pair of strings to a triple
-(`hostTriple` in `src/codegen/target.ts` and in `self/target.ts`).
+(`hostTriple` in `self/target.ts`).
 
 <!-- cookbook:begin builtin_host -->
 ```ts

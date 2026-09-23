@@ -19,9 +19,12 @@ Sources, tests, examples, benchmarks, `CHANGELOG.md` (it lives on GitHub and
 becomes the release notes), the other docs and CI configuration are not in
 the tarball. Check with `npm pack --dry-run`.
 
-`src/index.ts` resolves `scripts/build.sh` and `runtime/runtime.c` from the
-package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
-working directory, so a global install works from any directory.
+The compiler resolves `scripts/build.sh` and `runtime/runtime.c` from its
+package root (`packageRootCandidates` in `self/compile.ts`): the directory
+above the one `argv[0]` names, then the same for its real path when the command
+was reached through a link, and the working directory only last, for a
+compiler sitting in a checkout. The first candidate with `scripts/build.sh` in
+it wins, so a global install works from any directory.
 
 **The package is an installer.** `bin.nish` is `bin/nish`, which looks
 for the prebuilt native compiler for this machine and hands over to it; the
@@ -34,7 +37,7 @@ staged directory the release tarball is made from, so installing is a download
 and an unpack. A machine with no prebuilt binary — musl, FreeBSD, a 32-bit
 anything — gets a diagnostic naming the four platforms that have one and exit
 3. It used to get `dist/index.js`, the Node compiler that shipped in the same
-package; that compiler is `src/`, which R6 deletes, so there is nothing left to
+package; that compiler was `src/`, which R6 deleted, so there is nothing left to
 fall back to (see "Which compiler the package ships", amended 2026-09-22, and
 [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly) for
 what it costs whom).
@@ -68,22 +71,28 @@ upgrading belongs to whatever installed the compiler, which is `npm update -g`
 on one side and this script on the other.
 
 The `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
-installs the tarball into a temporary prefix, and links a hello-world from an
-unrelated directory with the installed `nish` — which, with no platform package
-beside it, is the fallback path end to end. It then synthesises a platform
-package in that prefix and checks the other one: that `nish` hands argv to the
-binary and gives its exit status back, that a binary killed by a signal reaches
-the caller as that signal rather than as a status, and that a binary which will
-not start falls back to the Node compiler and says so on stderr. A stub stands
-in for the compiler there on purpose — what is under test is whether the
-launcher gets out of the way, and whether the thing it hands to is a correct
-compiler is `npm run bootstrap`'s question.
+installs the tarball into a temporary prefix, and checks that with no platform
+package beside it the installed `nish` refuses, names every supported platform
+and exits 3 — under `--json` too, as one `NL0002` object — having written
+nothing. It then builds a platform package from this checkout's compiler, the
+way `release.yml` does, installs it into the same prefix, and links and runs a
+hello-world from an unrelated directory with the installed `nish`. A stub
+binary then checks the launcher itself: that `nish` hands argv to the binary
+and gives its exit status back, that a binary killed by a signal reaches the
+caller as that signal rather than as a status, and that a binary which will
+not start is refused with the reason and exit 3. The stub is there on purpose —
+what is under test is whether the launcher gets out of the way, and whether the
+thing it hands to is a correct compiler is `npm run bootstrap`'s question.
 
-`--version` reads `version` from `package.json` at runtime
-(`src/version.ts`). There is no generated version file to keep in sync.
+`--version` prints `VERSION` from `self/branding.ts`, baked into the binary: a
+compiled compiler has no JSON parser and may have been copied anywhere, so it
+cannot read `package.json` at runtime. `tests/run.js` fails when the two
+disagree, and `release-pr.yml` bumps both.
 
 `prepublishOnly` runs `npm run check && npm run build && npm test`, so a
-`npm publish` from a broken tree fails before anything is uploaded.
+`npm publish` from a broken tree fails before anything is uploaded. The build
+there is the seeded bootstrap; nothing in the package is its output, so it is
+a gate rather than a step that produces what ships.
 
 ## What the launcher costs
 
@@ -179,17 +188,16 @@ refusal is machine-readable rather than prose only.
 | Code | When | Message shape |
 | ---: | --- | --- |
 | 0 | success, and `--help` / `--version`: a request that was answered | `wrote <file.ll>` / `linked <exe>: <bytes> bytes (<profile>)` on stderr; the usage text or the version line on **stdout** |
-| 1 | `CompileError` from the validator, parser or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); a Node system error on an input or output path | `file:line:col: error: ...` with caret excerpt, or one line |
+| 1 | a diagnostic from the parser, validator or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); an input or output path that cannot be read or written | `file:line:col: error: ...` with caret excerpt, or one line |
 | 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr |
-| 3 | toolchain: the C toolchain, or the prebuilt compiler itself, could not be run. `--link` requested but `clang` (or `$CC`) is not runnable; `scripts/build.sh` exited non-zero or could not be spawned; or `bin/nish` found no prebuilt compiler for this platform, or one that would not start | the per-platform install hint; build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...`; or the launcher's refusal naming the platforms a release carries |
-| 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `nish <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `NISH_DEBUG=1` |
+| 3 | toolchain: the C toolchain, or the prebuilt compiler itself, could not be run. `--link` requested but no `scripts/build.sh` beside the compiler; `scripts/build.sh` (and the `clang` or `$CC` it runs) exited non-zero or could not be spawned; or `bin/nish` found no prebuilt compiler for this platform, or one that would not start | `--link: cannot find scripts/build.sh (looked in ...)`; build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...`; or the launcher's refusal naming the platforms a release carries |
+| 70 | internal compiler error: a broken invariant inside the compiler (`EX_SOFTWARE`, `self/ice.ts`) | `nish <version>: internal compiler error`, what broke, and a request to report it at the issue tracker with the input file and the command line. There is no stack to print — the language has no exceptions — and the report says that `NISH_DEBUG=1` adds nothing |
 
 `--help` is the answer to a question, not a refusal, so it prints on stdout and
 exits 0 — what clang, tsc and git do, and what lets a wrapper ask the compiler
 what it accepts without treating the run as a failure. A usage *error* prints
 the same text on stderr with exit 2. The two are told apart by the stream and
-the code, and `tests/run.js` pins both. stage1 answers the same way
-(`self/compile.ts`).
+the code, and `tests/run.js` pins both (`self/compile.ts`).
 
 Under `--json` every one of these failures is also one JSON object on stdout —
 including exit 3 and exit 70, which have no source position and so carry
@@ -197,17 +205,16 @@ including exit 3 and exit 70, which have no source position and so carry
 tool that asked for JSON is never left with an empty stdout and an exit code to
 guess about. See [wp10-ci.md](wp10-ci.md#failures-without-a-source-position).
 
-The toolchain check runs *before* compilation (`missingToolchain()` probes
-`$CC --version`), so a missing compiler is reported instantly, without
-writing any IR. A `build.sh` failure happens *after* the IR is written and the
-message names the `.ll` files so the user can build them by hand.
+A missing `scripts/build.sh` is found before anything is linked. A C toolchain
+that cannot be run is found by `build.sh`, which runs *after* the IR is
+written, so the message names the `.ll` files and the user can build them by
+hand once clang is there.
 
 Every code is exercised by the `// ---- WP12: exit codes` block of
 `tests/run.js`: the internal-error path through the `NISH_SIMULATE_ICE=1`
-test hook (which throws a `TypeError` at the top of the compile step and
-exists only for that test), the missing-toolchain path by running with `PATH`
-set to an empty directory, and the build failure path with `CC` pointing at a
-stub compiler that accepts `--version` but fails to link.
+test hook (which exists only for that test), the missing-toolchain path by
+running with `PATH` set to an empty directory, and the build failure path with
+`CC` pointing at a stub compiler that accepts `--version` but fails to link.
 
 ## Smoke test
 
@@ -275,8 +282,8 @@ tarball, the per-platform npm package and the main npm package — and all three
 name every standard-library module now. The first two were missing it; the
 third carried `std` through `package.json`'s `files` all along, with nothing
 asserting it. `tests/run.js` derives the list from the same
-directory `self/std_modules.ts`'s literal and stage0's directory read are
-already checked against, and fails when any of the three gates omits a module —
+directory `self/std_modules.ts`'s literal is already checked against, and
+fails when any of the three gates omits a module —
 so the next module added to the library cannot ship in the compiler's list and
 not in the tarball. Each check was watched failing.
 
@@ -388,16 +395,13 @@ step below is done by hand.
      output;
    - runs the `binaries` matrix — one job per supported target, each on a
      runner of that architecture (`ubuntu-latest`, `ubuntu-24.04-arm`,
-     `macos-15-intel`, `macos-latest`) — which bootstraps the native compiler
-     to `build/release/nish-0.2.0-<triple>` with `--verify` and then
+     `macos-15-intel`, `macos-latest`) — which fetches the previous release's
+     binary for that platform as the seed, bootstraps the native compiler
+     from it to `build/release/nish-0.2.0-<triple>` with `--verify`, and then
      smoke-tests it: `--version`, and linking and running `examples/hello.ts`
      from a directory unrelated to both the checkout and the unpack. Each job
      checks its runner's own `uname` against the triple it was asked for, so
      an asset cannot be labelled for an architecture it was not built on;
-   - cuts this release's **provenance tag**, `ddc-<version>`, at the commit
-     being released — after the jobs above have proved the property it stands
-     for and before anything is published (`.github/ddc-tag.sh`, and "The
-     provenance tag" below);
    - `gh release create v0.2.0 nish-0.2.0.tgz` plus the four
      `nish-0.2.0-<triple>.tar.gz`, with the notes rendered from
      `changelog/0.2.0.json` — the file the release pull request was reviewed
@@ -460,8 +464,8 @@ step below is done by hand.
    **Platform packages first.** In this order a failure half way leaves a
    registry where the main package does not yet exist for that version, so
    nobody can install one whose binaries are missing; the other order publishes
-   a compiler that resolves nothing and falls back to Node on every machine
-   that installs it until the loop is finished. That is the partial-publish
+   a launcher that resolves nothing and refuses on every machine that installs
+   it until the loop is finished. That is the partial-publish
    failure mode the decision below priced, and the ordering is the whole of the
    answer to it.
 
@@ -482,11 +486,8 @@ step below is done by hand.
 
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
-The `ddc-<version>` tag that release cut stays where it is and should: it names
-a commit at which `IR(stage0, self/) == IR(stage1, self/)` held, which is still
-true of that commit whether or not the release it was cut during was published.
-Cutting the next one is the next release's job, and `.github/ddc-tag.sh` refuses
-to move an existing one rather than quietly repointing it.
+A `ddc-<version>` tag cut before R6 stays where it is and should ("The
+provenance tag" below).
 
 To preview what the train would produce, without pushing anything:
 
@@ -516,66 +517,58 @@ equalities that belong to the working tree rather than to the seed —
 stage2. It does **not** assert `IR(seed) == IR(stage1)` for a released seed: a
 release is allowed to emit better code than the release before it, and that
 comparison forbids it. The seeded run reports the difference and carries on.
-The one seed that comparison is asserted for is stage0, where it is two
-independent implementations of one revision agreeing rather than one
+Until R6 the one seed that comparison was asserted for was stage0, where it was
+two independent implementations of one revision agreeing rather than one
 implementation at two dates (G3, "What the seeded run proves, and what it does
-not").
+not"); with `src/` gone every seed is a release, and the line is always a
+report.
 
-0.1.0 is the base case the rule needs. It is the first release and has no
-predecessor to be built by, so it is built by stage0, and it is the release
-that creates the first seed. From 0.2.0 on the seed is the previous line's last
+There is no seed but a release. `scripts/fetch-seed.sh` downloads the last
+release's tarball for this platform into `build/seed/`, and `NISH_BOOTSTRAP`
+names another binary when a contributor has one; `scripts/bootstrap.sh` has no
+fallback when neither is there, and says so rather than building from anything
+in the working tree.
+
+0.1.0 was the base case the rule needs. It was the first release and had no
+predecessor to be built by, so it was built by stage0, and it is the release
+that created the first seed. From 0.2.0 on the seed is the previous line's last
 patch release.
 
 The consequence for contributors: **a construct added in 0.N cannot be used by
 `self/` until 0.(N+1)**. While 0.N is in development the compiler that has to
 compile `self/` is a 0.(N−1) binary, and it has never heard of the construct.
 Rule 1 of [wp14-selfhost.md](wp14-selfhost.md) §6 — a construct enters the
-language before it enters `self/` — therefore survives stage0's retirement
-unchanged, and only its subject changes, from stage0 to the seed. Add the
+language before it enters `self/` — therefore survived stage0's retirement
+unchanged, and only its subject changed, from stage0 to the seed. Add the
 construct to the language, ship the release, then use it in `self/`.
 
 ## The provenance tag
 
-Every release cuts `ddc-<version>` at the commit it is built from, and no
-release step asks anyone to remember it.
-
-The tag is [WP19 G6](wp19-stage0-retirement.md#g6--the-provenance-is-recorded-before-it-is-lost)'s:
+From WP19 G6 until R6, each release cut `ddc-<version>` at the commit it was
+built from, from a `ddc` job in `release.yml` between the binaries and the
+release. The tag was
+[WP19 G6](wp19-stage0-retirement.md#g6--the-provenance-is-recorded-before-it-is-lost)'s:
 it marks a commit at which `IR(stage0, self/) == IR(stage1, self/)` and the
-fixed point both hold — two independently written implementations of this
+fixed point both held — two independently written implementations of this
 language emitting identical IR for every module of `self/`, which is the second
-half of diverse double-compiling and which no other self-hosted compiler in
-that document's table asserts. G6 writes down how to re-verify it from the tag:
-check the tag out, `npm ci`, `npm run build`, `node tests/self/bootstrap.js`.
-After R6 deletes `src/` there is no second implementation left to disagree
-with, so the tags cut before that day are the only commits the property can
-ever be demonstrated at again.
+half of diverse double-compiling. G6 writes down how to re-verify it from the
+tag: check the tag out, `npm ci`, `npm run build`,
+`node tests/self/bootstrap.js` — commands that mean what they meant at that
+commit, where `src/` still exists.
 
-That is why it is cut by the workflow rather than by a person. The cost of
-forgetting is paid once and is not recoverable: the first release nobody
-remembers is the release after which the property can no longer be
-demonstrated, and a gate that is remembered at every release except one is not
-a gate. So `release.yml` has a `ddc` job between the binaries and the release,
-and `.github/ddc-tag.sh` is what decides:
-
-| The run | What it does |
-| --- | --- |
-| the proving jobs are green and no `ddc` tag exists for this version | cuts the tag at the released commit and pushes it |
-| the tag is already there, on that commit | nothing, and green — a re-run of a release that already recorded its provenance is not a failure |
-| the tag is already there, on another commit | refuses: two commits cannot both be this version's, and a provenance tag that moved is worth less than none |
-| a job that proves the property did not succeed, or is no longer named | refuses, and says which job — a tag cut on a run that proved nothing is a claim nobody can falsify afterwards, which is worse than no tag |
-
-What proves the property is not that script and must not become it:
-`tests/self/bootstrap.js`, which `npm test` runs in the `ci` job, and
-`scripts/bootstrap.sh --verify` with stage0 as the seed, which every row of the
-`binaries` job runs — the stage0 seed is the one for which `IR(seed) ==
-IR(stage1)` is asserted rather than reported ("The bootstrap seed" above). The
-script reads what those jobs answered, through `DDC_PROOF`, and decides.
-
-Each of those rows is a case in the WP19 block of `tests/run.js`, driven
-against a stand-in for `git`, because the refusal cannot be reached in a real
-release without the release going wrong and a gate nobody can fail is a wish.
+R6 deleted `src/`, so there is no second implementation left to disagree with
+and nothing for a new tag to record. The `ddc` job and `.github/ddc-tag.sh` went
+with it, and releases from then on cut no `ddc-*` tag. The tags already cut are
+the only commits the property can ever be demonstrated at again, which is why
+they are never moved or deleted — including one cut during a release that was
+itself withdrawn, since the property is a fact about the commit and not about
+the publish.
 
 ## The npm name
+
+> The analysis below was written while `src/` existed and names its files in
+> the present tense; R6 deleted it, and `self/branding.ts` is now the one file
+> the compiler reads its name from.
 
 **Decided 2026-09-19: the package is `@amritk/nish`, and the command stays
 `nish`.** That is option (a) below, taken without the project rename option (b)
@@ -666,6 +659,12 @@ written out, so the scope is still spelled in a single place.
 
 ## Which compiler the package ships
 
+> **Superseded in part by R6.** This section records the 2026-09-19 decision
+> and its amendments as they were written. Where it says `dist/` stays in the
+> package, or that stage0 is the seed and the oracle, that stopped being true
+> when R6 deleted `src/`: the package ships no compiler for Node, and the seed
+> is the previous release.
+
 **Decided 2026-09-19: (c) for which binary, (b) for delivery, (a) as the
 fallback.** `bin.nish` runs the self-hosted native compiler. `dist/` stays in
 the package and keeps both of the jobs it already has — the bootstrap seed
@@ -683,9 +682,9 @@ prebuilt binary gets a diagnostic naming the four that have one, and exit 3.
 The reason is not a re-pricing — the 2026-09-20 amendment below is arithmetic
 and it is still correct — it is that the thing it priced stopped existing.
 `dist/` was the cheap fallback because it was *already in the package for its
-own reasons*: the bootstrap seed and the differential oracle. R6 deletes `src/`
-([wp19](wp19-stage0-retirement.md)), so `dist/` has no other reasons, and
-keeping it for the fallback alone would mean shipping — and therefore
+own reasons*: the bootstrap seed and the differential oracle. R6 deleted `src/`
+([wp19](wp19-stage0-retirement.md)), so `dist/` had no other reasons, and
+keeping it for the fallback alone would have meant shipping — and therefore
 maintaining, and therefore keeping buildable — a second implementation of the
 compiler for musl, FreeBSD and 32-bit anything. That is the doubling wp19 §1
 spent its whole length pricing, bought back at the end for the smallest
@@ -782,9 +781,11 @@ What (b) honestly costs, now that its blocker is built:
   The point this bullet was making stands either way: (b) needs *a* fallback,
   which is why the row was never ruled out.
 
-**The rule: `bin.nish` is the native binary, `dist/` is the seed and the
-oracle, and a cost in the table below is re-measured before it is cited
-again.**
+**The rule, as it stood until R6: `bin.nish` is the native binary, `dist/` is
+the seed and the oracle, and a cost in the table below is re-measured before it
+is cited again.** The first clause still holds and so does the last; the middle
+one ended with `src/`, and the seed is now the previous release ("The bootstrap
+seed" above).
 
 **Implemented on 2026-09-20**, which is what the first amendment above came out
 of. `bin.nish` is the launcher — `dist/launcher.js` then, `bin/launcher.js`
@@ -871,5 +872,5 @@ Multi-error reporting and `--json` diagnostics were listed here as a WP10
 follow-up and have since landed in WP10 itself: every phase that can recover
 hands its errors to one `DiagnosticSink` and the driver prints the first 20 in
 source order, and `--json` writes one object per error on stdout
-(`docs/wp10-ci.md`, "Multi-error reporting" and "`--json`"). stage1 answers
-`--json` itself (`self/compile.ts`), as it does every other flag it owns.
+(`docs/wp10-ci.md`, "Multi-error reporting" and "`--json`"). The compiler
+answers `--json` in `self/compile.ts`, as it does every other flag it owns.
