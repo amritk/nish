@@ -72,8 +72,11 @@
 //   - a store to a field whose name is anywhere on the path, through any holder
 //     at all — the name is compared, never the struct type, so an alias is
 //     caught without knowing it is one;
-//   - a store of a whole element into an array of structs, which rewrites a
-//     record in place and every field of it with no field name written;
+//   - a store of a whole element into an array of inline records, which
+//     rewrites a record in place and every field of it with no field name
+//     written — on a path with a link read off a holder declared as that
+//     record type, because that is the only memory the store can reach
+//     (`recordReaches`);
 //   - an assignment to the root, or its declaration running again;
 //   - **any** call and any `new`, strings included. `FunctionFacts.resizesArray`
 //     would answer "can this callee grow an array", but it is the attribute
@@ -123,9 +126,9 @@ import {
   N_WHILE,
   Node,
 } from "./nodes";
-import { CheckedProgram } from "./program";
+import { CheckedProgram, inlineElementStruct } from "./program";
 import { Local, STORAGE_LOCAL } from "./symbols";
-import { T_I32, T_I64, T_STRING, isUnsigned } from "./types";
+import { T_I32, T_I64, T_STRING, TypeTable, isUnsigned } from "./types";
 
 /** The largest bound the fold carries; a literal past it is answered "not a bound". */
 const I32_MAX: i64 = 2147483647;
@@ -607,11 +610,14 @@ const lengthHolder = (ctx: CheckContext, expr: Node): Local | null => {
 export class PathHolder {
   root: Local;
   fields: string[];
+  /** The declared type each of `fields` is read off: the root's, then each link's. */
+  links: i32[];
   holder: Local;
 
-  constructor(root: Local, fields: string[], holder: Local) {
+  constructor(root: Local, fields: string[], links: i32[], holder: Local) {
     this.root = root;
     this.fields = fields;
+    this.links = links;
     this.holder = holder;
   }
 }
@@ -636,7 +642,8 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
     e = unwrapBoundsParens(e.children[0]);
   }
   const fields: string[] = [];
-  const type = declaredPathType(walk, expr, fields);
+  const links: i32[] = [];
+  const type = declaredPathType(walk, expr, fields, links);
   if (fields.length === 0 || type < 0 || (!walk.ctx.table.isArray(type) && type !== T_STRING)) {
     return null;
   }
@@ -652,17 +659,18 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
     }
   }
   const holder = new Local(name, type, false, STORAGE_LOCAL);
-  walk.paths.push(new PathHolder(root, fields, holder));
+  walk.paths.push(new PathHolder(root, fields, links, holder));
   return holder;
 };
 
 /**
  * The declared type of the location `expr` names, pushing its field names on
- * to `fields` from the root outward, or -1 where a link is not a plain struct
+ * to `fields` from the root outward and the declared type each is read off on
+ * to `links`, or -1 where a link is not a plain struct
  * with that field. Recursive rather than a loop over the links, so that it
  * indexes nothing and has no bounds check of its own to prove.
  */
-const declaredPathType = (walk: BoundsWalk, expr: Node, fields: string[]): i32 => {
+const declaredPathType = (walk: BoundsWalk, expr: Node, fields: string[], links: i32[]): i32 => {
   const program = walk.ctx.program;
   const table = walk.ctx.table;
   const e = unwrapBoundsParens(expr);
@@ -673,7 +681,7 @@ const declaredPathType = (walk: BoundsWalk, expr: Node, fields: string[]): i32 =
   if (e.kind !== N_MEMBER) {
     return -1;
   }
-  const below = declaredPathType(walk, e.children[0], fields);
+  const below = declaredPathType(walk, e.children[0], fields, links);
   if (below < 0 || !table.isStruct(below)) {
     return -1;
   }
@@ -686,6 +694,7 @@ const declaredPathType = (walk: BoundsWalk, expr: Node, fields: string[]): i32 =
     return -1;
   }
   fields.push(e.text);
+  links.push(below);
   return field.type;
 };
 
@@ -698,10 +707,29 @@ const holderOf = (walk: BoundsWalk, expr: Node): Local | null => {
   return pathHolder(walk, expr);
 };
 
-/** Every path fact goes: what a call, a `new` or a whole-record store leaves. */
+/** Every path fact goes: what a call or a `new` leaves. */
 const forgetPaths = (walk: BoundsWalk, state: State): void => {
   for (const path of walk.paths) {
     forget(state, path.holder);
+  }
+};
+
+/** Whether a whole-record store of `stored` (`recordStoreType`) can rewrite a field `path` reads. */
+const recordRewritesPath = (stored: i32, path: PathHolder): boolean => {
+  for (const link of path.links) {
+    if (recordReaches(stored, link)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** The facts of every path a whole-record store of `stored` can rewrite a link of. */
+const forgetPathsRecord = (walk: BoundsWalk, state: State, stored: i32): void => {
+  for (const path of walk.paths) {
+    if (recordRewritesPath(stored, path)) {
+      forget(state, path.holder);
+    }
   }
 };
 
@@ -1140,11 +1168,28 @@ export class BoundsWalk {
   uncheckedIndexing: boolean;
   /** The property paths this body's facts have been keyed by, in first-use order. */
   paths: PathHolder[];
+  /**
+   * The state at each `continue` of the innermost loop being walked. A
+   * `continue` jumps to the `for` update or the `do/while` condition with its
+   * branch's effects applied, so those are walked from the join of these and
+   * the end of the body rather than from the end of the body alone (#181).
+   */
+  continues: State[];
+  /**
+   * The state at each `break` of the innermost loop or `switch` being walked.
+   * A `break` leaves a `for` or `while` with the body's writes applied, past
+   * the condition that re-established a fact about them, so the state after
+   * the loop is the join of these and the condition's exit (#181's `break`
+   * counterpart).
+   */
+  breaks: State[];
 
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx;
     this.unproven = [];
     this.paths = [];
+    this.continues = [];
+    this.breaks = [];
     this.loops = 0;
     this.uncheckedIndexing = uncheckedIndexing;
   }
@@ -1160,6 +1205,24 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
     return false;
   }
   return ctx.program.nodeTypes[callee.children[0].id] === T_STRING;
+};
+
+/**
+ * `r.unwrapOr(d)` or `r.expect(m)` on a `Result`, whose one argument
+ * `self/emit_result.ts` evaluates on the `Err` path only, or "" for any other
+ * call. The names are the checker's (`checkResultMethod` in `self/result.ts`);
+ * they are matched here rather than through the emitter's `resultMethodName`,
+ * because a checker module does not reach into the emitter.
+ */
+const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
+  const callee = unwrapBoundsParens(call.children[0]);
+  if (callee.kind !== N_MEMBER || call.children[1].children.length !== 1) {
+    return "";
+  }
+  if (callee.text !== "unwrapOr" && callee.text !== "expect") {
+    return "";
+  }
+  return ctx.table.isResult(ctx.program.nodeTypes[callee.children[0].id]) ? callee.text : "";
 };
 
 /**
@@ -1382,6 +1445,19 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     } else if (callee.kind !== N_IDENT) {
       walkExpression(walk, state, callee);
     }
+    const lazy = lazyResultMethod(ctx, e);
+    if (lazy !== "") {
+      // The argument runs on the `Err` path alone. `unwrapOr`'s fallback then
+      // joins the `Ok` path, so only what holds either way survives; `expect`'s
+      // message is followed by the exit, so nothing it did reaches past it.
+      const errPath = cloneState(state);
+      walkExpression(walk, errPath, e.children[1].children[0]);
+      if (lazy === "unwrapOr") {
+        copyInto(state, intersect(state, errPath));
+      }
+      forgetCallEffects(walk, state);
+      return;
+    }
     // A `substring`'s clamps are decided one bound at a time, interleaved with
     // the arguments, because that is the order `emitSubstring` writes them in:
     // bound 0 is clamped before bound 1 is evaluated, so nothing bound 1 does
@@ -1509,18 +1585,46 @@ const isBoundsAssignment = (op: string): boolean => {
   return op !== "===" && op !== "!==" && op !== "==" && op !== "!=" && op !== "<=" && op !== ">=";
 };
 
+/** `recordStoreType`: the element store writes a pointer or a value, and rewrites no record. */
+export const NO_RECORD: i32 = -1;
+/** `recordStoreType`: the checker recorded no element type, so nothing says what the store reaches. */
+export const ANY_RECORD: i32 = -2;
+
 /**
- * Whether an element store writes a struct in place. An array of records keeps
+ * Which record an element store writes in place. An array of records keeps
  * its elements inline (WP15 §2a) and `const r = rs[0]` is an interior pointer,
  * so `rs[0] = other` rewrites `r.xs` with no field name anywhere in the
- * statement. An array of classes holds pointers and a store there changes no
- * object, but the two are told apart by a layout rule this walk has no reason
- * to restate, so any struct element counts.
+ * statement. An array of classes holds pointers, so `nodes[i] = spare` stores a
+ * pointer and rewrites no object; `inlineElementStruct` is the layout rule that
+ * tells the two apart, and it is asked rather than restated. The answer is the
+ * record's type, `NO_RECORD` for a pointer or a value, and `ANY_RECORD` for an
+ * element whose type the checker did not record, because nothing says it is a
+ * pointer.
+ *
+ * The header hoist in `self/emit_arrays.ts` (`storedFields`) asks the same
+ * question about a field load it would lift out of a loop, and reads this
+ * answer rather than a copy of it (#180).
  */
-const storesRecord = (ctx: CheckContext, access: Node): boolean => {
-  const type = ctx.program.nodeTypes[access.id];
-  return type < 0 || ctx.table.isStruct(type);
+export const recordStoreType = (program: CheckedProgram, table: TypeTable, access: Node): i32 => {
+  const type = program.nodeTypes[access.id];
+  if (type < 0) {
+    return ANY_RECORD;
+  }
+  return inlineElementStruct(program, table, type) === null ? NO_RECORD : type;
 };
+
+/**
+ * Whether a whole-record store of `stored` can rewrite a field read off a
+ * holder declared `holder`. The only memory the store writes is one slot of
+ * inline storage, and the only thing that can point into that slot is a value
+ * of the element's own type: a field of struct type is a pointer, never an
+ * inline copy, and interfaces are nominal, so no other declared type is ever
+ * bound to it. A path whose every link is read off something else — a class,
+ * above all, which is never inline — keeps its facts, and its header hoist.
+ * The proof here and the hoist in `self/emit_arrays.ts` ask this one question.
+ */
+export const recordReaches = (stored: i32, holder: i32): boolean =>
+  stored === ANY_RECORD || holder < 0 || (stored !== NO_RECORD && stored === holder);
 
 /**
  * Whether evaluating `value` can change what the access `target` reads before
@@ -1551,8 +1655,13 @@ const rebindsAccess = (walk: BoundsWalk, value: Node, target: Node): boolean => 
     if (path.holder !== holder) {
       continue;
     }
-    if (effects.records || contains(effects.clobbered, path.root)) {
+    if (contains(effects.clobbered, path.root)) {
       return true;
+    }
+    for (const stored of effects.records) {
+      if (recordRewritesPath(stored, path)) {
+        return true;
+      }
     }
     for (const field of effects.fields) {
       if (path.fields.indexOf(field) >= 0) {
@@ -1611,8 +1720,9 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
         judge(walk, state, target, target.children[0], target.children[1]);
       }
     }
-    if (storesRecord(ctx, target)) {
-      forgetPaths(walk, state);
+    const stored = recordStoreType(ctx.program, ctx.table, target);
+    if (stored !== NO_RECORD) {
+      forgetPathsRecord(walk, state, stored);
     }
     return;
   }
@@ -1651,7 +1761,8 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
  * a variable whose every assignment is an increment, which keeps its lower
  * bound and loses its upper ones. Every array length goes too as soon as the
  * node contains a call. A path goes with its root, with a store to any field it
- * names, and with a call, a `new` or a whole-record store anywhere in the node.
+ * names, with a call or a `new` anywhere in the node, and with a whole-record
+ * store there that can reach one of its links (`recordReaches`).
  * That leaves the loop *condition* to re-establish the upper bound on each
  * pass, which is exactly what it does.
  */
@@ -1677,15 +1788,17 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
   }
   if (effects.calls) {
     forgetCallEffects(walk, state);
-  } else if (effects.records) {
-    forgetPaths(walk, state);
+  } else {
+    for (const stored of effects.records) {
+      forgetPathsRecord(walk, state, stored);
+    }
   }
 };
 
 /**
  * What a statement can do to the state on its way round: the locals it steps
- * and the ones it overwrites, the field names it stores to, and whether it
- * calls anything or stores a whole record, either of which reaches fields it
+ * and the ones it overwrites, the field names it stores to, whether it calls
+ * anything, and which records it stores whole — the last two reach fields it
  * does not name.
  */
 class Effects {
@@ -1693,14 +1806,15 @@ class Effects {
   clobbered: Local[];
   fields: string[];
   calls: boolean;
-  records: boolean;
+  /** The record types a whole-record store writes (`recordStoreType`), each once. */
+  records: i32[];
 
   constructor() {
     this.stepped = [];
     this.clobbered = [];
     this.fields = [];
     this.calls = false;
-    this.records = false;
+    this.records = [];
   }
 }
 
@@ -1719,8 +1833,11 @@ const noteStoredField = (ctx: CheckContext, target: Node, effects: Effects): voi
   if (t.kind === N_MEMBER && effects.fields.indexOf(t.text) < 0) {
     effects.fields.push(t.text);
   }
-  if (t.kind === N_INDEX && storesRecord(ctx, t)) {
-    effects.records = true;
+  if (t.kind === N_INDEX) {
+    const stored = recordStoreType(ctx.program, ctx.table, t);
+    if (stored !== NO_RECORD && effects.records.indexOf(stored) < 0) {
+      effects.records.push(stored);
+    }
   }
 };
 
@@ -1764,6 +1881,42 @@ const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void =
 };
 
 // ---- Statements -------------------------------------------------------------------
+
+/**
+ * The state a `for` update or a `do/while` condition runs in: what holds at the
+ * end of the body and at every `continue` in it. A body that always leaves
+ * without a `continue` makes the update unreachable; it is still walked, from
+ * the end of the body, so the accesses in it are judged at all.
+ */
+const continueJoin = (walk: BoundsWalk, end: State, exits: boolean): State => {
+  let joined = end;
+  let k = 0;
+  if (exits && walk.continues.length > 0) {
+    joined = walk.continues[0];
+    k = 1;
+  }
+  while (k < walk.continues.length) {
+    joined = intersect(joined, walk.continues[k]);
+    k = k + 1;
+  }
+  return joined;
+};
+
+/**
+ * The state after a `for` or `while`: what holds where the condition fails,
+ * joined with every `break` out of the body. Written into `exit`, which is the
+ * condition's state and so the one the enclosing block goes on in.
+ */
+const breakJoin = (walk: BoundsWalk, exit: State): void => {
+  if (walk.breaks.length === 0) {
+    return;
+  }
+  let joined = exit;
+  for (const b of walk.breaks) {
+    joined = intersect(joined, b);
+  }
+  copyInto(exit, joined);
+};
 
 /**
  * Walk one statement, returning whether control definitely leaves it. That
@@ -1824,7 +1977,17 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     walkExpression(walk, state, stmt.children[0]);
     const body = cloneState(state);
     addFacts(body, conditionFacts(walk, state, stmt.children[0]).whenTrue);
+    // A `continue` here goes back to the condition, which was walked in the
+    // state `forgetAcross` left, so its states are collected only to keep them
+    // away from an enclosing loop's update.
+    const outer = walk.continues;
+    const outerBreaks = walk.breaks;
+    walk.continues = [];
+    walk.breaks = [];
     walkBoundsStatement(walk, body, stmt.children[1]);
+    breakJoin(walk, state);
+    walk.continues = outer;
+    walk.breaks = outerBreaks;
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1833,8 +1996,18 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     forgetAcross(walk, state, stmt);
     walk.loops = walk.loops + 1;
     const body = cloneState(state);
-    walkBoundsStatement(walk, body, stmt.children[0]);
-    walkExpression(walk, body, stmt.children[1]);
+    // The state after a `do/while` is the one `forgetAcross` left, which never
+    // saw the condition's facts, so a `break` has nothing to take back; its
+    // states are collected only to keep them away from an enclosing loop.
+    const outer = walk.continues;
+    const outerBreaks = walk.breaks;
+    walk.continues = [];
+    walk.breaks = [];
+    const exits = walkBoundsStatement(walk, body, stmt.children[0]);
+    const condition = continueJoin(walk, body, exits);
+    walk.continues = outer;
+    walk.breaks = outerBreaks;
+    walkExpression(walk, condition, stmt.children[1]);
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1860,9 +2033,17 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     if (cond.kind !== N_EMPTY) {
       addFacts(body, conditionFacts(walk, state, cond).whenTrue);
     }
-    walkBoundsStatement(walk, body, stmt.children[3]);
+    const outer = walk.continues;
+    const outerBreaks = walk.breaks;
+    walk.continues = [];
+    walk.breaks = [];
+    const exits = walkBoundsStatement(walk, body, stmt.children[3]);
+    const update = continueJoin(walk, body, exits);
+    breakJoin(walk, state);
+    walk.continues = outer;
+    walk.breaks = outerBreaks;
     if (stmt.children[2].kind !== N_EMPTY) {
-      walkExpression(walk, body, stmt.children[2]);
+      walkExpression(walk, update, stmt.children[2]);
     }
     walk.loops = walk.loops - 1;
     return false;
@@ -1873,7 +2054,15 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     forgetAcross(walk, state, stmt);
     walk.loops = walk.loops + 1;
     const body = cloneState(state);
+    // As with `do/while`, the state after the loop never saw a fact the loop
+    // re-establishes, so a `break` is only kept away from an enclosing loop.
+    const outer = walk.continues;
+    const outerBreaks = walk.breaks;
+    walk.continues = [];
+    walk.breaks = [];
     walkBoundsStatement(walk, body, stmt.children[2]);
+    walk.continues = outer;
+    walk.breaks = outerBreaks;
     walk.loops = walk.loops - 1;
     return false;
   }
@@ -1885,7 +2074,13 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return true;
   }
 
-  if (stmt.kind === N_BREAK || stmt.kind === N_CONTINUE) {
+  if (stmt.kind === N_CONTINUE) {
+    walk.continues.push(cloneState(state));
+    return true;
+  }
+
+  if (stmt.kind === N_BREAK) {
+    walk.breaks.push(cloneState(state));
     return true;
   }
 
@@ -1900,6 +2095,11 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // one above it, so each is walked from the state the whole `switch` is
     // sound under and nothing it decided survives past the closing brace.
     forgetAcross(walk, state, stmt);
+    // A `break` in a clause leaves the `switch`, not a loop around it, and the
+    // state after the `switch` is already the pruned one, so its states go no
+    // further. A `continue` does reach the loop, and stays in its frame.
+    const outerBreaks = walk.breaks;
+    walk.breaks = [];
     for (const clause of stmt.children[1].children) {
       const clauseState = cloneState(state);
       const body = clause.kind === N_CASE ? clause.children[1] : clause.children[0];
@@ -1909,6 +2109,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
         }
       }
     }
+    walk.breaks = outerBreaks;
     return false;
   }
 

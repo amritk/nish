@@ -3673,7 +3673,7 @@ the emitter guarantees here is **one length value feeding the loop condition and
 the bounds check both**, by construction rather than by hoping GVN merges two
 loads of one address.
 
-Three things refuse the hoist, and each is the whole of a proof:
+Four things refuse the hoist, and each is the whole of a proof:
 
 - a `push` or `pop` anywhere in the loop, or a call to a function the fixpoint
   says grows an array — those are what move `len`, `cap` and `data`;
@@ -3681,6 +3681,16 @@ Three things refuse the hoist, and each is the whole of a proof:
   since the hoisted value is a field load;
 - a path rooted at a local the loop itself declares, or at a reassignable one,
   or through a nullable link that a guard *inside* the loop narrows.
+- a store of a whole element into an array of inline records, which rewrites
+  a record in place with no field name written (`recordStoreType` in
+  `self/bounds.ts`, `arr_header_hoist_record_store`) — for a path with a link
+  read off a holder declared as that record type, because nothing else can
+  point into the slot (`recordReaches`, the rule the bounds proof shares). An
+  array of classes holds pointers: `this.nodes[i] = this.spare` is a
+  `store %struct.Node*` that rewrites no object, and the loop keeps its hoist
+  (`arr_header_hoist_record_class`); and `g.src`, read off a class, keeps its
+  hoist beside a record store into an unrelated array
+  (`arr_header_hoist_record_class_root`).
 
 The lowering is pinned by `tests/cases/arr_header_hoist.ts` and the checks
 `tests/run.js` runs over it, which assert both halves by name.

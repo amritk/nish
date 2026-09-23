@@ -2206,10 +2206,30 @@ that, for a local and a path alike:
     (`arr_bounds_store_rhs`, `arr_path_store_rhs`,
     `arr_path_store_rhs_compound`). A field store evaluates its receiver before
     its value, and `g.hs[i].n = (i = 0)` is judged that way round
-    (`arr_path_store_rhs_field`).
+    (`arr_path_store_rhs_field`);
+  - a `for` update and a `do/while` condition are reached from the end of the
+    body *and* from every `continue`, so they are judged against what holds
+    on all of those edges: a `continue` branch that rebinds the array, moves
+    the index or calls anything takes the proof away from the update or the
+    condition (`arr_path_continue_for`, `arr_path_continue_do`,
+    `arr_bounds_continue_for`, `arr_bounds_continue_do`), and one that does
+    none of that keeps it (`arr_bounds_continue_proven`). A `continue` in a
+    `switch` clause reaches the loop's update (`arr_bounds_continue_switch`),
+    and one in an inner loop reaches only the inner update
+    (`arr_bounds_continue_nested`);
+  - the code after a `for` or a `while` is reached where the condition fails
+    *and* from every `break`, which leaves with the body's writes applied. A
+    fact the condition re-established about something the body then changed
+    does not survive the loop (`arr_bounds_break_for`, `arr_bounds_break_while`,
+    `arr_bounds_break_for_string`, `arr_bounds_break_while_string`). A `break`
+    in a `switch` clause leaves only the `switch`;
+  - `r.unwrapOr(d)` evaluates `d` and `r.expect(m)` evaluates `m` only when
+    `r` is an `Err`, so neither argument proves anything after the call. What
+    `d` might undo is undone, and `m` is followed by the exit
+    (`arr_bounds_lazy_unwrap_or`, `arr_bounds_lazy_expect`).
 
-Both were unsound for locals before property paths existed; the fix and the
-tests cover both.
+All of these were unsound for locals before property paths existed; the fixes
+and the tests cover both.
 
 **A property path has to earn what a local gets for free**, because a field
 can be written through an alias and a local cannot. `h.xs.length` proves
@@ -2220,8 +2240,13 @@ path or resize the array, and a path fact ends at:
     holder — `g.xs = ys` ends `h.xs`'s facts even where `g` is a different
     object, because the name is compared rather than the aliasing guessed
     (`arr_path_reassign`, `arr_path_alias_store`);
-  - a store of a whole element into an array of structs, which rewrites a
-    record in place with no field name written (`arr_path_record_store`);
+  - a store of a whole element into an array of inline records, which
+    rewrites a record in place with no field name written
+    (`arr_path_record_store`). It ends the facts of a path with a link read
+    off a holder *declared* as that record type — `r.xs` for `const r = rs[0]`
+    — because a struct field is a pointer and interfaces are nominal, so
+    nothing else can point into the slot. An array of classes holds pointers,
+    so a store there rewrites no object and ends nothing;
   - an assignment to the root (`arr_path_root`);
   - **any call** and any `new`, for a string path as well as an array one: a
     callee may `push` or `pop` the array or store a new value in the field,
@@ -2238,9 +2263,21 @@ program that proves `i < h.xs.length`, breaks it by one rule, and reads
 removed. `arr_path_hold` pins where the fact holds, and
 `tests/cases/arr_header_hoist` pins the measured point of it: a loop over
 `h.xs` compiles to the loop `const xs = h.xs` does, with one bounds check fewer
-than before and so one loop exit fewer. A path the proof cannot take keeps its
+than before and so one loop exit fewer. The hoist that lifts `h.xs` out of the
+loop refuses a loop that stores a whole element into an array of inline
+records, by the same rule the proof drops its path facts by
+(`arr_header_hoist_record_store`), and keeps hoisting through a store into an
+array of classes (`arr_header_hoist_record_class`) and a path read off
+classes beside a record store (`arr_header_hoist_record_class_root`).
+A path the proof cannot take keeps its
 check without a warning, because the rewrite the warning would name is that
 `const xs = h.xs` hoist.
+
+A generic's instantiations are proved one at a time, each against its own
+verdicts: `rs[0] = x` rewrites a record when `T` is an inline record and
+stores a pointer or a value otherwise, so an access one instantiation proves
+may keep its check in another (`arr_bounds_generic_instances`, and the
+`_prim`, `_method` and `_iface` forms).
 
 The proof changes what the program *costs*, never what it *means*: an
 out-of-range index that reaches a check still panics.

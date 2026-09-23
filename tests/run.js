@@ -2145,6 +2145,34 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_path_store_rhs_field", "`g.hs[i].n = (i = 0)`", "", "1000000 >= 2"],
     ["arr_path_store_rhs_compound", "`h.xs[i] += (i = 2)`", "", "1000000 >= 3"],
     ["arr_bounds_store_rhs", "`xs[i] = (i = 0)` on a local", "", "1000000 >= 3"],
+    // #181: a `continue` reaches the `for` update or the `do/while` condition
+    // with its branch's effects applied, so those are judged from the join of
+    // every `continue` and the end of the body.
+    ["arr_path_continue_for", "a field store before `continue`, in a `for` update", "", "7 >= 1"],
+    ["arr_bounds_continue_for", "a rebind before `continue`, in a `for` update, on a local", "", "7 >= 1"],
+    ["arr_path_continue_do", "a call before `continue`, in a `do/while` condition", "", "3 >= 1"],
+    ["arr_bounds_continue_do", "a rebind before `continue`, in a `do/while` condition, on a local", "", "3 >= 1"],
+    ["arr_bounds_continue_nested", "an outer `continue` before an inner loop with its own", "", "7 >= 1"],
+    ["arr_bounds_continue_switch", "a `continue` inside a `switch` clause", "", "7 >= 1"],
+    // #181's `break` counterpart: a `break` leaves a `for` or `while` past the
+    // condition that re-established a fact, so the state after the loop is the
+    // join of the condition's exit and every `break`.
+    ["arr_bounds_break_for", "a move before `break`, after a `for` condition", "", "1000 >= 3"],
+    ["arr_bounds_break_while", "a rebind before `break`, after a `while` condition", "", "5 >= 1"],
+    ["arr_bounds_break_for_string", "a bound moved before a guarded `break`, on a string", "", "3 >= 3"],
+    ["arr_bounds_break_while_string", "a bound moved before `break`, on a string", "", "50 >= 3"],
+    // #182: an argument evaluated on the `Err` path alone proves nothing after the call.
+    ["arr_bounds_lazy_unwrap_or", "an `unwrapOr` fallback that did not run", "", "50 >= 3"],
+    ["arr_bounds_lazy_expect", "an `expect` message that did not run", "", "50 >= 3"],
+    // #180: the header hoist counts a whole-record store the way the proof does.
+    ["arr_header_hoist_record_store", "a whole-record store under a hoisted `const` view", "1", "1 >= 1"],
+    ["arr_header_hoist_record_view", "a whole-record store under a class field's view", "", "1 >= 1"],
+    // A generic's instantiations are proved against their own verdicts: one
+    // that stores a pointer or a value proves `r.xs[i]`, the `Rec` one must not.
+    ["arr_bounds_generic_instances", "a record store in `walk<Rec>`, beside `walk<Box>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_prim", "a record store in `walk<Rec>`, beside `walk<i32>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_method", "a record store in `Store<Rec>.walk`, beside `Store<Box>`", "15", "1 >= 1"],
+    ["arr_bounds_generic_instances_iface", "a record store through `Cell<Rec>`, beside `Cell<string>`", "15", "1 >= 1"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
     if (!fs.existsSync(ll)) continue;
@@ -2160,6 +2188,36 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         String(run.stderr).includes(`index out of range: ${message}`) &&
         String(run.stdout).trim() === stdout,
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // #180's rule stops at inline records: an element store into an array of
+  // classes stores a pointer, so `this.src` and `this.nodes` keep their headers
+  // in the preheader and the loop reloads no field of `this`.
+  const classStoreLl = path.join(buildDir, "arr_header_hoist_record_class.ll");
+  if (fs.existsSync(classStoreLl)) {
+    const ir = fs.readFileSync(classStoreLl, "utf8");
+    const fn = ir.slice(ir.search(/^define[^\n]*@Grid\.sumAndStamp\(/m));
+    const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
+    const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
+    check(
+      "arr_header_hoist_record_class: a class-element store leaves both headers hoisted",
+      reloads === 0,
+      `${reloads} array header loads inside the loop`
+    );
+  }
+  // And it stops at what the store can reach: a whole-record store into `rs`
+  // rewrites a `Rec` slot, and `g.src` is read off a class, so its header stays
+  // in the preheader.
+  const classRootLl = path.join(buildDir, "arr_header_hoist_record_class_root.ll");
+  if (fs.existsSync(classRootLl)) {
+    const ir = fs.readFileSync(classRootLl, "utf8");
+    const fn = ir.slice(ir.search(/^define[^\n]*@stamp\(/m));
+    const body = fn.slice(fn.indexOf("for.cond:"), fn.indexOf("\n}\n"));
+    const reloads = (body.match(/load %struct\.nish_array\*/g) || []).length;
+    check(
+      "arr_header_hoist_record_class_root: a record store leaves a class-rooted header hoisted",
+      reloads === 0,
+      `${reloads} array header loads inside the loop`
     );
   }
   // The declared-type rule on its own: `narrowed` and `plain` are one loop over
