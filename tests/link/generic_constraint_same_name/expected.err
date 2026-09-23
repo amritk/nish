@@ -1,0 +1,1 @@
+main.ts:15:32: error: `T` of `areaOf` requires `T extends Shape`, and `Circle` does not implement it

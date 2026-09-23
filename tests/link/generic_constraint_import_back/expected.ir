@@ -1,0 +1,4 @@
+define noundef i32 @areaOf$$Circle(
+define noundef i32 @areaOf$$Shape(
+declare noundef i32 @areaOf$$Circle(
+declare noundef i32 @areaOf$$Shape(

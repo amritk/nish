@@ -329,6 +329,30 @@ const DECLARED = [
     why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
   },
   {
+    program: "tests/link/generic_constraint_import_back/main.ts",
+    file: "main.h",
+    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
+    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
+  },
+  {
+    program: "tests/link/generic_constraint_same_name_fields/main.ts",
+    file: "exit",
+    changelog: "Hold a constraint to its declaration, not its name",
+    why: "a new negative: a class implementing the importer's own same-named `Shape`, with lib's fields, which the reference compiler took for lib's `Shape` and compiled",
+  },
+  {
+    program: "tests/link/generic_constraint_same_name_itself/main.ts",
+    file: "exit",
+    changelog: "Hold a constraint to its declaration, not its name",
+    why: "a new negative: the importer's own same-named `Shape` passed as the argument, which shares lib's type id and which the reference compiler compiled",
+  },
+  {
+    program: "tests/link/generic_constraint_same_name_class/main.ts",
+    file: "exit",
+    changelog: "Hold a constraint to its declaration, not its name",
+    why: "a new negative: the importer's own same-named `Base` class passed to a `T extends Base` bound on lib's class, which shares its type id and which the reference compiler compiled",
+  },
+  {
     program: "tests/cases/dbg_generic.ts",
     file: "dbg_generic.ll",
     changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
