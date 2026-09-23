@@ -353,6 +353,12 @@ const DECLARED = [
     why: "a new negative: the importer's own same-named `Base` class passed to a `T extends Base` bound on lib's class, which shares its type id and which the reference compiler compiled",
   },
   {
+    program: "tests/link/iface_same_name_class/main.ts",
+    file: "exit",
+    changelog: "Same-named interfaces and classes across modules keep their identity",
+    why: "a new negative: lib's `Circle` converted to the importer's own same-named `Shape`, which shares lib's `Shape`'s type id and which the reference compiler compiled, reading `Circle`'s layout as the wrong `Shape`'s",
+  },
+  {
     program: "tests/link/package_engines_floor/main.ts",
     file: "exit",
     changelog: "WP21 S3 — specific diagnostics at the package boundary",

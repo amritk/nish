@@ -28,7 +28,7 @@ import { SourceFile } from "./diagnostics";
 import { EFFECT_READ, EFFECT_WRITE } from "./runtime";
 import { StringSet } from "./map";
 import { compareStrings, jsonQuote } from "./strings";
-import { N_CALL, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_NEW, N_VAR_DECL, Node } from "./nodes";
+import { N_CALL, N_CONSTRUCTOR, N_EMPTY, N_NEW, N_VAR_DECL, Node } from "./nodes";
 import {
   CheckedProgram,
   ConstInfo,
@@ -244,14 +244,16 @@ const walkBody = (
     if (callee !== null) {
       out.push(`  callee ${position(source, node.start)} ${callee.sourceName} -> @${callee.name}`);
     }
-  } else if (node.kind === N_NEW && node.children[0].kind === N_IDENT) {
-    // `new C(...)` is bound through the struct registry rather than the
-    // callee table, and only a class's *own* constructor is named there.
-    const info = program.struct(node.children[0].text);
-    if (info !== null) {
-      const ctor = info.ctor;
-      if (ctor !== null) {
-        out.push(`  callee ${position(source, node.start)} new ${info.name} -> @${ctor.name}`);
+  } else if (node.kind === N_NEW) {
+    // `checkNew` records the constructor it binds, a generic class's
+    // instantiation included; a class with no constructor records none. The
+    // class is the constructor's owner, not the node's type, which is the
+    // interface a class converts to where one is wanted.
+    const ctor = program.nodeCallees[node.id];
+    if (ctor !== null) {
+      const owner = ctor.owner;
+      if (owner !== null) {
+        out.push(`  callee ${position(source, node.start)} new ${table.typeName(owner.type)} -> @${ctor.name}`);
       }
     }
   }
