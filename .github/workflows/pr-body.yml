@@ -1,0 +1,44 @@
+# The pull request body may not carry tool attribution.
+#
+# CLAUDE.md forbids session links, tracking IDs, model names and platform
+# attributions in PR text, and `.claude/hooks/no-attribution.mjs` refuses the
+# tool call that would write one. That hook runs before the call, so it cannot
+# see a footer a platform appends to the body after the pull request is opened
+# -- which is how claude.ai session links reached #167, #168, #169, #171 and
+# #179 (#176). This check reads the body GitHub holds, against the hook's own
+# list in `.claude/hooks/attribution-patterns.mjs`.
+#
+# A red check here is fixed by editing the body, never by loosening a pattern.
+# `edited` re-runs it, so removing the footer is what clears it.
+name: PR body
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-body-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: no attribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The body arrives through the environment, never interpolated into the
+      # shell: a body is attacker-controlled text and `${{ }}` inside a `run:`
+      # would splice it into the script. A pull request with no description
+      # sets it to the empty string, which passes.
+      - name: Check the body
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-pr-body.mjs

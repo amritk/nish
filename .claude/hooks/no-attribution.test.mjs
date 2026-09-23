@@ -4,10 +4,11 @@
 //
 //   node .claude/hooks/no-attribution.test.mjs
 //
-// Not part of `npm test` -- nothing here touches the compiler -- so run it by
-// hand when the hook or its patterns change. The banned strings are built by
-// concatenation so that editing this file, and grepping the repository for
-// them, does not turn up a line that reads like the real thing.
+// `npm test` runs it, beside `scripts/check-pr-body.test.mjs`, which holds the
+// same patterns (`attribution-patterns.mjs`) to a pull request body. The
+// banned strings are built by concatenation so that editing this file, and
+// grepping the repository for them, does not turn up a line that reads like
+// the real thing.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";

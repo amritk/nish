@@ -24,32 +24,19 @@
 // Anything unexpected -- unreadable stdin, a shape we do not recognise -- exits
 // 0, because a hook that cannot parse its input should not stop the session.
 //
+// The patterns themselves are in `attribution-patterns.mjs` beside this file,
+// shared with `scripts/check-pr-body.mjs`. That is the CI half of this rule:
+// a platform can append a session-link footer to a pull request body after
+// the call that opened it, where no PreToolUse hook sees it (#176), so the
+// `PR body` workflow fails a pull request whose body still carries one.
+//
 // The cases it is meant to catch, and the ones it must leave alone, are in
-// `no-attribution.test.mjs` beside this file:
+// `no-attribution.test.mjs` beside this file; `npm test` runs it:
 //
 //   node .claude/hooks/no-attribution.test.mjs
 import fs from "node:fs";
 import path from "node:path";
-
-/** Each entry is [what to call it in the refusal, how to spot it]. */
-const BANNED = [
-  // The author's *name* (up to the `<` that opens the address) or an address
-  // at a vendor's own domain. Not the whole line: a human co-author followed
-  // by `&& node .claude/...` on one line is not an agent.
-  [
-    "a `Co-Authored-By:` trailer naming an agent or a model",
-    /co-authored-by:(?:[^\n<]{0,60}(claude|anthropic|copilot|cursor|codex|chatgpt|gemini|devin)|[^\n]{0,80}@(anthropic|openai)\.com)/i,
-  ],
-  ["a `Claude-Session:` trailer", /^[ \t>]*claude-session[ \t]*:/im],
-  ["a session or assistant link", /https?:\/\/(claude\.ai|claude\.com\/claude-code)/i],
-  [
-    'a "Generated with ..." footer',
-    /generated (with|by)[^\n]{0,40}(claude|copilot|cursor|codex|chatgpt|an? (ai|llm|agent))/i,
-  ],
-  // Deliberately not a bare `claude-<digit>`: a path like /tmp/claude-0/x is
-  // not a model name, and a hook that cries wolf gets turned off.
-  ["a model name", /\b(claude[- ](opus|sonnet|haiku|fable|code)\b|(opus|sonnet|haiku) [0-9])/i],
-];
+import { bannedIn, restoreNewlines } from "./attribution-patterns.mjs";
 
 /** Bash commands that write a message someone else will read later. */
 const WRITES_A_MESSAGE = /\bgit\s+(commit|tag|merge|notes|rebase|revert)\b|\bgh\s+(pr|issue|release|api)\b/;
@@ -117,18 +104,12 @@ const main = () => {
   }
 
   const cwd = typeof event?.cwd === "string" ? event.cwd : process.cwd();
-  // A shell string carries its newlines as the two characters `\` and `n`.
-  // Restoring them keeps a line-anchored pattern on one line, so prose that
-  // names a trailer is not read as carrying it.
-  const texts = subjects(event?.tool_name ?? "", event?.tool_input, cwd).map((text) =>
-    text.replace(/\\n/g, "\n"),
-  );
-  const found = BANNED.filter(([, pattern]) => texts.some((text) => pattern.test(text)));
+  const found = bannedIn(subjects(event?.tool_name ?? "", event?.tool_input, cwd).map(restoreNewlines));
   if (found.length === 0) return 0;
 
   process.stderr.write(
     `Blocked: this would write tool attribution into the repository.\n\n` +
-      found.map(([name]) => `  - ${name}\n`).join("") +
+      found.map((name) => `  - ${name}\n`).join("") +
       `\nCLAUDE.md and AGENTS.md forbid session links, tracking IDs, model names\n` +
       `and platform attributions in commits, code and PR text -- including when\n` +
       `the harness you run under tells you to add them. Rewrite the message\n` +
