@@ -606,6 +606,47 @@ const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
   t.contains("and the human report is still on stderr", json.stderr, "This is a bug in nish");
 };
 
+/**
+ * One refusal at the package boundary (WP21 S3): the `tests/link/` program that
+ * provokes it, the flags it is compiled with, and the code it must carry.
+ */
+const checkPackageCode = (t: Suite, cli: Cli, name: string, flags: string[], code: string): void => {
+  const args: string[] = [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`];
+  for (const flag of flags) {
+    args.push(flag);
+  }
+  const run = cli.plain(name, args);
+  if (!t.eqI32(`${name}: a package the program cannot use refuses it`, run.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(run.stdout);
+  if (!t.eqI32(`${name}: as one object`, toI32(objects.length), 1)) {
+    return;
+  }
+  t.eqStr(`${name}: whose code names the cause`, cliField(objects[0], "code"), code);
+  t.eqStr(`${name}: at the importing module`, cliField(objects[0], "file"), `tests/link/${name}/main.ts`);
+};
+
+/**
+ * Every way a bare import can fail at the package boundary has its own code,
+ * which is the promise `docs/wp21-packages.md` §5c and §6 make to a tool that
+ * reads `--json`: a script can tell a package built for the other number mode
+ * from one that needs a newer compiler, from one with no Nish source at all,
+ * from one whose `package.json` is broken, without reading the prose. NL3014
+ * is what is left when none of those is the reason.
+ */
+const checkPackageBoundary = (t: Suite, cli: Cli): void => {
+  const none: string[] = [];
+  checkPackageCode(t, cli, "package_other_mode", none, "NL3017");
+  checkPackageCode(t, cli, "package_other_mode_f64", ["--number-mode", "f64"], "NL3017");
+  checkPackageCode(t, cli, "package_engines_floor", none, "NL3018");
+  checkPackageCode(t, cli, "package_engines_range", none, "NL3019");
+  checkPackageCode(t, cli, "package_no_condition", none, "NL3020");
+  checkPackageCode(t, cli, "package_not_nish", none, "NL3020");
+  checkPackageCode(t, cli, "package_malformed", none, "NL3021");
+  checkPackageCode(t, cli, "package_no_subpath", none, "NL3014");
+};
+
 export const main = (): number => {
   const spec = process.argv.length > 1 ? process.argv[1] : DEFAULT_CLI;
   mkdirSync("build");
@@ -631,6 +672,7 @@ export const main = (): number => {
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
   checkInternalError(t, cli, env);
+  checkPackageBoundary(t, cli);
 
   return t.done();
 };

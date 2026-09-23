@@ -1,0 +1,1 @@
+node_modules/pkg_broken/package.json:4:3 is not well-formed JSON, so this compiler could not read an entry point out of it

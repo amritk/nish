@@ -1,0 +1,1 @@
+Package `plainstr` has no Nish entry point: its `exports` gave this compiler no file to compile for `.`, because that entry declares none of the conditions this compiler compiles source from (`nish`, `nish-i32`, `nish-f64`)
