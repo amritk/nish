@@ -615,9 +615,9 @@ function main(argv) {
     return 0;
   }
 
-  // Before anything is compiled: the one piece of comparison logic here that
-  // can make two differing files look equal, driven over inputs no corpus
-  // produces. A run whose own comparison is broken must say so instead of
+  // Before anything is compiled: the two pieces of comparison logic here that
+  // can make two differing files look equal — each side's own root and each
+  // side's own producer version — driven over inputs no corpus produces. A run whose own comparison is broken must say so instead of
   // agreeing about three hundred programs.
   const selfCheck = selfCheckRoots();
   if (selfCheck !== null) {
