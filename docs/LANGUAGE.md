@@ -960,7 +960,7 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has: json,
-  testing, text) `` (`reject_std_unknown_module`), and one that would leave the
+  pair, testing, text) `` (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
   standard library; a `nish/` specifier names a module inside it, so no segment
@@ -981,6 +981,24 @@ and their `.ll` goldens are byte-identical files.
   specifier rather than by where the file sits, because reading it off the path
   would answer differently for an installed compiler and a checkout of the same
   version.
+- **`nish/pair` is `Pair<A, B>`, two values answered by one call.** It is
+  `interface Pair<A, B> { first: A; second: B; }` and nothing else: a generic
+  interface, so an object literal takes its type from the annotation and must
+  set both fields, and there is no tuple syntax and no constructor behind it.
+  It crosses a module boundary like any exported interface, over scalars
+  (`tests/link/std_pair_scalar`), a string and an `f64` under
+  `--number-mode f64` (`std_pair_f64`), an array (`std_pair_array`), another
+  `Pair` (`std_pair_nested`), and held in a class field and an array
+  (`std_pair_held`).
+  The instantiations are ordered — a `Pair<i32, string>` returned where a
+  `Pair<string, i32>` is declared is `` Return type mismatch: function returns
+  Pair<string, i32> but expression is Pair<i32, string> ``
+  (`reject_std_pair_swapped`) — and a literal that leaves a field out is
+  `` Object literal for `Pair<i32, boolean>` is missing field `second` ``
+  (`reject_std_pair_missing`). It lowers as any generic interface does
+  (`gen_interface`): one struct per instantiation, `%struct.Pair$i32$bool`,
+  returned by pointer. Use it to return two values, not to store them side by
+  side; `docs/wp23-language-surface.md` §5 is the reasoning.
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the

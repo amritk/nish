@@ -11,6 +11,7 @@ and subject to the same rules as `examples/` or `self/`
 | [`testing.ts`](./testing.ts) | a test runner: a `Suite` a program drives with straight-line assertions, printing the `PASS` / `FAIL` / `SKIP` lines the repository's own harness prints, and answering the exit code |
 | [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, and `firstDifference` over two arrays of lines |
 | [`json.ts`](./json.ts) | `jsonField(object, name)`: the value of one field of one flat JSON object, which is the shape the compiler's own `--json` diagnostics have. A reader and not a parser — it answers text, answers `null` for a field that is not there, and does not validate |
+| [`pair.ts`](./pair.ts) | `Pair<A, B>`: an interface with `first` and `second`, for a function that answers two values from one call. A type and nothing else — the caller writes an object literal at the return — and for returning two values rather than storing them side by side |
 
 ## How a program imports it
 
@@ -107,6 +108,7 @@ that are *not* this package.
   WP18 added generic functions and classes
   ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#generic-functions)) and still has
   one assertion per type ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3c).
+  `pair.ts` is the first module here to export a generic type.
 - **Ship it with a `tests/link/` case.** `tests/link/<name>/` is the only place a
   multi-module program is exercised end to end, and it is also what puts the
   module into the corpus the stage1 oracles read
@@ -116,7 +118,9 @@ that are *not* this package.
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
   message) — and `text.ts` and `json.ts` have `tests/link/std_text` and
   `tests/link/std_json`, each of which uses `Suite` to check the module, the way a
-  user would. `tests/link/std_text_f64` is the same corpus under
+  user would. `pair.ts` has five, `tests/link/std_pair_*`, one per shape of
+  instantiation, each returning a `Pair` from a sibling module and pinned by its
+  stdout. `tests/link/std_text_f64` is the same corpus under
   `--number-mode f64`, which is where a module that spelled its widths and forgot
   a `toI32` is caught.
 - **`std/` is not on the compiler's dependency list.** Nothing in `self/`
