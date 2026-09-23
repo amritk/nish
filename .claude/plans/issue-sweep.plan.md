@@ -1,11 +1,11 @@
 ---
 name: Issue sweep — the open bugs on main after language-gaps
-overview: Fix the eight open issues that are still reproducible on main 0f4211f (#180–#183 bounds and attribute soundness, #173–#175 cross-module and generic diagnostics, #107 and #110 registry and docs hygiene) in five independent PRs, add the CI check #176 asks for in a sixth, and close the three issues whose work has already landed (#140, #96, #94).
+overview: 'Fix the eight open issues that are still reproducible on main 0f4211f (#180–#183 bounds and attribute soundness, #173–#175 cross-module and generic diagnostics, #107 and #110 registry and docs hygiene) in five independent PRs, add the CI check #176 asks for in a sixth, and close the three issues whose work has already landed (#140, #96, #94).'
 stages:
   - id: bounds-soundness
     title: "fix(checker): bounds proofs see continue edges, lazy Result arguments and whole-record stores"
-    goal: Every access the bounds walk or the header hoist leaves unchecked is still in range on every edge that reaches it (#181, #182, #180)
-    verification: npm run check && npm test (undegraded) — with the new must-panic cases for #181, #182 and #180 passing and std/ still at zero performance warnings
+    goal: 'Every access the bounds walk or the header hoist leaves unchecked is still in range on every edge that reaches it (#181, #182, #180)'
+    verification: 'npm run check && npm test (undegraded) — with the new must-panic cases for #181, #182 and #180 passing and std/ still at zero performance warnings'
     todos:
       - id: bs-continue-edge
         content: Join the state at every continue into the for update and the do/while condition in walkBoundsStatement (self/bounds.ts) — see Bounds soundness
@@ -34,7 +34,7 @@ stages:
         content: Rewrite the stale stage0 comment at self/structs.ts ~505-543 (the one-diagnostic-per-declaration rule) to describe the current compiler — see Class identity
         status: pending
       - id: ci-tests
-        content: Add tests/link negatives for #173 and #174 and wordings cases for each new code, and add the codes to AGENTS.md and tests/nish/cli.ts where the table lives — see Tests
+        content: 'Add tests/link negatives for #173 and #174 and wordings cases for each new code, and add the codes to AGENTS.md and tests/nish/cli.ts where the table lives — see Tests'
         status: pending
   - id: generic-display
     title: "fix(checker): name the instantiation, not the template, in new-expression diagnostics and the checked dump"
@@ -76,7 +76,7 @@ stages:
         content: Count every string-literal line in each self/codes.ts table in scripts/gen-diagnostic-codes.mjs problems() and require it to be twice the pairs, plus contiguous NL9 codes — see Registry and docs
         status: pending
       - id: rd-wp15
-        content: Name bench/hoist_field.ts, the box and the statistic beside the §2c table in docs/wp15-performance.md, and correct the NL9010 wording that #108 disputes — see Registry and docs
+        content: 'Name bench/hoist_field.ts, the box and the statistic beside the §2c table in docs/wp15-performance.md, and correct the NL9010 wording that #108 disputes — see Registry and docs'
         status: pending
   - id: pr-body-check
     title: "ci: fail a pull request whose body carries a session link or tool attribution"
