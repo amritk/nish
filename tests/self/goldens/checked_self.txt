@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 453721 dump lines live, 64 distinct modules.
+# 64 programs, 453703 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -16704,19 +16704,17 @@ function Compilation.declaredStructs(this: Compilation, clashed: StringSet): Str
   callee 834:24 StringMap.get -> @StringMap.get
   callee 836:13 StringMap.set -> @StringMap.set
   local 840:19 what: string (const)
-  local 841:19 here: string (const)
-  callee 841:26 describePackage -> @describePackage
-  local 842:19 there: string (const)
-  callee 842:27 describePackage -> @describePackage
-  local 843:19 at: Node (const)
-  callee 844:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 848:28 TypeTable.typeName -> @TypeTable.typeName
-  local 853:19 first: string (const)
-  local 854:19 what: string (const)
-  local 855:19 at: Node (const)
-  callee 856:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 860:28 TypeTable.typeName -> @TypeTable.typeName
-  callee 862:13 StringSet.add -> @StringSet.add
+  local 841:19 at: Node (const)
+  local 843:21 here: string (const)
+  callee 843:28 describePackage -> @describePackage
+  local 844:21 there: string (const)
+  callee 844:29 describePackage -> @describePackage
+  callee 845:15 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 849:30 TypeTable.typeName -> @TypeTable.typeName
+  local 854:21 first: string (const)
+  callee 855:15 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 859:30 TypeTable.typeName -> @TypeTable.typeName
+  callee 861:15 StringSet.add -> @StringSet.add
   callee 864:11 StructRegistry.add -> @StructRegistry.add
 function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet): void -> @Compilation.rejectSymbolClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
