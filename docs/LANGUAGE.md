@@ -957,12 +957,25 @@ and their `.ll` goldens are byte-identical files.
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
 - **A file is one module however it is named.** The command line and the
   imports may spell one file differently — `./types.ts`, its absolute path,
-  and the `types.ts` an `import from "./types"` resolves to — and it is loaded
-  once, under the first spelling that reached it, so its declarations never
-  clash with themselves and its `.ll` is written once
-  (`tests/link/root_named_twice`). The comparison is by the path made absolute
-  and normalised, not through symbolic links: a file reached through two links
-  is two modules (`tests/link/package_symlink`).
+  a path through a linked directory, and the `types.ts` an
+  `import from "./types"` resolves to — and it is loaded once, under the first
+  spelling that reached it, so its declarations never clash with themselves
+  and its `.ll` is written once (`tests/link/root_named_twice`,
+  `tests/link/identity_symlink_cwd`). **A module's identity is its real
+  path**: the file the operating system opens under a spelling, with every
+  symbolic link resolved, as Node and `tsc` (`preserveSymlinks: false`)
+  identify one. A command-line path is taken as the operating system reads
+  it, so `far/../types.ts` with `far` a link into `other/` is
+  `other/types.ts`, a second module beside `./types.ts`
+  (`tests/link/identity_symlink_dotdot`); an import specifier is joined to its
+  importer's name, as a relative URL is. What a module is *called* — its IR
+  header, its diagnostics, its output file — is still the first spelling,
+  so no emitted byte depends on where the links point.
+- **Two modules never share an output file.** `-o <dir>/` names each `.ll`
+  after its module's basename, after its path relative to the entry when two
+  modules share a basename, and — when those still meet, as `types.ts` and
+  `far/../types.ts` do — a later module takes `<stem>_2.ll`, `<stem>_3.ll`
+  and on, in load order (`tests/nish/cli.ts`).
 - **The standard library is imported as `nish/<module>`**
   (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
   the running compiler rather than relative to the importing file, so the same
@@ -1089,13 +1102,20 @@ and their `.ll` goldens are byte-identical files.
     is one it cannot claim to meet: `` declares `engines.nish` as `^0.1.0`,
     which is not a range this compiler reads `` (`NL3019`,
     `tests/link/package_engines_range`).
-  - **A package is where its path says, and a symlink is not followed.** One
-    package installed twice, or reached both directly and through a symlink —
-    pnpm's layout, and npm's whenever it cannot hoist — is two packages of one
-    name, and that is refused by the clash check rather than merged the way
-    Node's `realpath` merges it (`tests/link/package_symlink`,
-    `docs/wp21-packages.md` §10d). Both compilers refuse it alike: resolving a
-    symlink needs a call the language does not have.
+  - **A package is its real directory, and a program compiles one copy of
+    it.** One package reached both directly and through a symlink — pnpm's
+    layout, and npm's whenever it cannot hoist — is one package, as it is to
+    Node's resolver, and its own dependencies are looked for beside where it
+    really is (`tests/link/package_symlink`). One package *name* at two real
+    directories — npm's duplicate copies, or two versions of it under two
+    dependencies — is refused at the import that reached the second, naming
+    both directories and both versions: `` Package `hash` is at two places,
+    …/node_modules/hash (1.0.0) and …/node_modules/user/node_modules/hash
+    (2.0.0): Nish compiles one copy of a package per program, so every import
+    of it has to reach the same directory `` (`NL3029`,
+    `tests/link/package_two_dirs`, `docs/wp21-packages.md` §7). A directory
+    no link leads through keeps the spelling the search found it by; one a
+    link leads through is named by its real, absolute path.
   - **Only the `nish` conditions are honoured**, and a subpath is an exact key:
     `default`, `import` and `node` are skipped rather than matched, and the
     `"./*"` pattern form is not read. A target is a string beginning with `./`

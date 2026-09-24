@@ -542,6 +542,19 @@ export const manifestEngineRange = (manifest: string, condition: string): string
 };
 
 /**
+ * The manifest's `version`, unquoted when it is a string and as written when
+ * it is not, or `""` when it declares none. A diagnostic that names two copies
+ * of one package tells them apart by it.
+ */
+export const manifestVersion = (manifest: string): string => {
+  const raw = manifestField(manifest, "version");
+  if (raw.length >= 2 && raw.charCodeAt(0) === QUOTE) {
+    return raw.substring(1, raw.length - 1);
+  }
+  return raw;
+};
+
+/**
  * The run of digits of `text` at `at` as a number, and the index after it
  * through `next`, a one-element array because the language has no tuple. -1
  * when there is no digit, or more than nine: a version component that does not
