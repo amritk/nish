@@ -16,19 +16,21 @@
 //      per source module. An imported function appears as a `declare` carrying
 //      exactly the attributes its exporter's `define` does.
 //
-// **Module identity is the absolute path; the name is the first spelling.**
-// `byPath` keys a module on `identityOf` its path: made absolute against the
-// working directory and lexically normalised, so `./types.ts`, `types.ts` and
-// `/abs/types.ts` are one file and load once. The working directory is read
-// for that key and for nothing else. A module's *name* — its IR header, its
-// output stem, the file its diagnostics cite — is the path it was first
-// loaded under, and an import's name is its specifier resolved against the
-// *name the importer was given*, so no emitted byte moves with the directory
-// the compiler was run from. That is what D4 still means here: the driver
-// asks the platform one question it needs to tell two spellings apart, and
-// its output depends only on the command line. For an entry named
-// relatively, which is how every caller names it, the names are the
-// cwd-relative ones stage0 printed, which is what lets the IR headers match.
+// **Module identity is the real path; the name is the first spelling.**
+// `byPath` keys a module on `identityOf` its path: the file the operating
+// system opens under that spelling, with every symbolic link resolved, as
+// Node's resolver and `tsc` (`preserveSymlinks: false`) both answer it. So
+// `./types.ts`, `types.ts`, `/abs/types.ts` and `link/types.ts` are one file
+// and load once, while `far/../types.ts` is whatever file `far/..` really
+// leads to. A module's *name* — its IR header, its output stem, the file its
+// diagnostics cite — is the path it was first loaded under, and an import's
+// name is its specifier resolved against the *name the importer was given*,
+// so no emitted byte moves with the directory the compiler was run from.
+// That is what D4 still means here: the driver asks the platform one question
+// it needs to tell two spellings apart, and its output depends only on the
+// command line. For an entry named relatively, which is how every caller
+// names it, the names are the cwd-relative ones stage0 printed, which is what
+// lets the IR headers match.
 //
 // **The name is a second string, and it is the one in the IR.** For a module
 // reached by a path the name is that path as it was first spelled. A module
@@ -81,6 +83,7 @@ import {
   manifestEngineCheck,
   manifestEngineRange,
   manifestMalformedAt,
+  manifestVersion,
   nishExportEntry,
 } from "./manifest";
 import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
@@ -127,6 +130,28 @@ export interface ResolvedModule {
   name: string;
   packageName: string;
   error: string;
+}
+
+/**
+ * Where one package of the program is: the directory its manifest was read
+ * from, as the resolver spelled it, the real directory that is its identity,
+ * and the manifest's version, which is what a reader tells two copies apart by.
+ */
+export class PackageCopy {
+  name: string;
+  dir: string;
+  realDir: string;
+  /** The directory its modules are named under: `dir`, or `realDir` spelled like it when a link is in the way. */
+  namedDir: string;
+  version: string;
+
+  constructor(name: string, dir: string, realDir: string, namedDir: string, version: string) {
+    this.name = name;
+    this.dir = dir;
+    this.realDir = realDir;
+    this.namedDir = namedDir;
+    this.version = version;
+  }
 }
 
 /** One source module: its identity, its tree, and the checker that owns it. */
@@ -210,18 +235,25 @@ export class Compilation {
   /** `identityOf` a module's resolved path -> index into `modules`. */
   byPath: StringMap;
   /**
+   * Package name -> index into `packageCopies`: the one directory each package
+   * of the program is compiled from, so a second directory for a name already
+   * seen is refused rather than compiled as a second copy (#198).
+   */
+  packageIndex: StringMap;
+  packageCopies: PackageCopy[];
+  /**
    * The working directory as an absolute path, or `""` when it cannot be
-   * resolved. It exists for `identityOf` alone: a module's *name* never reads
-   * it, so no output path, header or diagnostic moves with the directory the
-   * compiler was run from (WP19 §A3).
+   * resolved. It is read for two things: `identityOf`'s fallback, and
+   * spelling a linked package's real directory the way the walk that found
+   * it was spelled — relative, when the program was named relatively
+   * (`resolveBareSpecifier`). No other name reads it, so no output path,
+   * header or diagnostic of a program without links moves with the directory
+   * the compiler was run from (WP19 §A3).
    *
-   * When it is `""` the compile still goes ahead, because nothing it writes
-   * depends on the directory, but `identityOf` can only normalise: `./types.ts`
-   * and `types.ts` still meet, while an absolute spelling and a relative one
-   * of the same file are two modules again, as every two spellings were
-   * before identity was keyed this way. No diagnostic says so: the program
-   * that compiled before still compiles, and only one spelling of a file
-   * passed as a root beside an import of it can be refused.
+   * The fallback is for a path `realpathSync` cannot answer, which is a file
+   * that is not there — and loading one fails whatever it is keyed on. When
+   * this is `""` as well the key is the spelling normalised, which still
+   * makes `./types.ts` and `types.ts` meet.
    */
   workingDir: string;
   /**
@@ -265,6 +297,8 @@ export class Compilation {
     this.runtime = new RuntimeTable();
     this.modules = [];
     this.byPath = new StringMap();
+    this.packageIndex = new StringMap();
+    this.packageCopies = [];
     const cwd = realpathSync(".");
     this.workingDir = cwd === null ? "" : cwd;
     this.unreadableRoot = "";
@@ -288,28 +322,51 @@ export class Compilation {
    * Comparing directories rather than names is what stops a compiler invoked
    * on a file that is itself inside `node_modules/<pkg>` from treating its own
    * entry as one of its dependencies.
+   *
+   * A path with no `node_modules/<name>` in it may still be inside a package:
+   * one reached through a link is named by its real directory, which a
+   * workspace keeps anywhere (`node_modules/foo -> ../packages/foo`). So such
+   * a path is first looked for under the real directory of every package the
+   * program has resolved, the deepest first, and only when none holds it is
+   * it the root package's. Without that, a linked package's own relative
+   * imports joined the root package and clashed with it.
    */
   packageOf(modulePath: string): string {
-    if (packageDirOf(modulePath) === this.rootPackageDir) {
-      return ROOT_PACKAGE;
+    const dir = packageDirOf(modulePath);
+    if (dir.length > 0) {
+      return dir === this.rootPackageDir ? ROOT_PACKAGE : packageNameOf(modulePath);
     }
-    return packageNameOf(modulePath);
+    let found = ROOT_PACKAGE;
+    let depth = 0;
+    for (const copy of this.packageCopies) {
+      if (copy.namedDir.length > depth && modulePath.startsWith(`${copy.namedDir}/`)) {
+        found = copy.name;
+        depth = copy.namedDir.length;
+      }
+    }
+    return found;
   }
 
   /**
-   * Which file `path` is, as the key `byPath` files a module under: the path
-   * made absolute against the working directory and normalised. A command line
-   * may name a file `./types.ts` or by its absolute path while an import of it
-   * resolves to `types.ts`, and keyed on the spelling those were two modules
-   * of one file, which then clashed with themselves (NL3028) or emitted one
-   * `.ll` twice. The first spelling to load stays the module's path and name.
+   * Which file `path` is, as the key `byPath` files a module under: its real
+   * path, every symbolic link on the way resolved, exactly as Node and `tsc`
+   * (`preserveSymlinks: false`) identify a module. A command line may name a
+   * file `./types.ts`, by its absolute path, or through a linked directory,
+   * while an import of it resolves to `types.ts`; keyed on the spelling those
+   * were two modules of one file, which then clashed with themselves (NL3028)
+   * or emitted one `.ll` twice (#198). The first spelling to load stays the
+   * module's path and name.
    *
-   * Lexical rather than `realpathSync`, so a file reached through two symbolic
-   * links is still two modules: whether a package's identity is its real
-   * directory is WP21 S3's open question (`resolveSpecifier`), not this one.
+   * `path` is handed over as spelled rather than normalised first, because
+   * normalising is lexical and a link is not: with `far` a link to
+   * `elsewhere/inner`, `far/../types.ts` opens `elsewhere/types.ts`, and
+   * collapsing it to `types.ts` would make a second file the first one and
+   * skip it. A path `realpathSync` cannot answer is a file that is not there,
+   * whose load fails whatever it is keyed on, so it keeps the lexical key.
    */
   identityOf(path: string): string {
-    return resolvePath(this.workingDir, path);
+    const real = realpathSync(path);
+    return real === null ? resolvePath(this.workingDir, path) : real;
   }
 
   /**
@@ -335,7 +392,8 @@ export class Compilation {
    * the clash `packages.ts` exists to prevent.
    */
   load(path: string, name: string, packageOverride: string): boolean {
-    const at = this.byPath.get(this.identityOf(path), -1);
+    const identity = this.identityOf(path);
+    const at = this.byPath.get(identity, -1);
     if (at >= 0) {
       return true;
     }
@@ -382,7 +440,7 @@ export class Compilation {
       packageName
     );
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName);
-    this.byPath.set(this.identityOf(path), this.modules.length);
+    this.byPath.set(identity, this.modules.length);
     this.modules.push(unit);
 
     // Phase 0 before pass 1, so what is forbidden by design is refused before
@@ -533,10 +591,22 @@ export class Compilation {
       failed.error = `Cannot find package \`${specifier}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
       return failed;
     }
-    const packageDir = this.findPackageDir(dir, parsed.name);
-    if (packageDir === null) {
+    const foundDir = this.findPackageDir(dir, parsed.name);
+    if (foundDir === null) {
       failed.error = `Cannot find package \`${parsed.name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
       return failed;
+    }
+    // A package is its real directory, as it is to Node's resolver, so one
+    // package reached through links (pnpm's layout) is one package, and its
+    // own dependencies are looked for beside where it really is. The spelling
+    // the walk found is kept unless a link is in the way, so a program with no
+    // links names every module as before; through a link the real directory
+    // is spelled the way the walk was, relative to the working directory when
+    // that was relative, so a name never carries where the checkout sits.
+    const identity = this.identityOf(foundDir);
+    let packageDir = foundDir;
+    if (this.workingDir.length > 0 && identity !== resolvePath(this.workingDir, foundDir)) {
+      packageDir = foundDir.startsWith("/") ? identity : relativePath(this.workingDir, identity);
     }
     const manifestPath = joinPath([packageDir, "package.json"]);
     const manifest = readFileSyncOrNull(manifestPath);
@@ -547,6 +617,20 @@ export class Compilation {
     // same route as a manifest with nothing in it for us, which is the honest
     // answer: this compiler found no Nish entry point in that package.
     const text = manifest === null ? "" : manifest;
+    // One package name at two real directories is two copies of it (npm's
+    // duplicates, or §7's diamond), and a program compiles one copy of a
+    // package: refused in words, where it used to be refused by accident as a
+    // symbol clash between the copies.
+    const version = manifestVersion(text);
+    const seen = this.packageIndex.get(parsed.name, -1);
+    if (seen < 0) {
+      this.packageIndex.set(parsed.name, this.packageCopies.length);
+      this.packageCopies.push(new PackageCopy(parsed.name, foundDir, identity, packageDir, version));
+    } else if (this.packageCopies[seen].realDir !== identity) {
+      const first = this.packageCopies[seen];
+      failed.error = `Package \`${parsed.name}\` is at two places, ${first.dir} (${describeVersion(first.version)}) and ${foundDir} (${describeVersion(version)}): ${LANGUAGE} compiles one copy of a package per program, so every import of it has to reach the same directory`;
+      return failed;
+    }
     // The floor is checked before the entry point, and whether or not there is
     // one: a package that names a newer compiler has said this one should not
     // be trusted with its source, and a file that happens to resolve does not
@@ -610,26 +694,13 @@ export class Compilation {
     // own mistake and not the consumer's — but it is still a module that could
     // not be found, so the caller reports it as one.
     //
-    // The path is joined, never resolved through a symlink, so one package
-    // reached through two links is two modules and the WP21 S1 clash check
-    // refuses the program. Node's resolver realpaths and gets one, which is why
-    // pnpm's store resolves there and not here.
-    //
-    // The language *does* have `realpathSync` now, and the driver's own
-    // `packageRoot()` calls it (WP19 §5a item 4) — so what keeps this joined is
-    // no longer a missing builtin but an unmade decision: a package's identity
-    // being its real directory and a package's identity coming from its manifest
-    // answer WP21 §7's diamond differently, and they are one question.
-    // TODO(WP21 S3): close it on both sides, and decide that question rather
-    // than implying it with a `realpath` here. `tests/link/package_symlink` is
-    // the declared case and `docs/wp21-packages.md` §10d states it.
-    //
     // The name is the path, unlike the standard library's: the walk that found
     // this package started at the importing module's own name and never left
     // the program being compiled, so the answer already says as much about the
     // compiler's install as the importer's own name does, which is nothing
     // (§A7's third bullet is about the compiler's package root, and this walk
-    // does not use it).
+    // does not use it). Through a link it is under the real directory, spelled
+    // as above.
     const resolvedPath = joinPath([packageDir, target]);
     const resolved: ResolvedModule = {
       path: resolvedPath,
@@ -1107,18 +1178,20 @@ export class Compilation {
   /**
    * The file stem per module: its basename normally, and — when two modules
    * share one — its path relative to the entry's directory with the separators
-   * turned into `_`, so `-o <dir>/` never overwrites a module.
+   * turned into `_`. Whatever that still leaves shared, a later module takes
+   * the first free `<stem>_<n>` from 2 up, so `-o <dir>/` never writes two
+   * modules to one file.
    *
    * **The path, deliberately, and not the name.** A package module's name is
    * package-relative now, so stemming from it would make `std/text.ts` answer
    * `std_text` under every install instead of climbing out to wherever the
    * compiler sits — which is the better answer and is *not* this change: the
-   * fallback drops every `.` and `..` segment before joining, on both sides,
-   * so it already collapses two modules onto one stem and silently writes one
-   * `.ll` for them (`tests/link/module_stem_clash`,
-   * `docs/wp19-stage0-retirement.md` §5a item 5). Moving what it reads and
-   * what it drops in one change would move two things at once over live
-   * output stems; the name is this change and the stem is that one.
+   * fallback drops every `.` and `..` segment before joining, on both sides.
+   *
+   * **Why a counter is needed at all.** That drop is lossy, so two modules
+   * whose paths differ only by a climb, or by a link followed by `..`
+   * (`identityOf`), meet on one stem, and the second used to overwrite the
+   * first silently (`docs/wp19-stage0-retirement.md` §5a item 5, #198).
    */
   outputStems(): string[] {
     const counts = new StringMap();
@@ -1127,25 +1200,39 @@ export class Compilation {
       counts.set(base, counts.get(base, 0) + 1);
     }
     const root = dirname(this.entry().path);
+    const taken = new StringSet();
     const stems: string[] = [];
     for (const unit of this.modules) {
       const base = basenameWithout(unit.path, ".ts");
-      if (counts.get(base, 0) === 1) {
-        stems.push(base);
-        continue;
+      const stem = counts.get(base, 0) === 1 ? base : pathStem(root, unit.path);
+      let free = stem;
+      let n = 2;
+      while (taken.has(free)) {
+        free = `${stem}_${n}`;
+        n = n + 1;
       }
-      const parts: string[] = [];
-      for (const segment of splitByte(relativePath(root, unit.path), SLASH)) {
-        if (segment !== "." && segment !== "..") {
-          parts.push(segment);
-        }
-      }
-      const joined = parts.join("_");
-      stems.push(joined.endsWith(".ts") ? joined.substring(0, joined.length - 3) : joined);
+      taken.add(free);
+      stems.push(free);
     }
     return stems;
   }
 }
+
+/**
+ * `path` relative to `root`, with every `.` and `..` segment dropped and the
+ * rest joined with `_`: the stem of a module whose basename another module
+ * shares (`Compilation.outputStems`).
+ */
+const pathStem = (root: string, path: string): string => {
+  const parts: string[] = [];
+  for (const segment of splitByte(relativePath(root, path), SLASH)) {
+    if (segment !== "." && segment !== "..") {
+      parts.push(segment);
+    }
+  }
+  const joined = parts.join("_");
+  return joined.endsWith(".ts") ? joined.substring(0, joined.length - 3) : joined;
+};
 
 /**
  * The directory above `dir`, or `""` when there is none left to visit — and the
@@ -1188,6 +1275,9 @@ const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? s
 
 /** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
 const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0;
+
+/** How a diagnostic names a package copy's version: a manifest may declare none. */
+const describeVersion = (version: string): string => version.length > 0 ? version : "no version";
 
 /** How a diagnostic names a package: the program's own has no name to give. */
 const describePackage = (packageName: string): string => packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;

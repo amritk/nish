@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 433;
+export const RULE_COUNT: i32 = 434;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -113,6 +113,8 @@ export const diagnosticRules = (): string[] => [
   "NL2128",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
   "NL2123",
+  " compiles one copy of a package per program, so every import of it has to reach the same directory",
+  "NL3029",
   "; if (r.isErr()) { ... }`), propagate it with `.orReturn()`, or end on it with `.expect(message)`",
   "NL2025",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",

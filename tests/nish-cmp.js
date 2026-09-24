@@ -787,6 +787,48 @@ const DECLARED = [
     changelog: "Refuse two same-named classes or interfaces in one package",
     why: "a new program: `class_dollar_name` in the other load order, which the reference compiler compiles and HEAD refuses for the `$` in the name it was written with",
   },
+  {
+    program: "tests/link/package_symlink/main.ts",
+    file: "exit",
+    changelog: "Module and package identity is the real path",
+    why: "pnpm's layout, one package reached through a symlink, which the reference compiler loads as two copies and refuses as a clash on `val`, and HEAD compiles as one package (#198)",
+  },
+  {
+    program: "tests/link/identity_symlink_cwd/main.ts",
+    file: "exit",
+    changelog: "Module and package identity is the real path",
+    why: "a new program: one file named as a root through a linked directory beside an import of it, which the reference compiler loads as two modules and refuses as a duplicate export, and HEAD loads once (#198)",
+  },
+  {
+    program: "tests/link/identity_symlink_dotdot/main.ts",
+    file: "types.ll",
+    changelog: "Module and package identity is the real path",
+    why: "a new program: `types.ts` and `far/../types.ts` are two files whose stems meet, and the reference compiler writes the second over the first, so its `types.ll` is the root's where HEAD's is the import's (#198)",
+  },
+  {
+    program: "tests/link/identity_symlink_dotdot/main.ts",
+    file: "types_2.ll",
+    changelog: "Module and package identity is the real path",
+    why: "the same program: HEAD names the second module `types_2.ll` rather than overwriting the first, and the reference compiler writes no such file (#198)",
+  },
+  {
+    program: "tests/link/package_workspace/main.ts",
+    file: "index.ll",
+    changelog: "Module and package identity is the real path",
+    why: "a new program: a workspace link `node_modules/foo -> ../packages/foo`, whose modules HEAD names under the package's real directory, `packages/foo/index.ts`, where the reference compiler names them through the link (#198)",
+  },
+  {
+    program: "tests/link/package_workspace/main.ts",
+    file: "node_modules_foo_helper.ll",
+    changelog: "Module and package identity is the real path",
+    why: "the same program: the reference compiler stems `foo`'s own `helper.ts` from the link's spelling, and HEAD writes it as `packages_foo_helper.ll` (#198)",
+  },
+  {
+    program: "tests/link/package_workspace/main.ts",
+    file: "packages_foo_helper.ll",
+    changelog: "Module and package identity is the real path",
+    why: "the same program: HEAD stems `foo`'s own `helper.ts` from the package's real directory, a file the reference compiler does not write (#198)",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */
