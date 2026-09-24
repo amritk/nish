@@ -808,6 +808,41 @@ const checkEnginesBoundary = (t: Suite, cli: Cli): void => {
   );
 };
 
+/**
+ * Module and package identity is the real path (#198). One package name at two
+ * real directories is refused at the import that reached the second, with a
+ * code of its own (NL3029), rather than compiled as two copies that then clash
+ * on a symbol. And two modules whose output stems meet — `types.ts` and
+ * `far/../types.ts`, with `far` a link elsewhere, are two files — are written
+ * to two files: the second takes `types_2.ll` instead of overwriting the first.
+ */
+const checkIdentity198 = (t: Suite, cli: Cli): void => {
+  const twoDirs = "package_two_dirs";
+  const run = cli.plain(twoDirs, [`tests/link/${twoDirs}/main.ts`, "--json", "-o", `${WORK}/${twoDirs}/`]);
+  if (t.eqI32(`${twoDirs}: one package at two directories is refused`, run.status, 1)) {
+    const objects = cliObjectLines(run.stdout);
+    if (t.eqI32(`${twoDirs}: as one object`, toI32(objects.length), 1)) {
+      t.eqStr(`${twoDirs}: whose code names the cause`, cliField(objects[0], "code"), "NL3029");
+      t.eqStr(
+        `${twoDirs}: at the import that reached the second copy`,
+        cliField(objects[0], "file"),
+        `tests/link/${twoDirs}/node_modules/user/index.ts`
+      );
+    }
+  }
+
+  const out = `${WORK}/identity_dotdot`;
+  // A `types.ll` left by an earlier run would let one write look like two.
+  spawnSyncTo(["rm", "-rf", out], `${WORK}/rm.out`, `${WORK}/rm.err`);
+  const fixture = "tests/link/identity_symlink_dotdot";
+  const dotdot = cli.plain("identity_dotdot", [`${fixture}/main.ts`, `${fixture}/far/../types.ts`, "-o", `${out}/`]);
+  if (!t.eqI32("a link followed by `..` is a second module, and compiles", dotdot.status, 0)) {
+    return;
+  }
+  t.contains("the imported `types.ts` keeps its stem", readOrEmpty(`${out}/types.ll`), "@seven(");
+  t.contains("and the root it shares a stem with is written beside it", readOrEmpty(`${out}/types_2.ll`), "@eleven(");
+};
+
 export const main = (): number => {
   const spec = process.argv.length > 1 ? process.argv[1] : DEFAULT_CLI;
   mkdirSync("build");
@@ -836,6 +871,7 @@ export const main = (): number => {
   checkPackageBoundary(t, cli);
   checkEnginesBoundary(t, cli);
   checkSymbolClashes(t, cli);
+  checkIdentity198(t, cli);
 
   return t.done();
 };
