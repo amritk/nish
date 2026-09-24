@@ -846,14 +846,17 @@ export class Compilation {
               at.end,
               `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
             );
-          } else if (info.instance === null) {
+          } else if (info.instance === null && seen >= 0 && seen < ownerPaths.length) {
+            // `seen` indexes all three parallel arrays; the range test, and
+            // reading the path before any call, let the prover drop the check.
+            const first = ownerPaths[seen];
             const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
             const at = info.decl.children[0];
             this.sink.report(
               unit.source,
               at.start,
               at.end,
-              `${what} \`${this.table.typeName(info.type)}\` is also declared in ${ownerPaths[seen]}; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone`
+              `${what} \`${this.table.typeName(info.type)}\` is also declared in ${first}; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone`
             );
             clashed.add(info.name);
           }
