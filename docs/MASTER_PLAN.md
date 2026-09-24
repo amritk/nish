@@ -756,8 +756,9 @@ their own; releasing what they built is part of M4.
 
 ### What remains
 
-**1.0 is the frozen reference and a tag, and nothing else stands in front of
-it.** [LANGUAGE.md](LANGUAGE.md) is frozen and says so at its head, with the
+**1.0 is the frozen reference and a tag, and nothing else has to stand in
+front of it** (the one open question, WP22 stage D below, can wait for a
+major). [LANGUAGE.md](LANGUAGE.md) is frozen and says so at its head, with the
 rule for what a 1.x release may change: add a rule or turn a refusal into an
 acceptance in a minor; withdraw or narrow an accepted construct, or change what
 one means, only in a major. The tag is not a number the changelog generator
@@ -808,6 +809,13 @@ in a loop across the whole of `self/`, each with a rewrite the warning names,
 which is not a language feature's worth of them
 ([wp15-performance.md](wp15-performance.md) §2.4).
 
+**One question is still open for 1.0: WP22 stage D.**
+[wp22-arrow-functions.md](wp22-arrow-functions.md) made arrows the declaration
+form and `self/` is arrows, and stage D would reject a `function` definition.
+That withdraws an accepted construct, so under the freeze it either lands
+before 1.0.0 or waits for a major. Whether it happens at all is still wp22
+§10's open question.
+
 #### 1.1
 
 1. **The data-parallel call** — [wp29-thread-surface.md](wp29-thread-surface.md)
@@ -839,10 +847,6 @@ which is not a language feature's worth of them
 
 #### Settled, with the note that settles it
 
-- **`function` stays legal through 1.x.** [wp22-arrow-functions.md](wp22-arrow-functions.md)
-  made arrows the declaration form and `self/` is arrows, but stage D, which
-  rejects a `function` definition, did not land before the freeze. Under the
-  rule above it withdraws an accepted construct, so it waits for a major.
 - **`async`/`await` is refused** ([wp24-async.md](wp24-async.md)): there is
   nothing in either runtime to wait for. The one item it recommended,
   `--emit-napi-async`, is built.
