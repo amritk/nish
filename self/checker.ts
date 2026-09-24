@@ -143,10 +143,10 @@ export class Checker {
         // function templates and the member loop below skips it: its members
         // are collected once per instantiation instead.
         const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE;
+        const what = kind === STRUCT_CLASS ? "class" : "interface";
         // Nothing is declared for a refused `integer`: the name is refused as a
         // type wherever it is written, whatever the module declares.
-        const what = kind === STRUCT_CLASS ? "a class" : "an interface";
-        if (rejectRangedIntegerName(this.ctx, stmt.children[0].text, what, stmt.children[0])) {
+        if (rejectRangedIntegerName(this.ctx, stmt.children[0], what)) {
           continue;
         }
         if (isGenericStruct(stmt)) {
@@ -158,7 +158,7 @@ export class Checker {
           // template's name is held to holds here too. The struct is declared
           // all the same, so that an annotation naming it does not add a
           // second diagnostic to the first.
-          rejectDollarInSymbolName(this.ctx, stmt.children[0].text, kind === STRUCT_CLASS ? "class" : "interface", stmt.children[0]);
+          rejectDollarInSymbolName(this.ctx, stmt.children[0].text, what, stmt.children[0]);
           const info = declareStruct(this.ctx, stmt, kind);
           if (info !== null) {
             declared.push(info);
@@ -382,7 +382,7 @@ export class Checker {
 
   /** One `function` declaration: its signature, its name, and `main`. */
   collectFunction(stmt: Node): void {
-    if (rejectRangedIntegerName(this.ctx, stmt.children[0].text, "a function", stmt.children[0])) {
+    if (rejectRangedIntegerName(this.ctx, stmt.children[0], "function")) {
       return;
     }
     if (isGenericFunction(stmt)) {

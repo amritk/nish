@@ -47,13 +47,6 @@ import {
   R_UNKNOWN,
 } from "./types";
 
-/**
- * The name ranged integers will be spelled with, `integer<Lo, Hi>`
- * (docs/wp31-ranged-integers.md §3). The feature is not built yet; the name is
- * held now so that building it later takes nothing a program already declared.
- */
-export const RANGED_INTEGER: string = "integer";
-
 const SUPPORTED_REFERENCES: string =
   "(supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)";
 const SUPPORTED_TYPES: string =
@@ -225,9 +218,11 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     return resolveResult(node, args, argc, ctx);
   }
 
-  // Before every declared name and type parameter, so that `integer` never
-  // means something a later release would have to take back.
-  if (name === RANGED_INTEGER) {
+  // `integer<Lo, Hi>` is the spelling ranged integers will take
+  // (docs/wp31-ranged-integers.md §3). It is refused before every declared
+  // name and type parameter, so that `integer` never means something a later
+  // release would have to take back.
+  if (name === "integer") {
     return ctx.errorType(node, "`integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet");
   }
 
@@ -419,7 +414,7 @@ const resolveNullableUnion = (node: Node, ctx: CheckContext): i32 => {
  * syntax, and `i32` or `Result` before any declared name is consulted, so an
  * alias under one of these names would simply never be looked at -- silently,
  * which is the part worth refusing. `integer` is on the list before it is a
- * type (`RANGED_INTEGER`), so that it is never taken in the meantime.
+ * type (ranged integers, WP31), so that it is never taken in the meantime.
  */
 export const builtinTypeName = (name: string): boolean => {
   if (scalarNamed(name, NUMBER_MODE_I32) >= 0) {
@@ -436,7 +431,7 @@ export const builtinTypeName = (name: string): boolean => {
     name === "Array" ||
     name === "ReadonlyArray" ||
     name === "Result" ||
-    name === RANGED_INTEGER
+    name === "integer"
   );
 };
 
@@ -444,18 +439,18 @@ export const builtinTypeName = (name: string): boolean => {
  * A class, interface or function named `integer`. An alias or an enum of that
  * name is refused by `builtinTypeName`; these three are refused here, because
  * `integer<0, 255>` would otherwise mean two things in a module that declared
- * one. `what` carries its article ("a class", "an interface").
- *
- * The declaration is the statement being reported on, so a poisoned flag left
- * by the one before it is cleared first; otherwise a class written after
- * another rejected one would be dropped with no word said.
+ * one. The flag a previous rejected declaration left is cleared first, or
+ * this refusal would be dropped with no word said.
  */
-export const rejectRangedIntegerName = (ctx: CheckContext, name: string, what: string, node: Node): boolean => {
-  if (name !== RANGED_INTEGER) {
+export const rejectRangedIntegerName = (ctx: CheckContext, nameNode: Node, what: string): boolean => {
+  if (nameNode.text !== "integer") {
     return false;
   }
   ctx.errored = false;
-  ctx.error(node, `\`integer\` is reserved for ranged integers (\`integer<Lo, Hi>\`) and cannot be declared as ${what}`);
+  ctx.error(
+    nameNode,
+    `\`integer\` is reserved for ranged integers (\`integer<Lo, Hi>\`) and cannot be declared as ${what === "interface" ? "an" : "a"} ${what}`
+  );
   return true;
 };
 
