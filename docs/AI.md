@@ -193,6 +193,22 @@ const good = (a: i32, b: i64): i64 => {
 };
 ```
 
+**`integer` is reserved, not a type.** It is held for ranged integers
+(`integer<Lo, Hi>`), which the compiler does not build yet, so writing it as a
+type is refused. Declaring a type alias, enum, class, interface or function
+named `integer` is refused too. Use `i32`. A value named `integer` (a local
+or a module constant) is fine.
+
+```ts nish:err NL2333
+const clamp = (x: integer): i32 => x;
+```
+
+```ts nish:err NL2332
+class integer {
+  value: i32 = 0;
+}
+```
+
 ### Numeric literals take their type from the immediate context
 
 A literal is the mode's default (`i32`, or `f64` in f64 mode) **unless its
