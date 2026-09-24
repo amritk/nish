@@ -358,14 +358,20 @@ malformed ones the lexer oracle cannot judge. On a source whose literals are
 long rather than short the quadratic shows its real size: 400 KB of literal
 text cost 408 MB and 392 ms to lex, and now cost 2.4 MB and 10 ms.
 
-**D3's hazard did not fire.** Module identity is the specifier resolved against
+**D3's hazard did not fire.** A module's *name* is the specifier resolved against
 the name the importer was given, so it stays relative and needs no working
 directory (`self/paths.ts`'s `resolveModule`, and `relativePath` for the output
 stems, both checked against `node:path` by the support oracle). stage0 resolves
 against `process.cwd()` and prints a cwd-relative name; for an entry named
 relatively the two agree string for string, which is why the module headers
 match and the whole-program comparison is byte for byte rather than
-normalised.
+normalised. A module's *identity*, the key it is loaded once under, was that
+same string until #197, and a root spelled `./types.ts` or by its absolute
+path beside an import resolving to `types.ts` then loaded one file twice —
+D3's hazard, reached through the command line rather than through `..`. It is
+now the path made absolute against the working directory and lexically
+normalised (`Compilation.identityOf`); the working directory is read for that
+key alone, so the name, and every byte written, still does not depend on it.
 
 The `tests/self/ir_oracle.js` corpus grew with the driver: it now compiles
 **whole programs** rather than single modules, `tests/link/` included, and

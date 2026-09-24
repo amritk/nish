@@ -16,21 +16,28 @@
 //      per source module. An imported function appears as a `declare` carrying
 //      exactly the attributes its exporter's `define` does.
 //
-// **Module identity is the resolved path, and it stays relative.**
-// `src/compilation.ts` resolves against `process.cwd()` and then prints a
-// cwd-relative name; stage1 has no working directory (D4), so a module's
-// identity is its specifier resolved against the *name the importer was given*.
-// For an entry named relatively — which is how every caller names it — the two
-// agree string for string, which is what lets the IR headers match.
+// **Module identity is the absolute path; the name is the first spelling.**
+// `byPath` keys a module on `identityOf` its path: made absolute against the
+// working directory and lexically normalised, so `./types.ts`, `types.ts` and
+// `/abs/types.ts` are one file and load once. The working directory is read
+// for that key and for nothing else. A module's *name* — its IR header, its
+// output stem, the file its diagnostics cite — is the path it was first
+// loaded under, and an import's name is its specifier resolved against the
+// *name the importer was given*, so no emitted byte moves with the directory
+// the compiler was run from. That is what D4 still means here: the driver
+// asks the platform one question it needs to tell two spellings apart, and
+// its output depends only on the command line. For an entry named
+// relatively, which is how every caller names it, the names are the
+// cwd-relative ones stage0 printed, which is what lets the IR headers match.
 //
-// **The name is a second string, and it is the one in the IR.** For every
-// module reached by a path the two are equal, and this driver carries them
-// apart for the one kind that is not: a module reached by a *package*
-// specifier is found through the compiler's own package root — `<dir of
-// argv[0]>/..` — and is therefore named by how the compiler was invoked rather
-// than by anything about the program (WP19 §A7's third bullet). Its identity
-// stays the path, because a file still has to be opened; its name is its path
-// inside the package, which is what stage0 has always written.
+// **The name is a second string, and it is the one in the IR.** For a module
+// reached by a path the name is that path as it was first spelled. A module
+// reached by a *package* specifier is found through the compiler's own
+// package root — `<dir of argv[0]>/..` — so its path depends on how the
+// compiler was invoked rather than on anything about the program (WP19 §A7's
+// third bullet). Its identity is still built from that path, because a file
+// still has to be opened; its name is its path inside the package, which is
+// what stage0 has always written.
 //
 // The one thing this driver does not do is decide where the output goes: it
 // answers with the IR text per module and the stem each module's file should
@@ -207,6 +214,14 @@ export class Compilation {
    * resolved. It exists for `identityOf` alone: a module's *name* never reads
    * it, so no output path, header or diagnostic moves with the directory the
    * compiler was run from (WP19 §A3).
+   *
+   * When it is `""` the compile still goes ahead, because nothing it writes
+   * depends on the directory, but `identityOf` can only normalise: `./types.ts`
+   * and `types.ts` still meet, while an absolute spelling and a relative one
+   * of the same file are two modules again, as every two spellings were
+   * before identity was keyed this way. No diagnostic says so: the program
+   * that compiled before still compiles, and only one spelling of a file
+   * passed as a root beside an import of it can be refused.
    */
   workingDir: string;
   /**

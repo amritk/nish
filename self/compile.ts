@@ -486,8 +486,9 @@ export const main = (): number => {
   compilation.dumpOnly = emitAst;
   let loaded = true;
   for (const root of roots) {
-    // A root is named by the path it was given, which is its identity as
-    // well: only a package specifier makes those two different strings.
+    // A root is named by the path it was given, but its identity is
+    // `identityOf` that path, so a root the entry already imports under
+    // another spelling is found in `byPath` rather than loaded twice.
     if (!compilation.load(root, root, "")) {
       loaded = false;
       break;
