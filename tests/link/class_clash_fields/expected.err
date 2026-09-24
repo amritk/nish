@@ -1,1 +1,1 @@
-lib.ts:3:14: error: Class `Base` is also declared in tests/link/class_clash_fields/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone
+class_clash_fields/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone

@@ -1,1 +1,1 @@
-node_modules/shapes/other.ts:1:7: error: Class `Base` is also declared in tests/link/class_clash_package/node_modules/shapes/index.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone
+class_clash_package/node_modules/shapes/index.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone

@@ -1,1 +1,1 @@
-lib.ts:2:11: error: Interface `Shape` is also declared in tests/link/iface_clash_private/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone
+iface_clash_private/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone
