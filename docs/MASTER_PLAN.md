@@ -747,7 +747,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x, which the run's own analysis reads as spread rather than the program ([BENCHMARKS.md](BENCHMARKS.md), [wp9-optimisation.md](wp9-optimisation.md#summary)). The other three closed: the causes were named rather than guessed, and each section below the gap table says what the measurement was before the change |
-| M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** WP2b has left the milestone rather than been finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)), so what M4 still wants is the frozen reference and the tag |
+| M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **the reference is frozen; the tag is next.** [LANGUAGE.md](LANGUAGE.md) states the freeze at its head. The tag is the Release PR that follows a commit carrying `Release-As: 1.0.0`, once the trailer lands ([#200](https://github.com/amritk/nish/pull/200), pending) — see [What remains](#what-remains). WP2b left the milestone rather than being finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)) |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
 | M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** — R6 ([wp19 §5](wp19-stage0-retirement.md#5-order)) deleted `src/`, the TypeScript compiler that `tsc` built into `dist/`, and with it the `typescript` runtime dependency (it stays a devDependency, for `npm run check` and the lexer and parser oracles), the six oracles that compared stage1 with stage0 (types, diagnostics, symbols, checked, IR, interop), the parity mode and its workflows, and the stage1-only register, which had nothing left to register once every case was stage1's. Each oracle has a successor that runs without stage0: the types, diagnostics, symbols and checked dumps are held to the goldens in `tests/self/goldens/` (`tests/self/goldens.js`), which were written from stage0 while it still existed; the IR and the interop sidecars are held to the `tests/cases/*.ll` goldens and to `tests/nish-cmp.js`, which compares HEAD with the last released compiler. The seed is that release, fetched by `scripts/fetch-seed.sh`, and `self/` is the only compiler. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `self/` to TypeScript: with the `@ts-expect-error` at `self/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
 
@@ -756,19 +756,39 @@ their own; releasing what they built is part of M4.
 
 ### What remains
 
-M4 and WP15 are the road, and they are not sequential with each other. M6 is
-done: R6 deleted stage0 after 0.6.0 was out, which is the release it had to
-wait for, because `nish-cmp` compares against the last release and its
-`cmpSince` is 0.6.0 — the seeds before 0.5.0 ship no `std/`, and 0.5.0 differs
-from HEAD by WP30's deliberate changes (`.github/seed-targets.json`) —
-[wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on) has the
-reasoning as it stood before the deletion. The language reference cannot be frozen while
-items 5, 6 and 8 below are each still going to add or withdraw a rule, so the
-WP15 order *is* the road to 1.0 rather than a detour from it; WP22's
-arrow-function migration and WP23's landing items change the reference too,
-and are the separate road described further down this section. The list is
-[wp15-performance.md](wp15-performance.md) §9, repeated here so that this
-document does not need a second one open beside it to be current:
+**1.0 is the frozen reference and a tag, and nothing else stands in front of
+it.** [LANGUAGE.md](LANGUAGE.md) is frozen and says so at its head, with the
+rule for what a 1.x release may change: add a rule or turn a refusal into an
+acceptance in a minor; withdraw or narrow an accepted construct, or change what
+one means, only in a major. The tag is not a number the changelog generator
+would compute — before 1.0 a break moves the minor, so the commits alone never
+reach 1.0.0 — and so it is chosen: a `Release-As:` trailer read by
+`scripts/changelog-gen.mjs` ([#200](https://github.com/amritk/nish/pull/200),
+pending), then a commit carrying `Release-As: 1.0.0`, then the Release PR,
+which proposes 1.0.0 from then on and is merged by a human.
+
+Two changes went in before the freeze because each would have been a break
+after it:
+
+- **The name `integer` is reserved** ([#201](https://github.com/amritk/nish/pull/201)).
+  A class, interface or function called `integer` is `NL2332`, an alias or
+  enum of that name is refused as `type Result = …` is, and `integer` written
+  as a type is `NL2333`, so ranged integers ([wp31-ranged-integers.md](wp31-ranged-integers.md))
+  can land after 1.0 by turning `NL2333` into the type, and break nothing.
+- **A module is its real path and a package its real directory**
+  ([#202](https://github.com/amritk/nish/pull/202)), as in Node and in `tsc`.
+  That closes [#198](https://github.com/amritk/nish/issues/198) and the identity
+  half of WP21 S3: a symlinked package is one package, and one name at two real
+  directories is `NL3029`, a refusal that identity by manifest could later turn
+  into an acceptance ([wp21-packages.md](wp21-packages.md) §10d).
+
+**The WP15 list is closed for 1.0.** It was the road to the freeze because items
+5, 6 and 8 each added a rule to the reference; all three have landed. What is
+left on it is item 1b's hoist in the emitter, which changes IR and not the
+language. The table stays as the record of what each item was and what it was
+worth; [wp15-performance.md](wp15-performance.md) §9 is the full version, and
+[BENCHMARKS.md](BENCHMARKS.md), regenerated by `node bench/run.mjs`, is the only
+place the numbers are current.
 
 | | Item | Why in this position |
 | ---: | --- | --- |
@@ -779,301 +799,56 @@ document does not need a second one open beside it to be current:
 | 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
-| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
+| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` waited on item 8's generics and is now 1.1's ([wp31-ranged-integers.md](wp31-ranged-integers.md)), and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `self/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `self/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | **done**: generic functions, classes, interfaces and methods, constraints, the whole-program rule and the peripheries (`-g`, the interop sidecars, the fuzzer) have all landed — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 what stays deferred, each with its trigger. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
-An explicit bounds-check opt-out is deferred until 6 has landed and the checks
-that survive it have been counted. Both have happened: seventeen survive in a
-loop across the whole of `self/`, each with a rewrite the warning names, which
-is not a language feature's worth of them, so it stays unbuilt
-([wp15-performance.md](wp15-performance.md) §2.4). What each item is worth is a measurement
-and not a prediction: [BENCHMARKS.md](BENCHMARKS.md), regenerated by
-`node bench/run.mjs`, is the only place the numbers are current, and one of
-its seven programs is outside the 1.10x target today: fib at 1.15x against
-Rust `-O3`, a row the same suite re-measures at 261 ms against Rust's 262 when
-the runs are interleaved, so it is the spread and not the program
-([wp9-optimisation.md](wp9-optimisation.md#summary)). The remaining work on
-that list is therefore worth what it is worth for its own reasons, not because
-a gap table is waiting on it.
+An explicit bounds-check opt-out stays unbuilt: seventeen checks survive item 6
+in a loop across the whole of `self/`, each with a rewrite the warning names,
+which is not a language feature's worth of them
+([wp15-performance.md](wp15-performance.md) §2.4).
 
-Threads are not on that list and not in the waves above. The design question
-"how does Nish do true multithreading, like Go or Rust" has an answer
-that the zero-GC model and the attribute fixpoint force rather than leave
-open — 1:1 OS threads with data races rejected at compile time, not
-goroutines — and [wp20-threads.md](wp20-threads.md) is the plan of record for
-it. Its first stage T0, a thread-local arena behind `--threads`, **has landed**:
-it has no language surface and is a prerequisite for every version of the
-design, so nothing about the freeze argued against it, and with the flag off it
-changed no byte of IR, no golden and no binary — `runtime.c` is 4,670 of its
-4,864-byte `.text*` budget either way. What it costs when a program does ask is
-measured in [wp20-threads.md](wp20-threads.md) §4 T0. The four stages that add
-rules to LANGUAGE.md cannot land before M4 without delaying the freeze, and are
-1.1 scope by default.
+#### 1.1
 
-**The payoff is no longer a prediction, and the partitioner under it is built.**
-wp20 §4 T4 and §7 both said the parallel win should be measured before T1's
-surface was designed, and it has been twice — once on an ad-hoc driver and then
-through `runtime/runtime_parallel.c`, the third translation unit that landed as
-the stage under WP29's surface ([wp20-threads.md](wp20-threads.md) §8). Three
-kernels compiled to the C ABI by the ordinary compiler, one fixed amount of
-work, four physical cores: **3.96x** for a compute kernel, **3.09x** for an
-allocating one, **3.97x** for the same allocating one with its arena recycled.
-That is the largest number left anywhere in this plan — the whole of the WP15
-list above tops out at 2.48x for its one remaining large item and runs to a few
-per cent for the typical one — so T1 and T2 are worth building on a measurement
-and not only on the soundness argument.
+1. **The data-parallel call** — [wp29-thread-surface.md](wp29-thread-surface.md)
+   §4.1's stage P1, `parallelMapInto` and `parallelReduce`, over the
+   partitioner `runtime/runtime_parallel.c` already provides
+   ([wp20-threads.md](wp20-threads.md) §8d). It is first because it is where
+   the largest measured speedup in this plan is — **3.96x** on four cores for a
+   compute kernel, and 3.97x for an allocating one with its arena recycled
+   (wp20 §8), against 2.48x for the largest item left on the WP15 list — and
+   because it is the one threads stage that needs no handle, no join proof and
+   no capture analysis (wp29 §8). It brings
+   [wp23-language-surface.md](wp23-language-surface.md) §6's compile-time
+   function parameter with it, for a callee the checker can name and no other
+   kind (wp29 §6). The scope and the lock (wp29 P2 and P3) follow it in wp29's
+   order.
+2. **Ranged integers**, [wp31-ranged-integers.md](wp31-ranged-integers.md) W1 to
+   W4, none of them breaking now that the name is reserved.
 
-The second finding is that **arena discipline and cores are independent
-multipliers and a program gets the product**: recycling the arena is worth
-about 3x of wall clock on its own and three orders of magnitude of peak
-resident memory (1.37 GiB against 1.8 MB for the same source), so the best
-configuration beats the naive one by **12x**, of which about 3x is the body.
-Fix the body first, then add threads — not because threads stop working on an
-allocating body, but because three of those twelve times are free. So a
-`parallelFor` wants an arena story beside its partitioning story; the
-per-thread arena teardown turns out to exist already and needed no new runtime
-entry point; and `--threads` should become implied by the language surface
-rather than requested beside it, because a program that never spawns should not
-pay the 1.10x–1.22x it costs to be able to.
+#### After 1.0, additive and unscheduled
 
-wp20 §8b is a correction kept visible rather than folded in: an earlier draft
-of that section reported the recycled kernel at 1.86x, argued that an
-allocating body's scaling collapses, and blamed part of it on arena chunk
-churn. Re-measured through the real entry point the kernel scales 3.97x, the
-chunk-churn sweep is flat, and the limiter was the prototype's own driver — its
-scaling curve was non-monotonic, which should have been read as a signal at the
-time. A prototype's scaffolding is part of what it measures. **Threads are also now sequenced ahead of WP28's compat
-`async`**, which is notation over this engine rather than an engine of its own;
-that decision is recorded in both notes.
+- **WP21 S3's last two items**: a builtin the target has no runtime for, and a
+  compile error attributed to a dependency rather than to its consumer. Each
+  is a diagnostic for a program that already fails, so neither withdraws
+  anything. S4's build cache and S5's prebuilt distribution follow them
+  ([wp21-packages.md](wp21-packages.md) §8).
+- **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
+  proposed and unbuilt. It may only add acceptance, behind a flag, and strict
+  does not grow, so it fits a minor.
 
-**What the surface is** has its own note now, because the answer is decided by
-a constraint none of the reference languages have:
-[wp29-thread-surface.md](wp29-thread-surface.md). A Nish program must be legal
-TypeScript, and TypeScript will not give us a new keyword — so `go f()`,
-`spawn { }` and `parallel for` are all unsayable, and every construct has to be
-a call. The exception is *lifetime*: `using` (TS 5.2) is the one block-scoped
-deterministic-cleanup form the language has, and a scoped thread group is
-exactly a block-scoped lifetime. So the proposal is Rust's scoped threads
-spelled `using`, a `Mutex<T>` that owns the data it protects with a guard the
-block releases, and Rayon-shaped data parallelism — with the whole surface run
-through `tsc --strict` before being proposed rather than after, which it passes
-at `"lib": ["ES2022"]` with no tsconfig change once the shipped declaration
-file carries the disposable protocol itself.
+#### Settled, with the note that settles it
 
-Three results are worth pulling up to this page. **`using` deletes an
-analysis**: wp20 T1's "every handle is joined on every path" becomes a join the
-compiler emits at every block exit, so the rule is not proved and its
-diagnostic is not needed. **Race freedom needs no annotations and no
-detector**: Rust asks for `Send`/`Sync` bounds and Go ships a runtime detector,
-while the fixpoint in `self/attributes.ts` already proves `readnone` and
-`readonly` whole-program, so a parallel body it cannot clear is simply a
-compile error. And **the stage order should reverse**: wp20 builds spawn first
-and data parallelism last, but the data-parallel intrinsic is where the whole
-measured payoff is *and* is the only stage that needs no handle, no join proof
-and no capture analysis — because the partition belongs to the intrinsic, so
-disjointness is a property of the call rather than something to prove. The one
-thing the surface needs that does not exist is
-[wp23](wp23-language-surface.md) §6's compile-time function parameter, for a
-body written at the call site, which WP28 §7.4 measured at no run-time cost
-because the callee is statically known.
-
-Packages are not on that list either, and the question "how does one
-Nish package depend on another" turns out to have the same character:
-the answer is forced by whole-program compilation rather than chosen. A
-foreign host — JavaScript on Node, JavaScript in a browser, C — takes a built
-artifact across the ABI, which is what WP8 already generates; an Nish
-consumer takes **source**, compiled as part of its own program, because a
-prebuilt library cannot carry the attribute fixpoint of §3a, cannot contain a
-generic that nobody has instantiated yet, and would have to be built once per
-(number mode × target × profile). An `exports` map states both, one condition
-per consumer. [wp21-packages.md](wp21-packages.md) is the plan of record; it
-is rough, and its one hard blocker was that the symbol namespace was flat —
-two packages with a private `helper()` each could not be compiled together,
-because the whole-program fact table was keyed by symbol name. **That blocker
-is closed**: S1 gave every symbol a package scope (wp21 §9), and because the
-root package's prefix is empty a single-package program emits the IR it always
-did — not one golden moved and no exported name changed. The stage that
-follows is S2, bare specifiers and the `nish` export condition; S1 has no
-language surface and left `docs/LANGUAGE.md` untouched.
-
-The declaration form is not on that list either, and it is the one entry here
-that is pure spelling: **arrow functions become how Nish declares a
-function, and `function` becomes legacy**.
-[wp22-arrow-functions.md](wp22-arrow-functions.md) is the plan of record. The
-change cannot alter a byte of IR — the emitter reads `FunctionSig`s and never
-the declaration's syntax kind — so the golden `.ll` files verify the migration
-instead of being work it creates, and the two checker rules it needs accept an
-arrow without admitting the function values Phase 0 forbids. The order is
-forced by the bootstrap: both compilers had to accept arrows before `self/`
-could be migrated, and `self/` must be arrows before `function` can be rejected.
-Stages A and B are cheap and strictly additive; C and D are 1,401 rewrites for
-no expressiveness, and are worth taking incrementally — new code in arrows, a
-file converted when it is opened for another reason — rather than as a flag day.
-
-The rest of the language surface has no owner either, and a review of the
-corpus for the sentence *the language has no X* turned up eight candidates
-that belong to nobody: [wp23-language-surface.md](wp23-language-surface.md) is
-the plan of record, every row of it is now answered, and its most useful half
-is what it **refuses** — three declined outright (§7 to §9), module-level
-mutable state decided *no* with a concrete revisit trigger, and compile-time
-function parameters *not scheduled* until a second real program asks. Of the
-three that were still proposals, only one is a yes — `Pair<A, B>` in `std/`,
-which WP18 G5 and G7 between them made buildable. It never reaches the M4
-freeze because it adds a *library type* and not a rule, which is also why none
-of the three is on M4's critical path.
-Non-generic `type` aliases and a numeric `enum` have both landed — both were
-pure checker work that changed no byte of IR, the alias because `Int32Array`
-already establishes that an alias is the type it names, the enum because
-`self/` stands 171 module constants in for three of them and nothing stopped
-passing a token kind where a node kind belongs. An enum is a *distinct* type
-with `i32` representation, so `tests/cases/enum_ir` and `enum_expanded` are one
-program written with and without it and their goldens are byte-identical files;
-`self/` does not adopt them until the next minor, by the bootstrap seed policy
-([wp19-stage0-retirement.md](wp19-stage0-retirement.md) G4). Module-level mutable state is
-the one functional gap, since stage1 cannot emit the `--json` object for an
-internal compiler error and orientation rule 7 says every failure is one of
-those objects; the note designs the narrow version — module-private, scalar,
-thread-local by construction — and then argues against building it, because a
-boolean parameter costs seven ugly signatures and no proofs while the first
-writable global costs a symbol in the flat namespace WP21 has to fix and a row
-from WP20's asset table. Pairs and compile-time function parameters are both
-deferred to WP18 rather than given syntax of their own, and `for...of` over a
-string, a string `switch` and `?.` are declined with the argument written out:
-each is refused by a rule the project already accepted, and a plan of record
-that says what it turned down is worth more than one that only says yes.
-
-`async`/`await` is the one question on this page whose plan of record is a
-**refusal**, and [wp24-async.md](wp24-async.md) is that note. The blocker is
-not the lowering, and a coroutine is not a strategy for `async`/`await` but
-what `async`/`await` is — the only choice is who writes the state machine, and
-both answers were measured. A hand-written coroutine in textual IR is split by
-LLVM 18's default pipeline, and when the handle does not escape its caller the
-frame, the allocation and both split functions are elided outright, under the
-condition `self/escape.ts` already computes; rustc, meanwhile, uses none
-of those intrinsics and builds a 20-byte struct with a one-byte state
-discriminant and a `switch`, allocating nothing — which is the shape to copy,
-since a struct and a `switch` are constructs this language already has. The
-blocker is that there is nothing to await. Every I/O call in the
-language is synchronous and there is no socket, timer, sleep or poller in
-the compiler or either runtime, so the first deliverable of an async package
-would be a poller and a socket type rather than a keyword — a larger package
-than the syntax, for a workload nobody has asked for. What an asker usually
-wants is one of two things that already have answers: overlapping work is
-WP20's threads, and "do not block Node's event loop" is a change to the
-generated N-API shim — `napi_create_async_work` plus a promise on the
-JavaScript side, with the Nish function left exactly as synchronous as it
-is — whose entire cost is WP20's T0 thread-local arena. That one item has no
-language surface, was the note's only recommendation to build, and **is now
-built**: `--emit-napi-async` adds a promise-returning `<name>Async` beside every
-export whose arguments and result are scalars, and a 220 ms call that stalled
-Node's event loop for 218 ms now stalls it for 0.36 ms while taking exactly as
-long to compute. The rest is
-declined with the rule each refusal breaks, including the tempting one:
-accepting `async` as an erased no-op keyword would make a program mean
-something different under Node than it does here, in the direction
-[wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
-is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
-waiting on any of it.
-
-The question the async refusal keeps provoking is the one that follows it:
-*could there be a mode that accepts the TypeScript people have already written,
-so that a codebase is ported first and made fast afterwards, one construct at a
-time?* [wp28-compatibility-mode.md](wp28-compatibility-mode.md) is the plan of
-record, and nothing in it is built. Its useful half is the line that decides
-what may enter such a dialect, because the line is not "how hard is this to
-compile" but **can the compiler still name the layout of every value**. If it
-can, the construct costs a *proof* — an attribute the whole-program fixpoint
-was making, an allocation that goes back to the arena — and the cost is
-measurable, local, and reportable through the `performance` class WP15 item 2
-already built, which is why the migration dashboard needs no new machinery. If
-it cannot — `any`, a property nobody declared, `Proxy`, a prototype — the
-construct costs the object model: a tagged value, and a collector for the
-boxes about four minutes later. That tier is refused in every dialect
-permanently rather than staged, and saying so first is what keeps the mode from
-being read as a promise to run arbitrary TypeScript. Strict stays the default
-and does not grow, the mode may only *add* acceptance, and the whole corpus
-compiled with it on must emit byte-identical IR — 437 `reject_*` cases and
-every golden proving the flag is a no-op until it is used. The thesis is that
-the dialect is what lets strict stay small: [wp23](wp23-language-surface.md)
-declined `?.`, a string `switch` and `for...of` over a string as *language*
-decisions, correctly, and each of the three is also code somebody has already
-written, and a dialect is what stops those two facts from having to be settled
-against each other. It also forces the flag surface, which has grown to
-twenty-three options across four axes with none of them named: the note regroups
-them into **dialect / build / output**, gives the dialect one allow-list flag —
-`--compat`, bare for every built feature and `--compat=<list>` for exactly
-some, with strict being the *absence* of the flag so that no existing command
-line or golden moves — that a team ratchets down in `package.json` rather than
-twelve booleans, and records it in the emitted IR — which closes §5.1's older complaint
-that two `.ll` files from one source under different `--number-mode` settings
-are different programs and neither says so. It answers §3.4's oldest open row
-on the way: `i32` in strict, `f64` in compat, because a ported codebase whose
-arithmetic silently truncates at 2**31 is exactly the divergence
-[wp13-differential.md](wp13-differential.md) exists to catch.
-
-`async` is where that note and [wp24](wp24-async.md) meet, and it does not
-overturn the refusal — it finds the one condition under which the refusal does
-not apply, using wp24's own load-bearing finding to do it. wp24 §7 refuses
-`async` as an erased no-op because erasure makes a program mean something
-different under Node. wp24 §2 finds that there is nothing to await: no timer,
-no sleep, no poller, no socket, in the compiler or either runtime. Read the
-second against the first and the erasure is exact rather than a lie **whenever
-no two promises are simultaneously live** — because a JavaScript `await` only
-reorders a program when some other pending continuation exists to run in the
-gap the yield opens, and one live promise means the gap is empty. Two checker
-rules imply it (`await` applies directly to a call, and an `async` call is
-awaited in the expression that makes it), they are wp24 §9.3's "the promise as
-a value does not survive" stated as a rule rather than a conclusion, and every
-program they reject is one where the erasure would have diverged — so the
-rejection carries a line number and a rewrite instead of refusing the keyword.
-`Promise.all` is the case with two live promises, and it is admitted exactly
-when the fixpoint proves the callees do not interfere; that same proof is what
-lets the same expression become a real fork and join under a second engine,
-`--async-model threads`, riding WP20 T1 and T2. One analysis, two payoffs, and
-the second is parallelism the single-threaded original could not have had from
-source written for it. None of it is pre-1.0 and none of it adds a rule to
-LANGUAGE.md, so M4's freeze is not waiting on this note either.
-
-Of the two measurements that could have stopped the package before it started,
-the first has been taken and did not stop it — but it moved the headline, which
-is the useful kind of spike ([wp28](wp28-compatibility-mode.md) §7.4). One
-opaque callee in a hot loop costs **1.26x to 1.40x** for the inlining it loses;
-costs **nothing measurable** for the frontend facts it strips from every
-transitive caller, because LLVM re-derived them inside the LTO unit — which is
-not a claim the fixpoint is worthless, WP15 §1a's alias facts are worth 1.63x
-to 3.96x, only that *these* facts lost *this* way are free; and costs
-**8.76x** for the escape proof it takes away, because an object WP6 can prove
-local today becomes an entry-block `alloca` and is then removed outright, while
-an unknown callee sends 200M of them back to the arena. So the compat report
-leads with the arena and not with the attribute, and the closure stage splits
-along a line [wp23](wp23-language-surface.md) §6 had already drawn: a callback
-whose callee is *statically known* — an arrow at the call site, a function
-passed by name — is a direct call that inlines and keeps the escape proof and
-costs nothing, while a function value whose target the checker cannot name
-costs the 1.26x and the 8.76x. The cheap half is built first and is most of
-what a migrating codebase writes. The second measurement — how many `async`
-functions in a real application ever await something that can block — is still
-unrun.
-
-The one thing that has *left* the language rather than entered it is
-inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of
-record. `extends` gave three things: a field prefix, member reuse, and
-polymorphism — and the third is the reason hierarchies exist and the one Nish
-never had, because dispatch is static and a vtable is an indirect call the §3a
-fact pass cannot see through. So an override reached through a base-typed value
-ran the base method natively and the derived one under Node, which was the
-language's only knowing disagreement with JavaScript and the only by-design
-entry in `known-failures.txt` that was not a number. The removal keeps the half
-that was carrying weight by widening `implements` from an exact field match to
-a **prefix**: an interface's fields must be the class's first fields, the class
-may declare more after them, the conversion is still one `bitcast`, and the
-three layout classes that used to be derived are still 24, 16 and 32 bytes with
-the C twin unchanged. Two classes with different tails in one `I[]` is the job
-`extends` was doing, without a dispatch rule attached. It was affordable
-because `self/` — 25,911 lines, the largest Nish program there is — declared no
-derived class at all: WP14 §2.1 had already chosen one `Node` class with a
-`kind` discriminant over a hierarchy, and Nish-0 was defined as the language
-minus "inheritance and downcasts". Sixteen `reject_*` cases collapse into two
-rules, both in the checker rather than Phase 0, by the doctrine WP22 §6 states
-for a removed spelling.
+- **`function` stays legal through 1.x.** [wp22-arrow-functions.md](wp22-arrow-functions.md)
+  made arrows the declaration form and `self/` is arrows, but stage D, which
+  rejects a `function` definition, did not land before the freeze. Under the
+  rule above it withdraws an accepted construct, so it waits for a major.
+- **`async`/`await` is refused** ([wp24-async.md](wp24-async.md)): there is
+  nothing in either runtime to wait for. The one item it recommended,
+  `--emit-napi-async`, is built.
+- **Inheritance is removed** and `implements` is a field prefix
+  ([wp25-inheritance.md](wp25-inheritance.md)).
+- **The rest of the surface a corpus review asked for** is answered row by row
+  in [wp23-language-surface.md](wp23-language-surface.md): aliases, `enum` and
+  `Pair<A, B>` landed, module-level mutable state is *no*, and `?.`, a string
+  `switch` and `for...of` over a string are declined.

@@ -316,13 +316,12 @@ So the dependency is: wp23 §6 for a statically known callee, and it is a
 prerequisite for P1 rather than a nice-to-have. Nothing else on this page needs
 a language feature that does not exist.
 
-**And that prerequisite is decided *not scheduled*** ([wp23](wp23-language-surface.md)
-§6), which is the honest state of P1 rather than a reason to route around it.
-wp23 §6 asks for two real programs to want a compile-time function parameter
-before it is built, and names this section as the first of them — so P1 is not
-blocked on an argument anybody still has to win, only on a second ask. What
-must not happen in the meantime is P1 being built against the *other* kind of
-callee: WP28 §7.4 measured a callee the checker cannot name at 1.26x for the
+**That prerequisite is scheduled with P1.** [wp23](wp23-language-surface.md)
+§6 left it *not scheduled* until a second real program asked, and named this
+section as the first. [MASTER_PLAN](MASTER_PLAN.md#what-remains) makes P1
+1.1's first item, which is the decision to build the parameter with it, for a
+callee the checker can name and no other kind. What must not happen is P1
+being built against the *other* kind of callee: WP28 §7.4 measured a callee the checker cannot name at 1.26x for the
 call and up to 8.76x for the escape proof it forfeits, and an intrinsic that
 accepted one would spend the whole margin this page exists to buy.
 
@@ -586,11 +585,13 @@ language Nish is a subset of.
   question and the reason channels and non-scalar results should be designed in
   one go rather than separately.
 - **Whether `using` should be admitted in strict at all, or only alongside the
-  threads surface.** It is a new construct in a language reference that M4
-  freezes, and it is the one item here with a deadline. The narrow answer —
-  `using` is accepted only for the types the threads module declares — keeps
-  the freeze small and is probably right, but it makes `using` a keyword that
-  works on two types, which is an odd thing to write down.
+  threads surface.** This had a deadline while the reference was open to
+  change; it does not now, because the freeze at the head of LANGUAGE.md lets a
+  minor turn a refusal into an acceptance. That also settles which way to err:
+  the narrow answer — `using` is accepted only for the types the threads module
+  declares — can be widened later in a minor, and the wide one could not be
+  narrowed without a major. It still makes `using` a keyword that works on two
+  types, which is an odd thing to write down.
 - **Whether the partitioner belongs in the runtime or in emitted IR.** T0's
   arena went into the C, but a partition loop is code the optimiser would like
   to see. It is the kind of question wp7's budget rule (§2 of MASTER_PLAN)
