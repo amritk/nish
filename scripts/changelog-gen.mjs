@@ -310,7 +310,7 @@ function renderEntry(e) {
 }
 
 /**
- * The version the commits imply, from their types.
+ * The version the commits imply, from their types, as `[major, minor, patch]`.
  *
  * Before 1.0 a breaking change moves the minor rather than the major, because
  * 0.x is the "anything may change" range and burning 1.0 on the first breaking
@@ -325,11 +325,11 @@ function impliedVersion(current, entries, previousTag) {
   // the entire history as a patch and ship 0.0.1 — a number that would claim
   // the compiler is a bug-fix on nothing. 0.1.0 is also what the seed policy
   // already names as the base case (docs/wp12-release.md, "The bootstrap seed").
-  if (!previousTag) return "0.1.0";
+  if (!previousTag) return [0, 1, 0];
   const [major, minor, patch] = current.split(".").map(Number);
-  if (entries.some((e) => e.breaking)) return major === 0 ? `0.${minor + 1}.0` : `${major + 1}.0.0`;
-  if (entries.some((e) => e.type === "feat")) return `${major}.${minor + 1}.0`;
-  return `${major}.${minor}.${patch + 1}`;
+  if (entries.some((e) => e.breaking)) return major === 0 ? [0, minor + 1, 0] : [major + 1, 0, 0];
+  if (entries.some((e) => e.type === "feat")) return [major, minor + 1, 0];
+  return [major, minor, patch + 1];
 }
 
 /** `X.Y.Z` as three numbers, or undefined when it is not one. No `v`, no pre-release, no leading zeros. */
@@ -368,11 +368,11 @@ function nextVersion(current, entries, previousTag, releaseAs = []) {
     }
     if (!chosen || compareVersions(parsed, chosen.parsed) > 0) chosen = { ...request, parsed };
   }
-  if (!chosen) return { version: implied };
-  if (compareVersions(chosen.parsed, parseVersion(implied)) < 0) {
+  if (!chosen) return { version: implied.join(".") };
+  if (compareVersions(chosen.parsed, implied) < 0) {
     return {
       error:
-        `trailer \`Release-As: ${chosen.version}\` on ${chosen.commit} is below ${implied}, ` +
+        `trailer \`Release-As: ${chosen.version}\` on ${chosen.commit} is below ${implied.join(".")}, ` +
         `the version the commits since ${previousTag ?? "the start of the history"} imply; ` +
         "a trailer may raise the next version, never lower it",
     };
@@ -439,10 +439,8 @@ const includeUnconventional = argv.includes("--include-unconventional");
 const { entries, skipped, releaseAs } = collect(from, to, includeUnconventional);
 
 // `--next` answers the version and nothing else, for the release PR to name
-// itself and to bump package.json with. Everything downstream -- the
-// `changelog/<version>.json` it writes next, the bump of package.json, the
-// lockfile and self/branding.ts, and the `chore(release): <version>` title --
-// reads this one line, so a `Release-As:` trailer reaches all of them here.
+// itself and to bump package.json with. Everything release-pr.yml writes reads
+// this one line, so a `Release-As:` trailer reaches all of it here.
 if (argv.includes("--next")) {
   const next = nextVersion(pkgVersion, entries, from, releaseAs);
   if (next.error) {

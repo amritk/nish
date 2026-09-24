@@ -112,7 +112,9 @@ const cases = [
 ];
 
 let failed = 0;
+let total = 0;
 const check = (label, ok, detail) => {
+  total++;
   if (!ok) failed++;
   console.log(`${ok ? "pass" : "FAIL"}  ${label}${ok ? "" : `\n${detail.replace(/^/gm, "        ")}`}`);
 };
@@ -144,6 +146,5 @@ for (const [label, tag, messages, expected, want] of cases) {
 
 for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
 
-const total = cases.length + 1;
 console.log(failed === 0 ? `\nall ${total} cases pass` : `\n${failed} case(s) failed`);
 process.exit(failed === 0 ? 0 : 1);
