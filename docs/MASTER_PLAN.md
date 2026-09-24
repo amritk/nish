@@ -767,8 +767,8 @@ chosen with a `Release-As:` trailer ([#200](https://github.com/amritk/nish/pull/
 adds the trailer and is parked until then) on a commit, followed by the Release
 PR, which a human merges.
 
-Two breaking changes shipped in 0.10.0. Each would cost a major after 1.0, so
-both were taken while a break is still a minor:
+Two breaking changes are in 0.10.0, the next release. Each would cost a major
+after 1.0, so both were taken while a break is still a minor:
 
 - **The name `integer` is reserved** ([#201](https://github.com/amritk/nish/pull/201)).
   A class, interface or function called `integer` is `NL2332`, an alias or
