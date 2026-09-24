@@ -1,8 +1,8 @@
 // #174: two modules each declare a class `Base` with a constructor. A
 // constructor is the symbol `Base.constructor`, named after its class, so the
-// two collide; the refusal names the class and both files, and carries a
-// registered `--json` code (NL3022) rather than NL0000. Two same-named classes
-// with fields alone would compile: only a shared member collides.
+// two collide. Since #193 the two classes are refused first, by name (NL3028),
+// before their members are compared, and the shared constructor is not
+// reported as a second mistake: the program gets one diagnostic, not two.
 import { one } from "./lib";
 
 class Base {

@@ -1,1 +1,0 @@
-Class `Base` is declared with a constructor in both tests/wordings/nl3022_class_member_clash.ts and tests/wordings/nl3_clash/lib.ts; a constructor or method is named after its class, so two classes that share a name anywhere in the program cannot both declare it, whether or not either is exported; rename one of the classes

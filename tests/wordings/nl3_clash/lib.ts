@@ -1,8 +1,8 @@
-// The other module of the NL3022, NL3024 and NL3026 cases: each of them
+// The other module of the NL3024, NL3026 and NL3028 cases: each of them
 // declares one of these names again. It is not a case itself, and neither is
-// anything under `node_modules/`, the three packages the NL3023, NL3025 and
-// NL3027 cases import: `tests/diagnostic_coverage.js` collects only the files
-// directly in `tests/wordings/` that are named for the code they pin.
+// anything under `node_modules/`, the two packages the NL3025 and NL3027 cases
+// import: `tests/diagnostic_coverage.js` collects only the files directly in
+// `tests/wordings/` that are named for the code they pin.
 export class Base {
   x: i32 = 0;
 

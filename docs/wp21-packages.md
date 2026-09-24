@@ -442,6 +442,14 @@ only the mangling below it survives.
   the words §7 uses — so the hole is a diagnostic instead of a miscompile.
   Scoping the layouts, and saying what a `Point` from two versions of one
   package means, is §7's question and not this stage's.
+  The same hole was open *inside* one package — two of its modules declaring
+  `Base` merged into one type exactly as two packages would have — and #193
+  closed it the same way: the second declaration is refused, naming the first
+  module (NL3028, `tests/link/class_clash_fields`), even when a third package
+  declared the name before either (`tests/link/class_clash_after_package`),
+  and the same holds for two templates whose instantiations share a name
+  (`tests/link/generic_class_clash_after_package`). A struct name is therefore
+  unique across the whole program, one package or several.
 - **Versions are not in the identity.** §5a floated `pkg@version.symbol`;
   reading a version means reading a manifest, which §6 spent a section
   refusing. Two copies of one package name in one build therefore still

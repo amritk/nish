@@ -650,7 +650,7 @@ const checkPackageBoundary = (t: Suite, cli: Cli): void => {
 };
 
 /**
- * One whole-program symbol clash (#174): the `tests/link/` program that provokes
+ * One whole-program clash (#174, #193): the `tests/link/` program that provokes
  * it, the module the report lands in — the later of the two, since the earlier
  * one is named in the message — and the code it must carry. Until #174 all of
  * these were `NL0000`, which is not a code a tool can key on.
@@ -669,19 +669,53 @@ const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: st
 };
 
 /**
- * A constructor, a method, an exported function and a private one are each a
- * symbol the whole program shares, so a second definition is a driver refusal
- * with a code of its own: NL3022 for a class member and NL3023 for one inside a
- * package, NL3024 for an exported function and NL3026 for a private one. The
- * package spellings of the last two, NL3025 and NL3027, are pinned by
- * `tests/wordings/`.
+ * An exported function and a private one are each a symbol the whole program
+ * shares, so a second definition is a driver refusal with a code of its own:
+ * NL3024 for an exported function and NL3026 for a private one, whose package
+ * spellings, NL3025 and NL3027, are pinned by `tests/wordings/`. A class's
+ * constructor or method is one too, but two classes that share one share a name,
+ * and since #193 that is refused first and alone, as NL3028 — one object for one
+ * mistake, whether the classes declare a constructor, a method, fields only, or
+ * sit inside a package. Two generic classes of one package that share a name
+ * are refused at the template (NL3013) once, even when a signature has made
+ * their instantiations, members included, before any body is checked; and a
+ * declared class spelled like an instantiation (`Box$i32`) is refused for its
+ * `$` (NL2296), whichever of it and `Box<i32>` loads first.
  */
 const checkSymbolClashes = (t: Suite, cli: Cli): void => {
-  checkClashCode(t, cli, "class_clash_constructor", "lib.ts", "NL3022");
-  checkClashCode(t, cli, "class_clash_method", "lib.ts", "NL3022");
-  checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3023");
+  checkClashCode(t, cli, "class_clash_constructor", "lib.ts", "NL3028");
+  checkClashCode(t, cli, "class_clash_method", "lib.ts", "NL3028");
+  checkClashCode(t, cli, "class_clash_fields", "lib.ts", "NL3028");
+  checkClashCode(t, cli, "iface_clash_private", "lib.ts", "NL3028");
+  checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3028");
   checkClashCode(t, cli, "duplicate_export", "b.ts", "NL3024");
   checkClashCode(t, cli, "duplicate_internal", "helper.ts", "NL3026");
+  checkClashCode(t, cli, "generic_class_clash_signature", "a.ts", "NL3013");
+  checkClashCode(t, cli, "class_dollar_name", "main.ts", "NL2296");
+  checkClashCode(t, cli, "class_dollar_name_imported", "lib.ts", "NL2296");
+  checkPackageThenNameClash(t, cli, "class_clash_after_package", "a.ts", "b.ts");
+  checkPackageThenNameClash(t, cli, "class_clash_package_after_root", "node_modules/pa/index.ts", "node_modules/pa/other.ts");
+};
+
+/**
+ * Two modules of one package declare a class `Base` after a module of another
+ * package did. The first of the two is refused against the other package
+ * (NL3009) and the second against the first (NL3028): two objects, one per
+ * mistake, and no third for the constructor the same-package pair shares.
+ */
+const checkPackageThenNameClash = (t: Suite, cli: Cli, name: string, crossFile: string, sameFile: string): void => {
+  const run = cli.plain(name, [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`]);
+  if (!t.eqI32(`${name}: a class two packages declare is refused`, run.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(run.stdout);
+  if (!t.eqI32(`${name}: as two objects`, toI32(objects.length), 2)) {
+    return;
+  }
+  t.eqStr(`${name}: first across packages`, cliField(objects[0], "code"), "NL3009");
+  t.eqStr(`${name}: at the package's first declaration`, cliField(objects[0], "file"), `tests/link/${name}/${crossFile}`);
+  t.eqStr(`${name}: then inside the package`, cliField(objects[1], "code"), "NL3028");
+  t.eqStr(`${name}: at the package's second declaration`, cliField(objects[1], "file"), `tests/link/${name}/${sameFile}`);
 };
 
 /**

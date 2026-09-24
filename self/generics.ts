@@ -1146,7 +1146,7 @@ export const rejectDollarInSymbolName = (ctx: CheckContext, name: string, what: 
   }
   ctx.error(
     node,
-    `\`${name}\` cannot be the name of a ${what} in ${LANGUAGE}: \`$\` separates a generic's name from its ` +
+    `\`${name}\` cannot be the name of ${what === "interface" ? "an" : "a"} ${what} in ${LANGUAGE}: \`$\` separates a generic's name from its ` +
       "type arguments in the symbols the compiler emits"
   );
   return true;

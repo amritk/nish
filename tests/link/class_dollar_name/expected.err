@@ -1,0 +1,1 @@
+`Box$i32` cannot be the name of a class in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits

@@ -147,6 +147,12 @@ export class Checker {
           this.ctx.errored = false;
           this.registerStructTemplate(stmt, kind);
         } else {
+          // A `class Box$i32` would be one struct type with the instantiation
+          // `Box<i32>` wherever either is declared (#193), so the rule a
+          // template's name is held to holds here too. The struct is declared
+          // all the same, so that an annotation naming it does not add a
+          // second diagnostic to the first.
+          rejectDollarInSymbolName(this.ctx, stmt.children[0].text, kind === STRUCT_CLASS ? "class" : "interface", stmt.children[0]);
           const info = declareStruct(this.ctx, stmt, kind);
           if (info !== null) {
             declared.push(info);

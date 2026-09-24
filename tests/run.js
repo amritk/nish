@@ -1749,6 +1749,36 @@ for (const name of linkTests) {
   );
 }
 
+// One file named twice on a command line is one module, whichever way the
+// second name is spelled. `tests/link/root_named_twice` runs the entry by
+// absolute path and the second root from the repository root; these are the
+// other two spellings, run from the fixture's own directory with a relative
+// entry: `./types.ts` beside the import's `types.ts`, and the absolute path.
+// Keyed on the spelling, each was a second module of the same file, whose
+// class clashed with itself (NL3028) and whose `.ll` was written twice.
+{
+  const twiceDir = path.join(linkDir, "root_named_twice");
+  for (const [label, second, outName] of [
+    ["./types.ts", "./types.ts", "root_named_twice-dot"],
+    ["its absolute path", path.join(twiceDir, "types.ts"), "root_named_twice-abs"],
+  ]) {
+    const outDir = path.join(buildDir, "link", outName);
+    fs.rmSync(outDir, { recursive: true, force: true });
+    const exe = path.join(outDir, "app");
+    const r = spawnSync(NISH, ["main.ts", second, "-o", `${outDir}${path.sep}`, "--link", exe], {
+      cwd: twiceDir,
+      encoding: "utf8",
+    });
+    const wroteTypes = r.stderr.split("\n").filter((l) => l.startsWith("wrote ") && l.endsWith("types.ll"));
+    const run = r.status === 0 ? spawnSync(exe) : { status: null };
+    check(
+      `link/root_named_twice: \`main.ts\` and \`types.ts\` named as ${label} are one module, written once, exit 7`,
+      r.status === 0 && wroteTypes.length === 1 && run.status === 7,
+      `compile exit ${r.status}, run exit ${run.status}\n${r.stderr}`
+    );
+  }
+}
+
 /**
  * Compile `entry` **by absolute path** and pin the first line of the `.ll` the
  * import produced. Compiling by absolute path is what tells a name resolved

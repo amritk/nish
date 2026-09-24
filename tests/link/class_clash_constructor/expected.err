@@ -1,1 +1,1 @@
-error: Class `Base` is declared with a constructor in both 
+class_clash_constructor/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone

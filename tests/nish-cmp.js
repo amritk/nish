@@ -763,6 +763,30 @@ const DECLARED = [
     changelog: "A function whose unproven charCodeAt can panic is not willreturn",
     why: "the importer's `declare` of `@parseDigit` loses `willreturn` with its definition, and the attribute groups renumber",
   },
+  {
+    program: "tests/link/class_clash_fields/main.ts",
+    file: "exit",
+    changelog: "Refuse two same-named classes or interfaces in one package",
+    why: "a new program: #193's two same-named classes with fields only, which the reference compiler merges into one type and compiles, and HEAD refuses at the second declaration",
+  },
+  {
+    program: "tests/link/iface_clash_private/main.ts",
+    file: "exit",
+    changelog: "Refuse two same-named classes or interfaces in one package",
+    why: "a new program: #193's private interface passed across modules as a same-named one, which the reference compiler compiles and HEAD refuses at the second declaration",
+  },
+  {
+    program: "tests/link/class_dollar_name/main.ts",
+    file: "exit",
+    changelog: "Refuse two same-named classes or interfaces in one package",
+    why: "a new program: a declared `class Box$i32` beside the instantiation `Box<i32>`, which the reference compiler merges into one type and compiles, and HEAD refuses for its `$`",
+  },
+  {
+    program: "tests/link/class_dollar_name_imported/main.ts",
+    file: "exit",
+    changelog: "Refuse two same-named classes or interfaces in one package",
+    why: "a new program: `class_dollar_name` in the other load order, which the reference compiler compiles and HEAD refuses for the `$` in the name it was written with",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

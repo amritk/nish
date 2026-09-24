@@ -1,1 +1,1 @@
-error: Class `Counter` declares method `bump` in both 
+class_clash_method/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone

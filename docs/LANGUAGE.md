@@ -955,6 +955,14 @@ and their `.ll` goldens are byte-identical files.
   imports (`Side-effect imports`, `reject_side_effect_import`), and
   type-only imports are rejected. A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
+- **A file is one module however it is named.** The command line and the
+  imports may spell one file differently — `./types.ts`, its absolute path,
+  and the `types.ts` an `import from "./types"` resolves to — and it is loaded
+  once, under the first spelling that reached it, so its declarations never
+  clash with themselves and its `.ll` is written once
+  (`tests/link/root_named_twice`). The comparison is by the path made absolute
+  and normalised, not through symbolic links: a file reached through two links
+  is two modules (`tests/link/package_symlink`).
 - **The standard library is imported as `nish/<module>`**
   (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
   the running compiler rather than relative to the importing file, so the same
@@ -1317,8 +1325,11 @@ export const main = (): i32 => {
   its type arguments in every symbol the compiler emits, so a function called
   `identity$i32` would be the symbol `identity<i32>` already has:
   `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
-  (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
-  unaffected — only names that become symbols are restricted.
+  (`tests/cases/reject_generic_dollar_name`). A class or interface, generic or
+  not, is held to it too: a `class Box$i32` would be the struct `Box<i32>`
+  already is, and one type with it wherever either is declared (#193;
+  `tests/link/class_dollar_name`, `…_imported`). Locals, parameters and fields
+  are unaffected — only names that become symbols are restricted.
 - **An instantiation is spelled as written wherever a person reads it, and
   mangled wherever a machine does.** Every diagnostic, the `--emit-checked`
   dump and the `-g` DWARF `name` say `identity<i32>`, `identity<Box<i32>>`,
@@ -1440,6 +1451,11 @@ export const main = (): i32 => {
   `…_same_name_itself`, `…_same_name_class`). The constraint may still be the
   asking module's own declaration when the template's module imports that very
   declaration (`tests/link/generic_constraint_import_back`).
+  Two modules can no longer declare a `Shape` each at all (*A class or
+  interface name is program-wide*, under
+  [Generic classes and interfaces](#generic-classes-and-interfaces)), so the
+  four programs above are refused at the second declaration now, before any
+  call is checked; this rule is still what decides a constraint.
   Every position a type
   argument can be written in is a request of its own — a field, an array
   element, a `Result` arm, inside another instantiation, an `implements`
@@ -1508,12 +1524,38 @@ export const main = (): i32 => {
   the structs pass runs before the functions pass, so the template is always
   the one already there (`tests/cases/reject_generic_class_fn_clash`,
   `reject_generic_class_after_fn`, `reject_generic_class_redeclared`).
+- **A class or interface name is program-wide**, because a struct type is
+  identified by its name alone: `%struct.Base`, and a type id interned by that
+  name. So two modules may not both declare a class or interface of one name,
+  whether or not either is exported, whether it has fields only, and however
+  different the two field lists are. The later declaration in load order is
+  refused, once per name per module, naming the module that declared it first:
+  `` Class `Base` is also declared in main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone ``
+  (`tests/link/class_clash_fields`, `tests/link/iface_clash_private`; NL3028).
+  Left alone, a value of one was accepted where the other was expected and its
+  fields were read at the other's offsets, with no diagnostic (#193). Two
+  classes that share a name and a constructor or method are refused in the
+  same words, once (`tests/link/class_clash_constructor`, `…_method`,
+  `…_package`), and across two packages the wording is the one
+  `tests/link/two_packages_struct` pins. A declaration is compared with the
+  first of its name in its own package before any other, so when a third
+  package declared the name first, the first of the two is refused across
+  packages and the second in these words
+  (`tests/link/class_clash_after_package`, `…_package_after_root`). Importing
+  the one declaration is how two modules share a struct
+  (`tests/link/iface_same_name_imported`).
 - **An instantiation's name is program-wide**, because `%struct.Box$i32` and
   `@Box$i32.constructor` are. So two modules may not both declare a generic
   class or interface of one name once both instantiate it:
   `` Generic class `Holder` is also declared in helper.ts; a class or interface name must be unique across the program, and an instantiation is named after its template ``
-  (`tests/link/generic_class_clash`), and across two packages the wording is
-  the one `tests/link/package_generic_class_clash` pins. Nothing about the two
+  (`tests/link/generic_class_clash`), once per template even when signatures
+  have made both instantiations, constructor and methods included, before any
+  body is checked (`tests/link/generic_class_clash_signature`), and across two
+  packages the wording is the one `tests/link/package_generic_class_clash` pins.
+  As for a declared name, a template is compared with the first of its
+  instantiation's name in its own package before any other, so when a third
+  package instantiated the name first, the second module of the package is
+  refused in these words (`tests/link/generic_class_clash_after_package`). Nothing about the two
   declarations is visible at a call, so left unreported the second layout would
   simply replace the first and a field read would land on the wrong offset.
 - **`implements` may name an instantiation.** `class Box<T> implements
