@@ -1113,9 +1113,15 @@ and their `.ll` goldens are byte-identical files.
     …/node_modules/hash (1.0.0) and …/node_modules/user/node_modules/hash
     (2.0.0): Nish compiles one copy of a package per program, so every import
     of it has to reach the same directory `` (`NL3029`,
-    `tests/link/package_two_dirs`, `docs/wp21-packages.md` §7). A directory
-    no link leads through keeps the spelling the search found it by; one a
-    link leads through is named by its real, absolute path.
+    `tests/link/package_two_dirs`, `docs/wp21-packages.md` §7; a copy whose
+    manifest declares no `version` is said to have `no version`,
+    `tests/link/package_two_dirs_unversioned`). A directory no link leads
+    through keeps the spelling the search found it by. One a link leads
+    through is named by its real directory, spelled relative to the working
+    directory when the program was named relatively, and every module under
+    it is in that package — so a workspace link to a directory outside any
+    `node_modules` (`node_modules/foo -> ../packages/foo`) keeps `foo`'s own
+    relative imports in `foo` (`tests/link/package_workspace`).
   - **Only the `nish` conditions are honoured**, and a subpath is an exact key:
     `default`, `import` and `node` are skipped rather than matched, and the
     `"./*"` pattern form is not read. A target is a string beginning with `./`

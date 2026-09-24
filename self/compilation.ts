@@ -138,13 +138,18 @@ export interface ResolvedModule {
  * and the manifest's version, which is what a reader tells two copies apart by.
  */
 export class PackageCopy {
+  name: string;
   dir: string;
   realDir: string;
+  /** The directory its modules are named under: `dir`, or `realDir` spelled like it when a link is in the way. */
+  namedDir: string;
   version: string;
 
-  constructor(dir: string, realDir: string, version: string) {
+  constructor(name: string, dir: string, realDir: string, namedDir: string, version: string) {
+    this.name = name;
     this.dir = dir;
     this.realDir = realDir;
+    this.namedDir = namedDir;
     this.version = version;
   }
 }
@@ -238,9 +243,12 @@ export class Compilation {
   packageCopies: PackageCopy[];
   /**
    * The working directory as an absolute path, or `""` when it cannot be
-   * resolved. It exists for `identityOf`'s fallback alone: a module's *name*
-   * never reads it, so no output path, header or diagnostic moves with the
-   * directory the compiler was run from (WP19 §A3).
+   * resolved. It is read for two things: `identityOf`'s fallback, and
+   * spelling a linked package's real directory the way the walk that found
+   * it was spelled — relative, when the program was named relatively
+   * (`resolveBareSpecifier`). No other name reads it, so no output path,
+   * header or diagnostic of a program without links moves with the directory
+   * the compiler was run from (WP19 §A3).
    *
    * The fallback is for a path `realpathSync` cannot answer, which is a file
    * that is not there — and loading one fails whatever it is keyed on. When
@@ -314,12 +322,29 @@ export class Compilation {
    * Comparing directories rather than names is what stops a compiler invoked
    * on a file that is itself inside `node_modules/<pkg>` from treating its own
    * entry as one of its dependencies.
+   *
+   * A path with no `node_modules/<name>` in it may still be inside a package:
+   * one reached through a link is named by its real directory, which a
+   * workspace keeps anywhere (`node_modules/foo -> ../packages/foo`). So such
+   * a path is first looked for under the real directory of every package the
+   * program has resolved, the deepest first, and only when none holds it is
+   * it the root package's. Without that, a linked package's own relative
+   * imports joined the root package and clashed with it.
    */
   packageOf(modulePath: string): string {
-    if (packageDirOf(modulePath) === this.rootPackageDir) {
-      return ROOT_PACKAGE;
+    const dir = packageDirOf(modulePath);
+    if (dir.length > 0) {
+      return dir === this.rootPackageDir ? ROOT_PACKAGE : packageNameOf(modulePath);
     }
-    return packageNameOf(modulePath);
+    let found = ROOT_PACKAGE;
+    let depth = 0;
+    for (const copy of this.packageCopies) {
+      if (copy.namedDir.length > depth && modulePath.startsWith(`${copy.namedDir}/`)) {
+        found = copy.name;
+        depth = copy.namedDir.length;
+      }
+    }
+    return found;
   }
 
   /**
@@ -575,9 +600,14 @@ export class Compilation {
     // package reached through links (pnpm's layout) is one package, and its
     // own dependencies are looked for beside where it really is. The spelling
     // the walk found is kept unless a link is in the way, so a program with no
-    // links names every module as before.
+    // links names every module as before; through a link the real directory
+    // is spelled the way the walk was, relative to the working directory when
+    // that was relative, so a name never carries where the checkout sits.
     const identity = this.identityOf(foundDir);
-    const packageDir = this.workingDir.length === 0 || identity === resolvePath(this.workingDir, foundDir) ? foundDir : identity;
+    let packageDir = foundDir;
+    if (this.workingDir.length > 0 && identity !== resolvePath(this.workingDir, foundDir)) {
+      packageDir = foundDir.startsWith("/") ? identity : relativePath(this.workingDir, identity);
+    }
     const manifestPath = joinPath([packageDir, "package.json"]);
     const manifest = readFileSyncOrNull(manifestPath);
     const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32";
@@ -595,7 +625,7 @@ export class Compilation {
     const seen = this.packageIndex.get(parsed.name, -1);
     if (seen < 0) {
       this.packageIndex.set(parsed.name, this.packageCopies.length);
-      this.packageCopies.push(new PackageCopy(foundDir, identity, version));
+      this.packageCopies.push(new PackageCopy(parsed.name, foundDir, identity, packageDir, version));
     } else if (this.packageCopies[seen].realDir !== identity) {
       const first = this.packageCopies[seen];
       failed.error = `Package \`${parsed.name}\` is at two places, ${first.dir} (${describeVersion(first.version)}) and ${foundDir} (${describeVersion(version)}): ${LANGUAGE} compiles one copy of a package per program, so every import of it has to reach the same directory`;
@@ -669,8 +699,8 @@ export class Compilation {
     // the program being compiled, so the answer already says as much about the
     // compiler's install as the importer's own name does, which is nothing
     // (§A7's third bullet is about the compiler's package root, and this walk
-    // does not use it). Through a link it is the real directory's path, which
-    // is absolute: the link is what put the package somewhere else.
+    // does not use it). Through a link it is under the real directory, spelled
+    // as above.
     const resolvedPath = joinPath([packageDir, target]);
     const resolved: ResolvedModule = {
       path: resolvedPath,

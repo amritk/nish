@@ -655,10 +655,16 @@ disappeared and `packages.ts` says so.
     where `app2` really is, which is where pnpm puts them.
   - A package directory no link leads through keeps the spelling the walk
     found it by, so every program without links names every module as before;
-    one a link leads through is named by its real, absolute path.
+    one a link leads through is named by its real directory, spelled relative
+    to the working directory when the walk was relative, so no name carries
+    where the checkout sits. A module named under a package's real directory
+    is in that package even with no `node_modules/<name>` in its path, which
+    is what keeps a workspace package's own relative imports out of the root
+    package (`tests/link/package_workspace`).
   - One package name at two real directories is refused in words, naming both
     directories and both manifest versions (`NL3029`,
-    `tests/link/package_two_dirs`). That covers npm's duplicate copies of one
+    `tests/link/package_two_dirs`, and `package_two_dirs_unversioned` for a
+    manifest with no `version`). That covers npm's duplicate copies of one
     version and §7's diamond alike, which used to be refused by accident as a
     symbol clash.
   - Identity by manifest (`name@version`) is left for later on purpose: it
@@ -765,7 +771,7 @@ reading the prose — which was the point of a code in the first place.
 | `NL3019` | `engines.nish` is not a range this compiler reads. | `tests/link/package_engines_range` |
 | `NL3020` | The entry declares no Nish condition in any spelling — §6's `lodash` case. | `tests/link/package_not_nish`, `package_no_condition` |
 | `NL3021` | The manifest is not well-formed JSON, *and* no entry point could be read out of it. Named with the manifest's path, line and column. | `tests/link/package_malformed` |
-| `NL3029` | One package name at two real directories — npm's duplicate copies, or §7's diamond. Named with both directories and both manifest versions, at the import that reached the second. | `tests/link/package_two_dirs` |
+| `NL3029` | One package name at two real directories — npm's duplicate copies, or §7's diamond. Named with both directories and both manifest versions, at the import that reached the second. | `tests/link/package_two_dirs`, `package_two_dirs_unversioned` |
 | `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow — a nested condition object included, since the `nish` row may be inside it. | `tests/link/package_no_subpath`, `package_nested_condition` |
 
 `tests/nish/cli.ts` compiles each case with `--json` and holds its code, and

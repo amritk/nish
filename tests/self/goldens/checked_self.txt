@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 456265 dump lines live, 64 distinct modules.
+# 64 programs, 456328 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -16471,10 +16471,12 @@ struct ResolvedModule (interface) size=32 align=8 exported
   field name: string index=1 offset=8
   field packageName: string index=2 offset=16
   field error: string index=3 offset=24
-struct PackageCopy (class) size=24 align=8 exported
-  field dir: string index=0 offset=0
-  field realDir: string index=1 offset=8
-  field version: string index=2 offset=16
+struct PackageCopy (class) size=40 align=8 exported
+  field name: string index=0 offset=0
+  field dir: string index=1 offset=8
+  field realDir: string index=2 offset=16
+  field namedDir: string index=3 offset=24
+  field version: string index=4 offset=32
   constructor -> @PackageCopy.constructor
 struct ModuleUnit (class) size=72 align=8 exported
   field path: string index=0 offset=0
@@ -16524,10 +16526,10 @@ struct Compilation (class) size=112 align=8 exported
   method analyze -> @Compilation.analyze
   method emit -> @Compilation.emit
   method outputStems -> @Compilation.outputStems
-function PackageCopy.constructor(this: PackageCopy, dir: string, realDir: string, version: string): void -> @PackageCopy.constructor [exported constructor]
+function PackageCopy.constructor(this: PackageCopy, name: string, dir: string, realDir: string, namedDir: string, version: string): void -> @PackageCopy.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: dir realDir version
-  pointer this: size=24 writesThrough=true captured=false
+  escaping: dir name namedDir realDir version
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function ModuleUnit.constructor(this: ModuleUnit, path: string, name: string, source: SourceFile, file: Node, nodeCount: i32, isEntry: boolean, checker: Checker, packageName: string): void -> @ModuleUnit.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true
@@ -16538,8 +16540,8 @@ function ModuleUnit.constructor(this: ModuleUnit, path: string, name: string, so
   pointer file: size=40 writesThrough=true captured=true passedTo=ParentTable.constructor#1
   pointer checker: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 206:20 new ParentTable -> @ParentTable.constructor
-  callee 207:21 new StringMap -> @StringMap.constructor
+  callee 211:20 new ParentTable -> @ParentTable.constructor
+  callee 212:21 new StringMap -> @StringMap.constructor
 function EmittedModule.constructor(this: EmittedModule, stem: string, ir: string): void -> @EmittedModule.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: ir stem
@@ -16552,285 +16554,290 @@ function Compilation.constructor(this: Compilation, opts: Options): void -> @Com
   pointer this: size=112 writesThrough=true captured=false
   pointer opts: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 286:18 new TypeTable -> @TypeTable.constructor
-  callee 288:17 new DiagnosticSink -> @DiagnosticSink.constructor
-  callee 289:20 new RuntimeTable -> @RuntimeTable.constructor
-  callee 291:19 new StringMap -> @StringMap.constructor
-  callee 292:25 new StringMap -> @StringMap.constructor
-  local 294:11 cwd: string | null (const)
+  callee 294:18 new TypeTable -> @TypeTable.constructor
+  callee 296:17 new DiagnosticSink -> @DiagnosticSink.constructor
+  callee 297:20 new RuntimeTable -> @RuntimeTable.constructor
+  callee 299:19 new StringMap -> @StringMap.constructor
+  callee 300:25 new StringMap -> @StringMap.constructor
+  local 302:11 cwd: string | null (const)
 function Compilation.entry(this: Compilation): ModuleUnit -> @Compilation.entry [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=72
   calls: nish_panic_index
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Compilation.packageOf(this: Compilation, modulePath: string): string -> @Compilation.packageOf [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: modulePath
-  calls: nish_str_eq packageDirOf packageNameOf
+  calls: nish_str_at nish_str_concat nish_str_eq packageDirOf packageNameOf
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 319:9 packageDirOf -> @packageDirOf
-  callee 322:12 packageNameOf -> @packageNameOf
+  local 335:11 dir: string (const)
+  callee 335:17 packageDirOf -> @packageDirOf
+  callee 337:59 packageNameOf -> @packageNameOf
+  local 339:9 found: string (let)
+  local 340:9 depth: i32 (let)
+  local 341:16 copy: PackageCopy (const)
 function Compilation.identityOf(this: Compilation, path: string): string -> @Compilation.identityOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: path
   calls: nish_realpath resolvePath
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 343:11 real: string | null (const)
-  callee 344:28 resolvePath -> @resolvePath
+  local 368:11 real: string | null (const)
+  callee 369:28 resolvePath -> @resolvePath
 function Compilation.load(this: Compilation, path: string, name: string, packageOverride: string): boolean -> @Compilation.load [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: name packageOverride path
   calls: CheckContext.errorAtSpecifier Checker.collectSignatures Checker.constructor Compilation.identityOf Compilation.load Compilation.packageOf Compilation.resolveSpecifier DiagnosticSink.add DiagnosticSink.count ModuleUnit.constructor Parser.constructor Parser.parseSourceFile SourceFile.constructor StringMap.get StringMap.has StringMap.set dirname isNishSpecifier nish_alloc_struct nish_array_grow nish_read_file_or_null nish_str_at nish_str_concat packageDirOf stdModuleNames validate
   pointer this: size=112 writesThrough=true captured=false passedTo=Compilation.identityOf#0 Compilation.packageOf#0 Compilation.resolveSpecifier#0 Compilation.load#0 Compilation.identityOf#0
   stackSites=1 stackLocals=1
-  local 370:11 identity: string (const)
-  callee 370:22 Compilation.identityOf -> @Compilation.identityOf
-  local 371:11 at: i32 (const)
-  callee 371:16 StringMap.get -> @StringMap.get
-  local 375:11 text: string | null (const)
-  local 384:11 source: SourceFile (const)
-  callee 384:20 new SourceFile -> @SourceFile.constructor
-  local 385:11 parser: Parser (const)
-  callee 385:20 new Parser -> @Parser.constructor
-  local 386:11 file: Node (const)
-  callee 386:18 Parser.parseSourceFile -> @Parser.parseSourceFile
-  local 393:16 diagnostic: Diagnostic (const)
-  callee 394:7 DiagnosticSink.add -> @DiagnosticSink.add
-  local 399:11 isEntry: boolean (const)
-  callee 401:29 packageDirOf -> @packageDirOf
-  local 403:11 packageName: string (const)
-  callee 403:72 Compilation.packageOf -> @Compilation.packageOf
-  local 404:11 checker: Checker (const)
-  callee 404:21 new Checker -> @Checker.constructor
-  local 417:11 unit: ModuleUnit (const)
-  callee 417:18 new ModuleUnit -> @ModuleUnit.constructor
-  callee 418:5 StringMap.set -> @StringMap.set
-  local 427:11 beforeValidation: i32 (const)
-  callee 427:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee 428:5 validate -> @validate
-  local 429:11 failedValidation: boolean (const)
-  callee 429:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee 430:54 DiagnosticSink.count -> @DiagnosticSink.count
-  local 439:11 beforeSignatures: i32 (const)
-  callee 439:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee 440:5 Checker.collectSignatures -> @Checker.collectSignatures
-  local 450:11 signaturesFailed: boolean (const)
-  callee 450:30 DiagnosticSink.count -> @DiagnosticSink.count
-  local 451:11 dir: string (const)
-  callee 451:17 dirname -> @dirname
-  local 452:9 ok: boolean (let)
-  local 453:16 imp: ImportBinding (const)
-  callee 455:11 isNishSpecifier -> @isNishSpecifier
-  callee 458:11 StringMap.has -> @StringMap.has
-  local 461:13 found: ResolvedModule (const)
-  callee 461:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
-  callee 465:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local 469:13 target: string (const)
-  callee 471:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee 474:91 stdModuleNames -> @stdModuleNames
-  callee 485:12 Compilation.load -> @Compilation.load
-  callee 488:9 StringMap.set -> @StringMap.set
-  callee 488:42 StringMap.get -> @StringMap.get
-  callee 488:58 Compilation.identityOf -> @Compilation.identityOf
+  local 395:11 identity: string (const)
+  callee 395:22 Compilation.identityOf -> @Compilation.identityOf
+  local 396:11 at: i32 (const)
+  callee 396:16 StringMap.get -> @StringMap.get
+  local 400:11 text: string | null (const)
+  local 409:11 source: SourceFile (const)
+  callee 409:20 new SourceFile -> @SourceFile.constructor
+  local 410:11 parser: Parser (const)
+  callee 410:20 new Parser -> @Parser.constructor
+  local 411:11 file: Node (const)
+  callee 411:18 Parser.parseSourceFile -> @Parser.parseSourceFile
+  local 418:16 diagnostic: Diagnostic (const)
+  callee 419:7 DiagnosticSink.add -> @DiagnosticSink.add
+  local 424:11 isEntry: boolean (const)
+  callee 426:29 packageDirOf -> @packageDirOf
+  local 428:11 packageName: string (const)
+  callee 428:72 Compilation.packageOf -> @Compilation.packageOf
+  local 429:11 checker: Checker (const)
+  callee 429:21 new Checker -> @Checker.constructor
+  local 442:11 unit: ModuleUnit (const)
+  callee 442:18 new ModuleUnit -> @ModuleUnit.constructor
+  callee 443:5 StringMap.set -> @StringMap.set
+  local 452:11 beforeValidation: i32 (const)
+  callee 452:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee 453:5 validate -> @validate
+  local 454:11 failedValidation: boolean (const)
+  callee 454:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee 455:54 DiagnosticSink.count -> @DiagnosticSink.count
+  local 464:11 beforeSignatures: i32 (const)
+  callee 464:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee 465:5 Checker.collectSignatures -> @Checker.collectSignatures
+  local 475:11 signaturesFailed: boolean (const)
+  callee 475:30 DiagnosticSink.count -> @DiagnosticSink.count
+  local 476:11 dir: string (const)
+  callee 476:17 dirname -> @dirname
+  local 477:9 ok: boolean (let)
+  local 478:16 imp: ImportBinding (const)
+  callee 480:11 isNishSpecifier -> @isNishSpecifier
+  callee 483:11 StringMap.has -> @StringMap.has
+  local 486:13 found: ResolvedModule (const)
+  callee 486:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
+  callee 490:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local 494:13 target: string (const)
+  callee 496:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee 499:91 stdModuleNames -> @stdModuleNames
+  callee 510:12 Compilation.load -> @Compilation.load
+  callee 513:9 StringMap.set -> @StringMap.set
+  callee 513:42 StringMap.get -> @StringMap.get
+  callee 513:58 Compilation.identityOf -> @Compilation.identityOf
 function Compilation.resolveSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=32
   escaping: dir specifier
   calls: Compilation.resolveBareSpecifier isStdModuleName nish_alloc_struct nish_str_at nish_str_concat nish_str_new resolveModule stdModuleName stdModulePath
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.resolveBareSpecifier#0
   stackSites=0 stackLocals=0
-  local 505:13 name: string (const)
-  callee 506:31 isStdModuleName -> @isStdModuleName
-  local 511:15 escaped: ResolvedModule (const)
-  local 522:13 std: ResolvedModule (const)
-  callee 523:15 stdModulePath -> @stdModulePath
-  callee 524:15 stdModuleName -> @stdModuleName
-  local 531:13 resolvedPath: string (const)
-  callee 531:28 resolveModule -> @resolveModule
-  local 532:13 relative: ResolvedModule (const)
-  callee 540:12 Compilation.resolveBareSpecifier -> @Compilation.resolveBareSpecifier
+  local 530:13 name: string (const)
+  callee 531:31 isStdModuleName -> @isStdModuleName
+  local 536:15 escaped: ResolvedModule (const)
+  local 547:13 std: ResolvedModule (const)
+  callee 548:15 stdModulePath -> @stdModulePath
+  callee 549:15 stdModuleName -> @stdModuleName
+  local 556:13 resolvedPath: string (const)
+  callee 556:28 resolveModule -> @resolveModule
+  local 557:13 relative: ResolvedModule (const)
+  callee 565:12 Compilation.resolveBareSpecifier -> @Compilation.resolveBareSpecifier
 function Compilation.resolveBareSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveBareSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=32
   escaping: dir specifier
-  calls: Compilation.findPackageDir Compilation.identityOf PackageCopy.constructor StringMap.get StringMap.set columnOf describeVersion joinPath lineOf manifestEngineCheck manifestEngineRange manifestMalformedAt manifestVersion nishExportEntry nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_str_concat nish_str_eq nish_str_from_i32 packageConditionFor parseBareSpecifier resolvePath
+  calls: Compilation.findPackageDir Compilation.identityOf PackageCopy.constructor StringMap.get StringMap.set columnOf describeVersion joinPath lineOf manifestEngineCheck manifestEngineRange manifestMalformedAt manifestVersion nishExportEntry nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 packageConditionFor parseBareSpecifier relativePath resolvePath
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.findPackageDir#0 Compilation.identityOf#0
   stackSites=2 stackLocals=0
-  local 559:11 failed: ResolvedModule (const)
-  local 560:11 parsed: BareSpecifier | null (const)
-  callee 560:20 parseBareSpecifier -> @parseBareSpecifier
-  local 569:11 foundDir: string | null (const)
-  callee 569:22 Compilation.findPackageDir -> @Compilation.findPackageDir
-  local 579:11 identity: string (const)
-  callee 579:22 Compilation.identityOf -> @Compilation.identityOf
-  local 580:11 packageDir: string (const)
-  callee 580:69 resolvePath -> @resolvePath
-  local 581:11 manifestPath: string (const)
-  callee 581:26 joinPath -> @joinPath
-  local 582:11 manifest: string | null (const)
-  local 583:11 mode: string (const)
-  local 584:11 otherMode: string (const)
-  local 589:11 text: string (const)
-  local 594:11 version: string (const)
-  callee 594:21 manifestVersion -> @manifestVersion
-  local 595:11 seen: i32 (const)
-  callee 595:18 StringMap.get -> @StringMap.get
-  callee 597:7 StringMap.set -> @StringMap.set
-  callee 598:31 new PackageCopy -> @PackageCopy.constructor
-  local 600:13 first: PackageCopy (const)
-  callee 601:84 describeVersion -> @describeVersion
-  callee 601:136 describeVersion -> @describeVersion
-  local 608:11 engine: i32 (const)
-  callee 608:20 manifestEngineCheck -> @manifestEngineCheck
-  callee 610:124 manifestEngineRange -> @manifestEngineRange
-  callee 614:99 manifestEngineRange -> @manifestEngineRange
-  local 617:11 entry: ManifestEntry (const)
-  callee 617:19 nishExportEntry -> @nishExportEntry
-  callee 620:7 packageConditionFor -> @packageConditionFor
-  callee 622:7 packageConditionFor -> @packageConditionFor
-  local 636:13 brokenAt: i32 (const)
-  callee 636:49 manifestMalformedAt -> @manifestMalformedAt
-  callee 638:96 lineOf -> @lineOf
-  callee 638:122 columnOf -> @columnOf
-  callee 642:127 packageConditionFor -> @packageConditionFor
-  callee 642:203 packageConditionFor -> @packageConditionFor
-  callee 649:282 packageConditionFor -> @packageConditionFor
-  callee 649:316 packageConditionFor -> @packageConditionFor
-  local 662:11 target: string (const)
-  local 674:11 resolvedPath: string (const)
-  callee 674:26 joinPath -> @joinPath
-  local 675:11 resolved: ResolvedModule (const)
+  local 584:11 failed: ResolvedModule (const)
+  local 585:11 parsed: BareSpecifier | null (const)
+  callee 585:20 parseBareSpecifier -> @parseBareSpecifier
+  local 594:11 foundDir: string | null (const)
+  callee 594:22 Compilation.findPackageDir -> @Compilation.findPackageDir
+  local 606:11 identity: string (const)
+  callee 606:22 Compilation.identityOf -> @Compilation.identityOf
+  local 607:9 packageDir: string (let)
+  callee 608:52 resolvePath -> @resolvePath
+  callee 609:58 relativePath -> @relativePath
+  local 611:11 manifestPath: string (const)
+  callee 611:26 joinPath -> @joinPath
+  local 612:11 manifest: string | null (const)
+  local 613:11 mode: string (const)
+  local 614:11 otherMode: string (const)
+  local 619:11 text: string (const)
+  local 624:11 version: string (const)
+  callee 624:21 manifestVersion -> @manifestVersion
+  local 625:11 seen: i32 (const)
+  callee 625:18 StringMap.get -> @StringMap.get
+  callee 627:7 StringMap.set -> @StringMap.set
+  callee 628:31 new PackageCopy -> @PackageCopy.constructor
+  local 630:13 first: PackageCopy (const)
+  callee 631:84 describeVersion -> @describeVersion
+  callee 631:136 describeVersion -> @describeVersion
+  local 638:11 engine: i32 (const)
+  callee 638:20 manifestEngineCheck -> @manifestEngineCheck
+  callee 640:124 manifestEngineRange -> @manifestEngineRange
+  callee 644:99 manifestEngineRange -> @manifestEngineRange
+  local 647:11 entry: ManifestEntry (const)
+  callee 647:19 nishExportEntry -> @nishExportEntry
+  callee 650:7 packageConditionFor -> @packageConditionFor
+  callee 652:7 packageConditionFor -> @packageConditionFor
+  local 666:13 brokenAt: i32 (const)
+  callee 666:49 manifestMalformedAt -> @manifestMalformedAt
+  callee 668:96 lineOf -> @lineOf
+  callee 668:122 columnOf -> @columnOf
+  callee 672:127 packageConditionFor -> @packageConditionFor
+  callee 672:203 packageConditionFor -> @packageConditionFor
+  callee 679:282 packageConditionFor -> @packageConditionFor
+  callee 679:316 packageConditionFor -> @packageConditionFor
+  local 692:11 target: string (const)
+  local 704:11 resolvedPath: string (const)
+  callee 704:26 joinPath -> @joinPath
+  local 705:11 resolved: ResolvedModule (const)
 function Compilation.findPackageDir(this: Compilation, from: string, name: string): string | null -> @Compilation.findPackageDir [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: from name
   calls: basename joinPath nish_read_file_or_null nish_str_eq normalizePath parentDirectory
   pointer this: size=112 writesThrough=false captured=false
   stackSites=2 stackLocals=0
-  local 704:9 dir: string (let)
-  callee 704:15 normalizePath -> @normalizePath
-  local 705:9 steps: i32 (let)
-  local 706:9 searching: boolean (let)
-  callee 708:11 basename -> @basename
-  local 709:15 candidate: string (const)
-  callee 709:27 joinPath -> @joinPath
-  callee 710:32 joinPath -> @joinPath
-  local 714:13 parent: string (const)
-  callee 714:22 parentDirectory -> @parentDirectory
+  local 734:9 dir: string (let)
+  callee 734:15 normalizePath -> @normalizePath
+  local 735:9 steps: i32 (let)
+  local 736:9 searching: boolean (let)
+  callee 738:11 basename -> @basename
+  local 739:15 candidate: string (const)
+  callee 739:27 joinPath -> @joinPath
+  callee 740:32 joinPath -> @joinPath
+  local 744:13 parent: string (const)
+  callee 744:22 parentDirectory -> @parentDirectory
 function Compilation.check(this: Compilation): boolean -> @Compilation.check [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Checker.bindImports Checker.checkBodies Checker.closeReachableStructs Checker.drainInstantiations Checker.foldConstants Checker.makeDeferredInstantiations Compilation.declaredStructs Compilation.entry Compilation.rejectInstantiatedStructClashes Compilation.rejectSymbolClashes DiagnosticSink.hasErrors StringMap.get StringSet.constructor isNishSpecifier nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.declaredStructs#0 Compilation.rejectSymbolClashes#0 Compilation.entry#0 Compilation.rejectInstantiatedStructClashes#0
   stackSites=2 stackLocals=2
-  callee 731:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local 734:16 unit: ModuleUnit (const)
-  local 735:13 targets: CheckedProgram[] (const)
-  local 736:18 imp: ImportBinding (const)
-  local 740:15 index: i32 (const)
-  callee 740:23 isNishSpecifier -> @isNishSpecifier
-  callee 740:61 StringMap.get -> @StringMap.get
-  callee 743:7 Checker.bindImports -> @Checker.bindImports
-  local 749:16 unit: ModuleUnit (const)
-  callee 750:7 Checker.makeDeferredInstantiations -> @Checker.makeDeferredInstantiations
-  local 754:11 clashed: StringSet (const)
-  callee 754:21 new StringSet -> @StringSet.constructor
-  local 755:11 declared: StructRegistry (const)
-  callee 755:22 Compilation.declaredStructs -> @Compilation.declaredStructs
-  local 756:16 unit: ModuleUnit (const)
-  callee 757:7 Checker.closeReachableStructs -> @Checker.closeReachableStructs
-  callee 759:5 Compilation.rejectSymbolClashes -> @Compilation.rejectSymbolClashes
-  callee 760:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local 766:11 hasMain: boolean (const)
-  callee 766:21 Compilation.entry -> @Compilation.entry
-  local 767:16 unit: ModuleUnit (const)
-  local 772:16 unit: ModuleUnit (const)
-  callee 773:7 Checker.foldConstants -> @Checker.foldConstants
-  local 775:16 unit: ModuleUnit (const)
-  callee 776:7 Checker.checkBodies -> @Checker.checkBodies
-  callee 778:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local 791:9 working: boolean (let)
-  local 794:18 unit: ModuleUnit (const)
-  callee 795:13 Checker.drainInstantiations -> @Checker.drainInstantiations
-  callee 800:5 Compilation.rejectInstantiatedStructClashes -> @Compilation.rejectInstantiatedStructClashes
-  callee 801:13 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee 761:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local 764:16 unit: ModuleUnit (const)
+  local 765:13 targets: CheckedProgram[] (const)
+  local 766:18 imp: ImportBinding (const)
+  local 770:15 index: i32 (const)
+  callee 770:23 isNishSpecifier -> @isNishSpecifier
+  callee 770:61 StringMap.get -> @StringMap.get
+  callee 773:7 Checker.bindImports -> @Checker.bindImports
+  local 779:16 unit: ModuleUnit (const)
+  callee 780:7 Checker.makeDeferredInstantiations -> @Checker.makeDeferredInstantiations
+  local 784:11 clashed: StringSet (const)
+  callee 784:21 new StringSet -> @StringSet.constructor
+  local 785:11 declared: StructRegistry (const)
+  callee 785:22 Compilation.declaredStructs -> @Compilation.declaredStructs
+  local 786:16 unit: ModuleUnit (const)
+  callee 787:7 Checker.closeReachableStructs -> @Checker.closeReachableStructs
+  callee 789:5 Compilation.rejectSymbolClashes -> @Compilation.rejectSymbolClashes
+  callee 790:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local 796:11 hasMain: boolean (const)
+  callee 796:21 Compilation.entry -> @Compilation.entry
+  local 797:16 unit: ModuleUnit (const)
+  local 802:16 unit: ModuleUnit (const)
+  callee 803:7 Checker.foldConstants -> @Checker.foldConstants
+  local 805:16 unit: ModuleUnit (const)
+  callee 806:7 Checker.checkBodies -> @Checker.checkBodies
+  callee 808:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local 821:9 working: boolean (let)
+  local 824:18 unit: ModuleUnit (const)
+  callee 825:13 Checker.drainInstantiations -> @Checker.drainInstantiations
+  callee 830:5 Compilation.rejectInstantiatedStructClashes -> @Compilation.rejectInstantiatedStructClashes
+  callee 831:13 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
 function Compilation.rejectInstantiatedStructClashes(this: Compilation): void -> @Compilation.rejectInstantiatedStructClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Compilation.reportTemplateClash DiagnosticSink.report StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor TypeTable.typeName describePackage nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.reportTemplateClash#0
   stackSites=5 stackLocals=5
-  local 837:11 owners: StringMap (const)
-  callee 837:20 new StringMap -> @StringMap.constructor
-  local 838:11 ownerPackages: string[] (const)
-  local 841:11 packageOwners: StringMap (const)
-  callee 841:27 new StringMap -> @StringMap.constructor
-  local 842:11 packageOwnerPaths: string[] (const)
-  local 843:11 reported: StringSet (const)
-  callee 843:22 new StringSet -> @StringSet.constructor
-  local 844:16 unit: ModuleUnit (const)
-  local 845:18 instance: StructInstantiation (const)
-  local 851:15 name: string (const)
-  local 855:15 templateKey: string (const)
-  local 856:15 key: string (const)
-  local 857:15 inPackage: i32 (const)
-  callee 857:27 StringMap.get -> @StringMap.get
-  callee 859:11 StringMap.set -> @StringMap.set
-  local 865:17 first: string (const)
-  callee 866:15 StringSet.add -> @StringSet.add
-  callee 867:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
-  local 871:15 seen: i32 (const)
-  callee 871:22 StringMap.get -> @StringMap.get
-  callee 873:11 StringMap.set -> @StringMap.set
-  callee 878:14 StringSet.add -> @StringSet.add
-  local 881:15 at: Node (const)
-  local 882:15 what: string (const)
-  local 883:15 here: string (const)
-  callee 883:22 describePackage -> @describePackage
-  local 884:15 there: string (const)
-  callee 884:23 describePackage -> @describePackage
-  callee 885:9 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 889:24 TypeTable.typeName -> @TypeTable.typeName
+  local 867:11 owners: StringMap (const)
+  callee 867:20 new StringMap -> @StringMap.constructor
+  local 868:11 ownerPackages: string[] (const)
+  local 871:11 packageOwners: StringMap (const)
+  callee 871:27 new StringMap -> @StringMap.constructor
+  local 872:11 packageOwnerPaths: string[] (const)
+  local 873:11 reported: StringSet (const)
+  callee 873:22 new StringSet -> @StringSet.constructor
+  local 874:16 unit: ModuleUnit (const)
+  local 875:18 instance: StructInstantiation (const)
+  local 881:15 name: string (const)
+  local 885:15 templateKey: string (const)
+  local 886:15 key: string (const)
+  local 887:15 inPackage: i32 (const)
+  callee 887:27 StringMap.get -> @StringMap.get
+  callee 889:11 StringMap.set -> @StringMap.set
+  local 895:17 first: string (const)
+  callee 896:15 StringSet.add -> @StringSet.add
+  callee 897:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
+  local 901:15 seen: i32 (const)
+  callee 901:22 StringMap.get -> @StringMap.get
+  callee 903:11 StringMap.set -> @StringMap.set
+  callee 908:14 StringSet.add -> @StringSet.add
+  local 911:15 at: Node (const)
+  local 912:15 what: string (const)
+  local 913:15 here: string (const)
+  callee 913:22 describePackage -> @describePackage
+  local 914:15 there: string (const)
+  callee 914:23 describePackage -> @describePackage
+  callee 915:9 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 919:24 TypeTable.typeName -> @TypeTable.typeName
 function Compilation.declaredStructs(this: Compilation, clashed: StringSet): StructRegistry -> @Compilation.declaredStructs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=16
   calls: Compilation.reportTemplateClash DiagnosticSink.report StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor StructRegistry.add StructRegistry.constructor TypeTable.typeName describePackage isInstantiationName nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.reportTemplateClash#0
   pointer clashed: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   stackSites=6 stackLocals=6
-  local 925:11 declared: StructRegistry (const)
-  callee 925:22 new StructRegistry -> @StructRegistry.constructor
-  local 926:11 owners: StringMap (const)
-  callee 926:20 new StringMap -> @StringMap.constructor
-  local 927:11 ownerPackages: string[] (const)
-  local 928:11 ownerPaths: string[] (const)
-  local 931:11 packageOwners: StringMap (const)
-  callee 931:27 new StringMap -> @StringMap.constructor
-  local 932:11 packageOwnerPaths: string[] (const)
-  local 933:11 reportedTemplates: StringSet (const)
-  callee 933:31 new StringSet -> @StringSet.constructor
-  local 934:16 unit: ModuleUnit (const)
-  local 935:18 info: StructInfo (const)
-  callee 939:9 StructRegistry.add -> @StructRegistry.add
-  callee 943:39 isInstantiationName -> @isInstantiationName
-  local 946:15 what: string (const)
-  local 947:15 at: Node (const)
-  local 948:15 key: string (const)
-  local 949:15 inPackage: i32 (const)
-  callee 949:27 StringMap.get -> @StringMap.get
-  callee 951:11 StringMap.set -> @StringMap.set
-  local 956:17 first: string (const)
-  local 957:17 instance: StructInstantiation | null (const)
-  callee 959:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 963:28 TypeTable.typeName -> @TypeTable.typeName
-  callee 965:22 StringSet.add -> @StringSet.add
-  callee 966:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
-  callee 968:11 StringSet.add -> @StringSet.add
-  local 971:15 seen: i32 (const)
-  callee 971:22 StringMap.get -> @StringMap.get
-  callee 973:11 StringMap.set -> @StringMap.set
-  local 977:17 here: string (const)
-  callee 977:24 describePackage -> @describePackage
-  local 978:17 there: string (const)
-  callee 978:25 describePackage -> @describePackage
-  callee 979:11 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 983:26 TypeTable.typeName -> @TypeTable.typeName
+  local 955:11 declared: StructRegistry (const)
+  callee 955:22 new StructRegistry -> @StructRegistry.constructor
+  local 956:11 owners: StringMap (const)
+  callee 956:20 new StringMap -> @StringMap.constructor
+  local 957:11 ownerPackages: string[] (const)
+  local 958:11 ownerPaths: string[] (const)
+  local 961:11 packageOwners: StringMap (const)
+  callee 961:27 new StringMap -> @StringMap.constructor
+  local 962:11 packageOwnerPaths: string[] (const)
+  local 963:11 reportedTemplates: StringSet (const)
+  callee 963:31 new StringSet -> @StringSet.constructor
+  local 964:16 unit: ModuleUnit (const)
+  local 965:18 info: StructInfo (const)
+  callee 969:9 StructRegistry.add -> @StructRegistry.add
+  callee 973:39 isInstantiationName -> @isInstantiationName
+  local 976:15 what: string (const)
+  local 977:15 at: Node (const)
+  local 978:15 key: string (const)
+  local 979:15 inPackage: i32 (const)
+  callee 979:27 StringMap.get -> @StringMap.get
+  callee 981:11 StringMap.set -> @StringMap.set
+  local 986:17 first: string (const)
+  local 987:17 instance: StructInstantiation | null (const)
+  callee 989:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 993:28 TypeTable.typeName -> @TypeTable.typeName
+  callee 995:22 StringSet.add -> @StringSet.add
+  callee 996:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
+  callee 998:11 StringSet.add -> @StringSet.add
+  local 1001:15 seen: i32 (const)
+  callee 1001:22 StringMap.get -> @StringMap.get
+  callee 1003:11 StringMap.set -> @StringMap.set
+  local 1007:17 here: string (const)
+  callee 1007:24 describePackage -> @describePackage
+  local 1008:17 there: string (const)
+  callee 1008:25 describePackage -> @describePackage
+  callee 1009:11 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 1013:26 TypeTable.typeName -> @TypeTable.typeName
 function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, template: StructTemplateInfo, first: string): void -> @Compilation.reportTemplateClash [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DiagnosticSink.report nish_panic_index nish_str_concat
@@ -16838,116 +16845,116 @@ function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, te
   pointer unit: size=72 writesThrough=false captured=false
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 998:11 at: Node (const)
-  local 999:11 kindWord: string (const)
-  callee 1000:5 DiagnosticSink.report -> @DiagnosticSink.report
+  local 1028:11 at: Node (const)
+  local 1029:11 kindWord: string (const)
+  callee 1030:5 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet): void -> @Compilation.rejectSymbolClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Compilation.entry DiagnosticSink.report FunctionSig.definedIn StringMap.constructor StringMap.get StringMap.set StringSet.has clashMessage nameNode nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.entry#0
   pointer clashed: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=3 stackLocals=3
-  local 1031:11 owners: StringMap (const)
-  callee 1031:20 new StringMap -> @StringMap.constructor
-  local 1032:11 ownerSigs: FunctionSig | null[] (const)
-  local 1033:11 ownerModules: ModuleUnit[] (const)
-  local 1034:11 entry: ModuleUnit (const)
-  callee 1034:19 Compilation.entry -> @Compilation.entry
-  callee 1036:7 StringMap.set -> @StringMap.set
-  local 1040:16 unit: ModuleUnit (const)
-  local 1051:18 template: TemplateInfo (const)
-  local 1058:15 symbol: string (const)
-  local 1059:15 at: i32 (const)
-  callee 1059:20 StringMap.get -> @StringMap.get
-  callee 1061:11 StringMap.set -> @StringMap.set
-  callee 1070:9 DiagnosticSink.report -> @DiagnosticSink.report
-  local 1077:18 sig: FunctionSig (const)
-  callee 1078:14 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 1081:15 owner: StructInfo | null (const)
-  callee 1082:31 StringSet.has -> @StringSet.has
-  local 1085:15 at: i32 (const)
-  callee 1085:20 StringMap.get -> @StringMap.get
-  callee 1087:11 StringMap.set -> @StringMap.set
-  local 1092:15 previousSig: FunctionSig | null (const)
-  local 1093:15 previousModule: ModuleUnit (const)
-  local 1094:13 message: string (let)
-  callee 1098:21 clashMessage -> @clashMessage
-  local 1101:15 at2: Node (const)
-  callee 1101:21 nameNode -> @nameNode
-  callee 1102:9 DiagnosticSink.report -> @DiagnosticSink.report
+  local 1061:11 owners: StringMap (const)
+  callee 1061:20 new StringMap -> @StringMap.constructor
+  local 1062:11 ownerSigs: FunctionSig | null[] (const)
+  local 1063:11 ownerModules: ModuleUnit[] (const)
+  local 1064:11 entry: ModuleUnit (const)
+  callee 1064:19 Compilation.entry -> @Compilation.entry
+  callee 1066:7 StringMap.set -> @StringMap.set
+  local 1070:16 unit: ModuleUnit (const)
+  local 1081:18 template: TemplateInfo (const)
+  local 1088:15 symbol: string (const)
+  local 1089:15 at: i32 (const)
+  callee 1089:20 StringMap.get -> @StringMap.get
+  callee 1091:11 StringMap.set -> @StringMap.set
+  callee 1100:9 DiagnosticSink.report -> @DiagnosticSink.report
+  local 1107:18 sig: FunctionSig (const)
+  callee 1108:14 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 1111:15 owner: StructInfo | null (const)
+  callee 1112:31 StringSet.has -> @StringSet.has
+  local 1115:15 at: i32 (const)
+  callee 1115:20 StringMap.get -> @StringMap.get
+  callee 1117:11 StringMap.set -> @StringMap.set
+  local 1122:15 previousSig: FunctionSig | null (const)
+  local 1123:15 previousModule: ModuleUnit (const)
+  local 1124:13 message: string (let)
+  callee 1128:21 clashMessage -> @clashMessage
+  local 1131:15 at2: Node (const)
+  callee 1131:21 nameNode -> @nameNode
+  callee 1132:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=16
   calls: AnalysisUnit.constructor Compilation.entry analyzeFunctions nish_alloc_struct nish_array_grow
   pointer this: size=112 writesThrough=true captured=false passedTo=Compilation.entry#0
   stackSites=0 stackLocals=0
-  local 1114:11 done: FactsTable | null (const)
-  local 1118:11 units: AnalysisUnit[] (const)
-  local 1119:16 unit: ModuleUnit (const)
-  callee 1120:18 new AnalysisUnit -> @AnalysisUnit.constructor
-  local 1123:16 unit: ModuleUnit (const)
-  callee 1125:9 Compilation.entry -> @Compilation.entry
-  local 1128:11 facts: FactsTable (const)
-  callee 1128:19 analyzeFunctions -> @analyzeFunctions
+  local 1144:11 done: FactsTable | null (const)
+  local 1148:11 units: AnalysisUnit[] (const)
+  local 1149:16 unit: ModuleUnit (const)
+  callee 1150:18 new AnalysisUnit -> @AnalysisUnit.constructor
+  local 1153:16 unit: ModuleUnit (const)
+  callee 1155:9 Compilation.entry -> @Compilation.entry
+  local 1158:11 facts: FactsTable (const)
+  callee 1158:19 analyzeFunctions -> @analyzeFunctions
 function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.emit [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Compilation.analyze Compilation.outputStems EmittedModule.constructor emitProgram nish_alloc_struct nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.outputStems#0
   stackSites=0 stackLocals=0
-  local 1136:11 facts: FactsTable (const)
-  callee 1136:19 Compilation.analyze -> @Compilation.analyze
-  local 1137:11 units: AnalysisUnit[] (const)
-  local 1138:11 stems: string[] (const)
-  callee 1138:19 Compilation.outputStems -> @Compilation.outputStems
-  local 1139:11 out: EmittedModule[] (const)
-  local 1140:9 i: i32 (let)
-  callee 1142:16 new EmittedModule -> @EmittedModule.constructor
-  callee 1142:44 emitProgram -> @emitProgram
+  local 1166:11 facts: FactsTable (const)
+  callee 1166:19 Compilation.analyze -> @Compilation.analyze
+  local 1167:11 units: AnalysisUnit[] (const)
+  local 1168:11 stems: string[] (const)
+  callee 1168:19 Compilation.outputStems -> @Compilation.outputStems
+  local 1169:11 out: EmittedModule[] (const)
+  local 1170:9 i: i32 (let)
+  callee 1172:16 new EmittedModule -> @EmittedModule.constructor
+  callee 1172:44 emitProgram -> @emitProgram
 function Compilation.outputStems(this: Compilation): string[] -> @Compilation.outputStems [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Compilation.entry StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor StringSet.has basenameWithout dirname nish_array_grow nish_str_concat nish_str_from_i32 pathStem
   pointer this: size=112 writesThrough=false captured=false passedTo=Compilation.entry#0
   stackSites=2 stackLocals=2
-  local 1167:11 counts: StringMap (const)
-  callee 1167:20 new StringMap -> @StringMap.constructor
-  local 1168:16 unit: ModuleUnit (const)
-  local 1169:13 base: string (const)
-  callee 1169:20 basenameWithout -> @basenameWithout
-  callee 1170:7 StringMap.set -> @StringMap.set
-  callee 1170:24 StringMap.get -> @StringMap.get
-  local 1172:11 root: string (const)
-  callee 1172:18 dirname -> @dirname
-  callee 1172:26 Compilation.entry -> @Compilation.entry
-  local 1173:11 taken: StringSet (const)
-  callee 1173:19 new StringSet -> @StringSet.constructor
-  local 1174:11 stems: string[] (const)
-  local 1175:16 unit: ModuleUnit (const)
-  local 1176:13 base: string (const)
-  callee 1176:20 basenameWithout -> @basenameWithout
-  local 1177:13 stem: string (const)
-  callee 1177:20 StringMap.get -> @StringMap.get
-  callee 1177:55 pathStem -> @pathStem
-  local 1178:11 free: string (let)
-  local 1179:11 n: i32 (let)
-  callee 1180:14 StringSet.has -> @StringSet.has
-  callee 1184:7 StringSet.add -> @StringSet.add
+  local 1197:11 counts: StringMap (const)
+  callee 1197:20 new StringMap -> @StringMap.constructor
+  local 1198:16 unit: ModuleUnit (const)
+  local 1199:13 base: string (const)
+  callee 1199:20 basenameWithout -> @basenameWithout
+  callee 1200:7 StringMap.set -> @StringMap.set
+  callee 1200:24 StringMap.get -> @StringMap.get
+  local 1202:11 root: string (const)
+  callee 1202:18 dirname -> @dirname
+  callee 1202:26 Compilation.entry -> @Compilation.entry
+  local 1203:11 taken: StringSet (const)
+  callee 1203:19 new StringSet -> @StringSet.constructor
+  local 1204:11 stems: string[] (const)
+  local 1205:16 unit: ModuleUnit (const)
+  local 1206:13 base: string (const)
+  callee 1206:20 basenameWithout -> @basenameWithout
+  local 1207:13 stem: string (const)
+  callee 1207:20 StringMap.get -> @StringMap.get
+  callee 1207:55 pathStem -> @pathStem
+  local 1208:11 free: string (let)
+  local 1209:11 n: i32 (let)
+  callee 1210:14 StringSet.has -> @StringSet.has
+  callee 1214:7 StringSet.add -> @StringSet.add
 function pathStem(root: string, path: string): string -> @pathStem
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: path root
   calls: nish_alloc_struct nish_array_grow nish_str_at nish_str_eq nish_str_new relativePath splitByte
   stackSites=1 stackLocals=1
-  local 1197:9 parts: string[] (const)
-  local 1198:14 segment: string (const)
-  callee 1198:25 splitByte -> @splitByte
-  callee 1198:35 relativePath -> @relativePath
-  local 1203:9 joined: string (const)
+  local 1227:9 parts: string[] (const)
+  local 1228:14 segment: string (const)
+  callee 1228:25 splitByte -> @splitByte
+  callee 1228:35 relativePath -> @relativePath
+  local 1233:9 joined: string (const)
 function parentDirectory(dir: string): string -> @parentDirectory
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: dir
   calls: dirname nish_str_at nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
-  local 1229:11 parent: string (const)
-  callee 1229:20 dirname -> @dirname
-  callee 1240:10 dirname -> @dirname
+  local 1259:11 parent: string (const)
+  callee 1259:20 dirname -> @dirname
+  callee 1270:10 dirname -> @dirname
 function nameNode(sig: FunctionSig): Node -> @nameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=40
   calls: nish_panic_index
@@ -16972,11 +16979,11 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
   pointer sig: size=88 writesThrough=false captured=false
   pointer previous: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1284:9 owner: StructInfo | null (const)
-  local 1286:11 member: string (const)
-  local 1289:11 both: string (const)
-  callee 1289:29 TypeTable.typeName -> @TypeTable.typeName
-  local 1295:9 where: string (const)
+  local 1314:9 owner: StructInfo | null (const)
+  local 1316:11 member: string (const)
+  local 1319:11 both: string (const)
+  callee 1319:29 TypeTable.typeName -> @TypeTable.typeName
+  local 1325:9 where: string (const)
 module self/parser.ts
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import SourceFile from "./diagnostics" -> struct SourceFile

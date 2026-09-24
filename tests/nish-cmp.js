@@ -811,6 +811,24 @@ const DECLARED = [
     changelog: "Module and package identity is the real path",
     why: "the same program: HEAD names the second module `types_2.ll` rather than overwriting the first, and the reference compiler writes no such file (#198)",
   },
+  {
+    program: "tests/link/package_workspace/main.ts",
+    file: "index.ll",
+    changelog: "Module and package identity is the real path",
+    why: "a new program: a workspace link `node_modules/foo -> ../packages/foo`, whose modules HEAD names under the package's real directory, `packages/foo/index.ts`, where the reference compiler names them through the link (#198)",
+  },
+  {
+    program: "tests/link/package_workspace/main.ts",
+    file: "node_modules_foo_helper.ll",
+    changelog: "Module and package identity is the real path",
+    why: "the same program: the reference compiler stems `foo`'s own `helper.ts` from the link's spelling, and HEAD writes it as `packages_foo_helper.ll` (#198)",
+  },
+  {
+    program: "tests/link/package_workspace/main.ts",
+    file: "packages_foo_helper.ll",
+    changelog: "Module and package identity is the real path",
+    why: "the same program: HEAD stems `foo`'s own `helper.ts` from the package's real directory, a file the reference compiler does not write (#198)",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

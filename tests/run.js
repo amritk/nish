@@ -6173,6 +6173,37 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       );
     }
 
+    // WP21 S3 and #198: a package is its real directory. `package_symlink` is
+    // pnpm's layout, one package reached a second time through a link, which
+    // is one package: `@shared.val` is defined once. `package_workspace` is a
+    // workspace link to a directory outside any `node_modules`, whose own
+    // relative import stays in that package rather than joining the root
+    // package: `foo`'s `helper` is `@foo.helper` beside the program's
+    // `@helper`, where it used to clash with it. Both are compiled the way a
+    // user compiles them, `nish main.ts` from the fixture; the link loop above
+    // runs them.
+    for (const [workspaceName, wantDefines] of [
+      ["package_symlink", ["@app2.twice(", "@shared.val("]],
+      ["package_workspace", ["@foo.foo(", "@foo.helper(", "@helper("]],
+    ]) {
+      const ourDir = path.join(shipDir, `${workspaceName}-stage1`) + path.sep;
+      fs.rmSync(ourDir, { recursive: true, force: true });
+      const ourBuild = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+        cwd: path.join(root, "tests", "link", workspaceName),
+        encoding: "utf8",
+      });
+      const defines = llFilesIn(ourDir)
+        .flatMap((file) => fs.readFileSync(path.join(ourDir, file), "utf8").split("\n"))
+        .filter((line) => line.startsWith("define ") && !line.includes("@main(") && !line.includes("@nish_main("))
+        .map((line) => /@[\w.$]+\(/.exec(line)?.[0] ?? line)
+        .sort();
+      check(
+        `the self-hosted compiler: ${workspaceName} is one package per real directory (${wantDefines.join(" ")})`,
+        ourBuild.status === 0 && defines.join(" ") === wantDefines.join(" "),
+        `stage1 ${ourBuild.status}: ${ourBuild.stdout}${ourBuild.stderr}defines [${defines.join(" ")}]`
+      );
+    }
+
     // WP15 §8 through the driver (WP19 G1). The analysis is pinned by the
     // performance section and the checked goldens already; what this pins is
     // the half that is the driver's -- that it prints the warnings at all,
