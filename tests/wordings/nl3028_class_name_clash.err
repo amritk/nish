@@ -1,0 +1,1 @@
+Class `Base` is also declared in tests/wordings/nl3028_class_name_clash.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone

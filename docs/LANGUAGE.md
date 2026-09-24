@@ -1440,6 +1440,11 @@ export const main = (): i32 => {
   `…_same_name_itself`, `…_same_name_class`). The constraint may still be the
   asking module's own declaration when the template's module imports that very
   declaration (`tests/link/generic_constraint_import_back`).
+  Two modules can no longer declare a `Shape` each at all (*A class or
+  interface name is program-wide*, under
+  [Generic classes and interfaces](#generic-classes-and-interfaces)), so the
+  four programs above are refused at the second declaration now, before any
+  call is checked; this rule is still what decides a constraint.
   Every position a type
   argument can be written in is a request of its own — a field, an array
   element, a `Result` arm, inside another instantiation, an `implements`
@@ -1508,6 +1513,21 @@ export const main = (): i32 => {
   the structs pass runs before the functions pass, so the template is always
   the one already there (`tests/cases/reject_generic_class_fn_clash`,
   `reject_generic_class_after_fn`, `reject_generic_class_redeclared`).
+- **A class or interface name is program-wide**, because a struct type is
+  identified by its name alone: `%struct.Base`, and a type id interned by that
+  name. So two modules may not both declare a class or interface of one name,
+  whether or not either is exported, whether it has fields only, and however
+  different the two field lists are. The later declaration in load order is
+  refused, once per name per module, naming the module that declared it first:
+  `` Class `Base` is also declared in main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone ``
+  (`tests/link/class_clash_fields`, `tests/link/iface_clash_private`; NL3028).
+  Left alone, a value of one was accepted where the other was expected and its
+  fields were read at the other's offsets, with no diagnostic (#193). Two
+  classes that share a name and a constructor or method are refused in the
+  same words, once (`tests/link/class_clash_constructor`, `…_method`,
+  `…_package`), and across two packages the wording is the one
+  `tests/link/two_packages_struct` pins. Importing the one declaration is how
+  two modules share a struct (`tests/link/iface_same_name_imported`).
 - **An instantiation's name is program-wide**, because `%struct.Box$i32` and
   `@Box$i32.constructor` are. So two modules may not both declare a generic
   class or interface of one name once both instantiate it:

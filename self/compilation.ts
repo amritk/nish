@@ -668,11 +668,12 @@ export class Compilation {
     }
     // After every module is bound, so a struct reached through a chain of
     // modules does not depend on the order they were bound in.
-    const declared = this.declaredStructs();
+    const clashed = new StringSet();
+    const declared = this.declaredStructs(clashed);
     for (const unit of this.modules) {
       unit.checker.closeReachableStructs(declared);
     }
-    this.rejectSymbolClashes();
+    this.rejectSymbolClashes(clashed);
     if (this.sink.hasErrors()) {
       return false;
     }
@@ -737,8 +738,7 @@ export class Compilation {
    * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
    * which is a program-wide `%struct` name and a program-wide method symbol
    * whichever package asked for it. A declared `class Holder` in two modules of
-   * one package is caught before bodies, by `@Holder.constructor` clashing in
-   * `rejectSymbolClashes`; the generic spelling has no symbol until an
+   * one package is caught before bodies, by `declaredStructs`; the generic spelling has no symbol until an
    * instantiation exists, so it reached the emitter unremarked and produced two
    * different `%struct.Holder$i32` and an invalid redefinition of
    * `@Holder$i32.constructor`, with no diagnostic at all
@@ -800,11 +800,33 @@ export class Compilation {
     }
   }
 
-  /** Every class and interface declared anywhere in the program, by name. */
-  declaredStructs(): StructRegistry {
+  /**
+   * Every class and interface declared anywhere in the program, by name, and
+   * the refusal of a name declared twice.
+   *
+   * A struct's identity is its bare name -- `%struct.<name>`, and type equality
+   * compares type ids interned by name -- so two declarations of `Base` are one
+   * type to everything after this point, whichever modules and packages they
+   * sit in and whether or not either is exported. Left alone, a value of one is
+   * accepted where the other is expected and its fields are read at the other's
+   * offsets, with no diagnostic (#193). So the second declaration is refused,
+   * once per name per module, naming the module that declared it first.
+   *
+   * Across packages the words are docs/wp21-packages.md section 7's. Inside one
+   * package they are the generic rule's in `rejectInstantiatedStructClashes`,
+   * which catches the instantiations of a same-named template; an instantiation
+   * is skipped here for that reason, so that the template is refused once and in
+   * the words that say why.
+   *
+   * Every name refused inside one package goes into `clashed`, so that
+   * `rejectSymbolClashes` does not report the constructor or method the two
+   * classes share as a second mistake: it is the same one.
+   */
+  declaredStructs(clashed: StringSet): StructRegistry {
     const declared = new StructRegistry();
     const owners = new StringMap();
     const ownerPackages: string[] = [];
+    const ownerPaths: string[] = [];
     for (const unit of this.modules) {
       for (const info of unit.checker.program.structList) {
         if (info.origin === unit.source) {
@@ -812,13 +834,8 @@ export class Compilation {
           if (seen < 0) {
             owners.set(info.name, ownerPackages.length);
             ownerPackages.push(unit.packageName);
+            ownerPaths.push(unit.name);
           } else if (ownerPackages[seen] !== unit.packageName) {
-            // WP21 S1 stops at functions. A struct's identity is still its
-            // bare name -- `%struct.<name>`, and type equality compares names
-            // -- so two packages that both declare `Node` would be silently
-            // treated as declaring one type. Say so, in the words
-            // docs/wp21-packages.md section 7 uses, rather than letting the
-            // layouts merge.
             const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
             const here = describePackage(unit.packageName);
             const there = describePackage(ownerPackages[seen]);
@@ -829,6 +846,16 @@ export class Compilation {
               at.end,
               `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
             );
+          } else if (info.instance === null) {
+            const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
+            const at = info.decl.children[0];
+            this.sink.report(
+              unit.source,
+              at.start,
+              at.end,
+              `${what} \`${this.table.typeName(info.type)}\` is also declared in ${ownerPaths[seen]}; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone`
+            );
+            clashed.add(info.name);
           }
           declared.add(info);
         }
@@ -852,8 +879,12 @@ export class Compilation {
    * out of one name. A program of one package is every program that existed
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
+   *
+   * A constructor or method of a class in `clashed` is skipped: `declaredStructs`
+   * has already refused the second class, and the member the two share is a
+   * consequence of that one mistake rather than a second one.
    */
-  rejectSymbolClashes(): void {
+  rejectSymbolClashes(clashed: StringSet): void {
     const owners = new StringMap();
     const ownerSigs: (FunctionSig | null)[] = [];
     const ownerModules: ModuleUnit[] = [];
@@ -903,6 +934,10 @@ export class Compilation {
       for (const sig of unit.checker.program.functions) {
         if (!sig.definedIn(unit.source)) {
           continue; // an imported signature is the exporter's symbol, not a second one
+        }
+        const owner = sig.owner;
+        if (owner !== null && clashed.has(owner.name)) {
+          continue;
         }
         const at = owners.get(sig.name, -1);
         if (at < 0) {
@@ -1064,10 +1099,12 @@ const describePackage = (packageName: string): string => packageName === ROOT_PA
  * what its stable `NL` code in `self/codes.ts` is keyed on.
  *
  * A constructor or method is a symbol named after its class, so two classes
- * that share a name collide here only when both declare the same member: two
- * same-named classes with fields alone compile. That sentence names the class
- * and both files rather than the symbol `Base.constructor`, which is not a name
- * the reader wrote (#174).
+ * that share a name collide here when both declare the same member. That
+ * sentence names the class and both files rather than the symbol
+ * `Base.constructor`, which is not a name the reader wrote (#174). Since #193 two
+ * same-named classes are refused by `declaredStructs` before their members are
+ * looked at, so no program reaches it today; it stays as the wording of a rule
+ * that still holds, and its codes stay reserved.
  */
 const clashMessage = (
   table: TypeTable,

@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 430;
+export const RULE_COUNT: i32 = 431;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -73,6 +73,8 @@ export const diagnosticRules = (): string[] => [
   "NL2324",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
+  "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
+  "NL3028",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
   "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",

@@ -1,1 +1,1 @@
-main.ts:14:32: error: `T` of `areaOf` requires `T extends Shape`, and `Square` does not implement it
+lib.ts:3:18: error: Interface `Shape` is also declared in tests/link/generic_constraint_same_name_fields/main.ts; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone
