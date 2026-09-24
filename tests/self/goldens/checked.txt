@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 488 programs, 9480 dump lines.
+# 491 programs, 9570 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -5860,6 +5860,99 @@ function Cell<f64>.constructor(this: Cell<f64>, value: f64): void -> @Cell$f64.c
   escaping: value
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+program tests/cases/perf_padding_suffix.ts
+module tests/cases/perf_padding_suffix.ts (entry)
+struct Base (interface) size=16 align=8 exported
+  field a: i32 index=0 offset=0
+  field b: f64 index=1 offset=8
+struct Wide (class) size=40 align=8 exported
+  implements Base
+  field a: i32 index=0 offset=0 initialized
+  field b: f64 index=1 offset=8 initialized
+  field c: i32 index=2 offset=16 initialized
+  field d: f64 index=3 offset=24 initialized
+  field e: i32 index=4 offset=32 initialized
+struct Tag (interface) size=4 align=4 exported
+  field id: i32 index=0 offset=0
+struct Tagged (class) size=40 align=8 exported
+  implements Tag, Late
+  field id: i32 index=0 offset=0 initialized
+  field at: f64 index=1 offset=8 initialized
+  field flag: boolean index=2 offset=16 initialized
+  field weight: f64 index=3 offset=24 initialized
+  field count: i32 index=4 offset=32 initialized
+struct Late (interface) size=16 align=8 exported
+  field id: i32 index=0 offset=0
+  field at: f64 index=1 offset=8
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=2 stackLocals=4
+  local 45:9 w: Wide (const)
+  local 47:9 t: Tagged (const)
+  local 49:9 b: Base (const)
+  local 50:9 l: Late (const)
+program tests/cases/perf_padding_suffix_gap.ts
+module tests/cases/perf_padding_suffix_gap.ts (entry)
+struct Four (interface) size=4 align=4 exported
+  field a: i32 index=0 offset=0
+struct FourGap (class) size=32 align=8 exported
+  implements Four
+  field a: i32 index=0 offset=0 initialized
+  field b: f64 index=1 offset=8 initialized
+  field c: i32 index=2 offset=16 initialized
+  field d: f64 index=3 offset=24 initialized
+struct One (interface) size=1 align=1 exported
+  field a: boolean index=0 offset=0
+struct OneGap (class) size=32 align=8 exported
+  implements One
+  field a: boolean index=0 offset=0 initialized
+  field b: f64 index=1 offset=8 initialized
+  field c: boolean index=2 offset=16 initialized
+  field d: i32 index=3 offset=20 initialized
+  field e: f64 index=4 offset=24 initialized
+struct Item (class) size=4 align=4 exported
+  field id: i32 index=0 offset=0 initialized
+struct Mixed (class) size=56 align=8 exported
+  implements One
+  field a: boolean index=0 offset=0 initialized
+  field u: u16 index=1 offset=2 initialized
+  field s: string index=2 offset=8 initialized
+  field r: u8 index=3 offset=16 initialized
+  field xs: i32[] index=4 offset=24
+  field f: f32 index=5 offset=32 initialized
+  field n: Item | null index=6 offset=40 initialized
+  field q: i64 index=7 offset=48 initialized
+  constructor -> @Mixed.constructor
+function Mixed.constructor(this: Mixed): void -> @Mixed.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Mixed.constructor
+  stackSites=3 stackLocals=4
+  local 58:9 four: FourGap (const)
+  local 60:9 one: OneGap (const)
+  local 62:9 mixed: Mixed (const)
+  callee 62:17 new Mixed -> @Mixed.constructor
+  local 64:9 view: One (const)
+program tests/cases/perf_padding_suffix_quiet.ts
+module tests/cases/perf_padding_suffix_quiet.ts (entry)
+struct Header (interface) size=16 align=8 exported
+  field live: boolean index=0 offset=0
+  field weight: f64 index=1 offset=8
+struct Entry (class) size=32 align=8 exported
+  implements Header
+  field live: boolean index=0 offset=0 initialized
+  field weight: f64 index=1 offset=8 initialized
+  field size: f64 index=2 offset=16 initialized
+  field count: i32 index=3 offset=24 initialized
+  field flag: boolean index=4 offset=28 initialized
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=1 stackLocals=2
+  local 20:9 e: Entry (const)
+  local 22:9 h: Header (const)
 program tests/cases/perf_str_concat_loop.ts
 module tests/cases/perf_str_concat_loop.ts (entry)
 function test(): i32 -> @test [exported]

@@ -3249,14 +3249,23 @@ by the caller.
     (`tests/cases/diag_order_pass1`). Silent wherever the
     two sizes are equal — fields already widest first, one alignment
     throughout, a single field, or trailing padding that belongs to the
-    alignment rather than to the order; silent for a class that `implements` an
-    interface, whose first fields are the interface's own and in its order, so
-    the prefix is not the author's to permute and the order the message would
-    name is one the compiler would then refuse; and silent for a generic
+    alignment rather than to the order; and silent for a generic
     instantiation, which shares one declaration with every other instantiation
     of the same class, so the caret would land on that declaration once per type
     argument and the order that suits one need not suit another
-    (`tests/cases/perf_padding_quiet`).
+    (`tests/cases/perf_padding_quiet`). A class that `implements` an interface
+    is held to the part of its order that is its own: the fields of the longest
+    interface it implements are its first fields, in that interface's order, so
+    they stay put, and the rule warns when reordering only the fields after them
+    would shrink the class. The message names the whole order and says the
+    first fields stay where `implements` puts them
+    (`tests/cases/perf_padding_suffix`). The fields after them are laid out
+    from where the prefix ends, which is not always widest first. A prefix
+    that ends off alignment leaves a gap, and the order the message names
+    fills that gap with the narrow fields first
+    (`tests/cases/perf_padding_suffix_gap`). Padding inside that prefix is the
+    interface's, and the class says nothing about it
+    (`tests/cases/perf_padding_suffix_quiet`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
