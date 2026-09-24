@@ -1070,7 +1070,7 @@ if (!only || "performance".includes(only)) {
   const suffixSentence = (name, iface, order) =>
     `performance: \`${name}\` is 40 bytes and would be 32 with the same fields in a different order, so 8 bytes ` +
     `of every value are padding the alignment rules insert and nothing reads: keep the first 2 fields where ` +
-    `\`implements ${iface}\` puts them and declare the rest widest first \u2014 \`${order}\``;
+    `\`implements ${iface}\` puts them and declare the rest in this order \u2014 \`${order}\``;
   check(
     "performance: a class that implements an interface warns when reordering only the fields after the interface's shrinks it",
     suffix.status === 0 &&
@@ -1079,6 +1079,37 @@ if (!only || "performance".includes(only)) {
       suffixLines[0].endsWith(suffixSentence("Wide", "Base", "a: i32, b: f64, d: f64, c: i32, e: i32")) &&
       suffixLines[1].endsWith(suffixSentence("Tagged", "Late", "id: i32, at: f64, weight: f64, count: i32, flag: boolean")),
     suffix.stderr
+  );
+
+  // A prefix that ends off alignment leaves a gap the class's narrow fields can
+  // fill, so the best suffix is not widest first. Each sentence names the order
+  // that fills the gap and the size that order measures to: 24 for `FourGap` and
+  // `OneGap`, which widest first leaves at 32, and 40 for `Mixed`, where widest
+  // first reaches only 48. With one field kept the sentence says so in the
+  // singular.
+  const gap = compile("perf_padding_suffix_gap", "perf_padding_suffix_gap_report.ll");
+  const gapLines = summaries(gap.stderr);
+  const gapSentence = (name, size, packed, iface, order) =>
+    `performance: \`${name}\` is ${size} bytes and would be ${packed} with the same fields in a different order, ` +
+    `so ${size - packed} bytes of every value are padding the alignment rules insert and nothing reads: keep the ` +
+    `first field where \`implements ${iface}\` puts it and declare the rest in this order \u2014 \`${order}\``;
+  check(
+    "performance: a class whose interface prefix ends off alignment is told the order that fills the gap, and the size it reaches",
+    gap.status === 0 &&
+      gapLines.length === 3 &&
+      positions(gapLines) === "14:14,27:14,42:14" &&
+      gapLines[0].endsWith(gapSentence("FourGap", 32, 24, "Four", "a: i32, c: i32, b: f64, d: f64")) &&
+      gapLines[1].endsWith(gapSentence("OneGap", 32, 24, "One", "a: boolean, c: boolean, d: i32, b: f64, e: f64")) &&
+      gapLines[2].endsWith(
+        gapSentence(
+          "Mixed",
+          56,
+          40,
+          "One",
+          "a: boolean, r: u8, u: u16, f: f32, s: string, xs: i32[], n: Item | null, q: i64"
+        )
+      ),
+    gap.stderr
   );
 
   const str = compile("perf_str_concat_loop", "perf_str.ll");

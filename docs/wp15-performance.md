@@ -1762,11 +1762,24 @@ measurement closed says so and says why.
      author's to order, though, and a badly ordered suffix pads like any other
      struct. So the rule keeps the fields of the longest implemented interface
      where they are — every implemented interface is a prefix of the class, so
-     the longest fixes the most — puts only the rest widest first, and warns
-     when that is smaller, naming the whole order and saying the first *k*
-     fields stay where `implements` puts them
+     the longest fixes the most. It orders the rest from where the prefix
+     ends and warns when that is smaller, naming the whole order and saying
+     the first *k* fields stay where `implements` puts them
      ([#108](https://github.com/amritk/nish/issues/108),
-     `tests/cases/perf_padding_suffix`). Until then the class was silent
+     `tests/cases/perf_padding_suffix`). The rest are not simply widest first.
+     That order is the best one only from an offset aligned to the widest
+     field. A prefix that ends at 1 or 4 leaves a gap, and the class's narrow
+     fields can fill it. `interface I { a: i32 }` followed by `b: f64, c: i32,
+     d: f64` is 32 bytes widest first and 24 with `c` after `a`. So
+     `leastPaddingFirst` walks forward from the prefix's end and each time takes
+     the field that pads least, the widest of those that pad equally. No field
+     can cross a multiple of the struct's alignment, since every width is a
+     power of two and equals its alignment. Past the first such multiple the
+     fields are widest first and pad nothing, so the size depends only on how
+     much of the gap is used, and this walk uses as much as any order can. An
+     exhaustive search over every permutation of 20,000 random shapes found no
+     smaller layout. The size the message prints is `layoutSize` of the order
+     it names (`perf_padding_suffix_gap`). Until then the class was silent
      altogether, which was broader than its reason. Padding inside the prefix
      is the interface's to fix, and stays quiet here
      (`perf_padding_suffix_quiet`). **One shape stays silent**, because §8's

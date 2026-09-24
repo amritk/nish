@@ -3214,10 +3214,14 @@ by the caller.
     (`tests/cases/perf_padding_quiet`). A class that `implements` an interface
     is held to the part of its order that is its own: the fields of the longest
     interface it implements are its first fields, in that interface's order, so
-    they stay put, and the rule warns when putting only the fields after them
-    widest first would shrink the class. The message names the whole order and
-    says the first fields stay where `implements` puts them
-    (`tests/cases/perf_padding_suffix`); padding inside that prefix is the
+    they stay put, and the rule warns when reordering only the fields after them
+    would shrink the class. The message names the whole order and says the
+    first fields stay where `implements` puts them
+    (`tests/cases/perf_padding_suffix`). The fields after them are laid out
+    from where the prefix ends, which is not always widest first. A prefix
+    that ends off alignment leaves a gap, and the order the message names
+    fills that gap with the narrow fields first
+    (`tests/cases/perf_padding_suffix_gap`). Padding inside that prefix is the
     interface's, and the class says nothing about it
     (`tests/cases/perf_padding_suffix_quiet`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
