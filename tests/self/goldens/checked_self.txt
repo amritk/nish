@@ -19315,16 +19315,16 @@ function manifestEngineRange(manifest: string, condition: string): string -> @ma
   escaping: condition manifest
   calls: manifestField manifestUnquoted
   stackSites=0 stackLocals=0
-  callee 537:10 manifestUnquoted -> @manifestUnquoted
-  callee 537:27 manifestField -> @manifestField
-  callee 537:41 manifestField -> @manifestField
+  callee 537:3 manifestUnquoted -> @manifestUnquoted
+  callee 537:20 manifestField -> @manifestField
+  callee 537:34 manifestField -> @manifestField
 function manifestVersion(manifest: string): string -> @manifestVersion [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: manifest
   calls: manifestField manifestUnquoted
   stackSites=0 stackLocals=0
-  callee 545:62 manifestUnquoted -> @manifestUnquoted
-  callee 545:79 manifestField -> @manifestField
+  callee 544:62 manifestUnquoted -> @manifestUnquoted
+  callee 544:79 manifestField -> @manifestField
 function manifestUnquoted(raw: string): string -> @manifestUnquoted
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: raw
@@ -19336,41 +19336,41 @@ function manifestReadNumber(text: string, at: i32, next: i32[]): i32 -> @manifes
   calls: isDigit nish_panic_index
   pointer next: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 558:7 i: i32 (let)
-  local 559:7 value: i32 (let)
-  local 561:11 code: i32 (const)
-  callee 562:10 isDigit -> @isDigit
+  local 557:7 i: i32 (let)
+  local 558:7 value: i32 (let)
+  local 560:11 code: i32 (const)
+  callee 561:10 isDigit -> @isDigit
 function manifestVersionParts(text: string, at: i32, next: i32[]): i32[] -> @manifestVersionParts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: at text
   calls: manifestReadNumber nish_array_grow nish_panic_index
   pointer next: size=0 writesThrough=true captured=false passedTo=manifestReadNumber#2
   stackSites=0 stackLocals=0
-  local 581:9 parts: i32[] (const)
-  local 582:7 i: i32 (let)
-  local 584:11 value: i32 (const)
-  callee 584:19 manifestReadNumber -> @manifestReadNumber
-  local 586:13 none: i32[] (const)
-  local 600:11 none: i32[] (const)
+  local 580:9 parts: i32[] (const)
+  local 581:7 i: i32 (let)
+  local 583:11 value: i32 (const)
+  callee 583:19 manifestReadNumber -> @manifestReadNumber
+  local 585:13 none: i32[] (const)
+  local 599:11 none: i32[] (const)
 function manifestEngineCheck(manifest: string, condition: string, version: string): i32 -> @manifestEngineCheck [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: condition manifest version
   calls: manifestField manifestSkipBlank manifestVersionParts nish_panic_index nish_str_at nish_str_new
   stackSites=1 stackLocals=1
-  local 622:9 raw: string (const)
-  callee 622:15 manifestField -> @manifestField
-  callee 622:29 manifestField -> @manifestField
-  local 629:9 range: string (const)
-  local 630:9 next: i32[] (const)
-  local 631:9 opAt: i32 (const)
-  callee 631:16 manifestSkipBlank -> @manifestSkipBlank
-  local 635:9 floor: i32[] (const)
-  callee 635:17 manifestVersionParts -> @manifestVersionParts
-  callee 635:45 manifestSkipBlank -> @manifestSkipBlank
-  callee 636:29 manifestSkipBlank -> @manifestSkipBlank
-  local 641:9 running: i32[] (const)
-  callee 641:19 manifestVersionParts -> @manifestVersionParts
-  local 645:7 i: i32 (let)
+  local 621:9 raw: string (const)
+  callee 621:15 manifestField -> @manifestField
+  callee 621:29 manifestField -> @manifestField
+  local 628:9 range: string (const)
+  local 629:9 next: i32[] (const)
+  local 630:9 opAt: i32 (const)
+  callee 630:16 manifestSkipBlank -> @manifestSkipBlank
+  local 634:9 floor: i32[] (const)
+  callee 634:17 manifestVersionParts -> @manifestVersionParts
+  callee 634:45 manifestSkipBlank -> @manifestSkipBlank
+  callee 635:29 manifestSkipBlank -> @manifestSkipBlank
+  local 640:9 running: i32[] (const)
+  callee 640:19 manifestVersionParts -> @manifestVersionParts
+  local 644:7 i: i32 (let)
 module self/std_modules.ts
 import STD_PREFIX from "./branding" -> const STD_PREFIX
 import normalizePath from "./paths" -> function @normalizePath

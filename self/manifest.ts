@@ -533,9 +533,8 @@ export const ENGINE_UNREADABLE: i32 = 2;
  * written when it is not, or `""` when the manifest declares none. This is
  * what a diagnostic quotes back to the package's author.
  */
-export const manifestEngineRange = (manifest: string, condition: string): string => {
-  return manifestUnquoted(manifestField(manifestField(manifest, "engines"), condition));
-};
+export const manifestEngineRange = (manifest: string, condition: string): string =>
+  manifestUnquoted(manifestField(manifestField(manifest, "engines"), condition));
 
 /**
  * The manifest's `version`, unquoted when it is a string and as written when
