@@ -161,7 +161,7 @@ function splitTrailers(body) {
 }
 
 function parseTrailers(lines) {
-  const out = { metrics: [], refs: [], tests: [], releaseNote: undefined, releaseAs: undefined, breaking: undefined };
+  const out = { metrics: [], refs: [], tests: [], releaseNote: undefined, releaseAs: [], breaking: undefined };
   for (const line of lines) {
     if (DROPPED_TRAILERS.test(line)) continue;
     const m = line.match(KNOWN_TRAILERS);
@@ -172,7 +172,7 @@ function parseTrailers(lines) {
     else if (key === "refs") out.refs.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
     else if (key === "tests") out.tests.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
     else if (key === "releasenote") out.releaseNote = value;
-    else if (key === "releaseas") out.releaseAs = value;
+    else if (key === "releaseas") out.releaseAs.push(value);
     else if (key === "breakingchange") out.breaking = value;
   }
   return out;
@@ -235,7 +235,7 @@ function collect(from, to, includeUnconventional = false) {
     const [sha, author, date, subject, body = ""] = text.split("\x00");
     const { prose: rawProse, trailers } = splitTrailers(body);
     const t = parseTrailers(trailers);
-    if (t.releaseAs !== undefined) releaseAs.push({ version: t.releaseAs, commit: `${sha.slice(0, 7)} ${subject}` });
+    for (const version of t.releaseAs) releaseAs.push({ version, commit: `${sha.slice(0, 7)} ${subject}` });
 
     const parsed = parseSubject(subject);
     const classified = parsed !== undefined && CONVENTIONAL_TYPES.includes(parsed.type);
@@ -351,7 +351,8 @@ function compareVersions(a, b) {
  * never ship a patch where a `feat` asks for the minor.
  *
  * Returns `{ version }`, or `{ error }` naming the trailer and its commit when
- * one is malformed or below the floor. Neither is skipped: a trailer is a
+ * one is malformed, below the floor, or disagrees with another trailer on the
+ * same commit -- one commit asking for two versions has not said which it means. Neither is skipped: a trailer is a
  * human's decision about a number the release will carry for ever, and the
  * release PR proposing some other number without saying so would be worse than
  * the train stopping.
@@ -359,6 +360,7 @@ function compareVersions(a, b) {
 function nextVersion(current, entries, previousTag, releaseAs = []) {
   const implied = impliedVersion(current, entries, previousTag);
   let chosen;
+  const byCommit = new Map();
   for (const request of releaseAs) {
     const parsed = parseVersion(request.version);
     if (!parsed) {
@@ -366,6 +368,13 @@ function nextVersion(current, entries, previousTag, releaseAs = []) {
         error: `malformed trailer \`Release-As: ${request.version}\` on ${request.commit}; the value is a version, X.Y.Z`,
       };
     }
+    const earlier = byCommit.get(request.commit);
+    if (earlier !== undefined && earlier !== request.version) {
+      return {
+        error: `two trailers on ${request.commit} disagree: \`Release-As: ${earlier}\` and \`Release-As: ${request.version}\`; a commit asks for one version`,
+      };
+    }
+    byCommit.set(request.commit, request.version);
     if (!chosen || compareVersions(parsed, chosen.parsed) > 0) chosen = { ...request, parsed };
   }
   if (!chosen) return { version: implied.join(".") };

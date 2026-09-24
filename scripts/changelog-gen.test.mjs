@@ -106,6 +106,14 @@ const cases = [
     1,
     ["malformed", "`Release-As: 1.0.0-rc.1`"],
   ],
+  [
+    "REFUSE two trailers in one commit that disagree",
+    "0.9.0",
+    [`${feat}\n\nRelease-As: 1.0.0\nRelease-As: 0.11.0`],
+    1,
+    ["disagree", "`Release-As: 1.0.0`", "`Release-As: 0.11.0`", "feat(checker): accept a thing"],
+  ],
+  ["two trailers in one commit that agree are one", "0.9.0", [`${feat}\n\nRelease-As: 1.0.0\nRelease-As: 1.0.0`], 0, "1.0.0"],
   ["after 1.0: a break moves the major", "1.0.0", [fix, breaking], 0, "2.0.0"],
   ["after 1.0: a feat moves the minor", "1.0.0", [fix, feat], 0, "1.1.0"],
   ["after 1.0: a fix moves the patch", "1.0.0", [fix], 0, "1.0.1"],
@@ -119,32 +127,36 @@ const check = (label, ok, detail) => {
   console.log(`${ok ? "pass" : "FAIL"}  ${label}${ok ? "" : `\n${detail.replace(/^/gm, "        ")}`}`);
 };
 
+// A throwaway repository per case, removed however the run ends: `git()`
+// throws, and a failure that left temp directories behind would pile up.
 const dirs = [];
-for (const [label, tag, messages, expected, want] of cases) {
-  const dir = repo(tag, messages);
-  dirs.push(dir);
-  const r = run(dir, ["--next"]);
-  const ok =
-    r.status === expected &&
-    (expected === 0 ? r.stdout === `${want}\n` : r.stdout === "" && want.every((phrase) => r.stderr.includes(phrase)));
-  check(label, ok, `exit ${r.status}, wanted ${expected}\nstdout: ${r.stdout}stderr: ${r.stderr}`);
-}
+try {
+  for (const [label, tag, messages, expected, want] of cases) {
+    const dir = repo(tag, messages);
+    dirs.push(dir);
+    const r = run(dir, ["--next"]);
+    const ok =
+      r.status === expected &&
+      (expected === 0 ? r.stdout === `${want}\n` : r.stdout === "" && want.every((phrase) => r.stderr.includes(phrase)));
+    check(label, ok, `exit ${r.status}, wanted ${expected}\nstdout: ${r.stdout}stderr: ${r.stderr}`);
+  }
 
-// The trailer is bookkeeping for the version, not prose for the reader, so it
-// comes off the body in the record the website renders, as `Refs:` does.
-{
-  const dir = repo("0.9.0", [releaseAs("1.0.0")]);
-  dirs.push(dir);
-  const r = run(dir, ["--version", "1.0.0", "--stdout", "json"]);
-  const entry = r.status === 0 ? JSON.parse(r.stdout).entries[0] : undefined;
-  check(
-    "the trailer is stripped from the entry's body",
-    entry?.body === "The prose." && entry.refs.join() === "docs/wp12-release.md",
-    `exit ${r.status}\n${r.stdout}${r.stderr}`,
-  );
+  // The trailer is bookkeeping for the version, not prose for the reader, so it
+  // comes off the body in the record the website renders, as `Refs:` does.
+  {
+    const dir = repo("0.9.0", [releaseAs("1.0.0")]);
+    dirs.push(dir);
+    const r = run(dir, ["--version", "1.0.0", "--stdout", "json"]);
+    const entry = r.status === 0 ? JSON.parse(r.stdout).entries[0] : undefined;
+    check(
+      "the trailer is stripped from the entry's body",
+      entry?.body === "The prose." && entry.refs.join() === "docs/wp12-release.md",
+      `exit ${r.status}\n${r.stdout}${r.stderr}`,
+    );
+  }
+} finally {
+  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
 }
-
-for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
 
 console.log(failed === 0 ? `\nall ${total} cases pass` : `\n${failed} case(s) failed`);
 process.exit(failed === 0 ? 0 : 1);
