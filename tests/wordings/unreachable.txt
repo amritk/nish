@@ -157,8 +157,8 @@ NL2208  retired: `Generic methods are not supported`; generic methods compile si
 NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
 NL2217  labelled `break` is Phase 0's (NL1046)
 NL2218  labelled `continue` is Phase 0's (NL1046)
-NL3022  two classes that share a member symbol share a name in one package, which NL3028 refuses first; the member is not reported again (#193)
-NL3023  NL3022 inside a package, preempted by NL3028 the same way (#193)
+NL3022  a member symbol carries its package's prefix, so only two same-named structs of one package share one; declaredStructs compares each with its own package's first and refuses the pair first, a declared class as NL3028 and an instantiation at its template as NL3013, and skips their members (#193)
+NL3023  NL3022 inside a package, preempted by NL3028 or NL3013 the same way (#193)
 
 # --- Backstops: reachable, but only by a program this corpus will not carry. --
 # WP18's two instantiation caps. They are not rules of the language and their

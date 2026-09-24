@@ -1317,8 +1317,11 @@ export const main = (): i32 => {
   its type arguments in every symbol the compiler emits, so a function called
   `identity$i32` would be the symbol `identity<i32>` already has:
   `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
-  (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
-  unaffected — only names that become symbols are restricted.
+  (`tests/cases/reject_generic_dollar_name`). A class or interface, generic or
+  not, is held to it too: a `class Box$i32` would be the struct `Box<i32>`
+  already is, and one type with it wherever either is declared (#193;
+  `tests/link/class_dollar_name`, `…_imported`). Locals, parameters and fields
+  are unaffected — only names that become symbols are restricted.
 - **An instantiation is spelled as written wherever a person reads it, and
   mangled wherever a machine does.** Every diagnostic, the `--emit-checked`
   dump and the `-g` DWARF `name` say `identity<i32>`, `identity<Box<i32>>`,
@@ -1526,14 +1529,21 @@ export const main = (): i32 => {
   classes that share a name and a constructor or method are refused in the
   same words, once (`tests/link/class_clash_constructor`, `…_method`,
   `…_package`), and across two packages the wording is the one
-  `tests/link/two_packages_struct` pins. Importing the one declaration is how
-  two modules share a struct (`tests/link/iface_same_name_imported`).
+  `tests/link/two_packages_struct` pins. A declaration is compared with the
+  first of its name in its own package before any other, so when a third
+  package declared the name first, the first of the two is refused across
+  packages and the second in these words
+  (`tests/link/class_clash_after_package`, `…_package_after_root`). Importing
+  the one declaration is how two modules share a struct
+  (`tests/link/iface_same_name_imported`).
 - **An instantiation's name is program-wide**, because `%struct.Box$i32` and
   `@Box$i32.constructor` are. So two modules may not both declare a generic
   class or interface of one name once both instantiate it:
   `` Generic class `Holder` is also declared in helper.ts; a class or interface name must be unique across the program, and an instantiation is named after its template ``
-  (`tests/link/generic_class_clash`), and across two packages the wording is
-  the one `tests/link/package_generic_class_clash` pins. Nothing about the two
+  (`tests/link/generic_class_clash`), once per template even when signatures
+  have made both instantiations, constructor and methods included, before any
+  body is checked (`tests/link/generic_class_clash_signature`), and across two
+  packages the wording is the one `tests/link/package_generic_class_clash` pins. Nothing about the two
   declarations is visible at a call, so left unreported the second layout would
   simply replace the first and a field read would land on the wrong offset.
 - **`implements` may name an instantiation.** `class Box<T> implements

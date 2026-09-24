@@ -92,8 +92,8 @@ Every `--json` object is flat:
   refusals carry codes like any other: a function two modules both define is
   NL3024–NL3027 (exported or private; each across the program or within one
   package), a class or interface name two modules of one package both declare
-  is NL3028 (#193; it preempts NL3022–NL3023, the shared constructor or method
-  such classes used to be refused for), and `tests/nish/cli.ts` checks them
+  is NL3028 (#193; it and NL3013, its generic spelling, preempt NL3022–NL3023,
+  the shared constructor or method such classes used to be refused for), and `tests/nish/cli.ts` checks them
   from the `tests/link/` programs that provoke them.
 - A failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is still one JSON line,

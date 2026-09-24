@@ -676,7 +676,11 @@ const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: st
  * constructor or method is one too, but two classes that share one share a name,
  * and since #193 that is refused first and alone, as NL3028 — one object for one
  * mistake, whether the classes declare a constructor, a method, fields only, or
- * sit inside a package.
+ * sit inside a package. Two generic classes of one package that share a name
+ * are refused at the template (NL3013) once, even when a signature has made
+ * their instantiations, members included, before any body is checked; and a
+ * declared class spelled like an instantiation (`Box$i32`) is refused for its
+ * `$` (NL2296), whichever of it and `Box<i32>` loads first.
  */
 const checkSymbolClashes = (t: Suite, cli: Cli): void => {
   checkClashCode(t, cli, "class_clash_constructor", "lib.ts", "NL3028");
@@ -686,6 +690,32 @@ const checkSymbolClashes = (t: Suite, cli: Cli): void => {
   checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3028");
   checkClashCode(t, cli, "duplicate_export", "b.ts", "NL3024");
   checkClashCode(t, cli, "duplicate_internal", "helper.ts", "NL3026");
+  checkClashCode(t, cli, "generic_class_clash_signature", "a.ts", "NL3013");
+  checkClashCode(t, cli, "class_dollar_name", "main.ts", "NL2296");
+  checkClashCode(t, cli, "class_dollar_name_imported", "lib.ts", "NL2296");
+  checkPackageThenNameClash(t, cli, "class_clash_after_package", "a.ts", "b.ts");
+  checkPackageThenNameClash(t, cli, "class_clash_package_after_root", "node_modules/pa/index.ts", "node_modules/pa/other.ts");
+};
+
+/**
+ * Two modules of one package declare a class `Base` after a module of another
+ * package did. The first of the two is refused against the other package
+ * (NL3009) and the second against the first (NL3028): two objects, one per
+ * mistake, and no third for the constructor the same-package pair shares.
+ */
+const checkPackageThenNameClash = (t: Suite, cli: Cli, name: string, crossFile: string, sameFile: string): void => {
+  const run = cli.plain(name, [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`]);
+  if (!t.eqI32(`${name}: a class two packages declare is refused`, run.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(run.stdout);
+  if (!t.eqI32(`${name}: as two objects`, toI32(objects.length), 2)) {
+    return;
+  }
+  t.eqStr(`${name}: first across packages`, cliField(objects[0], "code"), "NL3009");
+  t.eqStr(`${name}: at the package's first declaration`, cliField(objects[0], "file"), `tests/link/${name}/${crossFile}`);
+  t.eqStr(`${name}: then inside the package`, cliField(objects[1], "code"), "NL3028");
+  t.eqStr(`${name}: at the package's second declaration`, cliField(objects[1], "file"), `tests/link/${name}/${sameFile}`);
 };
 
 /**

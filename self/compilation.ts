@@ -53,7 +53,7 @@ import {
 } from "./packages";
 import { ParentTable } from "./parents";
 import { Parser } from "./parser";
-import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry } from "./program";
+import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry, StructTemplateInfo } from "./program";
 import {
   basename,
   basenameWithout,
@@ -738,9 +738,10 @@ export class Compilation {
    * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
    * which is a program-wide `%struct` name and a program-wide method symbol
    * whichever package asked for it. A declared `class Holder` in two modules of
-   * one package is caught before bodies, by `declaredStructs`; the generic
-   * spelling has no layout until an instantiation exists, and no symbol either,
-   * so it reached the emitter unremarked and produced two
+   * one package is caught before bodies, by `declaredStructs`, and so is a
+   * generic one that a signature instantiated; the generic spelling has no
+   * layout until an instantiation exists, and no symbol either, so one only a
+   * body instantiated reached the emitter unremarked and produced two
    * different `%struct.Holder$i32` and an invalid redefinition of
    * `@Holder$i32.constructor`, with no diagnostic at all
    * (`tests/link/generic_class_clash`).
@@ -775,19 +776,11 @@ export class Compilation {
         if (!reported.add(`${unit.path}#${instance.template.sourceName}`)) {
           continue;
         }
-        const at = instance.template.decl.children[0];
         if (ownerPackages[seen] === unit.packageName) {
-          // The sentence `rejectSymbolClashes` writes for a generic function,
-          // with the noun changed: it is the same rule one level up.
-          const kindWord = instance.template.kind === STRUCT_CLASS ? "class" : "interface";
-          this.sink.report(
-            unit.source,
-            at.start,
-            at.end,
-            `Generic ${kindWord} \`${instance.template.sourceName}\` is also declared in ${ownerPaths[seen]}; a class or interface name must be unique across the program, and an instantiation is named after its template`
-          );
+          this.reportTemplateClash(unit, instance.template, ownerPaths[seen]);
           continue;
         }
+        const at = instance.template.decl.children[0];
         const what = instance.info.kind === STRUCT_CLASS ? "Class" : "Interface";
         const here = describePackage(unit.packageName);
         const there = describePackage(ownerPackages[seen]);
@@ -814,58 +807,104 @@ export class Compilation {
    * once per name per module, naming the module that declared it first.
    *
    * Across packages the words are docs/wp21-packages.md section 7's, for a
-   * declared struct and an instantiation alike. Inside one package they follow
-   * the generic rule's, and an instantiation is left to that rule,
-   * `rejectInstantiatedStructClashes`, so that a same-named template is refused
-   * once, at the template, in the words that say why.
+   * declared struct and an instantiation alike. Inside one package a second
+   * instantiation of one name is refused at its template, once, in the words
+   * `rejectInstantiatedStructClashes` uses for one a body asked for later,
+   * because the mistake is the template's name.
    *
-   * Every name refused inside one package goes into `clashed`, so that
-   * `rejectSymbolClashes` does not report the constructor or method the two
-   * classes share as a second mistake: it is the same one.
+   * A declaration is compared with the first one of its name in its own
+   * package before the first one anywhere, so that two modules of one package
+   * are refused as one package's mistake even when a third package declared the
+   * name before either of them. Every name refused inside one package goes into
+   * `clashed`, so that `rejectSymbolClashes` does not report the constructor or
+   * method the two classes share as a second mistake: it is the same one.
+   *
+   * A declared name with a `$` in it is left out: pass 1 has refused it
+   * already (`rejectDollarInSymbolName`), because it is spelled like an
+   * instantiation's.
    */
   declaredStructs(clashed: StringSet): StructRegistry {
     const declared = new StructRegistry();
     const owners = new StringMap();
     const ownerPackages: string[] = [];
     const ownerPaths: string[] = [];
+    // `<package> <name>` -> the path of the first module of that package to
+    // declare the name. A space cannot occur in either half.
+    const packageOwners = new StringMap();
+    const packageOwnerPaths: string[] = [];
+    const reportedTemplates = new StringSet();
     for (const unit of this.modules) {
       for (const info of unit.checker.program.structList) {
-        if (info.origin === unit.source) {
-          const seen = owners.get(info.name, -1);
-          if (seen < 0) {
-            owners.set(info.name, ownerPackages.length);
-            ownerPackages.push(unit.packageName);
-            ownerPaths.push(unit.name);
-          } else {
-            const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
-            const at = info.decl.children[0];
-            if (ownerPackages[seen] !== unit.packageName) {
-              const here = describePackage(unit.packageName);
-              const there = describePackage(ownerPackages[seen]);
-              this.sink.report(
-                unit.source,
-                at.start,
-                at.end,
-                `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
-              );
-            } else if (info.instance === null && seen >= 0 && seen < ownerPaths.length) {
-              // `seen` indexes both parallel arrays; the range test, and reading
-              // the path before any call, let the prover drop the check.
-              const first = ownerPaths[seen];
-              this.sink.report(
-                unit.source,
-                at.start,
-                at.end,
-                `${what} \`${this.table.typeName(info.type)}\` is also declared in ${first}; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone`
-              );
-              clashed.add(info.name);
-            }
+        if (info.origin !== unit.source) {
+          continue;
+        }
+        declared.add(info);
+        // Already refused where it was declared, for its `$`; compared here it
+        // would clash with the instantiation it is spelled like, in words
+        // that name the instantiation rather than what was written.
+        if (info.instance === null && isInstantiationName(info.name)) {
+          continue;
+        }
+        const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
+        const at = info.decl.children[0];
+        const key = `${unit.packageName} ${info.name}`;
+        const inPackage = packageOwners.get(key, -1);
+        if (inPackage < 0) {
+          packageOwners.set(key, packageOwnerPaths.length);
+          packageOwnerPaths.push(unit.name);
+        } else if (inPackage < packageOwnerPaths.length) {
+          // The range test, and reading the path before any call, let the
+          // prover drop the check.
+          const first = packageOwnerPaths[inPackage];
+          const instance = info.instance;
+          if (instance === null) {
+            this.sink.report(
+              unit.source,
+              at.start,
+              at.end,
+              `${what} \`${this.table.typeName(info.type)}\` is also declared in ${first}; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone`
+            );
+          } else if (reportedTemplates.add(`${unit.path}#${instance.template.sourceName}`)) {
+            this.reportTemplateClash(unit, instance.template, first);
           }
-          declared.add(info);
+          clashed.add(info.name);
+          continue;
+        }
+        const seen = owners.get(info.name, -1);
+        if (seen < 0) {
+          owners.set(info.name, ownerPackages.length);
+          ownerPackages.push(unit.packageName);
+          ownerPaths.push(unit.name);
+        } else if (ownerPackages[seen] !== unit.packageName) {
+          const here = describePackage(unit.packageName);
+          const there = describePackage(ownerPackages[seen]);
+          this.sink.report(
+            unit.source,
+            at.start,
+            at.end,
+            `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
+          );
         }
       }
     }
     return declared;
+  }
+
+  /**
+   * The refusal of a generic class or interface that another module of its
+   * package also declares, at the later template's name. It is the sentence
+   * `rejectSymbolClashes` writes for a generic function, with the noun
+   * changed: the same rule one level up.
+   */
+  reportTemplateClash(unit: ModuleUnit, template: StructTemplateInfo, first: string): void {
+    const at = template.decl.children[0];
+    const kindWord = template.kind === STRUCT_CLASS ? "class" : "interface";
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `Generic ${kindWord} \`${template.sourceName}\` is also declared in ${first}; a class or interface name must be unique across the program, and an instantiation is named after its template`
+    );
   }
 
   /**
@@ -1090,6 +1129,9 @@ const parentDirectory = (dir: string): string => {
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 
+/** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
+const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0;
+
 /** How a diagnostic names a package: the program's own has no name to give. */
 const describePackage = (packageName: string): string => packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
 
@@ -1108,9 +1150,11 @@ const describePackage = (packageName: string): string => packageName === ROOT_PA
  * that share a name collide here when both declare the same member. That
  * sentence names the class and both files rather than the symbol
  * `Base.constructor`, which is not a name the reader wrote (#174). Since #193 two
- * same-named classes are refused by `declaredStructs` before their members are
- * looked at, so no program reaches it today; it stays as the wording of a rule
- * that still holds, and its codes stay reserved.
+ * same-named classes of one package -- declared ones, or two templates'
+ * instantiations -- are refused by `declaredStructs` before their members are
+ * looked at, and only such a pair can share a member symbol, so no program
+ * reaches it today; it stays as the wording of a rule that still holds, and its
+ * codes stay reserved.
  */
 const clashMessage = (
   table: TypeTable,
