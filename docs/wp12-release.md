@@ -359,11 +359,13 @@ step below is done by hand.
    floor, so the trailer may equal it or exceed it, never go below: not a
    downgrade, and not `0.9.1` where a `feat` asks for `0.10.0`. When several
    commits carry one, the highest wins. The value is exactly `X.Y.Z`, with no
-   `v` and no pre-release. A trailer below the floor, one that is not a
-   version, or two on one commit that disagree, stops the train: `changelog-gen.mjs --next` exits non-zero naming
-   the trailer, the commit and the floor, and the Release PR is not refreshed
+   `v` and no pre-release. Three things stop the train, each with
+   `changelog-gen.mjs --next` exiting non-zero: a trailer below the floor
+   (the message names the trailer, its commit and the floor), a value that is
+   not a version (the trailer and its commit), and two trailers on one commit
+   that disagree (both values and the commit). The Release PR is not refreshed
    until it is fixed. A low trailer is fixed by a later commit with a higher
-   one. A malformed one cannot be: reverting the commit leaves it in the range
+   one. The other two cannot be: reverting the commit leaves it in the range
    until the next tag, so that release is cut by hand, doing what the workflow
    does with an explicit `--version` in place of `--next`. Read the trailer
    before merging the commit that carries it.
