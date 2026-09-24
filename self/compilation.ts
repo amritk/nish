@@ -62,6 +62,7 @@ import {
   normalizePath,
   relativePath,
   resolveModule,
+  resolvePath,
 } from "./paths";
 import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX, VERSION } from "./branding";
 import {
@@ -124,8 +125,9 @@ export interface ResolvedModule {
 /** One source module: its identity, its tree, and the checker that owns it. */
 export class ModuleUnit {
   /**
-   * The resolved path: the module's identity, the string `byPath` is keyed on,
-   * and the file that was opened. It is the name as well for every module
+   * The resolved path, as the first import or root to reach the file spelled
+   * it: the file that was opened, and what `byPath` is keyed on through
+   * `identityOf`. It is the name as well for every module
    * reached by a path — which is all of them but a package's.
    */
   path: string;
@@ -198,8 +200,15 @@ export class Compilation {
   runtime: RuntimeTable;
   /** Load order: entry first, then imports depth-first. */
   modules: ModuleUnit[];
-  /** Resolved path -> index into `modules`. */
+  /** `identityOf` a module's resolved path -> index into `modules`. */
   byPath: StringMap;
+  /**
+   * The working directory as an absolute path, or `""` when it cannot be
+   * resolved. It exists for `identityOf` alone: a module's *name* never reads
+   * it, so no output path, header or diagnostic moves with the directory the
+   * compiler was run from (WP19 §A3).
+   */
+  workingDir: string;
   /**
    * The root file `load` could not read, or `""`. A root has no importer to
    * point at, so the failure is not a diagnostic with a span; the driver owns
@@ -241,6 +250,8 @@ export class Compilation {
     this.runtime = new RuntimeTable();
     this.modules = [];
     this.byPath = new StringMap();
+    const cwd = realpathSync(".");
+    this.workingDir = cwd === null ? "" : cwd;
     this.unreadableRoot = "";
     this.facts = null;
     this.analysisUnits = [];
@@ -271,6 +282,22 @@ export class Compilation {
   }
 
   /**
+   * Which file `path` is, as the key `byPath` files a module under: the path
+   * made absolute against the working directory and normalised. A command line
+   * may name a file `./types.ts` or by its absolute path while an import of it
+   * resolves to `types.ts`, and keyed on the spelling those were two modules
+   * of one file, which then clashed with themselves (NL3028) or emitted one
+   * `.ll` twice. The first spelling to load stays the module's path and name.
+   *
+   * Lexical rather than `realpathSync`, so a file reached through two symbolic
+   * links is still two modules: whether a package's identity is its real
+   * directory is WP21 S3's open question (`resolveSpecifier`), not this one.
+   */
+  identityOf(path: string): string {
+    return resolvePath(this.workingDir, path);
+  }
+
+  /**
    * Load `path` and everything it imports. Answers false when a file could not
    * be read or a module failed to parse. A module's own errors are in the
    * sink; a *root* that could not be opened is in `unreadableRoot`, because it
@@ -293,7 +320,7 @@ export class Compilation {
    * the clash `packages.ts` exists to prevent.
    */
   load(path: string, name: string, packageOverride: string): boolean {
-    const at = this.byPath.get(path, -1);
+    const at = this.byPath.get(this.identityOf(path), -1);
     if (at >= 0) {
       return true;
     }
@@ -340,7 +367,7 @@ export class Compilation {
       packageName
     );
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName);
-    this.byPath.set(path, this.modules.length);
+    this.byPath.set(this.identityOf(path), this.modules.length);
     this.modules.push(unit);
 
     // Phase 0 before pass 1, so what is forbidden by design is refused before
@@ -410,7 +437,7 @@ export class Compilation {
       if (!this.load(target, found.name, found.packageName)) {
         ok = false;
       } else {
-        unit.resolved.set(imp.specifier, this.byPath.get(target, -1));
+        unit.resolved.set(imp.specifier, this.byPath.get(this.identityOf(target), -1));
       }
     }
     return ok;
@@ -753,7 +780,10 @@ export class Compilation {
   rejectInstantiatedStructClashes(): void {
     const owners = new StringMap();
     const ownerPackages: string[] = [];
-    const ownerPaths: string[] = [];
+    // `<package> <name>` -> the path of the first module of that package to
+    // own the instantiation, as in `declaredStructs`.
+    const packageOwners = new StringMap();
+    const packageOwnerPaths: string[] = [];
     const reported = new StringSet();
     for (const unit of this.modules) {
       for (const instance of unit.checker.program.structInstantiationList) {
@@ -763,21 +793,33 @@ export class Compilation {
           continue;
         }
         const name = instance.info.name;
+        // A template is one declaration in one module, so its module's path and
+        // its own name name it uniquely -- which is the object identity stage0
+        // keys this set on.
+        const templateKey = `${unit.path}#${instance.template.sourceName}`;
+        const key = `${unit.packageName} ${name}`;
+        const inPackage = packageOwners.get(key, -1);
+        if (inPackage < 0) {
+          packageOwners.set(key, packageOwnerPaths.length);
+          packageOwnerPaths.push(unit.name);
+        } else if (inPackage < packageOwnerPaths.length) {
+          // Its own package's first owner before anybody's, so that a clash
+          // inside one package is named as one even when another package
+          // owned the name before either module.
+          const first = packageOwnerPaths[inPackage];
+          if (reported.add(templateKey)) {
+            this.reportTemplateClash(unit, instance.template, first);
+          }
+          continue;
+        }
         const seen = owners.get(name, -1);
         if (seen < 0) {
           owners.set(name, ownerPackages.length);
           ownerPackages.push(unit.packageName);
-          ownerPaths.push(unit.name);
           continue;
         }
-        // A template is one declaration in one module, so its module's path and
-        // its own name name it uniquely -- which is the object identity stage0
-        // keys this set on.
-        if (!reported.add(`${unit.path}#${instance.template.sourceName}`)) {
-          continue;
-        }
-        if (ownerPackages[seen] === unit.packageName) {
-          this.reportTemplateClash(unit, instance.template, ownerPaths[seen]);
+        // Not this package's first, which was compared above, so another's.
+        if (!reported.add(templateKey)) {
           continue;
         }
         const at = instance.template.decl.children[0];

@@ -955,6 +955,14 @@ and their `.ll` goldens are byte-identical files.
   imports (`Side-effect imports`, `reject_side_effect_import`), and
   type-only imports are rejected. A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
+- **A file is one module however it is named.** The command line and the
+  imports may spell one file differently — `./types.ts`, its absolute path,
+  and the `types.ts` an `import from "./types"` resolves to — and it is loaded
+  once, under the first spelling that reached it, so its declarations never
+  clash with themselves and its `.ll` is written once
+  (`tests/link/root_named_twice`). The comparison is by the path made absolute
+  and normalised, not through symbolic links: a file reached through two links
+  is two modules (`tests/link/package_symlink`).
 - **The standard library is imported as `nish/<module>`**
   (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
   the running compiler rather than relative to the importing file, so the same
@@ -1543,7 +1551,11 @@ export const main = (): i32 => {
   (`tests/link/generic_class_clash`), once per template even when signatures
   have made both instantiations, constructor and methods included, before any
   body is checked (`tests/link/generic_class_clash_signature`), and across two
-  packages the wording is the one `tests/link/package_generic_class_clash` pins. Nothing about the two
+  packages the wording is the one `tests/link/package_generic_class_clash` pins.
+  As for a declared name, a template is compared with the first of its
+  instantiation's name in its own package before any other, so when a third
+  package instantiated the name first, the second module of the package is
+  refused in these words (`tests/link/generic_class_clash_after_package`). Nothing about the two
   declarations is visible at a call, so left unreported the second layout would
   simply replace the first and a field read would land on the wrong offset.
 - **`implements` may name an instantiation.** `class Box<T> implements
