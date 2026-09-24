@@ -1061,6 +1061,26 @@ if (!only || "performance".includes(only)) {
     pad.stderr
   );
 
+  // A class that `implements` an interface (#108): the interface's fields stay
+  // first and only the fields after them are reordered, so the sentence names
+  // the prefix it keeps and an order that starts with it. `Tagged` implements
+  // two interfaces and the longer one, declared below it, is the prefix.
+  const suffix = compile("perf_padding_suffix", "perf_padding_suffix_report.ll");
+  const suffixLines = summaries(suffix.stderr);
+  const suffixSentence = (name, iface, order) =>
+    `performance: \`${name}\` is 40 bytes and would be 32 with the same fields in a different order, so 8 bytes ` +
+    `of every value are padding the alignment rules insert and nothing reads: keep the first 2 fields where ` +
+    `\`implements ${iface}\` puts them and declare the rest widest first \u2014 \`${order}\``;
+  check(
+    "performance: a class that implements an interface warns when reordering only the fields after the interface's shrinks it",
+    suffix.status === 0 &&
+      suffixLines.length === 2 &&
+      positions(suffixLines) === "15:14,31:14" &&
+      suffixLines[0].endsWith(suffixSentence("Wide", "Base", "a: i32, b: f64, d: f64, c: i32, e: i32")) &&
+      suffixLines[1].endsWith(suffixSentence("Tagged", "Late", "id: i32, at: f64, weight: f64, count: i32, flag: boolean")),
+    suffix.stderr
+  );
+
   const str = compile("perf_str_concat_loop", "perf_str.ll");
   const strLines = summaries(str.stderr);
   // `for`, `while`, a nested loop whose accumulator is declared one level out,
@@ -1328,10 +1348,13 @@ if (!only || "performance".includes(only)) {
     // Every `substring` bound either proven -- in which case the clamp is gone
     // from the IR, not merely quiet -- or with no guard anybody could write.
     "perf_clamp_quiet",
-    // Structs that are already as small as their fields make them, plus the two
-    // whose order is not the author's to permute: a class that `implements` an
-    // interface, and a generic instantiation.
+    // Structs that are already as small as their fields make them, a class
+    // whose only padding is in the interface prefix it may not permute, and a
+    // generic instantiation, whose order is not the author's to choose.
     "perf_padding_quiet",
+    // A class whose padding is all inside its interface prefix, with the
+    // fields it adds already widest first: nothing the author may reorder.
+    "perf_padding_suffix_quiet",
   ]) {
     const quiet = compile(name, `${name}.ll`, caseArgs(name));
     check(

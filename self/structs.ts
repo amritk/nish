@@ -142,6 +142,26 @@ const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldI
 const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeName(info.type);
 
 /**
+ * How many fields an interface declares. Read off the declaration rather than
+ * `fields` because a class may name an interface declared further down the
+ * file, whose members pass 1 has not collected yet when the class's layout is
+ * reported; an instantiated interface shares its template's declaration and so
+ * its count.
+ */
+const declaredFieldCount = (iface: StructInfo): i32 => {
+  if (iface.collected) {
+    return iface.fields.length;
+  }
+  let count = 0;
+  for (const member of iface.decl.children[1].children) {
+    if (member.kind === N_FIELD) {
+      count = count + 1;
+    }
+  }
+  return count;
+};
+
+/**
  * WP15 section 8, the tenth rule: a struct whose declared field order costs it
  * bytes of padding that a different order would not spend. The message names
  * the current size, the achievable size and the order that reaches it, which
@@ -157,18 +177,22 @@ const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeN
  * — which is what `DiagnosticSink.reportPerformance` orders the warning list
  * for. Without that order this would print ahead of every warning in its file.
  *
- * Two shapes are deliberately silent, because section 8's bar is a rewrite the
- * message can name and neither of these has one:
+ * A class that `implements` an interface is held to a narrower rewrite. The
+ * interface's fields are its first fields, in order (`checkImplements`), so
+ * that prefix is not the author's to permute and "declare them widest first"
+ * would be advice that stops the program compiling. The fields *after* the
+ * prefix are the author's, though, and a badly ordered suffix pads like any
+ * other struct (#108). So `prefix` is the implemented interface with the most
+ * fields — every implemented interface is a prefix of the class, so the
+ * longest one fixes the most — its fields stay first, only the rest go widest
+ * first, and the warning fires when that order is smaller. Padding that lives
+ * inside the prefix is the interface's to fix, and its own warning says so.
  *
- *   - a class that `implements` an interface. The interface's fields are its
- *     first fields, in order (`checkImplements`), so the prefix is not the
- *     author's to permute and "declare them widest first" would be advice that
- *     stops the program compiling. Coarse on purpose: the fields *after* the
- *     prefix are the author's, and a narrower rule could still warn about them.
- *   - a generic instantiation. `Box$i32` and `Box$bool` are separate structs
- *     sharing one declaration, so the caret would land on the same `class Box`
- *     once per instantiation, and the order that suits one type argument need
- *     not suit another.
+ * A generic instantiation is deliberately silent, because section 8's bar is a
+ * rewrite the message can name and it has none: `Box$i32` and `Box$bool` are
+ * separate structs sharing one declaration, so the caret would land on the
+ * same `class Box` once per instantiation, and the order that suits one type
+ * argument need not suit another.
  *
  * The other side of the `implements` rule is a clause rather than a silence.
  * An *interface* may have implementers, whose first fields it is, and whether
@@ -183,14 +207,36 @@ const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeN
  * can apply and an un-actionable message is the failure this class cannot
  * afford; the length is the price of the hint being complete.
  */
-const reportWastefulPadding = (ctx: CheckContext, info: StructInfo, floor: i32): void => {
+const reportWastefulPadding = (
+  ctx: CheckContext,
+  info: StructInfo,
+  floor: i32,
+  prefix: StructInfo | null
+): void => {
   if (floor >= info.size) {
     return;
   }
-  if (info.implementsNames.length > 0 || ctx.program.structArguments(info.name) !== null) {
+  if (ctx.program.structArguments(info.name) !== null) {
     return;
   }
-  const fields = widestFirst(ctx, info.fields, info.align);
+  const fixed = prefix === null ? 0 : declaredFieldCount(prefix);
+  if (fixed > info.fields.length) {
+    // The class lacks a field its interface has, which `checkImplements`
+    // refuses; there is no layout here worth advice.
+    return;
+  }
+  const fields: FieldInfo[] = [];
+  const rest: FieldInfo[] = [];
+  for (const field of info.fields) {
+    if (fields.length < fixed) {
+      fields.push(field);
+    } else {
+      rest.push(field);
+    }
+  }
+  for (const field of widestFirst(ctx, rest, info.align)) {
+    fields.push(field);
+  }
   const packed = layoutSize(ctx, fields, info.align);
   if (packed >= info.size) {
     return;
@@ -203,11 +249,16 @@ const reportWastefulPadding = (ctx: CheckContext, info: StructInfo, floor: i32):
   const alsoImplementers = info.kind === STRUCT_INTERFACE
     ? " — here and in any class that `implements` it, since the interface's fields are its implementers' first fields"
     : "";
+  // An interface with no fields fixes nothing, and the advice is the plain one.
+  const rewrite = prefix === null || fixed === 0
+    ? "declare the fields widest first"
+    : `keep the first ${fixed} fields where \`implements ${spelled(ctx, prefix)}\` puts them and declare the rest ` +
+      "widest first";
   ctx.performance(
     info.decl.children[0],
     `\`${spelled(ctx, info)}\` is ${info.size} bytes and would be ${packed} with the same fields in a different ` +
       `order, so ${info.size - packed} bytes of every value are padding the alignment rules insert and nothing ` +
-      `reads: declare the fields widest first — \`${order}\`${alsoImplementers}`
+      `reads: ${rewrite} — \`${order}\`${alsoImplementers}`
   );
 };
 
@@ -532,6 +583,9 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
     return;
   }
   const decl = info.decl;
+  // The implemented interface with the most fields, whose fields the padding
+  // rule keeps first (`reportWastefulPadding`).
+  let prefix: StructInfo | null = null;
   if (info.kind === STRUCT_CLASS) {
     const extendsName = decl.children[1];
     if (extendsName.kind !== N_EMPTY) {
@@ -580,6 +634,9 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         continue;
       }
       info.implementsNames.push(target.name);
+      if (prefix === null || declaredFieldCount(target) > declaredFieldCount(prefix)) {
+        prefix = target;
+      }
     }
     for (const member of decl.children[3].children) {
       if (member.kind === N_FIELD) {
@@ -599,7 +656,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
   }
   const floor = computeLayout(ctx, info);
   info.collected = true;
-  reportWastefulPadding(ctx, info, floor);
+  reportWastefulPadding(ctx, info, floor, prefix);
 };
 
 /**

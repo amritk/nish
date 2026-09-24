@@ -1483,7 +1483,7 @@ and the original six:
 | allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
 | not inlinable | a call **inside a loop** to a function the module does not export, while `--no-strict-exports` is keeping it an external symbol | drop the flag |
 | clamp not folded | a `substring` **bound** the §2 proof could not place in `[0, s.length]`, on a call inside a loop | the guard that proves it, which makes the compiler write the bound through, or `slice`, which has no clamp |
-| wasteful struct padding | a `class` or `interface` whose declared field order costs it bytes no order has to spend, and whose order is the author's to change — a class that `implements` an interface is silent, and so is a generic instantiation | names the current size, the size the same fields reach in their best order, and that order in full |
+| wasteful struct padding | a `class` or `interface` whose declared field order costs it bytes no order has to spend, and whose order is the author's to change — for a class that `implements` an interface, only the fields after the interface's are, and a generic instantiation is silent | names the current size, the size the same fields reach in their best order, and that order in full |
 
 All ten rules ship. **Nine of them are found while pass 2 walks the bodies; the
 tenth is not** — a struct's layout is known in pass 1, when its members are
@@ -1755,21 +1755,25 @@ measurement closed says so and says why.
      reads 20, 26, 36, 42, which is the file top to bottom. That is the key the
      sort was written for.
 
-     **Two shapes stay silent**, because §8's bar is a rewrite the message can
-     name and the one it names, "declare them widest first", does not fit
-     either. The first is a class that `implements` an interface. Its first
-     fields are the interface's own, in the interface's order, so that
+     **A class that `implements` an interface gets a narrower rewrite.** Its
+     first fields are the interface's own, in the interface's order, so that
      *prefix* is fixed, and advice to reorder the whole class would stop the
      program compiling. The fields the class adds after the prefix are the
-     author's to order, though, and a badly ordered suffix can still pad, so the
-     silence is broader than its reason, as `reportWastefulPadding`'s own
-     comment in `self/structs.ts` says. A narrower rule would keep the
-     interface's fields where they are and name an order for the rest only.
-     Whether that is worth building is
-     [#108](https://github.com/amritk/nish/issues/108). The second is a
-     generic instantiation, where one declaration is shared by every
-     instantiation and the order that suits one type argument need not suit
-     another. An *interface* is the other side of that rule, and there it is a
+     author's to order, though, and a badly ordered suffix pads like any other
+     struct. So the rule keeps the fields of the longest implemented interface
+     where they are — every implemented interface is a prefix of the class, so
+     the longest fixes the most — puts only the rest widest first, and warns
+     when that is smaller, naming the whole order and saying the first *k*
+     fields stay where `implements` puts them
+     ([#108](https://github.com/amritk/nish/issues/108),
+     `tests/cases/perf_padding_suffix`). Until then the class was silent
+     altogether, which was broader than its reason. Padding inside the prefix
+     is the interface's to fix, and stays quiet here
+     (`perf_padding_suffix_quiet`). **One shape stays silent**, because §8's
+     bar is a rewrite the message can name and "declare them widest first"
+     does not fit it: a generic instantiation, where one declaration is shared
+     by every instantiation and the order that suits one type argument need
+     not suit another. An *interface* is the other side of that rule, and there it is a
      clause rather than a silence: the message always ends "and in any class
      that `implements` it", because whether an interface has implementers is
      not known until a pass after the layout. Naming the clause unconditionally
