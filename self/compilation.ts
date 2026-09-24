@@ -738,8 +738,9 @@ export class Compilation {
    * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
    * which is a program-wide `%struct` name and a program-wide method symbol
    * whichever package asked for it. A declared `class Holder` in two modules of
-   * one package is caught before bodies, by `declaredStructs`; the generic spelling has no symbol until an
-   * instantiation exists, so it reached the emitter unremarked and produced two
+   * one package is caught before bodies, by `declaredStructs`; the generic
+   * spelling has no layout until an instantiation exists, and no symbol either,
+   * so it reached the emitter unremarked and produced two
    * different `%struct.Holder$i32` and an invalid redefinition of
    * `@Holder$i32.constructor`, with no diagnostic at all
    * (`tests/link/generic_class_clash`).
@@ -812,11 +813,11 @@ export class Compilation {
    * offsets, with no diagnostic (#193). So the second declaration is refused,
    * once per name per module, naming the module that declared it first.
    *
-   * Across packages the words are docs/wp21-packages.md section 7's. Inside one
-   * package they are the generic rule's in `rejectInstantiatedStructClashes`,
-   * which catches the instantiations of a same-named template; an instantiation
-   * is skipped here for that reason, so that the template is refused once and in
-   * the words that say why.
+   * Across packages the words are docs/wp21-packages.md section 7's, for a
+   * declared struct and an instantiation alike. Inside one package they follow
+   * the generic rule's, and an instantiation is left to that rule,
+   * `rejectInstantiatedStructClashes`, so that a same-named template is refused
+   * once, at the template, in the words that say why.
    *
    * Every name refused inside one package goes into `clashed`, so that
    * `rejectSymbolClashes` does not report the constructor or method the two
@@ -847,8 +848,8 @@ export class Compilation {
               `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
             );
           } else if (info.instance === null && seen >= 0 && seen < ownerPaths.length) {
-            // `seen` indexes all three parallel arrays; the range test, and
-            // reading the path before any call, let the prover drop the check.
+            // `seen` indexes both parallel arrays; the range test, and reading
+            // the path before any call, let the prover drop the check.
             const first = ownerPaths[seen];
             const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
             const at = info.decl.children[0];
@@ -885,7 +886,9 @@ export class Compilation {
    *
    * A constructor or method of a class in `clashed` is skipped: `declaredStructs`
    * has already refused the second class, and the member the two share is a
-   * consequence of that one mistake rather than a second one.
+   * consequence of that one mistake rather than a second one. The bare name is
+   * enough of a key, because a member symbol carries its package's prefix, so
+   * only two classes of one package can share one.
    */
   rejectSymbolClashes(clashed: StringSet): void {
     const owners = new StringMap();
