@@ -818,4 +818,6 @@ JSDoc, which costs nothing to reword and carries no code.
   new code use arrows and converting a file when it is opened for another
   reason — the migration policy `.claude/typescript.md` already applies to
   `src/` — reaches the same place without a flag day, and leaves D as a
-  decision to take when the count is small rather than now.
+  decision to take when the count is small rather than now. The 1.0 freeze
+  puts a date on that decision: D withdraws an accepted construct, so it lands
+  before 1.0.0 or waits for a major ([LANGUAGE.md](LANGUAGE.md)'s head).

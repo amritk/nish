@@ -139,7 +139,12 @@ assumed:
 - `node docs/check-links.mjs` when the change touches Markdown.
 - The title is a conventional commit subject, because a squash merge lands it
   as the release-note heading. `node scripts/changelog-gen.mjs --check-subject`
-  is the same rule `pr-title.yml` enforces.
+  is the same rule `pr-title.yml` enforces. A break (`type!` or a
+  `BREAKING CHANGE:` trailer) moves the minor before 1.0 and the major from
+  1.0; 1.0.0 itself is chosen with a `Release-As: 1.0.0` trailer
+  ([#200](https://github.com/amritk/nish/pull/200), pending), and the freeze rule at the
+  head of [LANGUAGE.md](./docs/LANGUAGE.md) says what counts as a break in the
+  language.
 
 *Clear of conflicts* means the branch merges into `main` as it stands. Merge
 `main` in and resolve **before** pushing, rather than leaving the conflict for

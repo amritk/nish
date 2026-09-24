@@ -5,6 +5,13 @@ This is the normative reference for Nish, the subset of TypeScript that
 what each construct means, and how every rejection is worded. The design
 notes (`docs/wp*.md`) explain *why*; this page says *what*.
 
+**This reference is frozen from 1.0.** A minor release may add a rule, or turn
+a refusal into an acceptance. Withdrawing or narrowing an accepted construct,
+or changing what one means, needs a major. The wording of a refusal may change
+in any release; its diagnostic code may not, because `--json` consumers key on
+it. Where the compiler disagrees with this page, the compiler is wrong, and
+fixing it is not a change to the language.
+
 Conventions:
 
 - Every rule cites a test case in parentheses, e.g. `(tests/cases/cf_if)`,

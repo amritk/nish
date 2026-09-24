@@ -486,7 +486,9 @@ scheduling decisions rather than design ones.
 **Before or after the 1.0 freeze?** M4 is the only milestone left and it
 freezes the language reference (MASTER_PLAN §9). T1 through T4 each add rules
 to LANGUAGE.md, so the package is either pre-freeze scope — which delays 1.0
-by a large multiple of §3.6 — or it is 1.1, which is the honest default.
+by a large multiple of §3.6 — or it is 1.1. **It is 1.1, and it opens it**:
+[MASTER_PLAN](MASTER_PLAN.md#what-remains) names the data-parallel call as
+1.1's first item.
 
 **T0 is separable and probably should be early regardless.** It has no
 language surface, it is a prerequisite for every version of this design
@@ -496,8 +498,8 @@ that can be answered in a day. Nothing about the 1.0 freeze argues against
 it. **It landed on that argument** — the benchmark question is answered in §4
 T0, and the answer was "nothing, unless the program asks".
 
-The remaining order, then: **T1 and T2 together after the freeze; T3 after WP15
-item 8** — except that [wp29-thread-surface.md](wp29-thread-surface.md) §8
+The remaining order, as this note first wrote it: **T1 and T2 together after
+the freeze; T3 after WP15 item 8** — except that [wp29-thread-surface.md](wp29-thread-surface.md) §8
 argues for reversing it, on the strength of §8 below: data parallelism first
 because it is where the payoff is *and* because it is the only stage needing no
 handle, no join proof and no capture rule, then the scope, then locks and
