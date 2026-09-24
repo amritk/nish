@@ -367,7 +367,8 @@ export class Compilation {
    * the clash `packages.ts` exists to prevent.
    */
   load(path: string, name: string, packageOverride: string): boolean {
-    const at = this.byPath.get(this.identityOf(path), -1);
+    const identity = this.identityOf(path);
+    const at = this.byPath.get(identity, -1);
     if (at >= 0) {
       return true;
     }
@@ -414,7 +415,7 @@ export class Compilation {
       packageName
     );
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName);
-    this.byPath.set(this.identityOf(path), this.modules.length);
+    this.byPath.set(identity, this.modules.length);
     this.modules.push(unit);
 
     // Phase 0 before pass 1, so what is forbidden by design is refused before
@@ -570,27 +571,27 @@ export class Compilation {
       failed.error = `Cannot find package \`${parsed.name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
       return failed;
     }
-    // A package is its real directory, as it is to Node's resolver: one
-    // package reached through links — pnpm's layout, and npm's whenever it
-    // cannot hoist — is one package, and its own dependencies are looked for
-    // beside where it really is, which is where pnpm puts them. The directory
-    // keeps the spelling the walk found unless a link is in the way, so a
-    // program with no links names every module exactly as before.
-    const realDir = realpathSync(foundDir);
-    let packageDir = foundDir;
-    if (realDir !== null && this.workingDir.length > 0 && realDir !== resolvePath(this.workingDir, foundDir)) {
-      packageDir = realDir;
-    }
+    // A package is its real directory, as it is to Node's resolver, so one
+    // package reached through links (pnpm's layout) is one package, and its
+    // own dependencies are looked for beside where it really is. The spelling
+    // the walk found is kept unless a link is in the way, so a program with no
+    // links names every module as before.
+    const identity = this.identityOf(foundDir);
+    const packageDir = this.workingDir.length === 0 || identity === resolvePath(this.workingDir, foundDir) ? foundDir : identity;
     const manifestPath = joinPath([packageDir, "package.json"]);
     const manifest = readFileSyncOrNull(manifestPath);
-    // One package name at two real directories is two copies of it — npm's
-    // duplicates, or §7's diamond, `hash@1` under one dependency and `hash@2`
-    // under another — and a program compiles one copy of a package. Refused in
-    // words here, before either copy is read any further: compiled, the
-    // copies were two modules declaring the same names and the refusal came
-    // later, by accident, as a symbol clash.
-    const version = manifest === null ? "" : manifestVersion(manifest);
-    const identity = realDir === null ? resolvePath(this.workingDir, foundDir) : realDir;
+    const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32";
+    const otherMode = mode === "f64" ? "i32" : "f64";
+    // `findPackageDir` only answers a directory whose manifest it could read, so
+    // the null here is a file that vanished between the two reads. It takes the
+    // same route as a manifest with nothing in it for us, which is the honest
+    // answer: this compiler found no Nish entry point in that package.
+    const text = manifest === null ? "" : manifest;
+    // One package name at two real directories is two copies of it (npm's
+    // duplicates, or §7's diamond), and a program compiles one copy of a
+    // package: refused in words, where it used to be refused by accident as a
+    // symbol clash between the copies.
+    const version = manifestVersion(text);
     const seen = this.packageIndex.get(parsed.name, -1);
     if (seen < 0) {
       this.packageIndex.set(parsed.name, this.packageCopies.length);
@@ -600,13 +601,6 @@ export class Compilation {
       failed.error = `Package \`${parsed.name}\` is at two places, ${first.dir} (${describeVersion(first.version)}) and ${foundDir} (${describeVersion(version)}): ${LANGUAGE} compiles one copy of a package per program, so every import of it has to reach the same directory`;
       return failed;
     }
-    const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32";
-    const otherMode = mode === "f64" ? "i32" : "f64";
-    // `findPackageDir` only answers a directory whose manifest it could read, so
-    // the null here is a file that vanished between the two reads. It takes the
-    // same route as a manifest with nothing in it for us, which is the honest
-    // answer: this compiler found no Nish entry point in that package.
-    const text = manifest === null ? "" : manifest;
     // The floor is checked before the entry point, and whether or not there is
     // one: a package that names a newer compiler has said this one should not
     // be trusted with its source, and a file that happens to resolve does not
@@ -1164,14 +1158,10 @@ export class Compilation {
    * compiler sits — which is the better answer and is *not* this change: the
    * fallback drops every `.` and `..` segment before joining, on both sides.
    *
-   * **Why a counter is needed at all.** That drop is lossy: two modules whose
-   * paths differ only by a climb meet on one stem. So do two that are one
-   * spelling apart through a link — `types.ts` and `far/../types.ts`, with
-   * `far` a link elsewhere, are two files, and normalising either leaves
-   * `types` (#198). Until the counter the second silently overwrote the first
-   * (`docs/wp19-stage0-retirement.md` §5a item 5); `wrote <file>` names both
-   * files now, and the module order that picks the counter is the load order,
-   * which the command line decides.
+   * **Why a counter is needed at all.** That drop is lossy, so two modules
+   * whose paths differ only by a climb, or by a link followed by `..`
+   * (`identityOf`), meet on one stem, and the second used to overwrite the
+   * first silently (`docs/wp19-stage0-retirement.md` §5a item 5, #198).
    */
   outputStems(): string[] {
     const counts = new StringMap();
