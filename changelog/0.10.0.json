@@ -1,0 +1,312 @@
+{
+  "version": "0.10.0",
+  "date": "2026-09-24",
+  "tag": "v0.10.0",
+  "range": {
+    "from": "v0.9.0",
+    "to": "5a2f911"
+  },
+  "entries": [
+    {
+      "id": "name-the-instantiation-not-the-template-in-new",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "name the instantiation, not the template, in new-expression diagnostics and the checked dump",
+      "body": "A constructor-argument or arity error on a generic class now names the\ninstantiation the program wrote: ``Argument 1 of `new Box<i32>`: expected\ni32, got string`` rather than `` `new Box` ``, matching the method-call\nlabels (`Box<i32>.set`) and the constructor's own `Box<i32>.constructor`.\nA non-generic class reads as it did.\n\n`--emit-checked` now prints the callee of a generic `new`\n(`callee 17:13 new Box<i32> -> @Box$i32.constructor`). The dump used to\nlook the class up by its written name in the struct registry, which a\ntemplate is not in; it now reads the constructor `checkNew` records in\n`nodeCallees` and names its owning class. The owner rather than the\nexpression's type, because a `new` whose value converts to an interface\nhas the interface's type.\n\nThe `Instantiation.template` and `owner` comments now say that a generic\nmethod of a generic class has both set.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/reject_generic_new_args",
+        "tests/cases/reject_generic_new_arity",
+        "tests/self/goldens/checked.txt"
+      ],
+      "commits": [
+        "3069804"
+      ],
+      "pr": 187,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "the-registry-check-counts-every-fragment-line-and",
+      "type": "test",
+      "scope": "codes",
+      "breaking": false,
+      "title": "the registry check counts every fragment line, and wp15 names its benchmark",
+      "body": "`codeFor` in `self/codes.ts` reads each table as one flat array and steps\nthrough it by two, so a fragment added without its code line shifts every\nlater pairing, and messages from there on get their neighbour's code. The\npair reader skips such a line rather than failing on it, so\n`scripts/gen-diagnostic-codes.mjs --check` used to pass it as long as\n`RULE_COUNT` was left alone. It now counts the strings in each table on their\nown and requires twice the pairs. It also requires the `NL9xxx` codes to run\nfrom `NL9001` with no gap. Each error names the table.\n\n`--check` takes an optional path, and `tests/run.js` uses it to check three\nbroken copies of the live registry: a stray fragment in each table, and a\ngap in NL9xxx. The previous check passes all three.\n\n`docs/wp15-performance.md` §2c now says which program, box and statistic its\n756 ms / 305 ms / 2.48x table was measured with. It names\n`bench/hoist_field.ts` as the program that re-derives the figure, and points\nat the reconciliation later in the section. The NL9010 note no longer implies\nthat a class which `implements` an interface has its whole layout fixed. Only\nthe interface's prefix is fixed; the fields after it are the author's to\norder. Whether to warn about that suffix stays open in #108.",
+      "metrics": [],
+      "refs": [
+        "docs/wp15-performance.md#2c-making-the-header-invariant--candidate-1-refuted-the-item-re-scoped"
+      ],
+      "tests": [
+        "tests/run.js (codes: --check rejects ...)"
+      ],
+      "commits": [
+        "02cd2d5"
+      ],
+      "pr": 186,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "same-named-interfaces-and-classes-across-modules-keep",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "same-named interfaces and classes across modules keep their identity",
+      "body": "**An interface is a declaration, not a name (#173).** The implicit\nclass-to-interface conversion (`coercesTo` in `self/structs.ts`) compared\nthe wanted interface's name with the names in the class's `implements`\nclause. A struct type is interned by name, so a module that declared its own\n`interface Shape` accepted an imported `Circle` that implements a different\n`Shape`. It then read `Circle`'s layout as its own `Shape`'s, which printed\ngarbage or ran out of memory. The conversion now asks\n`implementsDeclaration`, the test #167 gave constraints, so it is refused\n(NL2185). Importing the very `Shape` that `Circle` implements still converts.\n`checkImplements` still looks up by name. That lookup is sound because it\nruns in the module that resolved the names, and a comment now says why.\n\n**Every duplicate-symbol refusal has a code (#174).** The four wordings of\nthe whole-program duplicate-symbol rule were `NL0000` under `--json`. Each\nnow has a code: NL3024 and NL3025 for an exported function (across the\nprogram, or within one package), and NL3026 and NL3027 for a private one.\nA constructor or method is a symbol named after its class. When two\nsame-named classes both declare one, the refusal now names the class, the\nmember and both files instead of the symbol `Base.constructor`: NL3022\nacross the program, NL3023 within a package. Two same-named classes with\nfields alone still compile; that wider identity gap is #193. The uncoded\nbacklog in `tests/run.js` goes from five to two.\n\nThe comment on `collectStructMembers` stated its one-diagnostic-per-\ndeclaration rule in terms of stage0, and gave it an expiry at R6. It now\nstates the rule as this compiler's own. Behaviour is unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/wp18-generics.md#159-known-issues"
+      ],
+      "tests": [
+        "tests/link/iface_same_name_class",
+        "tests/link/iface_same_name_imported",
+        "tests/link/class_clash_constructor",
+        "tests/link/class_clash_method",
+        "tests/link/class_clash_package",
+        "tests/wordings/nl3022_class_member_clash"
+      ],
+      "commits": [
+        "4b3e539"
+      ],
+      "pr": 191,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "a-function-whose-unproven-charcodeat-can-panic-is",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "a function whose unproven charCodeAt can panic is not willreturn",
+      "body": "`s.charCodeAt(i)` with an index the bounds walk cannot prove branches to\n`nish_panic_index`, which is `noreturn`, exactly as an unproven `a[i]` does.\nThe attribute fixpoint was told so for `a[i]` but not for `charCodeAt`:\n`stringConstructCallees` returned no callee for it, so the function and every\ncaller up to `nish_main` kept `willreturn`. Under the speed profile LLVM used\nthat to delete the panic, and a program whose `main` always indexes past the\nend of a string printed its first line and exited with garbage instead of\n`index out of range: 5 >= 0` and exit 1.\n\n`stringConstructCallees` now takes the call's `nodeProvenIndex` verdict and\nnames `nish_panic_index` under the condition `emitCharCodeAt` emits the check\nwith: not proven, and not `--unchecked-indexing`. A proven `charCodeAt` still\nemits no call and keeps `willreturn`.\n\nAn audit of every other emission of a `noreturn` runtime symbol\n(`nish_panic_index` from `a[i]` and `pop`, `nish_panic_slice`,\n`nish_panic_div`, and `nish_exit` from `panic`, `process.exit` and `expect`)\nfound each already reported to the fixpoint; `charCodeAt` was the one gap.",
+      "metrics": [
+        "self/ IR 10368744 -> 10370381 bytes (+0.02%); one function in self/ loses willreturn; compiling self/compile.ts unchanged within noise (~400 ms)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#element-access"
+      ],
+      "tests": [
+        "tests/cases/attr_panic_charcodeat"
+      ],
+      "commits": [
+        "d172b7f"
+      ],
+      "pr": 189,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "bounds-proofs-see-continue-edges-lazy-result-arguments",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "bounds proofs see continue edges, lazy Result arguments and whole-record stores",
+      "body": "Every access the bounds proof (`self/bounds.ts`) or the loop header hoist\n(`self/emit_arrays.ts`) leaves unchecked is now in range on every edge\nthat reaches it. Each of the following let a program read or write past\nan array or a string with no panic.\n\n- **`continue` edges (#181).** A `continue` jumps to the `for` update or\n  the `do/while` condition with its branch's effects applied, but the walk\n  judged the update or condition in the end-of-body state. It now keeps a\n  per-loop frame of the states at each `continue` and intersects them in.\n  An inner loop's `continue` never reaches an outer loop's update.\n- **`break` edges.** A `for` or `while` condition that re-establishes a\n  fact, followed by a body that changes it and `break`s, left the fact\n  alive after the loop. `break` states now join into the post-loop state;\n  a `switch` opens its own frame.\n- **Lazy `Result` arguments (#182).** `r.unwrapOr(d)` and `r.expect(m)`\n  evaluate the argument only on the `Err` path; the walk now treats it\n  that way instead of as always evaluated.\n- **Whole-record element stores (#180).** Storing a record into an array\n  of inline records rewrites it in place. The header hoist lifted a path\n  through such a record out of the loop anyway. The proof and the hoist\n  now share one rule, scoped to the holders that can point into that\n  record's slot, so paths read off classes keep their facts and hoists.\n- **Generic instantiations.** The proof tables were shared by every\n  instantiation of a template, so one instantiation's proof dropped the\n  check in another (`walk<i32>` next to `walk<Rec>`). Each instantiation\n  now carries its own tables, installed by `enterInstance`.\n\nNone of this costs a proof elsewhere: no existing `.ll` golden changed,\n`std/` stays at zero performance warnings, and `self/compile.ts`\ncompiles to byte-identical IR.",
+      "metrics": [
+        "self/compile.ts IR byte-identical before and after (1406 bounds checks); std/ 0 performance warnings"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#element-access"
+      ],
+      "tests": [
+        "tests/cases/arr_bounds_continue_*",
+        "tests/cases/arr_path_continue_*",
+        "tests/cases/arr_bounds_break_*",
+        "tests/cases/arr_bounds_lazy_*",
+        "tests/cases/arr_bounds_generic_instances*",
+        "tests/cases/arr_header_hoist_record_*"
+      ],
+      "commits": [
+        "0be6d6f"
+      ],
+      "pr": 190,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "name-the-squash-subject-in-the-break-edge",
+      "type": "test",
+      "scope": "cmp",
+      "breaking": false,
+      "title": "name the squash subject in the break-edge nish-cmp declarations",
+      "body": "Four `tests/nish-cmp.js` declarations for the `arr_bounds_break_*` cases\nnamed the subject of an intermediate commit of #190. The squash merge\ndropped that subject, so neither `CHANGELOG.md` nor the pending release\nnotes carried it, and `nish-cmp` failed on main. They now name #190's\nsquash subject, as the rest of its declarations do. A declaration's\n`changelog` has to name the pull request's title, because that is the only\nsubject a squash merge keeps.",
+      "metrics": [],
+      "refs": [
+        "#190"
+      ],
+      "tests": [
+        "tests/nish-cmp.js"
+      ],
+      "commits": [
+        "582eb6e"
+      ],
+      "pr": 194,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "fail-a-pull-request-whose-body-carries-a",
+      "type": "ci",
+      "breaking": false,
+      "title": "fail a pull request whose body carries a session link or tool attribution",
+      "body": "* ci: fail a pull request whose body carries a session link or tool attribution\n\nThe PreToolUse hook `.claude/hooks/no-attribution.mjs` refuses a tool call\nthat would write a session link, a model name or a \"Generated with\" footer\ninto git or GitHub. It cannot see a footer the platform appends to a pull\nrequest body after the call that opened it, which is how session links\nreached five merged bodies. The new `PR body` workflow reads the body GitHub\nholds and fails on the same rule.\n\n- The pattern list moves to `.claude/hooks/attribution-patterns.mjs`, which\n  the hook and `scripts/check-pr-body.mjs` both import, so there is one list.\n  The hook's behaviour is unchanged.\n- The script reads the body from `BODY`, never from `${{ }}` in the shell,\n  names each pattern it finds and exits 1. An empty body passes.\n- The workflow runs on opened, edited, reopened and synchronize, so editing\n  the footer out clears the red check.\n- `npm test` now runs both the hook's suite and the new one.\n- `package.json` keeps the two scripts out of the npm tarball: they import\n  from `.claude/`, which the tarball does not carry, and the pack check\n  refuses a shipped script with an unresolvable import.\n\nA pull request that fails this check is fixed by editing its body, never by\nloosening a pattern.\n\nRefs: #176\nTests: scripts/check-pr-body.test.mjs, .claude/hooks/no-attribution.test.mjs\n\n* test(ci): pin the footer the platform appended to the check's own pull request\n\nThe `PR body` check failed its own pull request on the `opened` run. The\nfooter the platform appended there is a different shape from the one that\nreached #169: an underscored \"Generated by\" line whose link carries the\nsession id. It is now a case of its own, so both shapes are pinned.\n\nTests: scripts/check-pr-body.test.mjs",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c767e90"
+      ],
+      "pr": 188,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "nl9010-advises-reordering-the-fields-a-class-adds",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "NL9010 advises reordering the fields a class adds after its interface prefix",
+      "body": "`NL9010`, the wasteful-struct-padding warning, used to stay silent for every class that `implements` an interface, because the interface fixes the order of its own fields. That constraint only covers the prefix. The fields a class adds after it are the author's to order, and they can still waste padding.\n\nThe warning now keeps the longest implemented interface's fields first and orders only the rest. It fires when that makes the class smaller, and names the whole order and the size it reaches, which is measured with `layoutSize`.\n\nThe suffix is ordered least-padding-first from the prefix's end offset, taking the widest field on a tie. Widest-first is optimal only from an aligned offset. After a prefix that ends at 1 or 4, narrow fields can fill the gap: `{a: i32}` followed by `b: f64, c: i32, d: f64` goes from 32 to 24 bytes as `a, c, b, d`. Every field width in the language is a power of two equal to its alignment, which is what makes the greedy walk optimal. It matched a brute-force minimum on every shape tried.\n\nA class with no `implements` gets the same message as before, byte for byte. Generic instantiations stay silent, and std/ stays at zero performance warnings.\n\nMeasured: 40 → 32, 32 → 24, 56 → 40 bytes on the three pinned shapes\nRefs: docs/wp15-performance.md#9, docs/LANGUAGE.md\nTests: tests/cases/perf_padding_suffix, perf_padding_suffix_gap, perf_padding_suffix_quiet\nFixes #108",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7099ca6"
+      ],
+      "pr": 196,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "refuse-two-same-named-classes-or-interfaces-in",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse two same-named classes or interfaces in one package",
+      "body": "A struct type is identified by its bare name. So two modules of one package that each declared a class or interface of the same name became one type. A value of one was accepted where the other was expected, and its fields were read at the other's offsets, with no diagnostic. A class with fields only has no member symbol, so nothing collided.\n\nThe compiler now refuses the second declaration with NL3028, naming the module that declared it first. This applies to exported and private declarations alike. A declaration is compared with the first declaration of its name in its own package before any other, so the result does not depend on which module loaded first. Two packages declaring one name keep their existing refusal (NL3009). Generic instantiations get the same per-package comparison (NL3013).\n\n`$` is now refused in a class or interface name, as it already was in function and template names. A `class Box$i32` would otherwise be the same struct type as the instantiation `Box<i32>`.\n\nA file named two ways is now loaded once, for example `nish main.ts ./types.ts` alongside `import … from \"./types\"`. Module identity is the absolute, lexically normalised path. A module's name, and every byte written, still come from the first spelling.\n\nNL3022 and NL3023, a class member shared by two same-named classes, are now unreachable. Their numbers stay reserved.\n\nRefs: docs/LANGUAGE.md (class and interface names, `$` in declared names, one file one module), docs/wp21-packages.md §9c\nTests: tests/link/class_clash_fields, iface_clash_private, class_dollar_name, class_dollar_name_imported, class_clash_after_package, class_clash_package_after_root, generic_class_clash_signature, generic_class_clash_after_package, root_named_twice; tests/wordings/nl3028_class_name_clash\nFixes #193",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "29969ef"
+      ],
+      "pr": 197,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "module-and-package-identity-is-the-real-path",
+      "type": "fix",
+      "scope": "compilation",
+      "breaking": true,
+      "title": "module and package identity is the real path",
+      "body": "A module's identity is now its real path: the file the operating system\nopens, with every symbolic link resolved, as in Node's resolver and in\n`tsc` with `preserveSymlinks: false`. A package's identity is its real\ndirectory. What a module is called (its IR header, its diagnostics, its\noutput file) is still the first spelling that reached it, so a program\nwith no links emits the same bytes as before.\n\n- One file reached through a link is one module. `nish main.ts\n  $PWD/types.ts` in a symlinked directory loads `types.ts` once (#198,\n  case 1).\n- A link followed by `..` is the file it really leads to, so\n  `far/../types.ts` is compiled as its own module rather than silently\n  skipped (#198, case 2).\n- Two modules never share an output file. A later module whose stem is\n  taken writes `<stem>_2.ll`, then `_3`, and so on, where before one\n  silently overwrote the other.\n- A symlinked package is one package, so pnpm's layout compiles. A\n  workspace link to a directory outside `node_modules` keeps the\n  package's own relative imports in that package.\n- One package name found at two real directories (npm's duplicate\n  copies, or a diamond) is refused with NL3029. The message names both\n  directories and both versions, or `no version` for a manifest without\n  one. Identity by manifest is left for later, because it could only\n  turn this refusal into an acceptance.\n\nBREAKING CHANGE: a program that compiled only because two links to one\nfile were two modules now either compiles as one module or is refused;\none package name at two real directories is refused with NL3029.\n\nCloses #198",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#export-and-import",
+        "docs/wp21-packages.md"
+      ],
+      "tests": [
+        "tests/link/package_symlink",
+        "tests/link/package_workspace",
+        "tests/link/package_two_dirs",
+        "tests/link/package_two_dirs_unversioned",
+        "tests/link/identity_symlink_cwd",
+        "tests/link/identity_symlink_dotdot"
+      ],
+      "commits": [
+        "287afb3"
+      ],
+      "pr": 202,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "reserve-the-type-name-integer-for-ranged-integers",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "title": "reserve the type name integer for ranged integers",
+      "body": "`integer` is now reserved for ranged integers, `integer<Lo, Hi>`, which\nare planned for 1.1. This change does not build them. The one breaking\npart of ranged integers was taking the name `integer` from programs that\ndeclare something called that. Doing it now, before the 1.0 freeze,\nlets the feature itself land in 1.1 without breaking anything.\n\n- `integer` or `integer<T>` used as a type is refused with NL2333,\n  which says the name is reserved for ranged integers.\n- A class, interface or function named `integer` is refused with\n  NL2332. This covers generic and `declare function` forms too.\n- A type alias or enum named `integer` is refused the way `type Result`\n  is, because `integer` is now a built-in type name (NL2275, NL2281).\n- A value named `integer`, such as a local or module constant, is\n  still accepted.\n\n`integer<0, 255>` itself remains a parse error until ranged integers\narrive, because a numeric literal cannot yet be a type argument.\n\nBREAKING CHANGE: a program that declares a type, enum, class, interface\nor function named integer is refused.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#types",
+        "docs/wp31-ranged-integers.md"
+      ],
+      "tests": [
+        "tests/cases/reject_integer_alias",
+        "tests/cases/reject_integer_enum",
+        "tests/cases/reject_integer_class",
+        "tests/cases/reject_integer_interface",
+        "tests/cases/reject_integer_function",
+        "tests/cases/reject_integer_use"
+      ],
+      "commits": [
+        "5e5a9a9"
+      ],
+      "pr": 201,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "m4-the-reference-is-frozen-and-1-0",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "M4, the reference is frozen and 1.0 is next",
+      "body": "`docs/LANGUAGE.md` now opens with the freeze. From 1.0, a minor release\nmay add a rule or turn a refusal into an acceptance. Withdrawing or\nnarrowing an accepted construct, or changing what one means, needs a\nmajor. The wording of a refusal may change; its diagnostic code may\nnot. No rule in the reference changed.\n\nThe master plan's \"What remains\" now describes where the project stands,\nrather than keeping a running history:\n\n- M4 is the frozen reference plus the tag. 1.0.0 is cut by merging the\n  `Release-As:` trailer support (#200, pending), landing a commit that\n  carries `Release-As: 1.0.0`, then merging the Release PR.\n- Two breaks were taken before the freeze: the type name `integer` is\n  reserved (NL2332, NL2333), so ranged integers can arrive in 1.1\n  without breaking anything; and module and package identity is the\n  real path (NL3029), which closes #198 and the identity half of WP21 S3.\n- The one question still open for 1.0 is WP22 stage D (rejecting\n  `function` definitions). It withdraws an accepted construct, so it\n  either lands before 1.0.0 or waits for a major. Whether it happens at\n  all is still undecided.\n- 1.1 begins with the data-parallel call from the threads plan (wp29),\n  where the largest measured speedup in the plan is: 3.96x on four\n  cores. Ranged integers (WP31 W1–W4) follow.\n\nCLAUDE.md and AGENTS.md state both halves of the version rule: before\n1.0 a break moves the minor, and from 1.0 it moves the major. The wp15,\nwp20, wp22 and wp29 notes and the docs index are updated to agree.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/MASTER_PLAN.md#what-remains"
+      ],
+      "tests": [],
+      "commits": [
+        "55ad23f"
+      ],
+      "pr": 203,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "nish-stays-on-0-x-until-its-owner",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "Nish stays on 0.x until its owner declares 1.0",
+      "body": "1.0 is not scheduled. The project stays on 0.x until its owner says\notherwise, so the docs no longer describe the tag as next.\n\n- `docs/LANGUAGE.md` opens with the stability rule for both states. On\n  0.x any minor release may change the language, and a change that\n  withdraws or narrows an accepted construct is marked breaking. From\n  1.0, a minor may only add a rule or turn a refusal into an acceptance.\n  Diagnostic codes are stable in either state.\n- The master plan's M4 row reads \"not scheduled\", and \"What remains\" no\n  longer counts down to a tag. Work that was labelled 1.1 is now \"Next\":\n  the data-parallel call first, then ranged integers. WP22 stage D stays\n  the one open language question.\n- CLAUDE.md and AGENTS.md tell contributors and agents not to propose or\n  cut 1.0.0, and not to add a `Release-As:` trailer.\n- The wp15, wp20, wp22, wp23, wp29 and wp31 notes and the docs index\n  drop the \"1.1\" and \"before the freeze\" wording.\n\nNo rule in the reference changed.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/MASTER_PLAN.md#what-remains"
+      ],
+      "tests": [],
+      "commits": [
+        "b6c0d00"
+      ],
+      "pr": 204,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "a-release-as-trailer-chooses-the-next-version",
+      "type": "build",
+      "scope": "release",
+      "breaking": false,
+      "title": "a Release-As trailer chooses the next version",
+      "body": "* build(release): a Release-As trailer chooses the next version\n\nThe release train computes the next version from the commit types, and\nbefore 1.0 a breaking change moves the minor, so 1.0.0 was a number the\ntrain could never propose. A `Release-As: X.Y.Z` trailer on any commit\nmerged since the last tag now makes the Release PR propose that version,\nand that trailer is how 1.0.0 gets cut: a human merges a commit carrying\n`Release-As: 1.0.0`, and the open `chore(release)` pull request is\nre-titled and re-bumped to it.\n\nThe trailer can only raise the version. The version the commits imply\nis a floor: a trailer below it (a downgrade, or a patch where a `feat`\nasks for the minor) stops `changelog-gen.mjs --next` with a message\nnaming the trailer, its commit and the floor, and so does a value that\nis not exactly `X.Y.Z`. When several commits carry one, the highest\nwins. `--next` is the line the workflow reads for the changelog JSON,\nthe version bump and the pull request title, so the chosen version\nreaches all of them. The trailer comes off the entry's body in the\nchangelog record, as `Refs:` does.\n\nFrom 1.0 on, nothing changes: the existing rule already moves the major\non a breaking change, which answers the old \"reconsider at 1.0\" note.\n\nRefs: docs/wp12-release.md#release-procedure\nTests: scripts/changelog-gen.test.mjs\n\n* refactor(release): keep one version representation in nextVersion\n\n`impliedVersion` returns the version as a `[major, minor, patch]` triple,\nso the floor comparison uses it directly instead of formatting it to a\nstring and parsing it back. The test counts its checks as it runs them\nrather than hard-coding the total. No behaviour change.\n\nTests: scripts/changelog-gen.test.mjs\n\n* fix(release): refuse two Release-As trailers on one commit that disagree\n\nA second `Release-As:` line in one commit body used to overwrite the\nfirst without a word, so which version a commit asked for depended on\nline order. One commit asking for two versions has not said which it\nmeans, so `--next` now refuses it, naming both values and the commit,\nas it refuses a malformed value. Two that agree are one request.\n\nThe test also removes its throwaway repositories on every path, not\nonly when every case finishes normally.\n\nRefs: docs/wp12-release.md#release-procedure\nTests: scripts/changelog-gen.test.mjs\n\n* docs(release): say what each Release-As refusal names\n\nThe malformed and disagreeing-trailer refusals name the trailer and the\ncommit but not the floor, and neither can be fixed by a later commit.\nThe release procedure now says what each of the three refusals names.\n\nRefs: docs/wp12-release.md#release-procedure",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5a2f911"
+      ],
+      "pr": 200,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    }
+  ]
+}

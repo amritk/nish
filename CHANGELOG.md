@@ -26,6 +26,44 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-24
+
+### Breaking changes
+
+- compilation: Module and package identity is the real path ([#202](https://github.com/amritk/nish/pull/202))
+- checker: Reserve the type name integer for ranged integers ([#201](https://github.com/amritk/nish/pull/201))
+
+### Added
+
+- checker: NL9010 advises reordering the fields a class adds after its interface prefix ([#196](https://github.com/amritk/nish/pull/196))
+
+### Fixed
+
+- checker: Name the instantiation, not the template, in new-expression diagnostics and the checked dump ([#187](https://github.com/amritk/nish/pull/187))
+- checker: Same-named interfaces and classes across modules keep their identity ([#191](https://github.com/amritk/nish/pull/191))
+- codegen: A function whose unproven charCodeAt can panic is not willreturn ([#189](https://github.com/amritk/nish/pull/189))
+- checker: Bounds proofs see continue edges, lazy Result arguments and whole-record stores ([#190](https://github.com/amritk/nish/pull/190))
+- checker: Refuse two same-named classes or interfaces in one package ([#197](https://github.com/amritk/nish/pull/197))
+
+### Documentation
+
+- plan: M4, the reference is frozen and 1.0 is next ([#203](https://github.com/amritk/nish/pull/203))
+- plan: Nish stays on 0.x until its owner declares 1.0 ([#204](https://github.com/amritk/nish/pull/204))
+
+### Tests
+
+- codes: The registry check counts every fragment line, and wp15 names its benchmark ([#186](https://github.com/amritk/nish/pull/186))
+- cmp: Name the squash subject in the break-edge nish-cmp declarations ([#194](https://github.com/amritk/nish/pull/194))
+
+### Build
+
+- release: A Release-As trailer chooses the next version ([#200](https://github.com/amritk/nish/pull/200))
+
+### CI
+
+- Fail a pull request whose body carries a session link or tool attribution ([#188](https://github.com/amritk/nish/pull/188))
+
+
 ## [0.9.0] - 2026-09-23
 
 ### Breaking changes
@@ -356,3 +394,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.7.0]: https://github.com/amritk/nish/releases/tag/v0.7.0
 [0.8.0]: https://github.com/amritk/nish/releases/tag/v0.8.0
 [0.9.0]: https://github.com/amritk/nish/releases/tag/v0.9.0
+[0.10.0]: https://github.com/amritk/nish/releases/tag/v0.10.0
