@@ -747,7 +747,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x, which the run's own analysis reads as spread rather than the program ([BENCHMARKS.md](BENCHMARKS.md), [wp9-optimisation.md](wp9-optimisation.md#summary)). The other three closed: the causes were named rather than guessed, and each section below the gap table says what the measurement was before the change |
-| M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **the reference is frozen; the tag is next.** [LANGUAGE.md](LANGUAGE.md) states the freeze at its head. The tag is the Release PR that follows a commit carrying `Release-As: 1.0.0`, once the trailer lands ([#200](https://github.com/amritk/nish/pull/200), pending) — see [What remains](#what-remains). WP2b left the milestone rather than being finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)) |
+| M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **not scheduled.** The project stays on 0.x until its owner declares 1.0. The rule that will apply then is already written at the head of [LANGUAGE.md](LANGUAGE.md) — see [What remains](#what-remains). WP2b left the milestone rather than being finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)) |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
 | M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** — R6 ([wp19 §5](wp19-stage0-retirement.md#5-order)) deleted `src/`, the TypeScript compiler that `tsc` built into `dist/`, and with it the `typescript` runtime dependency (it stays a devDependency, for `npm run check` and the lexer and parser oracles), the six oracles that compared stage1 with stage0 (types, diagnostics, symbols, checked, IR, interop), the parity mode and its workflows, and the stage1-only register, which had nothing left to register once every case was stage1's. Each oracle has a successor that runs without stage0: the types, diagnostics, symbols and checked dumps are held to the goldens in `tests/self/goldens/` (`tests/self/goldens.js`), which were written from stage0 while it still existed; the IR and the interop sidecars are held to the `tests/cases/*.ll` goldens and to `tests/nish-cmp.js`, which compares HEAD with the last released compiler. The seed is that release, fetched by `scripts/fetch-seed.sh`, and `self/` is the only compiler. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `self/` to TypeScript: with the `@ts-expect-error` at `self/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
 
@@ -756,26 +756,25 @@ their own; releasing what they built is part of M4.
 
 ### What remains
 
-**1.0 is the frozen reference and a tag, and nothing else has to stand in
-front of it** (the one open question, WP22 stage D below, can wait for a
-major). [LANGUAGE.md](LANGUAGE.md) is frozen and says so at its head, with the
-rule for what a 1.x release may change: add a rule or turn a refusal into an
-acceptance in a minor; withdraw or narrow an accepted construct, or change what
-one means, only in a major. The tag is not a number the changelog generator
-would compute — before 1.0 a break moves the minor, so the commits alone never
-reach 1.0.0 — and so it is chosen: a `Release-As:` trailer read by
-`scripts/changelog-gen.mjs` ([#200](https://github.com/amritk/nish/pull/200),
-pending), then a commit carrying `Release-As: 1.0.0`, then the Release PR,
-which proposes 1.0.0 from then on and is merged by a human.
+**Nish stays on 0.x until its owner declares 1.0, and no date is set.** Until
+then a release may change the language, and a break moves the minor. The rule
+for after 1.0 is written at the head of [LANGUAGE.md](LANGUAGE.md) so that it
+is not invented under pressure: a minor may add a rule or turn a refusal into
+an acceptance, and withdrawing or narrowing an accepted construct, or changing
+what one means, needs a major. The changelog generator never computes 1.0.0 on
+its own, because before 1.0 a break moves the minor. When 1.0 is declared it is
+chosen with a `Release-As:` trailer ([#200](https://github.com/amritk/nish/pull/200)
+adds the trailer and is parked until then) on a commit, followed by the Release
+PR, which a human merges.
 
-Two changes went in before the freeze because each would have been a break
-after it:
+Two breaking changes are in 0.10.0, the next release. Each would cost a major
+after 1.0, so both were taken while a break is still a minor:
 
 - **The name `integer` is reserved** ([#201](https://github.com/amritk/nish/pull/201)).
   A class, interface or function called `integer` is `NL2332`, an alias or
   enum of that name is refused as `type Result = …` is, and `integer` written
   as a type is `NL2333`, so ranged integers ([wp31-ranged-integers.md](wp31-ranged-integers.md))
-  can land after 1.0 by turning `NL2333` into the type, and break nothing.
+  can land by turning `NL2333` into the type, and break nothing.
 - **A module is its real path and a package its real directory**
   ([#202](https://github.com/amritk/nish/pull/202)), as in Node and in `tsc`.
   That closes [#198](https://github.com/amritk/nish/issues/198) and the identity
@@ -783,8 +782,8 @@ after it:
   directories is `NL3029`, a refusal that identity by manifest could later turn
   into an acceptance ([wp21-packages.md](wp21-packages.md) §10d).
 
-**The WP15 list is closed for 1.0.** It was the road to the freeze because items
-5, 6 and 8 each added a rule to the reference; all three have landed. What is
+**The WP15 list is closed.** It was the road to a stable reference because
+items 5, 6 and 8 each added a rule to it; all three have landed. What is
 left on it is item 1b's hoist in the emitter, which changes IR and not the
 language. The table stays as the record of what each item was and what it was
 worth; [wp15-performance.md](wp15-performance.md) §9 is the full version, and
@@ -800,7 +799,7 @@ place the numbers are current.
 | 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
-| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` waited on item 8's generics and is now 1.1's ([wp31-ranged-integers.md](wp31-ranged-integers.md)), and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
+| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` waited on item 8's generics and is now next after the data-parallel call ([wp31-ranged-integers.md](wp31-ranged-integers.md)), and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `self/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `self/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | **done**: generic functions, classes, interfaces and methods, constraints, the whole-program rule and the peripheries (`-g`, the interop sidecars, the fuzzer) have all landed — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 what stays deferred, each with its trigger. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
@@ -809,14 +808,13 @@ in a loop across the whole of `self/`, each with a rewrite the warning names,
 which is not a language feature's worth of them
 ([wp15-performance.md](wp15-performance.md) §2.4).
 
-**One question is still open for 1.0: WP22 stage D.**
+**One language question is open: WP22 stage D.**
 [wp22-arrow-functions.md](wp22-arrow-functions.md) made arrows the declaration
 form and `self/` is arrows, and stage D would reject a `function` definition.
-That withdraws an accepted construct, so under the freeze it either lands
-before 1.0.0 or waits for a major. Whether it happens at all is still wp22
-§10's open question.
+That withdraws an accepted construct: on 0.x a breaking minor, after 1.0 a
+major. Whether it happens at all is still wp22 §10's open question.
 
-#### 1.1
+#### Next
 
 1. **The data-parallel call** — [wp29-thread-surface.md](wp29-thread-surface.md)
    §4.1's stage P1, `parallelMapInto` and `parallelReduce`, over the
@@ -834,7 +832,7 @@ before 1.0.0 or waits for a major. Whether it happens at all is still wp22
 2. **Ranged integers**, [wp31-ranged-integers.md](wp31-ranged-integers.md) W1 to
    W4, none of them breaking now that the name is reserved.
 
-#### After 1.0, additive and unscheduled
+#### Additive and unscheduled
 
 - **WP21 S3's last two items**: a builtin the target has no runtime for, and a
   compile error attributed to a dependency rather than to its consumer. Each

@@ -963,8 +963,8 @@ reviewed before more code is written.
   of the three adds a rule to it: §4 is decided no, §6 is not scheduled, and §5
   adds a *library type* rather than a rule, so `std/` gaining a `Pair` moves
   `std/README.md` and not LANGUAGE.md. The honest default is still the one
-  [wp20-threads.md](wp20-threads.md) §7 takes — 1.1 scope — but it is now a
-  decision rather than a deferral.
+  [wp20-threads.md](wp20-threads.md) §7 takes — after the WP15 list, and now
+  next — but it is now a decision rather than a deferral.
 - **Anything about `self/` adopting §2 or §3.** Nish-0 excludes both by
   name and a construct enters the language before it enters `self/`
   ([`.claude/selfhost.md`](../.claude/selfhost.md), rule 1). Converting 171

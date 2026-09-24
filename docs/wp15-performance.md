@@ -1828,8 +1828,8 @@ measurement closed says so and says why.
    (`src/checker/bounds.ts`, `self/bounds.ts`), and with it the §8 warning for
    a check that survives, which is what proves it worked. What did *not* ship
    is the declared surface: `integer<0, 255>` waited on the generics of item 8,
-   and is now 1.1 scope in [wp31-ranged-integers.md](wp31-ranged-integers.md),
-   with the name `integer` reserved in 1.0 (#201), and the tuple form of the length guard buys
+   and is now next after the data-parallel call in [wp31-ranged-integers.md](wp31-ranged-integers.md),
+   with the name `integer` reserved in 0.10.0 (#201), and the tuple form of the length guard buys
    nothing the facts do not. Measured **1.069x** on the lexer-shaped cursor of
    item 3, against the 1.082x that removing every check buys on the same
    program — the hot function comes out byte-identical to the
