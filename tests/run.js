@@ -7510,6 +7510,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         "--no-fund",
         "--prefer-offline",
         "--ignore-scripts",
+        // The platform packages are on the registry from 0.10.0, so without this
+        // npm fetches the published one for this machine and the refusal below
+        // never happens. Omitting them is also exactly the user this block is
+        // about: `npm install --omit=optional` gets this install and no other.
+        "--omit=optional",
         tarball,
       ],
       { cwd: pkgDir, encoding: "utf8" }
@@ -7529,10 +7534,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       );
 
       // ---- no platform package: the refusal ----------------------------------------
-      // Nothing was installed beside the main package -- npm skipped four
-      // `optionalDependencies` whose `os`/`cpu` did not match or that the registry does
-      // not carry yet -- so this is the state a user on musl, FreeBSD or a 32-bit
-      // anything installs into. Until 0.6.0 it was the *fallback* path, and every check
+      // Nothing was installed beside the main package -- `--omit=optional` kept all four
+      // `optionalDependencies` out, where on a real install npm skips the three whose
+      // `os`/`cpu` do not match -- so this is the state a user on musl, FreeBSD or a
+      // 32-bit anything installs into. Until 0.6.0 it was the *fallback* path, and every check
       // below ran through it: this block proved the tarball's Node compiler rather than
       // the compiler a user on a supported platform gets, which is wp19 §5a item 1's
       // sentence about this very harness -- "the path the harness takes works and the
