@@ -28,7 +28,7 @@ number. §4 is that difference.
 | 5 | Leaving the range | Every operator reads a ranged value as `i32`, so arithmetic is `i32`. The range survives copies, `const` inference, reads of ranged fields and elements, returns, and type arguments. Nothing computes a range (§7). | Interval arithmetic in the types. |
 | 6 | Feeding `self/bounds.ts` | A ranged local's type answers `nonNegative` and `maxIndex` directly, the way `isUnsigned` answers `nonNegative` today, and needs no invalidation rule. The same facts decide which entry checks are elided (§8). | Recording the range as ordinary facts, which assignments would then forget. |
 | 7 | Interop and `-g` | `int32_t` in C, `number` in `.d.ts`, the range in the comment above both, and a `RangeError` at the N-API and wasm bridges. A ranged type argument goes through G8's `nish_gen_` names. DWARF gets a `DW_TAG_typedef` named with the display spelling (§9). | `DW_TAG_subrange_type`, which LLVM 18 cannot write, and a new naming scheme. |
-| 8 | Stages | W1 adds the type and always checks entry. W2 adds the proofs, W3 the bridges, and W4 the acceptance measurement. `self/` may write it from the release after W1. The item 3 cursor must not regress, and `getByte` is judged by the IR the frontend writes (§10). | One change, and a promise of speed that has not been measured. |
+| 8 | Stages | The name `integer` was reserved before 1.0 (§3), so the feature is 1.1 scope and breaks nothing. W1 adds the type and always checks entry. W2 adds the proofs, W3 the bridges, and W4 the acceptance measurement. `self/` may write it from the release after W1. The item 3 cursor must not regress, and `getByte` is judged by the IR the frontend writes (§10). | One change, and a promise of speed that has not been measured. |
 
 ---
 
@@ -106,15 +106,24 @@ for the reason that file gives: a brand would break `let x: i32 = 5`. So
 **The name is free.** No declaration in `node_modules/typescript/lib/*.d.ts`
 (TypeScript 5.9.3) matches `(type|interface|declare var|declare const|class)
 integer`, so the global cannot collide with a lib type at any `lib` setting.
-It is not a builtin name in the compiler either: `scalarNamed` and
-`builtinTypeName` in `self/annotations.ts` do not know it. Today
-`type integer = i32;` and `class integer { … }` both compile (checked with
-`build/nish`). W1 adds `integer` to `builtinTypeName`, which refuses an alias
-and an enum of that name the way `type Result = …` is refused. It also refuses
-a class, interface or function called `integer`, because otherwise
-`integer<0, 255>` would mean two things in a module that declared one. That
-breaks any program that declares something called `integer`, so W1 is
-`feat(checker)!` with a `BREAKING CHANGE:` trailer.
+When this note was written it was not a builtin name in the compiler either:
+`scalarNamed` and `builtinTypeName` in `self/annotations.ts` did not know it,
+and `type integer = i32;` and `class integer { … }` both compiled (checked
+with `build/nish`). Taking the name would have broken any program that
+declared something called `integer`, which would have made W1
+`feat(checker)!`.
+
+**The name was reserved before 1.0**, by its own `feat(checker)!` change,
+so that the break came before the freeze and W1 breaks nothing. `integer`
+is in `builtinTypeName`, which refuses an alias and an enum of that name the
+way `type Result = …` is refused. A class, interface or function called
+`integer` is refused as well (NL2332), because otherwise `integer<0, 255>`
+would mean two things in a module that declared one. `integer` written as a
+type is refused by name (NL2333), and W1 turns that refusal into the type.
+`integer<0, 255>` is still a syntax error until W1's `N_TYPE_LITERAL`. The
+rule is in [LANGUAGE.md](LANGUAGE.md#types) and is pinned by
+`tests/cases/reject_integer_*`. W1 is therefore `feat(checker)`, with no `!`,
+and is 1.1 scope.
 
 **Rejected: a new name for each range, like `index256` or `byte`.** A fixed
 list covers the ranges somebody thought of and no others. **Rejected: a
@@ -518,10 +527,10 @@ which with `instanceDisplayName` spells `Box<integer<0, 255>>`, and
 
 | Stage | Commit | Delivers | Tests |
 | --- | --- | --- | --- |
-| **W1** | `feat(checker)!: ranged integer types (WP31)` | `N_TYPE_LITERAL` and its oracle mapping. `K_RANGED`, `typeName` and `mangle`. The refusals of §4 and the `integer` name rule. The entry rules of §6, with every entry checked, since nothing is elided yet. The widening of §7. The `declare function` refusal. The `-g` typedef. The `runtime/nish.d.ts` line. The rule in `docs/LANGUAGE.md` under Types, `docs/AI.md`, a cookbook entry and a `CHANGELOG.md` line. The Node divergence of §6, in `docs/RUN_UNDER_NODE.md`, `tests/differential/unmodified.js`'s `KNOWN` and `tests/differential/known-failures.txt`. | `rng_param`, `rng_generic`, `rng_widen` (`.ll` and `.out`); `rng_entry_panic` (exit 1, stderr) and `rng_entry_panic_f64`, the f64-mode twin the unmodified runner compares; `dbg_rng`; a `reject_rng_*` case and a `tests/wordings/` program for each new code |
-| **W2** | `perf(checker): prove range entries and index through declared ranges (WP31)` | §8: the two queries, `nodeProvenRange`, the unsigned upper bounds, the `toI32(u8)` fact, and the new `performance` code. | `perf_rng_loop`, `perf_rng_quiet`, `arr_bounds_ranged`, and `perf_rng_counter`, which is §7's trap: a warning, then a panic at run time |
-| **W3** | `feat(interop): ranged parameters at the host boundary (WP31)` | §9: the prologue check under the linkage condition, the N-API and wasm `RangeError`, and the comments in the header and `.d.ts`. | `interop_rng_*`: the header under `clang -std=c11 -Wall -Wextra -Werror -pedantic`, the `.d.ts` under `tsc --noEmit`, and a Node call that must throw |
-| **W4** | `docs(wp31): record the ranged-integer measurements` | the acceptance program below, committed to `bench/`, and its numbers written into this note and into wp15 item 6 | the programs themselves, and their checksums in `bench/run.mjs` if they join the suite |
+| **W1** (1.1) | `feat(checker): ranged integer types (WP31)` | `N_TYPE_LITERAL` and its oracle mapping. `K_RANGED`, `typeName` and `mangle`. The refusals of §4. The `integer` name rule is already in place (§3); W1 turns NL2333, the refusal of `integer` as a type, into the type. The entry rules of §6, with every entry checked, since nothing is elided yet. The widening of §7. The `declare function` refusal. The `-g` typedef. The `runtime/nish.d.ts` line. The rule in `docs/LANGUAGE.md` under Types, `docs/AI.md`, a cookbook entry and a `CHANGELOG.md` line. The Node divergence of §6, in `docs/RUN_UNDER_NODE.md`, `tests/differential/unmodified.js`'s `KNOWN` and `tests/differential/known-failures.txt`. | `rng_param`, `rng_generic`, `rng_widen` (`.ll` and `.out`); `rng_entry_panic` (exit 1, stderr) and `rng_entry_panic_f64`, the f64-mode twin the unmodified runner compares; `dbg_rng`; a `reject_rng_*` case and a `tests/wordings/` program for each new code |
+| **W2** (1.1) | `perf(checker): prove range entries and index through declared ranges (WP31)` | §8: the two queries, `nodeProvenRange`, the unsigned upper bounds, the `toI32(u8)` fact, and the new `performance` code. | `perf_rng_loop`, `perf_rng_quiet`, `arr_bounds_ranged`, and `perf_rng_counter`, which is §7's trap: a warning, then a panic at run time |
+| **W3** (1.1) | `feat(interop): ranged parameters at the host boundary (WP31)` | §9: the prologue check under the linkage condition, the N-API and wasm `RangeError`, and the comments in the header and `.d.ts`. | `interop_rng_*`: the header under `clang -std=c11 -Wall -Wextra -Werror -pedantic`, the `.d.ts` under `tsc --noEmit`, and a Node call that must throw |
+| **W4** (1.1) | `docs(wp31): record the ranged-integer measurements` | the acceptance program below, committed to `bench/`, and its numbers written into this note and into wp15 item 6 | the programs themselves, and their checksums in `bench/run.mjs` if they join the suite |
 
 **The rolling freeze.** `self/` is built by the last release. It cannot write
 `integer<…>` in its own source until the release after W1 lands, because the

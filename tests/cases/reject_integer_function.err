@@ -1,0 +1,1 @@
+`integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as a function

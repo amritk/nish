@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 431;
+export const RULE_COUNT: i32 = 433;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -149,6 +149,10 @@ export const diagnosticRules = (): string[] => [
   "NL2149",
   "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)",
   "NL2152",
+  "`integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as ",
+  "NL2332",
+  "`integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet",
+  "NL2333",
   "`super` is not supported: Nish has no inheritance, so a class has no base class to reach",
   "NL2279",
   "` is not a module constant, and a module constant's value must be known at compile time",

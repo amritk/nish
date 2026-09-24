@@ -1,0 +1,1 @@
+`integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet
