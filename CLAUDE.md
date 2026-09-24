@@ -84,7 +84,9 @@ Tests: tests/cases/arr_alias_domains
   `chore`, and decides both the heading and the version bump: `feat` moves the
   minor, everything else the patch.
 - **`type!`** or a `BREAKING CHANGE:` trailer marks a break. Before 1.0 that
-  moves the minor, not the major.
+  moves the minor; from 1.0 it moves the major, and what counts as a break in
+  the language is the freeze rule at the head of `docs/LANGUAGE.md`. 1.0.0
+  itself is chosen, not computed: a `Release-As: 1.0.0` trailer (#200, pending).
 - **scope** is the part of the compiler — `checker`, `codegen`, `runtime`,
   `self`, `cli`, `interop` — and is what the website filters on.
 - **`Measured:`** carries a number, because this project's claims are measured.
