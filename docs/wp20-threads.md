@@ -296,8 +296,8 @@ it changes, and that is why it is a flag: a program pays only if it asks.
 
 With the flag *off*, nothing moved. Not one golden `.ll` changed, the runtime's
 `.text` is the same number, and `hello` is the same binary byte for byte — which
-is what the `--threads` default of `false` buys and what makes this landable
-before the 1.0 freeze.
+is what the `--threads` default of `false` buys and what made it landable
+without waiting on the rest of the package.
 
 The budget rule of [wp15-performance.md](wp15-performance.md) §7 is therefore
 not called on and neither is the gate. `RUNTIME_TEXT_BUDGET` in `tests/run.js`
@@ -483,18 +483,16 @@ and it must name the field that disqualified the type rather than the type.
 Two questions this note deliberately does not answer alone, because they are
 scheduling decisions rather than design ones.
 
-**Before or after the 1.0 freeze?** M4 is the only milestone left and it
-freezes the language reference (MASTER_PLAN §9). T1 through T4 each add rules
-to LANGUAGE.md, so the package is either pre-freeze scope — which delays 1.0
-by a large multiple of §3.6 — or it is 1.1. **It is 1.1, and it opens it**:
-[MASTER_PLAN](MASTER_PLAN.md#what-remains) names the data-parallel call as
-1.1's first item.
+**Before or after 1.0?** Neither constrains it. The project stays on 0.x until
+its owner declares 1.0, and T1 through T4 each add rules to LANGUAGE.md, which
+any release may do. **It is next**: [MASTER_PLAN](MASTER_PLAN.md#what-remains)
+names the data-parallel call as the next item.
 
 **T0 is separable and probably should be early regardless.** It has no
 language surface, it is a prerequisite for every version of this design
 including the detached-thread ones §3.4 defers, and its whole cost is a
 benchmark question
-that can be answered in a day. Nothing about the 1.0 freeze argues against
+that can be answered in a day. Nothing about 1.0 argues against
 it. **It landed on that argument** — the benchmark question is answered in §4
 T0, and the answer was "nothing, unless the program asks".
 

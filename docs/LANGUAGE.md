@@ -5,12 +5,15 @@ This is the normative reference for Nish, the subset of TypeScript that
 what each construct means, and how every rejection is worded. The design
 notes (`docs/wp*.md`) explain *why*; this page says *what*.
 
-**This reference is frozen from 1.0.** A minor release may add a rule, or turn
-a refusal into an acceptance. Withdrawing or narrowing an accepted construct,
-or changing what one means, needs a major. The wording of a refusal may change
-in any release; its diagnostic code may not, because `--json` consumers key on
-it. Where the compiler disagrees with this page, the compiler is wrong, and
-fixing it is not a change to the language.
+**Nish is 0.x, and stays there until its owner declares 1.0.** No date is set.
+Until then any minor release may change the language: a change that withdraws
+or narrows an accepted construct, or changes what one means, is marked breaking
+(`type!`) and named in the release notes. From 1.0 the rule tightens: a minor
+may add a rule or turn a refusal into an acceptance, and anything else needs a
+major. In either case the wording of a refusal may change in any release, but
+its diagnostic code may not, because `--json` consumers key on it. Where the
+compiler disagrees with this page, the compiler is wrong, and fixing it is not
+a change to the language.
 
 Conventions:
 
