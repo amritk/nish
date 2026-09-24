@@ -158,6 +158,23 @@ Type rules:
   Arrays of arrays (`tests/cases/arr_nested`), arrays of strings
   (`tests/cases/arr_strings`), arrays of class instances and class fields
   of array type work *(CLI only)*.
+- **`integer` is reserved** for ranged integers, `integer<Lo, Hi>`
+  ([wp31-ranged-integers.md](wp31-ranged-integers.md)), which this compiler
+  does not build yet. Holding the name now means the feature can be added
+  later without taking a name away from a program that already uses it.
+  As a type, `integer` or `integer<T>` is
+  `` `integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet ``
+  (`tests/cases/reject_integer_use`). A numeric literal as a type argument
+  (`integer<0, 255>`) is still a syntax error, because the parser reads only
+  types there. The name is also on the list of built-in type names, so
+  `type integer = …` and `enum integer` are refused the way `type string = …`
+  is (`reject_integer_alias`, `reject_integer_enum`). A class, interface or
+  function may not take it either, because `integer<0, 255>` would then mean
+  two things in the module that declared one:
+  `` `integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as a class ``
+  (`reject_integer_class`, `reject_integer_interface`,
+  `reject_integer_function`). A module constant or a local called `integer`
+  is a value, not a type, and is still accepted.
 
 ### Numeric literals
 

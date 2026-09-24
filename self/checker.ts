@@ -10,7 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites `src/` uses.
 
-import { aliasType, builtinTypeName, resolveType } from "./annotations";
+import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations";
 import { checkElementReferences } from "./arrays";
 import { checkDefiniteAssignment } from "./assignment";
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants";
@@ -143,6 +143,12 @@ export class Checker {
         // function templates and the member loop below skips it: its members
         // are collected once per instantiation instead.
         const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE;
+        const what = kind === STRUCT_CLASS ? "class" : "interface";
+        // Nothing is declared for a refused `integer`: the name is refused as a
+        // type wherever it is written, whatever the module declares.
+        if (rejectRangedIntegerName(this.ctx, stmt.children[0], what)) {
+          continue;
+        }
         if (isGenericStruct(stmt)) {
           this.ctx.errored = false;
           this.registerStructTemplate(stmt, kind);
@@ -152,7 +158,7 @@ export class Checker {
           // template's name is held to holds here too. The struct is declared
           // all the same, so that an annotation naming it does not add a
           // second diagnostic to the first.
-          rejectDollarInSymbolName(this.ctx, stmt.children[0].text, kind === STRUCT_CLASS ? "class" : "interface", stmt.children[0]);
+          rejectDollarInSymbolName(this.ctx, stmt.children[0].text, what, stmt.children[0]);
           const info = declareStruct(this.ctx, stmt, kind);
           if (info !== null) {
             declared.push(info);
@@ -376,6 +382,9 @@ export class Checker {
 
   /** One `function` declaration: its signature, its name, and `main`. */
   collectFunction(stmt: Node): void {
+    if (rejectRangedIntegerName(this.ctx, stmt.children[0], "function")) {
+      return;
+    }
     if (isGenericFunction(stmt)) {
       this.registerTemplate(stmt);
       return;
