@@ -9580,6 +9580,15 @@ if (!only || "attribution".includes(only) || "pr-body".includes(only)) {
   }
 }
 
+// ---- The release train's version: the implied bump and the `Release-As:` trailer -----
+// `scripts/changelog-gen.mjs --next` is the number the Release PR proposes and every
+// file it bumps. Its suite builds throwaway repositories, so it needs git and nothing else.
+if (!only || "release".includes(only) || "changelog".includes(only)) {
+  const suite = "scripts/changelog-gen.test.mjs";
+  const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" });
+  check(`release: node ${suite} passes`, r.status === 0, r.stdout + r.stderr);
+}
+
 // ---- WP19 G2.4: the frozen rewrites the WP13 oracle keeps once stage0 is gone -------
 // `tests/differential/rewrite.js` typed its rewrite with stage0's own `Compilation`, so
 // the differential comparison against Node -- the only oracle here about runtime

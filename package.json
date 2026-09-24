@@ -22,6 +22,7 @@
     "!scripts/fetch-seed.sh",
     "!scripts/check-pr-body.mjs",
     "!scripts/check-pr-body.test.mjs",
+    "!scripts/changelog-gen.test.mjs",
     "std",
     "README.md",
     "LICENSE",

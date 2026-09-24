@@ -343,6 +343,40 @@ step below is done by hand.
    wants the raw history. Prose that belongs above the sections goes in
    `changelog/<version>.intro.md`.
 
+   **How the version is chosen.** The commit types imply it: a breaking
+   change (`type!` or a `BREAKING CHANGE:` trailer) moves the major, a `feat`
+   the minor, anything else the patch. Before 1.0 a break moves the minor
+   instead, because 0.x is the range where anything may change, so 1.0.0 is
+   never *implied*. It is asked for. A **`Release-As: X.Y.Z`** trailer on any
+   commit merged since the last tag makes the Release PR propose that version,
+   and **that trailer is how 1.0.0 is cut**: a human merges a commit that
+   carries `Release-As: 1.0.0`, the train re-titles the open pull request
+   `chore(release): 1.0.0`, and merging that pull request tags it. From 1.0 on
+   nothing has to change: the same rule is ordinary semver, and a break moves
+   the major.
+
+   The trailer can only raise the version. The version the commits imply is a
+   floor, so the trailer may equal it or exceed it, never go below: not a
+   downgrade, and not `0.9.1` where a `feat` asks for `0.10.0`. When several
+   commits carry one, the highest wins. The value is exactly `X.Y.Z`, with no
+   `v` and no pre-release. Three things stop the train, each with
+   `changelog-gen.mjs --next` exiting non-zero: a trailer below the floor
+   (the message names the trailer, its commit and the floor), a value that is
+   not a version (the trailer and its commit), and two trailers on one commit
+   that disagree (both values and the commit). The Release PR is not refreshed
+   until it is fixed. A low trailer is fixed by a later commit with a higher
+   one. The other two cannot be: reverting the commit leaves it in the range
+   until the next tag, so that release is cut by hand, doing what the workflow
+   does with an explicit `--version` in place of `--next`. Read the trailer
+   before merging the commit that carries it.
+
+   `--next` is the one line everything downstream reads --
+   `changelog/<version>.json`, the bump of `package.json`, `package-lock.json`
+   and `self/branding.ts`, and the pull request's title -- so the chosen
+   version reaches all of them. The trailer is bookkeeping, so it comes off the
+   entry's body the way `Refs:` does. `scripts/changelog-gen.test.mjs`, which
+   `npm test` runs, pins every case.
+
    The rendered section is an index: one line per change -- the scope, the
    subject, and a link to the pull request it landed in (or to the commit,
    when it landed without one). The commit bodies, the `Measured:` numbers and
@@ -492,7 +526,7 @@ provenance tag" below).
 To preview what the train would produce, without pushing anything:
 
 ```bash
-npm run changelog -- --next             # the version the commits imply
+npm run changelog -- --next             # the version the commits imply, or a Release-As: trailer asks for
 npm run changelog -- --version 0.2.0    # those notes, on stdout
 npm run check && npm run lint && npm test && npm run smoke
 npm pack --dry-run   # only bin/, runtime/, scripts/, std/, README.md, LICENSE, llms.txt, docs/

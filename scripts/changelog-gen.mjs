@@ -38,6 +38,8 @@
 //   Tests: tests/cases/arr_alias_domains
 //   Release-Note: overrides the body for public notes, when the body is
 //     about the review rather than about the change
+//   Release-As: 1.0.0 -- the version the next release takes, when it is not
+//     the one the types imply (see nextVersion)
 //
 // `type!` or a `BREAKING CHANGE:` trailer marks a breaking change.
 //
@@ -102,7 +104,7 @@ const CONVENTIONAL_TYPES = TYPES.filter(([k]) => k !== "other").map(([k]) => k);
 const DROPPED_TRAILERS = /^(Co-Authored-By|Claude-Session|Signed-off-by|Reviewed-by):/i;
 
 /** Trailers this tool reads. Everything else is left in the body. */
-const KNOWN_TRAILERS = /^(Measured|Refs|Tests|Release-Note|BREAKING[ -]CHANGE):\s*(.*)$/i;
+const KNOWN_TRAILERS = /^(Measured|Refs|Tests|Release-Note|Release-As|BREAKING[ -]CHANGE):\s*(.*)$/i;
 
 /**
  * GitHub ends a squashed body with a rule when the branch had more than one
@@ -159,7 +161,7 @@ function splitTrailers(body) {
 }
 
 function parseTrailers(lines) {
-  const out = { metrics: [], refs: [], tests: [], releaseNote: undefined, breaking: undefined };
+  const out = { metrics: [], refs: [], tests: [], releaseNote: undefined, releaseAs: [], breaking: undefined };
   for (const line of lines) {
     if (DROPPED_TRAILERS.test(line)) continue;
     const m = line.match(KNOWN_TRAILERS);
@@ -170,6 +172,7 @@ function parseTrailers(lines) {
     else if (key === "refs") out.refs.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
     else if (key === "tests") out.tests.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
     else if (key === "releasenote") out.releaseNote = value;
+    else if (key === "releaseas") out.releaseAs.push(value);
     else if (key === "breakingchange") out.breaking = value;
   }
   return out;
@@ -200,7 +203,8 @@ function slug(title, taken) {
 }
 
 /**
- * The entries a release contains, and the subjects that did not become one.
+ * The entries a release contains, the subjects that did not become one, and
+ * the `Release-As:` trailers the range carries.
  *
  * A subject that does not classify is skipped: `pr-title.yml` makes every
  * squash-merge subject conventional, so what is left over is the branch
@@ -209,6 +213,10 @@ function slug(title, taken) {
  * notes rather than content, and both used to be most of the file. The skipped
  * subjects are returned so the caller can report them; `includeUnconventional`
  * restores the old behaviour and files them under "Uncategorised".
+ *
+ * A trailer is read from every commit in the range, skipped or not: a version
+ * someone asked for is not lost because the commit that asked was the
+ * work-in-progress half of a merge.
  */
 function collect(from, to, includeUnconventional = false) {
   const range = from ? `${from}..${to}` : to;
@@ -219,11 +227,16 @@ function collect(from, to, includeUnconventional = false) {
   const taken = new Set();
   const entries = [];
   const skipped = [];
+  const releaseAs = [];
 
   for (const record of raw.split("\x1e")) {
     const text = record.replace(/^\n/, "");
     if (!text.trim()) continue;
     const [sha, author, date, subject, body = ""] = text.split("\x00");
+    const { prose: rawProse, trailers } = splitTrailers(body);
+    const t = parseTrailers(trailers);
+    for (const version of t.releaseAs) releaseAs.push({ version, commit: `${sha.slice(0, 7)} ${subject}` });
+
     const parsed = parseSubject(subject);
     const classified = parsed !== undefined && CONVENTIONAL_TYPES.includes(parsed.type);
     if (!classified) {
@@ -231,9 +244,7 @@ function collect(from, to, includeUnconventional = false) {
       if (!includeUnconventional) continue;
     }
 
-    const { prose: rawProse, trailers } = splitTrailers(body);
     const prose = rawProse.replace(SQUASH_RULE, "");
-    const t = parseTrailers(trailers);
     const title = parsed ? parsed.title : subject;
     const pr = /\(#(\d+)\)\s*$/.exec(subject)?.[1];
 
@@ -254,7 +265,7 @@ function collect(from, to, includeUnconventional = false) {
       date: date.slice(0, 10),
     });
   }
-  return { entries, skipped };
+  return { entries, skipped, releaseAs };
 }
 
 function renderMarkdown(release) {
@@ -299,23 +310,83 @@ function renderEntry(e) {
 }
 
 /**
- * The next version, from what the commits contain.
+ * The version the commits imply, from their types, as `[major, minor, patch]`.
  *
- * Pre-1.0 semver: a breaking change moves the minor rather than the major,
- * because 0.x is the "anything may change" range and burning 1.0 on the first
- * breaking change would be a lie about stability. Reconsider at 1.0.
+ * Before 1.0 a breaking change moves the minor rather than the major, because
+ * 0.x is the "anything may change" range and burning 1.0 on the first breaking
+ * change would be a lie about stability. 1.0 is therefore never implied: it is
+ * asked for, with a `Release-As:` trailer (see nextVersion). From 1.0 on the
+ * same branch is ordinary semver -- a break moves the major, a `feat` the
+ * minor, anything else the patch -- so nothing changes here when 1.0 is cut.
  */
-function nextVersion(current, entries, previousTag) {
+function impliedVersion(current, entries, previousTag) {
   // The first release is 0.1.0 whatever the commits say. Every commit before
   // the convention existed is typed `other`, so a type-driven bump would read
   // the entire history as a patch and ship 0.0.1 — a number that would claim
   // the compiler is a bug-fix on nothing. 0.1.0 is also what the seed policy
   // already names as the base case (docs/wp12-release.md, "The bootstrap seed").
-  if (!previousTag) return "0.1.0";
+  if (!previousTag) return [0, 1, 0];
   const [major, minor, patch] = current.split(".").map(Number);
-  if (entries.some((e) => e.breaking)) return major === 0 ? `0.${minor + 1}.0` : `${major + 1}.0.0`;
-  if (entries.some((e) => e.type === "feat")) return `${major}.${minor + 1}.0`;
-  return `${major}.${minor}.${patch + 1}`;
+  if (entries.some((e) => e.breaking)) return major === 0 ? [0, minor + 1, 0] : [major + 1, 0, 0];
+  if (entries.some((e) => e.type === "feat")) return [major, minor + 1, 0];
+  return [major, minor, patch + 1];
+}
+
+/** `X.Y.Z` as three numbers, or undefined when it is not one. No `v`, no pre-release, no leading zeros. */
+function parseVersion(text) {
+  const m = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(text);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
+}
+
+/** Negative, zero or positive as `a` is below, at or above `b`. */
+function compareVersions(a, b) {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+/**
+ * The next version: the one the commits imply, unless a `Release-As: X.Y.Z`
+ * trailer in the range asks for another. The highest trailer wins, and it may
+ * only raise the version -- the implied one is a floor, so a trailer can cut
+ * 1.0.0 over a range that implies 0.10.0, but it can never downgrade, and
+ * never ship a patch where a `feat` asks for the minor.
+ *
+ * Returns `{ version }`, or `{ error }` naming the trailer and its commit when
+ * one is malformed, below the floor, or disagrees with another trailer on the
+ * same commit -- one commit asking for two versions has not said which it means. Neither is skipped: a trailer is a
+ * human's decision about a number the release will carry for ever, and the
+ * release PR proposing some other number without saying so would be worse than
+ * the train stopping.
+ */
+function nextVersion(current, entries, previousTag, releaseAs = []) {
+  const implied = impliedVersion(current, entries, previousTag);
+  let chosen;
+  const byCommit = new Map();
+  for (const request of releaseAs) {
+    const parsed = parseVersion(request.version);
+    if (!parsed) {
+      return {
+        error: `malformed trailer \`Release-As: ${request.version}\` on ${request.commit}; the value is a version, X.Y.Z`,
+      };
+    }
+    const earlier = byCommit.get(request.commit);
+    if (earlier !== undefined && earlier !== request.version) {
+      return {
+        error: `two trailers on ${request.commit} disagree: \`Release-As: ${earlier}\` and \`Release-As: ${request.version}\`; a commit asks for one version`,
+      };
+    }
+    byCommit.set(request.commit, request.version);
+    if (!chosen || compareVersions(parsed, chosen.parsed) > 0) chosen = { ...request, parsed };
+  }
+  if (!chosen) return { version: implied.join(".") };
+  if (compareVersions(chosen.parsed, implied) < 0) {
+    return {
+      error:
+        `trailer \`Release-As: ${chosen.version}\` on ${chosen.commit} is below ${implied.join(".")}, ` +
+        `the version the commits since ${previousTag ?? "the start of the history"} imply; ` +
+        "a trailer may raise the next version, never lower it",
+    };
+  }
+  return { version: chosen.version };
 }
 
 // ---- CLI ---------------------------------------------------------------------------------------
@@ -374,12 +445,18 @@ const stdoutKind = flag("stdout", "md");
 const write = argv.includes("--write");
 const includeUnconventional = argv.includes("--include-unconventional");
 
-const { entries, skipped } = collect(from, to, includeUnconventional);
+const { entries, skipped, releaseAs } = collect(from, to, includeUnconventional);
 
 // `--next` answers the version and nothing else, for the release PR to name
-// itself and to bump package.json with.
+// itself and to bump package.json with. Everything release-pr.yml writes reads
+// this one line, so a `Release-As:` trailer reaches all of it here.
 if (argv.includes("--next")) {
-  process.stdout.write(`${nextVersion(pkgVersion, entries, from)}\n`);
+  const next = nextVersion(pkgVersion, entries, from, releaseAs);
+  if (next.error) {
+    console.error(`changelog-gen: ${next.error}`);
+    process.exit(1);
+  }
+  process.stdout.write(`${next.version}\n`);
   process.exit(0);
 }
 
