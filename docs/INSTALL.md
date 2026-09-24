@@ -234,12 +234,13 @@ routes are
 If you need one of these to be a first-class install, that is the conversation
 to have on the issue tracker rather than a workaround to discover here.
 
-**Nothing is published to the registry yet.** The installer is built and
-tested, and what is left is a person publishing a release under it, which
-[docs/wp12-release.md](wp12-release.md#release-procedure) step 4 is about.
-Until that happens, install from a release.
+**On the registry from 0.10.0.** Every release publishes the main package and
+its platform packages to npm from `release.yml`, by trusted publishing
+([docs/wp12-release.md](wp12-release.md#release-procedure) step 4), so
+`npm install -g @amritk/nish` is the whole install. The rest of this section is
+for a machine that cannot reach the registry, or a release before 0.10.0.
 
-From a release tarball on GitHub — the same package `npm publish` would upload,
+From a release tarball on GitHub — the same package `npm publish` uploads,
 carried by the release instead of the registry. The `Release` workflow attaches
 the npm tarball to the release it builds for a `v*` tag. `npm pack` names it
 after `package.json#name`, so it is `amritk-nish-<version>.tgz` from 0.4.0 on

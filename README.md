@@ -49,22 +49,19 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-# Once this is published, the whole install is either of:
-#   npm install -g @amritk/nish
-#   curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
+npm install -g @amritk/nish            # or per project: npm i -D @amritk/nish
+npx @amritk/nish --version             # or run it without installing
+# or, with no Node at all:
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 # `nish` on the registry is an unrelated package from 2014, so this one is
-# scoped; the command it installs is still `nish`. Nothing is published yet,
-# so take it from a release -- the npm tarball, plus the prebuilt native
-# compiler for your machine, which is what the scoped install would fetch.
-base=https://github.com/amritk/nish/releases/download/v0.4.0
-curl -LO $base/amritk-nish-0.4.0.tgz
-curl -LO $base/amritk-nish-x86_64-linux-0.4.0.tgz    # or the row for your machine
-npm install -g ./amritk-nish-0.4.0.tgz ./amritk-nish-x86_64-linux-0.4.0.tgz
+# scoped; the command it installs is still `nish`. npm fetches the prebuilt
+# native compiler for your machine alongside it.
 ```
 
 > [!NOTE]
-> **Install the pair.** The main package is a launcher and carries no compiler:
-> installed on its own it has nothing to hand over to and says so, exiting 3.
+> **From a release tarball rather than the registry, install the pair.** The
+> main package is a launcher and carries no compiler: installed on its own it
+> has nothing to hand over to and says so, exiting 3.
 > The same is true on a platform this project publishes no binary for — musl,
 > FreeBSD, 32-bit anything — which since 0.6.0 gets a diagnostic naming the four
 > that do rather than the TypeScript compiler under Node that used to ship
