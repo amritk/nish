@@ -319,7 +319,7 @@ a language feature that does not exist.
 **That prerequisite is scheduled with P1.** [wp23](wp23-language-surface.md)
 §6 left it *not scheduled* until a second real program asked, and named this
 section as the first. [MASTER_PLAN](MASTER_PLAN.md#what-remains) makes P1
-1.1's first item, which is the decision to build the parameter with it, for a
+the next item, which is the decision to build the parameter with it, for a
 callee the checker can name and no other kind. What must not happen is P1
 being built against the *other* kind of callee: WP28 §7.4 measured a callee the checker cannot name at 1.26x for the
 call and up to 8.76x for the escape proof it forfeits, and an intrinsic that
@@ -585,12 +585,12 @@ language Nish is a subset of.
   question and the reason channels and non-scalar results should be designed in
   one go rather than separately.
 - **Whether `using` should be admitted in strict at all, or only alongside the
-  threads surface.** This had a deadline while the reference was open to
-  change; it does not now, because the freeze at the head of LANGUAGE.md lets a
+  threads surface.** This has no deadline: on 0.x any minor may change the
+  language, and after 1.0 the rule at the head of LANGUAGE.md still lets a
   minor turn a refusal into an acceptance. That also settles which way to err:
   the narrow answer — `using` is accepted only for the types the threads module
-  declares — can be widened later in a minor, and the wide one could not be
-  narrowed without a major. It still makes `using` a keyword that works on two
+  declares — can be widened later without a break, and the wide one could only
+  be narrowed by one. It still makes `using` a keyword that works on two
   types, which is an odd thing to write down.
 - **Whether the partitioner belongs in the runtime or in emitted IR.** T0's
   arena went into the C, but a partition loop is code the optimiser would like
