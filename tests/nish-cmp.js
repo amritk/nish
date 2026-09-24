@@ -763,6 +763,18 @@ const DECLARED = [
     changelog: "A function whose unproven charCodeAt can panic is not willreturn",
     why: "the importer's `declare` of `@parseDigit` loses `willreturn` with its definition, and the attribute groups renumber",
   },
+  {
+    program: "tests/link/class_clash_fields/main.ts",
+    file: "exit",
+    changelog: "Refuse two same-named classes or interfaces in one package",
+    why: "a new program: #193's two same-named classes with fields only, which the reference compiler merges into one type and compiles, and HEAD refuses at the second declaration",
+  },
+  {
+    program: "tests/link/iface_clash_private/main.ts",
+    file: "exit",
+    changelog: "Refuse two same-named classes or interfaces in one package",
+    why: "a new program: #193's private interface passed across modules as a same-named one, which the reference compiler compiles and HEAD refuses at the second declaration",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */
