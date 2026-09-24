@@ -2400,6 +2400,20 @@ None of these needs anybody's permission. They need somebody's afternoon.
    module's stem can be taken from the name instead of from a climb, which is
    both halves of this item in one edit. `tests/link/module_stem_clash` stays
    package-free until it is made.
+
+   **No module is dropped any more, as of 2026-09-24 (#198).** The stems are
+   still lossy — the climb is still filtered, so every row above still meets
+   on one stem — but a stem already taken is no longer reused: `outputStems`
+   gives the later module the first free `<stem>_<n>` from 2 up, in load
+   order, and `wrote <file>` names every file. #198 met the collision a new
+   way, two modules a symbolic link makes distinct — `types.ts` and
+   `far/../types.ts`, with `far` a link elsewhere, once module identity became
+   the real path — and `tests/nish/cli.ts` holds that both are written, as
+   `types.ll` and `types_2.ll`. Taking a package module's stem from its name,
+   the fix this item describes, is still open: it would make the stems
+   install-independent, which a counter does not. The "one more" above, two
+   spellings of one file as two modules, is closed too: a module is keyed on
+   its real path (`self/compilation.ts`, `identityOf`).
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
    one, so a later field is reported as unknown when it is not. **Reproduced
    again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``

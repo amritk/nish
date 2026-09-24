@@ -320,10 +320,16 @@ should not look alike.
 ## 7. What this note does not decide
 
 - **Diamond dependencies.** If A wants `hash@1` and B wants `hash@2`,
-  package-scoped symbols let both link — but a `Point` from `hash@1` is a
-  different `%struct` from `hash@2`'s and they are not interchangeable, which
-  needs a diagnostic that says so in those words rather than a type error
-  about two identically-named classes.
+  package-scoped symbols could let both link — but a `Point` from `hash@1` is a
+  different `%struct` from `hash@2`'s and they are not interchangeable. What
+  is decided is the diagnostic: a package is its real directory, a program
+  compiles one copy of it, and one name at two real directories is refused in
+  those words — `` Package `hash` is at two places, <dir> (1.0.0) and <dir>
+  (2.0.0) `` (`NL3029`, §11, `tests/link/package_two_dirs`) — rather than as
+  a clash between two identically-named functions, which is how it was
+  refused before. Linking both copies, or merging two copies of one version
+  by their manifests, would each turn that refusal into an acceptance, so
+  either stays open without breaking a program that compiles today.
 - **Whether the compiler or a separate tool resolves.** §5b assumes the
   compiler reads `node_modules`. A thin resolver that hands `nish` a flat
   list of files is the alternative and is less coupled.
@@ -345,7 +351,7 @@ should not look alike.
 | ---: | --- | --- | --- |
 | S1 | Package-scoped symbols | — | **done**, §9. §5a. No language surface, and the diff turned out small rather than large: the root package's prefix is empty, so not one golden `.ll` moved. |
 | S2 | Bare specifiers and the `nish` condition | S1 | **done**, §10. §5b. The condition name landed in `branding.ts` on both sides. |
-| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact. **The resolution half is done**, §11: a mode-mismatched, missing or malformed `nish` condition and an `engines.nish` floor each have their own `NL3xxx` code. **Left**: a builtin the target has no runtime for, a compile error attributed to a dependency rather than to the consumer, and the package-identity decision §10d leaves open. |
+| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact. **The resolution half is done**, §11: a mode-mismatched, missing or malformed `nish` condition and an `engines.nish` floor each have their own `NL3xxx` code. **The identity half is done** too: a package is its real directory, one name at two directories is `NL3029`, §10d and §11. **Left**: a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
 | S4 | The build cache | S2 | Content-addressed by (package version, number mode, target, profile, compiler version). Invisible to the package author; a pure compile-time optimisation, and the answer to §3's stated cost. |
 | S5 | Prebuilt distribution | S4 | §7. Deferred, possibly permanently. |
 
@@ -353,8 +359,9 @@ S1 was the only one with no design questions left open, which is why it went
 first, and it is done; S2 followed it and is done too. **S3 is the one to resist
 over-building**: §6 already talked one manifest out of existence, and everything
 left in it is a message rather than a file. Its resolution half split S2's single
-"has no Nish entry point" diagnostic into the causes §5c and §6 name (§11). What
-remains of it is three things, none of them a resolution failure:
+"has no Nish entry point" diagnostic into the causes §5c and §6 name (§11), and
+its identity half decided what a package is (§10d). What remains of it is two
+things, neither of them a resolution failure:
 
 - **A builtin with no runtime on the target**: "`@scope/hash` calls
   `readFileSync`, which the freestanding wasm profile has no runtime for" is a
@@ -363,10 +370,13 @@ remains of it is three things, none of them a resolution failure:
 - **A compile error attributed to the dependency** (§6's "one diagnostic
   obligation"): an error whose location is in `node_modules/<pkg>/…` should say
   it is the dependency's, because the reader's next move is an upstream report.
-- **Package identity** — a symlinked package is still a second package, and
-  deciding identity by real directory or by manifest is one question with §7's
-  diamond. `tests/link/package_symlink` stays a refusal and the `TODO(WP21 S3)`
-  in `self/compilation.ts` stays with it (§10d).
+
+The third, **package identity**, is done: a package is its real directory, so
+a symlinked package is one package (`tests/link/package_symlink` compiles), and
+one name at two real directories is refused with its own code, `NL3029`
+(`tests/link/package_two_dirs`). The `TODO(WP21 S3)` in `self/compilation.ts`
+is gone, replaced by the rule it asked for, and §10d says why the real directory
+rather than the manifest.
 
 Nothing here is on the M4 critical path and none of it should delay the freeze.
 
@@ -623,36 +633,48 @@ disappeared and `packages.ts` says so.
   reached a release, so there is no number reserved for it.
 - **No `engines.nish` floor** at S2: it is a message rather than a file, and S3
   added it (§11).
-- **No `realpath`, so a symlinked package is a second package.** Node's resolver
-  realpaths what it finds, which is how one package reached both as
+- **No `realpath` at S2, so a symlinked package was a second package.** Node's
+  resolver realpaths what it finds, which is how one package reached both as
   `node_modules/shared` and as `node_modules/app2/node_modules/shared` — a
   symlink to the first, and the layout pnpm always produces and npm produces
-  whenever it cannot hoist — is one module there. Here it is two, and the S1
-  clash check refuses the program: `` Exported function `val` is also defined
-  in … ``. That is a real limitation rather than a decision, and it is *declared*
-  rather than fixed for one reason: the language has no `realpath` builtin, so
-  `self/` cannot call one, and a stage0 that resolved symlinks would compile
-  programs stage1 refuses — trading a limitation both compilers share for a
-  divergence between them, which §10b spends a paragraph refusing. Closing it
-  means the builtin (a `nish:fs` addition, and so another work package's call) or
-  a rule that needs no path at all, such as deciding package identity from the
-  manifest rather than from the directory — which is S3's question because it is
-  the same question diamond dependencies ask (§7).
+  whenever it cannot hoist — is one module there. Under S2 it was two, and the
+  S1 clash check refused the program: `` Exported function `val` is also
+  defined in … ``. The language had no `realpath` builtin then, so neither
+  compiler could resolve one, and the case was declared rather than fixed.
 
-  **The builtin arrived on 2026-09-20 and both compilers have it** —
-  `realpathSync` (WP19 §5a item 4), and `self/`'s own `packageRoot()` calls it
-  as of 0.6.0 — so the reason above is no longer the reason. What is left is the
-  *decision*, and it is the one this bullet already named: resolving a package's
-  directory makes two copies of one version into one package and two versions of
-  one package into two, while deciding identity from the manifest answers §7's
-  diamond as well. They are the same question, so answering it here with a
-  `realpath` would settle §7 by accident. It stays S3's, and the case below stays
-  a refusal until that is decided rather than implied — the builtin removed the
-  excuse, not the question.
+  The builtin arrived on 2026-09-20 (`realpathSync`, WP19 §5a item 4), which
+  left the *decision*: resolving a package's directory makes two copies of one
+  version into two packages as well as two versions, while deciding identity
+  from the manifest would merge the copies and answer §7's diamond by accident.
+  **It is decided now, for the real directory**, as Node and `tsc`
+  (`preserveSymlinks: false`) decide it (#198):
 
-  `tests/link/package_symlink` is the case: both compilers run it and both must refuse it with the same
-  sentence, so the day either one stops refusing is a failing test rather than a
-  surprise.
+  - A module is the file `realpathSync` names, whatever spelling reached it,
+    and a package is its real directory. `tests/link/package_symlink` compiles:
+    `shared` loads once, and `app2`'s own dependencies are looked for beside
+    where `app2` really is, which is where pnpm puts them.
+  - A package directory no link leads through keeps the spelling the walk
+    found it by, so every program without links names every module as before;
+    one a link leads through is named by its real directory, spelled relative
+    to the working directory when the walk was relative, so no name carries
+    where the checkout sits. A module named under a package's real directory
+    is in that package even with no `node_modules/<name>` in its path, which
+    is what keeps a workspace package's own relative imports out of the root
+    package (`tests/link/package_workspace`).
+  - One package name at two real directories is refused in words, naming both
+    directories and both manifest versions (`NL3029`,
+    `tests/link/package_two_dirs`, and `package_two_dirs_unversioned` for a
+    manifest with no `version`). That covers npm's duplicate copies of one
+    version and §7's diamond alike, which used to be refused by accident as a
+    symbol clash.
+  - Identity by manifest (`name@version`) is left for later on purpose: it
+    would only turn that refusal into an acceptance for two copies of one
+    version, so it can come after 1.0 without breaking a program.
+  - What is still lexical is an import specifier: `./x` is joined to its
+    importer's *name*, not to the importer's real directory, so a relative
+    import out of a module named through a link and a `..` resolves by the
+    spelling. No module a package specifier reaches has such a name.
+
 - **No cache.** §3's stated cost — compile time grows with the dependency tree —
   is unpaid, and S4 is the payment.
 - **Struct names are still program-wide**, exactly as §9c left them.
@@ -749,6 +771,7 @@ reading the prose — which was the point of a code in the first place.
 | `NL3019` | `engines.nish` is not a range this compiler reads. | `tests/link/package_engines_range` |
 | `NL3020` | The entry declares no Nish condition in any spelling — §6's `lodash` case. | `tests/link/package_not_nish`, `package_no_condition` |
 | `NL3021` | The manifest is not well-formed JSON, *and* no entry point could be read out of it. Named with the manifest's path, line and column. | `tests/link/package_malformed` |
+| `NL3029` | One package name at two real directories — npm's duplicate copies, or §7's diamond. Named with both directories and both manifest versions, at the import that reached the second. | `tests/link/package_two_dirs`, `package_two_dirs_unversioned` |
 | `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow — a nested condition object included, since the `nish` row may be inside it. | `tests/link/package_no_subpath`, `package_nested_condition` |
 
 `tests/nish/cli.ts` compiles each case with `--json` and holds its code, and

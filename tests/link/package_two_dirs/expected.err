@@ -1,0 +1,1 @@
+ compiles one copy of a package per program, so every import of it has to reach the same directory

@@ -1953,34 +1953,6 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
   );
 }
 
-// WP21 S2, the declared limitation: one package reached through a symlink is two
-// packages (`docs/wp21-packages.md` §10d). `tests/link/package_symlink` is
-// pnpm's layout — `node_modules/shared`, and `node_modules/app2/node_modules/
-// shared` a link to it — which Node resolves to one module because its resolver
-// realpaths and this compiler resolves to two because a module's identity is its
-// path. The S1 clash check then refuses the program, and that refusal is what is
-// pinned here: not because it is wanted, but so that the day a `realpath` makes
-// it compile is a failing check rather than a surprise. The entry is under
-// `app/` so the loop above does not adopt the fixture as an ordinary case; the
-// WP14 section asks the self-hosted compiler for the same refusal, because a
-// limitation only one compiler has is the divergence, not the limitation.
-const symlinkDir = path.join(linkDir, "package_symlink");
-const symlinkApp = path.join(symlinkDir, "app");
-if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
-  const needle = fs.readFileSync(path.join(symlinkDir, "expected.err"), "utf8").trim();
-  const outDir = path.join(buildDir, "link", "package_symlink") + path.sep;
-  fs.rmSync(outDir, { recursive: true, force: true });
-  const r = spawnSync(NISH, ["main.ts", "-o", outDir], {
-    cwd: symlinkApp,
-    encoding: "utf8",
-  });
-  check(
-    `link/package_symlink: a symlinked copy is a second package, refused with "${needle}"`,
-    r.status === 1 && r.stderr.includes(needle),
-    r.stderr || "(compiled successfully)"
-  );
-}
-
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
@@ -6201,27 +6173,34 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       );
     }
 
-    // WP21 S2's declared limitation: a package reached through a symlink is a
-    // second package, because a module path is joined rather than resolved --
-    // an open decision about what a package's identity is, not a missing
-    // builtin (`self/compilation.ts`, TODO(WP21 S3); `docs/wp21-packages.md`
-    // §10d).
-    const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
-    const symlinkApp = path.join(symlinkSrc, "app");
-    if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
-      const symlinkNeedle = fs
-        .readFileSync(path.join(symlinkSrc, "expected.err"), "utf8")
-        .trim();
-      const outDir = path.join(shipDir, "package_symlink-stage1") + path.sep;
-      fs.rmSync(outDir, { recursive: true, force: true });
-      const ourSymlink = spawnSync(compiler, ["main.ts", "-o", outDir], {
-        cwd: symlinkApp,
+    // WP21 S3 and #198: a package is its real directory. `package_symlink` is
+    // pnpm's layout, one package reached a second time through a link, which
+    // is one package: `@shared.val` is defined once. `package_workspace` is a
+    // workspace link to a directory outside any `node_modules`, whose own
+    // relative import stays in that package rather than joining the root
+    // package: `foo`'s `helper` is `@foo.helper` beside the program's
+    // `@helper`, where it used to clash with it. Both are compiled the way a
+    // user compiles them, `nish main.ts` from the fixture; the link loop above
+    // runs them.
+    for (const [workspaceName, wantDefines] of [
+      ["package_symlink", ["@app2.twice(", "@shared.val("]],
+      ["package_workspace", ["@foo.foo(", "@foo.helper(", "@helper("]],
+    ]) {
+      const ourDir = path.join(shipDir, `${workspaceName}-stage1`) + path.sep;
+      fs.rmSync(ourDir, { recursive: true, force: true });
+      const ourBuild = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+        cwd: path.join(root, "tests", "link", workspaceName),
         encoding: "utf8",
       });
+      const defines = llFilesIn(ourDir)
+        .flatMap((file) => fs.readFileSync(path.join(ourDir, file), "utf8").split("\n"))
+        .filter((line) => line.startsWith("define ") && !line.includes("@main(") && !line.includes("@nish_main("))
+        .map((line) => /@[\w.$]+\(/.exec(line)?.[0] ?? line)
+        .sort();
       check(
-        "the self-hosted compiler: a symlinked copy is a second package",
-        ourSymlink.status === 1 && ourSymlink.stderr.includes(symlinkNeedle),
-        `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}`
+        `the self-hosted compiler: ${workspaceName} is one package per real directory (${wantDefines.join(" ")})`,
+        ourBuild.status === 0 && defines.join(" ") === wantDefines.join(" "),
+        `stage1 ${ourBuild.status}: ${ourBuild.stdout}${ourBuild.stderr}defines [${defines.join(" ")}]`
       );
     }
 

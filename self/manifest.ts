@@ -533,13 +533,19 @@ export const ENGINE_UNREADABLE: i32 = 2;
  * written when it is not, or `""` when the manifest declares none. This is
  * what a diagnostic quotes back to the package's author.
  */
-export const manifestEngineRange = (manifest: string, condition: string): string => {
-  const raw = manifestField(manifestField(manifest, "engines"), condition);
-  if (raw.length >= 2 && raw.charCodeAt(0) === QUOTE) {
-    return raw.substring(1, raw.length - 1);
-  }
-  return raw;
-};
+export const manifestEngineRange = (manifest: string, condition: string): string =>
+  manifestUnquoted(manifestField(manifestField(manifest, "engines"), condition));
+
+/**
+ * The manifest's `version`, unquoted when it is a string and as written when
+ * it is not, or `""` when it declares none. A diagnostic that names two copies
+ * of one package tells them apart by it.
+ */
+export const manifestVersion = (manifest: string): string => manifestUnquoted(manifestField(manifest, "version"));
+
+/** A raw field value unquoted when it is a string, and as written when it is not. */
+const manifestUnquoted = (raw: string): string =>
+  raw.length >= 2 && raw.charCodeAt(0) === QUOTE ? raw.substring(1, raw.length - 1) : raw;
 
 /**
  * The run of digits of `text` at `at` as a number, and the index after it
