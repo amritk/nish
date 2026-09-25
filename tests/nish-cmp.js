@@ -829,6 +829,10 @@ const DECLARED = [
     changelog: "Module and package identity is the real path",
     why: "the same program: HEAD stems `foo`'s own `helper.ts` from the package's real directory, a file the reference compiler does not write (#198)",
   },
+  {
+    changelog: "Keep a field array's header live across element stores",
+    why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

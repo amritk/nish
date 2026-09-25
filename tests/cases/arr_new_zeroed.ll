@@ -86,7 +86,7 @@ for.body:
   %23 = sext i32 %22 to i64
   %24 = bitcast i8* %18 to i32*
   %25 = getelementptr inbounds i32, i32* %24, i64 %23
-  %26 = load i32, i32* %25, align 4, !alias.scope !4, !noalias !3
+  %26 = load i32, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %27 = call i8* @nish_str_from_i32(i32 %26)
   call void @nish_print(i8* %27)
   br label %for.inc
@@ -112,7 +112,7 @@ for.end:
   %36 = load i8*, i8** %35, align 8, !alias.scope !3, !noalias !4
   %37 = bitcast i8* %36 to i1*
   %38 = getelementptr inbounds i1, i1* %37, i64 0
-  %39 = load i1, i1* %38, align 1, !alias.scope !4, !noalias !3
+  %39 = load i1, i1* %38, align 1, !alias.scope !4, !noalias !3, !tbaa !10
   %40 = select i1 %39, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   call void @nish_print(i8* %40)
   call void @nish_arena_release(i64 %arena.mark)
@@ -136,3 +136,9 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"element i1", !6, i64 0}
+!10 = !{!9, !9, i64 0}

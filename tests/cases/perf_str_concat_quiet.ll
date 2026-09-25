@@ -34,11 +34,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i8**
   %5 = getelementptr inbounds i8*, i8** %4, i64 0
-  store i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8** %5, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8** %5, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i8*, i8** %4, i64 1
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*), i8** %6, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*), i8** %6, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i8*, i8** %4, i64 2
-  store i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*), i8** %7, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*), i8** %7, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %parts.addr, align 8
   store i8* bitcast ({ i64, [1 x i8] }* @.str.3 to i8*), i8** %line.addr, align 8
   %8 = load %struct.nish_array*, %struct.nish_array** %parts.addr, align 8
@@ -57,7 +57,7 @@ forof.body:
   %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4
   %15 = bitcast i8* %14 to i8**
   %16 = getelementptr inbounds i8*, i8** %15, i64 %9
-  %17 = load i8*, i8** %16, align 8, !alias.scope !4, !noalias !3
+  %17 = load i8*, i8** %16, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store i8* %17, i8** %part.addr, align 8
   %18 = load i8*, i8** %part.addr, align 8
   %19 = call i8* @nish_str_concat(i8* %18, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
@@ -122,7 +122,7 @@ forof.body.1:
   %42 = load i8*, i8** %41, align 8, !alias.scope !3, !noalias !4
   %43 = bitcast i8* %42 to i8**
   %44 = getelementptr inbounds i8*, i8** %43, i64 %37
-  %45 = load i8*, i8** %44, align 8, !alias.scope !4, !noalias !3
+  %45 = load i8*, i8** %44, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store i8* %45, i8** %x.addr, align 8
   %46 = load i32, i32* %seen.addr, align 4
   %47 = load i8*, i8** %x.addr, align 8
@@ -164,3 +164,7 @@ attributes #1 = { nounwind willreturn }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

@@ -109,7 +109,7 @@ push.store:
   %27 = load i8*, i8** %26, align 8, !alias.scope !3, !noalias !4
   %28 = bitcast i8* %27 to i8**
   %29 = getelementptr inbounds i8*, i8** %28, i64 %22
-  store i8* %20, i8** %29, align 8, !alias.scope !4, !noalias !3
+  store i8* %20, i8** %29, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %30 = add i64 %22, 1
   store i64 %30, i64* %21, align 8, !alias.scope !3, !noalias !4
   %31 = trunc i64 %30 to i32
@@ -171,3 +171,7 @@ attributes #1 = { nounwind }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

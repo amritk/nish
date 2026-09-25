@@ -80,7 +80,7 @@ bounds.ok:
   %14 = load i8*, i8** %13, align 8, !alias.scope !11, !noalias !12
   %15 = bitcast i8* %14 to %struct.Cell**
   %16 = getelementptr inbounds %struct.Cell*, %struct.Cell** %15, i64 %9
-  %17 = load %struct.Cell*, %struct.Cell** %16, align 8, !alias.scope !12, !noalias !11
+  %17 = load %struct.Cell*, %struct.Cell** %16, align 8, !alias.scope !12, !noalias !11, !tbaa !14
   store i32 0, i32* %i.addr, align 4
   %18 = getelementptr inbounds %struct.Cell, %struct.Cell* %17, i32 0, i32 0
   store i32 0, i32* %18, align 4, !tbaa !4
@@ -111,9 +111,9 @@ entry:
   store i8* %8, i8** %9, align 8, !alias.scope !11, !noalias !12
   %10 = bitcast i8* %8 to %struct.Cell**
   %11 = getelementptr inbounds %struct.Cell*, %struct.Cell** %10, i64 0
-  store %struct.Cell* %1, %struct.Cell** %11, align 8, !alias.scope !12, !noalias !11
+  store %struct.Cell* %1, %struct.Cell** %11, align 8, !alias.scope !12, !noalias !11, !tbaa !14
   %12 = getelementptr inbounds %struct.Cell*, %struct.Cell** %10, i64 1
-  store %struct.Cell* %3, %struct.Cell** %12, align 8, !alias.scope !12, !noalias !11
+  store %struct.Cell* %3, %struct.Cell** %12, align 8, !alias.scope !12, !noalias !11, !tbaa !14
   call void @Grid.constructor(%struct.Grid* %Grid.obj, %struct.nish_array* %5)
   %13 = call i32 @poke(%struct.Grid* %Grid.obj, i32 1000000)
   %14 = call i8* @nish_str_from_i32(i32 %13)
@@ -147,3 +147,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !10 = !{!"elements", !8}
 !11 = !{!9}
 !12 = !{!10}
+!13 = !{!"element ptr", !1, i64 0}
+!14 = !{!13, !13, i64 0}

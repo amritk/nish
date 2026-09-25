@@ -67,7 +67,7 @@ join.sum.body:
   %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4
   %12 = bitcast i8* %11 to i8**
   %13 = getelementptr inbounds i8*, i8** %12, i64 %8
-  %14 = load i8*, i8** %13, align 8, !alias.scope !4, !noalias !3
+  %14 = load i8*, i8** %13, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %15 = load i64, i64* %join.total, align 8
   %16 = bitcast i8* %14 to i64*
   %17 = load i64, i64* %16, align 8
@@ -104,7 +104,7 @@ join.part:
   %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4
   %34 = bitcast i8* %33 to i8**
   %35 = getelementptr inbounds i8*, i8** %34, i64 %25
-  %36 = load i8*, i8** %35, align 8, !alias.scope !4, !noalias !3
+  %36 = load i8*, i8** %35, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %37 = bitcast i8* %36 to i64*
   %38 = load i64, i64* %37, align 8
   %39 = getelementptr inbounds i8, i8* %36, i64 8
@@ -164,7 +164,7 @@ push.store:
   %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
   %11 = bitcast i8* %10 to i8**
   %12 = getelementptr inbounds i8*, i8** %11, i64 %5
-  store i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8** %12, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8** %12, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = add i64 %5, 1
   store i64 %13, i64* %4, align 8, !alias.scope !3, !noalias !4
   %14 = trunc i64 %13 to i32
@@ -185,7 +185,7 @@ push.store.1:
   %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4
   %23 = bitcast i8* %22 to i8**
   %24 = getelementptr inbounds i8*, i8** %23, i64 %17
-  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %24, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %24, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %25 = add i64 %17, 1
   store i64 %25, i64* %16, align 8, !alias.scope !3, !noalias !4
   %26 = trunc i64 %25 to i32
@@ -205,7 +205,7 @@ push.store.1:
   store i8* %32, i8** %33, align 8, !alias.scope !3, !noalias !4
   %34 = bitcast i8* %32 to i8**
   %35 = getelementptr inbounds i8*, i8** %34, i64 0
-  store i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8** %35, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8** %35, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr.2, %struct.nish_array** %one.addr, align 8
   %36 = load %struct.nish_array*, %struct.nish_array** %parts.addr, align 8
   %37 = call i64 @nish_arena_mark()
@@ -238,7 +238,7 @@ join.sum.body:
   %56 = load i8*, i8** %55, align 8, !alias.scope !3, !noalias !4
   %57 = bitcast i8* %56 to i8**
   %58 = getelementptr inbounds i8*, i8** %57, i64 %53
-  %59 = load i8*, i8** %58, align 8, !alias.scope !4, !noalias !3
+  %59 = load i8*, i8** %58, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %60 = load i64, i64* %join.total, align 8
   %61 = bitcast i8* %59 to i64*
   %62 = load i64, i64* %61, align 8
@@ -275,7 +275,7 @@ join.part:
   %78 = load i8*, i8** %77, align 8, !alias.scope !3, !noalias !4
   %79 = bitcast i8* %78 to i8**
   %80 = getelementptr inbounds i8*, i8** %79, i64 %70
-  %81 = load i8*, i8** %80, align 8, !alias.scope !4, !noalias !3
+  %81 = load i8*, i8** %80, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %82 = bitcast i8* %81 to i64*
   %83 = load i64, i64* %82, align 8
   %84 = getelementptr inbounds i8, i8* %81, i64 8
@@ -317,7 +317,7 @@ join.sum.body.1:
   %105 = load i8*, i8** %104, align 8, !alias.scope !3, !noalias !4
   %106 = bitcast i8* %105 to i8**
   %107 = getelementptr inbounds i8*, i8** %106, i64 %102
-  %108 = load i8*, i8** %107, align 8, !alias.scope !4, !noalias !3
+  %108 = load i8*, i8** %107, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %109 = load i64, i64* %join.total.1, align 8
   %110 = bitcast i8* %108 to i64*
   %111 = load i64, i64* %110, align 8
@@ -354,7 +354,7 @@ join.part.1:
   %127 = load i8*, i8** %126, align 8, !alias.scope !3, !noalias !4
   %128 = bitcast i8* %127 to i8**
   %129 = getelementptr inbounds i8*, i8** %128, i64 %119
-  %130 = load i8*, i8** %129, align 8, !alias.scope !4, !noalias !3
+  %130 = load i8*, i8** %129, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %131 = bitcast i8* %130 to i64*
   %132 = load i64, i64* %131, align 8
   %133 = getelementptr inbounds i8, i8* %130, i64 8
@@ -395,7 +395,7 @@ join.sum.body.2:
   %153 = load i8*, i8** %152, align 8, !alias.scope !3, !noalias !4
   %154 = bitcast i8* %153 to i8**
   %155 = getelementptr inbounds i8*, i8** %154, i64 %150
-  %156 = load i8*, i8** %155, align 8, !alias.scope !4, !noalias !3
+  %156 = load i8*, i8** %155, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %157 = load i64, i64* %join.total.2, align 8
   %158 = bitcast i8* %156 to i64*
   %159 = load i64, i64* %158, align 8
@@ -432,7 +432,7 @@ join.part.2:
   %175 = load i8*, i8** %174, align 8, !alias.scope !3, !noalias !4
   %176 = bitcast i8* %175 to i8**
   %177 = getelementptr inbounds i8*, i8** %176, i64 %167
-  %178 = load i8*, i8** %177, align 8, !alias.scope !4, !noalias !3
+  %178 = load i8*, i8** %177, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %179 = bitcast i8* %178 to i64*
   %180 = load i64, i64* %179, align 8
   %181 = getelementptr inbounds i8, i8* %178, i64 8
@@ -463,3 +463,7 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

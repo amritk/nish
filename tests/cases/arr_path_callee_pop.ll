@@ -63,7 +63,7 @@ pop.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !8, !noalias !9
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 %5
-  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8
+  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %11 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
   %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !4
   %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
@@ -90,11 +90,11 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !8, !noalias !9
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 1, i32* %7, align 4, !alias.scope !9, !noalias !8
+  store i32 1, i32* %7, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 2, i32* %8, align 4, !alias.scope !9, !noalias !8
+  store i32 2, i32* %8, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 3, i32* %9, align 4, !alias.scope !9, !noalias !8
+  store i32 3, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %1)
   store %struct.Holder* %Holder.obj, %struct.Holder** %h.addr, align 8
   store i32 0, i32* %i.addr, align 4
@@ -134,7 +134,7 @@ bounds.ok:
   %29 = load i8*, i8** %28, align 8, !alias.scope !8, !noalias !9
   %30 = bitcast i8* %29 to i32*
   %31 = getelementptr inbounds i32, i32* %30, i64 %24
-  %32 = load i32, i32* %31, align 4, !alias.scope !9, !noalias !8
+  %32 = load i32, i32* %31, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   store i32 %32, i32* %x.addr, align 4
   %33 = load i32, i32* %left.addr, align 4
   %34 = call i8* @nish_str_from_i32(i32 %33)
@@ -175,3 +175,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}

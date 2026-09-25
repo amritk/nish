@@ -48,26 +48,26 @@ entry:
   store i8* %15, i8** %16, align 8, !alias.scope !13, !noalias !14
   %17 = bitcast i8* %15 to i8*
   %18 = getelementptr inbounds i8, i8* %17, i64 0
-  store i8 1, i8* %18, align 1, !alias.scope !14, !noalias !13
+  store i8 1, i8* %18, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %19 = getelementptr inbounds i8, i8* %17, i64 1
-  store i8 2, i8* %19, align 1, !alias.scope !14, !noalias !13
+  store i8 2, i8* %19, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %20 = getelementptr inbounds i8, i8* %17, i64 2
-  store i8 250, i8* %20, align 1, !alias.scope !14, !noalias !13
+  store i8 250, i8* %20, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %bytes.addr, align 8
   %21 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   %23 = load i8*, i8** %22, align 8, !alias.scope !13, !noalias !14
   %24 = bitcast i8* %23 to i8*
   %25 = getelementptr inbounds i8, i8* %24, i64 0
-  store i8 255, i8* %25, align 1, !alias.scope !14, !noalias !13
+  store i8 255, i8* %25, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %26 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2
   %28 = load i8*, i8** %27, align 8, !alias.scope !13, !noalias !14
   %29 = bitcast i8* %28 to i8*
   %30 = getelementptr inbounds i8, i8* %29, i64 0
-  %31 = load i8, i8* %30, align 1, !alias.scope !14, !noalias !13
+  %31 = load i8, i8* %30, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %32 = add i8 %31, 1
-  store i8 %32, i8* %30, align 1, !alias.scope !14, !noalias !13
+  store i8 %32, i8* %30, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %33 = load %struct.Pixel*, %struct.Pixel** %p.addr, align 8
   %34 = getelementptr inbounds %struct.Pixel, %struct.Pixel* %33, i32 0, i32 0
   %35 = load i8, i8* %34, align 1, !tbaa !5
@@ -93,7 +93,7 @@ entry:
   %55 = load i8*, i8** %54, align 8, !alias.scope !13, !noalias !14
   %56 = bitcast i8* %55 to i8*
   %57 = getelementptr inbounds i8, i8* %56, i64 0
-  %58 = load i8, i8* %57, align 1, !alias.scope !14, !noalias !13
+  %58 = load i8, i8* %57, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %59 = zext i8 %58 to i64
   %60 = call i8* @nish_str_from_u64(i64 %59)
   %61 = call i8* @nish_str_concat(i8* %52, i8* %60)
@@ -103,7 +103,7 @@ entry:
   %65 = load i8*, i8** %64, align 8, !alias.scope !13, !noalias !14
   %66 = bitcast i8* %65 to i8*
   %67 = getelementptr inbounds i8, i8* %66, i64 2
-  %68 = load i8, i8* %67, align 1, !alias.scope !14, !noalias !13
+  %68 = load i8, i8* %67, align 1, !alias.scope !14, !noalias !13, !tbaa !16
   %69 = zext i8 %68 to i64
   %70 = call i8* @nish_str_from_u64(i64 %69)
   %71 = call i8* @nish_str_concat(i8* %62, i8* %70)
@@ -129,3 +129,5 @@ attributes #0 = { nounwind willreturn }
 !12 = !{!"elements", !10}
 !13 = !{!11}
 !14 = !{!12}
+!15 = !{!"element i8", !1, i64 0}
+!16 = !{!15, !15, i64 0}

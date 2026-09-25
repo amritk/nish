@@ -2346,6 +2346,34 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     );
   }
 
+  // An element store cannot write the class field that holds the array, and the
+  // element's own `!tbaa` tag is what tells LLVM so (`elementTbaa`, self/tbaa.ts).
+  // Without it `opt -O3` reloaded `this.v` and its length after `this.v[i] = ...`
+  // in AWFY Permute's swap and checked `j` a second time: three checks, two field
+  // loads, two length loads. With it the swap keeps one of each load, and the
+  // repeat of `j`'s check folds into the first against the same length. The field
+  // load is the one `load ptr` that carries `!tbaa` and no alias scope (elements
+  // carry both, header fields only the scope); the length is the header's `load i64`.
+  const reloadLl = path.join(buildDir, "arr_field_reload.ll");
+  if (has("opt") && fs.existsSync(reloadLl)) {
+    const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", reloadLl]);
+    const body = String(o.stdout).match(/define[^\n]*@Swap\.swap\b[\s\S]*?\n}/)?.[0] ?? "";
+    const fieldLoads = body.match(/= load ptr, ptr %\w+, align 8, !tbaa ![0-9]+\n/g) ?? [];
+    const lengthLoads = body.match(/= load i64, ptr %\w+, align 8, !alias\.scope/g) ?? [];
+    const checks = body.match(/call void @nish_panic_index\(/g) ?? [];
+    check(
+      "arr_field_reload: opt -O3 loads the field and its length once in the swap, and checks at most twice",
+      o.status === 0 &&
+        body !== "" &&
+        fieldLoads.length === 1 &&
+        lengthLoads.length === 1 &&
+        checks.length <= 2,
+      o.status === 0
+        ? `field loads ${fieldLoads.length}, length loads ${lengthLoads.length}, checks ${checks.length}\n${body}`
+        : String(o.stderr)
+    );
+  }
+
   // WP15 §2c candidate 2: the emitter lifts an array header into the loop's
   // preheader. Two things are asserted and they are not the same thing.
   //

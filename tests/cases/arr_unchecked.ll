@@ -7,7 +7,7 @@ entry:
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3
+  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %5
 }
 
@@ -18,7 +18,7 @@ entry:
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  store i32 %v, i32* %4, align 4, !alias.scope !4, !noalias !3
+  store i32 %v, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret void
 }
 
@@ -30,3 +30,7 @@ attributes #1 = { nounwind willreturn }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

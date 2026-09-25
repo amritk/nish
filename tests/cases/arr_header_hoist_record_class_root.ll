@@ -82,7 +82,7 @@ for.body:
   %18 = sext i32 %17 to i64
   %19 = bitcast i8* %8 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 %18
-  %21 = load i32, i32* %20, align 4, !alias.scope !9, !noalias !8
+  %21 = load i32, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %22 = add nsw i32 %16, %21
   store i32 %22, i32* %t.addr, align 4
   %23 = load i32, i32* %i.addr, align 4
@@ -178,15 +178,15 @@ entry:
   store i8* %19, i8** %20, align 8, !alias.scope !8, !noalias !9
   %21 = bitcast i8* %19 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 0
-  store i32 10, i32* %22, align 4, !alias.scope !9, !noalias !8
+  store i32 10, i32* %22, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %23 = getelementptr inbounds i32, i32* %21, i64 1
-  store i32 20, i32* %23, align 4, !alias.scope !9, !noalias !8
+  store i32 20, i32* %23, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %24 = getelementptr inbounds i32, i32* %21, i64 2
-  store i32 30, i32* %24, align 4, !alias.scope !9, !noalias !8
+  store i32 30, i32* %24, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %25 = getelementptr inbounds i32, i32* %21, i64 3
-  store i32 40, i32* %25, align 4, !alias.scope !9, !noalias !8
+  store i32 40, i32* %25, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %26 = getelementptr inbounds i32, i32* %21, i64 4
-  store i32 50, i32* %26, align 4, !alias.scope !9, !noalias !8
+  store i32 50, i32* %26, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   call void @Grid.constructor(%struct.Grid* %Grid.obj, %struct.nish_array* %16)
   %27 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
   %28 = call i32 @stamp(%struct.Grid* %Grid.obj, %struct.nish_array* %27)
@@ -300,3 +300,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}

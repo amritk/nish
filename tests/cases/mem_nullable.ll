@@ -283,13 +283,13 @@ if.end:
   %58 = load i8*, i8** %57, align 8, !alias.scope !10, !noalias !11
   %59 = bitcast i8* %58 to %struct.Node**
   %60 = getelementptr inbounds %struct.Node*, %struct.Node** %59, i64 1
-  store %struct.Node* %56, %struct.Node** %60, align 8, !alias.scope !11, !noalias !10
+  store %struct.Node* %56, %struct.Node** %60, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   %61 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %61, i64 0, i32 2
   %63 = load i8*, i8** %62, align 8, !alias.scope !10, !noalias !11
   %64 = bitcast i8* %63 to %struct.Node**
   %65 = getelementptr inbounds %struct.Node*, %struct.Node** %64, i64 0
-  %66 = load %struct.Node*, %struct.Node** %65, align 8, !alias.scope !11, !noalias !10
+  %66 = load %struct.Node*, %struct.Node** %65, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   store %struct.Node* %66, %struct.Node** %x0.addr, align 8
   %67 = load %struct.Node*, %struct.Node** %x0.addr, align 8
   %68 = icmp eq %struct.Node* %67, null
@@ -310,7 +310,7 @@ bounds.ok:
   %75 = load i8*, i8** %74, align 8, !alias.scope !10, !noalias !11
   %76 = bitcast i8* %75 to %struct.Node**
   %77 = getelementptr inbounds %struct.Node*, %struct.Node** %76, i64 1
-  %78 = load %struct.Node*, %struct.Node** %77, align 8, !alias.scope !11, !noalias !10
+  %78 = load %struct.Node*, %struct.Node** %77, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   store %struct.Node* %78, %struct.Node** %x1.addr, align 8
   %79 = load %struct.Node*, %struct.Node** %x1.addr, align 8
   %80 = icmp ne %struct.Node* %79, null
@@ -355,3 +355,5 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !9 = !{!"elements", !7}
 !10 = !{!8}
 !11 = !{!9}
+!12 = !{!"element ptr", !1, i64 0}
+!13 = !{!12, !12, i64 0}

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 491 programs, 9570 dump lines.
+# 495 programs, 9700 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -555,6 +555,123 @@ function main(): void -> @nish_main [exported entry]
   stackSites=1 stackLocals=1
   local 10:9 xs: f64[] (const)
   callee 11:15 mean -> @mean
+program tests/cases/arr_field_reload.ts
+module tests/cases/arr_field_reload.ts (entry)
+struct Swap (class) size=16 align=8 exported
+  field count: i32 index=0 offset=0 initialized
+  field v: i32[] index=1 offset=8
+  constructor -> @Swap.constructor
+  method swap -> @Swap.swap
+function Swap.constructor(this: Swap): void -> @Swap.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Swap.swap(this: Swap, i: i32, j: i32): void -> @Swap.swap [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i j
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 18:11 tmp: i32 (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Swap.constructor Swap.swap nish_panic_index
+  stackSites=1 stackLocals=1
+  local 26:9 s: Swap (const)
+  callee 26:13 new Swap -> @Swap.constructor
+  callee 28:3 Swap.swap -> @Swap.swap
+  callee 29:3 Swap.swap -> @Swap.swap
+program tests/cases/arr_field_reload_alias.ts
+module tests/cases/arr_field_reload_alias.ts (entry)
+struct Disk (class) size=16 align=8 exported
+  field size: i32 index=0 offset=0
+  field next: Disk | null index=1 offset=8
+  constructor -> @Disk.constructor
+struct Holder (class) size=16 align=8 exported
+  field v: i32[] index=0 offset=0
+  field piles: Disk | null[] index=1 offset=8
+  constructor -> @Holder.constructor
+function Disk.constructor(this: Disk, size: i32): void -> @Disk.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: size
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.constructor(this: Holder): void -> @Holder.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function grow(h: Holder): void -> @grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_array_grow
+  pointer h: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function viaAlias(h: Holder, other: Holder): i32 -> @viaAlias
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer h: size=16 writesThrough=false captured=false
+  pointer other: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function viaCallee(h: Holder): i32 -> @viaCallee
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: grow nish_panic_index
+  pointer h: size=16 writesThrough=false captured=false passedTo=grow#0
+  stackSites=0 stackLocals=0
+  callee 40:3 grow -> @grow
+function viaPointers(h: Holder): i32 -> @viaPointers
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Disk.constructor nish_alloc_struct nish_panic_index
+  pointer h: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 45:9 top: Disk (const)
+  callee 45:15 new Disk -> @Disk.constructor
+  local 47:9 under: Disk (const)
+  callee 47:17 new Disk -> @Disk.constructor
+  local 50:9 first: Disk | null (const)
+  local 51:9 second: Disk | null (const)
+  local 55:9 below: Disk | null (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Holder.constructor viaAlias viaCallee viaPointers
+  stackSites=3 stackLocals=1
+  local 63:9 h: Holder (const)
+  callee 63:13 new Holder -> @Holder.constructor
+  local 64:9 a: i32 (const)
+  callee 64:13 viaAlias -> @viaAlias
+  local 65:9 b: i32 (const)
+  callee 65:13 viaCallee -> @viaCallee
+  callee 65:23 new Holder -> @Holder.constructor
+  local 66:9 c: i32 (const)
+  callee 66:13 viaPointers -> @viaPointers
+  callee 66:25 new Holder -> @Holder.constructor
+program tests/cases/arr_field_reload_records.ts
+module tests/cases/arr_field_reload_records.ts (entry)
+struct Cell (interface) size=16 align=8
+  field n: i32 index=0 offset=0
+  field xs: i32[] index=1 offset=8
+struct Board (class) size=8 align=8 exported
+  field cells: Cell[] index=0 offset=0
+  constructor -> @Board.constructor
+  method swap -> @Board.swap
+function Board.constructor(this: Board): void -> @Board.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Board.swap(this: Board, i: i32, j: i32): i32 -> @Board.swap [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i j
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 20:11 c: Cell (const)
+  local 21:11 before: i32 (const)
+  local 22:11 tmp: Cell (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Board.constructor Board.swap
+  stackSites=3 stackLocals=1
+  local 30:9 b: Board (const)
+  callee 30:13 new Board -> @Board.constructor
+  callee 32:10 Board.swap -> @Board.swap
 program tests/cases/arr_for_of.ts
 module tests/cases/arr_for_of.ts (entry)
 function total(xs: i32[]): i32 -> @total
@@ -6881,6 +6998,23 @@ function first(a: i32[]): i32 -> @first
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+program docs/cookbook/arr_field_element.ts
+module docs/cookbook/arr_field_element.ts (entry)
+struct Perm (class) size=8 align=8 exported
+  field v: i32[] index=0 offset=0
+  constructor -> @Perm.constructor
+  method swap -> @Perm.swap
+function Perm.constructor(this: Perm): void -> @Perm.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Perm.swap(this: Perm, i: i32, j: i32): void -> @Perm.swap [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i j
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 10:11 tmp: i32 (const)
 program docs/cookbook/arr_index.ts
 module docs/cookbook/arr_index.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get

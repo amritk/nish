@@ -29,28 +29,28 @@ entry:
   %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
   %10 = bitcast i8* %9 to float*
   %11 = getelementptr inbounds float, float* %10, i64 %7
-  store float 0x3FE0000000000000, float* %11, align 4, !alias.scope !4, !noalias !3
+  store float 0x3FE0000000000000, float* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %12 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %13 = fptosi double 0x3FF0000000000000 to i64
   %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
   %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
   %16 = bitcast i8* %15 to float*
   %17 = getelementptr inbounds float, float* %16, i64 %13
-  store float 0x3FF4000000000000, float* %17, align 4, !alias.scope !4, !noalias !3
+  store float 0x3FF4000000000000, float* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %18 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %19 = fptosi double 0x0000000000000000 to i64
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 2
   %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
   %22 = bitcast i8* %21 to float*
   %23 = getelementptr inbounds float, float* %22, i64 %19
-  %24 = load float, float* %23, align 4, !alias.scope !4, !noalias !3
+  %24 = load float, float* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %25 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %26 = fptosi double 0x3FF0000000000000 to i64
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 2
   %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4
   %29 = bitcast i8* %28 to float*
   %30 = getelementptr inbounds float, float* %29, i64 %26
-  %31 = load float, float* %30, align 4, !alias.scope !4, !noalias !3
+  %31 = load float, float* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %32 = fadd float %24, %31
   %33 = fmul float %32, %k
   ret float %33
@@ -82,3 +82,7 @@ attributes #1 = { nounwind }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element float", !6, i64 0}
+!8 = !{!7, !7, i64 0}

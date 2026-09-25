@@ -50,22 +50,22 @@ entry:
   store i8* %5, i8** %6, align 8, !alias.scope !9, !noalias !10
   %7 = bitcast i8* %5 to double*
   %8 = getelementptr inbounds double, double* %7, i64 0
-  store double 0x3FE0000000000000, double* %8, align 8, !alias.scope !10, !noalias !9
+  store double 0x3FE0000000000000, double* %8, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %9 = getelementptr inbounds double, double* %7, i64 1
-  store double 0x3FF8000000000000, double* %9, align 8, !alias.scope !10, !noalias !9
+  store double 0x3FF8000000000000, double* %9, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %10 = getelementptr inbounds double, double* %7, i64 2
-  store double 0x4004000000000000, double* %10, align 8, !alias.scope !10, !noalias !9
+  store double 0x4004000000000000, double* %10, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %11 = getelementptr inbounds %struct.Config, %struct.Config* %this, i32 0, i32 1
-  store %struct.nish_array* %2, %struct.nish_array** %11, align 8, !tbaa !11
+  store %struct.nish_array* %2, %struct.nish_array** %11, align 8, !tbaa !13
   ret void
 }
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, double noundef %x, double noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store double %x, double* %0, align 8, !tbaa !13
+  store double %x, double* %0, align 8, !tbaa !15
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store double %y, double* %1, align 8, !tbaa !14
+  store double %y, double* %1, align 8, !tbaa !16
   ret void
 }
 
@@ -86,9 +86,9 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !9, !noalias !10
   %4 = bitcast i8* %2 to double*
   %5 = getelementptr inbounds double, double* %4, i64 0
-  store double 0x3FE0000000000000, double* %5, align 8, !alias.scope !10, !noalias !9
+  store double 0x3FE0000000000000, double* %5, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %6 = getelementptr inbounds double, double* %4, i64 1
-  store double 0x3FF8000000000000, double* %6, align 8, !alias.scope !10, !noalias !9
+  store double 0x3FF8000000000000, double* %6, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   call void @Config.constructor(%struct.Config* %Config.obj)
   store %struct.Config* %Config.obj, %struct.Config** %c.addr, align 8
@@ -107,14 +107,14 @@ bounds.ok:
   %12 = load i8*, i8** %11, align 8, !alias.scope !9, !noalias !10
   %13 = bitcast i8* %12 to double*
   %14 = getelementptr inbounds double, double* %13, i64 0
-  %15 = load double, double* %14, align 8, !alias.scope !10, !noalias !9
+  %15 = load double, double* %14, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %16 = load %struct.Config*, %struct.Config** %c.addr, align 8
   %17 = getelementptr inbounds %struct.Config, %struct.Config* %16, i32 0, i32 0
   %18 = load double, double* %17, align 8, !tbaa !5
   %19 = fadd double %15, %18
   %20 = load %struct.Config*, %struct.Config** %c.addr, align 8
   %21 = getelementptr inbounds %struct.Config, %struct.Config* %20, i32 0, i32 1
-  %22 = load %struct.nish_array*, %struct.nish_array** %21, align 8, !tbaa !11
+  %22 = load %struct.nish_array*, %struct.nish_array** %21, align 8, !tbaa !13
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
   %24 = load i64, i64* %23, align 8, !alias.scope !9, !noalias !10
   %25 = icmp ult i64 2, %24
@@ -129,13 +129,13 @@ bounds.ok.1:
   %27 = load i8*, i8** %26, align 8, !alias.scope !9, !noalias !10
   %28 = bitcast i8* %27 to double*
   %29 = getelementptr inbounds double, double* %28, i64 2
-  %30 = load double, double* %29, align 8, !alias.scope !10, !noalias !9
+  %30 = load double, double* %29, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %31 = fadd double %19, %30
   %32 = call i8* @nish_str_from_f64(double %31)
   call void @nish_print(i8* %32)
   call void @Point.constructor(%struct.Point* %Point.obj, double 0x3FF8000000000000, double 0x4002000000000000)
   %33 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
-  %34 = load double, double* %33, align 8, !tbaa !13
+  %34 = load double, double* %33, align 8, !tbaa !15
   %35 = call i8* @nish_str_from_f64(double %34)
   call void @nish_print(i8* %35)
   ret i32 0
@@ -165,7 +165,9 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !8 = !{!"elements", !6}
 !9 = !{!7}
 !10 = !{!8}
-!11 = !{!4, !3, i64 8}
-!12 = !{!"Point", !2, i64 0, !2, i64 8}
-!13 = !{!12, !2, i64 0}
-!14 = !{!12, !2, i64 8}
+!11 = !{!"element double", !1, i64 0}
+!12 = !{!11, !11, i64 0}
+!13 = !{!4, !3, i64 8}
+!14 = !{!"Point", !2, i64 0, !2, i64 8}
+!15 = !{!14, !2, i64 0}
+!16 = !{!14, !2, i64 8}

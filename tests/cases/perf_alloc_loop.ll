@@ -83,7 +83,7 @@ bounds.ok:
   %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4
   %20 = bitcast i8* %19 to i32*
   %21 = getelementptr inbounds i32, i32* %20, i64 0
-  store i32 %14, i32* %21, align 4, !alias.scope !4, !noalias !3
+  store i32 %14, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %22 = load %struct.nish_array*, %struct.nish_array** %row.addr, align 8
   %23 = load i32, i32* %i.addr, align 4
   %24 = mul nsw i32 %23, 2
@@ -101,7 +101,7 @@ bounds.ok.1:
   %29 = load i8*, i8** %28, align 8, !alias.scope !3, !noalias !4
   %30 = bitcast i8* %29 to i32*
   %31 = getelementptr inbounds i32, i32* %30, i64 1
-  store i32 %24, i32* %31, align 4, !alias.scope !4, !noalias !3
+  store i32 %24, i32* %31, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %32 = load i32, i32* %total.addr, align 4
   %33 = load %struct.nish_array*, %struct.nish_array** %row.addr, align 8
   %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
@@ -118,7 +118,7 @@ bounds.ok.2:
   %38 = load i8*, i8** %37, align 8, !alias.scope !3, !noalias !4
   %39 = bitcast i8* %38 to i32*
   %40 = getelementptr inbounds i32, i32* %39, i64 0
-  %41 = load i32, i32* %40, align 4, !alias.scope !4, !noalias !3
+  %41 = load i32, i32* %40, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %42 = add nsw i32 %32, %41
   %43 = load %struct.nish_array*, %struct.nish_array** %row.addr, align 8
   %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %43, i64 0, i32 0
@@ -135,7 +135,7 @@ bounds.ok.3:
   %48 = load i8*, i8** %47, align 8, !alias.scope !3, !noalias !4
   %49 = bitcast i8* %48 to i32*
   %50 = getelementptr inbounds i32, i32* %49, i64 1
-  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3
+  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %52 = add nsw i32 %42, %51
   %53 = load %struct.nish_array*, %struct.nish_array** %row.addr, align 8
   %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %53, i64 0, i32 0
@@ -165,3 +165,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

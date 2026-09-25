@@ -42,7 +42,7 @@ sentence each:
 | `alwaysinline` | Always inline the callee: the arena fast path `@nish_alloc_struct` becomes a few instructions in every caller. |
 | `allocsize(0)` | The first argument is the size in bytes of the allocation the function returns, so LLVM can reason about the object's extent. |
 | `noundef` | The value is never `undef` or `poison`: every Nish value is initialised. Not emitted for a by-value `Result` under the private ABI, whose dead arm is `undef` on purpose (WP15 §7b). |
-| `!tbaa` | What the access *is*, not where it points: a field named by its class, LLVM type and byte offset. Lets LLVM keep a store to `bi.vx` from blocking a load of `bj.mass` through a different pointer. Only on classes that implement no interface. |
+| `!tbaa` | What the access *is*, not where it points: a field named by its class, LLVM type and byte offset. Lets LLVM keep a store to `bi.vx` from blocking a load of `bj.mass` through a different pointer. Only on classes that implement no interface. An array element slot that holds a value is tagged `element <type>`, which no field shares, so an element store does not block a reload of the field that holds the array. |
 | `zeroext` | An `i1` (`boolean`) is zero-extended in a register, matching the C ABI for `bool`. |
 | `nonnull` | The pointer is never null: only a `T \| null` parameter or return can be, and those do not carry it. |
 | `align 8` (param/return) | The pointee is 8-byte aligned: string literals, arena strings, array headers and objects all are. |
@@ -287,11 +287,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 4, i32* %5, align 4, !alias.scope !4, !noalias !3
+  store i32 4, i32* %5, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 5, i32* %6, align 4, !alias.scope !4, !noalias !3
+  store i32 5, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 6, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 6, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = call i32 @firstOf$i32(%struct.nish_array* %arr.hdr)
   %9 = call i8* @nish_str_from_i32(i32 %8)
   call void @nish_print(i8* %9)
@@ -321,7 +321,7 @@ bounds.ok:
   %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
   %5 = bitcast i8* %4 to i32*
   %6 = getelementptr inbounds i32, i32* %5, i64 0
-  %7 = load i32, i32* %6, align 4, !alias.scope !4, !noalias !3
+  %7 = load i32, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %7
 }
 
@@ -356,6 +356,10 @@ attributes #5 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end gen_infer -->
 
@@ -1002,9 +1006,9 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %4 to i8*
   %7 = getelementptr inbounds i8, i8* %6, i64 0
-  store i8 %0, i8* %7, align 1, !alias.scope !4, !noalias !3
+  store i8 %0, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds i8, i8* %6, i64 1
-  store i8 %1, i8* %8, align 1, !alias.scope !4, !noalias !3
+  store i8 %1, i8* %8, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %data.addr, align 8
   store i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8** %label.addr, align 8
   %9 = load i8*, i8** %label.addr, align 8
@@ -1013,7 +1017,7 @@ entry:
   %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
   %13 = bitcast i8* %12 to i8*
   %14 = getelementptr inbounds i8, i8* %13, i64 0
-  %15 = load i8, i8* %14, align 1, !alias.scope !4, !noalias !3
+  %15 = load i8, i8* %14, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   %16 = call i32 @widen(i8 %15)
   %17 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
@@ -1030,7 +1034,7 @@ bounds.ok:
   %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4
   %23 = bitcast i8* %22 to i8*
   %24 = getelementptr inbounds i8, i8* %23, i64 1
-  %25 = load i8, i8* %24, align 1, !alias.scope !4, !noalias !3
+  %25 = load i8, i8* %24, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   %26 = call i32 @widen(i8 %25)
   %27 = add nsw i32 %16, %26
   %28 = call i8* @nish_str_from_i32(i32 %27)
@@ -1057,6 +1061,10 @@ attributes #3 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i8", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end decl_type_alias -->
 
@@ -2321,7 +2329,7 @@ forof.body:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %sum.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -2347,6 +2355,10 @@ attributes #0 = { nounwind willreturn readonly }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end stmt_for_of -->
 
@@ -2591,9 +2603,9 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = and i32 %8, 255
-  store i32 %9, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 %9, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret void
 }
 
@@ -2616,6 +2628,10 @@ attributes #2 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end expr_compound_target -->
 
@@ -3232,7 +3248,7 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %8
 }
 
@@ -3253,7 +3269,7 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  store i32 %v, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 %v, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret void
 }
 
@@ -3265,6 +3281,10 @@ attributes #1 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_index -->
 
@@ -3315,7 +3335,7 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i8*
   %7 = getelementptr inbounds i8, i8* %6, i64 %0
-  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3
+  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   ret i8 %8
 }
 
@@ -3336,7 +3356,7 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i8*
   %7 = getelementptr inbounds i8, i8* %6, i64 %0
-  store i8 %v, i8* %7, align 1, !alias.scope !4, !noalias !3
+  store i8 %v, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   ret void
 }
 
@@ -3348,6 +3368,10 @@ attributes #1 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i8", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_u8_elements -->
 
@@ -3404,7 +3428,7 @@ for.body:
   %9 = sext i32 %8 to i64
   %10 = bitcast i8* %3 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %9
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = add nsw i32 %7, %12
   store i32 %13, i32* %total.addr, align 4
   br label %for.inc
@@ -3433,7 +3457,7 @@ if.then:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %8
 
 if.end:
@@ -3448,6 +3472,10 @@ attributes #1 = { nounwind willreturn readonly }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_bounds_proven -->
 
@@ -3519,7 +3547,7 @@ while.body:
   %11 = sext i32 %10 to i64
   %12 = bitcast i8* %5 to i32*
   %13 = getelementptr inbounds i32, i32* %12, i64 %11
-  %14 = load i32, i32* %13, align 4, !alias.scope !9, !noalias !8
+  %14 = load i32, i32* %13, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %15 = add nsw i32 %9, %14
   store i32 %15, i32* %s.addr, align 4
   %16 = load i32, i32* %i.addr, align 4
@@ -3545,6 +3573,8 @@ attributes #1 = { nounwind readonly }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}
 ```
 <!-- cookbook:end arr_bounds_path -->
 
@@ -3703,6 +3733,194 @@ a property path — a local cannot be written through an alias, a field can. So
 loop exit and it is what keeps the vectoriser away; closing it is that file's
 work, not the emitter's.
 
+### An element store beside the field that holds the array
+
+Every element load and store of a slot that holds a value carries a `!tbaa`
+tag of its own, `element <type>`, beside the scalar nodes the class fields
+use. The field load of `this.v` is tagged `Perm`'s `ptr` at offset 0, the
+element store `element i32`, and neither node is an ancestor of the other, so
+LLVM knows `this.v[i] = x` cannot have written `this.v` — nor, through the
+alias domains above, `this.v`'s header. After `opt -O3` the swap below loads
+the field once, `len` once and `data` once, and the second check of `j` folds
+into the first against the same `len`: two checks where there were three, and
+one field load where there were two.
+
+The tag is never put on an inline record's slot, which is written whole by an
+untagged `llvm.memcpy` and whose fields are read with no tag at all, so a
+record element store still aliases every read of that record's fields. The
+rule and why it is sound are in
+[ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules); `tests/run.js`
+asserts the `opt -O3` result on `tests/cases/arr_field_reload.ts`, and
+`arr_field_reload_records` is the inline-record case that must still reload.
+
+<!-- cookbook:begin arr_field_element -->
+```ts
+// An element store beside the class field that holds the array.
+export class Perm {
+  v: i32[];
+
+  constructor() {
+    this.v = [];
+  }
+
+  swap(i: i32, j: i32): void {
+    const tmp = this.v[i];
+    this.v[i] = this.v[j];
+    this.v[j] = tmp;
+  }
+}
+```
+
+```llvm
+%struct.Perm = type { %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 0, i64* %2, align 8, !alias.scope !3, !noalias !4
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 0, i64* %3, align 8, !alias.scope !3, !noalias !4
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* null, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %5 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  store %struct.nish_array* %1, %struct.nish_array** %5, align 8, !tbaa !9
+  ret void
+}
+
+define void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, i32 noundef %j) #1 {
+entry:
+  %tmp.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !9
+  %2 = sext i32 %i to i64
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4
+  %5 = icmp ult i64 %2, %4
+  br i1 %5, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %2, i64 %4)
+  unreachable
+
+bounds.ok:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 %2
+  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !11
+  store i32 %10, i32* %tmp.addr, align 4
+  %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !9
+  %13 = sext i32 %i to i64
+  %14 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %15 = load %struct.nish_array*, %struct.nish_array** %14, align 8, !tbaa !9
+  %16 = sext i32 %j to i64
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
+  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4
+  %19 = icmp ult i64 %16, %18
+  br i1 %19, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 %16, i64 %18)
+  unreachable
+
+bounds.ok.1:
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
+  %22 = bitcast i8* %21 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 %16
+  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !11
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
+  %26 = load i64, i64* %25, align 8, !alias.scope !3, !noalias !4
+  %27 = icmp ult i64 %13, %26
+  br i1 %27, label %bounds.ok.2, label %bounds.fail.2
+
+bounds.fail.2:
+  call void @nish_panic_index(i64 %13, i64 %26)
+  unreachable
+
+bounds.ok.2:
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
+  %29 = load i8*, i8** %28, align 8, !alias.scope !3, !noalias !4
+  %30 = bitcast i8* %29 to i32*
+  %31 = getelementptr inbounds i32, i32* %30, i64 %13
+  store i32 %24, i32* %31, align 4, !alias.scope !4, !noalias !3, !tbaa !11
+  %32 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !9
+  %34 = sext i32 %j to i64
+  %35 = load i32, i32* %tmp.addr, align 4
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
+  %37 = load i64, i64* %36, align 8, !alias.scope !3, !noalias !4
+  %38 = icmp ult i64 %34, %37
+  br i1 %38, label %bounds.ok.3, label %bounds.fail.3
+
+bounds.fail.3:
+  call void @nish_panic_index(i64 %34, i64 %37)
+  unreachable
+
+bounds.ok.3:
+  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
+  %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4
+  %41 = bitcast i8* %40 to i32*
+  %42 = getelementptr inbounds i32, i32* %41, i64 %34
+  store i32 %35, i32* %42, align 4, !alias.scope !4, !noalias !3, !tbaa !11
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"ptr", !6, i64 0}
+!8 = !{!"Perm", !7, i64 0}
+!9 = !{!8, !7, i64 0}
+!10 = !{!"element i32", !6, i64 0}
+!11 = !{!10, !10, i64 0}
+```
+<!-- cookbook:end arr_field_element -->
+
 ### `--unchecked-indexing`
 
 The compare, the branch and the panic block disappear; `get` regains
@@ -3727,7 +3945,7 @@ entry:
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3
+  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %5
 }
 
@@ -3738,6 +3956,10 @@ attributes #0 = { nounwind willreturn readonly }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_unchecked -->
 
@@ -3835,7 +4057,7 @@ push.store:
   %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
   %18 = bitcast i8* %17 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 %12
-  store i32 %10, i32* %19, align 4, !alias.scope !4, !noalias !3
+  store i32 %10, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %20 = add i64 %12, 1
   store i64 %20, i64* %11, align 8, !alias.scope !3, !noalias !4
   %21 = trunc i64 %20 to i32
@@ -3865,9 +4087,9 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 1, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 2, i32* %8, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret %struct.nish_array* %1
 }
 
@@ -3880,6 +4102,10 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_literal_push -->
 
@@ -3962,7 +4188,7 @@ join.sum.body:
   %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4
   %12 = bitcast i8* %11 to i8**
   %13 = getelementptr inbounds i8*, i8** %12, i64 %8
-  %14 = load i8*, i8** %13, align 8, !alias.scope !4, !noalias !3
+  %14 = load i8*, i8** %13, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %15 = load i64, i64* %join.total, align 8
   %16 = bitcast i8* %14 to i64*
   %17 = load i64, i64* %16, align 8
@@ -3999,7 +4225,7 @@ join.part:
   %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4
   %34 = bitcast i8* %33 to i8**
   %35 = getelementptr inbounds i8*, i8** %34, i64 %25
-  %36 = load i8*, i8** %35, align 8, !alias.scope !4, !noalias !3
+  %36 = load i8*, i8** %35, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %37 = bitcast i8* %36 to i64*
   %38 = load i64, i64* %37, align 8
   %39 = getelementptr inbounds i8, i8* %36, i64 8
@@ -4034,7 +4260,7 @@ idx.test:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i8**
   %7 = getelementptr inbounds i8*, i8** %6, i64 %2
-  %8 = load i8*, i8** %7, align 8, !alias.scope !4, !noalias !3
+  %8 = load i8*, i8** %7, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = call zeroext i1 @nish_str_eq(i8* %8, i8* %name)
   br i1 %9, label %idx.found, label %idx.next
 
@@ -4063,6 +4289,10 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_join -->
 
@@ -4203,7 +4433,7 @@ forof.body:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -4243,7 +4473,7 @@ forof.body:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -4269,6 +4499,10 @@ attributes #0 = { nounwind willreturn readonly }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end arr_readonly -->
 
@@ -5617,7 +5851,7 @@ bounds.ok:
   %4 = load i8*, i8** %3, align 8, !alias.scope !10, !noalias !11
   %5 = bitcast i8* %4 to %struct.Node**
   %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
-  %7 = load %struct.Node*, %struct.Node** %6, align 8, !alias.scope !11, !noalias !10
+  %7 = load %struct.Node*, %struct.Node** %6, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   store %struct.Node* %7, %struct.Node** %head.addr, align 8
   %8 = load %struct.Node*, %struct.Node** %head.addr, align 8
   %9 = icmp ne %struct.Node* %8, null
@@ -5655,6 +5889,8 @@ attributes #4 = { nounwind noreturn cold }
 !9 = !{!"elements", !7}
 !10 = !{!8}
 !11 = !{!9}
+!12 = !{!"element ptr", !1, i64 0}
+!13 = !{!12, !12, i64 0}
 ```
 <!-- cookbook:end mem_nullable -->
 
@@ -6033,11 +6269,11 @@ if.end:
   store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
   %8 = bitcast i8* %6 to i8**
   %9 = getelementptr inbounds i8*, i8** %8, i64 0
-  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %9, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %9, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = getelementptr inbounds i8*, i8** %8, i64 1
-  store i8* bitcast ({ i64, [17 x i8] }* @.str.3 to i8*), i8** %10, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [17 x i8] }* @.str.3 to i8*), i8** %10, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = getelementptr inbounds i8*, i8** %8, i64 2
-  store i8* bitcast ({ i64, [7 x i8] }* @.str.4 to i8*), i8** %11, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.4 to i8*), i8** %11, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %3, %struct.nish_array** %argv.addr, align 8
   %12 = load %struct.nish_array*, %struct.nish_array** %argv.addr, align 8
   %13 = call i32 @nish_spawn(%struct.nish_array* %12)
@@ -6062,6 +6298,10 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end builtin_process -->
 
@@ -6272,11 +6512,11 @@ if.end:
   store i8* %8, i8** %9, align 8, !alias.scope !3, !noalias !4
   %10 = bitcast i8* %8 to i8**
   %11 = getelementptr inbounds i8*, i8** %10, i64 0
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*), i8** %11, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*), i8** %11, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %12 = getelementptr inbounds i8*, i8** %10, i64 1
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.3 to i8*), i8** %12, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.3 to i8*), i8** %12, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = getelementptr inbounds i8*, i8** %10, i64 2
-  store i8* bitcast ({ i64, [11 x i8] }* @.str.4 to i8*), i8** %13, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [11 x i8] }* @.str.4 to i8*), i8** %13, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %14 = call i32 @nish_spawn_to(%struct.nish_array* %5, i8* bitcast ({ i64, [14 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
   store i32 %14, i32* %status.addr, align 4
   %15 = load %struct.nish_array*, %struct.nish_array** %cases.addr, align 8
@@ -6317,6 +6557,10 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}
 ```
 <!-- cookbook:end builtin_driver -->
 

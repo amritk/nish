@@ -117,9 +117,9 @@ bounds.fail:
 bounds.ok:
   %33 = bitcast i8* %12 to i32*
   %34 = getelementptr inbounds i32, i32* %33, i64 %31
-  %35 = load i32, i32* %34, align 4, !alias.scope !4, !noalias !3
+  %35 = load i32, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %36 = add nsw i32 %35, 1
-  store i32 %36, i32* %34, align 4, !alias.scope !4, !noalias !3
+  store i32 %36, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   br label %for.inc
 
 for.inc:
@@ -156,7 +156,7 @@ bounds.fail.1:
 bounds.ok.1:
   %49 = bitcast i8* %43 to i32*
   %50 = getelementptr inbounds i32, i32* %49, i64 %47
-  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3
+  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %52 = load i32, i32* %best.addr, align 4
   %53 = sext i32 %52 to i64
   %54 = icmp ult i64 %53, %41
@@ -169,7 +169,7 @@ bounds.fail.2:
 bounds.ok.2:
   %55 = bitcast i8* %43 to i32*
   %56 = getelementptr inbounds i32, i32* %55, i64 %53
-  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3
+  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %58 = icmp sgt i32 %51, %57
   br i1 %58, label %if.then, label %if.end
 
@@ -277,3 +277,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
