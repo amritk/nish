@@ -1753,6 +1753,24 @@ for (const name of linkTests) {
   );
 }
 
+// WP29 P1: `dst` shorter than `src` panics before any element is written, with
+// `std/threads.ts`'s own message. The link loop above compares stdout and the
+// exit code only, so the wording is pinned here, on stderr, the way
+// `arr_bounds_panic` pins `index out of range`.
+if (!only || "link/par_dst_short".includes(only) || only.startsWith("par_")) {
+  const exe = path.join(buildDir, "link", "par_dst_short", "app");
+  if (fs.existsSync(exe)) {
+    const run = spawnSync(exe);
+    check(
+      "link/par_dst_short: exits 1 with `parallelMapInto: dst has 2 elements and src has 3` on stderr",
+      run.status === 1 &&
+        String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
+        String(run.stdout).trim() === "before",
+      `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+    );
+  }
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the

@@ -1911,7 +1911,8 @@ from the whole-program facts, and each rule is reported there:
   included — is
   `` `bump` writes memory its caller can see at main.ts:10:3, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``,
   naming the write, or the callee that makes it (`tests/cases/reject_par_shared_write`,
-  `reject_par_shared_write_via`). A bounds check, an integer division and
+  `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
+  runtime's `nish_print`). A bounds check, an integer division and
   `panic` are not writes: each prints and exits, and nothing runs again to see
   memory. The instance performs every store itself, into slots the partitioner
   has made disjoint, so a function that writes nothing cannot race.

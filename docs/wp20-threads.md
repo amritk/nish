@@ -713,8 +713,10 @@ spawn is under a tenth of its cost, which is the number the compiler's default
 also why `parallelMapInto` over a short array has to come out as an ordinary
 loop rather than as four threads.
 P1 picked **2^20 elements** per chunk of a map, one named constant (`GRAIN` in
-`self/emit_parallel.ts`, `BLOCK` in `std/threads.ts` for a reduce's blocks), so
-a map over at most that many elements is one chunk and takes the 3 ns row.
+`self/emit_parallel.ts`), so a map over at most that many elements is one chunk
+and takes the 3 ns row. A reduce's block width is a separate constant of the
+same size (`BLOCK` in `std/threads.ts`), because it decides the reduce's answer
+and the grain decides only how work is divided.
 
 The 3 ns row is worth its own line because it was 3,734 ns until this was
 measured. `nish_cpu_count()` called `sysconf(_SC_NPROCESSORS_ONLN)` on every

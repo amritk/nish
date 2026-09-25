@@ -34,10 +34,12 @@
  */
 
 /**
- * Elements per block of a reduce: 2^20, about a millisecond of simple work,
- * which is what a region has to carry before dividing it costs under a tenth
- * of the work (docs/wp20-threads.md §8e). An array this short is one block and
- * runs as the loop it would have been.
+ * Elements per block of a reduce: 2^20, about a millisecond of simple work
+ * (docs/wp20-threads.md §8e). It decides the blocking, and so the answer's
+ * bits: an array this short is one block, folded as the loop it would have
+ * been. It is independent of the map's grain (`GRAIN` in
+ * `self/emit_parallel.ts`), which decides only how a map is divided and may
+ * change without changing any result; this one may not.
  */
 const BLOCK: i32 = 1048576;
 

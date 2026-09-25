@@ -18116,8 +18116,8 @@ function isParallelRegionCall(caller: FunctionSig | null, callee: FunctionSig): 
   pointer caller: size=104 writesThrough=false captured=false passedTo=isParallelEntry#0
   pointer callee: size=104 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
-  callee 48:22 isParallelEntry -> @isParallelEntry
-  callee 48:49 parallelRoleOf -> @parallelRoleOf
+  callee 50:22 isParallelEntry -> @isParallelEntry
+  callee 50:49 parallelRoleOf -> @parallelRoleOf
 function emitParallelRegion(emitter: Emitter, chunk: FunctionSig, types: string[], values: string[]): void -> @emitParallelRegion [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
@@ -18127,66 +18127,66 @@ function emitParallelRegion(emitter: Emitter, chunk: FunctionSig, types: string[
   pointer types: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 62:9 caller: FunctionSig | null (const)
-  callee 64:18 internalErrorFor -> @internalErrorFor
-  local 66:9 count: i32 (const)
-  callee 75:7 internalErrorFor -> @internalErrorFor
-  local 78:9 fieldTypes: string[] (const)
-  local 79:7 i: i32 (let)
-  local 84:9 ctxType: string (const)
-  local 85:9 fn: IRFunction (const)
-  local 86:9 slot: string (const)
-  callee 86:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  local 90:11 type: string (const)
-  local 91:11 value: string (const)
-  local 92:11 at: string (const)
-  callee 92:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 93:5 IRFunction.emit -> @IRFunction.emit
-  local 96:9 raw: string (const)
-  callee 96:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 97:9 len: string (const)
-  callee 97:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 98:9 grain: i32 (const)
-  callee 98:17 parallelRoleOf -> @parallelRoleOf
-  local 99:9 trampoline: string (const)
-  callee 100:3 IRFunction.emit -> @IRFunction.emit
-  callee 101:18 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 103:3 IRModule.addFunction -> @IRModule.addFunction
-  callee 103:30 chunkTrampoline -> @chunkTrampoline
+  local 64:9 caller: FunctionSig | null (const)
+  callee 66:18 internalErrorFor -> @internalErrorFor
+  local 68:9 count: i32 (const)
+  callee 77:7 internalErrorFor -> @internalErrorFor
+  local 80:9 fieldTypes: string[] (const)
+  local 81:7 i: i32 (let)
+  local 86:9 ctxType: string (const)
+  local 87:9 fn: IRFunction (const)
+  local 88:9 slot: string (const)
+  callee 88:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  local 92:11 type: string (const)
+  local 93:11 value: string (const)
+  local 94:11 at: string (const)
+  callee 94:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 95:5 IRFunction.emit -> @IRFunction.emit
+  local 98:9 raw: string (const)
+  callee 98:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 99:9 len: string (const)
+  callee 99:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 100:9 grain: i32 (const)
+  callee 100:17 parallelRoleOf -> @parallelRoleOf
+  local 101:9 trampoline: string (const)
+  callee 102:3 IRFunction.emit -> @IRFunction.emit
+  callee 103:18 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 105:3 IRModule.addFunction -> @IRModule.addFunction
+  callee 105:30 chunkTrampoline -> @chunkTrampoline
 function chunkTrampoline(emitter: Emitter, name: string, chunk: FunctionSig, ctxType: string, fieldTypes: string[]): IRFunction -> @chunkTrampoline
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
-  sharedWrite: 122:5
+  sharedWrite: 124:5
   escaping: name
   calls: IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer emitter: size=152 writesThrough=false captured=false
   pointer chunk: size=104 writesThrough=false captured=false
   pointer fieldTypes: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 119:9 optimize: boolean (const)
-  local 120:9 attrs: string[] (const)
-  local 124:9 params: IRParam[] (const)
-  callee 125:15 new IRParam -> @IRParam.constructor
-  callee 126:15 new IRParam -> @IRParam.constructor
+  local 121:9 optimize: boolean (const)
+  local 122:9 attrs: string[] (const)
+  local 126:9 params: IRParam[] (const)
   callee 127:15 new IRParam -> @IRParam.constructor
-  local 128:9 fn: IRFunction (const)
-  callee 128:14 new IRFunction -> @IRFunction.constructor
-  local 133:11 group: string[] (const)
-  callee 135:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  local 137:9 typed: string (const)
-  callee 137:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 138:9 operands: string[] (const)
-  local 139:7 i: i32 (let)
-  local 141:11 type: string (const)
-  local 142:11 at: string (const)
-  callee 142:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 143:11 value: string (const)
-  callee 143:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 147:9 lo: string (const)
-  callee 147:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 148:9 hi: string (const)
-  callee 148:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 151:3 IRFunction.emit -> @IRFunction.emit
-  callee 152:3 IRFunction.emit -> @IRFunction.emit
+  callee 128:15 new IRParam -> @IRParam.constructor
+  callee 129:15 new IRParam -> @IRParam.constructor
+  local 130:9 fn: IRFunction (const)
+  callee 130:14 new IRFunction -> @IRFunction.constructor
+  local 135:11 group: string[] (const)
+  callee 137:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  local 139:9 typed: string (const)
+  callee 139:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 140:9 operands: string[] (const)
+  local 141:7 i: i32 (let)
+  local 143:11 type: string (const)
+  local 144:11 at: string (const)
+  callee 144:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 145:11 value: string (const)
+  callee 145:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 149:9 lo: string (const)
+  callee 149:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local 150:9 hi: string (const)
+  callee 150:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 153:3 IRFunction.emit -> @IRFunction.emit
+  callee 154:3 IRFunction.emit -> @IRFunction.emit
 module self/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"

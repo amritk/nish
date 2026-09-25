@@ -38,8 +38,10 @@ import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
  * over at most this many elements is one chunk, and runs on the calling
  * thread as the loop it would have been.
  *
- * A reduce divides blocks, not elements, and a block is already about this
- * many (`BLOCK` in `std/threads.ts`), so its grain is one block.
+ * It governs a map alone. A reduce's region divides its blocks, with a grain
+ * of one block, and the block width is `BLOCK` in `std/threads.ts`, which
+ * decides the reduce's answer and is independent of this constant: tuning one
+ * never obliges the other to move.
  */
 export const GRAIN: i32 = 1048576;
 
