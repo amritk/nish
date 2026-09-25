@@ -81,6 +81,9 @@ const slotType = (emitter: Emitter, elem: i32): string => elementLLVMType(emitte
 // ---- Alias domains ------------------------------------------------------------------
 
 /**
+ * `, !alias.scope <this side>, !noalias <the other side>` for an access to an
+ * array header (`wantHeader`) or to element data.
+ *
  * An array's 24-byte header and the element buffer it points at never share a
  * byte, and telling LLVM so is what keeps the header out of the loop: without
  * it, `a[i] = v` might land on some array's `len` or `data`, so the header is
@@ -88,18 +91,21 @@ const slotType = (emitter: Emitter, elem: i32): string => elementLLVMType(emitte
  * Measured at 1.6x on an element loop; the proof and the four allocation
  * shapes it covers are written out in `src/codegen/emit/arrays.ts`.
  */
-const aliasScopeList = (emitter: Emitter, wantHeader: boolean): string => {
+const scopePair = (emitter: Emitter, wantHeader: boolean): string => {
   const domain = emitter.metadata(`!{!"nish array"}`);
   const header = emitter.metadata(`!{!"header", ${domain}}`);
   const element = emitter.metadata(`!{!"elements", ${domain}}`);
   const headerList = emitter.metadata(`!{${header}}`);
   const elementList = emitter.metadata(`!{${element}}`);
-  // All five are interned on every call, in stage0's order, so that the two
-  // compilers number the nodes identically and the IR oracle stays byte for byte.
+  // All five are interned on every call and in this order, so the nodes are
+  // numbered alike whichever side asks first. One call answers both halves:
+  // every header and element access in the program comes through here, and
+  // interning the five twice per access was measurable in the compiler's own
+  // peak arena.
   if (wantHeader) {
-    return headerList;
+    return `, !alias.scope ${headerList}, !noalias ${elementList}`;
   }
-  return elementList;
+  return `, !alias.scope ${elementList}, !noalias ${headerList}`;
 };
 
 /**
@@ -113,8 +119,7 @@ const headerAccess = (emitter: Emitter, index: i32): string => {
   if (!emitter.opts.optimizeAttributes) {
     return "";
   }
-  const scopes = `, !alias.scope ${aliasScopeList(emitter, true)}, !noalias ${aliasScopeList(emitter, false)}`;
-  return `${scopes}${headerTbaa(emitter, index)}`;
+  return `${scopePair(emitter, true)}${headerTbaa(emitter, index)}`;
 };
 
 /** The same, for a load or store of array element data. */
@@ -122,7 +127,7 @@ export const elementAccess = (emitter: Emitter): string => {
   if (!emitter.opts.optimizeAttributes) {
     return "";
   }
-  return `, !alias.scope ${aliasScopeList(emitter, false)}, !noalias ${aliasScopeList(emitter, true)}`;
+  return scopePair(emitter, false);
 };
 
 /**
