@@ -46,7 +46,7 @@ stages:
         content: Declare Option, Some and None in runtime/nish.d.ts, shim.mjs and nish.mjs, with the TS2339 check in the ambient hunk — see Stage S2
         status: pending
       - id: s-tests
-        content: Add f64-mode option_ goldens with Node agreement, rejects, wordings, the -g loop, cookbook, DECLARED, unfrozen.txt and LANGUAGE.md — see Stage S2
+        content: Add option_ goldens (f64 and Node-compared, enum cases i32-only), rejects, wordings, the -g loop, cookbook, DECLARED, unfrozen.txt and LANGUAGE.md — see Stage S2
         status: pending
   - id: option-methods
     title: feat(checker) — unwrapOr and expect on Option, with arguments evaluated as JavaScript does
