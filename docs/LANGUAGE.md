@@ -2348,6 +2348,23 @@ and both come from the program as written:
     `i < n`. A constant index `w[3]` needs `w.length >= 4` instead, which a
     length guard (`if (w.length >= 4)`) or an array literal of known size
     gives.
+  - **both at once from a check that has already passed.** A checked `w[i]`,
+    read, store or compound assignment, and a checked `s.charCodeAt(i)`
+    either panic or leave `0 <= i < w.length` behind, because the panic does
+    not return; a checked `w[3]` leaves `w.length >= 4`. So the same index on
+    the same holder is proved on every path that runs through the first
+    check, until one of the rules below ends the fact — which they do exactly
+    as they end a fact a test wrote. `const t = v[i]; v[i] = v[j]; v[j] = t`
+    carries two checks, not four. The fact is taken where the emitter runs
+    the check: `v[i] = v[j]` checks `v[j]` before `v[i]`, and `v[i] op= x`
+    checks before `x` runs. A store whose value calls anything proves nothing
+    about a *path* holder, because its check passed on the array the path
+    named before the call (`tests/cases/arr_repeat_check`,
+    `arr_repeat_check_local`; the repeats that keep their check are
+    `arr_repeat_check_call`, `_push`, `_field_store`, `_reassign` and
+    `_flow`, and `arr_repeat_check_panic` panics past the end on three of
+    them). Under `--unchecked-indexing` there is no check to have passed, so
+    nothing is learned.
 
     **`toI32(w.length)` is `w.length`** wherever a length appears above: in
     the hoist `const n: i32 = toI32(w.length)`, in `i < toI32(w.length)` and
