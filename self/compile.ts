@@ -447,6 +447,10 @@ export const main = (): number => {
     console.error(usageText());
     return 2;
   }
+  // What the build hands on decides who else may call the program's exports
+  // (`hostVisible` in `self/visibility.ts`), so the checker is told.
+  opts.link = link;
+  opts.profile = profile;
   // WP24 A1: an asynchronous export allocates on a libuv worker while the JS
   // thread keeps going, so the arena has to be thread-local on both sides --
   // and its storage class is decided per module, not only in the runtime. A

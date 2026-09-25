@@ -54,6 +54,7 @@ import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
+import { proveCallSiteRanges } from "./ranges";
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -104,7 +105,8 @@ import { splitByte } from "./strings";
 import { TypeTable } from "./types";
 import { columnOf, lineOf } from "./lexer";
 import { validate } from "./validator";
-import { NUMBER_MODE_F64 } from "./context";
+import { buildModeOf } from "./visibility";
+import { CheckContext, NUMBER_MODE_F64 } from "./context";
 
 const SLASH: i32 = 47;
 
@@ -859,6 +861,17 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false;
     }
+    // WP15 §2.4: what every call site proves for its callee's parameters. It
+    // needs every body checked, instantiations included, and the attribute
+    // analysis below reads the proofs it adds.
+    // Which of them a host may also call is the build's to say (`hostVisible`).
+    const contexts: CheckContext[] = [];
+    const programs: CheckedProgram[] = [];
+    for (const unit of this.modules) {
+      contexts.push(unit.checker.ctx);
+      programs.push(unit.checker.program);
+    }
+    proveCallSiteRanges(contexts, buildModeOf(this.opts, programs));
     this.reportArenaLoops();
     this.checkParallel();
     return !this.sink.hasErrors();

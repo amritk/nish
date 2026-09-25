@@ -119,21 +119,11 @@ if.end:
   %22 = getelementptr inbounds %struct.Towers, %struct.Towers* %this, i32 0, i32 0
   %23 = load %struct.nish_array*, %struct.nish_array** %22, align 8, !tbaa !20
   %24 = sext i32 %pile to i64
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
-  %26 = load i64, i64* %25, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %27 = icmp ult i64 %24, %26
-  br i1 %27, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 %24, i64 %26)
-  unreachable
-
-bounds.ok.1:
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
-  %29 = load i8*, i8** %28, align 8, !alias.scope !12, !noalias !13, !tbaa !19
-  %30 = bitcast i8* %29 to %struct.Disk**
-  %31 = getelementptr inbounds %struct.Disk*, %struct.Disk** %30, i64 %24
-  store %struct.Disk* %disk, %struct.Disk** %31, align 8, !alias.scope !13, !noalias !12, !tbaa !22
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
+  %26 = load i8*, i8** %25, align 8, !alias.scope !12, !noalias !13, !tbaa !19
+  %27 = bitcast i8* %26 to %struct.Disk**
+  %28 = getelementptr inbounds %struct.Disk*, %struct.Disk** %27, i64 %24
+  store %struct.Disk* %disk, %struct.Disk** %28, align 8, !alias.scope !13, !noalias !12, !tbaa !22
   ret void
 }
 
@@ -175,26 +165,16 @@ if.end:
   %16 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
   %17 = getelementptr inbounds %struct.Disk, %struct.Disk* %16, i32 0, i32 1
   %18 = load %struct.Disk*, %struct.Disk** %17, align 8, !tbaa !5
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0
-  %20 = load i64, i64* %19, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %21 = icmp ult i64 %15, %20
-  br i1 %21, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 %15, i64 %20)
-  unreachable
-
-bounds.ok.1:
-  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
-  %23 = load i8*, i8** %22, align 8, !alias.scope !12, !noalias !13, !tbaa !19
-  %24 = bitcast i8* %23 to %struct.Disk**
-  %25 = getelementptr inbounds %struct.Disk*, %struct.Disk** %24, i64 %15
-  store %struct.Disk* %18, %struct.Disk** %25, align 8, !alias.scope !13, !noalias !12, !tbaa !22
-  %26 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
-  %27 = getelementptr inbounds %struct.Disk, %struct.Disk* %26, i32 0, i32 1
-  store %struct.Disk* null, %struct.Disk** %27, align 8, !tbaa !5
-  %28 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
-  ret %struct.Disk* %28
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
+  %20 = load i8*, i8** %19, align 8, !alias.scope !12, !noalias !13, !tbaa !19
+  %21 = bitcast i8* %20 to %struct.Disk**
+  %22 = getelementptr inbounds %struct.Disk*, %struct.Disk** %21, i64 %15
+  store %struct.Disk* %18, %struct.Disk** %22, align 8, !alias.scope !13, !noalias !12, !tbaa !22
+  %23 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
+  %24 = getelementptr inbounds %struct.Disk, %struct.Disk* %23, i32 0, i32 1
+  store %struct.Disk* null, %struct.Disk** %24, align 8, !tbaa !5
+  %25 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
+  ret %struct.Disk* %25
 }
 
 define void @Towers.moveTopDisk(%struct.Towers* noundef nonnull align 8 dereferenceable(16) nocapture %this, i32 noundef %fromPile, i32 noundef %toPile) #1 {

@@ -970,6 +970,27 @@ and their `.ll` goldens are byte-identical files.
   `export * from`, and `export =` are rejected
   (`Only functions can be exported`; `` `export default` is not supported ``,
   `tests/cases/reject_export_default`).
+- **What `export` promises depends on the build.** In every build it makes a
+  declaration importable by another module of the program. A build whose
+  output something else links or loads — `-o` alone (IR for a C host to link),
+  `--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`,
+  `--profile wasi` or a wasm `--target` — also makes an exported function, and
+  every method of an exported class, callable by that host with any arguments,
+  so the compiler assumes nothing about them from the program's own calls
+  (`tests/cases/arr_range_call_exported`, where a C host's `pick(7)` panics).
+  A **`--link` build with none of those flags and no `declare function`** is
+  its own final link: the executable holds the program's modules and the
+  runtime and nothing else, so every call to an exported function is one the
+  compiler sees, and it may, for example, prove an exported method's index in
+  range from what every caller passes (`tests/link/range_export`, AWFY Permute
+  as an exported class, whose `swap` carries no bounds check;
+  `tests/link/range_export_unproven`, where one caller proves nothing, so the
+  check stays and panics). The `.ll` such a build writes beside the executable
+  is that executable's, not an object for another link; build with `-o` alone,
+  or with a sidecar, to hand a host the program. `main` is the one exception:
+  the runtime calls it, and it is never assumed anything about. The rule is
+  `hostVisible` in `self/visibility.ts`, and `docs/ARCHITECTURE.md` (the
+  call-site ranges row of the attribute soundness rules) is why it is sound.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -2506,12 +2527,25 @@ and both come from the program as written:
     `const n: i32 = toI32(xs.length)` above it (`perf_bounds_toi32`,
     `perf_bounds_toi32_f64`).
 
+  - **`i - c` and `w.length - c`** (`c` a non-negative literal) carry
+    bounds too: removing `c` lowers every floor of `i` by `c` — `i >= 1`,
+    which `if (i !== 0)` on a non-negative `i` gives, leaves `i - 1 >= 0` —
+    and with `c >= 1` turns `i <= w.length` into `i - 1 < w.length`;
+    `w.length - 1` is below the length whatever the array holds. A copy
+    `let j = i` has every bound `i` has
+    (`tests/cases/arr_range_call_countdown`).
+
 A fact ends where it stops being true: at any assignment to `i` that is not
-`i = i + <non-negative literal>` (`i++` and `i += n` included), at any
-assignment to `w`, and — for an **array** — at any call, because a callee
-holding the same array may `push` or `pop` and move `len`
-(`tests/cases/arr_bounds_shrink_panic` is the program that still panics
-because of that rule). A **string**'s length cannot change once the variable
+`i = i + <non-negative literal>` (`i++` and `i += n` included) or
+`i = i - <non-negative literal>` (`i--` and `i -= n` included), at any
+assignment to `w`, and — for an **array** — at any call to something that
+may resize it, because a callee holding the same array may `push` or `pop`
+and move `len` (`tests/cases/arr_bounds_shrink_panic` is the program that
+still panics because of that rule). A decrement keeps the upper bounds and
+loses the lower ones, the mirror of an increment, so the loop that counts
+down from the last index needs only its own `i >= 0`; under `--wrapping` it
+keeps them only where `i >= 0` is known at the decrement, since `INT_MIN - 1`
+is defined to be `INT_MAX` (`arr_range_call_wrap` panics past the end). A **string**'s length cannot change once the variable
 holding it is bound, so a string fact survives calls, which is what makes a
 scanner's cursor check-free (`tests/cases/str_bounds_proven`). The increment
 exception needs `nsw`: under `--wrapping` the step past `INT_MAX` is *defined*
@@ -2581,12 +2615,13 @@ path or resize the array, and a path fact ends at:
     nothing else can point into the slot. An array of classes holds pointers,
     so a store there rewrites no object and ends nothing;
   - an assignment to the root (`arr_path_root`);
-  - **any call** and any `new`, for a string path as well as an array one: a
-    callee may `push` or `pop` the array or store a new value in the field,
-    and a `pop` through a second holder of the same array is a call too
+  - **any call** and any `new` that may resize an array or store to a field
+    on the path, for a string path as well as an array one: a callee may
+    `push` or `pop` the array or store a new value in the field, and a `pop`
+    through a second holder of the same array is a call too
     (`arr_path_callee_pop`, `arr_path_callee_string`, `arr_path_alias_shrink`).
-    `charCodeAt` and the builtin `toI32` are the exceptions, as they are for a
-    local: they are lowered inline and call nothing.
+    `charCodeAt` and the builtin `toI32` call nothing, as they do for a
+    local; what else a call may do is its summary, below.
 
 A path is never built through a link whose **declared** type is nullable —
 the root's included — whatever a guard narrowed it to, and neither is one
@@ -2605,6 +2640,47 @@ classes beside a record store (`arr_header_hoist_record_class_root`).
 A path the proof cannot take keeps its
 check without a warning, because the rewrite the warning would name is that
 `const xs = h.xs` hoist.
+
+**What crosses a call** (WP15 §2.4). Once every body is checked, each
+function gets a summary of what it can do to a caller's facts: the field
+names it — or anything it calls — may store to, and the record types it may
+store whole. A function that calls `push`, `pop` or any builtin handed an
+array or an object, `Arena`, a foreign function or an instantiation has no
+summary, and a call to it ends every array and path fact as above. A call
+with a summary resizes no array, so it keeps every array-length fact and
+every path fact whose fields and links it leaves alone: `c.touch()`, which
+stores `calls`, keeps `i < xs.length` and `i < c.v.length`
+(`arr_range_call_loop`), and one that stores `v` ends `c.v`'s facts
+(`arr_range_call_rebind`). A builtin handed only numbers, booleans and
+strings — `console.log`, `panic`, a string method — has the empty summary,
+since without mutable module state or a function value what a call is handed
+is all it can reach.
+
+A function every call to which the compiler can see is **entered with what
+every call site proves** about its parameters: a floor and an upper bound of
+an integer parameter, and length facts about a holder read off a parameter or
+`this` — `this.v.length >= 6`, `i < this.v.length`. Each site is judged once
+its arguments have run, a fact about the local an argument named is carried
+only while no later argument writes it (`arr_range_call_arg_rebind`), and an
+argument handed to a parameter of a different integer type carries nothing.
+The sites are joined — the weaker floor, the higher bound, the shorter
+length, a relation only where every site states it
+(`arr_range_call_two_sites`, `arr_range_call_no_proof`) — and recursion is a
+fixpoint, so `permute(n)` calling `permute(n - 1)` under `if (n !== 0)` keeps
+`n <= 6` and a recursion that grows its index keeps nothing
+(`arr_range_call_grow`). Inside the function the facts end by the rules above
+(`arr_range_call_rebind_callee`). **Not entered with anything:** `main`; an exported
+function or a method of an exported class, since a host may call it with
+anything (`arr_range_call_exported`) — unless the build is a closed-world
+`--link`, where `export` means only "importable" (see
+[`export` and `import`](#export-and-import): `tests/link/range_export`, and
+`range_export_unproven` for a caller that proves nothing); a `hidden` one, a
+constructor, a lifted arrow, a function taking a compile-time function, and
+any function called from an arrow or from an instantiation's body
+(`arr_range_call_arrow`, `arr_range_call_generic`). AWFY Permute with its
+class not exported is proved throughout: `swap` carries no check
+(`arr_range_call`), and with it exported the same holds in a `--link` build. `--unchecked-indexing` skips the pass, and its output
+is byte for byte what it was.
 
 A generic's instantiations are proved one at a time, each against its own
 verdicts: `rs[0] = x` rewrites a record when `T` is an inline record and

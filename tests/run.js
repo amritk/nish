@@ -2212,6 +2212,186 @@ const panicCount = (ir, fn) =>
   ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(/call void @nish_panic_index/g) ?? [])
     .length;
 
+// WP15 §2.4: call-site ranges. The positives prove a callee's accesses from what
+// every call site guarantees, so the function named carries no check; each
+// negative breaks one rule the proof rests on, keeps its check, and panics when
+// run. `arr_range_call_exported` is driven by a C host, the caller the compiler
+// cannot see.
+if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call")) {
+  for (const [name, fn, count] of [
+    ["arr_range_call", "Permute.swap", 0],
+    ["arr_range_call_loop", "Counts.bump", 0],
+    ["arr_range_call_loop", "total", 0],
+    ["arr_range_call_countdown", "sumDown", 0],
+    ["arr_range_call_countdown", "pairs", 0],
+    ["arr_range_call_callee_pop", "Stack.get", 1],
+    ["arr_range_call_grow", "visit", 1],
+    ["arr_range_call_no_proof", "at", 1],
+    ["arr_range_call_rebind", "Box.get", 1],
+    ["arr_range_call_rebind_callee", "Box.take", 1],
+    ["arr_range_call_two_sites", "at", 1],
+    ["arr_range_call_wrap", "pick", 1],
+    ["arr_range_call_exported", "pick", 1],
+    ["arr_range_call_arg_rebind", "pick", 1],
+    ["arr_range_call_arrow", "at9", 1],
+    ["arr_range_call_generic", "at9", 1],
+    // #209's dominance rules, which `arr_repeat_check_flow` no longer reaches.
+    ["arr_range_call_flow", "inBranch", 2],
+    ["arr_range_call_flow", "shortCircuit", 2],
+    ["arr_range_call_flow", "ternary", 2],
+    ["arr_range_call_flow", "inLoop", 2],
+    ["arr_range_call_flow", "inCondition", 1],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn.replace(".", "\\."));
+    check(`${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`, got === count, `found ${got}`);
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_range_call_no_proof", "a caller with no proof", "8", "5 >= 3"],
+      ["arr_range_call_two_sites", "a second call site that proves nothing", "7\n8\n9", "5 >= 3"],
+      ["arr_range_call_callee_pop", "a `pop` in a callee between the proof and the call", "4", "1 >= 1"],
+      ["arr_range_call_grow", "a recursion whose index grows", "1\n2\n3", "3 >= 3"],
+      ["arr_range_call_rebind", "a callee that stores the receiver's field before the call", "0", "5 >= 0"],
+      ["arr_range_call_rebind_callee", "a store to the field inside the callee", "", "2 >= 0"],
+      ["arr_range_call_wrap", "a decrement that wraps under `--wrapping`", "2", "2147483647 >= 3"],
+      ["arr_range_call_exported", "a host calling an exported function", "20", "7 >= 3"],
+      ["arr_range_call_arg_rebind", "a later argument rebinding the index's local", "1", "50 >= 3"],
+      ["arr_range_call_arrow", "a call from a lifted arrow", "2", "9 >= 3"],
+      ["arr_range_call_generic", "a call from a generic instantiation", "2", "9 >= 3"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const exe = path.join(buildDir, name);
+      const host = path.join(casesDir, `${name}.c`);
+      const cc = linkNative(exe, ll, { driver: fs.existsSync(host) ? host : null });
+      const run = cc.status === 0 ? spawnSync(exe) : null;
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      );
+    }
+  }
+}
+
+// WP15 §2.4, the build-mode rule (`hostVisible` in `self/visibility.ts`). A
+// `--link` build with no sidecar, no wasm and no C function declared is its own
+// final link, so an exported function takes the facts its call sites prove:
+// `tests/link/range_export` is AWFY Permute as an exported class, and its
+// `Permute.swap` carries no check. Every host-facing mode builds the same class
+// and keeps both checks. The `tests/link/` loop above has already built and run
+// the modes that link natively; the wasm and IR-only modes are built here, and
+// their IR is read whether or not a link was possible.
+if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
+  const swapChecks = (file) =>
+    fs.existsSync(file) ? panicCount(fs.readFileSync(file, "utf8"), "Permute\\.swap") : -1;
+  for (const [name, count, mode] of [
+    ["range_export", 0, "`--link`, closed world"],
+    ["range_export_header", 2, "`--emit-header`"],
+    ["range_export_napi", 2, "`--emit-napi`"],
+    ["range_export_napi_async", 2, "`--emit-napi-async`"],
+    ["range_export_dts", 2, "`--emit-dts`"],
+    ["range_export_foreign", 2, "a `declare function`"],
+  ]) {
+    const ll = path.join(buildDir, "link", name, "permute.ll");
+    if (!fs.existsSync(ll)) continue;
+    const got = swapChecks(ll);
+    check(
+      `link/${name}: ${mode} leaves \`Permute.swap\` ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    );
+  }
+  // Closed is not a licence: `pick`'s two call sites, in another module, are
+  // joined, one proves nothing, and the link loop has seen the second panic.
+  const unproven = path.join(buildDir, "link", "range_export_unproven", "pick.ll");
+  if (fs.existsSync(unproven)) {
+    const got = panicCount(fs.readFileSync(unproven, "utf8"), "pick");
+    check(
+      "link/range_export_unproven: a call site that proves nothing leaves `pick` 1 bounds check",
+      got === 1,
+      `found ${got}`
+    );
+  }
+  const entry = path.join(linkDir, "range_export", "main.ts");
+  const built = (name, args) => {
+    const dir = path.join(buildDir, "range_export_modes", name);
+    fs.rmSync(dir, { recursive: true, force: true });
+    const r = spawnSync(NISH, [entry, "-o", `${dir}${path.sep}`, ...args], { cwd: root, encoding: "utf8" });
+    return { dir, status: r.status, stderr: r.stderr, checks: swapChecks(path.join(dir, "permute.ll")) };
+  };
+  // IR only: a host links the modules. Linked here with the runtime alone, the
+  // program still runs as the executable does.
+  const irOnly = built("ir_only", []);
+  check(
+    "range_export: `-o` without `--link` leaves `Permute.swap` 2 bounds checks",
+    irOnly.checks === 2,
+    `found ${irOnly.checks}\n${irOnly.stderr}`
+  );
+  if (has("clang") && irOnly.status === 0) {
+    const exe = path.join(irOnly.dir, "app");
+    const lls = fs
+      .readdirSync(irOnly.dir)
+      .filter((f) => f.endsWith(".ll"))
+      .map((f) => path.join(irOnly.dir, f));
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ...lls, ...RUNTIME_C, "-lm", "-o", exe], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const run = cc.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : null;
+    check(
+      "range_export: the IR-only build, linked by hand, prints `true` and 8660",
+      run !== null && run.status === 0 && run.stdout === "true\n8660\n",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : cc.stderr
+    );
+  }
+  // wasm: a host instantiates the module and calls its exports. The link needs
+  // a WASI sysroot, and the IR is written before it is attempted.
+  const wasi = built("wasi", [
+    "--link",
+    path.join(buildDir, "range_export_modes", "wasi.wasm"),
+    "--profile",
+    "wasi",
+  ]);
+  check(
+    "range_export: `--profile wasi` leaves `Permute.swap` 2 bounds checks",
+    wasi.checks === 2,
+    `found ${wasi.checks}\n${wasi.stderr}`
+  );
+  const wasm = path.join(buildDir, "range_export_modes", "wasi.wasm");
+  if (wasi.status === 0 && fs.existsSync(wasm)) {
+    const run = spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      "range_export: the `--profile wasi` module prints `true` and 8660 under Node's WASI",
+      run.status === 0 && run.stdout === "true\n8660\n",
+      `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+    );
+  } else {
+    skip("skipped: range_export: `--profile wasi` did not link (no WASI sysroot), so its module is not run");
+  }
+  // The same with a wasm triple and the default profile: whatever the link
+  // makes of it, the IR was written for a wasm host.
+  const target = built("wasm_target", [
+    "--link",
+    path.join(buildDir, "range_export_modes", "wasm_target.app"),
+    "--target",
+    "wasm32-unknown-unknown",
+  ]);
+  check(
+    "range_export: `--target wasm32-unknown-unknown` leaves `Permute.swap` 2 bounds checks",
+    target.checks === 2,
+    `found ${target.checks}\n${target.stderr}`
+  );
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.

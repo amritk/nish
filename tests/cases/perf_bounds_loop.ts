@@ -1,7 +1,7 @@
 // WP15 §8: a bounds check the analysis could not remove, inside a loop, warns
 // and names the guard that would remove it. Every access here is one the
 // compiler genuinely cannot prove, and the program is legal and still exits 0.
-const weigh = (ys: i32[]): i32 => ys.length;
+// `weigh`, below `test`, pushes and pops through the array it is handed.
 
 export const test = (): number => {
   // Two arrays, one length: nothing says `ys` is as long as `xs`.
@@ -21,12 +21,18 @@ export const test = (): number => {
     j = j + 1;
   }
 
-  // A cursor that only ever moves down keeps no upper bound.
+  // A cursor counting down keeps its upper bound, but `!== 0` is no lower one.
   const ws = [1, 2];
   let k = ws.length - 1;
-  while (k > 0) {
+  while (k !== 0) {
     total = total + ws[k];
     k = k - 1;
   }
   return total;
+};
+
+const weigh = (ys: i32[]): i32 => {
+  ys.push(0);
+  ys.pop();
+  return ys.length;
 };

@@ -12,9 +12,8 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -109,7 +108,7 @@ entry:
   ret %struct.nish_array* %9
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #0 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %h.addr = alloca %struct.Holder*, align 8
@@ -146,23 +145,13 @@ entry:
   %18 = call i8* @nish_str_from_i32(i32 %17)
   call void @nish_print(i8* %18)
   %19 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 0
-  %21 = load i64, i64* %20, align 8, !alias.scope !8, !noalias !9, !tbaa !13
-  %22 = icmp ult i64 2, %21
-  br i1 %22, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 2, i64 %21)
-  unreachable
-
-bounds.ok:
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
-  %24 = load i8*, i8** %23, align 8, !alias.scope !8, !noalias !9, !tbaa !14
-  %25 = bitcast i8* %24 to i32*
-  %26 = getelementptr inbounds i32, i32* %25, i64 2
-  %27 = load i32, i32* %26, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %28 = call i8* @nish_str_from_i32(i32 %27)
-  call void @nish_print(i8* %28)
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %22 = bitcast i8* %21 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 2
+  %24 = load i32, i32* %23, align 4, !alias.scope !9, !noalias !8, !tbaa !16
+  %25 = call i8* @nish_str_from_i32(i32 %24)
+  call void @nish_print(i8* %25)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -178,8 +167,7 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
