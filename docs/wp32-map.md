@@ -32,7 +32,7 @@ it waits on generic classes. Those have landed.
 | --- | --- | --- | --- | --- |
 | 1 | Layout | Insertion-ordered. A `u32[]` bucket table holds eight fingerprint bits above a 24-bit entry index plus one. The entries sit in parallel arrays (`keys`, `values`, `hashes`), and the full 32-bit hash of each is stored in `hashes`. The cap is 2^24 − 1 entries, which is exactly Node's own. | 2 | an `i64` slot holding the whole hash; the StringMap shape; an unordered table |
 | 2 | Load factor | At most 3/4 of the buckets taken, counting deleted entries until a rebuild. | 2.4 | 7/8 |
-| 3 | `get`'s type | `V \| undefined`. It is narrowed by `!== undefined` / `=== undefined`, or collapsed by `??`. A maybe value may be bound to a `const`, annotated or not. It may not cross a call, and it is never in memory: it lowers to the WP17 pair `{ i1, V }` in registers. | 3 | `has` + `get(k)!`; `get(k, default)`; a maybe value as a parameter or return type |
+| 3 | `get`'s type | `V \| undefined`. It is narrowed by `!== undefined` / `=== undefined`, or collapsed by `??`. A maybe value may be bound to a `const`, annotated or not. It may not cross a call, and it is never in memory: S3 lowers it to two SSA values, a found bit and the value. That is a new lowering, analogous to WP17's in-module register shape. | 3 | `has` + `get(k)!`; `get(k, default)`; a maybe value as a parameter or return type |
 | 4 | Output | The implicitly loaded `std/collections.ts` writes no `.ll` of its own. Every instance, and every helper it reaches, is emitted into each module that uses it with `internal` linkage, so `-o x.ll` keeps working for a one-file program. | 4.1 | a separate module, with its tests in `tests/link/` |
 | 5 | Names, and a user's `Map` | The std templates are `class Map<K, V>` and `class Set<T>`, mangled like any template (`%struct.Map$str$i32`). A module that declares or imports its own `Map` or `Set` gets no implicit import. A program where one module does that and another names the global is refused, naming both. | 4.2 | a reserved IR prefix for the std classes |
 | 6 | Keys | Strings, every integer width, `number` in either mode, `f64`, `f32`, `boolean`, enums and class instances by identity. Refused in v1: interfaces, arrays, `T \| null` and `Result`. | 5 | records by value; nullable keys in v1 |
@@ -59,7 +59,7 @@ measures the first property directly.
 | Stage | Builds | From |
 | --- | --- | --- |
 | S2 map-core | `std/collections.ts` with the §2 layout; the implicit load and the §4 output shape; `hashKey`/`sameKey` per §5.2; the §5 key and value refusals; §7's surface; §8's sidecars | §2, §4, §5, §6.1, §7, §8 |
-| S3 map-get | `V \| undefined`, the maybe `const`, `??`, narrowing, each as §3 specifies | §3 |
+| S3 map-get | `V \| undefined`, the maybe `const`, `??`, narrowing, each as §3 specifies, and the new two-value lowering of a maybe (§3.2) | §3 |
 | S4 map-iteration | `for...of` over `keys()`, `values()` and a `Set`, with §6.2's counter | §6 |
 | S5 map-fusion-extras | §9.1's three patterns and `nish/map`'s `reserve` and `getOrInsert` | §9 |
 | S6 stringmap-fingerprints | `StringMap` on the §2 slot and stored hashes, in Nish-0 | §2, §6.1 |
@@ -165,8 +165,9 @@ differences that held in every session, and on two measures that do not
 move at all:
 
 - **Instructions**, counted by cachegrind at `n` = 16384. The prototypes are in
-  the instruction gate (§2.6): ordered 252,738,509; `i64` fp 237,097,763;
-  `u32` fp 254,786,070; unordered 219,853,569.
+  the instruction gate (§2.6): ordered 251,794,504; `i64` fp 236,784,417;
+  `u32` fp 254,837,532; unordered 219,736,662. They were counted at `6451cf2`,
+  with #220's array-header TBAA, which moved them by −0.37% to +0.02%.
 - **Peak RSS at 2^20**, in KB, whole process, keys included: ordered 586,936;
   `i64` fp 828,212; `u32` fp 660,280; unordered 681,400; Node 744,072.
 
@@ -201,8 +202,8 @@ on insert.
 - It is never slower than the `i64` slot by more than the noise, and it was
   faster on string insert and integer churn at 2^20 in every session. It is
   half the bucket memory: 4 bytes a bucket against 8, which is 168 MB of peak
-  RSS at 2^20. It retires 17.7 million more instructions than the `i64` slot
-  at `n` = 16384, 7.5%, for the stored-hash compare and the index mask. It buys
+  RSS at 2^20. It retires 18.1 million more instructions than the `i64` slot
+  at `n` = 16384, 7.6%, for the stored-hash compare and the index mask. It buys
   that back in cache lines once the table leaves the cache.
 - **The index cap costs nothing a JavaScript program can use.** Node's `Map`
   and `Set` throw `RangeError: Map maximum size exceeded` at the 2^24-th
@@ -260,7 +261,7 @@ unordered `Map` is §10's question, and S7 answers it with (b) to (d).
 ### 2.6 The prototypes in the instruction gate
 
 The four prototypes are in `bench/instructions.json` (#218's gate), at `n` =
-16384, about 220 to 255 million instructions each. They are single-threaded.
+16384, where they run 219.7 to 254.8 million instructions each. They are single-threaded.
 They read the clock only when timing, so an untimed run's count does not depend
 on the vDSO. `--instructions --runs 3` gave a spread of 0 on all four. They are
 the only hash-table code in the gate: a bounds-proof, loop or call-lowering
@@ -308,13 +309,22 @@ not narrow it.
   a store, a template hole and an arithmetic operand (E). Every refused
   spelling either fails under `tsc` too (E, J) or is one v1 chooses not to
   need (H, I).
-- **Narrowing reuses the nullable machinery**
-  ([LANGUAGE.md → Nullable types](LANGUAGE.md#nullable-types)). The table of
-  forms there applies with `undefined` in place of `null`. A maybe `const`
-  reads as `V` where a test proves it present, and the region rules are the
-  same. A `const` cannot be reassigned, so the "narrowing ends at an
-  assignment" rule never fires. That is why `let` is refused: it is the case
-  that needs that rule.
+- **Narrowing reuses the nullable *rules*, not the nullable representation.**
+  - **Reused:** the checker's type-level narrowing
+    ([LANGUAGE.md → Nullable types](LANGUAGE.md#nullable-types)). The table of
+    forms there applies with `undefined` in place of `null`, and so do the
+    region rules. The scope narrowing and stripping in `self/expressions.ts`
+    are generalised from `null` to `undefined`. A maybe `const` reads as `V`
+    where a test proves it present.
+  - **New:** what is narrowed. `T | null` exists only for a class, interface,
+    array or string, because `null` is a spare pointer value
+    ([same section](LANGUAGE.md#nullable-types)). A maybe covers every `V`,
+    scalars included (every §3.1 example is `Map<string, i32>`). So it is a
+    payload with a separate found bit, and the code that tests it and reads it
+    is S3's to write. It is not a pointer compared with `null`.
+  - A `const` cannot be reassigned, so the "narrowing ends at an assignment"
+    rule never fires. That is why `let` is refused: it is the case that needs
+    that rule.
 - **`??` parses with TypeScript's precedence.** It is at the level of `||`,
   its operands bind as tightly as `|` does, and it does not mix with `||` or
   `&&` without parentheses. `m.get(k) ?? 1 || 2` is TS5076 under `tsc`, and it
@@ -327,12 +337,17 @@ not narrow it.
   (`reject_undefined_value`) and as a type (`reject_union_undefined`). The
   maybe type is spelled only as the annotation of a `const` initialised
   directly from `get`.
-- **It lowers to the WP17 pair `{ i1, V }`**, the shape a `Result` takes
-  between two functions of one module
-  ([LANGUAGE.md → Result and error handling](LANGUAGE.md#result-and-error-handling)).
-  The pair never crosses a call and never reaches memory, so it is two SSA
-  values: the probe's "found" bit and the value, loaded only when found. `get`
-  is one probe, and `m.get(k) ?? d` is that probe and a `select`.
+- **It lowers to two SSA values: the probe's found bit, and the value, loaded
+  only when found.** This is a new lowering, and building it is S3's work.
+  - It is *analogous to* WP17's in-module register shape
+    ([LANGUAGE.md → Result and error handling](LANGUAGE.md#result-and-error-handling)),
+    but it is not that shape. A `Result` between two functions of one module is
+    `{ i1, i32, i32 }`: the discriminant and one slot per arm. A maybe has no
+    error arm.
+  - The pair never crosses a call and never reaches memory, so it needs no
+    struct type at all. There is nothing in WP17 for S3 to reuse beyond the
+    idea.
+  - `get` is one probe, and `m.get(k) ?? d` is that probe and a `select`.
 
 **Why not `has` + `get(k)!`.** `tsc` needs the `!` (C against D). Nish's parser
 does not accept a postfix `!` at all today: `p!` is `` syntax error: expected
@@ -348,9 +363,10 @@ thing on both runtimes, and it is one probe as written.
 **Why a maybe value does not cross a call in v1.** H is legal TypeScript, but
 it needs `V | undefined` as a parameter type. That opens `undefined` in type
 positions generally, and the maybe then has to be laid out in memory: in a
-field, in an argument slot of an exported function, in the C header. The WP17
-pair would carry it: `{ i1, V }` for an internal callee, and the packed word
-for an exported one when `V` fits in four bytes. But nothing in v1 needs it.
+field, in an argument slot of an exported function, in the C header. A later
+stage would carry it the way WP17 carries a `Result`: a register pair for an
+internal callee, and a packed word for an exported one when `V` fits in four
+bytes. That would be a new ABI shape, not WP17's. Nothing in v1 needs it.
 The refusal names the rewrite (`?? d`, or narrow first). Relaxing it later is a
 minor, because it turns a refusal into an acceptance.
 
