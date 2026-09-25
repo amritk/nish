@@ -27,6 +27,7 @@
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -7153,9 +7154,12 @@ if (!only || "docs".includes(only) || "ai".includes(only)) {
 // longer ships (docs/wp12-release.md, "Which compiler the package ships"; the cost to
 // musl and FreeBSD is priced in docs/wp19-stage0-retirement.md §6).
 if (!only || "package".includes(only) || "wp12".includes(only)) {
-  const pkgDir = path.join(buildDir, "wp12-package");
-  fs.rmSync(pkgDir, { recursive: true, force: true });
-  fs.mkdirSync(pkgDir, { recursive: true });
+  // Outside the checkout, not under build/. The installed launcher finds its platform
+  // package with Node's resolution, which walks up every parent `node_modules`: from
+  // build/ that walk reaches the repository's own, where `npm ci` puts the published
+  // platform package for this machine now that the registry carries one, and the
+  // "nothing installed beside it" half of this block would find a compiler after all.
+  const pkgDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-wp12-package-"));
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const pack = spawnSync(npm, ["pack", "--json", "--pack-destination", pkgDir], {
     cwd: root,
