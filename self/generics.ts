@@ -34,6 +34,7 @@ import { collectFunctionSignature } from "./declarations";
 import { internalErrorFor } from "./ice";
 import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
+import { parallelRole, recordParallelCall } from "./parallel";
 import { collectMethodSignature, collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
 import {
   FLAG_FOREIGN,
@@ -1057,6 +1058,7 @@ export const instantiateHere = (
   info.from = site.fromFunction;
   info.functionArgs = functions;
   info.functionBindings = bindFunctionParameters(template.decl, functions);
+  info.parallel = parallelRole(template);
   sig.instance = info;
   template.count = template.count + 1;
   ctx.program.addInstantiation(symbol, info);
@@ -1211,6 +1213,10 @@ export const checkGenericCall = (
     i = i + 1;
   }
   ctx.program.nodeCallees[expr.id] = sig;
+  // WP29 P1: whether the body may run on several threads at once is a
+  // question about the whole program, so it is asked once the fixpoint has an
+  // answer (`Compilation.checkParallel`); the call is where it will be told.
+  recordParallelCall(ctx.program, expr, sig);
   return sig.returnType;
 };
 
