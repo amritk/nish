@@ -36,6 +36,7 @@
 import { Emitter } from "./emit";
 import { FactsTable } from "./attributes";
 import { internalErrorFor } from "./ice";
+import { intrinsicType } from "./emit_util";
 import { StringSet } from "./map";
 import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_PAREN, N_STRING, N_TRUE, Node } from "./nodes";
 import { CheckedProgram, FunctionSig, MAP_HASH_KEY, MAP_NONE } from "./program";
@@ -337,9 +338,8 @@ export const emitMaybe = (emitter: Emitter, expr: Node): MaybeParts => {
   const fn = emitter.fn;
   const receiver = emitter.emitExpression(access.children[0]);
   const key = emitter.emitExpression(expr.children[1].children[0]);
-  const mark = emitter.beginReclaim(probe);
   const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
-  const packed = emitter.endReclaim(mark, fn.emitValue(`call i64 @${probe.name}(${operands})`));
+  const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
   const parts = new MaybeParts(fn.emitValue(`icmp sge i64 ${packed}, 0`), "");
   parts.receiver = receiver;
   parts.packed = packed;
@@ -420,16 +420,21 @@ const zeroOf = (emitter: Emitter, type: i32): string => {
  * `get` tested this way is its probe alone; the value is never read.
  */
 export const emitUndefinedTest = (emitter: Emitter, expr: Node): string => {
-  const left = expr.children[0];
-  const operand = emitter.table.isMaybe(emitter.program.nodeTypes[left.id]) ? left : expr.children[1];
+  const operand = testsUndefined(emitter, expr.children[0]) ? expr.children[1] : expr.children[0];
   const parts = emitMaybe(emitter, operand);
   return expr.text === "!==" ? parts.found : emitter.fn.emitValue(`xor i1 ${parts.found}, true`);
 };
 
 /** Whether the `===` or `!==` `expr` tests a maybe against `undefined`. */
 export const isUndefinedTest = (emitter: Emitter, expr: Node): boolean =>
-  emitter.table.isMaybe(emitter.program.nodeTypes[expr.children[0].id]) ||
-  emitter.table.isMaybe(emitter.program.nodeTypes[expr.children[1].id]);
+  testsUndefined(emitter, expr.children[0]) || testsUndefined(emitter, expr.children[1]);
+
+/** The `undefined` side of a test, on which the checker records the maybe it is compared with. */
+const testsUndefined = (emitter: Emitter, operand: Node): boolean =>
+  operand.kind === N_IDENT &&
+  operand.text === "undefined" &&
+  emitter.program.nodeLocals[operand.id] === null &&
+  emitter.table.isMaybe(emitter.program.nodeTypes[operand.id]);
 
 /**
  * `a ?? d`. The default runs only where the value is missing, as JavaScript's
@@ -440,7 +445,7 @@ export const isUndefinedTest = (emitter: Emitter, expr: Node): boolean =>
  */
 export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   const fn = emitter.fn;
-  const type = emitter.typeOf(expr);
+  const type = intrinsicType(emitter.program, expr); // before an interface coercion, which `emitExpression` adds
   const ty = emitter.llvm(type);
   const nullable = emitter.table.isNullable(type);
   const parts = emitMaybe(emitter, expr.children[0]);

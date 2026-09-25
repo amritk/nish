@@ -1179,9 +1179,10 @@ class FactCollector {
         this.facts.callees.add(callee.name);
       }
       // WP32: `m.get(k)` is a `probe` and, when it finds the key, a `valueAt`,
-      // which the checker records on the callee member (`checkMapGet`).
+      // which the checker records on the callee member (`checkMapGet`); its
+      // type, a maybe, is what says the call is one.
       const reads = program.nodeCallees[node.children[0].id];
-      if (reads !== null) {
+      if (reads !== null && this.table.isMaybe(program.nodeTypes[node.id])) {
         this.facts.callees.add(reads.name);
       }
     }

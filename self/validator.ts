@@ -26,6 +26,7 @@ import {
   N_IDENT,
   N_INDEX,
   N_MEMBER,
+  N_MODULE_CONST,
   N_NEW,
   N_NUMBER,
   N_PAREN,
@@ -235,6 +236,9 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         return;
       }
       break;
+    case N_MODULE_CONST:
+      refuseUndefinedIn(ctx, node);
+      break;
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
@@ -261,15 +265,11 @@ const isUndefinedType = (node: Node): boolean =>
   node.kind === N_TYPE_REF && node.text === "undefined" && node.children[0].children.length === 0;
 
 /**
- * A `const` declaration annotated `V | undefined` (or `undefined | V`, or
- * `V | null | undefined` for a nullable `V`) whose initialiser is a call of a
- * member named `get` (docs/wp32-map.md §3.2: the maybe type is spelled only
- * as the annotation of a `const` initialised directly from `get`). Whether the
- * receiver is a `Map`, and the annotation its value type, is the checker's to
- * say. Every other `T | undefined` is refused below as the union it is.
+ * `V | undefined`, `undefined | V`, or `V | null | undefined` for a nullable
+ * `V`: the spelling of the maybe type (WP32). The checker resolves exactly
+ * this shape (`resolveMaybeAnnotation`), so both layers read it here.
  */
-const isMaybeDeclaration = (decl: Node): boolean => {
-  const annotation = decl.children[1];
+export const isMaybeAnnotation = (annotation: Node): boolean => {
   if (annotation.kind !== N_TYPE_UNION) {
     return false;
   }
@@ -282,13 +282,39 @@ const isMaybeDeclaration = (decl: Node): boolean => {
       nulls = nulls + 1;
     }
   }
-  const values = annotation.children.length - undefineds - nulls;
+  return undefineds === 1 && nulls <= 1 && annotation.children.length - undefineds - nulls === 1;
+};
+
+/**
+ * A `const` declaration annotated with the maybe type whose initialiser is a
+ * call of a member named `get` (docs/wp32-map.md §3.2: the maybe type is
+ * spelled only as the annotation of a `const` initialised directly from
+ * `get`). Whether the receiver is a `Map`, and the annotation its value type,
+ * is the checker's to say. Every other `T | undefined` is refused below as the
+ * union it is.
+ */
+const isMaybeDeclaration = (decl: Node): boolean => {
   let init = decl.children[2];
   while (init.kind === N_PAREN) {
     init = init.children[0];
   }
   const callsGet = init.kind === N_CALL && init.children[0].kind === N_MEMBER && init.children[0].text === "get";
-  return undefineds === 1 && nulls <= 1 && values === 1 && callsGet;
+  return callsGet && isMaybeAnnotation(decl.children[1]);
+};
+
+/**
+ * `undefined` anywhere in a module constant's initialiser. The `===` exemption
+ * above is for a `Map.get` result, which a module constant, folded at compile
+ * time, never holds, so there it is refused as it always was.
+ */
+const refuseUndefinedIn = (ctx: CheckContext, node: Node): void => {
+  if (isUndefined(node)) {
+    ctx.error(node, undefinedForbidden());
+    return;
+  }
+  for (const child of node.children) {
+    refuseUndefinedIn(ctx, child);
+  }
 };
 
 /** One declaration of a `const` list, whose annotation may be the maybe type. */

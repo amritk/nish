@@ -1007,14 +1007,35 @@ const checkUndefinedTest = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   if (isUndefinedValue(operand, scope)) {
     return ctx.errorType(operand, undefinedForbidden());
   }
-  const type = checkExpression(ctx, operand, scope, WANT_MAYBE);
+  const type = maybeOperand(ctx, operand, scope);
   if (type === T_ERROR) {
     return T_ERROR;
   }
   if (!ctx.table.isMaybe(type)) {
     return ctx.errorType(absent, undefinedForbidden());
   }
+  // The emitter reads which operand is tested off this: the `undefined` side
+  // records the maybe it is compared with.
+  ctx.program.nodeTypes[absent.id] = type;
   return T_BOOL;
+};
+
+/**
+ * An operand that may be a maybe, and its maybe type. A `const` bound to
+ * `get` is one even where a test has narrowed it to `V`, as it is under `tsc`:
+ * testing it again, or defaulting it, is still asking about the found bit.
+ */
+const maybeOperand = (ctx: CheckContext, operand: Node, scope: Scope): i32 => {
+  const type = checkExpression(ctx, operand, scope, WANT_MAYBE);
+  let bare = operand;
+  while (bare.kind === N_PAREN) {
+    bare = bare.children[0];
+  }
+  const local: Local | null = bare.kind === N_IDENT ? scope.lookup(bare.text) : null;
+  if (type !== T_ERROR && local !== null && ctx.table.isMaybe(local.type)) {
+    return local.type;
+  }
+  return type;
 };
 
 /**
@@ -1024,7 +1045,7 @@ const checkUndefinedTest = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
  * the one Phase 0 always refused, in the words it always used.
  */
 const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
-  const left = checkExpression(ctx, expr.children[0], scope, WANT_MAYBE);
+  const left = maybeOperand(ctx, expr.children[0], scope);
   if (left === T_ERROR) {
     return T_ERROR;
   }
@@ -1055,6 +1076,7 @@ const PLACE_ELEMENT: i32 = 5;
 const PLACE_TEMPLATE: i32 = 6;
 const PLACE_OPERAND: i32 = 7;
 const PLACE_ANNOTATED: i32 = 8;
+const PLACE_DEFAULT: i32 = 9;
 
 /**
  * Refuse the maybe `expr` in a place that does not admit one, naming the
@@ -1106,6 +1128,12 @@ const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 => {
     return ctx.errorType(
       expr,
       `${shown} and cannot be the operand of an operator other than \`??\`, \`=== undefined\` and \`!== undefined\`: give it a default with \`??\` first, or bind it to a \`const\` and use it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_DEFAULT) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be the default of another \`??\`: the default stands in for a missing value, so it is a value; give this one a default of its own first, \`a ?? (b ?? d)\``
     );
   }
   if (place === PLACE_ANNOTATED) {
@@ -1171,7 +1199,7 @@ const operatorPlace = (parent: Node, node: Node): i32 => {
   if (parent.text !== "=") {
     // A compound assignment reads its target first, so its value is an
     // operand; `??`'s right operand is `V` and admits no maybe either.
-    return parent.text === "??" ? PLACE_OTHER : PLACE_OPERAND;
+    return parent.text === "??" ? PLACE_DEFAULT : PLACE_OPERAND;
   }
   if (parent.children[1] !== node) {
     return PLACE_OTHER;
@@ -1226,20 +1254,15 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
   if (value < 0 || value === T_ERROR) {
     return T_ERROR;
   }
+  if (nullable && !ctx.table.isPointer(value)) {
+    // The rule `T | null` has everywhere else, which this spelling skips past.
+    const spelled = ctx.table.typeName(value);
+    return ctx.errorType(
+      annotation,
+      `\`${spelled} | null\` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)`
+    );
+  }
   return ctx.table.maybeOf(nullable ? ctx.table.nullableOf(value) : value);
-};
-
-/** Whether `annotation` spells the maybe type: a union with `undefined` among its members. */
-export const isMaybeAnnotation = (annotation: Node): boolean => {
-  if (annotation.kind !== N_TYPE_UNION) {
-    return false;
-  }
-  for (const member of annotation.children) {
-    if (member.kind === N_TYPE_REF && member.text === "undefined") {
-      return true;
-    }
-  }
-  return false;
 };
 
 // ---- Assignment ---------------------------------------------------------------------

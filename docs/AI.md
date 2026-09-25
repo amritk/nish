@@ -1115,8 +1115,9 @@ if (a !== undefined) {
 ```
 
 - Anywhere else — a `let`, an argument, a `return`, a field or element, a
-  template hole, an arithmetic operand, a `const` annotated `i32` — the maybe is
-  refused with a message naming the place. Default it with `??` first.
+  template hole, an arithmetic operand, the default of another `??`, a `const`
+  annotated `i32` — the maybe is refused with a message naming the place.
+  Default it with `??` first: `m.get(a) ?? (m.get(b) ?? 0)`.
 - The only spelling of the type is `const a: i32 | undefined = m.get(k)`.
 - `??` does not mix with `||` or `&&` without parentheses, and its default must
   be the value type. For a `Map<K, Node | null>` it replaces a stored `null`

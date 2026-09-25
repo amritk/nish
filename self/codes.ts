@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 474;
+export const RULE_COUNT: i32 = 475;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -99,6 +99,8 @@ export const diagnosticRules = (): string[] => [
   "NL2347",
   "`, which is not associative: `parallelReduce` folds each block from the identity and then combines the blocks, which is a left fold only for an associative operator",
   "NL2349",
+  " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`",
+  "NL2371",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
   "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`",

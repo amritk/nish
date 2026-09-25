@@ -3288,17 +3288,22 @@ export const main = (): i32 => {
     `=== undefined` or `!== undefined`, either way round
     (`tests/cases/map_get_nullish`, `map_get_narrow`). The type is spelled
     `V | undefined` or `undefined | V`, and `Node | null | undefined` for a
-    nullable `V`, and only as the annotation of a `const` initialised from a
-    call of `get`; anywhere else it is the union it looks like
+    nullable `V` (a scalar is no more nullable here than anywhere,
+    `reject_map_get_nullable_scalar`), and only as the annotation of a `const`
+    initialised from a call of `get`; anywhere else it is the union it looks like
     (`reject_map_get_let_annotated`, `reject_union_undefined`), and
     `undefined` as a value is refused as it always was
-    (`reject_undefined_value`).
+    (`reject_undefined_value`, and in a module constant, which never holds a
+    `get` result, `reject_map_get_undefined_module_const`).
   - **A `const` bound to `get` is narrowed** by the rules of
     [Nullable types](#nullable-types), with `undefined` in place of `null`:
     it reads as `V` in the region a test proves it present, `if (a === undefined) return`
     included, and nowhere else (`map_get_narrow`,
     `reject_map_get_narrowing_leaks`). A `const` is never assigned, so its
     narrowing never ends early; a `let` would need that rule, and is refused.
+    Narrowed, it is still the maybe it was bound to, as under `tsc`: testing it
+    again, or defaulting it with `??`, reads the same found bit
+    (`map_get_narrowed_again`).
     Compared with `undefined`, anything that is not a maybe is
     `` `undefined` is forbidden in Nish; use `null` with a `T | null` type ``
     (`reject_map_get_undefined_compare`).
@@ -3318,8 +3323,10 @@ export const main = (): i32 => {
     `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
     (`reject_nullish`, `reject_nullish_nullable`).
   - **Everywhere else a maybe is refused**, and the message names the place,
-    because the rewrite differs by place. Every one either fails under `tsc`
-    too or needs a maybe to cross a call or reach memory, which it never does:
+    because the rewrite differs by place. Some fail under `tsc` too (an
+    operand, a `const` annotated `V`); the rest are legal TypeScript that this
+    version does not take, because a maybe never crosses a call, never reaches
+    memory, and is narrowed only in a `const` ([wp32-map.md](wp32-map.md) §3.2):
 
     | Place | Message after `` `m.get("a")` is `i32 \| undefined` `` | Case |
     | --- | --- | --- |
@@ -3330,6 +3337,7 @@ export const main = (): i32 => {
     | an array element, or an array literal's | `and cannot be stored in an array element` | `reject_map_get_element`, `reject_map_get_array_literal` (NL2365) |
     | a template literal hole | `and cannot be a template literal hole` | `reject_map_get_template` (NL2366) |
     | an operand of any other operator | `and cannot be the operand of an operator other than` | `reject_map_get_arithmetic`, `reject_map_get_compare`, `reject_map_get_unary` (NL2367) |
+    | the default of another `??` (`m.get(a) ?? m.get(b) ?? 0`) | `` and cannot be the default of another `??` `` | `reject_nullish_default_maybe` (NL2371); write `m.get(a) ?? (m.get(b) ?? 0)` |
     | a `const` annotated `V` | `` and cannot initialise a `const` annotated with its value type `` | `reject_map_get_annotated` (NL2368) |
     | anywhere else, a dropped result included | `` , which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` `` | `reject_map_get_statement` (NL2369) |
 
@@ -3344,7 +3352,9 @@ export const main = (): i32 => {
     `get` never probes twice nor calls `has`. `??` on a `get` is a branch to
     the value or the default and a `phi`; on a `const`, whose value is loaded
     already, with a literal or a name as its default, it is one `select`
-    (`map_get_narrow`). A `const` holds a `phi` of the value and `V`'s zero,
+    (`map_get_narrow`). Where the `??` is wanted as an interface its class
+    implements, the two class pointers are joined and the result converted
+    once (`map_get_interface`). A `const` holds a `phi` of the value and `V`'s zero,
     which no narrowed read can reach. A value built in the default goes
     wherever the `??` goes, as a ternary's arm does, so an object made there
     and stored in the map is allocated in the arena (`map_get_default_escapes`).

@@ -17,11 +17,11 @@ import {
   checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
-  isMaybeAnnotation,
   narrow,
   resolveMaybeAnnotation,
   WANT_MAYBE,
 } from "./expressions";
+import { isMaybeAnnotation } from "./validator";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { declaredOrigin, elementOrigin } from "./generics";
