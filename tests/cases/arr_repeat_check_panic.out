@@ -1,0 +1,7 @@
+11
+index out of range: 2 >= 2
+popPastEnd exit 1
+index out of range: 3 >= 1
+callStorePastEnd exit 1
+index out of range: 3 >= 1
+fieldStorePastEnd exit 1

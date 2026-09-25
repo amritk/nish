@@ -162,6 +162,61 @@ about 0.5%. The honest summary is that this item is worth what §2b said it was
 worth, and that the place it is worth time is the string cursor; everywhere
 else it buys code size and `willreturn`.
 
+**2′. A passed check is a fact — shipped.** A check that has run is as good
+a proof as a guard: `a[i]` either branches to `nish_panic_index`, which is
+`noreturn`, or continues with `0 <= i < a.length`. So `self/bounds.ts`
+records `nonNegative(i)` and `below(i, a)` on the path past every checked
+`a[i]` and `s.charCodeAt(i)` (and `a.length >= n + 1` past a literal `a[n]`),
+and a repeat of the same index on the same holder is proven. The facts are
+the ordinary ones, keyed on the ordinary local or property path, so nothing
+new had to be argued about invalidation: a call drops them, `push` and `pop`
+are calls, a field store on the path drops a path, and rebinding the index or
+the root drops everything. What *is* new is order. The fact lands where the
+emitter runs the check, and `a[i] = a[j]` checks `a[j]` (the value) before
+`a[i]` (the store), while `a[i] op= x` checks before `x`. One case needed an
+argument of its own: `this.v[i] = f()` loads `this.v` before the call and
+checks after it, so the check can pass on an array `f` has just replaced; a
+store whose value calls anything therefore teaches a *path* nothing
+(`arr_repeat_check_panic` panics on exactly that program).
+
+The shape that asked for it is AWFY Permute's `swap`:
+
+```ts
+swap(i: i32, j: i32): void {
+  const tmp = this.v[i];
+  this.v[i] = this.v[j];
+  this.v[j] = tmp;
+}
+```
+
+Four checks in the emitted IR before, two after; after `opt -O3` on the
+module, three before and two after, because LLVM had already found one. Over
+the whole AWFY run of `Permute 1000`, one iteration under
+`valgrind --tool=cachegrind`, that is **339.7 M instructions against
+309.5 M (-8.9%)**, 44.0 M branches against 33.9 M, and 4.85 M simulated
+mispredicts against 4.29 M; `--unchecked-indexing` is 187.8 M. The other six
+AWFY programs move by at most 14 instructions, because they have no repeated
+access in a hot path. Over `self/`, four NL9007 warnings went with it
+(`self/generics.ts` three, `self/manifest.ts` one).
+
+**Wall time did not follow, and that is recorded rather than smoothed over.**
+On the 4-core cloud container this was measured on, Permute's
+median-of-last-20 swings by ±10% from run to run and does not separate the
+two builds. `permute`'s machine code after LTO is the seed's with one
+`load len; cmp; jbe` taken out of each unrolled copy of the swap and nothing
+else moved, yet user CPU time over 100 iterations, pinned and alternated six
+times, came out 5–10% *higher* for the build with fewer instructions. Forcing
+64-byte function and block alignment and the 32-byte-branch (JCC erratum)
+mitigation did not change it, so it is not layout; with no hardware counters
+in the container, a memory-ordering effect of the tighter store sequence is
+the remaining suspect and is not proved. The 3x that `--unchecked-indexing`
+buys is somewhere else entirely: with no check left, LLVM shrink-wraps
+`permute`, so the leaf call `permute(0)` — most calls — returns before
+saving a register, while both checked builds push and pop five on every
+call because the surviving checks keep the frame. That is the next thing to
+look at on this benchmark, and the header reloads that survive `opt -O3` are
+the other half.
+
 **3. Slice iterators — measured, and not taken.** The proposal was that
 `for (const c of s)` lower to pointer advancement —
 `p = start; end = start + len; while (p < end) { ... p++; }` — rather than to
