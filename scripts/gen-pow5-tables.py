@@ -8,6 +8,11 @@ Prints the C to stdout; paste it over the `NISH_POW5_INV_SPLIT` and
 the ~10 KB of constants in the runtime are *derived*, with exact integer
 arithmetic, rather than transcribed from somewhere -- so a reader can check
 them rather than trust them. See docs/wp15-performance.md section 7a.
+
+The code that reads the tables is adapted from Ryu (ryu/d2s.c and
+ryu/common.h, Copyright 2018 Ulf Adams) under the Boost Software License,
+Version 1.0; runtime/LICENSE-ryu has the text and THIRD_PARTY_NOTICES.md the
+entry.
 """
 INV_BITCOUNT = 125
 BITCOUNT = 125

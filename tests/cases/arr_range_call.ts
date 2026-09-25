@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // WP15 §2.4: a parameter used as an index is proven in range when every call
 // site proves it for the same array. This is AWFY Permute with its class not
 // exported, so that every call to `swap` is one the compiler sees. `benchmark`

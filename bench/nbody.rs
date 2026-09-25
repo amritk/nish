@@ -1,3 +1,8 @@
+// Adapted from the Computer Language Benchmarks Game n-body program (Node.js #6,
+// contributed by Isaac Gouy, modified by Andrey Filatkin),
+// https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+// Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+// Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 // Rust twin of nbody.ts: same struct, same expression order. The bodies live
 // in a Vec<Body> indexed by i32-as-usize, as the Nish array is; the
 // idiomatic `[Body; 5]` would let LLVM drop every bounds check up front.

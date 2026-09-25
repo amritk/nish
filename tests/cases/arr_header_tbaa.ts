@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // A class-field store cannot write an array's header, and the header's own
 // `!tbaa` subtree is what tells LLVM so (`headerTbaa`, self/tbaa.ts). This is
 // AWFY Towers' `moveTopDisk`: `popDiskFrom` and `pushDisk` inlined into one

@@ -1,3 +1,5 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
 // The AWFY Queens shape: the field is assigned from a helper, and the helper
 // is proven to return a fresh array whose length is its parameter -- a
 // `const` local made by `new Array<T>(n)` that the helper only indexes and

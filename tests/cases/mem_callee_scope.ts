@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // An automatic arena scope for a function whose callees are what allocate.
 // `benchmark` allocates nothing itself: `makeList` builds three lists, `tail`
 // hands one of them back, and all `benchmark` keeps is an `i32`. It is

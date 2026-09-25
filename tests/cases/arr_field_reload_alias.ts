@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // What the element tag must not hide. Each function reads a field or a header
 // that really did change between two element accesses, so a stale value kept
 // across the change would print a different number: a field reassigned through

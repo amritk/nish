@@ -136,7 +136,10 @@ const emitStringHash = (emitter: Emitter, str: string): string => {
   return fn.emitValue(`load i32, i32* ${state}${emitter.alignSuffix(T_I32)}`);
 };
 
-/** murmur3's 32-bit finaliser. Every multiply wraps, which is what it is written against. */
+/**
+ * murmur3's 32-bit finaliser. Every multiply wraps, which is what it is written
+ * against. MurmurHash3 and its constants are public domain, as are FNV's above.
+ */
 const fmix32 = (emitter: Emitter, x: string): string => {
   const fn = emitter.fn;
   const a = fn.emitValue(`xor i32 ${x}, ${fn.emitValue(`lshr i32 ${x}, 16`)}`);

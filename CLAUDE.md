@@ -18,6 +18,7 @@ Developer guidelines live in the `.claude/` directory:
 - **comments.md** — Comment guidelines and JSDoc
 - **testing.md** — The golden-test harness, what every construct ships with
 - **architecture.md** — The pipeline, the rules that shape every change, where to read next
+- **licensing.md** — Third-party code: what counts as a copy, the notice it keeps, the licences allowed
 
 > **Agents: read every file in `.claude/` before writing any code.** The rules
 > there are authoritative — if generated code violates them, that is a mistake
@@ -31,7 +32,9 @@ A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
 trip with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
 rule and cookbook entry, and a line in `CHANGELOG.md` — see
 `docs/MASTER_PLAN.md` §7 and the checklist in `docs/ARCHITECTURE.md`. Show the
-exact LLVM IR for every TypeScript snippet a PR adds to the tests.
+exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
+ported or adapted from elsewhere keeps its upstream notice and is listed in
+`THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
 
 **There is one compiler, and a construct is written once, in `self/`.** The
 TypeScript implementation that used to sit beside it in `src/` was deleted in

@@ -1,3 +1,8 @@
+// Adapted from the Computer Language Benchmarks Game spectral-norm program
+// (Node.js #1, contributed by Ian Osgood, modified by Isaac Gouy),
+// https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+// Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+// Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 // Spectral norm (the Benchmarks Game shape) in f64 mode: number[] vectors,
 // i32 indices, 10 power iterations over the n x n matrix A(i,j) whose entries
 // are computed on the fly. Prints sqrt(vBv / vv), 1.274224153 for n = 1000.
