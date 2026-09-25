@@ -385,6 +385,11 @@ const addFact = (state: State, fact: Fact): void => {
     state.maxIndexValue.push(fact.n);
     return;
   }
+  // A weaker floor than one already recorded changes no answer, and a checked
+  // literal index offers the same one at every access it passes.
+  if (knownMinLength(state, fact.v, fact.n)) {
+    return;
+  }
   state.minLengthVar.push(fact.v);
   state.minLengthValue.push(fact.n);
 };
@@ -1681,17 +1686,15 @@ export const recordReaches = (stored: i32, holder: i32): boolean =>
   stored === ANY_RECORD || holder < 0 || (stored !== NO_RECORD && stored === holder);
 
 /**
- * Whether evaluating `value` can change what the access `target` reads before
- * it: the index local, the array local, or a path's root or any field on it.
+ * Whether evaluating `value`, whose `effects` the caller collected, can change
+ * what the access `target` reads before it: the index local, the array local, or a path's root or any field on it.
  * `a[i] = value` reads those two before `value` and checks after it, so a
  * proof stated in the state after `value` is a proof about them only while
  * `value` leaves them alone. A call needs no case here: it cannot reach a
  * local, and it already drops every path and array length it could.
  */
-const rebindsAccess = (walk: BoundsWalk, value: Node, target: Node): boolean => {
+const rebindsAccess = (walk: BoundsWalk, effects: Effects, target: Node): boolean => {
   const ctx = walk.ctx;
-  const effects = new Effects();
-  collectEffects(ctx, value, effects);
   const index = localOf(ctx.program, target.children[1]);
   if (index !== null && (contains(effects.stepped, index) || contains(effects.clobbered, index))) {
     return true;
@@ -1736,14 +1739,8 @@ const rebindsAccess = (walk: BoundsWalk, value: Node, target: Node): boolean => 
  * check passing on the array the path no longer names, so a path holder
  * learns nothing from a store whose value calls anything.
  */
-const storeReadsHolder = (walk: BoundsWalk, value: Node, target: Node): boolean => {
-  if (lengthHolder(walk.ctx, target.children[0]) !== null) {
-    return true;
-  }
-  const effects = new Effects();
-  collectEffects(walk.ctx, value, effects);
-  return !effects.calls;
-};
+const storeReadsHolder = (walk: BoundsWalk, effects: Effects, target: Node): boolean =>
+  lengthHolder(walk.ctx, target.children[0]) !== null || !effects.calls;
 
 /** Assignments and the short-circuit operators; every other binary is left then right. */
 const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
@@ -1789,8 +1786,10 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
       // there is no proof at all: `xs[i] = (i = 0)` checked the new `i` and
       // stored through the old one.
       walkExpression(walk, state, right);
-      if (!rebindsAccess(walk, right, target)) {
-        judge(walk, state, target, target.children[0], target.children[1], storeReadsHolder(walk, right, target));
+      const effects = new Effects();
+      collectEffects(ctx, right, effects);
+      if (!rebindsAccess(walk, effects, target)) {
+        judge(walk, state, target, target.children[0], target.children[1], storeReadsHolder(walk, effects, target));
       }
     }
     const stored = recordStoreType(ctx.program, ctx.table, target);
