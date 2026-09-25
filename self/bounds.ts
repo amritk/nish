@@ -268,20 +268,24 @@ const cloneState = (s: State): State => {
   return out;
 };
 
-/** Overwrite `into` with `from`'s facts. The walk threads one mutable state through a body. */
+/**
+ * Overwrite `into` with `from`'s facts. The walk threads one mutable state
+ * through a body. The arrays are taken rather than copied: every caller hands
+ * over a state nothing reads again — a fresh `intersect`, or a branch's clone
+ * whose branch is over — so copying them once more only made garbage.
+ */
 const copyInto = (into: State, from: State): void => {
-  const copy = cloneState(from);
-  into.nonNegative = copy.nonNegative;
-  into.belowIndex = copy.belowIndex;
-  into.belowHolder = copy.belowHolder;
-  into.atMostIndex = copy.atMostIndex;
-  into.atMostHolder = copy.atMostHolder;
-  into.maxIndexVar = copy.maxIndexVar;
-  into.maxIndexValue = copy.maxIndexValue;
-  into.minLengthVar = copy.minLengthVar;
-  into.minLengthValue = copy.minLengthValue;
-  into.minValueVar = copy.minValueVar;
-  into.minValueValue = copy.minValueValue;
+  into.nonNegative = from.nonNegative;
+  into.belowIndex = from.belowIndex;
+  into.belowHolder = from.belowHolder;
+  into.atMostIndex = from.atMostIndex;
+  into.atMostHolder = from.atMostHolder;
+  into.maxIndexVar = from.maxIndexVar;
+  into.maxIndexValue = from.maxIndexValue;
+  into.minLengthVar = from.minLengthVar;
+  into.minLengthValue = from.minLengthValue;
+  into.minValueVar = from.minValueVar;
+  into.minValueValue = from.minValueValue;
 };
 
 // ---- Reading the state ------------------------------------------------------------
@@ -831,7 +835,7 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
   }
   const fields: string[] = [];
   const links: i32[] = [];
-  const type = declaredPathType(walk, expr, fields, links);
+  const type = declaredPathType(walk.ctx, expr, fields, links);
   if (fields.length === 0 || type < 0 || (!walk.ctx.table.isArray(type) && type !== T_STRING)) {
     return null;
   }
@@ -845,15 +849,31 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
 
 /** The one stand-in for the path `root.fields`, made the first time it is asked for. */
 const internHolder = (walk: BoundsWalk, root: Local, fields: string[], links: i32[], type: i32): Local => {
-  const name = `${root.name}.${fields.join(".")}`;
+  // No field name holds a dot, so the same root and the same fields is the
+  // same name, and the name is only spelled for a path seen the first time.
   for (const path of walk.paths) {
-    if (path.root === root && path.holder.name === name) {
+    if (path.root === root && sameFields(path.fields, fields)) {
       return path.holder;
     }
   }
+  const name = `${root.name}.${fields.join(".")}`;
   const holder = new Local(name, type, false, STORAGE_LOCAL);
   walk.paths.push(new PathHolder(root, fields, links, holder));
   return holder;
+};
+
+const sameFields = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let k = 0;
+  while (k < a.length && k < b.length) {
+    if (a[k] !== b[k]) {
+      return false;
+    }
+    k = k + 1;
+  }
+  return true;
 };
 
 /**
@@ -895,9 +915,9 @@ const internPath = (walk: BoundsWalk, root: Local, fields: string[]): Local | nu
  * with that field. Recursive rather than a loop over the links, so that it
  * indexes nothing and has no bounds check of its own to prove.
  */
-const declaredPathType = (walk: BoundsWalk, expr: Node, fields: string[], links: i32[]): i32 => {
-  const program = walk.ctx.program;
-  const table = walk.ctx.table;
+const declaredPathType = (ctx: CheckContext, expr: Node, fields: string[], links: i32[]): i32 => {
+  const program = ctx.program;
+  const table = ctx.table;
   const e = unwrapBoundsParens(expr);
   if (e.kind === N_IDENT || e.kind === N_THIS) {
     const root = program.nodeLocals[e.id];
@@ -906,7 +926,7 @@ const declaredPathType = (walk: BoundsWalk, expr: Node, fields: string[], links:
   if (e.kind !== N_MEMBER) {
     return -1;
   }
-  const below = declaredPathType(walk, e.children[0], fields, links);
+  const below = declaredPathType(ctx, e.children[0], fields, links);
   if (below < 0 || !table.isStruct(below)) {
     return -1;
   }
@@ -1265,6 +1285,9 @@ const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFa
  * because "everything `later` can do" is exactly what `forgetAcross` models.
  */
 const survivingFacts = (walk: BoundsWalk, facts: Fact[], later: Node): Fact[] => {
+  if (facts.length === 0) {
+    return facts;
+  }
   const scratch = new State();
   addFacts(scratch, facts);
   forgetAcross(walk, scratch, later);
@@ -1546,6 +1569,15 @@ export class BoundsWalk {
   clamps: Node[];
   /** Every call to a function taking entry facts, with what this site proves for it. */
   sites: RangeSite[];
+  /** This body's program's callee table (`RangeTables.calleesOf`), or empty in pass 2. */
+  callees: i32[];
+  /**
+   * How many sites the walk may stop after, or -1 to walk to the end. A walk
+   * that only collects sites — its body has nothing left to prove — is over
+   * once it has noted every call to a candidate there is (`done`).
+   */
+  stopAfter: i32;
+  done: boolean;
 
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx;
@@ -1560,6 +1592,9 @@ export class BoundsWalk {
     this.proved = [];
     this.clamps = [];
     this.sites = [];
+    this.callees = [];
+    this.stopAfter = -1;
+    this.done = false;
   }
 }
 
@@ -1850,6 +1885,10 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
  * before anything that follows it.
  */
 const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
+  // A leaf — a name, a literal, `this` — changes nothing and proves nothing.
+  if (expr.children.length === 0 || walk.done) {
+    return;
+  }
   const ctx = walk.ctx;
   const e = unwrapBoundsParens(expr);
 
@@ -2413,7 +2452,10 @@ const collectEffects = (walk: BoundsWalk, node: Node, effects: Effects): void =>
     }
   }
   for (const child of node.children) {
-    collectEffects(walk, child, effects);
+    // A leaf — a name, a literal, `this` — writes nothing and calls nothing.
+    if (child.children.length > 0) {
+      collectEffects(walk, child, effects);
+    }
   }
 };
 
@@ -2484,6 +2526,9 @@ const breakJoin = (walk: BoundsWalk, exit: State): void => {
  * rest of the block, which is the shape a scanner is written in.
  */
 const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolean => {
+  if (walk.done) {
+    return false;
+  }
   const ctx = walk.ctx;
 
   if (stmt.kind === N_BLOCK) {
@@ -2707,6 +2752,11 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
  * thing the emitter ever reads from here.
  */
 export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: boolean): Node[] => {
+  // A body with nothing to judge has nothing to prove and nothing to warn
+  // about, and the walk writes nothing else.
+  if (!judgesAnything(body)) {
+    return [];
+  }
   const walk = new BoundsWalk(ctx, uncheckedIndexing);
   const state = new State();
   if (body.kind === N_BLOCK) {
@@ -2715,6 +2765,30 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
     walkExpression(walk, state, body);
   }
   return walk.unproven;
+};
+
+/**
+ * Whether `node` holds anything `judge` or `judgeClampBound` is ever called on:
+ * an element access, or a call spelled `.charCodeAt(...)` or `.substring(...)`,
+ * whatever its receiver. Read off the syntax alone, so it answers `true` for
+ * more than the walk judges, never less.
+ */
+const judgesAnything = (node: Node): boolean => {
+  if (node.kind === N_INDEX) {
+    return true;
+  }
+  if (node.kind === N_CALL) {
+    const callee = unwrapBoundsParens(node.children[0]);
+    if (callee.kind === N_MEMBER && (callee.text === "charCodeAt" || callee.text === "substring")) {
+      return true;
+    }
+  }
+  for (const child of node.children) {
+    if (child.children.length > 0 && judgesAnything(child)) {
+      return true;
+    }
+  }
+  return false;
 };
 
 // ---- What crosses a call (self/ranges.ts) -----------------------------------------
@@ -2744,17 +2818,75 @@ export class CallSummary {
  * whether it takes entry facts from its call sites. `none` is the summary of a
  * call that stores nothing at all.
  */
+/** What `RangeTables.callees` records for a call whose callee has no body in the tables. */
+export const NOT_HERE: i32 = 1073741824;
+
 export class RangeTables {
   index: StringMap;
   summaries: (CallSummary | null)[];
   candidates: boolean[];
   none: CallSummary;
+  /**
+   * Per program, and in step with `programs`, what `index` answers for the
+   * callee of each call and `new` node, plus one: `NOT_HERE` for a callee with
+   * no body in the tables, and `0` for a node nobody recorded. A walk meets a
+   * call once per round and again inside a loop, and a name lookup there cost
+   * more than the rest of the call's handling.
+   */
+  programs: CheckedProgram[];
+  callees: i32[][];
+  /**
+   * Per candidate, an empty `EntryFacts` once the fixpoint has entered it with
+   * nothing (`settleEmpty`), and `null` until then. An empty entry stays empty,
+   * so what a site proves for such a callee cannot change its join, and
+   * `noteCallSite` hands it this rather than working it out.
+   */
+  settledEmpty: (EntryFacts | null)[];
 
   constructor() {
     this.index = new StringMap();
     this.summaries = [];
     this.candidates = [];
     this.none = new CallSummary();
+    this.programs = [];
+    this.callees = [];
+    this.settledEmpty = [];
+  }
+
+  /** Record that the candidate at `at` is entered with nothing, which is for good. */
+  settleEmpty(at: i32, empty: EntryFacts): void {
+    while (this.settledEmpty.length <= at) {
+      const none: EntryFacts | null = null;
+      this.settledEmpty.push(none);
+    }
+    if (at >= 0 && at < this.settledEmpty.length) {
+      this.settledEmpty[at] = empty;
+    }
+  }
+
+  /** The callee table of `program`, made the first time it is asked for. */
+  calleesOf(program: CheckedProgram): i32[] {
+    let k = 0;
+    while (k < this.programs.length) {
+      if (this.programs[k] === program) {
+        return this.callees[k];
+      }
+      k = k + 1;
+    }
+    const made = new Array<i32>(program.nodeCallees.length);
+    this.programs.push(program);
+    this.callees.push(made);
+    return made;
+  }
+
+  /**
+   * The index of `sig`, the callee of `call`, read from `known` when it was
+   * recorded there. A callee with no body here is recorded as `NOT_HERE`,
+   * whose index is past every table, so it answers what `-1` does.
+   */
+  at(known: i32[], call: Node, sig: FunctionSig): i32 {
+    const cached = call.id < known.length ? known[call.id] : 0;
+    return cached > 0 ? cached - 1 : this.index.get(sig.name, -1);
   }
 
   add(sig: FunctionSig, candidate: boolean): void {
@@ -2776,16 +2908,61 @@ export class RangeTables {
     }
   }
 
-  summaryOf(sig: FunctionSig): CallSummary | null {
-    const at = this.index.get(sig.name, -1);
-    return at < 0 ? null : this.summaries[at];
+  summaryOf(at: i32): CallSummary | null {
+    return at < 0 || at >= this.summaries.length ? null : this.summaries[at];
   }
 
-  isCandidate(sig: FunctionSig): boolean {
-    const at = this.index.get(sig.name, -1);
-    return at >= 0 && this.candidates[at];
+  isCandidate(at: i32): boolean {
+    return at >= 0 && at < this.candidates.length && this.candidates[at];
   }
 }
+
+/**
+ * Whether `node`, an access pass 2 left checked or a `substring` call, is one
+ * some walk could still prove, whatever the state it is judged in. `judge`
+ * proves nothing without a holder, and `proves` nothing unless the index is a
+ * literal or a bare local of an integer type; `provesClamp` needs a local
+ * receiver for anything but a literal `0`, which pass 2 has already folded.
+ * All of that is read off the syntax and the declared types, so an access
+ * this answers `false` for keeps its check under every entry fact and every
+ * summary there could be.
+ */
+export const isOpenAccess = (ctx: CheckContext, node: Node): boolean => {
+  const program = ctx.program;
+  if (node.kind === N_INDEX) {
+    return !program.nodeProvenIndex[node.id] && couldProve(ctx, node.children[0], node.children[1]);
+  }
+  if (node.kind !== N_CALL) {
+    return false;
+  }
+  const callee = unwrapBoundsParens(node.children[0]);
+  if (isCharCodeAt(ctx, node)) {
+    return !program.nodeProvenIndex[node.id] && couldProve(ctx, callee.children[0], node.children[1].children[0]);
+  }
+  if (!isSubstringCall(ctx, node) || lengthHolder(ctx, callee.children[0]) === null) {
+    return false;
+  }
+  for (const bound of node.children[1].children) {
+    if (!program.nodeProvenClamp[bound.id] && (literalValue(bound) >= 0 || indexLocal(program, bound) !== null)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** Whether `holderOf` answers for `receiver` at all, and `proves` reads `index`. */
+const couldProve = (ctx: CheckContext, receiver: Node, index: Node): boolean => {
+  if (literalValue(index) < 0 && indexLocal(ctx.program, index) === null) {
+    return false;
+  }
+  if (lengthHolder(ctx, receiver) !== null) {
+    return true;
+  }
+  const fields: string[] = [];
+  const links: i32[] = [];
+  const type = declaredPathType(ctx, receiver, fields, links);
+  return fields.length > 0 && type >= 0 && (ctx.table.isArray(type) || type === T_STRING);
+};
 
 /** A value no call can reach memory through: a number, a boolean or a string, which is immutable. */
 const inertType = (type: i32): boolean => type >= 0 && (isNumeric(type) || type === T_BOOL || type === T_STRING);
@@ -2816,7 +2993,7 @@ export const callSummary = (walk: BoundsWalk, call: Node): CallSummary | null =>
   }
   const callee = walk.ctx.program.nodeCallees[call.id];
   if (callee !== null) {
-    return tables.summaryOf(callee);
+    return tables.summaryOf(tables.at(walk.callees, call, callee));
   }
   return isInertBuiltin(walk.ctx.program, call) ? tables.none : null;
 };
@@ -2864,8 +3041,8 @@ const applyCallEffects = (walk: BoundsWalk, state: State, call: Node): void => {
  * call site's facts and another's can be compared. Per parameter, a floor
  * (`p >= floor`, -1 for none) and a `maxIndex` (`p < n`, -1 for none); then
  * a list of length facts, each about a holder named by a parameter and the
- * fields read off it (`fields`, empty for the parameter itself, and `keys`,
- * the same joined with dots): `FACT_MIN_LENGTH` with its `values`, or
+ * fields read off it (`fields`, empty for the parameter itself):
+ * `FACT_MIN_LENGTH` with its `values`, or
  * `FACT_BELOW` / `FACT_AT_MOST` with the parameter that is the index.
  */
 export class EntryFacts {
@@ -2874,7 +3051,6 @@ export class EntryFacts {
   kinds: i32[];
   index: i32[];
   roots: i32[];
-  keys: string[];
   fields: string[][];
   values: i32[];
 
@@ -2890,28 +3066,30 @@ export class EntryFacts {
     this.kinds = [];
     this.index = [];
     this.roots = [];
-    this.keys = [];
     this.fields = [];
     this.values = [];
   }
 
   addLength(kind: i32, index: i32, root: i32, fields: string[], value: i32): void {
-    const key = fields.join(".");
-    if (this.find(kind, index, root, key) >= 0) {
+    if (this.find(kind, index, root, fields) >= 0) {
       return;
     }
     this.kinds.push(kind);
     this.index.push(index);
     this.roots.push(root);
-    this.keys.push(key);
     this.fields.push(fields);
     this.values.push(value);
   }
 
-  find(kind: i32, index: i32, root: i32, key: string): i32 {
+  find(kind: i32, index: i32, root: i32, fields: string[]): i32 {
     let k = 0;
     while (k < this.kinds.length) {
-      if (this.kinds[k] === kind && this.index[k] === index && this.roots[k] === root && this.keys[k] === key) {
+      if (
+        this.kinds[k] === kind &&
+        this.index[k] === index &&
+        this.roots[k] === root &&
+        sameFields(this.fields[k], fields)
+      ) {
         return k;
       }
       k = k + 1;
@@ -2952,7 +3130,7 @@ export const joinEntryFacts = (a: EntryFacts, b: EntryFacts): EntryFacts => {
   }
   k = 0;
   while (k < a.kinds.length) {
-    const other = b.find(a.kinds[k], a.index[k], a.roots[k], a.keys[k]);
+    const other = b.find(a.kinds[k], a.index[k], a.roots[k], a.fields[k]);
     if (other >= 0) {
       const value = a.values[k] < b.values[other] ? a.values[k] : b.values[other];
       out.addLength(a.kinds[k], a.index[k], a.roots[k], a.fields[k], value);
@@ -2976,7 +3154,7 @@ export const sameEntryFacts = (a: EntryFacts, b: EntryFacts): boolean => {
   }
   k = 0;
   while (k < a.kinds.length) {
-    const other = b.find(a.kinds[k], a.index[k], a.roots[k], a.keys[k]);
+    const other = b.find(a.kinds[k], a.index[k], a.roots[k], a.fields[k]);
     if (other < 0 || b.values[other] !== a.values[k]) {
       return false;
     }
@@ -2989,11 +3167,14 @@ export const sameEntryFacts = (a: EntryFacts, b: EntryFacts): boolean => {
 export class RangeSite {
   call: Node;
   callee: FunctionSig;
+  /** The callee's index in `RangeTables`. */
+  at: i32;
   facts: EntryFacts;
 
-  constructor(call: Node, callee: FunctionSig, facts: EntryFacts) {
+  constructor(call: Node, callee: FunctionSig, at: i32, facts: EntryFacts) {
     this.call = call;
     this.callee = callee;
+    this.at = at;
     this.facts = facts;
   }
 }
@@ -3001,10 +3182,21 @@ export class RangeSite {
 const noteCallSite = (walk: BoundsWalk, state: State, call: Node): void => {
   const tables = walk.tables;
   const callee = walk.ctx.program.nodeCallees[call.id];
-  if (tables === null || callee === null || !tables.isCandidate(callee)) {
+  if (tables === null || callee === null) {
     return;
   }
-  walk.sites.push(new RangeSite(call, callee, siteFacts(walk, state, call, callee)));
+  const at = tables.at(walk.callees, call, callee);
+  if (tables.isCandidate(at)) {
+    let settled: EntryFacts | null = null;
+    if (at < tables.settledEmpty.length) {
+      settled = tables.settledEmpty[at];
+    }
+    const facts = settled !== null ? settled : siteFacts(walk, state, call, callee);
+    walk.sites.push(new RangeSite(call, callee, at, facts));
+    if (walk.stopAfter >= 0 && walk.sites.length >= walk.stopAfter) {
+      walk.done = true;
+    }
+  }
 };
 
 /** Whether evaluating something with these `effects` can write `v`. */
@@ -3038,6 +3230,12 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
   if (args.length !== count) {
     return out;
   }
+  // Past the last argument that can write anything, the later arguments
+  // have no effects to collect.
+  let quiet = args.length;
+  while (quiet > 0 && !mayWrite(walk.ctx, args[quiet - 1])) {
+    quiet = quiet - 1;
+  }
   // Per parameter: the caller's local an index was read from, and the root
   // and fields a holder was.
   const indexVars: (Local | null)[] = [];
@@ -3055,7 +3253,7 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
       if (constant >= 0) {
         out.floor[k] = constant;
         out.maxIndex[k] = constant + 1;
-      } else if (v !== null && v.type === type && !writesVariable(laterEffects(walk, args, k), v)) {
+      } else if (v !== null && v.type === type && (k + 1 >= quiet || !writesVariable(laterEffects(walk, args, k), v))) {
         // The same type, or no fact at all: an `i32` with an upper bound and
         // no floor may be negative, and handed to a `u32` it is not below
         // anything.
@@ -3066,7 +3264,9 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
     } else {
       const links: i32[] = [];
       const root = argumentRoot(walk, arg, fields, links);
-      if (root !== null) {
+      if (root !== null && k + 1 >= quiet) {
+        holderRoot = root;
+      } else if (root !== null) {
         const later = laterEffects(walk, args, k);
         const moved = later.calls || later.records.length > 0 || sharesField(later.fields, fields);
         if (!writesVariable(later, root) && (fields.length === 0 || !moved)) {
@@ -3092,6 +3292,29 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
   return out;
 };
 
+/**
+ * Whether evaluating `node` could put anything in an `Effects`: a call or a
+ * `new`, an assignment, or a step. `collectEffects` finds nothing in a node
+ * this answers `false` for.
+ */
+const mayWrite = (ctx: CheckContext, node: Node): boolean => {
+  if (node.kind === N_NEW || (node.kind === N_CALL && !callsNothing(ctx, node))) {
+    return true;
+  }
+  if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
+    return true;
+  }
+  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    return true;
+  }
+  for (const child of node.children) {
+    if (mayWrite(ctx, child)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /** What evaluating every argument after the `k`th can do. */
 const laterEffects = (walk: BoundsWalk, args: Node[], k: i32): Effects => {
   const later = new Effects();
@@ -3113,7 +3336,7 @@ const laterEffects = (walk: BoundsWalk, args: Node[], k: i32): Effects => {
 const argumentRoot = (walk: BoundsWalk, arg: Node, fields: string[], links: i32[]): Local | null => {
   const program = walk.ctx.program;
   let e = unwrapBoundsParens(arg);
-  if (e.kind === N_MEMBER && declaredPathType(walk, e, fields, links) < 0) {
+  if (e.kind === N_MEMBER && declaredPathType(walk.ctx, e, fields, links) < 0) {
     return null;
   }
   while (e.kind === N_MEMBER) {
@@ -3198,36 +3421,47 @@ const mapOneHolder = (state: State, out: EntryFacts, r: i32, holder: Local, rest
  * `Local` in a scope it does not keep, so the uses are where it is found; an
  * arrow's own parameters are not this function's, and its body is skipped.
  */
-const parameterLocals = (program: CheckedProgram, sig: FunctionSig, body: Node): (Local | null)[] => {
+export const parameterLocals = (program: CheckedProgram, sig: FunctionSig, body: Node): (Local | null)[] => {
   const out: (Local | null)[] = [];
-  for (const name of sig.paramNames) {
-    out.push(findParameter(program, body, name));
+  while (out.length < sig.paramNames.length) {
+    out.push(null);
   }
+  findParameters(program, body, sig.paramNames, out, out.length);
   return out;
 };
 
-const findParameter = (program: CheckedProgram, node: Node, name: string): Local | null => {
+/**
+ * Fill each still empty slot of `out` with the first use, in tree order, of
+ * the parameter of that name, in one pass for all of them. `left` is how many
+ * slots are empty, and the answer is how many still are, so that the search
+ * stops when none is.
+ */
+const findParameters = (program: CheckedProgram, node: Node, names: string[], out: (Local | null)[], left: i32): i32 => {
   if (node.kind === N_ARROW) {
-    return null;
+    return left;
   }
+  let empty = left;
   if (node.kind === N_IDENT || node.kind === N_THIS) {
     const local = program.nodeLocals[node.id];
-    if (local !== null && local.storage === STORAGE_PARAM && local.name === name) {
-      return local;
+    if (local !== null && local.storage === STORAGE_PARAM) {
+      const k = names.indexOf(local.name);
+      if (k >= 0 && k < out.length && out[k] === null) {
+        out[k] = local;
+        empty = empty - 1;
+      }
     }
   }
   for (const child of node.children) {
-    const found = findParameter(program, child, name);
-    if (found !== null) {
-      return found;
+    if (empty === 0) {
+      return 0;
     }
+    empty = findParameters(program, child, names, out, empty);
   }
-  return null;
+  return empty;
 };
 
-/** Put `entering` into `state`, stated against the parameters' own locals. */
-const seedEntry = (walk: BoundsWalk, state: State, sig: FunctionSig, body: Node, entering: EntryFacts): void => {
-  const params = parameterLocals(walk.ctx.program, sig, body);
+/** Put `entering` into `state`, stated against the parameters' own locals (`parameterLocals`). */
+const seedEntry = (walk: BoundsWalk, state: State, params: (Local | null)[], entering: EntryFacts): void => {
   let k = 0;
   while (k < params.length && k < entering.floor.length) {
     const p = params[k];
@@ -3279,23 +3513,30 @@ export const commitProofs = (program: CheckedProgram, walk: BoundsWalk): void =>
 /**
  * Walk one body the way `analyzeBounds` does, with what the whole program
  * knows: callee summaries in `tables`, and `entering` — or nothing — as the facts
- * that hold where it starts. The walk comes back with the call sites it saw
- * and, when `record` is set, the proofs it added.
+ * that hold where it starts, stated against `params` (`parameterLocals`).
+ * `callees` is the body's program's table from `RangeTables.calleesOf`. The
+ * walk comes back with the call sites it saw and, when `record` is set, the
+ * proofs it added. An unrecorded walk stops once it has noted `stopAfter`
+ * sites, when that is not -1: its proofs are then only what it proved before.
  */
 export const walkWithRanges = (
   ctx: CheckContext,
-  sig: FunctionSig,
+  params: (Local | null)[],
   body: Node,
   tables: RangeTables,
+  callees: i32[],
   entering: EntryFacts | null,
-  record: boolean
+  record: boolean,
+  stopAfter: i32
 ): BoundsWalk => {
   const walk = new BoundsWalk(ctx, ctx.uncheckedIndexing);
   walk.tables = tables;
+  walk.callees = callees;
   walk.record = record;
+  walk.stopAfter = record ? -1 : stopAfter;
   const state = new State();
   if (entering !== null && !entering.isEmpty()) {
-    seedEntry(walk, state, sig, body, entering);
+    seedEntry(walk, state, params, entering);
   }
   if (body.kind === N_BLOCK) {
     walkBoundsStatement(walk, state, body);

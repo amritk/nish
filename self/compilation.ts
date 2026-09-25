@@ -871,7 +871,7 @@ export class Compilation {
       contexts.push(unit.checker.ctx);
       programs.push(unit.checker.program);
     }
-    proveCallSiteRanges(contexts, buildModeOf(this.opts, programs));
+    proveCallSiteRanges(contexts, buildModeOf(this.opts, programs), this.opts.rangeReference);
     this.reportArenaLoops();
     this.checkParallel();
     return !this.sink.hasErrors();

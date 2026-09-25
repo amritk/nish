@@ -105,6 +105,14 @@ export class Options {
    * the driver that parsed the flag.
    */
   json: boolean;
+  /**
+   * `--range-reference`: run the call-site ranges pass (`self/ranges.ts`) by
+   * the rule it narrowed and without the shortcuts it takes, so that
+   * `tests/run.js` can compile the same program both ways and require the same
+   * proofs. A test hook, not a mode: it is not in the usage, and it changes
+   * the time a compile takes and nothing it writes.
+   */
+  rangeReference: boolean;
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32;
@@ -125,5 +133,6 @@ export class Options {
     this.profile = "speed";
     this.packageRoot = "";
     this.json = false;
+    this.rangeReference = false;
   }
 }
