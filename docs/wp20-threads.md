@@ -650,6 +650,8 @@ Four, and none of them is a number:
    pay it. T1 should imply the flag from the language surface rather than ask
    for it beside it: a program that names a parallel construct gets the
    thread-local arena, one that does not gets today's binary, byte for byte.
+   **Done by WP29 P1:** importing `nish/threads` compiles the program with
+   `--threads`, and a program that does not import it is unchanged.
 4. **The scaling is measured on kernels, not on `BENCHMARKS.md`.** `nbody` and
    `spectral` are the shapes §4 T4 names, and neither has been partitioned,
    because nothing in the language can partition one. What a `parallelFor` over
@@ -710,6 +712,9 @@ spawn is under a tenth of its cost, which is the number the compiler's default
 [wp29-thread-surface.md](wp29-thread-surface.md)'s P1 chooses one — and it is
 also why `parallelMapInto` over a short array has to come out as an ordinary
 loop rather than as four threads.
+P1 picked **2^20 elements** per chunk of a map, one named constant (`GRAIN` in
+`self/emit_parallel.ts`, `BLOCK` in `std/threads.ts` for a reduce's blocks), so
+a map over at most that many elements is one chunk and takes the 3 ns row.
 
 The 3 ns row is worth its own line because it was 3,734 ns until this was
 measured. `nish_cpu_count()` called `sysconf(_SC_NPROCESSORS_ONLN)` on every

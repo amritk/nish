@@ -1,0 +1,1 @@
+`name` answers `string`, and `parallelMapInto` hands back only a number, a `boolean` or an enum

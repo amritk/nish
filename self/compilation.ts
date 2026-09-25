@@ -562,8 +562,15 @@ export class Compilation {
       // Two strings, deliberately: the path says where the file is on *this*
       // install and the name says where the module is in the package, and only
       // the second one reaches the IR (§A7's third bullet).
+      //
+      // A driver that never looked for its package — the `--emit-checked`
+      // dump entries the stage1 oracles build (`self/dump_checked.ts`) — is
+      // answered from the working directory, which is the last place
+      // `compile.ts` looks too. Without it `/std/<name>.ts` was asked for, and
+      // a corpus program importing the library could not be dumped at all.
+      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : ".";
       const std: ResolvedModule = {
-        path: stdModulePath(this.opts.packageRoot, specifier),
+        path: stdModulePath(root, specifier),
         name: stdModuleName(specifier),
         packageName: CLI,
         error: "",

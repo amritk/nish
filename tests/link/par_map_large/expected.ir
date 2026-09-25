@@ -1,0 +1,7 @@
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #0
+define internal void @nish.parallelMapInto$i32$i32$fn.3.mix$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+%par.ctx = alloca { %struct.nish_array*, %struct.nish_array* }, align 8
+call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.3.mix$chunk, i8* %20, i64 %21, i64 1048576)
+call void @nish.mapRange$i32$i32$fn.3.mix(%struct.nish_array* %2, %struct.nish_array* %4, i32 %5, i32 %6)
+define hidden noundef i32 @mix(i32 noundef %x) #0 {

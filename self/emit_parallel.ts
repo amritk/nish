@@ -35,7 +35,7 @@ import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
  * Elements per chunk of a map region: 2^20, about a millisecond of simple
  * work, which is what a region has to carry before the ~125 µs of dividing it
  * four ways is under a tenth of its cost (docs/wp20-threads.md §8e). A map
- * over fewer elements than twice this is one chunk, and runs on the calling
+ * over at most this many elements is one chunk, and runs on the calling
  * thread as the loop it would have been.
  *
  * A reduce divides blocks, not elements, and a block is already about this
@@ -70,7 +70,7 @@ export const emitParallelRegion = (emitter: Emitter, chunk: FunctionSig, types: 
   }
   const fieldTypes: string[] = [];
   let i = 0;
-  while (i < count - 2) {
+  while (i < count - 2 && i < types.length) {
     fieldTypes.push(types[i]);
     i = i + 1;
   }
@@ -78,9 +78,12 @@ export const emitParallelRegion = (emitter: Emitter, chunk: FunctionSig, types: 
   const fn = emitter.fn;
   const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0);
   i = 0;
-  while (i < fieldTypes.length) {
+  while (i < fieldTypes.length && i < values.length) {
+    // Read before the call below, which ends the length facts.
+    const type = fieldTypes[i];
+    const value = values[i];
     const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${slot}, i32 0, i32 ${i}`);
-    fn.emit(`store ${fieldTypes[i]} ${values[i]}, ${fieldTypes[i]}* ${at}`);
+    fn.emit(`store ${type} ${value}, ${type}* ${at}`);
     i = i + 1;
   }
   const raw = fn.emitValue(`bitcast ${ctxType}* ${slot} to i8*`);
@@ -128,9 +131,10 @@ const chunkTrampoline = (
   const operands: string[] = [];
   let i = 0;
   while (i < fieldTypes.length) {
+    const type = fieldTypes[i];
     const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${typed}, i32 0, i32 ${i}`);
-    const value = fn.emitValue(`load ${fieldTypes[i]}, ${fieldTypes[i]}* ${at}`);
-    operands.push(`${fieldTypes[i]} ${value}`);
+    const value = fn.emitValue(`load ${type}, ${type}* ${at}`);
+    operands.push(`${type} ${value}`);
     i = i + 1;
   }
   const lo = fn.emitValue("trunc i64 %lo to i32");
