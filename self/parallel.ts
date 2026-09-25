@@ -42,7 +42,7 @@
 // from a static estimate of what one element costs (`mapGrain`), so a region
 // is only divided once each thread's share is worth a thread.
 
-import { FactsTable, FunctionFacts } from "./attributes";
+import { FactsTable, FunctionFacts, stepOf } from "./attributes";
 import { CLI, STD_PREFIX } from "./branding";
 import { isScalarArgument } from "./escape";
 import { isTemplateExpression } from "./emit_util";
@@ -64,6 +64,7 @@ import {
   N_TRUE,
   N_UNARY,
   N_BINARY,
+  N_VAR,
   N_WHILE,
   Node,
 } from "./nodes";
@@ -479,14 +480,21 @@ export const reduceMessage = (
 //     grain = clamp(REGION_COST / elementCost(f), 1, REGION_COST)
 //
 // The estimate is read off the body's syntax, in units of roughly one simple
-// operation — about a nanosecond on the machine it was calibrated on, which
-// is what makes `REGION_COST` a millisecond (the calibration is in
-// docs/wp29-thread-surface.md §8a). It is deliberately crude, and it errs one
-// way: a callee counts as a call and not as its body, so a body that hides its
-// work behind a call is estimated cheap and divided too little, which costs
-// speed and never makes a short array slower than the loop.
+// operation, and `REGION_COST` was set by measurement rather than by what a
+// unit is worth: the cheapest body there is has to win at two chunks
+// (docs/wp29-thread-surface.md §8a has the calibration). It is deliberately
+// crude, and it errs both ways. A callee counts as a call and not as its body,
+// so work hidden behind a call is estimated cheap and divided too little. A
+// loop whose trip count the header does not state counts `DEFAULT_TRIPS`, which
+// overestimates a loop over a short array; that costs threads only once the
+// estimate reaches `REGION_COST` over the length, which for a map of eight
+// elements takes three such loops nested, or two around a hundred operations.
 
-/** The work, in estimate units, that one chunk of a map region should carry: about a millisecond. */
+/**
+ * The work, in estimate units, that one chunk of a map region should carry:
+ * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
+ * loop it replaces (2^20 lost to it by 12%; 2^22 wins by 1.54x).
+ */
 export const REGION_COST: i32 = 4194304;
 
 /** One call: the jump, the frame and the return, beyond the arguments. */
@@ -510,30 +518,40 @@ const scaled = (a: i32, b: i32): i32 => {
 const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a + b);
 
 /**
- * How many times the loop `node` runs its body: the literal of a
- * `for (...; i < N; ...)` or `i <= N`, and `DEFAULT_TRIPS` for anything the
- * syntax does not state.
+ * How many times the loop `node` runs its body, when its header says so
+ * outright — `for (let i = A; i < B; i += C)` with `A`, `B` and `C` literals
+ * (`<=` and `i++` too) — and `DEFAULT_TRIPS` for anything else. A `break` is
+ * not looked for.
  */
 const tripsOf = (node: Node): i32 => {
-  if (node.kind !== N_FOR || node.children.length < 2) {
+  if (node.kind !== N_FOR || node.children.length < 3 || node.children[0].kind !== N_VAR) {
     return DEFAULT_TRIPS;
   }
+  const decls = node.children[0].children[0];
+  if (decls.children.length !== 1 || decls.children[0].children.length < 3) {
+    return DEFAULT_TRIPS;
+  }
+  const name = decls.children[0].children[0].text;
+  const first = unparen(decls.children[0].children[2]);
   const cond = unparen(node.children[1]);
-  if (cond.kind !== N_BINARY || cond.children.length < 2) {
+  if (first.kind !== N_NUMBER || cond.kind !== N_BINARY || cond.children.length < 2) {
     return DEFAULT_TRIPS;
   }
+  const iv = unparen(cond.children[0]);
   const bound = unparen(cond.children[1]);
-  if (bound.kind !== N_NUMBER || (cond.text !== "<" && cond.text !== "<=")) {
+  const step = stepOf(unparen(node.children[2]), name);
+  if (iv.kind !== N_IDENT || iv.text !== name || bound.kind !== N_NUMBER || step <= 0) {
     return DEFAULT_TRIPS;
   }
-  const n = Number(bound.text);
-  if (n < 1.0) {
+  if (cond.text !== "<" && cond.text !== "<=") {
+    return DEFAULT_TRIPS;
+  }
+  const span = Number(bound.text) - Number(first.text) + (cond.text === "<=" ? 1.0 : 0.0);
+  const trips = Math.ceil(span / toF64(step));
+  if (trips < 1.0) {
     return 1;
   }
-  if (n >= toF64(REGION_COST)) {
-    return REGION_COST;
-  }
-  return cond.text === "<=" ? toI32(n) + 1 : toI32(n);
+  return trips >= toF64(REGION_COST) ? REGION_COST : toI32(trips);
 };
 
 /** The estimate for `node` and everything under it. */

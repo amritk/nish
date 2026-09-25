@@ -111,7 +111,7 @@ export const emitParallelRegion = (
   fn.placeBlock(seqBlock);
   const operands: string[] = [];
   i = 0;
-  while (i < count && i < values.length) {
+  while (i < types.length && i < values.length) {
     operands.push(`${types[i]} ${values[i]}`);
     i = i + 1;
   }

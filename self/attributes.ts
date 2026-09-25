@@ -2022,7 +2022,7 @@ const isName = (expr: Node, name: string): boolean => {
 };
 
 /** Signed step of `i++`, `++i`, `i--`, `--i`, `i += c`, `i -= c`; 0 for anything else. */
-const stepOf = (expr: Node, name: string): i32 => {
+export const stepOf = (expr: Node, name: string): i32 => {
   if (expr.kind === N_UNARY && isName(expr.children[0], name)) {
     if (expr.text === "++") {
       return 1;

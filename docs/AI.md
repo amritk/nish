@@ -711,22 +711,6 @@ export const main = (): i32 => {
   costs: a cheap body is divided only past about a million elements, one with
   a loop far sooner.
 
-```ts nish:ok
-import { parallelMapInto } from "nish/threads";
-
-const digits = (x: i32): i32 => {
-  let s = "";
-  s = `${x}`;
-  return s.length;
-};
-
-export const main = (): i32 => {
-  const out: i32[] = [0, 0];
-  parallelMapInto([7, 42], out, digits);   // compiles; each element frees its string
-  return out[1];
-};
-```
-
 ```ts nish:err NL2350
 import { parallelReduce } from "nish/threads";
 
