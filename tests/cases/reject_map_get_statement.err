@@ -1,0 +1,1 @@
+`m.get("a")` is `i32 | undefined`, which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` by `===` or `!==`

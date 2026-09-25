@@ -74,6 +74,15 @@ cases/map_compaction added after R6: no rewriter to freeze it with
 cases/map_dbg added after R6: no rewriter to freeze it with
 cases/map_delete_reinsert added after R6: no rewriter to freeze it with
 cases/map_fingerprint_miss added after R6: no rewriter to freeze it with
+cases/map_get_default_escapes added after R6: no rewriter to freeze it with
+cases/map_get_narrow added after R6: no rewriter to freeze it with
+cases/map_get_nullish added after R6: no rewriter to freeze it with
+cases/map_get_pointer_value added after R6: no rewriter to freeze it with
+cases/map_get_user_class added after R6: no rewriter to freeze it with
+cases/map_get_value_bool added after R6: no rewriter to freeze it with
+cases/map_get_value_f64 added after R6: no rewriter to freeze it with
+cases/map_get_value_i32 added after R6: no rewriter to freeze it with
+cases/map_get_value_string added after R6: no rewriter to freeze it with
 cases/map_growth added after R6: no rewriter to freeze it with
 cases/map_key_bool added after R6: no rewriter to freeze it with
 cases/map_key_class added after R6: no rewriter to freeze it with

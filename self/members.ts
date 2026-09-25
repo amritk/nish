@@ -13,6 +13,7 @@ import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
+import { internalErrorFor } from "./ice";
 import {
   checkGenericCall,
   instantiateWritten,
@@ -194,6 +195,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (refuseCollectionMember(ctx, info, access, true)) {
     return T_ERROR; // WP32: only the JavaScript members of a `Map` or `Set`
   }
+  if (access.text === "get" && isCollectionStruct(info) && !ctx.program.isCollections()) {
+    return checkMapGet(ctx, expr, info, args, scope);
+  }
   const method = info.method(access.text); // own first, then the base chain: static dispatch
   if (method === null) {
     // WP18 G8: a generic method is a template on its receiver, and a call of
@@ -210,6 +214,28 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   checkMethodArguments(ctx, expr, method, args, `${ctx.table.typeName(info.type)}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
+};
+
+/**
+ * WP32: `m.get(k)` on the global `Map`, which answers `V | undefined`, a maybe
+ * (docs/wp32-map.md §3.2). It is not a method of `std/collections.ts`: a maybe
+ * never crosses a call, so there is no `get` to call. It is one `probe`, whose
+ * packed answer is its found bit, and a `valueAt` of the entry it found, run
+ * only when it found one. The call is checked, and recorded, as a call of
+ * `probe`; `valueAt` is recorded on the callee member `m.get`, a slot no member
+ * uses otherwise, so that the whole-program facts see both calls and the
+ * emitter copies both functions into the module (`self/emit_map.ts`).
+ */
+const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node, scope: Scope): i32 => {
+  const probe = info.method("probe");
+  const read = info.method("valueAt");
+  if (probe === null || read === null) {
+    process.exit(internalErrorFor("checker: the global `Map` has no `probe` or `valueAt`", ctx.table.json));
+  }
+  checkMethodArguments(ctx, expr, probe, args, `${ctx.table.typeName(info.type)}.get`, scope, false);
+  ctx.program.nodeCallees[expr.id] = probe;
+  ctx.program.nodeCallees[expr.children[0].id] = read;
+  return ctx.table.maybeOf(read.returnType);
 };
 
 /**
@@ -488,9 +514,9 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
  * WP32: a member of the global `Map` or `Set` that a program may not name, in
  * a module other than `std/collections.ts` (docs/wp32-map.md §4.2, §7).
  * Answers true when it reported one. What a program sees is JavaScript's
- * surface less what this version defers: `get` waits for its `V | undefined`,
- * `keys()` and `values()` for `for...of`, and `entries` and `forEach` for
- * destructuring and function values. Every other member is the table's own and
+ * surface less what this version defers: `keys()` and `values()` wait for
+ * `for...of`, and `entries` and `forEach` for destructuring and function
+ * values. A call of `get` is not a method of the class at all (`checkMapGet`). Every other member is the table's own and
  * is refused as if it did not exist, which under `tsc` it does not.
  */
 const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, call: boolean): boolean => {
@@ -508,10 +534,11 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
   }
   const shown = ctx.table.typeName(info.type);
   if (isMap && name === "get") {
-    ctx.errorAtProperty(
-      at,
-      `\`get\` on \`${shown}\` is not supported yet: its result is \`V | undefined\`, and this version cannot narrow one`
-    );
+    if (call) {
+      return false; // `checkMapGet`
+    }
+    // Not a method of the class, so the ordinary path would not know to say so.
+    ctx.errorAtProperty(at, `Unknown field \`get\` on class \`${shown}\` (it is a method; call it)`);
     return true;
   }
   if (name === "keys" || name === "values") {
@@ -531,7 +558,7 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
   }
   ctx.errorAtProperty(
     at,
-    `Unknown member \`${name}\` on \`${shown}\`: a \`Map\` has size, set, has, delete and clear, and a \`Set\` has size, add, has, delete and clear`
+    `Unknown member \`${name}\` on \`${shown}\`: a \`Map\` has size, get, set, has, delete and clear, and a \`Set\` has size, add, has, delete and clear`
   );
   return true;
 };

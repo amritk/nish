@@ -2185,6 +2185,16 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     return;
   }
 
+  // WP32: `a ?? d` runs `d` only where `a` is missing, so, as for `&&`, only
+  // what holds whether or not it ran survives it.
+  if (op === "??") {
+    walkExpression(walk, state, left);
+    const maybeRan = cloneState(state);
+    walkExpression(walk, maybeRan, right);
+    copyInto(state, intersect(state, maybeRan));
+    return;
+  }
+
   if (!isBoundsAssignment(op)) {
     walkExpression(walk, state, left);
     walkExpression(walk, state, right);

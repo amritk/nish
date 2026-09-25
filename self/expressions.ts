@@ -16,6 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding";
+import { resolveType } from "./annotations";
 import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
@@ -39,6 +40,7 @@ import {
   structOf,
 } from "./members";
 import {
+  FLAG_CONST,
   FLAG_POSTFIX,
   N_ARRAY,
   N_ARROW,
@@ -47,25 +49,35 @@ import {
   N_CALL,
   N_CONDITIONAL,
   N_FALSE,
+  N_FUNCTION,
   N_IDENT,
   N_INDEX,
+  N_LIST,
   N_MEMBER,
   N_NEW,
   N_NULL,
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
+  N_PROPERTY,
+  N_RETURN,
   N_STRING,
   N_SUPER,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
   N_THIS,
   N_TRUE,
+  N_TYPE_NULL,
+  N_TYPE_REF,
+  N_TYPE_UNION,
   N_UNARY,
+  N_VAR_DECL,
   Node,
 } from "./nodes";
+import { ParentTable } from "./parents";
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program";
 import { coercesTo } from "./structs";
+import { undefinedForbidden } from "./validator";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
   intBits,
@@ -101,7 +113,17 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (ctx.errored) {
     return T_ERROR;
   }
-  const type = computeType(ctx, expr, scope, want);
+  // WP32: a maybe (`V | undefined`, what `m.get(k)` answers) is checked into
+  // one of three places, which say so by the `want` they pass: `WANT_MAYBE`,
+  // or the maybe type itself for a `const` annotated with it. Parentheses pass
+  // the welcome on; nothing else does, so everywhere else it is refused here,
+  // once, however the value is used.
+  const welcome = want === WANT_MAYBE || ctx.table.isMaybe(want);
+  const type = computeType(ctx, expr, scope, welcome && expr.kind !== N_PAREN ? -1 : want);
+  if (ctx.table.isMaybe(type) && !welcome && expr.kind !== N_PAREN) {
+    ctx.program.nodeTypes[expr.id] = T_ERROR;
+    return refuseMaybe(ctx, expr, type);
+  }
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want);
     ctx.program.nodeCoercions[expr.id] = type;
@@ -507,6 +529,12 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   }
   if (op === "&&" || op === "||") {
     return checkLogical(ctx, expr, scope);
+  }
+  if (op === "??") {
+    return checkCoalesce(ctx, expr, scope);
+  }
+  if ((op === "===" || op === "!==") && (isUndefinedValue(expr.children[0], scope) || isUndefinedValue(expr.children[1], scope))) {
+    return checkUndefinedTest(ctx, expr, scope);
   }
   // WP18 §2a: `identity<i32>(7)` is `(identity < i32) > (7)` to a parser with
   // one token of lookahead, which is exactly why type arguments are not written
@@ -914,10 +942,14 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   if (op !== "===" && op !== "!==") {
     return;
   }
+  // WP32: `a !== undefined` narrows a maybe `const` to `V` by the same rules,
+  // with `undefined` in place of `null` (docs/wp32-map.md §3.2).
   const left = cond.children[0];
   const right = cond.children[1];
-  const variable = right.kind === N_NULL ? left : left.kind === N_NULL ? right : left;
-  if (variable.kind !== N_IDENT || (right.kind !== N_NULL && left.kind !== N_NULL)) {
+  const rightAbsent = right.kind === N_NULL || isUndefinedValue(right, scope);
+  const leftAbsent = left.kind === N_NULL || isUndefinedValue(left, scope);
+  const variable = rightAbsent ? left : leftAbsent ? right : left;
+  if (variable.kind !== N_IDENT || (!rightAbsent && !leftAbsent)) {
     return;
   }
   const local = scope.lookup(variable.text);
@@ -925,14 +957,289 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
     return;
   }
   const declared = scope.typeOf(local);
-  if (!ctx.table.isNullable(declared)) {
+  const byUndefined = (rightAbsent ? right : left).kind !== N_NULL;
+  let present = -1;
+  if (byUndefined && ctx.table.isMaybe(declared)) {
+    present = ctx.table.refOf(declared);
+  } else if (!byUndefined && ctx.table.isNullable(declared)) {
+    present = ctx.table.stripNull(declared);
+  }
+  if (present < 0) {
     return;
   }
   // `p !== null` narrows where it holds; `p === null` narrows where it does not.
   const narrows = op === "!==" ? whenTrue : !whenTrue;
   if (narrows) {
-    scope.narrow(local, ctx.table.stripNull(declared));
+    scope.narrow(local, present);
   }
+};
+
+// ---- `V | undefined` (WP32) ---------------------------------------------------------
+//
+// `m.get(k)` answers a *maybe* (docs/wp32-map.md §3.2), and a maybe is admitted
+// in exactly three places: the initialiser of a `const` (unannotated, or
+// annotated `V | undefined`), the left operand of `??`, and an operand of
+// `=== undefined` / `!== undefined`. A `const` holding one reads as `V` where a
+// test proves it present, by the nullable narrowing rules with `undefined` in
+// place of `null` (`narrowBinary` above). Everywhere else `checkExpression`
+// refuses it, naming the place, because the rewrite differs by place.
+
+/**
+ * The `want` of a place that admits a maybe: `??`'s left operand, the operand
+ * of an `undefined` test, and an unannotated `const`'s initialiser. It is
+ * below every type id and is not -1, so every checker that reads `want < 0` as
+ * "no contextual type" reads it the same way.
+ */
+export const WANT_MAYBE: i32 = -2;
+
+/**
+ * The value `undefined`: the identifier, unless a local of that name shadows
+ * it, as a parameter called `undefined` does under `tsc`.
+ */
+export const isUndefinedValue = (node: Node, scope: Scope): boolean =>
+  node.kind === N_IDENT && node.text === "undefined" && scope.lookup("undefined") === null;
+
+/** `a === undefined` / `a !== undefined`: a test of a maybe's found bit, and nothing else. */
+const checkUndefinedTest = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  const leftAbsent = isUndefinedValue(expr.children[0], scope);
+  const operand = leftAbsent ? expr.children[1] : expr.children[0];
+  const absent = leftAbsent ? expr.children[0] : expr.children[1];
+  if (isUndefinedValue(operand, scope)) {
+    return ctx.errorType(operand, undefinedForbidden());
+  }
+  const type = checkExpression(ctx, operand, scope, WANT_MAYBE);
+  if (type === T_ERROR) {
+    return T_ERROR;
+  }
+  if (!ctx.table.isMaybe(type)) {
+    return ctx.errorType(absent, undefinedForbidden());
+  }
+  return T_BOOL;
+};
+
+/**
+ * `a ?? d`, where `a` is a maybe: `d` stands in for a missing value, so it is
+ * `V`, and so is the whole expression. When `V` is itself nullable, JavaScript's
+ * `??` replaces a stored `null` too, and so does this one. Any other `??` is
+ * the one Phase 0 always refused, in the words it always used.
+ */
+const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  const left = checkExpression(ctx, expr.children[0], scope, WANT_MAYBE);
+  if (left === T_ERROR) {
+    return T_ERROR;
+  }
+  if (!ctx.table.isMaybe(left)) {
+    return ctx.errorType(expr, "Nullish coalescing `??` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)");
+  }
+  const value = ctx.table.refOf(left);
+  const fallback = checkExpression(ctx, expr.children[1], scope, value);
+  if (fallback === T_ERROR) {
+    return T_ERROR;
+  }
+  if (!ctx.table.assignable(fallback, value)) {
+    return ctx.errorType(
+      expr.children[1],
+      `The right operand of \`??\` stands in for a missing value, so it must be \`${ctx.table.typeName(value)}\`, the type of the value on its left; got \`${ctx.table.typeName(fallback)}\``
+    );
+  }
+  return value;
+};
+
+// Where a refused maybe stands, which decides the rewrite its message names.
+const PLACE_OTHER: i32 = 0;
+const PLACE_LET: i32 = 1;
+const PLACE_ARGUMENT: i32 = 2;
+const PLACE_RETURN: i32 = 3;
+const PLACE_FIELD: i32 = 4;
+const PLACE_ELEMENT: i32 = 5;
+const PLACE_TEMPLATE: i32 = 6;
+const PLACE_OPERAND: i32 = 7;
+const PLACE_ANNOTATED: i32 = 8;
+
+/**
+ * Refuse the maybe `expr` in a place that does not admit one, naming the
+ * place. The checker threads the contextual type down and keeps no parent
+ * links, so the place is found by building them (`self/parents.ts`) — only
+ * here, on a program that is already refused, so a program that compiles
+ * never pays for the walk.
+ */
+const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 => {
+  const shown = `\`${ctx.textOf(expr)}\` is \`${ctx.table.typeName(type)}\``;
+  const place = maybePlace(ctx, expr);
+  if (place === PLACE_LET) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be held in a \`let\`: only a \`const\` is narrowed, because a \`let\` can be assigned; bind it with \`const\` and test it with \`!== undefined\`, or give it a default with \`??\``
+    );
+  }
+  if (place === PLACE_ARGUMENT) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be passed as an argument: a value that may be missing does not cross a call; give it a default with \`??\`, or bind it to a \`const\` and pass it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_RETURN) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be returned: a value that may be missing does not cross a call; return a default with \`??\`, or bind it to a \`const\` and return it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_FIELD) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be stored in a field: a value that may be missing is never in memory; store a default with \`??\`, or bind it to a \`const\` and store it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_ELEMENT) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be stored in an array element: a value that may be missing is never in memory; store a default with \`??\`, or bind it to a \`const\` and store it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_TEMPLATE) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be a template literal hole: there is no \`undefined\` to print; give it a default with \`??\`, or bind it to a \`const\` and print it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_OPERAND) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot be the operand of an operator other than \`??\`, \`=== undefined\` and \`!== undefined\`: give it a default with \`??\` first, or bind it to a \`const\` and use it where \`!== undefined\` has narrowed it`
+    );
+  }
+  if (place === PLACE_ANNOTATED) {
+    return ctx.errorType(
+      expr,
+      `${shown} and cannot initialise a \`const\` annotated with its value type: annotate the \`const\` with the whole type, or with none, and test it with \`!== undefined\`, or give it a default with \`??\``
+    );
+  }
+  return ctx.errorType(
+    expr,
+    `${shown}, which can only initialise a \`const\`, be the left operand of \`??\`, or be compared with \`undefined\` by \`===\` or \`!==\``
+  );
+};
+
+/** One of the `PLACE_*` values: where `expr`, parentheses aside, is used. */
+const maybePlace = (ctx: CheckContext, expr: Node): i32 => {
+  const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length);
+  let node = expr;
+  let parent = linkedParent(parents, node);
+  while (parent !== null && parent.kind === N_PAREN) {
+    node = parent;
+    parent = linkedParent(parents, node);
+  }
+  if (parent === null) {
+    return PLACE_OTHER;
+  }
+  switch (parent.kind) {
+    case N_VAR_DECL: {
+      const list = linkedParent(parents, parent);
+      const statement: Node | null = list === null ? null : linkedParent(parents, list);
+      return statement !== null && (statement.flags & FLAG_CONST) !== 0 ? PLACE_ANNOTATED : PLACE_LET;
+    }
+    case N_BINARY:
+      return operatorPlace(parent, node);
+    case N_UNARY:
+      return PLACE_OPERAND;
+    case N_LIST: {
+      const owner = linkedParent(parents, parent);
+      const isArguments =
+        owner !== null &&
+        ((owner.kind === N_CALL && owner.children[1] === parent) || (owner.kind === N_NEW && owner.children[2] === parent));
+      return isArguments ? PLACE_ARGUMENT : PLACE_OTHER;
+    }
+    case N_RETURN:
+      return PLACE_RETURN;
+    case N_FUNCTION:
+      return parent.children[3] === node ? PLACE_RETURN : PLACE_OTHER; // a concise body is its `return`
+    case N_ARROW:
+      return parent.children[3] === node ? PLACE_RETURN : PLACE_OTHER;
+    case N_TEMPLATE:
+      return PLACE_TEMPLATE;
+    case N_PROPERTY:
+      return PLACE_FIELD;
+    case N_ARRAY:
+      return PLACE_ELEMENT;
+    default:
+      return PLACE_OTHER;
+  }
+};
+
+/** The place of `node`, an operand of the binary `parent`. */
+const operatorPlace = (parent: Node, node: Node): i32 => {
+  if (parent.text !== "=") {
+    // A compound assignment reads its target first, so its value is an
+    // operand; `??`'s right operand is `V` and admits no maybe either.
+    return parent.text === "??" ? PLACE_OTHER : PLACE_OPERAND;
+  }
+  if (parent.children[1] !== node) {
+    return PLACE_OTHER;
+  }
+  const target = parent.children[0];
+  if (target.kind === N_IDENT) {
+    return PLACE_LET; // only a `let` can be assigned
+  }
+  if (target.kind === N_MEMBER) {
+    return PLACE_FIELD;
+  }
+  return target.kind === N_INDEX ? PLACE_ELEMENT : PLACE_OTHER;
+};
+
+/**
+ * `node`'s parent when the table really holds it, or `null`. A body checked
+ * for an instantiation can belong to another module's tree, whose ids are not
+ * this table's, so the link is confirmed rather than trusted.
+ */
+const linkedParent = (parents: ParentTable, node: Node): Node | null => {
+  if (node.id < 0 || node.id >= parents.parents.length) {
+    return null;
+  }
+  const parent = parents.parentOf(node);
+  if (parent === null) {
+    return null;
+  }
+  for (const child of parent.children) {
+    if (child === node) {
+      return parent;
+    }
+  }
+  return null;
+};
+
+/**
+ * The type a `const` annotated `V | undefined` is declared with: the maybe of
+ * `V`. The validator admits that spelling only on a `const` initialised from a
+ * call of `get`, and only with one `V` beside `undefined` (and a `null`, for a
+ * nullable `V`), so this resolves `V` and wraps it.
+ */
+export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32 => {
+  let value = -1;
+  let nullable = false;
+  for (const member of annotation.children) {
+    if (member.kind === N_TYPE_NULL) {
+      nullable = true;
+    } else if (!(member.kind === N_TYPE_REF && member.text === "undefined")) {
+      value = resolveType(member, ctx);
+    }
+  }
+  if (value < 0 || value === T_ERROR) {
+    return T_ERROR;
+  }
+  return ctx.table.maybeOf(nullable ? ctx.table.nullableOf(value) : value);
+};
+
+/** Whether `annotation` spells the maybe type: a union with `undefined` among its members. */
+export const isMaybeAnnotation = (annotation: Node): boolean => {
+  if (annotation.kind !== N_TYPE_UNION) {
+    return false;
+  }
+  for (const member of annotation.children) {
+    if (member.kind === N_TYPE_REF && member.text === "undefined") {
+      return true;
+    }
+  }
+  return false;
 };
 
 // ---- Assignment ---------------------------------------------------------------------

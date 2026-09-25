@@ -1,0 +1,1 @@
+`m.get("a")` is `i32 | undefined` and cannot be passed as an argument: a value that may be missing does not cross a call; give it a default with `??`, or bind it to a `const` and pass it where `!== undefined` has narrowed it

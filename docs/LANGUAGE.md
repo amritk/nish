@@ -408,6 +408,9 @@ value, so nothing is boxed; `null` takes its type from context.
   Constants and parameters keep their narrowing for the whole region.
   Property paths are not narrowed: `if (n.next !== null) n.next.v` is
   rejected; copy into a local first *(CLI only)*.
+- **`undefined`** is not a value of `T | null`, but the same narrowing rules
+  hold for a `const` bound to `Map.get`, with `undefined` in place of `null`
+  (WP32, [`Map` and `Set`](#map-and-set)).
 - **Access** to a field, method, element, or `.length` on an un-narrowed
   nullable is `` Cannot read property `value` of `Node | null`; check for null first ``
   (`tests/cases/reject_null_field_access`).
@@ -2360,16 +2363,17 @@ under [Semantics decisions](#semantics-decisions).
 | `<< >> >>>` | two integers of one type | that type | `shl`; `>>` is `ashr` (sign-filling) on a signed type and `lshr` (zero-filling) on an unsigned one, so `>>` and `>>>` are the same instruction there; `>>>` is always `lshr`. The count is masked to the operand width (31, 63, or 7/15 on the narrow unsigned widths); a constant count is masked at compile time and emits no `and` (see [Shifts](#shifts)) | `bit_shifts`, `bit_shift_const`, `bit_shift_fill`, `bit_shift_narrow`, `bit_i64`, `u_shift_logical`; `reject_u_shift_mixed`; `tests/differential/corpus/bit_shifts` |
 | unary `~` | any integer type | same | `xor x, -1` (LLVM has no `not`) | `bit_not`; `reject_bit_not` (`` Operator `~` requires an integer operand, got f64 ``) |
 | `< <= > >=` | two numbers of one type (`i32`, `i64`, the unsigned widths, `f32`, or `f64`); nothing else | `boolean` | `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...` for both float widths | `cf_if`, `f64_mode`, `u_compare_above_intmax`, `f32_arith`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
-| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
+| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null`; `a === undefined`, for a `Map.get` result only: its found bit, negated | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`, `map_get_narrow`; arrays *(CLI only)*; `reject_null_compare_two`, `reject_map_get_undefined_compare` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch`, `reject_cf_ternary_void` |
+| `a ?? d` | `a` a `Map.get` result (`V \| undefined`), `d` a `V`; the level of `\|\|`, not mixed with `\|\|` or `&&` unparenthesised | `V` | `br` to `valueAt` or `d`, then `phi`; `select` for a `const` with a literal or a name as `d` | `map_get_nullish`, `map_get_narrow`, `map_get_pointer_value`; `reject_nullish`, `reject_nullish_default_type`, `reject_nullish_mixed_or` ([`Map` and `Set`](#map-and-set)) |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
-| `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
+| `?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
 | `** +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
 
 ### Checked integer division
@@ -3195,14 +3199,13 @@ export const main = (): i32 => {
 ```
 
 - **The members are JavaScript's, less what this version defers.** A `Map` has
-  `size`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
+  `size`, `get`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
   `has`, `delete` and `clear`. `set` and `add` answer the receiver, so they
   chain, and `delete` answers whether the key was there
   (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
   `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
-  `get` answers `V | undefined`, which lands in a later stage, and is refused
-  by name until then: `` `get` on `Map<string, i32>` is not supported yet ``
-  (`reject_map_get`). `keys()` and `values()` are only ever a `for...of`
+  `get` answers `V | undefined`, which has rules of its own, below.
+  `keys()` and `values()` are only ever a `for...of`
   iterable, and iterating is not lowered yet:
   `` `keys()` of `Map<string, i32>` can only be the iterable of a `for...of` ``
   (`reject_map_keys`, `reject_map_values_for_of`). There is no `entries` or
@@ -3261,10 +3264,99 @@ export const main = (): i32 => {
   (`@nish.Map$str$i32.set`), and a map is filled and grown through a callee
   and across loop arena scopes like any other object
   (`tests/cases/map_arena_callee`).
+- **`m.get(k)` answers `V | undefined`**, as it does under `tsc`: a *maybe*.
+  It is one probe, and a maybe is read in one of three ways, the three a
+  program that type-checks under `tsc --strict` has
+  ([wp32-map.md](wp32-map.md) §3):
+
+  ```typescript
+  export const main = (): i32 => {
+    const counts = new Map<string, i32>();
+    for (const w of ["a", "b", "a"]) {
+      counts.set(w, (counts.get(w) ?? 0) + 1);      // a default
+    }
+    const a = counts.get("a");                      // a `const`, tested
+    if (a !== undefined) {
+      console.log(`${a}`);                          // 2: `a` is an i32 here
+    }
+    return counts.get("z") === undefined ? 0 : 1;   // a test
+  };
+  ```
+
+  - **Where a maybe may stand**: the initialiser of a `const`, unannotated or
+    annotated with the maybe type; the left operand of `??`; and an operand of
+    `=== undefined` or `!== undefined`, either way round
+    (`tests/cases/map_get_nullish`, `map_get_narrow`). The type is spelled
+    `V | undefined` or `undefined | V`, and `Node | null | undefined` for a
+    nullable `V`, and only as the annotation of a `const` initialised from a
+    call of `get`; anywhere else it is the union it looks like
+    (`reject_map_get_let_annotated`, `reject_union_undefined`), and
+    `undefined` as a value is refused as it always was
+    (`reject_undefined_value`).
+  - **A `const` bound to `get` is narrowed** by the rules of
+    [Nullable types](#nullable-types), with `undefined` in place of `null`:
+    it reads as `V` in the region a test proves it present, `if (a === undefined) return`
+    included, and nowhere else (`map_get_narrow`,
+    `reject_map_get_narrowing_leaks`). A `const` is never assigned, so its
+    narrowing never ends early; a `let` would need that rule, and is refused.
+    Compared with `undefined`, anything that is not a maybe is
+    `` `undefined` is forbidden in Nish; use `null` with a `T | null` type ``
+    (`reject_map_get_undefined_compare`).
+  - **`a ?? d` has TypeScript's precedence**: the level of `||`, with operands
+    that bind as tightly as `|`, left associative (`tests/parser/nullish`). It
+    does not mix with `||` or `&&` without parentheses, as `tsc` reports
+    TS5076: `` `||` and `??` cannot be mixed without parentheses `` is a
+    syntax error (`reject_nullish_mixed_or`, `reject_nullish_mixed_and`). `d`
+    runs only when the value is missing, and it has type `V`, as does the
+    whole expression:
+    `` The right operand of `??` stands in for a missing value, so it must be `i32` ``
+    (`reject_nullish_default_type`). When `V` is nullable, `??` replaces a
+    stored `null` as well, as JavaScript's does, and the result is still `V`;
+    `!== undefined` narrows to `V`, keeping the `null`
+    (`map_get_pointer_value`). A `??` whose left operand is not a maybe is
+    refused in the words Phase 0 always used,
+    `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
+    (`reject_nullish`, `reject_nullish_nullable`).
+  - **Everywhere else a maybe is refused**, and the message names the place,
+    because the rewrite differs by place. Every one either fails under `tsc`
+    too or needs a maybe to cross a call or reach memory, which it never does:
+
+    | Place | Message after `` `m.get("a")` is `i32 \| undefined` `` | Case |
+    | --- | --- | --- |
+    | a `let`, or an assignment to one | `` and cannot be held in a `let` `` | `reject_map_get_let`, `reject_map_get_assign_let` (NL2361) |
+    | an argument of a function, method, constructor or builtin | `and cannot be passed as an argument` | `reject_map_get_argument`, `_argument_method`, `_argument_constructor`, `_argument_builtin` (NL2362) |
+    | a `return`, or a concise arrow body | `and cannot be returned` | `reject_map_get_return`, `reject_map_get_const_read` (NL2363) |
+    | a field, or an object literal's | `and cannot be stored in a field` | `reject_map_get_field`, `reject_map_get_object_field` (NL2364) |
+    | an array element, or an array literal's | `and cannot be stored in an array element` | `reject_map_get_element`, `reject_map_get_array_literal` (NL2365) |
+    | a template literal hole | `and cannot be a template literal hole` | `reject_map_get_template` (NL2366) |
+    | an operand of any other operator | `and cannot be the operand of an operator other than` | `reject_map_get_arithmetic`, `reject_map_get_compare`, `reject_map_get_unary` (NL2367) |
+    | a `const` annotated `V` | `` and cannot initialise a `const` annotated with its value type `` | `reject_map_get_annotated` (NL2368) |
+    | anywhere else, a dropped result included | `` , which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` `` | `reject_map_get_statement` (NL2369) |
+
+    `get` is called, never read as a value
+    (`` Unknown field `get` on class `Map<string, i32>` (it is a method; call it) ``,
+    `reject_map_get_property`), and its key is checked against `K`
+    (`reject_map_get_key_type`, `reject_map_get_arity`).
+  - **A maybe is two SSA values**: the found bit, which is the probe's packed
+    answer compared with 0, and the value, which `valueAt` reads only on the
+    edge where the bit is set. There is no struct and no store. Each `get` in
+    the `map_get_*` goldens is exactly one call of the instance's `probe`, and
+    `get` never probes twice nor calls `has`. `??` on a `get` is a branch to
+    the value or the default and a `phi`; on a `const`, whose value is loaded
+    already, with a literal or a name as its default, it is one `select`
+    (`map_get_narrow`). A `const` holds a `phi` of the value and `V`'s zero,
+    which no narrowed read can reach. A value built in the default goes
+    wherever the `??` goes, as a ternary's arm does, so an object made there
+    and stored in the map is allocated in the arena (`map_get_default_escapes`).
+    Each value width is a golden: `map_get_value_i32`, `map_get_value_f64`,
+    `map_get_value_bool`, `map_get_value_string`, and a class in
+    `map_get_pointer_value`. The `number`-mode cases print under Node's own
+    `Map` what they print compiled (`tests/differential/unmodified.js`).
 - **A module's own `Map` or `Set` wins in that module.** A module that
   declares or imports a class, interface, alias or enum of either name gets no
   implicit import, as the declaration shadows the global under `tsc`
-  (`tests/link/map_own_class`). A type parameter called `Map` or `Set` is not a
+  (`tests/link/map_own_class`), and its `get` is its own method, answering
+  what its signature says (`tests/cases/map_get_user_class`). A type parameter called `Map` or `Set` is not a
   use of the global either, so a module whose only `Map` or `Set` is a type
   parameter loads nothing and compiles as it did before `Map` existed
   (`tests/cases/map_type_param_shadow`). It does not shadow the global,
@@ -3943,12 +4035,12 @@ fragment `tests/run.js` matches and the case that proves it.
 | `Symbol(...)`, `Symbol` as a value | `` `Symbol` is forbidden in Nish (no symbol type) `` | `reject_symbol_value` |
 | `globalThis` | `` `globalThis` is forbidden in Nish (no global object) `` | `reject_globalthis` |
 | `arguments` | `` `arguments` is forbidden in Nish (functions have fixed arity) `` | `reject_arguments` |
-| `undefined` as a value | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_undefined_value` |
+| `undefined` as a value, except compared with a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_undefined_value`, `reject_map_get_undefined_compare` |
 | `void expr` | `` `void` expressions are forbidden in Nish (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator` |
 | `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain` |
-| `a ?? b` | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
+| `a ?? b`, unless `a` is a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |

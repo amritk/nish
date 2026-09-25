@@ -1,0 +1,1 @@
+`m.get("a")` is `i32 | undefined` and cannot be the operand of an operator other than `??`, `=== undefined` and `!== undefined`: give it a default with `??` first, or bind it to a `const` and use it where `!== undefined` has narrowed it

@@ -1,0 +1,1 @@
+`m.get("a")` is `i32 | undefined` and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it

@@ -1,0 +1,1 @@
+`m.get("a")` is `i32 | undefined` and cannot be a template literal hole: there is no `undefined` to print; give it a default with `??`, or bind it to a `const` and print it where `!== undefined` has narrowed it

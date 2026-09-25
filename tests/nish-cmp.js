@@ -125,6 +125,51 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/map_get_default_escapes.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_narrow.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_nullish.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_pointer_value.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_value_bool.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_value_f64.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_value_i32.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_value_string.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "docs/cookbook/map_get.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
     program: "tests/cases/map_annotated_new.ts",
     changelog: "The global Map and Set, backed by std/collections.ts",
     why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",

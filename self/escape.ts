@@ -506,7 +506,12 @@ class EscapeAnalysis {
       if (parent === null) {
         return new FlowTarget(null, false);
       }
-      if (parent.kind === N_PAREN || (parent.kind === N_CONDITIONAL && parent.children[0] !== node)) {
+      // WP32: `a ?? d` is one of its operands, as a ternary is one of its arms.
+      if (
+        parent.kind === N_PAREN ||
+        (parent.kind === N_CONDITIONAL && parent.children[0] !== node) ||
+        (parent.kind === N_BINARY && parent.text === "??")
+      ) {
         node = parent;
         continue;
       }
@@ -571,6 +576,7 @@ class EscapeAnalysis {
       if (
         parent.kind === N_PAREN ||
         (parent.kind === N_CONDITIONAL && parent.children[0] !== node) ||
+        (parent.kind === N_BINARY && parent.text === "??") ||
         (parent.kind === N_INDEX && parent.children[0] === node && yieldsInteriorPointer(this.unit, this.table, parent))
       ) {
         node = parent;
@@ -1196,6 +1202,10 @@ class PassWalk {
     }
     if (e.kind === N_CONDITIONAL) {
       return this.isOld(e.children[1]) && this.isOld(e.children[2]);
+    }
+    // WP32: `m.get(k) ?? d` is a value read out of the map, or `d`.
+    if (e.kind === N_BINARY && e.text === "??") {
+      return this.isOld(e.children[1]);
     }
     if (e.kind === N_CALL) {
       const callee = program.nodeCallees[e.id];

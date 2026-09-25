@@ -672,6 +672,11 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       return use(USE_ESCAPE); // the constructed name, not an argument
     }
     if (parent.kind === N_BINARY) {
+      // WP32: `a ?? d` hands on whichever operand it answers, as a ternary does.
+      if (parent.text === "??") {
+        node = parent;
+        continue;
+      }
       // Assignment retains the right-hand side; every other operator consumes both operands.
       if (isAssignmentOperator(parent.text)) {
         if (parent.children[1] !== node) {
@@ -904,7 +909,11 @@ const classifyElementUse = (unit: AnalysisUnit, table: TypeTable, access: Node):
     if (parent === null) {
       return use(USE_READ);
     }
-    if (parent.kind === N_PAREN || (parent.kind === N_INDEX && parent.children[0] === node)) {
+    if (
+      parent.kind === N_PAREN ||
+      (parent.kind === N_INDEX && parent.children[0] === node) ||
+      (parent.kind === N_BINARY && parent.text === "??") // WP32: as a ternary's arm
+    ) {
       node = parent;
       continue;
     }
@@ -1168,6 +1177,12 @@ class FactCollector {
       const callee = program.nodeCallees[node.id];
       if (callee !== null) {
         this.facts.callees.add(callee.name);
+      }
+      // WP32: `m.get(k)` is a `probe` and, when it finds the key, a `valueAt`,
+      // which the checker records on the callee member (`checkMapGet`).
+      const reads = program.nodeCallees[node.children[0].id];
+      if (reads !== null) {
+        this.facts.callees.add(reads.name);
       }
     }
     const param = this.paramRef(node);

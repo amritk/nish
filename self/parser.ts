@@ -17,10 +17,12 @@
 // TypeScript is genuinely ambiguous to one token (`(` after an identifier is a
 // call, and `<` after a type name is a type argument list).
 //
-// **What it accepts is wider than the language.** The parser reads `??`, `?.`,
+// **What it accepts is wider than the language.** The parser reads `?.`,
 // `==`, `**` and the rest, and turns them down by name, because a message
 // about the operator the programmer wrote beats one about a token they did
-// not. Anything it cannot make a node of is an `N_ERROR` with the reason.
+// not. `??` it builds as an operator (WP32), and the checker refuses it
+// wherever its left operand is not a `Map.get` result. Anything it cannot
+// make a node of is an `N_ERROR` with the reason.
 
 import { Diagnostic, SourceFile } from "./diagnostics";
 import { Lexer } from "./lexer";
@@ -158,6 +160,7 @@ import {
   TOK_PLUS_ASSIGN,
   TOK_PLUS_PLUS,
   TOK_QUESTION,
+  TOK_QUESTION_QUESTION,
   TOK_RBRACE,
   TOK_RBRACKET,
   TOK_RETURN,
@@ -1483,7 +1486,7 @@ export class Parser {
 
   parseConditional(): Node {
     const start = this.start;
-    const condition = this.parseBinary(1);
+    const condition = this.parseCoalesce();
     if (!this.at(TOK_QUESTION)) return condition;
     this.advance();
     const node = this.node(N_CONDITIONAL, start, this.end);
@@ -1493,6 +1496,52 @@ export class Parser {
     node.children.push(this.parseExpression());
     node.end = this.previousEnd;
     return node;
+  }
+
+  /**
+   * `a ?? b`, with TypeScript's grammar (WP32, docs/wp32-map.md §3.2): it sits
+   * at the level of `||`, each operand binds as tightly as `|`, and it is left
+   * associative. It does not mix with `||` or `&&` without parentheses, as
+   * `tsc` reports TS5076, because which of them runs first is exactly what a
+   * reader cannot tell. The mix is reported and then read on as written, so
+   * the statement after it is not blamed for it too.
+   */
+  parseCoalesce(): Node {
+    const start = this.start;
+    let left = this.parseBinary(1);
+    if (!this.at(TOK_QUESTION_QUESTION)) return left;
+    if (left.kind === N_BINARY && (left.text === "||" || left.text === "&&")) {
+      this.reportMixedCoalesce(left.text);
+    }
+    while (this.at(TOK_QUESTION_QUESTION)) {
+      this.advance();
+      const right = this.parseBinary(binaryPrecedence(TOK_PIPE));
+      const node = this.node(N_BINARY, start, right.end);
+      node.text = "??";
+      node.children.push(left);
+      node.children.push(right);
+      left = node;
+    }
+    while (this.at(TOK_OR_OR) || this.at(TOK_AND_AND)) {
+      const operator = tokenName(this.kind);
+      this.reportMixedCoalesce(operator);
+      this.advance();
+      const right = this.parseBinary(binaryPrecedence(TOK_PIPE));
+      const node = this.node(N_BINARY, start, right.end);
+      node.text = operator;
+      node.children.push(left);
+      node.children.push(right);
+      left = node;
+    }
+    return left;
+  }
+
+  reportMixedCoalesce(operator: string): void {
+    this.report(
+      `\`${operator}\` and \`??\` cannot be mixed without parentheses: parenthesise the one that is to run first`,
+      this.start,
+      this.end
+    );
   }
 
   /** Precedence climbing; every operator here is left-associative. */

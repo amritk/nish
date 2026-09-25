@@ -17,6 +17,7 @@
 import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
 import {
+  FLAG_CONST,
   N_BIGINT,
   N_BINARY,
   N_CALL,
@@ -36,8 +37,16 @@ import {
   N_TYPE_REF,
   N_TYPE_UNION,
   N_UNARY,
+  N_VAR,
   Node,
 } from "./nodes";
+
+/**
+ * `undefined`, as a value and as a type. One sentence for both, and for the
+ * checker's refusal of `x === undefined` where `x` is not a `Map.get` result,
+ * the one thing `undefined` may be compared with (WP32).
+ */
+export const undefinedForbidden = (): string => "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type";
 
 /** The message for an identifier that may never appear as a value, or "". */
 const forbiddenValue = (name: string): string => {
@@ -63,7 +72,7 @@ const forbiddenValue = (name: string): string => {
     return "`arguments` is forbidden in " + LANGUAGE + " (functions have fixed arity)";
   }
   if (name === "undefined") {
-    return "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type";
+    return undefinedForbidden();
   }
   if (name === "debugger") {
     // `debugger;` parses as an expression statement naming an identifier, so
@@ -91,7 +100,7 @@ const forbiddenType = (name: string): string => {
     return "`bigint` type is forbidden in " + LANGUAGE + " (use number, i32, or f64)";
   }
   if (name === "undefined") {
-    return "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type";
+    return undefinedForbidden();
   }
   if (name === "any") {
     return "`any` is forbidden in " + LANGUAGE;
@@ -203,6 +212,29 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
     case N_ENUM:
       rejectComputedEnumMembers(ctx, node);
       break;
+    case N_BINARY:
+      // WP32: `x === undefined` and `x !== undefined` are how a maybe is
+      // tested, so `undefined` is let through as an operand of those two and
+      // nowhere else. Whether `x` is a maybe is the checker's question.
+      if (node.text === "===" || node.text === "!==") {
+        for (const child of node.children) {
+          if (!isUndefined(child)) {
+            visit(ctx, child, inTypePosition);
+          }
+        }
+        return;
+      }
+      break;
+    case N_VAR:
+      // WP32: `const a: V | undefined = m.get(k)` is the one place the maybe
+      // type is spelled. `V` itself is still swept.
+      if ((node.flags & FLAG_CONST) !== 0) {
+        for (const decl of node.children[0].children) {
+          visitDeclaration(ctx, decl, inTypePosition);
+        }
+        return;
+      }
+      break;
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
@@ -219,6 +251,59 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
   for (const child of node.children) {
     visit(ctx, child, inTypePosition);
   }
+};
+
+/** The identifier `undefined`, as a value. */
+const isUndefined = (node: Node): boolean => node.kind === N_IDENT && node.text === "undefined";
+
+/** The type `undefined`, as a union member. */
+const isUndefinedType = (node: Node): boolean =>
+  node.kind === N_TYPE_REF && node.text === "undefined" && node.children[0].children.length === 0;
+
+/**
+ * A `const` declaration annotated `V | undefined` (or `undefined | V`, or
+ * `V | null | undefined` for a nullable `V`) whose initialiser is a call of a
+ * member named `get` (docs/wp32-map.md §3.2: the maybe type is spelled only
+ * as the annotation of a `const` initialised directly from `get`). Whether the
+ * receiver is a `Map`, and the annotation its value type, is the checker's to
+ * say. Every other `T | undefined` is refused below as the union it is.
+ */
+const isMaybeDeclaration = (decl: Node): boolean => {
+  const annotation = decl.children[1];
+  if (annotation.kind !== N_TYPE_UNION) {
+    return false;
+  }
+  let undefineds = 0;
+  let nulls = 0;
+  for (const member of annotation.children) {
+    if (isUndefinedType(member)) {
+      undefineds = undefineds + 1;
+    } else if (member.kind === N_TYPE_NULL) {
+      nulls = nulls + 1;
+    }
+  }
+  const values = annotation.children.length - undefineds - nulls;
+  let init = decl.children[2];
+  while (init.kind === N_PAREN) {
+    init = init.children[0];
+  }
+  const callsGet = init.kind === N_CALL && init.children[0].kind === N_MEMBER && init.children[0].text === "get";
+  return undefineds === 1 && nulls <= 1 && values === 1 && callsGet;
+};
+
+/** One declaration of a `const` list, whose annotation may be the maybe type. */
+const visitDeclaration = (ctx: CheckContext, decl: Node, inTypePosition: boolean): void => {
+  if (!isMaybeDeclaration(decl)) {
+    visit(ctx, decl, inTypePosition);
+    return;
+  }
+  visit(ctx, decl.children[0], inTypePosition);
+  for (const member of decl.children[1].children) {
+    if (!isUndefinedType(member)) {
+      visit(ctx, member, inTypePosition);
+    }
+  }
+  visit(ctx, decl.children[2], inTypePosition);
 };
 
 /**

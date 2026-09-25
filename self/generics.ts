@@ -2679,6 +2679,11 @@ export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigi
       // An assignment's value is its right-hand side. Every other operator
       // answers a type of its own — a number, a boolean, a concatenated
       // string — which is the operator's result, not the operand's.
+      // `??` answers one of its operands, the left one read out of a map: where
+      // that came from is not followed, so it fails closed (WP32).
+      if (expr.text === "??") {
+        return unknownOrigin(expr);
+      }
       return expr.text === "=" ? originOf(ctx, expr.children[1], scope) : null;
     case N_INDEX:
       return originElement(originOf(ctx, expr.children[0], scope));
