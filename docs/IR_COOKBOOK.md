@@ -1130,7 +1130,7 @@ export const seen = (s: Set<i32>, x: i32): boolean => s.has(x);
 %struct.Set$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array* }
 %struct.nish_array = type { i64, i64, i8* }
 
-@.str.0 = private unnamed_addr constant { i64, [32 x i8] } { i64 31, [32 x i8] c"Map: a probe ran out of buckets\00" }, align 8
+@.str.0 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_exit(i32 noundef) #3
@@ -1341,7 +1341,7 @@ if.end.1:
   br label %while.cond
 
 while.end:
-  call void @nish_write(i8* bitcast ({ i64, [32 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.0 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 }

@@ -38,7 +38,7 @@ import { FactsTable } from "./attributes";
 import { internalErrorFor } from "./ice";
 import { StringMap, StringSet } from "./map";
 import { CheckedProgram, FunctionSig, MAP_HASH_KEY, MAP_NONE } from "./program";
-import { intBits, T_BOOL, T_F32, T_F64, T_STRING } from "./types";
+import { intBits, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types";
 
 /** The `MAP_*` role of `sig`, or `MAP_NONE` when it is not an instantiation of one of the two intrinsics. */
 export const mapIntrinsicOf = (sig: FunctionSig): i32 => {
@@ -106,37 +106,35 @@ const nonZero = (emitter: Emitter, h: string): string => {
  */
 const fnv1a = (emitter: Emitter, str: string): string => {
   const fn = emitter.fn;
-  const index = fn.emitAlloca("hash.i", "i64", emitter.opts.optimizeAttributes ? 8 : 0);
-  const state = fn.emitAlloca("hash.h", "i32", emitter.opts.optimizeAttributes ? 4 : 0);
+  const index = fn.emitAlloca("hash.i", "i64", emitter.align(T_I64));
+  const state = fn.emitAlloca("hash.h", "i32", emitter.align(T_I32));
   const header = fn.emitValue(`bitcast i8* ${str} to i64*`);
-  const len = fn.emitValue(`load i64, i64* ${header}${emitter.align8()}`);
+  const len = fn.emitValue(`load i64, i64* ${header}${emitter.alignSuffix(T_I64)}`);
   const data = fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`);
-  fn.emit(`store i64 0, i64* ${index}${emitter.align8()}`);
-  fn.emit(`store i32 -2128831035, i32* ${state}${alignI32(emitter)}`);
+  fn.emit(`store i64 0, i64* ${index}${emitter.alignSuffix(T_I64)}`);
+  fn.emit(`store i32 -2128831035, i32* ${state}${emitter.alignSuffix(T_I32)}`);
   const test = fn.newBlock("hash.test");
   const body = fn.newBlock("hash.byte");
   const done = fn.newBlock("hash.done");
   fn.emit(`br label %${test.label}`);
   fn.placeBlock(test);
-  const at = fn.emitValue(`load i64, i64* ${index}${emitter.align8()}`);
+  const at = fn.emitValue(`load i64, i64* ${index}${emitter.alignSuffix(T_I64)}`);
   const more = fn.emitValue(`icmp ult i64 ${at}, ${len}`);
   fn.emit(`br i1 ${more}, label %${body.label}, label %${done.label}`);
   fn.placeBlock(body);
   const address = fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${at}`);
   const byte = fn.emitValue(`load i8, i8* ${address}`);
   const wide = fn.emitValue(`zext i8 ${byte} to i32`);
-  const h = fn.emitValue(`load i32, i32* ${state}${alignI32(emitter)}`);
+  const h = fn.emitValue(`load i32, i32* ${state}${emitter.alignSuffix(T_I32)}`);
   const mixed = fn.emitValue(`xor i32 ${h}, ${wide}`);
   const next = fn.emitValue(`mul i32 ${mixed}, 16777619`);
-  fn.emit(`store i32 ${next}, i32* ${state}${alignI32(emitter)}`);
+  fn.emit(`store i32 ${next}, i32* ${state}${emitter.alignSuffix(T_I32)}`);
   const step = fn.emitValue(`add i64 ${at}, 1`);
-  fn.emit(`store i64 ${step}, i64* ${index}${emitter.align8()}`);
+  fn.emit(`store i64 ${step}, i64* ${index}${emitter.alignSuffix(T_I64)}`);
   fn.emit(`br label %${test.label}`);
   fn.placeBlock(done);
-  return fn.emitValue(`load i32, i32* ${state}${alignI32(emitter)}`);
+  return fn.emitValue(`load i32, i32* ${state}${emitter.alignSuffix(T_I32)}`);
 };
-
-const alignI32 = (emitter: Emitter): string => emitter.opts.optimizeAttributes ? ", align 4" : "";
 
 /** murmur3's 32-bit finaliser. Every multiply wraps, which is what it is written against. */
 const fmix32 = (emitter: Emitter, x: string): string => {

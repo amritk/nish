@@ -1038,13 +1038,6 @@ export class CheckedProgram {
   /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
   parallelCalls: ParallelCall[];
   /**
-   * WP32: the first node that names the global `Map` or `Set`, when this module
-   * was given the implicit import of `nish/collections` for it, and `null`
-   * otherwise. The driver reads it to refuse a program in which another module
-   * declares a `Map` or `Set` of its own (`Compilation.rejectCollectionsClash`).
-   */
-  namesCollections: Node | null;
-  /**
    * WP32: `const m: Map<string, i32> = new Map()` takes the `new`'s type
    * arguments from the annotation (docs/wp32-map.md §7). The node id of such a
    * `new`, as text -> index into `newTypeArguments`, the annotation's list.
@@ -1161,7 +1154,6 @@ export class CheckedProgram {
     this.enumList = [];
     this.entryMain = null;
     this.parallelCalls = [];
-    this.namesCollections = null;
     this.newTypeArgumentIds = new StringMap();
     this.newTypeArguments = [];
     this.usesArgv = false;

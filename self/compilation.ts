@@ -50,6 +50,7 @@ import { arenaLoopFindings } from "./escape";
 import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
+import { internalErrorFor } from "./ice";
 import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
@@ -876,37 +877,33 @@ export class Compilation {
    * own and another names the global one. Each module's own is legal by itself
    * — it shadows the global, as it does under `tsc` — but a class name is
    * program-wide (NL3028), so the two classes would be one struct type and one
-   * set of method symbols. Refused at the declaration, naming the module that
-   * uses the global, once per declaring module and name.
+   * set of method symbols. Refused at the declaration, naming the first module
+   * that uses the global, once per declaring module and name. Using it means
+   * importing it from `nish/collections`, which the implicit import and an
+   * explicit one both are.
    */
   rejectCollectionsClash(): void {
-    for (const user of this.modules) {
-      const at = user.checker.program.namesCollections;
-      if (at === null) {
-        continue;
+    for (const unit of this.modules) {
+      if (!unit.checker.program.isCollections()) {
+        this.reportCollectionClash(unit, "Map");
+        this.reportCollectionClash(unit, "Set");
       }
-      for (const unit of this.modules) {
-        const program = unit.checker.program;
-        if (unit === user || program.isCollections()) {
-          continue;
-        }
-        this.reportCollectionClash(unit, "Map", user);
-        this.reportCollectionClash(unit, "Set", user);
-      }
-      return;
     }
   }
 
-  /** The refusal for one name, when `unit` declares it and `user` was given the global. */
-  reportCollectionClash(unit: ModuleUnit, name: string, user: ModuleUnit): void {
-    let imported = false;
-    for (const imp of user.checker.program.imports) {
-      if (imp.localName === name && imp.specifier === COLLECTIONS_SPECIFIER) {
-        imported = true;
+  /** The refusal for one name, when `unit` declares it and another module uses the global. */
+  reportCollectionClash(unit: ModuleUnit, name: string): void {
+    const at = declarationNameOf(unit.checker.program, name);
+    if (at === null) {
+      return;
+    }
+    let user: ModuleUnit | null = null;
+    for (const other of this.modules) {
+      if (user === null && other !== unit && importsCollection(other.checker.program, name)) {
+        user = other;
       }
     }
-    const at = declarationNameOf(unit.checker.program, name);
-    if (!imported || at === null) {
+    if (user === null) {
       return;
     }
     this.sink.report(
@@ -1339,18 +1336,22 @@ export class Compilation {
     const units = this.analysisUnits;
     const stems = this.outputStems();
     const library = this.libraryIndex();
+    let copies: AnalysisUnit | null = null;
+    if (library >= 0 && library < units.length) {
+      copies = units[library];
+    }
     const out: EmittedModule[] = [];
     let i = 0;
     let written = 0;
     while (i < this.modules.length && i < units.length) {
       const unit = this.modules[i];
       if (this.writesOutput(unit)) {
-        let copies: AnalysisUnit | null = null;
-        if (library >= 0 && library < units.length) {
-          copies = units[library];
+        // `outputStems` skips exactly the modules `writesOutput` does.
+        if (written >= stems.length) {
+          process.exit(internalErrorFor(`driver: no output stem for ${unit.name}`, this.opts.json));
         }
         const ir = emitProgram(units[i], this.table, this.opts, this.runtime, facts, copies);
-        out.push(new EmittedModule(written < stems.length ? stems[written] : unit.name, ir, unit.name));
+        out.push(new EmittedModule(stems[written], ir, unit.name));
         written = written + 1;
       }
       i = i + 1;
@@ -1406,6 +1407,16 @@ export class Compilation {
     return stems;
   }
 }
+
+/** Whether `program` uses the global `name`: it imports it from `nish/collections`, implicitly or not (WP32). */
+const importsCollection = (program: CheckedProgram, name: string): boolean => {
+  for (const imp of program.imports) {
+    if (imp.importedName === name && imp.specifier === COLLECTIONS_SPECIFIER) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /** The name node of `program`'s own declaration of the type `name`, or `null` (WP32). */
 const declarationNameOf = (program: CheckedProgram, name: string): Node | null => {

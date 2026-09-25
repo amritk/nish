@@ -39,9 +39,9 @@
  */
 
 /**
- * The most entries a table holds: 2^24 - 1, what the 24-bit index field holds
- * as an index plus one. It is exactly the limit of Node's own `Map` and `Set`,
- * which throw at the 2^24-th entry.
+ * The most entries a table holds, dead ones included until a rebuild: 2^24 - 1,
+ * what the 24-bit index field holds as an index plus one. Node's own `Map` and
+ * `Set` hold one more, 2^24, and throw on the next insert.
  */
 const INDEX_CAP: i32 = 16777215;
 
@@ -107,7 +107,7 @@ const probeTable = <K>(slots: u32[], mask: i32, hashes: u32[], keys: K[], key: K
     }
     bucket = (bucket + 1) & mask;
   }
-  panic("Map: a probe ran out of buckets");
+  panic("collections: a probe ran out of buckets");
 };
 
 /**
@@ -169,9 +169,7 @@ const compactHashes = (hashes: u32[]): i32 => {
 const rebuiltSlots = (slots: u32[], live: i32, used: i32): u32[] => {
   const n = toI32(slots.length);
   if (live * 2 < used) {
-    for (let i: i32 = 0; i < n; i++) {
-      slots[i] = 0;
-    }
+    clearSlots(slots);
     return slots;
   }
   return new Array<u32>(n * 2);
@@ -182,6 +180,49 @@ const refile = (slots: u32[], hashes: u32[]): void => {
   const mask = toI32(slots.length) - 1;
   for (let i: i32 = 0; i < toI32(hashes.length); i++) {
     fileEntry(slots, mask, hashes[i], i);
+  }
+};
+
+/**
+ * `delete`'s write through a found probe result: the bucket becomes a
+ * tombstone and the entry's stored hash 0. The key and value stay in the entry
+ * until a rebuild compacts them away (§6.1).
+ */
+const killEntry = (slots: u32[], hashes: u32[], found: i64): void => {
+  const at = toI32(found);
+  const bucket = toI32(found >> 32);
+  if (bucket >= 0 && bucket < toI32(slots.length)) {
+    slots[bucket] = 16777216;
+  }
+  if (at >= 0 && at < toI32(hashes.length)) {
+    hashes[at] = 0;
+  }
+};
+
+/** Zero every bucket in place, which is what emptying a table and compacting one both start with. */
+const clearSlots = (slots: u32[]): void => {
+  for (let i: i32 = 0; i < toI32(slots.length); i++) {
+    slots[i] = 0;
+  }
+};
+
+/** Drop every element of `items`, keeping its capacity. */
+const truncate = <T>(items: T[]): void => {
+  while (toI32(items.length) > 0) {
+    items.pop();
+  }
+};
+
+/**
+ * Point bucket `bucket`, the empty one an absent probe stopped at, at the entry
+ * just appended as index `used - 1`; or, when a rebuild made room first and
+ * moved the buckets (`bucket` is -1), file it from its hash.
+ */
+const fileAppended = (slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): void => {
+  if (bucket >= 0 && bucket < toI32(slots.length)) {
+    slots[bucket] = slotWord(h, used - 1);
+  } else {
+    fileEntry(slots, mask, h, used - 1);
   }
 };
 
@@ -237,14 +278,7 @@ export class Map<K, V> {
     if (found < 0) {
       return false;
     }
-    const at = toI32(found);
-    const bucket = toI32(found >> 32);
-    if (bucket >= 0 && bucket < toI32(this.slots.length)) {
-      this.slots[bucket] = 16777216;
-    }
-    if (at >= 0 && at < toI32(this.entryHashes.length)) {
-      this.entryHashes[at] = 0;
-    }
+    killEntry(this.slots, this.entryHashes, found);
     this.live = this.live - 1;
     this.size = this.size - 1;
     return true;
@@ -252,19 +286,10 @@ export class Map<K, V> {
 
   /** Empty the table in place: the buckets are zeroed and the entries truncated. */
   clear(): void {
-    const slots = this.slots;
-    for (let i: i32 = 0; i < toI32(slots.length); i++) {
-      slots[i] = 0;
-    }
-    while (toI32(this.entryKeys.length) > 0) {
-      this.entryKeys.pop();
-    }
-    while (toI32(this.entryValues.length) > 0) {
-      this.entryValues.pop();
-    }
-    while (toI32(this.entryHashes.length) > 0) {
-      this.entryHashes.pop();
-    }
+    clearSlots(this.slots);
+    truncate(this.entryKeys);
+    truncate(this.entryValues);
+    truncate(this.entryHashes);
     this.live = 0;
     this.size = 0;
   }
@@ -303,11 +328,7 @@ export class Map<K, V> {
     this.live = this.live + 1;
     this.size = this.size + 1;
     const used = toI32(this.entryKeys.length);
-    if (bucket >= 0 && bucket < toI32(this.slots.length)) {
-      this.slots[bucket] = slotWord(h, used - 1);
-    } else {
-      fileEntry(this.slots, this.mask, h, used - 1);
-    }
+    fileAppended(this.slots, this.mask, bucket, h, used);
     // Every entry takes a bucket, live or dead, until a rebuild.
     if (used * 4 > toI32(this.slots.length) * 3) {
       this.rebuild();
@@ -368,30 +389,16 @@ export class Set<T> {
     if (found < 0) {
       return false;
     }
-    const at = toI32(found);
-    const bucket = toI32(found >> 32);
-    if (bucket >= 0 && bucket < toI32(this.slots.length)) {
-      this.slots[bucket] = 16777216;
-    }
-    if (at >= 0 && at < toI32(this.entryHashes.length)) {
-      this.entryHashes[at] = 0;
-    }
+    killEntry(this.slots, this.entryHashes, found);
     this.live = this.live - 1;
     this.size = this.size - 1;
     return true;
   }
 
   clear(): void {
-    const slots = this.slots;
-    for (let i: i32 = 0; i < toI32(slots.length); i++) {
-      slots[i] = 0;
-    }
-    while (toI32(this.entryKeys.length) > 0) {
-      this.entryKeys.pop();
-    }
-    while (toI32(this.entryHashes.length) > 0) {
-      this.entryHashes.pop();
-    }
+    clearSlots(this.slots);
+    truncate(this.entryKeys);
+    truncate(this.entryHashes);
     this.live = 0;
     this.size = 0;
   }
@@ -412,11 +419,7 @@ export class Set<T> {
     this.live = this.live + 1;
     this.size = this.size + 1;
     const used = toI32(this.entryKeys.length);
-    if (bucket >= 0 && bucket < toI32(this.slots.length)) {
-      this.slots[bucket] = slotWord(h, used - 1);
-    } else {
-      fileEntry(this.slots, this.mask, h, used - 1);
-    }
+    fileAppended(this.slots, this.mask, bucket, h, used);
     if (used * 4 > toI32(this.slots.length) * 3) {
       this.rebuild();
     }

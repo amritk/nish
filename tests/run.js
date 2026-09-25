@@ -2146,7 +2146,7 @@ if (has("opt")) {
 // compiled here rather than read from section A's output, so its existence is
 // part of the assertion; only a toolchain without `ld.lld`, or an `ld.lld`
 // without `--wrap`, skips it.
-if (!only || "map_fingerprint_miss".includes(only) || "fingerprint".includes(only)) {
+if (!only || "map_fingerprint_miss".includes(only)) {
   if (!HAS_CLANG || !has("ld.lld")) {
     skip("map_fingerprint_miss: the key-compare count needs clang and ld.lld for --wrap");
   } else {

@@ -3168,7 +3168,8 @@ export const main = (): i32 => {
   tombstone that later probes walk past, and setting it again appends a new
   entry (`map_delete_reinsert`); and a table whose entries are mostly dead
   compacts in place instead of growing (`map_compaction`). A table holds at
-  most 2^24 - 1 entries, Node's own limit: an insert at the cap first compacts
+  most 2^24 - 1 entries, which is what a 24-bit index field holds and one fewer
+  than Node's 2^24: an insert at the cap first compacts
   away dead entries, and when there are none it panics with
   `Map maximum size exceeded` (or `Set …`) *(CLI only: the case takes 16 million
   inserts)*.

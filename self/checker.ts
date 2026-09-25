@@ -274,9 +274,6 @@ export class Checker {
     }
     this.program.imports.push(new ImportBinding(COLLECTIONS_SPECIFIER, name, name, at, at));
     this.program.typeNames.add(name);
-    if (this.program.namesCollections === null) {
-      this.program.namesCollections = at;
-    }
   }
 
   /**
