@@ -827,6 +827,17 @@ major. Whether it happens at all is still wp22 §10's open question.
    scope and the lock (wp29 P2 and P3) follow it in wp29's order.
 2. **Ranged integers**, [wp31-ranged-integers.md](wp31-ranged-integers.md) W1 to
    W4, none of them breaking now that the name is reserved.
+3. **The global `Map` and `Set`**, [wp32-map.md](wp32-map.md). S1, the design
+   note and four layout prototypes, has decided every open question. The
+   layout is insertion-ordered, with a `u32` bucket of eight fingerprint bits
+   over a 24-bit entry index and the full hash stored with each entry. Its cap
+   is 2^24 − 1 entries, Node's own. `get` answers `V | undefined`, narrowed or
+   defaulted with `??`. Each instance is emitted into the module that uses it.
+   Measured against Node's `Map` on the same workloads, the chosen layout is
+   1.7x to 4.9x ahead at 2^20 keys, and within 10% of an unordered table on
+   eight of ten workloads. S2 to S5 build it in order, S6 moves `StringMap` to
+   the same slot, and S7 measures what is left and decides whether an unordered
+   map is ever needed.
 
 #### Additive and unscheduled
 
