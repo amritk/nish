@@ -5,3 +5,4 @@ declare noundef double @nish_main$arrow0(double noundef, double noundef)
 define void @mapInto$f64$f64$fn.6.square(
 declare void @mapInto$f64$f64$fn.6.square(
 define noundef i32 @reduce$i32$fn.16.nish_main$arrow1(
+define hidden noundef i64 @half(i32 noundef %x)

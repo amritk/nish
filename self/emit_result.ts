@@ -468,7 +468,7 @@ export const emitResultReturn = (emitter: Emitter, value: string): void => {
   if (sig === null) {
     process.exit(internalErrorFor("emitter: a `Result` return outside a function", emitter.opts.json));
   }
-  const abi = emitter.llvmAbi(sig.returnType, privateResultAbi(emitter, sig.exported));
+  const abi = emitter.llvmAbi(sig.returnType, privateResultAbi(emitter, sig.visibleOutside()));
   emitter.fn.emit(`ret ${abi} ${value}`);
 };
 
@@ -532,7 +532,7 @@ const emitOrReturn = (emitter: Emitter, expr: Node, receiver: i32): string => {
   emitter.fn.placeBlock(errBlock);
   const error = loadSlot(emitter, layout, object, layout.errorIndex, layout.errorType);
   if (emitter.table.resultByValue(returnType)) {
-    const propagated = privateResultAbi(emitter, sig.exported)
+    const propagated = privateResultAbi(emitter, sig.visibleOutside())
       ? armsForArm(emitter, returnType, false, error, true)
       : packArm(emitter, returnType, false, error, true);
     emitter.emitScopeExit();

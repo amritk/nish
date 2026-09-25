@@ -2269,7 +2269,9 @@ divide with overflow` is simply unreachable on an unsigned type.
 
 ### Calls
 
-- `f(args)` calls a top-level function or an imported one; the callee must
+- `f(args)` calls a top-level function or an imported one, or — inside a
+  template — a [function parameter](#function-parameters), which is a direct
+  call to the function the instantiation was given; the callee must
   be a plain identifier (`Only direct calls to named functions are supported`),
   known (`` Unknown function `String` `` *(CLI only)*), and called with
   matching arity and types (see [Functions](#functions)).

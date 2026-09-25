@@ -564,7 +564,9 @@ export class Emitter {
   declareAll(sigs: FunctionSig[], seen: StringSet): void {
     for (const sig of sigs) {
       if (seen.add(sig.name)) {
-        this.module.addDeclaration(this.declarationFor(sig));
+        // WP29: a C function passed to another module's template is declared
+        // there as C's, with no attribute this compiler cannot prove.
+        this.module.addDeclaration(sig.foreign() ? this.foreignDeclarationFor(sig) : this.declarationFor(sig));
       }
     }
   }
@@ -787,7 +789,7 @@ export class Emitter {
     // scope release, because the object it may be read out of is arena memory
     // the release reclaims.
     if (this.table.resultByValue(sig.returnType)) {
-      const packed = emitPackedResult(this, value, sig.returnType, privateResultAbi(this, sig.exported));
+      const packed = emitPackedResult(this, value, sig.returnType, privateResultAbi(this, sig.visibleOutside()));
       this.emitScopeExit();
       emitResultReturn(this, packed);
       return;

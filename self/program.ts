@@ -246,6 +246,12 @@ export class ConstraintList {
  * parameter and return annotations mention `typeParams`, so they mean nothing
  * until an instantiation binds them, and a template therefore has no signature,
  * no symbol and no entry in `functions`.
+ *
+ * WP29: a function with a function-typed parameter is one too, with or without
+ * type parameters, because each callee a call gives it is an instantiation of
+ * its own (`Instantiation.functionArgs`). Such a parameter is read off `decl`
+ * whenever it is needed (`isFunctionParameter` in `self/generics.ts`), so
+ * nothing about it is stored here.
  */
 export class TemplateInfo {
   /**

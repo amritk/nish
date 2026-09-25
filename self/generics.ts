@@ -1351,7 +1351,8 @@ const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
   if (fn.definedIn(home.source)) {
     return;
   }
-  if (!fn.exported) {
+  // A `declare function` is C's symbol, and has no linkage of this program's.
+  if (!fn.exported && !fn.foreign()) {
     fn.hidden = true;
   }
   useExternalInstance(home, fn);
@@ -1457,14 +1458,23 @@ const resolveFunctionArgument = (
     return null;
   }
   const wanted = fnType.children[0].children;
-  if (fn.paramTypes.length === wanted.length) {
-    let k = 0;
-    while (k < wanted.length) {
-      unifyAnnotation(ctx, wanted[k].children[1], fn.paramTypes[k], names, bindings);
-      k = k + 1;
-    }
-    unifyAnnotation(ctx, fnType.children[1], fn.returnType, names, bindings);
+  if (fn.paramTypes.length !== wanted.length) {
+    // Said now, in the words of the exact-type rule, rather than as a type
+    // parameter the callee failed to bind.
+    ctx.error(
+      arg,
+      `Argument ${index + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
+        `\`${functionTypeText(ctx.table, fn.paramNames, fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
+        `\`${template.home.textOf(fnType)}\`; a function argument must have exactly its parameter's type`
+    );
+    return null;
   }
+  let k = 0;
+  while (k < wanted.length && k < fn.paramTypes.length) {
+    unifyAnnotation(ctx, wanted[k].children[1], fn.paramTypes[k], names, bindings);
+    k = k + 1;
+  }
+  unifyAnnotation(ctx, fnType.children[1], fn.returnType, names, bindings);
   return fn;
 };
 

@@ -19,3 +19,14 @@ export const reduce = <T>(src: T[], f: (acc: T, x: T) => T, identity: T): T => {
   }
   return acc;
 };
+
+export const sumOk = <T>(src: T[], f: (x: T) => Result<i32, i32>): i32 => {
+  let n = 0;
+  for (const x of src) {
+    const r = f(x);
+    if (r.ok) {
+      n = n + r.value;
+    }
+  }
+  return n;
+};
