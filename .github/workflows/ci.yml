@@ -164,7 +164,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 valgrind
           # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
           # plain names through a private bin dir placed ahead of /usr/bin so the
           # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `opt`,

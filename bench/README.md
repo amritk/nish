@@ -175,6 +175,91 @@ any exits non-zero, and `tests/run.js` runs it in its `WP9: bench` check with
 C++ are in
 [docs/wp9-optimisation.md](../docs/wp9-optimisation.md#are-we-fast-yet).
 
+## Instruction counts
+
+Wall time on a virtual machine moves by more than a codegen regression of a few
+percent, so a regression can hide in the noise of the table above. What the
+compiler emits is also caught by a number that does not move:
+the instructions each program executes, counted by valgrind's cachegrind.
+`bench/instructions.json` holds one count for each of the fourteen programs, the
+seven above and the seven AWFY ports, and `npm test` fails when any of them runs
+more than 0.1% above its count.
+
+```bash
+node bench/run.mjs --instructions            # count all fourteen and print them against the baseline
+node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
+node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
+node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
+node bench/run.mjs --instructions --only Queens,fib   # a subset (`awfy` names all seven ports)
+```
+
+Each program is built as the timing mode builds it: `--profile speed`, the
+flags in its `.args`, bounds checks on, and the AWFY harness from
+`bench/awfy/main.ts`. Each one then runs once under `valgrind --tool=cachegrind
+--cache-sim=no`. The size is the `n` or `inner` beside the count in
+`bench/instructions.json`. The AWFY ports run at the suite's own inner counts, and
+the bench programs are sized to about 300 million instructions each. strbuild
+is the exception and runs at its full `bench:n`. Mandelbrot has to run at 500,
+because its `verifyResult` knows only 1, 500 and 750. The whole check takes about 16
+seconds on a 2.8 GHz Xeon virtual machine, builds included.
+
+**The whole process is counted.** That includes the dynamic loader and glibc's
+start-up, about 120 thousand instructions of each count. Counting only `main`
+would need either symbols, which a `--profile speed` binary does not keep, or
+glibc's debug symbols to tell its code apart from the program's. CI's runner has
+neither. So the start-up stays in the count, and whatever about it could vary
+from one host to the next is pinned instead:
+
+- **The environment.** The child's environment holds `GLIBC_TUNABLES` and
+  nothing else. The loader scans every variable, and each one costs about 500
+  instructions. This container's inherited 7.6 KB environment added 97,461 to
+  fib, and a 64 KB variable adds 551.
+- **argv[0].** The program runs as `./fib` from its own directory, so the
+  checkout's path never reaches it. A 168-character absolute path added 151.
+- **glibc's string routines.** glibc picks a `memcpy` and a `memset` for the
+  CPU it finds, and switches strategy (`rep movsb`, non-temporal stores) at
+  thresholds it derives from the cache sizes. Each choice executes a different
+  number of instructions for the same copy. Left alone, strbuild counted
+  72,136,198 here, 61,606,752 with a smaller non-temporal threshold, and
+  50,457,172 with ERMS masked, a 30% spread for one binary. Storage moved 0.4%. The
+  tunables in `PINNED_LIBC` (`bench/run.mjs`) send every x86-64 host to the SSE2
+  baseline routines, with no `rep` string instructions and no non-temporal
+  path. With those pinned, changing the cache sizes glibc sees moves strbuild
+  by at most 3,315 instructions (0.006%) and Storage by at most 3,324
+  (0.0008%).
+  The program's own code is the same on every host already: `--profile speed`
+  does not pass `-march`.
+
+**Measured determinism, at `4fed2b7`.** Three counts of each program in one run,
+and a second run of the whole set, agree to the instruction for thirteen of the
+fourteen. Storage moves by up to 56 instructions, because the AWFY harness prints
+its own elapsed time and the number of digits varies. Turning ASLR off
+(`setarch -R`) changes nothing.
+
+**The tolerance is 0.1%,** stored in the file as `tolerance`. The largest effect
+measured above, after pinning, is strbuild's 0.006%, so 0.1% leaves a
+sixteenfold margin for anything else that differs between runners, such as a
+glibc patch release or a kernel's vDSO. A looser bound would have cost real
+regressions: switching off the bounds prover in `self/bounds.ts` costs Queens
+0.858% and changes no other benchmark by more than two instructions. A count below
+its baseline by more than the tolerance does not fail. `--check` prints a note,
+and the next `--update` makes the gain the new bar.
+
+**Raising a baseline.** `--update` writes the counts it measured, the valgrind
+version and the commit, and leaves the sizes and the tolerance alone. Those two
+are edited by hand. A pull request that runs `--update` shows the table it
+printed, the old count against the new one for every benchmark it moves, and
+says in its body **why** each count went up: what the compiler now does that it
+did not, and why that is worth the instructions. A count that goes up with no
+reason given is a regression, whatever the timing table says. Resizing a program
+changes its count as well, so a resize is its own update and says so.
+
+**Where it runs.** `tests/run.js` runs `--instructions --check` with the compiler
+under test. The counts are only meaningful on x86-64 Linux, and valgrind does not
+run on macOS. So on any other host, or where valgrind is not on `PATH`, the check
+is a counted skip that names the reason. CI's Linux job installs valgrind beside
+LLVM, so the check runs there on every push.
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),

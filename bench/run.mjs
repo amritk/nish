@@ -15,6 +15,12 @@
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md)
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
+//     --instructions    count the instructions each of the 14 programs executes
+//                       under valgrind's cachegrind, at the sizes in
+//                       bench/instructions.json; nothing is timed. With --check,
+//                       fail when one exceeds its baseline by more than the
+//                       tolerance; with --update, rewrite the baseline (a PR that
+//                       does must say why). --runs N repeats each run (default 1)
 //
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
 // are compared token by token; numeric tokens must agree to 1e-9 relative so
@@ -84,7 +90,20 @@ function sourceArgs(name) {
 
 // ---- Options ------------------------------------------------------------------------
 
-const opts = { runs: 5, warmup: 1, only: null, sizes: new Map(), validate: false, rust: true, go: true, out: path.join(root, "docs", "BENCHMARKS.md") };
+const opts = {
+  runs: 5,
+  runsGiven: false,
+  warmup: 1,
+  only: null,
+  sizes: new Map(),
+  validate: false,
+  instructions: false,
+  check: false,
+  update: false,
+  rust: true,
+  go: true,
+  out: path.join(root, "docs", "BENCHMARKS.md"),
+};
 const argv = nishc.rest;
 for (let i = 2; i < argv.length; i++) {
   const a = argv[i];
@@ -93,7 +112,10 @@ for (let i = 2; i < argv.length; i++) {
     if (v === undefined) fail(`${a} needs a value`);
     return v;
   };
-  if (a === "--runs") opts.runs = Number(next());
+  if (a === "--runs") {
+    opts.runs = Number(next());
+    opts.runsGiven = true;
+  }
   else if (a === "--warmup") opts.warmup = Number(next());
   else if (a === "--only") opts.only = new Set(next().split(",").filter(Boolean));
   else if (a === "--n") {
@@ -103,6 +125,9 @@ for (let i = 2; i < argv.length; i++) {
       opts.sizes.set(name, value);
     }
   } else if (a === "--validate") opts.validate = true;
+  else if (a === "--instructions") opts.instructions = true;
+  else if (a === "--check") opts.check = true;
+  else if (a === "--update") opts.update = true;
   else if (a === "--no-rust") opts.rust = false;
   else if (a === "--no-go") opts.go = false;
   else if (a === "--out") opts.out = path.resolve(next());
@@ -115,6 +140,14 @@ for (let i = 2; i < argv.length; i++) {
     console.log(banner.slice(0, end).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
     process.exit(0);
   } else fail(`unknown option ${a}`);
+}
+
+if ((opts.check || opts.update) && !opts.instructions) fail("--check and --update belong to --instructions");
+if (opts.check && opts.update) fail("--check and --update are exclusive: update the baseline or check it");
+// Counting runs only the Nish builds, so the other languages are not looked up.
+if (opts.instructions) {
+  opts.rust = false;
+  opts.go = false;
 }
 
 function fail(msg) {
@@ -159,8 +192,11 @@ if (!GO && opts.go) console.error("note: the go tool was not found; Go columns a
 
 const SPEED = ["-C", "opt-level=3", "-C", "panic=abort", "-C", "codegen-units=1", "-C", "strip=symbols"];
 
-/** Copy a source into build/bench/src, rewriting the number on its `bench:n` line when a size override is given. */
-function prepare(file, size) {
+/**
+ * Copy a source into `dir` (build/bench/src), rewriting the number on its
+ * `bench:n` line when a size override is given.
+ */
+function prepare(file, size, dir = srcDir) {
   let text = fs.readFileSync(path.join(benchDir, file), "utf8");
   if (size !== undefined) {
     const lines = text.split("\n");
@@ -169,7 +205,7 @@ function prepare(file, size) {
     lines[at] = lines[at].replace(/\b\d+\b/, size);
     text = lines.join("\n");
   }
-  const dst = path.join(srcDir, file);
+  const dst = path.join(dir, file);
   fs.writeFileSync(dst, text);
   return dst;
 }
@@ -284,7 +320,219 @@ function median(xs) {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
+// ---- Instruction counts -------------------------------------------------------------------
+
+/**
+ * Build the AWFY harness into `dir` exactly as the timing mode does: checked,
+ * `--profile speed` and nothing else. Answers the executable's path.
+ */
+const buildAwfy = (dir) => {
+  const exe = path.join(dir, "awfy-harness");
+  const args = [
+    "bench/awfy/main.ts",
+    "-o",
+    `${path.relative(root, path.join(dir, "awfy"))}/`,
+    "--link",
+    path.relative(root, exe),
+    "--profile",
+    "speed",
+  ];
+  run(nishc.cmd, [...nishc.prefix, ...args], "awfy");
+  return exe;
+};
+
+const BASELINE_FILE = path.join(benchDir, "instructions.json");
+
+/**
+ * The one environment variable a counted run is given. glibc picks its
+ * `memcpy` and `memset` by the CPU it finds and switches strategy at
+ * thresholds taken from the cache sizes, and each choice executes a different
+ * number of instructions for the same copy: left alone, strbuild counted 30%
+ * fewer with ERMS switched off than with it on. These tunables take every host
+ * to the SSE2 baseline routines with no `rep movsb`/`rep stosb` and no
+ * non-temporal path, so a count measured on one x86-64 machine holds on
+ * another. It changes which libc routine runs, never the program's own code.
+ */
+const PINNED_LIBC = [
+  "glibc.cpu.hwcaps=-AVX_Fast_Unaligned_Load,-AVX2,-AVX512F,-AVX512VL,-ERMS,-FSRM,-SSSE3",
+  "glibc.cpu.x86_non_temporal_threshold=0x0fffffffffffffff",
+  "glibc.cpu.x86_rep_movsb_threshold=0x0fffffffffffffff",
+  "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
+].join(":");
+
+/**
+ * The instructions one run executes, counted by cachegrind over the whole
+ * process: the dynamic loader and libc's start-up included, because nothing
+ * separates them from the program's own code in a stripped `--profile speed`
+ * binary on a host without libc's debug symbols. They are about 120 thousand
+ * of a count in the hundreds of millions. What varies with the host is pinned
+ * instead: the child's environment is `PINNED_LIBC` and nothing else, and its
+ * argv[0] is relative (`./fib`, run from its own directory), so neither the
+ * caller's variables nor the checkout's path reach the loader. bench/README.md
+ * has the measurements that show what is left.
+ */
+const countInstructions = (valgrind, exe, args, name) => {
+  const dir = path.dirname(exe);
+  const out = path.join(dir, `${name}.cachegrind`);
+  const r = spawnSync(
+    valgrind,
+    [
+      "--tool=cachegrind",
+      "--cache-sim=no",
+      `--cachegrind-out-file=${out}`,
+      `./${path.basename(exe)}`,
+      ...args,
+    ],
+    {
+      cwd: dir,
+      env: { GLIBC_TUNABLES: PINNED_LIBC },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  if (r.status !== 0) {
+    console.error(
+      `${name}: cachegrind ${exe} ${args.join(" ")} failed (exit ${r.status})\n${r.stdout}${r.stderr}`
+    );
+    process.exit(1);
+  }
+  const m = fs.readFileSync(out, "utf8").match(/^summary: (\d+)$/m);
+  if (!m) fail(`${name}: no summary line in ${path.relative(root, out)}`);
+  return Number(m[1]);
+};
+
+/**
+ * `--instructions`: build the seven bench/ programs and the seven AWFY ports at
+ * the sizes bench/instructions.json names, count each run, and print the counts
+ * against the baseline. `--check` fails on any count above it by more than the
+ * tolerance, and `--update` writes the counts back. Answers the exit status.
+ */
+const runInstructions = () => {
+  const valgrind = which("valgrind");
+  if (!valgrind) fail("--instructions needs valgrind on PATH (Linux only; see bench/README.md)");
+  const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, "utf8"));
+  const host = `${process.platform}-${process.arch}`;
+  if ((opts.check || opts.update) && host !== baseline.platform) {
+    fail(`the baseline is counted on ${baseline.platform}, so this ${host} host can neither check nor update it`);
+  }
+  const names = [...BENCHMARKS.map((b) => b.name), ...AWFY.map((b) => b.name)];
+  const listed = Object.keys(baseline.programs);
+  if (listed.join(",") !== names.join(",")) {
+    fail(`bench/instructions.json must list ${names.join(", ")} in that order; it lists ${listed.join(", ")}`);
+  }
+  const wanted = (name, awfy) => !opts.only || opts.only.has(name) || (awfy && opts.only.has("awfy"));
+  for (const name of opts.only ?? []) {
+    if (name !== "awfy" && !names.includes(name)) fail(`unknown benchmark \`${name}\``);
+  }
+
+  const dir = path.join(outDir, "instructions");
+  const src = path.join(dir, "src");
+  fs.mkdirSync(src, { recursive: true });
+  const rel = (p) => path.relative(root, p);
+  const jobs = []; // { name, size, exe, args }
+  process.stderr.write("instructions: building");
+  for (const b of BENCHMARKS.filter((x) => wanted(x.name, false))) {
+    const n = baseline.programs[b.name].n;
+    const ts = prepare(`${b.name}.ts`, String(n), src);
+    const exe = path.join(dir, b.name);
+    run(
+      nishc.cmd,
+      [...nishc.prefix, rel(ts), ...sourceArgs(b.name), "--link", rel(exe), "--profile", "speed"],
+      `${b.name}/instructions`
+    );
+    jobs.push({ name: b.name, size: `n=${n}`, exe, args: [] });
+    process.stderr.write(".");
+  }
+  const awfy = AWFY.filter((b) => wanted(b.name, true));
+  if (awfy.length > 0) {
+    const exe = buildAwfy(dir);
+    for (const b of awfy) {
+      const inner = baseline.programs[b.name].inner;
+      jobs.push({ name: b.name, size: `inner=${inner}`, exe, args: [b.name, "1", String(inner)] });
+    }
+  }
+  process.stderr.write(" ok; counting");
+
+  const runs = opts.runsGiven ? opts.runs : 1;
+  const rows = [];
+  for (const job of jobs) {
+    const counts = [];
+    for (let i = 0; i < runs; i++) counts.push(countInstructions(valgrind, job.exe, job.args, job.name));
+    const count = median(counts);
+    const base = baseline.programs[job.name].instructions;
+    rows.push({
+      ...job,
+      count,
+      spread: Math.max(...counts) - Math.min(...counts),
+      base,
+      change: (count - base) / base,
+    });
+    process.stderr.write(".");
+  }
+  process.stderr.write("\n");
+
+  const tolerance = baseline.tolerance;
+  const pct = (x) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(3)}%`;
+  const num = (x) => x.toLocaleString("en-US");
+  // An update reports what it moves; a check reports what it would fail.
+  const [above, below, within] = opts.update ? ["raised", "lowered", "kept"] : ["REGRESSED", "below", "ok"];
+  const status = (r) => (r.change > tolerance ? above : r.change < -tolerance ? below : within);
+  console.log(
+    `instructions: ${version(valgrind)} cachegrind, whole process, --profile speed; tolerance ${pct(tolerance)}`
+  );
+  console.log(
+    `${"program".padEnd(12)}${"size".padEnd(12)}${"instructions".padStart(16)}${"baseline".padStart(16)}${"change".padStart(10)}${runs > 1 ? `${"spread".padStart(8)}` : ""}  status`
+  );
+  for (const r of rows) {
+    const spread = runs > 1 ? String(r.spread).padStart(8) : "";
+    console.log(
+      `${r.name.padEnd(12)}${r.size.padEnd(12)}${num(r.count).padStart(16)}${num(r.base).padStart(16)}${pct(r.change).padStart(10)}${spread}  ${status(r)}`
+    );
+  }
+
+  if (opts.update) {
+    for (const r of rows) baseline.programs[r.name].instructions = r.count;
+    baseline.valgrind = version(valgrind);
+    baseline.commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    // One program to a line, so a diff of the file reads as the table above.
+    const { programs, ...header } = baseline;
+    const entry = (p) =>
+      `{ ${Object.entries(p)
+        .map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+        .join(", ")} }`;
+    const body = Object.entries(programs).map(([name, p]) => `    ${JSON.stringify(name)}: ${entry(p)}`);
+    fs.writeFileSync(
+      BASELINE_FILE,
+      JSON.stringify(header, null, 2).replace(/\n}$/, `,\n  "programs": {\n${body.join(",\n")}\n  }\n}\n`)
+    );
+    console.log(
+      `wrote ${rel(BASELINE_FILE)}: ${rows.length} count(s); say why in the pull request that carries it`
+    );
+    return 0;
+  }
+  for (const r of rows.filter((x) => status(x) === below)) {
+    console.log(
+      `note: ${r.name} runs ${pct(r.change)} against its baseline; \`--instructions --update\` locks the gain in`
+    );
+  }
+  const regressed = rows.filter((r) => status(r) === above);
+  if (!opts.check) return 0;
+  if (regressed.length > 0) {
+    console.log(
+      `instructions: ${regressed.length} of ${rows.length} above ${rel(BASELINE_FILE)} by more than ${pct(tolerance)}: ${regressed.map((r) => r.name).join(", ")}`
+    );
+    return 1;
+  }
+  console.log(`instructions: all ${rows.length} within ${pct(tolerance)} of ${rel(BASELINE_FILE)}`);
+  return 0;
+};
+
 // ---- Main --------------------------------------------------------------------------------
+
+if (opts.instructions) process.exit(runInstructions());
 
 fs.mkdirSync(srcDir, { recursive: true });
 const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name));
@@ -298,9 +546,7 @@ if (opts.only) for (const name of opts.only) if (name !== "awfy" && !BENCHMARKS.
  */
 const runAwfy = () => {
   process.stderr.write("awfy: building");
-  const exe = path.join(outDir, "awfy-harness");
-  const args = ["bench/awfy/main.ts", "-o", `${path.relative(root, path.join(outDir, "awfy"))}/`, "--link", path.relative(root, exe), "--profile", "speed"];
-  run(nishc.cmd, [...nishc.prefix, ...args], "awfy");
+  const exe = buildAwfy(outDir);
   process.stderr.write(" ok; running\n");
   const rows = [];
   for (const b of AWFY) {
