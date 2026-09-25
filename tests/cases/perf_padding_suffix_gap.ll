@@ -57,11 +57,11 @@ entry:
   %7 = call i8* @nish_alloc_struct(i64 24)
   %8 = bitcast i8* %7 to %struct.nish_array*
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0
-  store i64 0, i64* %9, align 8, !alias.scope !3, !noalias !4
+  store i64 0, i64* %9, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 1
-  store i64 0, i64* %10, align 8, !alias.scope !3, !noalias !4
+  store i64 0, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 2
-  store i8* null, i8** %11, align 8, !alias.scope !3, !noalias !4
+  store i8* null, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %12 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %this, i32 0, i32 4
   store %struct.nish_array* %8, %struct.nish_array** %12, align 8
   ret void
@@ -141,7 +141,7 @@ cond.end:
   %35 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %34, i32 0, i32 4
   %36 = load %struct.nish_array*, %struct.nish_array** %35, align 8
   %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
-  %38 = load i64, i64* %37, align 8, !alias.scope !3, !noalias !4
+  %38 = load i64, i64* %37, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %39 = trunc i64 %38 to i32
   %40 = add nsw i32 %33, %39
   call void @nish_arena_release(i64 %arena.mark)
@@ -157,3 +157,11 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}

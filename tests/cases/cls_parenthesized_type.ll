@@ -40,27 +40,27 @@ entry:
   %first.addr = alloca %struct.Node*, align 8
   %found.addr = alloca %struct.Node*, align 8
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 2, i64* %0, align 8, !alias.scope !3, !noalias !4
+  store i64 2, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 2, i64* %1, align 8, !alias.scope !3, !noalias !4
+  store i64 2, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %2 = mul i64 2, 8
   %3 = bitcast [2 x %struct.Node*]* %arr.data to i8*
   call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !4, !noalias !3
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4
+  store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %slots.addr, align 8
   %5 = call i8* @nish_alloc_struct(i64 4)
   %6 = bitcast i8* %5 to %struct.Node*
   %7 = getelementptr inbounds %struct.Node, %struct.Node* %6, i32 0, i32 0
-  store i32 0, i32* %7, align 4, !tbaa !9
+  store i32 0, i32* %7, align 4, !tbaa !15
   store %struct.Node* %6, %struct.Node** %first.addr, align 8
   %8 = load %struct.Node*, %struct.Node** %first.addr, align 8
   %9 = getelementptr inbounds %struct.Node, %struct.Node* %8, i32 0, i32 0
-  store i32 7, i32* %9, align 4, !tbaa !9
+  store i32 7, i32* %9, align 4, !tbaa !15
   %10 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %11 = load %struct.Node*, %struct.Node** %first.addr, align 8
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4
+  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %14 = icmp ult i64 0, %13
   br i1 %14, label %bounds.ok, label %bounds.fail
 
@@ -70,16 +70,16 @@ bounds.fail:
 
 bounds.ok:
   %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4
+  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %17 = bitcast i8* %16 to %struct.Node**
   %18 = getelementptr inbounds %struct.Node*, %struct.Node** %17, i64 0
-  store %struct.Node* %11, %struct.Node** %18, align 8, !alias.scope !4, !noalias !3, !tbaa !11
+  store %struct.Node* %11, %struct.Node** %18, align 8, !alias.scope !4, !noalias !3, !tbaa !17
   %19 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %22 = bitcast i8* %21 to %struct.Node**
   %23 = getelementptr inbounds %struct.Node*, %struct.Node** %22, i64 0
-  %24 = load %struct.Node*, %struct.Node** %23, align 8, !alias.scope !4, !noalias !3, !tbaa !11
+  %24 = load %struct.Node*, %struct.Node** %23, align 8, !alias.scope !4, !noalias !3, !tbaa !17
   store %struct.Node* %24, %struct.Node** %found.addr, align 8
   %25 = load %struct.Node*, %struct.Node** %found.addr, align 8
   %26 = icmp eq %struct.Node* %25, null
@@ -92,7 +92,7 @@ cond.true:
 cond.false:
   %28 = load %struct.Node*, %struct.Node** %found.addr, align 8
   %29 = getelementptr inbounds %struct.Node, %struct.Node* %28, i32 0, i32 0
-  %30 = load i32, i32* %29, align 4, !tbaa !9
+  %30 = load i32, i32* %29, align 4, !tbaa !15
   br label %cond.end
 
 cond.end:
@@ -112,8 +112,14 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"i32", !6, i64 0}
-!8 = !{!"Node", !7, i64 0}
-!9 = !{!8, !7, i64 0}
-!10 = !{!"element ptr", !6, i64 0}
-!11 = !{!10, !10, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"i32", !6, i64 0}
+!14 = !{!"Node", !13, i64 0}
+!15 = !{!14, !13, i64 0}
+!16 = !{!"element ptr", !6, i64 0}
+!17 = !{!16, !16, i64 0}

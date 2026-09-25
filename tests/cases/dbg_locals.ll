@@ -61,21 +61,21 @@ entry:
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8, !dbg !63
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %values, i64 0, i32 0, !dbg !63
-  %2 = load i64, i64* %1, align 8, !alias.scope !69, !noalias !70, !dbg !63
+  %2 = load i64, i64* %1, align 8, !alias.scope !69, !noalias !70, !tbaa !74, !dbg !63
   %3 = icmp ult i64 %0, %2, !dbg !63
   br i1 %3, label %forof.body, label %forof.end, !dbg !63
 
 forof.body:
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %values, i64 0, i32 2, !dbg !63
-  %5 = load i8*, i8** %4, align 8, !alias.scope !69, !noalias !70, !dbg !63
+  %5 = load i8*, i8** %4, align 8, !alias.scope !69, !noalias !70, !tbaa !75, !dbg !63
   %6 = bitcast i8* %5 to i32*, !dbg !63
   %7 = getelementptr inbounds i32, i32* %6, i64 %0, !dbg !63
-  %8 = load i32, i32* %7, align 4, !alias.scope !70, !noalias !69, !tbaa !72, !dbg !63
+  %8 = load i32, i32* %7, align 4, !alias.scope !70, !noalias !69, !tbaa !77, !dbg !63
   store i32 %8, i32* %v.addr, align 4, !dbg !63
-  %9 = load i32, i32* %acc.addr, align 4, !dbg !74
-  %10 = load i32, i32* %v.addr, align 4, !dbg !75
-  %11 = add nsw i32 %9, %10, !dbg !74
-  store i32 %11, i32* %acc.addr, align 4, !dbg !74
+  %9 = load i32, i32* %acc.addr, align 4, !dbg !79
+  %10 = load i32, i32* %v.addr, align 4, !dbg !80
+  %11 = add nsw i32 %9, %10, !dbg !79
+  store i32 %11, i32* %acc.addr, align 4, !dbg !79
   br label %forof.inc, !dbg !63
 
 forof.inc:
@@ -85,11 +85,11 @@ forof.inc:
   br label %forof.cond, !dbg !63
 
 forof.end:
-  %14 = load i32, i32* %acc.addr, align 4, !dbg !77
-  ret i32 %14, !dbg !76
+  %14 = load i32, i32* %acc.addr, align 4, !dbg !82
+  ret i32 %14, !dbg !81
 }
 
-define noundef i32 @test() #0 !dbg !80 {
+define noundef i32 @test() #0 !dbg !85 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
@@ -100,86 +100,86 @@ entry:
   %t.addr = alloca i32, align 4
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
-  %arena.mark = call i64 @nish_arena_mark(), !dbg !81
-  call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4), !dbg !83
-  store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8, !dbg !82
-  call void @llvm.dbg.declare(metadata %struct.Point** %p.addr, metadata !86, metadata !DIExpression()), !dbg !82
-  %0 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !88
-  %1 = call i32 @Point.sum(%struct.Point* %0), !dbg !88
-  %2 = icmp eq i32 %1, 7, !dbg !88
-  store i1 %2, i1* %ok.addr, align 1, !dbg !87
-  call void @llvm.dbg.declare(metadata i1* %ok.addr, metadata !91, metadata !DIExpression()), !dbg !87
-  store i64 1, i64* %big.addr, align 8, !dbg !92
-  call void @llvm.dbg.declare(metadata i64* %big.addr, metadata !94, metadata !DIExpression()), !dbg !92
-  store double 0x4004000000000000, double* %ratio.addr, align 8, !dbg !95
-  call void @llvm.dbg.declare(metadata double* %ratio.addr, metadata !98, metadata !DIExpression()), !dbg !95
-  %3 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !101
-  %4 = call i64 @nish_arena_mark(), !dbg !100
-  %5 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !100
-  %6 = call i8* @nish_arena_keep(i64 %4, i8* %5), !dbg !100
-  store i8* %6, i8** %s.addr, align 8, !dbg !99
-  call void @llvm.dbg.declare(metadata i8** %s.addr, metadata !103, metadata !DIExpression()), !dbg !99
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0, !dbg !106
-  store i64 3, i64* %7, align 8, !alias.scope !69, !noalias !70, !dbg !106
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1, !dbg !106
-  store i64 3, i64* %8, align 8, !alias.scope !69, !noalias !70, !dbg !106
-  %9 = bitcast [3 x i32]* %arr.data to i8*, !dbg !106
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2, !dbg !106
-  store i8* %9, i8** %10, align 8, !alias.scope !69, !noalias !70, !dbg !106
-  %11 = bitcast i8* %9 to i32*, !dbg !106
-  %12 = getelementptr inbounds i32, i32* %11, i64 0, !dbg !106
-  store i32 1, i32* %12, align 4, !alias.scope !70, !noalias !69, !tbaa !72, !dbg !106
-  %13 = getelementptr inbounds i32, i32* %11, i64 1, !dbg !106
-  store i32 2, i32* %13, align 4, !alias.scope !70, !noalias !69, !tbaa !72, !dbg !106
-  %14 = getelementptr inbounds i32, i32* %11, i64 2, !dbg !106
-  store i32 3, i32* %14, align 4, !alias.scope !70, !noalias !69, !tbaa !72, !dbg !106
-  %15 = call i32 @total(%struct.nish_array* %arr.hdr), !dbg !105
-  store i32 %15, i32* %t.addr, align 4, !dbg !104
-  call void @llvm.dbg.declare(metadata i32* %t.addr, metadata !110, metadata !DIExpression()), !dbg !104
-  %16 = load i1, i1* %ok.addr, align 1, !dbg !112
-  br i1 %16, label %land.rhs.2, label %land.end.2, !dbg !112
+  %arena.mark = call i64 @nish_arena_mark(), !dbg !86
+  call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4), !dbg !88
+  store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8, !dbg !87
+  call void @llvm.dbg.declare(metadata %struct.Point** %p.addr, metadata !91, metadata !DIExpression()), !dbg !87
+  %0 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !93
+  %1 = call i32 @Point.sum(%struct.Point* %0), !dbg !93
+  %2 = icmp eq i32 %1, 7, !dbg !93
+  store i1 %2, i1* %ok.addr, align 1, !dbg !92
+  call void @llvm.dbg.declare(metadata i1* %ok.addr, metadata !96, metadata !DIExpression()), !dbg !92
+  store i64 1, i64* %big.addr, align 8, !dbg !97
+  call void @llvm.dbg.declare(metadata i64* %big.addr, metadata !99, metadata !DIExpression()), !dbg !97
+  store double 0x4004000000000000, double* %ratio.addr, align 8, !dbg !100
+  call void @llvm.dbg.declare(metadata double* %ratio.addr, metadata !103, metadata !DIExpression()), !dbg !100
+  %3 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !106
+  %4 = call i64 @nish_arena_mark(), !dbg !105
+  %5 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !105
+  %6 = call i8* @nish_arena_keep(i64 %4, i8* %5), !dbg !105
+  store i8* %6, i8** %s.addr, align 8, !dbg !104
+  call void @llvm.dbg.declare(metadata i8** %s.addr, metadata !108, metadata !DIExpression()), !dbg !104
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0, !dbg !111
+  store i64 3, i64* %7, align 8, !alias.scope !69, !noalias !70, !tbaa !74, !dbg !111
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1, !dbg !111
+  store i64 3, i64* %8, align 8, !alias.scope !69, !noalias !70, !tbaa !115, !dbg !111
+  %9 = bitcast [3 x i32]* %arr.data to i8*, !dbg !111
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2, !dbg !111
+  store i8* %9, i8** %10, align 8, !alias.scope !69, !noalias !70, !tbaa !75, !dbg !111
+  %11 = bitcast i8* %9 to i32*, !dbg !111
+  %12 = getelementptr inbounds i32, i32* %11, i64 0, !dbg !111
+  store i32 1, i32* %12, align 4, !alias.scope !70, !noalias !69, !tbaa !77, !dbg !111
+  %13 = getelementptr inbounds i32, i32* %11, i64 1, !dbg !111
+  store i32 2, i32* %13, align 4, !alias.scope !70, !noalias !69, !tbaa !77, !dbg !111
+  %14 = getelementptr inbounds i32, i32* %11, i64 2, !dbg !111
+  store i32 3, i32* %14, align 4, !alias.scope !70, !noalias !69, !tbaa !77, !dbg !111
+  %15 = call i32 @total(%struct.nish_array* %arr.hdr), !dbg !110
+  store i32 %15, i32* %t.addr, align 4, !dbg !109
+  call void @llvm.dbg.declare(metadata i32* %t.addr, metadata !116, metadata !DIExpression()), !dbg !109
+  %16 = load i1, i1* %ok.addr, align 1, !dbg !118
+  br i1 %16, label %land.rhs.2, label %land.end.2, !dbg !118
 
 land.rhs.2:
-  %17 = load i64, i64* %big.addr, align 8, !dbg !113
-  %18 = icmp eq i64 %17, 1, !dbg !113
-  br label %land.end.2, !dbg !112
+  %17 = load i64, i64* %big.addr, align 8, !dbg !119
+  %18 = icmp eq i64 %17, 1, !dbg !119
+  br label %land.end.2, !dbg !118
 
 land.end.2:
-  %19 = phi i1 [ false, %entry ], [ %18, %land.rhs.2 ], !dbg !112
-  br i1 %19, label %land.rhs.1, label %land.end.1, !dbg !112
+  %19 = phi i1 [ false, %entry ], [ %18, %land.rhs.2 ], !dbg !118
+  br i1 %19, label %land.rhs.1, label %land.end.1, !dbg !118
 
 land.rhs.1:
-  %20 = load double, double* %ratio.addr, align 8, !dbg !115
-  %21 = fcmp ogt double %20, 0x4000000000000000, !dbg !115
-  br label %land.end.1, !dbg !112
+  %20 = load double, double* %ratio.addr, align 8, !dbg !121
+  %21 = fcmp ogt double %20, 0x4000000000000000, !dbg !121
+  br label %land.end.1, !dbg !118
 
 land.end.1:
-  %22 = phi i1 [ false, %land.end.2 ], [ %21, %land.rhs.1 ], !dbg !112
-  br i1 %22, label %land.rhs, label %land.end, !dbg !112
+  %22 = phi i1 [ false, %land.end.2 ], [ %21, %land.rhs.1 ], !dbg !118
+  br i1 %22, label %land.rhs, label %land.end, !dbg !118
 
 land.rhs:
-  %23 = load i8*, i8** %s.addr, align 8, !dbg !117
-  %24 = bitcast i8* %23 to i64*, !dbg !117
-  %25 = load i64, i64* %24, align 8, !dbg !117
-  %26 = trunc i64 %25 to i32, !dbg !117
-  %27 = icmp eq i32 %26, 4, !dbg !117
-  br label %land.end, !dbg !112
+  %23 = load i8*, i8** %s.addr, align 8, !dbg !123
+  %24 = bitcast i8* %23 to i64*, !dbg !123
+  %25 = load i64, i64* %24, align 8, !dbg !123
+  %26 = trunc i64 %25 to i32, !dbg !123
+  %27 = icmp eq i32 %26, 4, !dbg !123
+  br label %land.end, !dbg !118
 
 land.end:
-  %28 = phi i1 [ false, %land.end.1 ], [ %27, %land.rhs ], !dbg !112
-  br i1 %28, label %if.then, label %if.end, !dbg !111
+  %28 = phi i1 [ false, %land.end.1 ], [ %27, %land.rhs ], !dbg !118
+  br i1 %28, label %if.then, label %if.end, !dbg !117
 
 if.then:
-  %29 = load i32, i32* %t.addr, align 4, !dbg !121
-  %30 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !122
-  %31 = call i32 @Point.sum(%struct.Point* %30), !dbg !122
-  %32 = add nsw i32 %29, %31, !dbg !121
-  call void @nish_arena_release(i64 %arena.mark), !dbg !120
-  ret i32 %32, !dbg !120
+  %29 = load i32, i32* %t.addr, align 4, !dbg !127
+  %30 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !128
+  %31 = call i32 @Point.sum(%struct.Point* %30), !dbg !128
+  %32 = add nsw i32 %29, %31, !dbg !127
+  call void @nish_arena_release(i64 %arena.mark), !dbg !126
+  ret i32 %32, !dbg !126
 
 if.end:
-  call void @nish_arena_release(i64 %arena.mark), !dbg !123
-  ret i32 0, !dbg !123
+  call void @nish_arena_release(i64 %arena.mark), !dbg !129
+  ret i32 0, !dbg !129
 }
 
 attributes #0 = { nounwind willreturn }
@@ -258,57 +258,63 @@ attributes #1 = { nounwind willreturn readonly }
 !68 = !{!"elements", !66}
 !69 = !{!67}
 !70 = !{!68}
-!71 = !{!"element i32", !20, i64 0}
-!72 = !{!71, !71, i64 0}
-!73 = !DILocation(line: 21, column: 27, scope: !57)
-!74 = !DILocation(line: 22, column: 5, scope: !57)
-!75 = !DILocation(line: 22, column: 12, scope: !57)
-!76 = !DILocation(line: 24, column: 3, scope: !57)
-!77 = !DILocation(line: 24, column: 10, scope: !57)
-!78 = !{!6}
-!79 = !DISubroutineType(types: !78)
-!80 = distinct !DISubprogram(name: "test", linkageName: "test", scope: !1, file: !1, line: 27, type: !79, scopeLine: 27, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
-!81 = !DILocation(line: 27, column: 1, scope: !80)
-!82 = !DILocation(line: 28, column: 3, scope: !80)
-!83 = !DILocation(line: 28, column: 13, scope: !80)
-!84 = !DILocation(line: 28, column: 23, scope: !80)
-!85 = !DILocation(line: 28, column: 26, scope: !80)
-!86 = !DILocalVariable(name: "p", scope: !80, file: !1, line: 28, type: !5)
-!87 = !DILocation(line: 29, column: 3, scope: !80)
-!88 = !DILocation(line: 29, column: 23, scope: !80)
-!89 = !DILocation(line: 29, column: 35, scope: !80)
-!90 = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
-!91 = !DILocalVariable(name: "ok", scope: !80, file: !1, line: 29, type: !90)
-!92 = !DILocation(line: 30, column: 3, scope: !80)
-!93 = !DILocation(line: 30, column: 20, scope: !80)
-!94 = !DILocalVariable(name: "big", scope: !80, file: !1, line: 30, type: !48)
-!95 = !DILocation(line: 31, column: 3, scope: !80)
-!96 = !DILocation(line: 31, column: 22, scope: !80)
-!97 = !DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)
-!98 = !DILocalVariable(name: "ratio", scope: !80, file: !1, line: 31, type: !97)
-!99 = !DILocation(line: 32, column: 3, scope: !80)
-!100 = !DILocation(line: 32, column: 13, scope: !80)
-!101 = !DILocation(line: 32, column: 19, scope: !80)
-!102 = !DILocation(line: 32, column: 22, scope: !80)
-!103 = !DILocalVariable(name: "s", scope: !80, file: !1, line: 32, type: !36)
-!104 = !DILocation(line: 33, column: 3, scope: !80)
-!105 = !DILocation(line: 33, column: 13, scope: !80)
-!106 = !DILocation(line: 33, column: 19, scope: !80)
-!107 = !DILocation(line: 33, column: 20, scope: !80)
-!108 = !DILocation(line: 33, column: 23, scope: !80)
-!109 = !DILocation(line: 33, column: 26, scope: !80)
-!110 = !DILocalVariable(name: "t", scope: !80, file: !1, line: 33, type: !6)
-!111 = !DILocation(line: 34, column: 3, scope: !80)
-!112 = !DILocation(line: 34, column: 7, scope: !80)
-!113 = !DILocation(line: 34, column: 13, scope: !80)
-!114 = !DILocation(line: 34, column: 21, scope: !80)
-!115 = !DILocation(line: 34, column: 26, scope: !80)
-!116 = !DILocation(line: 34, column: 34, scope: !80)
-!117 = !DILocation(line: 34, column: 41, scope: !80)
-!118 = !DILocation(line: 34, column: 54, scope: !80)
-!119 = !DILocation(line: 34, column: 57, scope: !80)
-!120 = !DILocation(line: 35, column: 5, scope: !80)
-!121 = !DILocation(line: 35, column: 12, scope: !80)
-!122 = !DILocation(line: 35, column: 16, scope: !80)
-!123 = !DILocation(line: 37, column: 3, scope: !80)
-!124 = !DILocation(line: 37, column: 10, scope: !80)
+!71 = !{!"header i64", !20, i64 0}
+!72 = !{!"header ptr", !20, i64 0}
+!73 = !{!"array header", !71, i64 0, !71, i64 8, !72, i64 16}
+!74 = !{!73, !71, i64 0}
+!75 = !{!73, !72, i64 16}
+!76 = !{!"element i32", !20, i64 0}
+!77 = !{!76, !76, i64 0}
+!78 = !DILocation(line: 21, column: 27, scope: !57)
+!79 = !DILocation(line: 22, column: 5, scope: !57)
+!80 = !DILocation(line: 22, column: 12, scope: !57)
+!81 = !DILocation(line: 24, column: 3, scope: !57)
+!82 = !DILocation(line: 24, column: 10, scope: !57)
+!83 = !{!6}
+!84 = !DISubroutineType(types: !83)
+!85 = distinct !DISubprogram(name: "test", linkageName: "test", scope: !1, file: !1, line: 27, type: !84, scopeLine: 27, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!86 = !DILocation(line: 27, column: 1, scope: !85)
+!87 = !DILocation(line: 28, column: 3, scope: !85)
+!88 = !DILocation(line: 28, column: 13, scope: !85)
+!89 = !DILocation(line: 28, column: 23, scope: !85)
+!90 = !DILocation(line: 28, column: 26, scope: !85)
+!91 = !DILocalVariable(name: "p", scope: !85, file: !1, line: 28, type: !5)
+!92 = !DILocation(line: 29, column: 3, scope: !85)
+!93 = !DILocation(line: 29, column: 23, scope: !85)
+!94 = !DILocation(line: 29, column: 35, scope: !85)
+!95 = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
+!96 = !DILocalVariable(name: "ok", scope: !85, file: !1, line: 29, type: !95)
+!97 = !DILocation(line: 30, column: 3, scope: !85)
+!98 = !DILocation(line: 30, column: 20, scope: !85)
+!99 = !DILocalVariable(name: "big", scope: !85, file: !1, line: 30, type: !48)
+!100 = !DILocation(line: 31, column: 3, scope: !85)
+!101 = !DILocation(line: 31, column: 22, scope: !85)
+!102 = !DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)
+!103 = !DILocalVariable(name: "ratio", scope: !85, file: !1, line: 31, type: !102)
+!104 = !DILocation(line: 32, column: 3, scope: !85)
+!105 = !DILocation(line: 32, column: 13, scope: !85)
+!106 = !DILocation(line: 32, column: 19, scope: !85)
+!107 = !DILocation(line: 32, column: 22, scope: !85)
+!108 = !DILocalVariable(name: "s", scope: !85, file: !1, line: 32, type: !36)
+!109 = !DILocation(line: 33, column: 3, scope: !85)
+!110 = !DILocation(line: 33, column: 13, scope: !85)
+!111 = !DILocation(line: 33, column: 19, scope: !85)
+!112 = !DILocation(line: 33, column: 20, scope: !85)
+!113 = !DILocation(line: 33, column: 23, scope: !85)
+!114 = !DILocation(line: 33, column: 26, scope: !85)
+!115 = !{!73, !71, i64 8}
+!116 = !DILocalVariable(name: "t", scope: !85, file: !1, line: 33, type: !6)
+!117 = !DILocation(line: 34, column: 3, scope: !85)
+!118 = !DILocation(line: 34, column: 7, scope: !85)
+!119 = !DILocation(line: 34, column: 13, scope: !85)
+!120 = !DILocation(line: 34, column: 21, scope: !85)
+!121 = !DILocation(line: 34, column: 26, scope: !85)
+!122 = !DILocation(line: 34, column: 34, scope: !85)
+!123 = !DILocation(line: 34, column: 41, scope: !85)
+!124 = !DILocation(line: 34, column: 54, scope: !85)
+!125 = !DILocation(line: 34, column: 57, scope: !85)
+!126 = !DILocation(line: 35, column: 5, scope: !85)
+!127 = !DILocation(line: 35, column: 12, scope: !85)
+!128 = !DILocation(line: 35, column: 16, scope: !85)
+!129 = !DILocation(line: 37, column: 3, scope: !85)
+!130 = !DILocation(line: 37, column: 10, scope: !85)

@@ -2480,14 +2480,14 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   // it the swap loads the field once and the length once. The two checks left are
   // `i`'s and `j`'s, and they must stay on: a swap with none passes nothing it
   // should. The field load is the one `load ptr` that carries `!tbaa` and no alias
-  // scope (elements carry both, header fields only the scope); the length is the
-  // header's `load i64`.
+  // scope (elements and header fields carry both); the length is the header's
+  // `load i64`.
   const reloadLl = path.join(buildDir, "arr_field_reload.ll");
   if (has("opt") && fs.existsSync(reloadLl)) {
     const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", reloadLl]);
     const body = String(o.stdout).match(/define[^\n]*@Swap\.swap\b[\s\S]*?\n}/)?.[0] ?? "";
     const fieldLoads = body.match(/= load ptr, ptr %\w+, align 8, !tbaa ![0-9]+\n/g) ?? [];
-    const lengthLoads = body.match(/= load i64, ptr %\w+, align 8, !alias\.scope/g) ?? [];
+    const lengthLoads = body.match(/= load i64, ptr %\w+, align 8, (?:!tbaa ![0-9]+, )?!alias\.scope/g) ?? [];
     const checks = body.match(/call void @nish_panic_index\(/g) ?? [];
     check(
       "arr_field_reload: opt -O3 loads the field and its length once in the swap, and keeps exactly two checks",
@@ -2500,6 +2500,72 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         ? `field loads ${fieldLoads.length}, length loads ${lengthLoads.length}, checks ${checks.length}\n${body}`
         : String(o.stderr)
     );
+  }
+
+  // A class-field store cannot write an array header, and the header's own `!tbaa`
+  // subtree is what tells LLVM so (`headerTbaa`, self/tbaa.ts). Without it `opt -O3`
+  // reloads `this.piles`'s `data` after `top.next = null` and again after
+  // `disk.next = top` in AWFY Towers' inlined `moveTopDisk`, three loads of each of
+  // `len` and `data` per move where one of each will do. The header's tags are read
+  // out of the metadata rather than assumed, because nodes are numbered per module.
+  //
+  // The negatives are the other half: in each of them a header really does change
+  // between two reads (`push` in a callee, `pop` through an alias, `nish_array_grow`
+  // on an alloca header, a record array growing under untagged record stores). The
+  // golden round trips link against the runtime's objects, so the C behind those
+  // calls stays opaque there; here each is linked the way `--link` links, `-O3
+  // -flto` over the runtime's sources, so `nish_array_grow` is inlined into the
+  // Nish code with clang's own TBAA root beside ours, and the answers must not move.
+  const headerTbaaLl = path.join(buildDir, "arr_header_tbaa.ll");
+  if (has("opt") && fs.existsSync(headerTbaaLl)) {
+    const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", headerTbaaLl]);
+    const out = String(o.stdout);
+    const header = out.match(/^(![0-9]+) = !\{!"array header",/m)?.[1];
+    const tagOf = (offset) =>
+      header === undefined ? undefined : out.match(new RegExp(`^(![0-9]+) = !\\{${header}, ![0-9]+, i64 ${offset}\\}$`, "m"))?.[1];
+    const lenTag = tagOf(0);
+    const dataTag = tagOf(16);
+    const body = out.match(/define[^\n]*@Towers\.moveTopDisk\b[\s\S]*?\n}/)?.[0] ?? "";
+    const loads = (type, tag) =>
+      tag === undefined ? -1 : (body.match(new RegExp(`= load ${type}, ptr %\\w+, align 8, !tbaa ${tag}(?![0-9])`, "g")) ?? []).length;
+    const lengthLoads = loads("i64", lenTag);
+    const dataLoads = loads("ptr", dataTag);
+    check(
+      "arr_header_tbaa: opt -O3 loads the header's length and data once per Towers move",
+      o.status === 0 && body !== "" && lengthLoads === 1 && dataLoads === 1,
+      o.status === 0
+        ? `header ${header}, len tag ${lenTag}, data tag ${dataTag}: length loads ${lengthLoads}, data loads ${dataLoads}\n${body}`
+        : String(o.stderr)
+    );
+  }
+  if (!HAS_CLANG || !has("ld.lld")) {
+    skip("arr_header_tbaa: the -O3 -flto round trips need clang and ld.lld");
+  } else {
+    for (const name of [
+      "arr_header_tbaa",
+      "arr_header_tbaa_push",
+      "arr_header_tbaa_pop",
+      "arr_header_tbaa_records",
+      "arr_header_tbaa_stack",
+      "arr_header_tbaa_threads",
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const threads = name.endsWith("_threads") ? ["-DNISH_THREADS=1", "-ftls-model=initial-exec", "-pthread"] : [];
+      const exe = path.join(buildDir, `${name}_lto`);
+      const link = spawnSync(
+        "clang",
+        ["-Wno-override-module", "-O3", "-flto", "-fuse-ld=lld", ...threads, ll, DRIVER_C, ...RUNTIME_C, "-lm", "-o", exe],
+        { cwd: root }
+      );
+      const run = link.status === 0 ? spawnSync(exe) : null;
+      const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8");
+      check(
+        `${name}: linked -O3 -flto with the runtime inlined, the answer is the golden's`,
+        run !== null && run.status === 0 && String(run.stdout) === want,
+        run === null ? String(link.stderr) : `got ${String(run.stdout)}want ${want}`
+      );
+    }
   }
 
   // WP15 §2c candidate 2: the emitter lifts an array header into the loop's
