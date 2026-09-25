@@ -1,0 +1,38 @@
+module tests/cases/dump_shared_write_alloc.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+function make(x: i32): Point -> @make
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  escaping: x
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function label(n: i32): string -> @label
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function sum(n: i32): i32 -> @sum
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_array_grow
+  stackSites=1 stackLocals=1
+  local 16:9 acc: i32[] (const)
+  local 17:12 i: i32 (let)
+  local 20:7 total: i32 (let)
+  local 21:14 v: i32 (const)
+function grow(xs: i32[], v: i32): void -> @grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 28:3
+  escaping: v
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function run(xs: i32[]): i32 -> @run [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via grow
+  calls: grow label make sum
+  pointer xs: size=0 writesThrough=true captured=false passedTo=grow#0
+  stackSites=0 stackLocals=0
+  callee 32:3 grow -> @grow
+  callee 32:12 sum -> @sum
+  callee 33:10 make -> @make
+  callee 33:15 label -> @label

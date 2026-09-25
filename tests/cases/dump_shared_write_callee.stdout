@@ -1,0 +1,28 @@
+module tests/cases/dump_shared_write_callee.ts (entry)
+function fill(xs: i32[], v: i32): void -> @fill
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 5:5
+  escaping: v
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 4:12 i: i32 (let)
+function reset(xs: i32[]): void -> @reset
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fill
+  calls: fill
+  pointer xs: size=0 writesThrough=true captured=false passedTo=fill#0
+  stackSites=0 stackLocals=0
+  callee 10:3 fill -> @fill
+function log(n: i32): void -> @log
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+function run(): i32 -> @run [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via reset
+  calls: log nish_panic_index reset
+  stackSites=1 stackLocals=1
+  local 18:9 xs: i32[] (const)
+  callee 19:3 reset -> @reset
+  callee 20:3 log -> @log
