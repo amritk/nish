@@ -1286,6 +1286,36 @@ const DECLARED = [
     why: "a new program: `test` only calls allocating functions and gets the arena scope; its bounds checks are the reference compiler's",
   },
   {
+    program: "bench/awfy/main.ts",
+    file: "list.ll",
+    changelog: "Give a function the arena scope when only its callees allocate",
+    why: "a new program, the Are We Fast Yet ports: `List.benchmark` brackets itself with the callee scope, which the reference compiler does not give it",
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "storage.ll",
+    changelog: "Give a function the arena scope when only its callees allocate",
+    why: "a new program, the Are We Fast Yet ports: `Storage.benchmark`, its manual `Arena` calls removed, brackets itself with the callee scope",
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "bounce.ll",
+    changelog: "Give a function the arena scope when only its callees allocate",
+    why: "a new program, the Are We Fast Yet ports: `Bounce.innerBenchmarkLoop` brackets itself with the callee scope, the balls each run makes dying with the call",
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "main.ll",
+    changelog: "Give a function the arena scope when only its callees allocate",
+    why: "a new program, the Are We Fast Yet ports: the harness's `innerBenchmarkLoop` brackets itself with the callee scope around the benchmark object it makes",
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "permute.ll",
+    changelog: "A passed bounds check proves the same index on the same array",
+    why: "a new program, the Are We Fast Yet ports: `Permute.swap` keeps two of its four checks",
+  },
+  {
     changelog: "Keep a field array's header live across element stores",
     why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
   },
