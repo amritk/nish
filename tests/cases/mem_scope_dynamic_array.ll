@@ -51,22 +51,22 @@ entry:
   %1 = call i8* @nish_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.nish_array*
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4
+  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
-  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %5 = mul i64 %0, 4
   %6 = call i8* @nish_alloc_struct(i64 %5)
   call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %2, %struct.nish_array** %counts.addr, align 8
   store i32 %seed, i32* %x.addr, align 4
   store i32 0, i32* %i.addr, align 4
   %8 = load %struct.nish_array*, %struct.nish_array** %counts.addr, align 8
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0
-  %10 = load i64, i64* %9, align 8, !alias.scope !3, !noalias !4
+  %10 = load i64, i64* %9, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 2
-  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   br label %for.cond
 
 for.cond:
@@ -117,9 +117,9 @@ bounds.fail:
 bounds.ok:
   %33 = bitcast i8* %12 to i32*
   %34 = getelementptr inbounds i32, i32* %33, i64 %31
-  %35 = load i32, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %35 = load i32, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %36 = add nsw i32 %35, 1
-  store i32 %36, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store i32 %36, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   br label %for.inc
 
 for.inc:
@@ -133,9 +133,9 @@ for.end:
   store i32 0, i32* %i.addr.1, align 4
   %39 = load %struct.nish_array*, %struct.nish_array** %counts.addr, align 8
   %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 0
-  %41 = load i64, i64* %40, align 8, !alias.scope !3, !noalias !4
+  %41 = load i64, i64* %40, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 2
-  %43 = load i8*, i8** %42, align 8, !alias.scope !3, !noalias !4
+  %43 = load i8*, i8** %42, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   br label %for.cond.1
 
 for.cond.1:
@@ -156,7 +156,7 @@ bounds.fail.1:
 bounds.ok.1:
   %49 = bitcast i8* %43 to i32*
   %50 = getelementptr inbounds i32, i32* %49, i64 %47
-  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %52 = load i32, i32* %best.addr, align 4
   %53 = sext i32 %52 to i64
   %54 = icmp ult i64 %53, %41
@@ -169,7 +169,7 @@ bounds.fail.2:
 bounds.ok.2:
   %55 = bitcast i8* %43 to i32*
   %56 = getelementptr inbounds i32, i32* %55, i64 %53
-  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %58 = icmp sgt i32 %51, %57
   br i1 %58, label %if.then, label %if.end
 
@@ -279,5 +279,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"element i32", !6, i64 0}
-!8 = !{!7, !7, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i32", !6, i64 0}
+!14 = !{!13, !13, i64 0}

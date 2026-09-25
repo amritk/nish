@@ -37,7 +37,7 @@ define internal noundef i32 @firstOf(%struct.nish_array* noundef nonnull align 8
 entry:
   %0 = call %struct.nish_array* @identity$roarr.i32(%struct.nish_array* %xs)
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %3 = icmp ult i64 0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
 
@@ -47,24 +47,24 @@ bounds.fail:
 
 bounds.ok:
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   ret i32 %8
 }
 
 define void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %v) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
-  store i32 %v, i32* %0, align 4, !tbaa !11
+  store i32 %v, i32* %0, align 4, !tbaa !16
   ret void
 }
 
 define noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4, !tbaa !11
+  %1 = load i32, i32* %0, align 4, !tbaa !16
   ret i32 %1
 }
 
@@ -80,7 +80,7 @@ entry:
 if.then:
   %3 = load %struct.Box$i32*, %struct.Box$i32** %same.addr, align 8
   %4 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %3, i32 0, i32 0
-  %5 = load i32, i32* %4, align 4, !tbaa !11
+  %5 = load i32, i32* %4, align 4, !tbaa !16
   ret i32 %5
 
 if.end:
@@ -146,19 +146,19 @@ entry:
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
-  store i64 3, i64* %2, align 8, !alias.scope !3, !noalias !4
+  store i64 3, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
-  store i64 3, i64* %3, align 8, !alias.scope !3, !noalias !4
+  store i64 3, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !17
   %4 = call i8* @nish_alloc_struct(i64 12)
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
-  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 4, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store i32 4, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 5, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store i32 5, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 6, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store i32 6, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   store %struct.nish_array* %1, %struct.nish_array** %xs.addr, align 8
   %10 = call i8* @nish_alloc_struct(i64 4)
   %11 = bitcast i8* %10 to %struct.Box$i32*
@@ -174,7 +174,7 @@ entry:
   %19 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %20 = call %struct.nish_array* @identity$arr.i32(%struct.nish_array* %19)
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
-  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4
+  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %23 = trunc i64 %22 to i32
   %24 = add nsw i32 %18, %23
   %25 = load %struct.Box$i32*, %struct.Box$i32** %box.addr, align 8
@@ -264,8 +264,14 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"element i32", !6, i64 0}
-!8 = !{!7, !7, i64 0}
-!9 = !{!"i32", !6, i64 0}
-!10 = !{!"Box$i32", !9, i64 0}
-!11 = !{!10, !9, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{!"i32", !6, i64 0}
+!15 = !{!"Box$i32", !14, i64 0}
+!16 = !{!15, !14, i64 0}
+!17 = !{!9, !7, i64 8}

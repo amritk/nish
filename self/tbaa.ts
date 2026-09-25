@@ -11,7 +11,9 @@
  *
  * Element slots get a subtree of their own beside the scalars the fields use,
  * so that an element store is not read as a clobber of the class field that
- * holds the array (`elementTbaa` has the argument). The whole rule is in
+ * holds the array (`elementTbaa` has the argument), and so does the array
+ * header, so that a field store is not read as a clobber of an array's
+ * `length` or `data` (`headerTbaa`). The whole rule is in
  * `docs/ARCHITECTURE.md`, "Attribute soundness rules".
  */
 import { Emitter } from "./emit";
@@ -95,4 +97,38 @@ export const elementTbaa = (emitter: Emitter, elem: i32): string => {
   }
   const node = emitter.metadata(`!{!"element ${typeName(emitter, elem)}", ${charNode(emitter)}, i64 0}`);
   return `, !tbaa ${emitter.metadata(`!{${node}, ${node}, i64 0}`)}`;
+};
+
+/**
+ * `, !tbaa !N` for a load or store of array header field `index` (0 `len`,
+ * 1 `cap`, 2 `data`), or `""` under `--no-optimize-attributes`.
+ *
+ * The header is a struct node of its own, `array header`, whose fields hang
+ * off two scalars that are nobody else's (`header i64`, `header ptr`). No
+ * class can be named with a space, so no field's struct path can reach that
+ * node, and a header access is NoAlias with every tagged class field access
+ * and every element access. That is what keeps `this.piles`'s `data` and
+ * `len` live across `top.next = null` in AWFY Towers.
+ *
+ * It is sound because every write of a header's bytes is one of two things.
+ * Either it is Nish IR, and then it goes through `storeHeaderField` in
+ * `self/emit_arrays.ts` and carries this tag: `new Array`, a literal, `push`
+ * and `pop`, whether the header is an arena bump or an entry-block alloca. Or
+ * it is C behind a call: `nish_array_grow`, `nish_alloc_array`,
+ * `nish_readdir`, `nish_argv_init`, a C caller's stack header or the N-API
+ * shim's. A call is opaque to TBAA, and under `-flto` the inlined C carries
+ * clang's own root, which LLVM answers MayAlias against this one. A header is
+ * never a class object, an element slot or an inline record, and is never
+ * copied with `llvm.memcpy`. `docs/ARCHITECTURE.md` has the whole argument.
+ */
+export const headerTbaa = (emitter: Emitter, index: i32): string => {
+  if (!emitter.opts.optimizeAttributes) {
+    return "";
+  }
+  const omni = charNode(emitter);
+  const word = emitter.metadata(`!{!"header i64", ${omni}, i64 0}`);
+  const ptr = emitter.metadata(`!{!"header ptr", ${omni}, i64 0}`);
+  const header = emitter.metadata(`!{!"array header", ${word}, i64 0, ${word}, i64 8, ${ptr}, i64 16}`);
+  const access = index === 2 ? ptr : word;
+  return `, !tbaa ${emitter.metadata(`!{${header}, ${access}, i64 ${index * 8}}`)}`;
 };

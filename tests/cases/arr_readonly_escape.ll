@@ -25,7 +25,7 @@ entry:
   %1 = getelementptr inbounds %struct.Window, %struct.Window* %0, i32 0, i32 0
   %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !4
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8, !alias.scope !8, !noalias !9
+  %4 = load i64, i64* %3, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %5 = trunc i64 %4 to i32
   ret i32 %5
 }
@@ -33,7 +33,7 @@ entry:
 define noundef i32 @touch(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %rows, i32 noundef %v) #2 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %rows, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !8, !noalias !9
+  %1 = load i64, i64* %0, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %2 = icmp ult i64 0, %1
   br i1 %2, label %bounds.ok, label %bounds.fail
 
@@ -43,12 +43,12 @@ bounds.fail:
 
 bounds.ok:
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %rows, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !8, !noalias !9
+  %4 = load i8*, i8** %3, align 8, !alias.scope !8, !noalias !9, !tbaa !14
   %5 = bitcast i8* %4 to %struct.nish_array**
   %6 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %5, i64 0
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !alias.scope !9, !noalias !8, !tbaa !11
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !alias.scope !9, !noalias !8, !tbaa !16
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
-  %9 = load i64, i64* %8, align 8, !alias.scope !8, !noalias !9
+  %9 = load i64, i64* %8, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %10 = icmp ult i64 0, %9
   br i1 %10, label %bounds.ok.1, label %bounds.fail.1
 
@@ -58,12 +58,12 @@ bounds.fail.1:
 
 bounds.ok.1:
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
-  %12 = load i8*, i8** %11, align 8, !alias.scope !8, !noalias !9
+  %12 = load i8*, i8** %11, align 8, !alias.scope !8, !noalias !9, !tbaa !14
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 0
-  store i32 %v, i32* %14, align 4, !alias.scope !9, !noalias !8, !tbaa !13
+  store i32 %v, i32* %14, align 4, !alias.scope !9, !noalias !8, !tbaa !18
   %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %rows, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8, !alias.scope !8, !noalias !9
+  %16 = load i64, i64* %15, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %17 = trunc i64 %16 to i32
   ret i32 %17
 }
@@ -83,7 +83,12 @@ attributes #3 = { nounwind noreturn cold }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
-!10 = !{!"element ptr", !1, i64 0}
-!11 = !{!10, !10, i64 0}
-!12 = !{!"element i32", !1, i64 0}
-!13 = !{!12, !12, i64 0}
+!10 = !{!"header i64", !1, i64 0}
+!11 = !{!"header ptr", !1, i64 0}
+!12 = !{!"array header", !10, i64 0, !10, i64 8, !11, i64 16}
+!13 = !{!12, !10, i64 0}
+!14 = !{!12, !11, i64 16}
+!15 = !{!"element ptr", !1, i64 0}
+!16 = !{!15, !15, i64 0}
+!17 = !{!"element i32", !1, i64 0}
+!18 = !{!17, !17, i64 0}
