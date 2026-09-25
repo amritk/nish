@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // An element store cannot write the class field that holds the array. AWFY's
 // Permute.swap is this shape: before element loads and stores carried a TBAA
 // tag of their own, `opt -O3` reloaded `this.v` and its length after the first

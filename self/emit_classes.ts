@@ -26,7 +26,14 @@ import {
   resultTypeDecl,
 } from "./emit_result";
 import { fieldTbaa } from "./tbaa";
-import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
+import {
+  emitArrayLength,
+  emitArrayMethodCall,
+  emitInlineArrayAssignment,
+  emitNewArray,
+  initInlineArrays,
+  inlineHeaderPointer,
+} from "./emit_arrays";
 import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
@@ -51,7 +58,7 @@ import {
 } from "./nodes";
 import { FieldInfo, FunctionSig, StructInfo } from "./program";
 import { ARRAY_TYPE } from "./runtime";
-import { isFloat, T_I32, T_STRING, T_VOID } from "./types";
+import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types";
 
 // ---- Helpers ------------------------------------------------------------------------
 
@@ -211,6 +218,7 @@ export const emitNew = (emitter: Emitter, expr: Node): string => {
   // The class named, not the type it converts to.
   const info = structInfoOf(emitter, intrinsicType(emitter.program, expr));
   const obj = allocate(emitter, info, expr);
+  initInlineArrays(emitter, info, obj);
   constructObject(emitter, info, obj, expr.children[2].children, expr);
   return obj;
 };
@@ -228,6 +236,11 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
   }
   const info = structInfoOf(emitter, receiver);
   const field = info.field(expr.text);
+  if (field !== null && field.inline()) {
+    // The array lives in the object, so the field's value is its header's
+    // address; only an element access or a `.length` ever asks for it.
+    return inlineHeaderPointer(emitter, info, emitter.emitExpression(expr.children[0]), field);
+  }
   if (field !== null) {
     return loadField(emitter, info, emitter.emitExpression(expr.children[0]), field);
   }
@@ -296,6 +309,9 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   if (field === null) {
     process.exit(internalErrorFor(`emitter: unknown field \`${target.text}\` on \`${info.name}\``, emitter.opts.json));
   }
+  if (field.inline()) {
+    return emitInlineArrayAssignment(emitter, expr, field);
+  }
   const receiver = emitter.emitExpression(target.children[0]);
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1]);
@@ -353,7 +369,7 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
     declared.push(info.name);
     const types: string[] = [];
     for (const field of info.fields) {
-      types.push(emitter.llvm(field.type));
+      types.push(fieldLLVMType(emitter, field));
     }
     const body = types.length > 0 ? ` ${types.join(", ")} ` : "";
     lines.push(`%struct.${info.name} = type {${body}}`);
@@ -394,6 +410,19 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
     lines.push(decl);
   }
   return lines;
+};
+
+/**
+ * The LLVM type of one field in its struct body. An inline array field is one
+ * member, so no field's index moves: the header, then its `K` slots
+ * (`self/inline_arrays.ts`).
+ */
+const fieldLLVMType = (emitter: Emitter, field: FieldInfo): string => {
+  if (!field.inline()) {
+    return emitter.llvm(field.type);
+  }
+  const slot = emitter.llvm(emitter.table.refOf(field.type));
+  return `{ ${ARRAY_STRUCT}, [${field.inlineCapacity} x ${slot}] }`;
 };
 
 const noteStruct = (

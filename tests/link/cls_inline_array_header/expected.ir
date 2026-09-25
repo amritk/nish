@@ -1,0 +1,1 @@
+%struct.Board = type { %struct.nish_array* }

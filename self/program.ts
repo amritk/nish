@@ -23,6 +23,7 @@ import { BuiltinExport } from "./nish_modules";
 import { StringMap, StringSet } from "./map";
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
 import { packageSymbolPrefix } from "./packages";
+import { isCollectionsModule } from "./std_modules";
 import { Local } from "./symbols";
 import { TypeTable } from "./types";
 
@@ -191,6 +192,16 @@ export const PAR_MAP: i32 = 1;
 export const PAR_REDUCE: i32 = 2;
 /** `mapRange` or `reduceBlocks`: the loop one thread runs over its share of a region. */
 export const PAR_CHUNK: i32 = 3;
+
+// WP32: what an instantiation is to the emitter's `Map` lowering
+// (`mapIntrinsicRole` in `self/generics.ts` decides, `self/emit_map.ts` reads).
+
+/** An ordinary instantiation. */
+export const MAP_NONE: i32 = 0;
+/** `hashKey<K>` from `std/collections.ts`: every call is the key's hash, lowered in place. */
+export const MAP_HASH_KEY: i32 = 1;
+/** `sameKey<K>`: every call is SameValueZero on two keys, lowered in place. */
+export const MAP_SAME_KEY: i32 = 2;
 
 /**
  * One call of `parallelMapInto` or `parallelReduce`, recorded where it was
@@ -465,6 +476,8 @@ export class Instantiation {
   functionBindings: FunctionBindings;
   /** WP29 P1: one of the `PAR_*` roles; `PAR_NONE` for everything but `nish/threads`'s four templates. */
   parallel: i32;
+  /** WP32: one of the `MAP_*` roles; `MAP_NONE` for everything but `std/collections.ts`'s two intrinsics. */
+  mapIntrinsic: i32;
 
   constructor(template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
     this.template = template;
@@ -472,6 +485,7 @@ export class Instantiation {
     this.functionArgs = [];
     this.functionBindings = new FunctionBindings();
     this.parallel = PAR_NONE;
+    this.mapIntrinsic = MAP_NONE;
     this.typeArgs = typeArgs;
     this.sig = sig;
     this.bindings = bindings;
@@ -525,6 +539,14 @@ export class FieldInfo {
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null;
   decl: Node;
+  /**
+   * The number of element slots an array field holds inside its object, or -1
+   * for a field laid out as it always was. Decided once the whole program is
+   * checked (`self/inline_arrays.ts`): an inline field is the array header and
+   * `inlineCapacity` slots, one LLVM member `{ %struct.nish_array, [K x T] }`,
+   * so `index` does not move and `offset` is recomputed.
+   */
+  inlineCapacity: i32;
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name;
@@ -534,6 +556,12 @@ export class FieldInfo {
     this.readonly = false;
     this.initializer = null;
     this.decl = decl;
+    this.inlineCapacity = -1;
+  }
+
+  /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
+  inline(): boolean {
+    return this.inlineCapacity >= 0;
   }
 }
 
@@ -1023,6 +1051,23 @@ export class CheckedProgram {
   usesArgv: boolean;
   /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
   parallelCalls: ParallelCall[];
+  /**
+   * Every `x.f = e;` in this module's bodies whose field is stored inline, with
+   * the length `e` is known to have (`self/inline_arrays.ts`). Parallel lists
+   * rather than a table by node id: there are a handful per program, and a
+   * per-node array would cost every module a slot per node for them.
+   */
+  inlineAssignNodes: Node[];
+  inlineAssignLengths: i32[];
+  /**
+   * WP32: `const m: Map<string, i32> = new Map()` takes the `new`'s type
+   * arguments from the annotation (docs/wp32-map.md §7). The node id of such a
+   * `new`, as text -> index into `newTypeArguments`, the annotation's list.
+   */
+  newTypeArgumentIds: StringMap;
+  newTypeArguments: Node[];
+  /** `isCollections()`, decided once: the package and the path never change. */
+  collectionsLibrary: boolean;
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[];
@@ -1133,6 +1178,11 @@ export class CheckedProgram {
     this.enumList = [];
     this.entryMain = null;
     this.parallelCalls = [];
+    this.inlineAssignNodes = [];
+    this.inlineAssignLengths = [];
+    this.newTypeArgumentIds = new StringMap();
+    this.newTypeArguments = [];
+    this.collectionsLibrary = isCollectionsModule(packageName, source.path);
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
     this.nodeLocals = new Array<Local | null>(nodeCount);
@@ -1157,6 +1207,20 @@ export class CheckedProgram {
     }
   }
 
+  /**
+   * The type-argument list a `new` with none of its own takes from the
+   * annotation of the declaration it initialises, or `null` (WP32).
+   */
+  newTypeArgumentsOf(expr: Node): Node | null {
+    const at = this.newTypeArgumentIds.get(`${expr.id}`, -1);
+    return at < 0 || at >= this.newTypeArguments.length ? null : this.newTypeArguments[at];
+  }
+
+  /** Whether this module is the standard library's `std/collections.ts` (WP32). */
+  isCollections(): boolean {
+    return this.collectionsLibrary;
+  }
+
   /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */
   methodConstraintList(decl: Node): ConstraintList {
     const key = `${decl.id}`;
@@ -1168,6 +1232,18 @@ export class CheckedProgram {
     this.methodConstraints.set(key, this.methodConstraintLists.length);
     this.methodConstraintLists.push(list);
     return list;
+  }
+
+  /** The length the fresh array `assignment` stores into an inline field has, or -1 when it is not one. */
+  inlineAssignLength(assignment: Node): i32 {
+    let i = 0;
+    while (i < this.inlineAssignNodes.length) {
+      if (this.inlineAssignNodes[i] === assignment) {
+        return this.inlineAssignLengths[i];
+      }
+      i = i + 1;
+    }
+    return -1;
   }
 
   /** The struct called `name` in this module, or `null`. */

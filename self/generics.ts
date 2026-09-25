@@ -85,6 +85,9 @@ import {
   FunctionSig,
   ImportBinding,
   Instantiation,
+  MAP_HASH_KEY,
+  MAP_NONE,
+  MAP_SAME_KEY,
   ROLE_FUNCTION,
   STRUCT_CLASS,
   StructInfo,
@@ -93,7 +96,107 @@ import {
   TemplateInfo,
 } from "./program";
 import { Local, STORAGE_PARAM, Scope, TypeOrigin, unknownOrigin } from "./symbols";
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, R_UNKNOWN, T_ERROR, T_VOID, TypeTable } from "./types";
+import {
+  intBits,
+  K_ARRAY,
+  K_NULLABLE,
+  K_RESULT,
+  K_STRUCT,
+  R_UNKNOWN,
+  T_BOOL,
+  T_ERROR,
+  T_F32,
+  T_F64,
+  T_STRING,
+  T_VOID,
+  TypeTable,
+} from "./types";
+
+/**
+ * WP32: whether `template` is the global `Map` or `Set`, the two classes
+ * `std/collections.ts` declares (docs/wp32-map.md §4.2). A program's own `Map`
+ * is an ordinary class and none of the rules about the global apply to it.
+ */
+export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
+  template.home.program.isCollections() && (template.sourceName === "Map" || template.sourceName === "Set");
+
+/**
+ * WP32: why `args` cannot instantiate the global `Map` or `Set`, or `""`
+ * (docs/wp32-map.md §5.1). A key is hashed and compared by value, or by
+ * identity for a class instance, so it is a string, a number of any width, a
+ * boolean, an enum or a class; an interface is stored inline and has no
+ * identity, and an array, a nullable type and a `Result` wait for a program
+ * that needs one. A value is stored as it is, so it is anything but `void` and
+ * an interface, whose record would be copied in rather than shared.
+ */
+export const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
+  if (args.length !== template.typeParams.length || args.length === 0) {
+    return "";
+  }
+  const table = ctx.table;
+  const shown = instanceDisplayName(table, template.sourceName, args);
+  const key = args[0];
+  if (key !== T_ERROR && !isCollectionKey(ctx, key)) {
+    return (
+      `\`${table.typeName(key)}\` cannot be the key type of \`${shown}\`: a key is hashed and compared by value, or by identity for a class instance, ` +
+      "so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`"
+    );
+  }
+  if (args.length < 2) {
+    return "";
+  }
+  const value = args[1];
+  if (value === T_VOID || isInterfaceType(ctx, value)) {
+    return (
+      `\`${table.typeName(value)}\` cannot be the value type of \`${shown}\`: a value is stored in the table as it is, ` +
+      "so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)"
+    );
+  }
+  return "";
+};
+
+/** A key type of §5.1: a string, a scalar, an enum, or a class held by identity. */
+const isCollectionKey = (ctx: CheckContext, type: i32): boolean => {
+  const table = ctx.table;
+  if (type === T_STRING || type === T_BOOL || type === T_F32 || type === T_F64 || intBits(type) > 0 || table.isEnum(type)) {
+    return true;
+  }
+  if (!table.isStruct(type)) {
+    return false;
+  }
+  const info = ctx.program.struct(table.nameOf(type));
+  return info !== null && info.kind === STRUCT_CLASS;
+};
+
+/** Whether `type` is an interface: a record stored inline wherever it is held. */
+const isInterfaceType = (ctx: CheckContext, type: i32): boolean => {
+  if (!ctx.table.isStruct(type)) {
+    return false;
+  }
+  const info = ctx.program.struct(ctx.table.nameOf(type));
+  return info !== null && info.kind !== STRUCT_CLASS;
+};
+
+/**
+ * WP32: the `MAP_*` role of an instantiation of `template`: `hashKey` and
+ * `sameKey` in `std/collections.ts` are lowered in place by the emitter
+ * (`self/emit_map.ts`), and every other template is what it says.
+ */
+export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
+  if (template.owner !== null || !template.home.program.isCollections()) {
+    return MAP_NONE;
+  }
+  if (template.sourceName === "hashKey") {
+    return MAP_HASH_KEY;
+  }
+  return template.sourceName === "sameKey" ? MAP_SAME_KEY : MAP_NONE;
+};
+
+/** The same question about an instantiated struct: `Map$str$i32` is one, and so is `Set$i32`. */
+export const isCollectionStruct = (info: StructInfo): boolean => {
+  const instance = info.instance;
+  return instance !== null && isCollectionTemplate(instance.template);
+};
 
 /**
  * This compiler's instantiation limits. They are a backstop for a program that
@@ -768,6 +871,16 @@ export const instantiateStructHere = (
   at: Node,
   site: RequestSite
 ): StructInfo | null => {
+  // WP32: the global `Map` and `Set` hold a key a probe can hash and compare,
+  // and a value it can store as it is. Refused where the type was written,
+  // before the template's own body could refuse it in words about its fields.
+  if (isCollectionTemplate(template) && !site.asker.program.isCollections()) {
+    const refusal = collectionArgumentRefusal(site.asker, template, args);
+    if (refusal.length > 0) {
+      site.asker.error(at, refusal);
+      return null;
+    }
+  }
   adoptArgumentLayouts(ctx, args, site);
   // WP18 G6: before the tuple is looked up, so every request is held to the
   // constraint where it was written, not only the first one to name the tuple.
@@ -1059,6 +1172,7 @@ export const instantiateHere = (
   info.functionArgs = functions;
   info.functionBindings = bindFunctionParameters(template.decl, functions);
   info.parallel = parallelRole(template);
+  info.mapIntrinsic = mapIntrinsicRole(template);
   sig.instance = info;
   template.count = template.count + 1;
   ctx.program.addInstantiation(symbol, info);

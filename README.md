@@ -547,4 +547,5 @@ coding agents are in [AGENTS.md](AGENTS.md) and [`.claude/`](.claude/).
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Third-party code in the repository keeps its own
+licence; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

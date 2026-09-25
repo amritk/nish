@@ -125,6 +125,131 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/map_annotated_new.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_arena_callee.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_compaction.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_dbg.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_delete_reinsert.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_fingerprint_miss.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_growth.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_bool.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_class.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_enum.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_f32.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_f64.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_i32.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_i64.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_str.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_u16.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_u32.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_u64.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_u8.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/set_i32.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/set_str.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "examples/sets.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "docs/cookbook/map_has.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/link/map_two_modules/main.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/link/map_own_class/main.ts",
+    changelog: "The global Map and Set, backed by std/collections.ts",
+    why: "a new program: its entry declares its own `Map` and `unique.ts` names the global `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
     program: "tests/cases/perf_bounds_toi32.ts",
     file: "perf_bounds_toi32.ll",
     changelog: "Prove bounds through toI32(length) and compile std/text silent",

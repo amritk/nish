@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // The Towers move again, compiled with `--threads`. The flag moves the arena
 // into thread-local storage and changes nothing about which allocation a
 // header access reaches, so the header tags are the same ones and the answer

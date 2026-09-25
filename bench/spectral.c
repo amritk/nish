@@ -1,3 +1,8 @@
+/* Adapted from the Computer Language Benchmarks Game spectral-norm program
+   (Node.js #1, contributed by Ian Osgood, modified by Isaac Gouy),
+   https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+   Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+   Revised BSD licence; see bench/LICENSE-benchmarksgame.md. */
 /* C twin of spectral.ts: same loops, same evaluation order, heap vectors. */
 #include <math.h>
 #include <stdint.h>

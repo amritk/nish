@@ -1,3 +1,8 @@
+// Adapted from the Computer Language Benchmarks Game spectral-norm program
+// (Node.js #1, contributed by Ian Osgood, modified by Isaac Gouy),
+// https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+// Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+// Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 // Rust twin of spectral.ts: same loops and evaluation order, Vec<f64> indexed
 // by i32-as-usize (bounds-checked, as in Nish).
 const N: i32 = 3000; // bench:n

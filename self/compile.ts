@@ -564,11 +564,11 @@ export const main = (): number => {
   const emitted = compilation.emit();
   const stems: string[] = [];
   const paths: string[] = [];
+  // One entry per module that writes a `.ll`: `std/collections.ts` writes
+  // none, so a one-file program that names `Map` is still one module (WP32).
   for (const module of emitted) {
     stems.push(module.stem);
-  }
-  for (const unit of compilation.modules) {
-    paths.push(unit.name);
+    paths.push(module.name);
   }
   const outputs = planOutputs(stems, paths, output, link);
   if (outputs.length === 0) {

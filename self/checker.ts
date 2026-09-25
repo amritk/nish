@@ -52,7 +52,9 @@ import {
   N_IMPORT,
   N_INDEX,
   N_INTERFACE,
+  N_LIST,
   N_MEMBER,
+  N_METHOD,
   N_MODULE_CONST,
   N_ARRAY,
   N_CALL,
@@ -66,12 +68,14 @@ import {
   N_TEMPLATE_TEXT,
   N_ENUM,
   N_TYPE_ALIAS,
+  N_TYPE_REF,
   N_UNARY,
   N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes";
 import { StringSet } from "./map";
+import { COLLECTIONS_SPECIFIER } from "./std_modules";
 import {
   AliasInfo,
   CheckedProgram,
@@ -79,6 +83,7 @@ import {
   DeferredInstance,
   EnumInfo,
   FunctionSig,
+  ImportBinding,
   Instantiation,
   TemplateInfo,
   STRUCT_CLASS,
@@ -179,6 +184,8 @@ export class Checker {
         this.declareEnum(stmt);
       }
     }
+    // WP32: the global `Map` and `Set`, bound before any annotation is resolved.
+    this.importCollections();
 
     for (const stmt of this.program.file.children) {
       // Per declaration: stage0 wraps each of these in `sink.recover`, so one
@@ -234,6 +241,44 @@ export class Checker {
     }
     this.ctx.errored = false;
     this.qualifySymbols();
+  }
+
+  /**
+   * WP32: the implicit `import { Map, Set } from "nish/collections"`
+   * (docs/wp32-map.md §4.2).
+   *
+   * A module that names the global `Map` or `Set` — in a type or after `new` —
+   * is given a binding for it, synthesised here exactly as `collectImports`
+   * would have written it, so everything after this is the ordinary imported
+   * generic class (`bindStructTemplateImport`). A module that declares or
+   * imports a `Map` or `Set` of its own keeps its own, as it would under `tsc`,
+   * and one that names neither loads nothing, so every program that compiled
+   * before this compiles to the same bytes.
+   */
+  importCollections(): void {
+    // Neither name in the text means neither can be in the tree: most modules
+    // stop here without the walk.
+    const text = this.program.source.text;
+    if (this.program.isCollections() || (text.indexOf("Map") < 0 && text.indexOf("Set") < 0)) {
+      return;
+    }
+    const names = new CollectionNames();
+    scanCollectionNames(this.program.file, names, this.program, false, false);
+    this.importCollection("Map", names.map);
+    this.importCollection("Set", names.set);
+  }
+
+  importCollection(name: string, at: Node | null): void {
+    if (at === null || this.nameTaken(name)) {
+      return;
+    }
+    for (const imp of this.program.imports) {
+      if (imp.localName === name) {
+        return;
+      }
+    }
+    this.program.imports.push(new ImportBinding(COLLECTIONS_SPECIFIER, name, name, at, at));
+    this.program.typeNames.add(name);
   }
 
   /**
@@ -2175,4 +2220,107 @@ const checkShiftCount = (walk: PerfWalk, expr: Node): void => {
       `${count.value % width} and this shifts by that instead: mask the count yourself if that is intended, or ` +
       `shift a wider value — \`${expr.text}\` never shifts a value out of existence here`
   );
+};
+
+/** The first place a module names `Map` and `Set`, in a type or after `new` (WP32). */
+class CollectionNames {
+  map: Node | null;
+  set: Node | null;
+
+  constructor() {
+    this.map = null;
+    this.set = null;
+  }
+
+  note(name: string, at: Node): void {
+    if (name === "Map" && this.map === null) {
+      this.map = at;
+    } else if (name === "Set" && this.set === null) {
+      this.set = at;
+    }
+  }
+}
+
+/**
+ * Walk `node` for the names of the global collections, and record every
+ * `const m: Map<K, V> = new Map()` whose `new` takes its type arguments from
+ * the annotation (docs/wp32-map.md §7). One walk, because both are syntax: the
+ * import has to exist before pass 1 resolves the first annotation.
+ *
+ * A type parameter called `Map` or `Set` shadows the global inside the
+ * declaration that binds it, as it does under `tsc`, so the walk carries which
+ * of the two names an enclosing function, class, interface or method has
+ * bound, and a name it has bound is not a use of the global.
+ */
+const scanCollectionNames = (
+  node: Node,
+  names: CollectionNames,
+  program: CheckedProgram,
+  hideMap: boolean,
+  hideSet: boolean
+): void => {
+  const bound = boundTypeParameters(node);
+  let mapHidden = hideMap;
+  let setHidden = hideSet;
+  if (bound !== null) {
+    for (const param of bound.children) {
+      if (param.kind === N_IDENT && param.text === "Map") {
+        mapHidden = true;
+      } else if (param.kind === N_IDENT && param.text === "Set") {
+        setHidden = true;
+      }
+    }
+  }
+  let name = "";
+  let at: Node | null = null;
+  if (node.kind === N_TYPE_REF) {
+    name = node.text;
+    at = node;
+  } else if (node.kind === N_NEW && node.children[0].kind === N_IDENT) {
+    name = node.children[0].text;
+    at = node.children[0];
+  }
+  const hidden = (name === "Map" && mapHidden) || (name === "Set" && setHidden);
+  if (at !== null && !hidden) {
+    names.note(name, at);
+  }
+  if (node.kind === N_VAR_DECL) {
+    noteAnnotatedNew(node, program, mapHidden, setHidden);
+  }
+  for (const child of node.children) {
+    scanCollectionNames(child, names, program, mapHidden, setHidden);
+  }
+};
+
+/**
+ * The type-parameter list a declaration binds for its own extent — a function
+ * in either spelling, a method, a class or an interface — or `null`.
+ */
+const boundTypeParameters = (node: Node): Node | null => {
+  let at = -1;
+  if (node.kind === N_FUNCTION || node.kind === N_METHOD || node.kind === N_CLASS) {
+    at = 4;
+  } else if (node.kind === N_INTERFACE) {
+    at = 2;
+  }
+  if (at < 0 || node.children.length <= at || node.children[at].kind !== N_LIST) {
+    return null;
+  }
+  return node.children[at];
+};
+
+/** `const m: Map<K, V> = new Map()`: the `new` names the annotation's class and writes no type arguments. */
+const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean, hideSet: boolean): void => {
+  const annotation = decl.children[1];
+  const init = decl.children[2];
+  if (annotation.kind !== N_TYPE_REF || init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
+    return;
+  }
+  const name = init.children[0].text;
+  const global = (name === "Map" && !hideMap) || (name === "Set" && !hideSet);
+  if (!global || annotation.text !== name || init.children[1].children.length > 0) {
+    return;
+  }
+  program.newTypeArgumentIds.set(`${init.id}`, program.newTypeArguments.length);
+  program.newTypeArguments.push(annotation.children[0]);
 };

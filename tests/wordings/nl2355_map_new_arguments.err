@@ -1,0 +1,1 @@
+`new Map<string, i32>` takes no arguments in this version: a `Map` or `Set` starts empty, so create it with `new Map<string, i32>()` and `set` or `add` each entry in a loop
