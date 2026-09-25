@@ -592,7 +592,8 @@ returns a scalar and still gets no scope. It names what refused the scope: the
 line of an allocation stored into memory, a callee that stores one, or a callee
 that releases or resets the arena. It is silent in a function that calls
 `Arena.mark`, `Arena.release` or `Arena.reset` itself, and in one that returns
-a pointer.
+a pointer. §2d widens it to every function and narrows it to the loops a pass
+scope does not reclaim either.
 
 Both halves are whole-program facts, so it is found after the attribute
 fixpoint (`arenaLoopFindings`, `self/escape.ts`) and reported by
@@ -636,6 +637,149 @@ so it gets a scope too (Permute and Towers net-allocate beneath it). Bounce's
 functions are identical after `opt -O3` either way, and relinking the same
 modules with `-Wl,-mllvm,-align-loops=64` turns 25.6 ms without that scope
 into 22.0 ms with it.
+
+## 2d. Scopes around a loop's pass (#216)
+
+A function that returns a pointer gets no scope of its own, so a loop in it
+that builds and drops a temporary on every pass keeps every pass's temporary
+until its caller releases: #216's `summarise(rounds): Box`, calling an
+allocating `build(i)` and keeping only `.length`, peaked at 85 MB at 4000
+rounds. And a scalar function's scope only reclaims when it returns, so a long
+loop in one still grows by every pass until then. This brackets the pass.
+
+### Rule
+
+A loop's body is bracketed when nothing it allocates, itself or through a
+callee, is reachable once the pass is over except through a number, a
+`boolean` or an `enum` (`decideLoopScopes`, `self/escape.ts`, after
+`settleCalleeScopes`), and it allocates something (profit, not proof: a direct
+arena site in the body, a `push`, a printed number, or a callee that leaves
+memory behind). The clauses, one per way out of a pass:
+
+- **memory**: no allocation site in the body escapes, and no callee has
+  `allocEscapes`. As in §2c this means no allocation of the pass is stored
+  anywhere, so a pointer read out of memory during the pass predates it;
+- **outer locals**: a local declared outside the body, of a type that can hold
+  a pointer, is assigned only a value `isOld` proves predates the pass (a
+  literal, `this`, an outer local, a field or element read, the `const`
+  variable of a nested `for...of` over an old array, a call to a function that
+  allocates nothing, a choice between two of those); `x op= e` on
+  such a local is refused, which is `s = s + x`'s sibling;
+- **growth**: `push` only onto a `const` the body declared with a fresh array
+  literal or `new Array`;
+- **return**: a pointer `return`ed from the body is `isOld`, and `orReturn` is
+  refused;
+- **control**: the function calls no `Arena.mark` / `release` / `reset`
+  itself, and reaches no callee that releases or resets.
+
+An inline element (`xs[i]` where `xs` holds an interface nothing implements) is
+the address of a slot in `xs`, not a pointer loaded out of it. `classifyUse` and
+the escape flow used to treat it as a read of `xs`, which let a function store
+`xs[n - 1]` into its parameter's object, count as contained under §2c and
+release the block it pointed into; `mem_loop_scope_interior` printed `8 16`
+instead of `49 98`. Both now follow such an element as the array itself
+(`yieldsInteriorPointer`, `self/attributes.ts`), `isOld` asks for an inline
+element's array, and a `for...of` over an inline array flows into its variable.
+
+### Lowering
+
+```llvm
+for.body:
+  %2 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %3 = load i8*, i8** %2, align 8                  ; the mark: buf ...
+  %4 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8                  ; ... and off
+  ...                                              ; the pass
+  %20 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %21 = load i8*, i8** %20, align 8
+  %22 = icmp eq i8* %21, %3
+  br i1 %22, label %pass.rewind, label %pass.free
+
+pass.rewind:                                       ; no chunk of the pass survives
+  %23 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %23, align 8
+  br label %pass.done
+
+pass.free:                                         ; the pass pushed a chunk
+  %24 = ptrtoint i8* %3 to i64
+  %25 = add i64 %24, %5
+  call void @nish_arena_release(i64 %25)
+  br label %pass.done
+```
+
+The mark is read inline rather than through `nish_arena_mark`. The first
+version called both runtime functions and cost the adversarial loop below
+twice its time; `nish_arena_grow` only ever pushes a chunk in front of the
+others and moves `buf` to it, so an unchanged `buf` means rewinding `off` is
+the whole release, and otherwise `nish_arena_release(buf + off)` is exactly
+the runtime's own mark and release (`0` for an arena with no chunk yet, which
+releases everything). `runtime_wasm.c` rewinds `off` the same way.
+
+The mark is the first instruction of the body, so it dominates every release.
+The body falling through releases before the back-edge; `continue` and `break`
+release the pass of the loop they leave (a `switch`'s `break` stays in it); a
+`return` releases the outermost open scope, the function's own if it has one,
+which rewinds past every inner pass at once; a scalar tail call sinks that
+release ahead of itself as §2b does, refused for a callee that reads the bump
+position. A `for` loop's condition and update run outside the bracket.
+
+### Measured
+
+Micro-benchmarks, `--profile speed`, `taskset -c 2`, best of five, this
+container. `small`: a scalar function looping 10⁸ times over a callee that
+returns a two-element array; `ptr`: the same loop in a function returning a
+`Box`; `none`: the loop allocating nothing, which takes no scope; `short`:
+10⁶ calls of a 100-pass loop in a function that has a §2 scope already, so
+main keeps at most 100 arrays live and never faults a page — the loop the
+rule costs most on.
+
+| | main | this change |
+| --- | ---: | ---: |
+| `small` 10⁸ passes | 1.6–16.4 s, 3,127,848 KB | 0.23 s, 1,448 KB |
+| `ptr` 10⁸ passes | 1.5–5.4 s, 3,127,848 KB | 0.26 s, 1,448 KB |
+| `none` 10⁸ passes | 0.020 s | 0.020 s |
+| `short` 10⁶ × 100 passes | 0.168 s | 0.203 s (0.34 s with runtime calls) |
+
+#216's probe, peak resident set (`bench/rss.c`), for the shape of
+`tests/cases/mem_loop_scope` (`build` pushes 64 to 70 numbers) and a heavier
+`build` pushing 2000:
+
+| rounds | main | this change | main, heavy | this change, heavy |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 1,576 KB | 1,448 KB | 2,984 KB | 1,448 KB |
+| 1000 | 2,344 KB | 1,448 KB | 17,704 KB | 1,448 KB |
+| 4000 | 5,160 KB | 1,448 KB | 66,600 KB | 1,448 KB |
+
+`tests/run.js` holds the same property on `mem_loop_scope_chunk`, whose pass
+pushes a chunk every time: the peak at 2000 passes is the peak at 20 (165,672 KB
+against 2,984 KB before this change).
+
+`short` is the price: about a third of a nanosecond, a load, a compare and a
+store, per pass of a loop whose body is two stores and an add. It is taken
+because the rule cannot tell `short` from `small` without the trip count, and
+the same loop run 10⁸ times in one call is `small`. None of the seven Are We
+Fast Yet ports or the seven `bench/` programs has a loop the rule scopes: their
+IR is byte-identical before and after.
+
+### The warning, again
+
+`NL9011` now fires in a function of any return type, where neither a pass
+scope nor a function scope reclaims the call's memory, and names what refused
+each. It stays silent in a loop whose pass can `return` what it allocated,
+since no bracket, written or automatic, could release that pass (`std/json.ts`'s
+`jsonField` is that loop). Over `self/compile.ts` that is 82 warnings, from 51.
+
+### Left out
+
+- A callee that stores what it allocates into the object it returns (`words`
+  pushing fresh strings into the array it returns) has `allocEscapes`, so no
+  loop that calls it is scoped: the escape analysis follows values, not
+  memory, and a pointer read back out of that object is not an allocation
+  site. Lifting it needs a "stored only into fresh memory" fact *and* reads
+  that follow a pointer out of fresh memory, together.
+- A `return` of a fresh value from the pass (`return new Box(i)`) refuses the
+  scope, although the release could run first when the value's inputs are
+  scalars.
 
 ## 3. Explicit control
 
@@ -759,9 +903,9 @@ object, so the `nish_alloc_struct(i64 N)` the layout test reads is still there.
   local first.
 - `new Array<T>(n)` with a `const n = 4` is not stackable: only a literal
   length is.
-- Arena scopes are per function; a temporary allocated inside a loop is
-  released when the function returns, not per iteration (write the loop
-  body as a function to get per-iteration release).
+- A loop's pass is scoped only under §2d's rule; a pass that keeps anything
+  in an outer local or older memory keeps every pass's temporaries until the
+  function returns (write the loop body as a function to get per-call release).
 - A function that loses its scope to a **branch-assigned local** retains its
   memory and the compiler says nothing about it, unless it earns the §2c
   scope instead (a scalar result, parameters that hold no pointer, and a

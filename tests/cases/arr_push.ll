@@ -1,4 +1,7 @@
 %struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -110,19 +113,40 @@ for.cond.1:
   br i1 %48, label %for.body.1, label %for.end.1
 
 for.body.1:
-  %49 = load i32, i32* %i.addr.1, align 4
-  %50 = sext i32 %49 to i64
-  %51 = bitcast i8* %45 to i32*
-  %52 = getelementptr inbounds i32, i32* %51, i64 %50
-  %53 = load i32, i32* %52, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %54 = call i8* @nish_str_from_i32(i32 %53)
-  call void @nish_print(i8* %54)
+  %49 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %50 = load i8*, i8** %49, align 8
+  %51 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %52 = load i64, i64* %51, align 8
+  %53 = load i32, i32* %i.addr.1, align 4
+  %54 = sext i32 %53 to i64
+  %55 = bitcast i8* %45 to i32*
+  %56 = getelementptr inbounds i32, i32* %55, i64 %54
+  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %58 = call i8* @nish_str_from_i32(i32 %57)
+  call void @nish_print(i8* %58)
+  %59 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %60 = load i8*, i8** %59, align 8
+  %61 = icmp eq i8* %60, %50
+  br i1 %61, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %62 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %52, i64* %62, align 8
+  br label %pass.done
+
+pass.free:
+  %63 = ptrtoint i8* %50 to i64
+  %64 = add i64 %63, %52
+  call void @nish_arena_release(i64 %64)
+  br label %pass.done
+
+pass.done:
   br label %for.inc.1
 
 for.inc.1:
-  %55 = load i32, i32* %i.addr.1, align 4
-  %56 = add nsw i32 %55, 1
-  store i32 %56, i32* %i.addr.1, align 4
+  %65 = load i32, i32* %i.addr.1, align 4
+  %66 = add nsw i32 %65, 1
+  store i32 %66, i32* %i.addr.1, align 4
   br label %for.cond.1
 
 for.end.1:

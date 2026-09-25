@@ -6572,6 +6572,192 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end mem_callee_scope -->
 
+### A scope around each pass of a loop
+
+A loop whose pass drops everything it allocates is bracketed on its own, in a
+function of any return type: the mark is read at the top of the body, and
+every edge that leaves the pass rewinds to it — the back-edge, `continue`,
+`break`, and a `return`. Nothing the pass allocates may be stored into memory,
+kept in a local declared outside the loop, pushed onto an older array, or
+returned. The rule and its proof are in [ARCHITECTURE.md](ARCHITECTURE.md),
+"Escape analysis, stack allocation, and arena scopes"
+(`tests/cases/mem_loop_scope`, `mem_loop_scope_control`, and the `_escape`,
+`_forof` and `_interior` negatives).
+
+<!-- cookbook:begin mem_loop_scope -->
+```ts
+// `summarise` returns a pointer, so it gets no scope of its own, and each
+// list `build` returns is garbage once its length is read. Nothing the pass
+// allocates reaches `total`, older memory, or the `return`, so every pass is
+// bracketed: the mark is the arena's `buf` and `off`, and the release rewinds
+// `off` unless the pass pushed a chunk.
+class Box {
+  n: i32;
+
+  constructor(n: i32) {
+    this.n = n;
+  }
+}
+
+const build = (n: i32): i32[] => [n, n + 1, n + 2];
+
+export const summarise = (rounds: i32): Box => {
+  let total = 0;
+  for (let i = 0; i < rounds; i++) {
+    total = total + build(i).length;
+  }
+  return new Box(total);
+};
+```
+
+```llvm
+%struct.Box = type { i32 }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_arena_release(i64 noundef) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %n) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
+  store i32 %n, i32* %0, align 4, !tbaa !4
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @build(i32 noundef %n) #0 {
+entry:
+  %0 = add nsw i32 %n, 1
+  %1 = add nsw i32 %n, 2
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 3, i64* %4, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 3, i64* %5, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %6 = call i8* @nish_alloc_struct(i64 12)
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* %6, i8** %7, align 8, !alias.scope !8, !noalias !9, !tbaa !15
+  %8 = bitcast i8* %6 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 0
+  store i32 %n, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  %10 = getelementptr inbounds i32, i32* %8, i64 1
+  store i32 %0, i32* %10, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  %11 = getelementptr inbounds i32, i32* %8, i64 2
+  store i32 %1, i32* %11, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  ret %struct.nish_array* %3
+}
+
+define noundef nonnull align 8 dereferenceable(4) %struct.Box* @summarise(i32 noundef %rounds) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  store i32 0, i32* %total.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %rounds
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %3 = load i8*, i8** %2, align 8
+  %4 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8
+  %6 = load i32, i32* %total.addr, align 4
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = call %struct.nish_array* @build(i32 %7)
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0
+  %10 = load i64, i64* %9, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %11 = trunc i64 %10 to i32
+  %12 = add nsw i32 %6, %11
+  store i32 %12, i32* %total.addr, align 4
+  %13 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %14 = load i8*, i8** %13, align 8
+  %15 = icmp eq i8* %14, %3
+  br i1 %15, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %16, align 8
+  br label %pass.done
+
+pass.free:
+  %17 = ptrtoint i8* %3 to i64
+  %18 = add i64 %17, %5
+  call void @nish_arena_release(i64 %18)
+  br label %pass.done
+
+pass.done:
+  br label %for.inc
+
+for.inc:
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %21 = call i8* @nish_alloc_struct(i64 4)
+  %22 = bitcast i8* %21 to %struct.Box*
+  %23 = load i32, i32* %total.addr, align 4
+  call void @Box.constructor(%struct.Box* %22, i32 %23)
+  ret %struct.Box* %22
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Box", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"nish array"}
+!6 = !{!"header", !5}
+!7 = !{!"elements", !5}
+!8 = !{!6}
+!9 = !{!7}
+!10 = !{!"header i64", !1, i64 0}
+!11 = !{!"header ptr", !1, i64 0}
+!12 = !{!"array header", !10, i64 0, !10, i64 8, !11, i64 16}
+!13 = !{!12, !10, i64 0}
+!14 = !{!12, !10, i64 8}
+!15 = !{!12, !11, i64 16}
+!16 = !{!"element i32", !1, i64 0}
+!17 = !{!16, !16, i64 0}
+```
+<!-- cookbook:end mem_loop_scope -->
+
 ### A tail call, and the release ahead of it
 
 `sum` ends with its recursive call, so the call carries `tail`: the callee is

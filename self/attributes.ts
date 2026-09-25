@@ -45,6 +45,7 @@ import {
 import { stringifyCallee, stringConstructCallees } from "./emit_strings";
 import {
   analyzeEscapes,
+  decideLoopScopes,
   EscapeResult,
   FLOW_LEAKS,
   FLOW_LOCAL,
@@ -97,6 +98,7 @@ import {
   N_THROW,
   N_UNARY,
   N_VAR,
+  N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes";
@@ -190,6 +192,41 @@ export class CallSite {
     this.flow = flow;
     this.escapes = escapes;
     this.node = node;
+  }
+}
+
+/**
+ * One loop of a function, and whether each pass of its body is bracketed with
+ * `nish_arena_mark` / `nish_arena_release` (`decideLoopScopes`, escape.ts).
+ * When it is not, `why`, `at` and `name` say what refused it, which is what the
+ * arena-loop diagnostic names.
+ */
+export class LoopScope {
+  loop: Node;
+  /** The statement each pass runs: what the scope brackets. */
+  body: Node;
+  /** The node whose line the reason names, or null. */
+  at: Node | null;
+  /** The local or the callee the reason names, or `""`. */
+  name: string;
+  /** A `LOOP_*` reason from escape.ts; `LOOP_NOTHING` when nothing refused the scope. */
+  why: i32;
+  scoped: boolean;
+  /**
+   * A pass can `return` what it allocated, whatever else refused it: no
+   * bracket, automatic or written, could release that pass, so the
+   * arena-loop diagnostic has no rewrite to offer and says nothing.
+   */
+  handsBack: boolean;
+
+  constructor(loop: Node, body: Node) {
+    this.loop = loop;
+    this.body = body;
+    this.scoped = false;
+    this.why = 0;
+    this.at = null;
+    this.name = "";
+    this.handsBack = false;
   }
 }
 
@@ -336,6 +373,12 @@ export class FunctionFacts {
   readsArenaState: boolean;
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[];
+  /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
+  escapingNodes: Node[];
+  /** `EscapeResult.arenaNodes`: the sites that bump the arena themselves. */
+  arenaNodes: Node[];
+  /** Every loop of the body, and whether its passes are scoped. Decided after the scopes are settled. */
+  loopScopes: LoopScope[];
   /**
    * Every arena allocation made while this function runs, by itself or by
    * anything it calls, is unreachable once it returns except through its
@@ -417,6 +460,9 @@ export class FunctionFacts {
     this.usesArenaControl = false;
     this.readsArenaState = false;
     this.callSites = [];
+    this.escapingNodes = [];
+    this.arenaNodes = [];
+    this.loopScopes = [];
     this.contained = false;
     this.escapeSite = null;
     this.returnsScalar = false;
@@ -447,6 +493,25 @@ export class FunctionFacts {
   /** WP6: the allocation at `node` was proved not to outlive the function. */
   isStackSite(node: Node): boolean {
     return this.stackSites[node.id];
+  }
+
+  /** Each pass of `body` is bracketed with its own arena scope: it is the body of a scoped loop. */
+  scopesPass(body: Node): boolean {
+    for (const scope of this.loopScopes) {
+      if (scope.body === body) {
+        return scope.scoped;
+      }
+    }
+    return false;
+  }
+
+  scopesAnyPass(): boolean {
+    for (const scope of this.loopScopes) {
+      if (scope.scoped) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** WP17: the object the by-value `Result` parameter `name` unpacks into is an alloca. */
@@ -559,6 +624,8 @@ const indexInList = (list: Node, node: Node): i32 => {
 export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse => {
   const program = unit.program;
   let node = ref;
+  // Set once the value is an inline element: the address of a slot in the array.
+  let interior = false;
   for (;;) {
     const parent = unit.parents.parentOf(node);
     if (parent === null) {
@@ -585,6 +652,11 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       continue;
     }
     if (parent.kind === N_INDEX && parent.children[0] === node) {
+      if (yieldsInteriorPointer(unit, table, parent)) {
+        node = parent;
+        interior = true;
+        continue;
+      }
       return classifyElementUse(unit, table, parent);
     }
     if (parent.kind === N_MEMBER) {
@@ -621,7 +693,19 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       return use(USE_READ);
     }
     if (parent.kind === N_FOR_OF) {
-      return use(parent.children[1] === node ? USE_READ : USE_ESCAPE);
+      // The loop variable of an inline-element array is each slot's address,
+      // so the array itself is what the body holds (`yieldsInteriorPointer`).
+      if (parent.children[1] !== node) {
+        return use(USE_ESCAPE);
+      }
+      if (!storesInlineElements(program, table, node)) {
+        return use(USE_READ);
+      }
+      return classifyElementHolder(unit, table, program.nodeLocals[parent.children[0].children[0].children[0].id], parent);
+    }
+    // `const p = xs[i]`: the local holds the slot, and is what uses it.
+    if (interior && parent.kind === N_VAR_DECL && parent.children[2] === node) {
+      return classifyElementHolder(unit, table, program.nodeLocals[parent.id], enclosingBlock(unit, parent));
     }
     if (parent.kind === N_UNARY) {
       return use(USE_NONE);
@@ -717,6 +801,93 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     return argumentUse(ctor, index + 1);
   }
   return use(USE_ESCAPE);
+};
+
+/**
+ * `xs[i]` whose value is the address of a slot inside `xs`'s data block
+ * rather than a pointer loaded out of it: `xs` holds its elements inline
+ * (WP15 §2a), and the element is used as a value — kept in a local, passed,
+ * returned, stored — rather than read from or written through on the spot.
+ *
+ * Whoever holds that value holds `xs`'s memory, so a use of it is a use of
+ * `xs`, and the classifiers see through the index to it. Reading a field of
+ * the element (`xs[i].x`) or writing the slot (`xs[i] = p`, which copies)
+ * keeps nothing, and neither is this. Before this was seen through, a
+ * function could store `xs[i]` into its parameter's object, be told nothing
+ * escaped, and release the arena it pointed into
+ * (`tests/cases/mem_loop_scope_interior`).
+ */
+export const yieldsInteriorPointer = (unit: AnalysisUnit, table: TypeTable, access: Node): boolean => {
+  if (!storesInlineElements(unit.program, table, access.children[0])) {
+    return false;
+  }
+  let node = access;
+  let parent = unit.parents.parentOf(node);
+  while (parent !== null && parent.kind === N_PAREN) {
+    node = parent;
+    parent = unit.parents.parentOf(node);
+  }
+  return parent !== null && parent.kind !== N_MEMBER && !isAssignmentTarget(parent, node);
+};
+
+/**
+ * A local that holds an inline element (`const p = xs[i]`, or the variable of
+ * a `for...of` over such an array), classified as a use of the array: every
+ * reference to it reads or writes one of the slot's fields on the spot, which
+ * is `USE_READ` or `USE_WRITE` exactly as `xs[i].x` is, or anything else, which
+ * keeps the slot's address and escapes. `within` is where the local is
+ * visible: its block, or the `for...of`.
+ */
+const classifyElementHolder = (unit: AnalysisUnit, table: TypeTable, holder: Local | null, within: Node | null): ParamUse => {
+  if (holder === null || within === null) {
+    return use(USE_ESCAPE);
+  }
+  const refs: Node[] = [];
+  collectRefs(unit.program, within, holder, refs);
+  let kind = USE_READ;
+  for (const ref of refs) {
+    let node = ref;
+    let parent = unit.parents.parentOf(node);
+    while (parent !== null && parent.kind === N_PAREN) {
+      node = parent;
+      parent = unit.parents.parentOf(node);
+    }
+    if (parent === null || parent.kind !== N_MEMBER) {
+      return use(USE_ESCAPE);
+    }
+    const found = classifyMemberUse(unit, table, parent);
+    if (found.kind === USE_WRITE) {
+      kind = USE_WRITE;
+    } else if (found.kind !== USE_READ) {
+      return use(USE_ESCAPE);
+    }
+  }
+  return use(kind);
+};
+
+/** Every identifier under `node` that names `local`, skipping lifted arrow bodies. */
+const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[]): void => {
+  if (node.kind === N_ARROW) {
+    return;
+  }
+  if (node.kind === N_IDENT) {
+    const named = program.nodeLocals[node.id];
+    if (named !== null && named === local) {
+      out.push(node);
+    }
+  }
+  for (const child of node.children) {
+    collectRefs(program, child, local, out);
+  }
+};
+
+/** The block a declaration's scope ends with, or null when it is not in one. */
+const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
+  let node: Node | null = unit.parents.parentOf(decl);
+  while (node !== null && node.kind !== N_BLOCK) {
+    node = unit.parents.parentOf(node);
+  }
+  return node;
 };
 
 /**
@@ -1378,6 +1549,8 @@ export const collectFacts = (
     facts.returnsAllocation = memory.returnsAllocation;
     facts.usesArenaControl = memory.usesArenaControl;
     facts.callSites = memory.callSites;
+    facts.escapingNodes = memory.escapingNodes;
+    facts.arenaNodes = memory.arenaNodes;
     facts.escapeSite = memory.escapeSite;
     // The half of `contained` that needs no fixpoint; the other is added after it.
     facts.contained = rootsHoldNoPointer(program, table, sig);
@@ -1535,10 +1708,32 @@ export const analyzeFunctions = (
   }
   scopeParallelBodies(units, facts);
   settleCalleeScopes(facts);
+  // The per-pass scopes read the settled answers: which callees still leave
+  // memory behind, and which let an allocation escape.
+  for (const unit of units) {
+    for (const sig of unit.program.functions) {
+      const f = facts.get(sig.name);
+      if (f === null || !f.hasLoops || !sig.definedIn(unit.program.source)) {
+        continue;
+      }
+      const instance = sig.instance;
+      if (instance !== null) {
+        unit.program.enterInstance(instance);
+      }
+      decideLoopScopes(unit, table, sig, f, facts);
+      if (instance !== null) {
+        unit.program.leaveInstance();
+      }
+    }
+  }
   for (const f of facts.list) {
+    // Both are `willreturn` and the function already writes (it allocates),
+    // so nothing else moves. A scoped pass reads its mark inline and calls
+    // only the release.
     if (f.arenaScope) {
-      // Both are `willreturn` and the function already writes (it allocates), so nothing else moves.
       f.callees.add("nish_arena_mark");
+    }
+    if (f.arenaScope || f.scopesAnyPass()) {
       f.callees.add("nish_arena_release");
     }
   }
