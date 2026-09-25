@@ -52,10 +52,16 @@ const INITIAL_SLOTS: i32 = 16;
 const INDEX_CAP: i32 = 16777215;
 
 /** The first bucket for `hash`: its low bits folded with its high half. */
-const home = (hash: u32, mask: i32): i32 => toI32(hash ^ (hash >>> 16)) & mask;
+export const home = (hash: u32, mask: i32): i32 => toI32(hash ^ (hash >>> 16)) & mask;
+
+/** The eight hash bits a bucket keeps: the top of the hash, independent of `home`'s low bits. */
+export const fingerprint = (hash: u32): u32 => hash >>> 24;
 
 /** The bucket word for entry `index`: the fingerprint, then the index plus one. */
-const slotOf = (hash: u32, index: i32): u32 => ((hash >>> 24) << 24) | toU32(index + 1);
+const slotOf = (hash: u32, index: i32): u32 => (fingerprint(hash) << 24) | toU32(index + 1);
+
+/** The entry index an occupied bucket word points at. */
+const entryOf = (slot: u32): i32 => toI32(slot & 16777215) - 1;
 
 export class StringMap {
   /** Bucket -> fingerprint in the top 8 bits, entry index plus one in the low 24. 0 is empty. */
@@ -97,12 +103,12 @@ export class StringMap {
    * keeps at least a quarter of the buckets empty, so this always terminates.
    */
   probe(key: string, hash: u32): i32 {
-    const fingerprint = hash >>> 24;
+    const wanted = fingerprint(hash);
     let bucket = home(hash, this.mask);
     let slot = this.slots[bucket];
     while (slot !== 0) {
-      if (slot >>> 24 === fingerprint) {
-        const at = toI32(slot & 16777215) - 1;
+      if (fingerprint(slot) === wanted) {
+        const at = entryOf(slot);
         if (this.hashes[at] === hash && this.keys[at] === key) {
           return at;
         }
@@ -120,7 +126,7 @@ export class StringMap {
   }
 
   has(key: string): boolean {
-    return this.probe(key, fnv1a(key)) >= 0;
+    return this.find(key) >= 0;
   }
 
   /**
@@ -129,7 +135,7 @@ export class StringMap {
    * caller says what "absent" means.
    */
   get(key: string, missing: i32): i32 {
-    const at = this.probe(key, fnv1a(key));
+    const at = this.find(key);
     return at < 0 ? missing : this.values[at];
   }
 
@@ -142,6 +148,17 @@ export class StringMap {
       return;
     }
     this.insertAt(-1 - at, key, hash, value);
+  }
+
+  /** Insert `key` unless the map holds it, leaving a value it has alone; true when it was absent. One probe either way. */
+  add(key: string, value: i32): boolean {
+    const hash = fnv1a(key);
+    const at = this.probe(key, hash);
+    if (at >= 0) {
+      return false;
+    }
+    this.insertAt(-1 - at, key, hash, value);
+    return true;
   }
 
   /** Append an entry and point `bucket`, the empty one a probe for `key` stopped at, to it. */
@@ -207,12 +224,6 @@ export class StringSet {
 
   /** Add `key`; true when it was not already there. One probe either way. */
   add(key: string): boolean {
-    const hash = fnv1a(key);
-    const at = this.map.probe(key, hash);
-    if (at >= 0) {
-      return false;
-    }
-    this.map.insertAt(-1 - at, key, hash, 0);
-    return true;
+    return this.map.add(key, 0);
   }
 }

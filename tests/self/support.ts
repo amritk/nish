@@ -21,7 +21,7 @@ import {
   splitByte,
   StringBuilder,
 } from "../../self/strings";
-import { hashString, StringMap, StringSet } from "../../self/map";
+import { fingerprint, hashString, home, StringMap, StringSet } from "../../self/map";
 import { nishExportTarget } from "../../self/manifest";
 import { parseBareSpecifier } from "../../self/packages";
 import {
@@ -191,15 +191,14 @@ function reportGrowth(out: string[]): void {
  * the hash matches too, and only the string compare tells the keys apart.
  */
 function reportProbe(out: string[]): void {
-  const resident = hashString("k0");
+  const resident = toU32(hashString("k0"));
   let i = 1;
   let twin = "";
   while (twin.length === 0) {
     const candidate = `k${i}`;
-    const hash = hashString(candidate);
-    const sameFingerprint = toU32(hash) >>> 24 === toU32(resident) >>> 24;
-    const sameHome = ((hash ^ (hash >>> 16)) & 15) === ((resident ^ (resident >>> 16)) & 15);
-    if (sameFingerprint && sameHome && hash !== resident) {
+    const hash = toU32(hashString(candidate));
+    const sameFingerprint = fingerprint(hash) === fingerprint(resident);
+    if (sameFingerprint && home(hash, 15) === home(resident, 15) && hash !== resident) {
       twin = candidate;
     }
     i = i + 1;

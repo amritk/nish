@@ -225,7 +225,8 @@ function expected(caseText) {
   out.push(`probe fingerprint ${JSON.stringify(`k${twin}`)} -1 1 2 2`);
   // A real FNV-1a collision: equal hashes, unequal keys. The line prints both
   // hashes, so a pair that stopped colliding would fail here, not pass.
-  const [a, b] = ["c2ya8", "czki6"];
+  const a = "c2ya8";
+  const b = "czki6";
   if (hashString(a) !== hashString(b)) throw new Error(`${a} and ${b} no longer collide`);
   out.push(`probe collision ${hashString(a)} ${hashString(b)} -1 1 2 2 ${JSON.stringify(b)}`);
   out.push("probe set 1 1 0 2");
