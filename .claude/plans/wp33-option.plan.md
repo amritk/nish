@@ -22,7 +22,7 @@ stages:
   - id: option-scalar
     title: feat(checker) — Option<T> for pointer-free payloads, with Some and None
     goal: Option<T> for payloads that contain no pointer (numbers, bool, enums, nested Options of those), as locals, parameters and returns of non-exported functions — typed from context, narrowed like Result, lowered as a found bit and the value, never allocated.
-    verification: npm run check && node tests/run.js option_ && node tests/run.js reject_option && node tests/run.js ambient && node tests/run.js dbg_option && node tests/differential/unmodified.js --compiler build/nish && npm test (zero non-environmental skips)
+    verification: npm run check && node tests/run.js option_ && node tests/run.js reject_option && node tests/run.js ambient && node tests/run.js dbg_option && node tests/run.js option_debug && node tests/run.js diagnostics && node tests/differential/unmodified.js --compiler build/nish && npm test (zero non-environmental skips)
     todos:
       - id: s-type
         content: Add K_OPTION (next free kind after WP32 S3) to self/types.ts with state-keyed interning, the some. tag, alignOf, typeName and llvmType — see Stage S2
@@ -79,7 +79,7 @@ stages:
   - id: option-propagate
     title: feat(checker) — orReturn and okOr on Option, and Option through function arguments
     goal: orReturn() propagates None, okOr(e) converts to Result, and a compile-time function parameter may take or return an Option.
-    verification: npm run check && node tests/run.js option_ && node tests/run.js fnarg && npm test (zero non-environmental skips)
+    verification: npm run check && node tests/run.js option_ && node tests/run.js option_fnarg && npm test (zero non-environmental skips)
     todos:
       - id: f-orreturn
         content: Check and lower orReturn on Option with the enclosing-return rule, the Node divergence noted and the shim naming it — see Stage S4a
@@ -133,7 +133,7 @@ stages:
 
 # WP33 — `Option<T>`
 
-Pinned to `main` at **e5e0cfe** (#230) and to WP32 S3's branch `feature/wp32-map/map-get` at 9c195a3. Line references are those commits'. The plan went through three adversarial reviews; each finding it acts on is folded into the section it changes.
+Pinned to `main` at **e5e0cfe** (#230) and to WP32 S3's PR #232 (`feature/wp32-map/map-get`) at 9bf9650. Line references are those commits'. The plan went through four adversarial reviews (two on the draft, one on each revision); each finding it acts on is folded into the section it changes.
 
 ## Context
 
@@ -165,7 +165,7 @@ So `Option` allows nested payloads and `T | null` payloads (Q1). The note makes 
 
 | # | Question | Recommendation |
 | --- | --- | --- |
-| Q1 | Payloads, and every refusal | **Allowed:** any payload but `void` and `CPtr`. That includes nested `Option`, `T \| null`, interfaces (`Iface \| null` is legal, LANGUAGE.md :371) and enums. **Refused in v1, each with a code and a `reject_option_*` case:** `Option<Result<…>>` and `Result<Option<…>, E>`, since must-handle inside a payload needs its own rule; `Option<T> \| null`, since "`Option` already models absence" (Result's NL2151 twin, and under Q13 (b) it would collapse `None` and `null` into one bit pattern); `new Array<Option<T>>(n)`, since native zero-fills to `None` while Node leaves holes (a fill or a push is required); and an `Option` map key, since keys compare by identity under Node. Refused until a later stage, with not-yet codes: memory positions (S4b), host-visible signatures (S5), and `--no-strict-exports` (S5). |
+| Q1 | Payloads, and every refusal | **Allowed:** any payload but `void` and `CPtr`. That includes nested `Option`, `T \| null`, interfaces (`Iface \| null` is legal, LANGUAGE.md :371) and enums. **Refused in v1, each with a code and a `reject_option_*` case:** `Option<Result<…>>` and `Result<Option<…>, E>`, since must-handle inside a payload needs its own rule; `Option<T> \| null`, since "`Option` already models absence" (Result's NL2151 twin, and under Q13 (b) it would collapse `None` and `null` into one bit pattern); `new Array<Option<T>>(n)`, since native zero-fills to `None` while Node leaves holes (a fill or a push is required); an `Option` map key and a `Set<Option<…>>` element (`sameKey` is `===` under Node, collections.ts :356+), and `indexOf`/`includes` over an `Option` element (arrays.ts :199 accepts any element type; natively a pair compares by value, under Node by identity) — all because keys and searches compare by identity under Node. Refused until a later stage, with not-yet codes: memory positions (S4b), host-visible signatures (S5), and `--no-strict-exports` (S5). |
 | Q2 | Representation | A **non-nullable pointer** payload is the pointer, with `null` = `None` (Rust's niche). **Everything else** is `{ i1, T }`, where a nested niche or a `T \| null` payload is a pair whose `T` is the inner representation. **`holdsPointer(optionType)`** is true for the niche and for any pair whose payload contains a pointer; it is the one rule S3's analysis sites read. The note shows the IR for `i32`, `f64`, `bool`, an enum, `Option<i32>`, `Node \| null`, `string` and a class. |
 | Q3 | The pair's `None` | `{ i1 false, T zeroinitializer }`, not `undef`. That keeps `noundef` everywhere, needing no private-ABI exemption as `Result`'s does (attributes.ts :2374/:2488), and makes S5's packed word deterministic. It is sound for every payload, an enum with no zero member and `-0` included, because the checker never reads an unproven payload and `unwrapOr` selects it away. |
 | Q4 | Pair storage and shape | **A `const`:** two SSA values with no slot, like WP32's `emitMaybeLocal` (emit_map.ts :372 on the map-get branch), described in DWARF with `dbg.value`. **A parameter:** one `{ i1, T }` aggregate. Parameters are already SSA and immutable (emit.ts :1076–1080; reassignment is refused). **A `let` or a loop-carried value:** an `alloca { i1, T }`, left to mem2reg, because the emitter builds no phis. **Never** a `nish_alloc_struct` call. |
@@ -178,10 +178,10 @@ So `Option` allows nested payloads and `T | null` payloads (Q1). The note makes 
 | Q11 | Memory layout (S4b) | **A field or an array element:** inline, as clang lays out `struct { bool some; T value; }`, citing #230's inline layout (`inline_arrays.ts`, `FieldInfo.inline()`); `Option<i32>[]` measured at 8 bytes per element. **The header** spells a field the same way (interop_header.ts :87–114 describes every class, interop_abi.ts :374–400). **A `Map` value** needs arrays, because `Map<K, V>` stores `entryValues: V[]` (std/collections.ts :234/:244). **WP32's `zeroOf`** (emit_map.ts ~:372–430) answers `0` for a pair today and must answer `zeroinitializer`. |
 | Q12 | `orReturn` under Node | It throws, as `Result`'s does, because the rewriter was deleted in WP19 R6. The shim throws an `Error` whose message names `docs/RUN_UNDER_NODE.md`. The docs show the Node-faithful `if (o.isNone()) { return None; }`, and the refusal in a `Result` function suggests `.okOr(e).orReturn()`. |
 | Q13 | Pointer representation design | **(a)** `K_OPTION` plus one `table.reprOf(type)` helper that every emit and analysis layer calls, or **(b)** intern a niche `Option` as `K_NULLABLE` with an option flag that the checker's surface and the mangling read. `isNullable`, `stripNull` and `K_NULLABLE` appear in 18 `self/` files: annotations, arrays, attributes, checker, debug, declarations, emit_arrays, emit_classes, emit_result, escape, expressions, generics, inline_arrays, interop_abi, members, parallel, structs and types. |
-| Q14 | Public ABI (S5) | **Pointer payload:** the nullable pointer. **A scalar of ≤4 bytes:** the WP17 word. **An 8-byte scalar, or a nested pair:** measure a C `struct { bool some; T value; }` returned in two registers against a pointer. **Which functions take it:** the public ABI applies only to host-visible signatures, meaning an exported function or a method of an exported class, plus everything under `--no-strict-exports`. A `hidden` function (set late by `exposeTo`, generics.ts :1476) is called only by this compiler's own output, so it keeps the pair, unlike `Result`'s rule (emit_result.ts :338). The pair-versus-public decision keys on `!sig.exported` and the build mode. |
+| Q14 | Public ABI (S5) | **Pointer payload:** the nullable pointer. **A scalar of ≤4 bytes:** the WP17 word. **An 8-byte scalar, or a nested pair:** measure a C `struct { bool some; T value; }` returned in two registers against a pointer. **Which functions take it:** the public ABI applies only to host-visible signatures, meaning an exported function or a method of an exported class, plus everything under `--no-strict-exports`. A `hidden` function (set late by `exposeTo`, generics.ts :1470–1476) is called only by this compiler's own output, so it keeps the pair, as `Result`'s private ABI already does (`privateResultAbi = strictExports && !exported`, emit_result.ts :338). **The pair-versus-public decision keys on host visibility: `exported && !isLibraryCopy` and the build mode** — a std/collections.ts library copy is emitted `internal` into its user (emit.ts :355), so its methods keep the pair even though `class Map` is exported, and an instantiation inherits `sig.exported = template.exported` (generics.ts :1168), so an exported *user* template instantiated at an `Option` argument is host-visible and is gated until S5. |
 | Q15 | Threads | A `parallelMapInto` return type is already a whitelist of number, boolean and enum, so an `Option` is refused there. S4b adds `K_OPTION` to `reachingPath` (parallel.ts :293). |
 | Q16 | Relation to WP32's maybe | They stay separate. `lookup(m, k)` is the bridge, and `??` stays the maybe's alone. |
-| Q17 | The analyses' view of an Option method | `isSome`, `isNone`, `value`, `unwrapOr` and `expect` store nothing and resize nothing, and `expect`'s failure path is `noreturn`. So they are `callsNothing` (bounds.ts :1604) and inert (`isInertBuiltin`, ~:2860), keeping every length fact across the call. A pointer-free pair is a scalar in `isScalarArgument` (escape.ts :957) and in `returnsScalar` (attributes.ts :1592), so tail marking and loop arena passes survive. |
+| Q17 | The analyses' view of an Option method | `isSome`, `isNone`, `value`, `unwrapOr` and `expect` store nothing and resize nothing, and `expect`'s failure path is `noreturn`. So they are `callsNothing` (bounds.ts :1604) and inert (`isInertBuiltin`, :2825), keeping every length fact across the call. A pointer-free pair is a scalar in `isScalarArgument` (escape.ts :957) and in `returnsScalar` (attributes.ts :1592), so tail marking and loop arena passes survive. |
 
 **The `tsc` evidence already gathered.** Three reviews and the lead, all with `tsc --strict` 5.9.3.
 - **Accepted and narrowed:**
@@ -200,6 +200,8 @@ So `Option` allows nested payloads and `T | null` payloads (Q1). The note makes 
   - a user non-generic `Option` used with arguments (TS2315).
 - **Collisions:** `"lib": ["DOM"]` does not collide, since DOM's `Option` is a value. A script-mode file collides (TS2300/TS2451); every Nish module exports, and the d.ts header says so.
 - **The declaration:** `None` is declared `OptionNone & OptionMethods<never>`.
+- **A recorded asymmetry:** `const k: Option<number> = None; if (k.isNone()) {} else { k.value }` is TS2339 under `tsc` (narrowing by assignment makes the else arm `never`), while Nish at `O_UNKNOWN` accepts it. `Result` behaves the same way today; the note says so, and it is the harmless direction (Nish accepts a program `tsc` refuses only where the value is provably absent, and `.value` there is unreachable).
+- **Enums under Node:** Node 22's strip-only mode throws `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on a TypeScript `enum`, so no enum case can be Node-compared; enum cases stay i32-mode (no Node comparison), as every enum case on `main` does.
 
 ## Stage S1 — wp33-note
 
@@ -237,7 +239,7 @@ No compiler change.
 - **Runtime:** [runtime/nish.d.ts](../../runtime/nish.d.ts), [runtime/shim.mjs](../../runtime/shim.mjs), [runtime/nish.mjs](../../runtime/nish.mjs).
 - **Tests:**
   - `tests/cases/option_*`, `reject_option_*`, `dbg_option`, `tests/wordings/nl2*_option*`;
-  - `tests/run.js`: the TS2339 check inside the `ambient` section (:7520), and a gated hunk compiling every `option_*` case with `-g` that asserts its variables appear;
+  - `tests/run.js`: in the `ambient` section (:7520) the TS2339 check for `reject_option_value_unchecked` and "`tsc` accepts every `option_*` case" (the section type-checks only `res_*` by name, :7543–7552); and a hunk gated on `option_debug` that compiles every `option_*` case with `-g` and asserts its variables appear. Wordings and code coverage run under `diagnostics` (run.js :587), which the stage's verification line names;
   - `tests/nish-cmp.js` (`DECLARED`);
   - `tests/differential/goldens/unfrozen.txt`.
 - **Docs:** `docs/LANGUAGE.md` (the Option section and the types-table row), `docs/IR_COOKBOOK.md` + `docs/cookbook/option_pair.ts`, `docs/RUN_UNDER_NODE.md`.
@@ -255,7 +257,7 @@ No compiler change.
 | surface and narrowing | option.ts, members.ts, expressions.ts `narrow` :895 | `checkOptionProperty`/`checkOptionMethod` (`some`, `value`, `isSome`, `isNone`); `narrowOptionTest` chained after `narrowResultTest`; immutability as at members.ts :446 |
 | generics | generics.ts | an `Option` branch in `unifyAnnotation` (~:535–556), so `describe(Some(3))` binds `T`; `containsType`; `originOfMember` |
 | lowering | emit_option.ts; emit.ts `emitVarDecl`/`emitIdentifier` | Q4's shapes, and `None` as `zeroinitializer` (Q3). A ternary's `phi` of `llvm(type)` already works for `{ i1, T }` (emit_control.ts :354). |
-| DWARF | debug.ts `typeRef` :253 | a two-member composite, and `dbg.value` for a slotless `const`. Otherwise `-g` exits 70 through `internalErrorFor`. |
+| DWARF | debug.ts `typeRef` :253 | a two-member composite; a slotless `const` pair is two SSA values, so it gets two `llvm.dbg.value` calls with `DW_OP_LLVM_fragment` (flag, payload). Otherwise `-g` exits 70 through `internalErrorFor`. |
 | Node | shim.mjs, nish.mjs | `NishOption` with `some`/`value`, a frozen `None` singleton, and `provide("Some"/"None")`. `provide` never overrides a module's own name. |
 
 ### Position gate
@@ -266,7 +268,9 @@ No compiler change.
 | --- | --- | --- |
 | a class or interface field | `_field` | S4b |
 | an array element | `_element` | S4b |
-| a generic type argument | `_type_argument` | S4b |
+| a generic type argument written explicitly — not `Option`'s own payload, so `Option<Option<i32>>` is allowed | `_type_argument` | S4b |
+| a generic type argument or array element *inferred* (`id(Some(3))` binding `T = Option<i32>`, `[Some(1), None]`, `new Box(Some(1))`), gated in `instantiate`/`instantiateStruct` like `rejectForeignPointer` (generics.ts :895) and in array-literal typing | `_type_argument_inferred`, `_element_inferred` | S4b |
+| an instantiation of an exported user template at an `Option` argument (it is host-visible, B of round 3) | `_export_instance` | S5 |
 | a `Map` value | `_map_value` | S4b |
 | a module constant | `_module_const` | S4b |
 | a compile-time function-type parameter | `_function_type` | S4a |
@@ -275,17 +279,18 @@ No compiler change.
 | an `Option` payload that holds a pointer | `_pointer_payload` | S3 |
 | a `Result` payload holding an `Option`, or an `Option` holding a `Result` | `_in_result` | never (Q1) |
 | `Option<T> \| null` | `_or_null` | never (Q1) |
-| an `Option` map key | `_map_key` | never (Q1) |
+| an `Option` map key, or a `Set<Option<…>>` | `_map_key`, `_set_element` | never (Q1) |
+| `indexOf`/`includes` over `Option` elements | `_index_of` | never (Q1) |
 
 An `Option` in a generic *signature* (`first<T>(xs: T[]): Option<T>`) is not a type argument, and is allowed from S2 on, at pointer-free instantiations.
 
-**Tests.** Every positive case is f64 mode (`.args` `--number-mode f64`) with `export const main`, so `tests/differential/unmodified.js` runs it against Node; it runs nothing else (:59).
+**Tests.** Every positive case except the enum ones is f64 mode (`.args` `--number-mode f64`) with `export const main`, so `tests/differential/unmodified.js` runs it against Node; it runs nothing else (:59). The enum cases (`option_enum`, and `option_first_generic`'s enum instantiation split out as `option_first_enum`) are i32-mode with no Node comparison, because Node's strip-only mode rejects `enum`.
 - **Positive:**
   - `option_find_f64`, `option_i32_payload` (through `toI32`), `option_bool`, `option_enum`, `option_nested`;
   - `option_narrow` (every form in Result's narrowing table, with `some`/`isSome`/`isNone`);
   - `option_infer` (`describe(Some(3))`), `option_ternary_infer`;
   - `option_shadow_local`, `_param`, `_type_param`, `_module` (a user `Option`, `Some` or `None` wins);
-  - `option_first_generic` (`first<T>` at `f64`, `bool`, an enum);
+  - `option_first_generic` (`first<T>` at `f64`, `bool`) and `option_first_enum` (i32 mode);
   - `dbg_option`.
 - **Reject:** every gate row above, plus `_value_unchecked` (also TS2339), `_value_of_some`, `_let_none`, `_payload_mismatch`, `_not_generic` (the TS2315 twin), `_equality`, `_template`, `_nullish` and `_console_log` (reusing existing codes where they apply).
 
@@ -300,7 +305,7 @@ An `Option` in a generic *signature* (`first<T>(xs: T[]): Option<T>`) is not a t
 **Tests:**
 - `option_eager_argument` (f64): native and Node print the same side effect, in the same order.
 - `arr_bounds_option_unwrap_or`, `arr_bounds_option_expect`, and `arr_bounds_option_loop`, which asserts no index check reappears after `o.isSome()` in a loop.
-- **The `option_o2` hunk** asserts three things about a non-exported function returning `Option<i32>`: its `.ll` has no `nish_alloc_struct` and no `nish_arena_*` call caused by the `Option`; it returns `{ i1, i32 }`; and after `opt -O2 -S -mtriple=x86_64-unknown-linux-gnu` it has no `alloca` and no call. Precedent for such checks: tests/run.js :2088, :2649.
+- **The `option_o2` hunk** asserts three things about a non-exported function returning `Option<i32>`: its `.ll` has no `nish_alloc_struct` and no `nish_arena_*` call caused by the `Option`; it returns `{ i1, i32 }`; and after `opt -O2 -S -mtriple=x86_64-unknown-linux-gnu` the *whole module* (the caller included, since an internal callee is likely inlined and deleted, which would make a per-function check pass on nothing) has no `alloca` and no allocator or arena call. Precedent for such checks: tests/run.js :2088, :2649.
 
 ## Stage S3 — option-pointer
 
@@ -334,7 +339,8 @@ An `Option` in a generic *signature* (`first<T>(xs: T[]): Option<T>`) is not a t
 - **`okOr(e)`**, which builds a `Result<T, E>`:
   - its argument is eager, and `option_eager_argument` is extended to it;
   - a pointer `e` escapes, pinned by `option_escape_okor_arg`.
-- **Callbacks:** a compile-time function parameter's type may take or return `Option`, which `std/option.ts`'s `find` needs (S6).
+- **Receivers on a pointer-holding `Option`** (round 3, E): `orReturn`'s receiver flows through (its payload *is* the result), and `okOr`'s receiver is `USE_ESCAPE` (it is stored into the `Result`) — not `USE_READ` as a `Result` receiver is (attributes.ts :745–748), because a niche receiver is the payload itself. Pinned by `option_escape_or_return` and `option_escape_okor_receiver`.
+- **Callbacks:** a compile-time function parameter's type may take or return `Option` (a `firstSome<T, U>(xs, (x) => Option<U>)`-style std helper needs it; `find`'s own callback is `(x: T) => boolean` and does not). Pinned by a positive `option_fnarg` case, since the `fnarg` filter only reruns the existing `fnarg_*` cases.
 
 ## Stage S4b — option-memory
 
@@ -343,7 +349,8 @@ An `Option` in a generic *signature* (`first<T>(xs: T[]): Option<T>`) is not a t
 **What this stage adds:**
 - **Lifted positions:** fields, elements, type arguments, `Map` values and module constants, with Q11's layout. `new Array<Option<T>>(n)` stays refused (Q1).
 - **The header's field spelling,** so `--emit-header` over a class with an `Option` field is right before S5.
-- **Analyses:** `zeroOf` answers `zeroinitializer`; `reachingPath` gains `K_OPTION`; full DWARF (`optionComposite` beside `resultComposite` :423).
+- **Analyses:** `zeroOf` answers `zeroinitializer`; `reachingPath` gains `K_OPTION`; `canonicalArgument` (generics.ts :312) canonicalises an `Option`'s proof state as it does a `Result`'s, or `O_SOME` and `O_UNKNOWN` arguments ask for one symbol under two ids; `assignable` ignores the state as it does `Result`'s (types.ts :644); full DWARF (`optionComposite` beside `resultComposite` :423).
+- **The inferred positions** (`_type_argument_inferred`, `_element_inferred`) lift with the written ones. `_export_instance` stays until S5.
 
 Property paths still do not narrow, so a field `Option` is copied to a local first, as a `T | null` field is today.
 
@@ -401,7 +408,7 @@ Existing APIs that predate `Option` (`readFileSyncOrNull`, `pop()`) keep their t
 ## Merge order
 
 S1 → S2 → S2b → S3 → S4a → S4b → S5 → S6.
-- S4a and S4b may run concurrently once S3 lands, since their Owns overlap only in `emit_option.ts` and `codes.ts`; merge S4a first.
+- S4a and S4b may run concurrently once S3 lands, but their Owns overlap in `emit_option.ts`, `codes.ts`, `generics.ts`, `attributes.ts` and `escape.ts`, so whichever merges second merges `main` and resolves; merge S4a first.
 - The WP starts after WP32 closes: it takes the kind and code numbers after WP32 S3's, builds on `emitMaybeLocal`, and S4b/S6 need WP32's `Map` and `std/map.ts`.
 
 ## Acceptance
@@ -410,7 +417,7 @@ S1 → S2 → S2b → S3 → S4a → S4b → S5 → S6.
 2. A non-exported function returning `Option<i32>` makes no allocator or arena call because of the `Option`, returns `{ i1, i32 }`, and after `opt -O2` has no `alloca` and no call (S2b). The instruction gate records it within tolerance of the `-1` sentinel (S6).
 3. The `option_niche_equal` programs have identical `define` bodies (S3).
 4. An unproven `o.value`, including right after `const o = Some(x)`, is refused by `nish` and by `tsc` (TS2339).
-5. Every refused form and position in Q1, Q5 and the gate has a `reject_option_*` case and a stable code.
+5. Every refused form and position in Q1, Q5 and the gate — the inferred positions, `_export_instance`, `Set<Option>` and `indexOf` over `Option` elements included — has a `reject_option_*` case and a stable code.
 6. `unwrapOr`, `expect` and `okOr` evaluate their argument exactly as Node does (`option_eager_argument`, f64 mode).
 7. `orReturn()` propagates `None` natively. Its Node divergence is in RUN_UNDER_NODE.md and `KNOWN`, and the shim's error names that page.
 8. Programs that name none of `Option`, `Some` or `None` are byte-identical: no `tests/cases` golden moves, and `nish-cmp` shows 0 undeclared differences.
@@ -450,5 +457,7 @@ The definition of done:
 **How `tests/run.js` filters.** `node tests/run.js <x>` matches by substring within each section's own gate (run.js :406/:419). So a stage's gated hunks, such as `ambient`, `interop`, `option_o2` and `option_niche_equal`, are named in its verification line. `tests/differential/unmodified.js` needs `npm run build` first, and `npm test` runs it (run.js :10695).
 
 Every construct stage ships its golden `.ll`, `llvm-as`, native `.out`, a `reject_*` case per form, the wording, the `LANGUAGE.md` rule and its cookbook entry in the same PR.
+
+**Every stage that adds cases also owns** `tests/nish-cmp.js` `DECLARED` (each new program is a seed difference; its `changelog` text matches that stage's PR title), `tests/differential/goldens/unfrozen.txt` (one line per new case with `main`), and the regenerated `tests/self/goldens/*` stores (tests/cases is corpus, tests/self/corpus.js :40), whether or not its Owns list repeats them.
 
 **The rolling freeze:** `self/` does not use `Option`. New `self/` files only regenerate `tests/self/goldens/checked_self.txt`.
