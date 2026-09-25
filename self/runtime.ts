@@ -196,8 +196,7 @@ export class RuntimeTable {
     // The slow path of the inline allocator: it moves the arena to a new chunk
     // and answers a block nobody else holds, which is an allocation and nothing
     // more (`writesShared` in attributes.ts gives `nish_alloc_struct` the same answer).
-    grow.writes = WRITES_ALLOC;
-    this.add(grow);
+    this.addWrites(WRITES_ALLOC, grow);
     this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE));
     this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE));
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
@@ -502,8 +501,7 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     panicIndex.noreturn = true;
-    panicIndex.writes = WRITES_PANIC;
-    this.add(panicIndex);
+    this.addWrites(WRITES_PANIC, panicIndex);
     // `slice` range-check failure (WP15 section 4): prints "slice out of range:
     // [<start>, <end>) of length <len>" and exits 1. Its own symbol rather than
     // `nish_panic_index` because a reversed pair is as common a mistake as an
@@ -515,8 +513,7 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     panicSlice.noreturn = true;
-    panicSlice.writes = WRITES_PANIC;
-    this.add(panicSlice);
+    this.addWrites(WRITES_PANIC, panicSlice);
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
       "nish_panic_div",
@@ -525,8 +522,7 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     panicDiv.noreturn = true;
-    panicDiv.writes = WRITES_PANIC;
-    this.add(panicDiv);
+    this.addWrites(WRITES_PANIC, panicDiv);
     this.buildIntrinsics();
   }
 
