@@ -54,6 +54,7 @@ import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
+import { proveCallSiteRanges } from "./ranges";
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -93,7 +94,7 @@ import { splitByte } from "./strings";
 import { TypeTable } from "./types";
 import { columnOf, lineOf } from "./lexer";
 import { validate } from "./validator";
-import { NUMBER_MODE_F64 } from "./context";
+import { CheckContext, NUMBER_MODE_F64 } from "./context";
 
 const SLASH: i32 = 47;
 
@@ -832,6 +833,14 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false;
     }
+    // WP15 §2.4: what every call site proves for its callee's parameters. It
+    // needs every body checked, instantiations included, and the attribute
+    // analysis below reads the proofs it adds.
+    const contexts: CheckContext[] = [];
+    for (const unit of this.modules) {
+      contexts.push(unit.checker.ctx);
+    }
+    proveCallSiteRanges(contexts);
     this.reportArenaLoops();
     return true;
   }

@@ -10,9 +10,8 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -75,7 +74,7 @@ entry:
   ret i32 %8
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %sq.addr = alloca %struct.Square*, align 8
   %c.addr = alloca %struct.Circle*, align 8
@@ -117,39 +116,29 @@ entry:
   %22 = call i8* @nish_str_from_i32(i32 %21)
   call void @nish_print(i8* %22)
   %23 = load %struct.nish_array*, %struct.nish_array** %shapes.addr, align 8
-  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
-  %25 = load i64, i64* %24, align 8, !alias.scope !3, !noalias !4
-  %26 = icmp ult i64 1, %25
-  br i1 %26, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 1, i64 %25)
-  unreachable
-
-bounds.ok:
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
-  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4
-  %29 = bitcast i8* %28 to %struct.Shape**
-  %30 = getelementptr inbounds %struct.Shape*, %struct.Shape** %29, i64 1
-  %31 = load %struct.Shape*, %struct.Shape** %30, align 8, !alias.scope !4, !noalias !3, !tbaa !8
-  %32 = call i32 @shift(%struct.Shape* %31, i32 5)
-  %33 = call i8* @nish_str_from_i32(i32 %32)
-  call void @nish_print(i8* %33)
-  %34 = load %struct.Square*, %struct.Square** %sq.addr, align 8
-  %35 = getelementptr inbounds %struct.Square, %struct.Square* %34, i32 0, i32 0
-  %36 = load i32, i32* %35, align 4
-  %37 = call i8* @nish_str_from_i32(i32 %36)
-  call void @nish_print(i8* %37)
-  %38 = load %struct.Square*, %struct.Square** %sq.addr, align 8
-  %39 = getelementptr inbounds %struct.Square, %struct.Square* %38, i32 0, i32 2
-  %40 = load i32, i32* %39, align 4
-  %41 = call i8* @nish_str_from_i32(i32 %40)
-  call void @nish_print(i8* %41)
-  %42 = load %struct.Circle*, %struct.Circle** %c.addr, align 8
-  %43 = getelementptr inbounds %struct.Circle, %struct.Circle* %42, i32 0, i32 2
-  %44 = load i32, i32* %43, align 4
-  %45 = call i8* @nish_str_from_i32(i32 %44)
-  call void @nish_print(i8* %45)
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
+  %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4
+  %26 = bitcast i8* %25 to %struct.Shape**
+  %27 = getelementptr inbounds %struct.Shape*, %struct.Shape** %26, i64 1
+  %28 = load %struct.Shape*, %struct.Shape** %27, align 8, !alias.scope !4, !noalias !3, !tbaa !8
+  %29 = call i32 @shift(%struct.Shape* %28, i32 5)
+  %30 = call i8* @nish_str_from_i32(i32 %29)
+  call void @nish_print(i8* %30)
+  %31 = load %struct.Square*, %struct.Square** %sq.addr, align 8
+  %32 = getelementptr inbounds %struct.Square, %struct.Square* %31, i32 0, i32 0
+  %33 = load i32, i32* %32, align 4
+  %34 = call i8* @nish_str_from_i32(i32 %33)
+  call void @nish_print(i8* %34)
+  %35 = load %struct.Square*, %struct.Square** %sq.addr, align 8
+  %36 = getelementptr inbounds %struct.Square, %struct.Square* %35, i32 0, i32 2
+  %37 = load i32, i32* %36, align 4
+  %38 = call i8* @nish_str_from_i32(i32 %37)
+  call void @nish_print(i8* %38)
+  %39 = load %struct.Circle*, %struct.Circle** %c.addr, align 8
+  %40 = getelementptr inbounds %struct.Circle, %struct.Circle* %39, i32 0, i32 2
+  %41 = load i32, i32* %40, align 4
+  %42 = call i8* @nish_str_from_i32(i32 %41)
+  call void @nish_print(i8* %42)
   ret i32 0
 }
 
@@ -163,8 +152,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

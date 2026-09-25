@@ -288,6 +288,85 @@ spelling: Nish parses with the TypeScript parser, which rejects it. A
 labelled block `trusted: { ... }` or a `/* @trusted */` pragma would be the
 candidates.)
 
+**5. Call-site ranges — shipped, and what it does and does not prove about
+AWFY Permute.** Round 1 of the Are We Fast Yet work (#207) left `Permute.swap`
+with two checks that only an interprocedural fact could remove (#215).
+`self/ranges.ts` is that fact, run once every body is checked, and it feeds
+the same walk: `self/bounds.ts` takes a table of what the whole program knows
+and an entry state.
+
+*What crosses a call.* Two things, and both are stated so that pass 2's rules
+still end them.
+
+  - **What a callee can do**, as a summary: the field names it, or anything it
+    calls, may store to, and the record types it may store whole. A callee
+    that calls a builtin handed an array or an object (`push` and `pop` are
+    those), `Arena`, a foreign function or an instantiation, or stores to a
+    field called `length`, has none — "anything", which is what every call was
+    before. A call with a summary resizes no array, so a caller keeps every
+    array length across it and every path whose fields and links the summary
+    leaves alone. A builtin handed only numbers, booleans and strings has the
+    empty summary: with no mutable module state and no function value, a call
+    can reach only what it is handed.
+  - **What a function is entered with**: per integer parameter a floor and a
+    `maxIndex`, and length facts about a holder named by a parameter and the
+    fields read off it — `this.v.length >= 6`, `i < this.v.length`. It holds
+    when every call site proves it, judged in the caller's state once every
+    argument has run, and a fact about an argument's local or a path read off
+    one is carried only while no later argument writes the local, stores to a
+    field of the path or calls something that might. An argument of another
+    integer type carries nothing, because an `i32` with no floor handed to a
+    `u32` is not below anything.
+
+*Who takes entry facts.* Only a function every call to which the pass can
+see: not an exported function or a method of an exported class, whose symbol
+a C, wasm or N-API host can call with anything; not a `hidden` one, a
+constructor, an instantiation, a lifted arrow or a function taking a
+compile-time function. Calls made from where the walk keeps no state — an
+instantiation's body, an arrow's, code after a `return` — are found by scanning
+every call in the program rather than by trusting the walk to have seen them,
+and leave their callee entered knowing nothing. Only a candidate that has an
+access pass 2 left checked, or that calls one and could hand its facts on,
+takes part; the rest are entered with nothing, which costs no proof.
+
+*Recursion.* The entry fixpoint starts every candidate at "not reached" and
+walks every reached body under its current entry, joining the facts each
+function's call sites prove: the weaker floor, the higher bound, the shorter
+length, a relation only where every site states it. An entry only weakens once
+set — a new caller adds a site, a weaker entry proves less at each site below
+it — so the rounds end; `self/` settles in six, under a limit of 64 past which
+the pass keeps no entry fact at all. A walk records no proof until the entries
+have settled, and a body's last walk was the one under its settled entry, so
+those proofs are kept rather than walked for again.
+
+*New local rules the shape needed.* A floor above zero (`if (n !== 0)` on a
+non-negative `n` is `n >= 1`); `i - c` and `w.length - c` keep the bounds they
+imply; `let j = i` copies `i`'s; and a decrement keeps the upper bounds and
+loses the lower ones, as an increment keeps the lower. Each wrap is ruled out
+by `nsw`, or under `--wrapping` by a floor known where the subtraction runs,
+and an unsigned value never keeps one.
+
+*Permute.* `benchmark` stores `new Array<i32>(6)` into `this.v`, which now
+records `this.v.length >= 6`, and calls `permute(6)`. `permute` recurses with
+`n1 = n - 1` under `n !== 0`, so its entry settles at `0 <= n < 7`, and its
+loop's `i` runs from `n1` down to `0` with `n1 < 6`. `permute` stores only
+`count` and `swap` stores no field, so `this.v.length >= 6` survives every
+call, and `swap` is entered with `i, j` in `[0, 6)` and the length: its four
+accesses are proven, and `tests/cases/arr_range_call` has no check in it.
+**The port in `bench/awfy/permute.ts` keeps both checks**, and soundly:
+`export class Permute` makes `Permute.swap` an external symbol that
+`--emit-header` declares as `Permute_swap(Permute*, int32_t, int32_t)`, and
+a host that calls it with `(p, 100, 0)` must meet a panic. Proving it would
+need a second, internal copy of `swap` for the calls the compiler can see,
+which is a change to the emitter and a larger one than this. After `opt -O3`
+AWFY Permute carries the same two panics in `swap` as before.
+
+*What it bought.* Towers executes 5.6% fewer instructions and Storage 3.3%
+fewer (cachegrind, one pass at 50 inner iterations); the other five AWFY
+programs and all of `bench/`'s compile to the IR they did. Sixteen of the
+compiler's own warned checks (`tests/perf-baseline.json`) are proven away. It
+costs `self/`'s compile 2.6% more instructions and 1.4% more peak RSS.
+
 **Floor: the runtime check stays.** When none of the above proves it, the panic
 is emitted, as today. Safety is the default; speed is what the proofs buy.
 

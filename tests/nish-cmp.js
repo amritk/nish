@@ -1319,6 +1319,15 @@ const DECLARED = [
     changelog: "Keep a field array's header live across element stores",
     why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
   },
+  // WP15 §2.4: a call whose callee resizes nothing keeps the caller's length
+  // facts, a function every caller of which is visible is entered with what
+  // they prove, and a count-down loop keeps its upper bound. Any program with
+  // an access past a call, or in a function called with a proven index, loses
+  // checks and the attributes a dropped panic frees, in any module of it.
+  {
+    changelog: "Prove an index in range from what every call site guarantees",
+    why: "call-site ranges and callee summaries prove accesses the reference compiler checks, across the corpus, so those modules drop `nish_panic_index` calls and the attributes they cost",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

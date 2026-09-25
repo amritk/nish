@@ -96,51 +96,41 @@ entry:
   call void @Config.constructor(%struct.Config* %Config.obj)
   store %struct.Config* %Config.obj, %struct.Config** %c.addr, align 8
   %7 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
-  %9 = load i64, i64* %8, align 8, !alias.scope !9, !noalias !10
-  %10 = icmp ult i64 0, %9
-  br i1 %10, label %bounds.ok, label %bounds.fail
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !9, !noalias !10
+  %10 = bitcast i8* %9 to double*
+  %11 = getelementptr inbounds double, double* %10, i64 0
+  %12 = load double, double* %11, align 8, !alias.scope !10, !noalias !9, !tbaa !12
+  %13 = load %struct.Config*, %struct.Config** %c.addr, align 8
+  %14 = getelementptr inbounds %struct.Config, %struct.Config* %13, i32 0, i32 0
+  %15 = load double, double* %14, align 8, !tbaa !5
+  %16 = fadd double %12, %15
+  %17 = load %struct.Config*, %struct.Config** %c.addr, align 8
+  %18 = getelementptr inbounds %struct.Config, %struct.Config* %17, i32 0, i32 1
+  %19 = load %struct.nish_array*, %struct.nish_array** %18, align 8, !tbaa !13
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 0
+  %21 = load i64, i64* %20, align 8, !alias.scope !9, !noalias !10
+  %22 = icmp ult i64 2, %21
+  br i1 %22, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %9)
+  call void @nish_panic_index(i64 2, i64 %21)
   unreachable
 
 bounds.ok:
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
-  %12 = load i8*, i8** %11, align 8, !alias.scope !9, !noalias !10
-  %13 = bitcast i8* %12 to double*
-  %14 = getelementptr inbounds double, double* %13, i64 0
-  %15 = load double, double* %14, align 8, !alias.scope !10, !noalias !9, !tbaa !12
-  %16 = load %struct.Config*, %struct.Config** %c.addr, align 8
-  %17 = getelementptr inbounds %struct.Config, %struct.Config* %16, i32 0, i32 0
-  %18 = load double, double* %17, align 8, !tbaa !5
-  %19 = fadd double %15, %18
-  %20 = load %struct.Config*, %struct.Config** %c.addr, align 8
-  %21 = getelementptr inbounds %struct.Config, %struct.Config* %20, i32 0, i32 1
-  %22 = load %struct.nish_array*, %struct.nish_array** %21, align 8, !tbaa !13
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
-  %24 = load i64, i64* %23, align 8, !alias.scope !9, !noalias !10
-  %25 = icmp ult i64 2, %24
-  br i1 %25, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 2, i64 %24)
-  unreachable
-
-bounds.ok.1:
-  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 2
-  %27 = load i8*, i8** %26, align 8, !alias.scope !9, !noalias !10
-  %28 = bitcast i8* %27 to double*
-  %29 = getelementptr inbounds double, double* %28, i64 2
-  %30 = load double, double* %29, align 8, !alias.scope !10, !noalias !9, !tbaa !12
-  %31 = fadd double %19, %30
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
+  %24 = load i8*, i8** %23, align 8, !alias.scope !9, !noalias !10
+  %25 = bitcast i8* %24 to double*
+  %26 = getelementptr inbounds double, double* %25, i64 2
+  %27 = load double, double* %26, align 8, !alias.scope !10, !noalias !9, !tbaa !12
+  %28 = fadd double %16, %27
+  %29 = call i8* @nish_str_from_f64(double %28)
+  call void @nish_print(i8* %29)
+  call void @Point.constructor(%struct.Point* %Point.obj, double 0x3FF8000000000000, double 0x4002000000000000)
+  %30 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
+  %31 = load double, double* %30, align 8, !tbaa !15
   %32 = call i8* @nish_str_from_f64(double %31)
   call void @nish_print(i8* %32)
-  call void @Point.constructor(%struct.Point* %Point.obj, double 0x3FF8000000000000, double 0x4002000000000000)
-  %33 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
-  %34 = load double, double* %33, align 8, !tbaa !15
-  %35 = call i8* @nish_str_from_f64(double %34)
-  call void @nish_print(i8* %35)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

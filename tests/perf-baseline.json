@@ -26,11 +26,11 @@
       "NL9011": 2
     },
     "self/compilation.ts": {
-      "NL9007": 8,
+      "NL9007": 7,
       "NL9011": 3
     },
     "self/compile.ts": {
-      "NL9007": 2
+      "NL9007": 1
     },
     "self/context.ts": {
       "NL9010": 1
@@ -46,20 +46,16 @@
       "NL9007": 7
     },
     "self/dump.ts": {
-      "NL9007": 2,
       "NL9011": 3
     },
     "self/emit.ts": {
       "NL9011": 4
     },
     "self/emit_arrays.ts": {
-      "NL9007": 2
-    },
-    "self/emit_classes.ts": {
-      "NL9007": 2
+      "NL9007": 1
     },
     "self/emit_control.ts": {
-      "NL9007": 3
+      "NL9007": 2
     },
     "self/escape.ts": {
       "NL9011": 1
@@ -69,7 +65,7 @@
     },
     "self/generics.ts": {
       "NL9002": 1,
-      "NL9007": 10,
+      "NL9007": 5,
       "NL9011": 7
     },
     "self/ice.ts": {

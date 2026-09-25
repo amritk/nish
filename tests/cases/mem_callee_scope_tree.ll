@@ -16,7 +16,6 @@ declare void @nish_arena_release(i64 noundef) #0
 declare noundef i64 @nish_arena_used() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare void @nish_panic_div(i1 noundef zeroext) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
@@ -138,47 +137,37 @@ if.end:
   store %struct.nish_array* %21, %struct.nish_array** %arr.addr, align 8
   store i32 0, i32* %i.addr, align 4
   %27 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
-  %29 = load i64, i64* %28, align 8, !alias.scope !13, !noalias !14
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
-  %31 = load i8*, i8** %30, align 8, !alias.scope !13, !noalias !14
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
+  %29 = load i8*, i8** %28, align 8, !alias.scope !13, !noalias !14
   br label %for.cond
 
 for.cond:
-  %32 = load i32, i32* %i.addr, align 4
-  %33 = icmp slt i32 %32, 4
-  br i1 %33, label %for.body, label %for.end
+  %30 = load i32, i32* %i.addr, align 4
+  %31 = icmp slt i32 %30, 4
+  br i1 %31, label %for.body, label %for.end
 
 for.body:
-  %34 = load i32, i32* %i.addr, align 4
-  %35 = sext i32 %34 to i64
-  %36 = call i8* @nish_alloc_struct(i64 8)
-  %37 = bitcast i8* %36 to %struct.ArrayTree*
-  %38 = sub nsw i32 %depth, 1
-  %39 = call %struct.nish_array* @Storage.buildTreeDepth(%struct.Storage* %this, i32 %38, %struct.Random* %random)
-  call void @ArrayTree.constructor(%struct.ArrayTree* %37, %struct.nish_array* %39)
-  %40 = icmp ult i64 %35, %29
-  br i1 %40, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %35, i64 %29)
-  unreachable
-
-bounds.ok:
-  %41 = bitcast i8* %31 to %struct.ArrayTree**
-  %42 = getelementptr inbounds %struct.ArrayTree*, %struct.ArrayTree** %41, i64 %35
-  store %struct.ArrayTree* %37, %struct.ArrayTree** %42, align 8, !alias.scope !14, !noalias !13, !tbaa !16
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = sext i32 %32 to i64
+  %34 = call i8* @nish_alloc_struct(i64 8)
+  %35 = bitcast i8* %34 to %struct.ArrayTree*
+  %36 = sub nsw i32 %depth, 1
+  %37 = call %struct.nish_array* @Storage.buildTreeDepth(%struct.Storage* %this, i32 %36, %struct.Random* %random)
+  call void @ArrayTree.constructor(%struct.ArrayTree* %35, %struct.nish_array* %37)
+  %38 = bitcast i8* %29 to %struct.ArrayTree**
+  %39 = getelementptr inbounds %struct.ArrayTree*, %struct.ArrayTree** %38, i64 %33
+  store %struct.ArrayTree* %35, %struct.ArrayTree** %39, align 8, !alias.scope !14, !noalias !13, !tbaa !16
   br label %for.inc
 
 for.inc:
-  %43 = load i32, i32* %i.addr, align 4
-  %44 = add nsw i32 %43, 1
-  store i32 %44, i32* %i.addr, align 4
+  %40 = load i32, i32* %i.addr, align 4
+  %41 = add nsw i32 %40, 1
+  store i32 %41, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %45 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
-  ret %struct.nish_array* %45
+  %42 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
+  ret %struct.nish_array* %42
 }
 
 define noundef i32 @nish_main() #1 {

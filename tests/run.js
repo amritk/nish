@@ -2089,6 +2089,73 @@ const panicCount = (ir, fn) =>
   ((ir.match(new RegExp(`define[^\\n]*@${fn}\\b[\\s\\S]*?\\n}`))?.[0] ?? "").match(/call void @nish_panic_index/g) ?? [])
     .length;
 
+// WP15 §2.4: call-site ranges. The positives prove a callee's accesses from what
+// every call site guarantees, so the function named carries no check; each
+// negative breaks one rule the proof rests on, keeps its check, and panics when
+// run. `arr_range_call_exported` is driven by a C host, the caller the compiler
+// cannot see.
+if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call")) {
+  for (const [name, fn, count] of [
+    ["arr_range_call", "Permute.swap", 0],
+    ["arr_range_call_loop", "Counts.bump", 0],
+    ["arr_range_call_loop", "total", 0],
+    ["arr_range_call_countdown", "sumDown", 0],
+    ["arr_range_call_countdown", "pairs", 0],
+    ["arr_range_call_callee_pop", "Stack.get", 1],
+    ["arr_range_call_grow", "visit", 1],
+    ["arr_range_call_no_proof", "at", 1],
+    ["arr_range_call_rebind", "Box.get", 1],
+    ["arr_range_call_rebind_callee", "Box.take", 1],
+    ["arr_range_call_two_sites", "at", 1],
+    ["arr_range_call_wrap", "pick", 1],
+    ["arr_range_call_exported", "pick", 1],
+    ["arr_range_call_arg_rebind", "pick", 1],
+    ["arr_range_call_arrow", "at9", 1],
+    ["arr_range_call_generic", "at9", 1],
+    // #209's dominance rules, which `arr_repeat_check_flow` no longer reaches.
+    ["arr_range_call_flow", "inBranch", 2],
+    ["arr_range_call_flow", "shortCircuit", 2],
+    ["arr_range_call_flow", "ternary", 2],
+    ["arr_range_call_flow", "inLoop", 2],
+    ["arr_range_call_flow", "inCondition", 1],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn.replace(".", "\\."));
+    check(`${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`, got === count, `found ${got}`);
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_range_call_no_proof", "a caller with no proof", "8", "5 >= 3"],
+      ["arr_range_call_two_sites", "a second call site that proves nothing", "7\n8\n9", "5 >= 3"],
+      ["arr_range_call_callee_pop", "a `pop` in a callee between the proof and the call", "4", "1 >= 1"],
+      ["arr_range_call_grow", "a recursion whose index grows", "1\n2\n3", "3 >= 3"],
+      ["arr_range_call_rebind", "a callee that stores the receiver's field before the call", "0", "5 >= 0"],
+      ["arr_range_call_rebind_callee", "a store to the field inside the callee", "", "2 >= 0"],
+      ["arr_range_call_wrap", "a decrement that wraps under `--wrapping`", "2", "2147483647 >= 3"],
+      ["arr_range_call_exported", "a host calling an exported function", "20", "7 >= 3"],
+      ["arr_range_call_arg_rebind", "a later argument rebinding the index's local", "1", "50 >= 3"],
+      ["arr_range_call_arrow", "a call from a lifted arrow", "2", "9 >= 3"],
+      ["arr_range_call_generic", "a call from a generic instantiation", "2", "9 >= 3"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const exe = path.join(buildDir, name);
+      const host = path.join(casesDir, `${name}.c`);
+      const cc = linkNative(exe, ll, { driver: fs.existsSync(host) ? host : null });
+      const run = cc.status === 0 ? spawnSync(exe) : null;
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      );
+    }
+  }
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.

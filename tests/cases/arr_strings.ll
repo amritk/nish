@@ -126,28 +126,18 @@ bounds.ok:
   %34 = select i1 %33, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
   call void @nish_print(i8* %34)
   %35 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 0
-  %37 = load i64, i64* %36, align 8, !alias.scope !3, !noalias !4
-  %38 = icmp ult i64 0, %37
-  br i1 %38, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 0, i64 %37)
-  unreachable
-
-bounds.ok.1:
-  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 2
-  %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4
-  %41 = bitcast i8* %40 to i8**
-  %42 = getelementptr inbounds i8*, i8** %41, i64 0
-  store i8* bitcast ({ i64, [8 x i8] }* @.str.7 to i8*), i8** %42, align 8, !alias.scope !4, !noalias !3, !tbaa !8
-  %43 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
-  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %43, i64 0, i32 2
-  %45 = load i8*, i8** %44, align 8, !alias.scope !3, !noalias !4
-  %46 = bitcast i8* %45 to i8**
-  %47 = getelementptr inbounds i8*, i8** %46, i64 0
-  %48 = load i8*, i8** %47, align 8, !alias.scope !4, !noalias !3, !tbaa !8
-  call void @nish_print(i8* %48)
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 2
+  %37 = load i8*, i8** %36, align 8, !alias.scope !3, !noalias !4
+  %38 = bitcast i8* %37 to i8**
+  %39 = getelementptr inbounds i8*, i8** %38, i64 0
+  store i8* bitcast ({ i64, [8 x i8] }* @.str.7 to i8*), i8** %39, align 8, !alias.scope !4, !noalias !3, !tbaa !8
+  %40 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
+  %41 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %40, i64 0, i32 2
+  %42 = load i8*, i8** %41, align 8, !alias.scope !3, !noalias !4
+  %43 = bitcast i8* %42 to i8**
+  %44 = getelementptr inbounds i8*, i8** %43, i64 0
+  %45 = load i8*, i8** %44, align 8, !alias.scope !4, !noalias !3, !tbaa !8
+  call void @nish_print(i8* %45)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -195,65 +195,45 @@ entry:
   %30 = call i8* @nish_str_from_i32(i32 %29)
   %31 = call i8* @nish_str_concat(i8* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %32 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 0
-  %34 = load i64, i64* %33, align 8, !alias.scope !8, !noalias !9
-  %35 = icmp ult i64 0, %34
-  br i1 %35, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %34)
-  unreachable
-
-bounds.ok:
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 2
-  %37 = load i8*, i8** %36, align 8, !alias.scope !8, !noalias !9
-  %38 = bitcast i8* %37 to %struct.Rec*
-  %39 = getelementptr inbounds %struct.Rec, %struct.Rec* %38, i64 0
-  %40 = getelementptr inbounds %struct.Rec, %struct.Rec* %39, i32 0, i32 0
-  %41 = load i32, i32* %40, align 4
-  %42 = call i8* @nish_str_from_i32(i32 %41)
-  %43 = call i8* @nish_str_concat(i8* %31, i8* %42)
-  %44 = call i8* @nish_str_concat(i8* %43, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %45 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %45, i64 0, i32 2
-  %47 = load i8*, i8** %46, align 8, !alias.scope !8, !noalias !9
-  %48 = bitcast i8* %47 to %struct.Rec*
-  %49 = getelementptr inbounds %struct.Rec, %struct.Rec* %48, i64 0
-  %50 = getelementptr inbounds %struct.Rec, %struct.Rec* %49, i32 0, i32 1
-  %51 = load i32, i32* %50, align 4
-  %52 = call i8* @nish_str_from_i32(i32 %51)
-  %53 = call i8* @nish_str_concat(i8* %44, i8* %52)
-  %54 = call i8* @nish_str_concat(i8* %53, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %55 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %56 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %55, i64 0, i32 0
-  %57 = load i64, i64* %56, align 8, !alias.scope !8, !noalias !9
-  %58 = icmp ult i64 1, %57
-  br i1 %58, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 1, i64 %57)
-  unreachable
-
-bounds.ok.1:
-  %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %55, i64 0, i32 2
-  %60 = load i8*, i8** %59, align 8, !alias.scope !8, !noalias !9
-  %61 = bitcast i8* %60 to %struct.Rec*
-  %62 = getelementptr inbounds %struct.Rec, %struct.Rec* %61, i64 1
-  %63 = getelementptr inbounds %struct.Rec, %struct.Rec* %62, i32 0, i32 0
-  %64 = load i32, i32* %63, align 4
-  %65 = call i8* @nish_str_from_i32(i32 %64)
-  %66 = call i8* @nish_str_concat(i8* %54, i8* %65)
-  %67 = call i8* @nish_str_concat(i8* %66, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %68 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %69 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %68, i64 0, i32 2
-  %70 = load i8*, i8** %69, align 8, !alias.scope !8, !noalias !9
-  %71 = bitcast i8* %70 to %struct.Rec*
-  %72 = getelementptr inbounds %struct.Rec, %struct.Rec* %71, i64 1
-  %73 = getelementptr inbounds %struct.Rec, %struct.Rec* %72, i32 0, i32 1
-  %74 = load i32, i32* %73, align 4
-  %75 = call i8* @nish_str_from_i32(i32 %74)
-  %76 = call i8* @nish_str_concat(i8* %67, i8* %75)
-  call void @nish_print(i8* %76)
+  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 2
+  %34 = load i8*, i8** %33, align 8, !alias.scope !8, !noalias !9
+  %35 = bitcast i8* %34 to %struct.Rec*
+  %36 = getelementptr inbounds %struct.Rec, %struct.Rec* %35, i64 0
+  %37 = getelementptr inbounds %struct.Rec, %struct.Rec* %36, i32 0, i32 0
+  %38 = load i32, i32* %37, align 4
+  %39 = call i8* @nish_str_from_i32(i32 %38)
+  %40 = call i8* @nish_str_concat(i8* %31, i8* %39)
+  %41 = call i8* @nish_str_concat(i8* %40, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %42 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
+  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 2
+  %44 = load i8*, i8** %43, align 8, !alias.scope !8, !noalias !9
+  %45 = bitcast i8* %44 to %struct.Rec*
+  %46 = getelementptr inbounds %struct.Rec, %struct.Rec* %45, i64 0
+  %47 = getelementptr inbounds %struct.Rec, %struct.Rec* %46, i32 0, i32 1
+  %48 = load i32, i32* %47, align 4
+  %49 = call i8* @nish_str_from_i32(i32 %48)
+  %50 = call i8* @nish_str_concat(i8* %41, i8* %49)
+  %51 = call i8* @nish_str_concat(i8* %50, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %52 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
+  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %52, i64 0, i32 2
+  %54 = load i8*, i8** %53, align 8, !alias.scope !8, !noalias !9
+  %55 = bitcast i8* %54 to %struct.Rec*
+  %56 = getelementptr inbounds %struct.Rec, %struct.Rec* %55, i64 1
+  %57 = getelementptr inbounds %struct.Rec, %struct.Rec* %56, i32 0, i32 0
+  %58 = load i32, i32* %57, align 4
+  %59 = call i8* @nish_str_from_i32(i32 %58)
+  %60 = call i8* @nish_str_concat(i8* %51, i8* %59)
+  %61 = call i8* @nish_str_concat(i8* %60, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %62 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
+  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %62, i64 0, i32 2
+  %64 = load i8*, i8** %63, align 8, !alias.scope !8, !noalias !9
+  %65 = bitcast i8* %64 to %struct.Rec*
+  %66 = getelementptr inbounds %struct.Rec, %struct.Rec* %65, i64 1
+  %67 = getelementptr inbounds %struct.Rec, %struct.Rec* %66, i32 0, i32 1
+  %68 = load i32, i32* %67, align 4
+  %69 = call i8* @nish_str_from_i32(i32 %68)
+  %70 = call i8* @nish_str_concat(i8* %61, i8* %69)
+  call void @nish_print(i8* %70)
   ret i32 0
 }
 

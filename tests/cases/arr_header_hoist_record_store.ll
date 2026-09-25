@@ -100,73 +100,63 @@ entry:
   store %struct.Rec* %32, %struct.Rec** %r.addr, align 8
   store i32 0, i32* %i.addr, align 4
   %33 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
-  %35 = load i64, i64* %34, align 8, !alias.scope !3, !noalias !4
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
-  %37 = load i8*, i8** %36, align 8, !alias.scope !3, !noalias !4
+  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
+  %35 = load i8*, i8** %34, align 8, !alias.scope !3, !noalias !4
   br label %while.cond
 
 while.cond:
-  %38 = load i32, i32* %i.addr, align 4
-  %39 = load %struct.Rec*, %struct.Rec** %r.addr, align 8
-  %40 = getelementptr inbounds %struct.Rec, %struct.Rec* %39, i32 0, i32 0
-  %41 = load %struct.nish_array*, %struct.nish_array** %40, align 8
-  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 0
-  %43 = load i64, i64* %42, align 8, !alias.scope !3, !noalias !4
-  %44 = trunc i64 %43 to i32
-  %45 = icmp slt i32 %38, %44
-  br i1 %45, label %while.body, label %while.end
+  %36 = load i32, i32* %i.addr, align 4
+  %37 = load %struct.Rec*, %struct.Rec** %r.addr, align 8
+  %38 = getelementptr inbounds %struct.Rec, %struct.Rec* %37, i32 0, i32 0
+  %39 = load %struct.nish_array*, %struct.nish_array** %38, align 8
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 0
+  %41 = load i64, i64* %40, align 8, !alias.scope !3, !noalias !4
+  %42 = trunc i64 %41 to i32
+  %43 = icmp slt i32 %36, %42
+  br i1 %43, label %while.body, label %while.end
 
 while.body:
-  %46 = load i32, i32* %i.addr, align 4
-  %47 = icmp eq i32 %46, 1
-  br i1 %47, label %if.then, label %if.end
+  %44 = load i32, i32* %i.addr, align 4
+  %45 = icmp eq i32 %44, 1
+  br i1 %45, label %if.then, label %if.end
 
 if.then:
-  %48 = load %struct.Rec*, %struct.Rec** %short.addr, align 8
-  %49 = icmp ult i64 0, %35
-  br i1 %49, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %35)
-  unreachable
-
-bounds.ok:
-  %50 = bitcast i8* %37 to %struct.Rec*
-  %51 = getelementptr inbounds %struct.Rec, %struct.Rec* %50, i64 0
-  %52 = bitcast %struct.Rec* %51 to i8*
-  %53 = bitcast %struct.Rec* %48 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %52, i8* align 8 %53, i64 8, i1 false), !alias.scope !4, !noalias !3
+  %46 = load %struct.Rec*, %struct.Rec** %short.addr, align 8
+  %47 = bitcast i8* %35 to %struct.Rec*
+  %48 = getelementptr inbounds %struct.Rec, %struct.Rec* %47, i64 0
+  %49 = bitcast %struct.Rec* %48 to i8*
+  %50 = bitcast %struct.Rec* %46 to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %49, i8* align 8 %50, i64 8, i1 false), !alias.scope !4, !noalias !3
   br label %if.end
 
 if.end:
-  %54 = load %struct.Rec*, %struct.Rec** %r.addr, align 8
-  %55 = getelementptr inbounds %struct.Rec, %struct.Rec* %54, i32 0, i32 0
-  %56 = load %struct.nish_array*, %struct.nish_array** %55, align 8
-  %57 = load i32, i32* %i.addr, align 4
-  %58 = sext i32 %57 to i64
-  %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %56, i64 0, i32 0
-  %60 = load i64, i64* %59, align 8, !alias.scope !3, !noalias !4
-  %61 = icmp ult i64 %58, %60
-  br i1 %61, label %bounds.ok.1, label %bounds.fail.1
+  %51 = load %struct.Rec*, %struct.Rec** %r.addr, align 8
+  %52 = getelementptr inbounds %struct.Rec, %struct.Rec* %51, i32 0, i32 0
+  %53 = load %struct.nish_array*, %struct.nish_array** %52, align 8
+  %54 = load i32, i32* %i.addr, align 4
+  %55 = sext i32 %54 to i64
+  %56 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %53, i64 0, i32 0
+  %57 = load i64, i64* %56, align 8, !alias.scope !3, !noalias !4
+  %58 = icmp ult i64 %55, %57
+  br i1 %58, label %bounds.ok, label %bounds.fail
 
-bounds.fail.1:
-  call void @nish_panic_index(i64 %58, i64 %60)
+bounds.fail:
+  call void @nish_panic_index(i64 %55, i64 %57)
   unreachable
 
-bounds.ok.1:
-  %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %56, i64 0, i32 2
-  %63 = load i8*, i8** %62, align 8, !alias.scope !3, !noalias !4
-  %64 = bitcast i8* %63 to i32*
-  %65 = getelementptr inbounds i32, i32* %64, i64 %58
-  %66 = load i32, i32* %65, align 4, !alias.scope !4, !noalias !3, !tbaa !8
-  store i32 %66, i32* %x.addr, align 4
-  %67 = load i32, i32* %x.addr, align 4
-  %68 = call i8* @nish_str_from_i32(i32 %67)
-  call void @nish_print(i8* %68)
-  %69 = load i32, i32* %i.addr, align 4
-  %70 = add nsw i32 %69, 1
-  store i32 %70, i32* %i.addr, align 4
+bounds.ok:
+  %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %53, i64 0, i32 2
+  %60 = load i8*, i8** %59, align 8, !alias.scope !3, !noalias !4
+  %61 = bitcast i8* %60 to i32*
+  %62 = getelementptr inbounds i32, i32* %61, i64 %55
+  %63 = load i32, i32* %62, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store i32 %63, i32* %x.addr, align 4
+  %64 = load i32, i32* %x.addr, align 4
+  %65 = call i8* @nish_str_from_i32(i32 %64)
+  call void @nish_print(i8* %65)
+  %66 = load i32, i32* %i.addr, align 4
+  %67 = add nsw i32 %66, 1
+  store i32 %67, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
