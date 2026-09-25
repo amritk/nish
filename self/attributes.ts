@@ -101,7 +101,7 @@ import {
   Node,
 } from "./nodes";
 import { Options } from "./options";
-import { isParallelEntry } from "./parallel";
+import { isParallelEntry, recyclesPerElement } from "./parallel";
 import { ParentTable } from "./parents";
 import {
   CheckedProgram,
@@ -1533,6 +1533,7 @@ export const analyzeFunctions = (
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
     f.contained = f.contained || !f.allocEscapes;
   }
+  scopeParallelBodies(units, facts);
   settleCalleeScopes(facts);
   for (const f of facts.list) {
     if (f.arenaScope) {
@@ -1542,6 +1543,45 @@ export const analyzeFunctions = (
     }
   }
   return facts;
+};
+
+/**
+ * WP29: a data-parallel body that allocates gets an arena scope of its own, so
+ * every element gives back what it allocated before the next one starts. The
+ * WP6 rule above asks the function's own allocations to stay out of every
+ * local that is assigned, and the callee rule below asks for a callee that
+ * allocates; a body can fail both and still be one whose memory is garbage
+ * the moment it answers, and for a body that runs a million times on one
+ * thread's arena that difference is the peak resident size (wp20 §8a).
+ *
+ * **Why it is sound.** `recyclesPerElement` (`self/parallel.ts`) is the callee
+ * rule's own condition — contained, a scalar result, no arena control — plus
+ * not reading the bump position, and `Compilation.checkParallel` refuses any
+ * body that allocates without it, so a scope added here never frees what
+ * outlives the element. The arena is thread-local under `--threads`
+ * (`ARENA_GLOBAL_TLS`), and importing `nish/threads` implies `--threads`, so
+ * the mark and the release run in whichever thread the element runs in and
+ * name that thread's arena: a worker rewinds only what it bumped itself, and
+ * the calling thread, which runs chunk 0, rewinds its own arena to where the
+ * element found it. No other thread's allocation can sit between the two.
+ *
+ * It is set before the callee scopes are settled, so a caller that only calls
+ * the body — the chunk loop — sees a callee that no longer net-allocates and
+ * does not get a scope of its own around a whole chunk.
+ */
+const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => {
+  for (const unit of units) {
+    for (const call of unit.program.parallelCalls) {
+      const instance = call.sig.instance;
+      if (instance === null || instance.functionArgs.length !== 1) {
+        continue;
+      }
+      const f = facts.get(instance.functionArgs[0].name);
+      if (f !== null && f.allocates && !f.arenaScope && recyclesPerElement(f)) {
+        f.arenaScope = true;
+      }
+    }
+  }
 };
 
 /**

@@ -3,13 +3,13 @@
 @.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"parallelMapInto: dst has \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [23 x i8] } { i64 22, [23 x i8] c" elements and src has \00" }, align 8
 
-declare noundef i32 @nish_main$arrow0(i32 noundef) #1
-declare noundef i64 @nish_arena_mark() #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_exit(i32 noundef) #3
-declare void @nish_panic_div(i1 noundef zeroext) #4
+declare noundef i32 @label(i32 noundef) #0
+declare noundef i64 @nish_arena_mark() #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_exit(i32 noundef) #2
+declare void @nish_panic_div(i1 noundef zeroext) #3
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #0
 
 define internal noundef i32 @nish.reduceBlockCount(i32 noundef %n) #0 {
@@ -87,7 +87,7 @@ entry:
   unreachable
 }
 
-define internal void @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+define internal void @nish.parallelMapInto$i32$i32$fn.5.label$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, %struct.nish_array* }, { %struct.nish_array*, %struct.nish_array* }* %0, i32 0, i32 0
@@ -96,11 +96,11 @@ entry:
   %4 = load %struct.nish_array*, %struct.nish_array** %3
   %5 = trunc i64 %lo to i32
   %6 = trunc i64 %hi to i32
-  call void @nish.mapRange$i32$i32$fn.16.nish_main$arrow0(%struct.nish_array* %2, %struct.nish_array* %4, i32 %5, i32 %6)
+  call void @nish.mapRange$i32$i32$fn.5.label(%struct.nish_array* %2, %struct.nish_array* %4, i32 %5, i32 %6)
   ret void
 }
 
-define void @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst) #0 {
+define void @nish.parallelMapInto$i32$i32$fn.5.label(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst) #0 {
 entry:
   %n.addr = alloca i32, align 4
   %par.ctx = alloca { %struct.nish_array*, %struct.nish_array* }, align 8
@@ -125,11 +125,11 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 74898
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
-  call void @nish.mapRange$i32$i32$fn.16.nish_main$arrow0(%struct.nish_array* %src, %struct.nish_array* %dst, i32 0, i32 %12)
+  call void @nish.mapRange$i32$i32$fn.5.label(%struct.nish_array* %src, %struct.nish_array* %dst, i32 0, i32 %12)
   br label %par.done
 
 par.region:
@@ -139,14 +139,14 @@ par.region:
   store %struct.nish_array* %dst, %struct.nish_array** %15
   %16 = bitcast { %struct.nish_array*, %struct.nish_array* }* %par.ctx to i8*
   %17 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0$chunk, i8* %16, i64 %17, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.5.label$chunk, i8* %16, i64 %17, i64 74898)
   br label %par.done
 
 par.done:
   ret void
 }
 
-define internal void @nish.mapRange$i32$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal void @nish.mapRange$i32$i32$fn.5.label(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
   %i.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
@@ -191,7 +191,7 @@ for.body:
   %19 = bitcast i8* %3 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 %18
   %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !8
-  %22 = call i32 @nish_main$arrow0(i32 %21)
+  %22 = call i32 @label(i32 %21)
   store i32 %22, i32* %y.addr, align 4
   %23 = load i32, i32* %i.addr, align 4
   %24 = trunc i64 %5 to i32
@@ -221,10 +221,9 @@ for.end:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { noreturn nounwind }
+attributes #3 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

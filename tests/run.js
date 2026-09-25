@@ -1776,6 +1776,48 @@ if (!only || "par_dst_short".includes(only)) {
   );
 }
 
+// WP29: an allocating parallel body compiles with NL9012 at the call, which
+// the link loop above cannot see, because it keeps no stderr of a compile that
+// succeeds. Asked of `--json`, whose `code` is the contract, and again under
+// `--no-warn-performance`, which must silence it and change nothing else. The
+// fixture's existence is part of the assertion, as for `par_dst_short`.
+if (!only || "par_alloc".includes(only)) {
+  const fixture = linkTests.includes("par_alloc");
+  const entry = path.join(linkDir, "par_alloc", "main.ts");
+  const compileJson = (extra) => {
+    const out = path.join(buildDir, "link", `par_alloc-json${extra.length}`) + path.sep;
+    fs.rmSync(out, { recursive: true, force: true });
+    const r = spawnSync(NISH, [entry, "--json", "-o", out, ...extra], { cwd: root, encoding: "utf8" });
+    const objects = r.stdout
+      .split("\n")
+      .filter((l) => l.startsWith("{"))
+      .map((l) => JSON.parse(l));
+    return { status: r.status, objects, stderr: r.stderr };
+  };
+  const warned = fixture ? compileJson([]) : null;
+  const quiet = fixture ? compileJson(["--no-warn-performance"]) : null;
+  const nl9012 = warned === null ? [] : warned.objects.filter((o) => o.code === "NL9012");
+  check(
+    "link/par_alloc: an allocating parallel body compiles with one NL9012 at the call, and --no-warn-performance silences it",
+    warned !== null &&
+      quiet !== null &&
+      warned.status === 0 &&
+      warned.objects.length === 1 &&
+      nl9012.length === 1 &&
+      nl9012[0].severity === "performance" &&
+      nl9012[0].line === 23 &&
+      nl9012[0].column === 3 &&
+      nl9012[0].message.startsWith(
+        "the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call"
+      ) &&
+      quiet.status === 0 &&
+      quiet.objects.length === 0,
+    warned === null
+      ? "no such fixture: tests/link/par_alloc"
+      : `warned: exit ${warned.status} ${JSON.stringify(warned.objects)}\nquiet: exit ${quiet.status} ${JSON.stringify(quiet.objects)}`
+  );
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the

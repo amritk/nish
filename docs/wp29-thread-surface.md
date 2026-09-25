@@ -220,12 +220,19 @@ decided, beyond what is written above:
   reads can still read `dst` through its argument (`T = Row { cells: f64[] }`
   with a `f64[]` `dst`). An array of `dst`'s element type reachable from `T` is
   refused, naming the path.
-- **Allocation is refused outright** in this stage, and the result is a
-  scalar, per §7. Stage P1's follow-up admits a body whose allocations are
-  recycled per element, with §8a's warning.
-- **The grain is a constant**, 2^20 elements, from wp20 §8e's millisecond per
-  region, so a map over at most that many elements is one chunk on the calling
-  thread.
+- **A body may allocate, and gives it back per element.** The result is a
+  scalar, per §7. A body that allocates gets an arena scope of its own
+  (`scopeParallelBodies` in `self/attributes.ts`) when the escape analysis
+  sees every allocation die and the body leaves `Arena` alone, and is refused
+  otherwise (NL2352, NL2351). The arena is thread-local, so each element marks
+  and releases the arena of the thread it runs on. It compiles with §8a's
+  warning, NL9012 — not NL9011, which the arena-loop rule had taken by then.
+- **The grain is sized from the body.** `2^22 / elementCost(f)`, clamped to
+  `[1, 2^22]` (`mapGrain` in `self/parallel.ts`): a static estimate of one
+  element, so a cheap body is divided only past about a million elements and
+  one with a loop far sooner. Up to the grain the map calls its chunk loop
+  directly, which inlines, instead of going through the partitioner. §8a has
+  the calibration. P1 first shipped a constant 2^20.
 - **`--threads` is implied** by importing the module (wp20 §8c.3). It is a
   soundness requirement rather than a default: allocation is left out of a
   shared write only because the arena is thread-local. A program that does not
@@ -456,6 +463,66 @@ warning[NL9xxx]: the body of this `parallelMapInto` allocates per element
 It costs nothing to compute, it is the single most useful thing that can be
 said about a parallel region before it is run, and it exists only because the
 whole-program pass and the warning class were both built for other reasons.
+
+**As built (NL9012).** The compiler went one step past the warning: rather than
+telling the program to recycle the arena, it recycles it. A body that
+allocates gets an arena scope of its own, so each element marks and releases
+the arena of the thread it runs on, and the 780x of peak memory is not there to
+warn about. What is left to say is that every element still pays for the
+allocation and the release, and that is what the warning says, one line long,
+at the call:
+
+```
+main.ts:23:3: performance: the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both
+```
+
+`Arena.reset()` inside the body is no longer the advice, and is refused
+(NL2351): each thread has an arena of its own, and a body that moves it
+could rewind past the mark its element scope is about to release to. The
+warning honours `--no-warn-performance` and `--json` like every other.
+
+**Measured**, on the four-core machine `docs/BENCHMARKS.md` names, by
+`node bench/run.mjs` (the kernels are `bench/par_*.ts`, each one binary run as
+the loop and as the map):
+
+| kernel | loop | `parallelMapInto` | speedup |
+| --- | ---: | ---: | ---: |
+| `par_compute`: 64 square roots per element, 2^21 elements | 780 ms | 210 ms | **3.71x** |
+| `par_nbody`: 1024 bodies, 16 steps, 3n probes per step | 171 ms | 49.0 ms | 3.49x |
+| `par_alloc`: a string built and summed per element, 2^22 elements | 167 ms | 74.9 ms | 2.23x |
+| `par_short`: an 8-element map, 2^20 calls | 54.7 ms | 56.1 ms | 0.97x |
+
+Minimum of five runs after one warm-up. The compute kernel clears the 3x the
+stage was held to. The allocating kernel's peak memory is 33,956 KB as the loop
+and 34,596 KB as the map, which is its two arrays of 2^22 `i32` and nothing
+else: the arena is recycled per element on every thread, where wp20 §8a's
+unrecycled body held 1.37 GiB. It divides worse than the compute kernel
+because each element is a bump, a format and a mark and release through the
+thread-local arena rather than arithmetic.
+
+The short map is the one where "no slower than the loop" is the claim, and
+five runs cannot resolve 2.6%, so it was run 40 more times, interleaved with
+the loop: 50.9 ms against 50.7 by minimum, 57.9 against 56.3 by median. Up to
+its grain a map calls its chunk loop directly, which LLVM inlines, so what is
+left is the per-call length check and two header reads the loop hoists out of
+its caller; measured on a one-operation body (`(x * 3 + 1) % 1000003`) that
+difference is about 3 ns per call, and on the four-operation body the kernel
+uses it is within the noise. Before this stage, the same call cost an arena
+mark and release (the wrapper's panic message was its own allocation) and an
+indirect call through `nish_parallel_range`.
+
+**The grain's calibration.** The estimate counts one unit per operation, 32
+per allocation, 4 per call, and a loop body as many times as its literal bound
+says, or 64 times when the bound is data. Against measured time per element
+the unit runs from 0.07 ns (the allocating kernel, whose loop over a string's
+bytes runs about 7 times and is estimated at 64) to 0.18 ns (the compute
+kernel, 372 ns per element estimated at 2,060 units) and 1.6 ns (n-body,
+whose inner loop over 1024 bodies is estimated at 64 trips). The target was
+then set by the cheapest body there is, `(x) => x * 3 + 1` (5 units), at
+exactly two chunks: with a target of 2^20 it lost 12% to the loop at 262,144
+elements (60.8 ms against 54.1 over 400 maps), and with 2^22 it wins 1.54x at
+1,677,722 (223.6 ms against 345.0). The default of 64 trips is what divides
+n-body four ways: at 16, its 3,072 probes were two chunks.
 
 ---
 

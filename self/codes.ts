@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 452;
+export const RULE_COUNT: i32 = 455;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -69,6 +69,8 @@ export const diagnosticRules = (): string[] => [
   "NL3023",
   "` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is given, and this is a parameter of ",
   "NL2338",
+  "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
+  "NL2352",
   "An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in ",
   "NL2336",
   "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
@@ -81,6 +83,8 @@ export const diagnosticRules = (): string[] => [
   "NL2349",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
+  "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`",
+  "NL2351",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory",
@@ -943,6 +947,8 @@ export const diagnosticRules = (): string[] => [
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
 export const performanceRules = (): string[] => [
+  "` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both",
+  "NL9012",
   "allocates a dynamically sized array on every iteration of this loop",
   "NL9001",
   "is rebuilt from its own value on every iteration of this loop",

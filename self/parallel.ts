@@ -14,10 +14,16 @@
 //     own sequential loop writes `dst[i]`, so it is always a shared write.
 //     The intrinsic performs every store, into slots the partitioner has made
 //     disjoint, so a body that writes nothing cannot race with anything.
-//   - **The body does not allocate.** A worker's arena is its own under
-//     `--threads` and is freed when its thread exits, so nothing a body
-//     allocates may outlive its element. P1 refuses every allocation; stage 4
-//     relaxes this rule alone (`allocationMessage`), which is why it is one.
+//   - **What the body allocates dies with its element.** A worker's arena is
+//     its own under `--threads` and is freed when its thread exits, so nothing
+//     a body allocates may outlive its element — and so it does not have to
+//     live even that long: a body that allocates gets an arena scope of its
+//     own (`scopeParallelBodies` in `self/attributes.ts`), and each element
+//     gives its temporaries back before the next one starts. That needs the
+//     escape analysis to see every allocation die (`escapeMessage`) and the
+//     body to leave the arena alone (`arenaMessage`); what is left is legal,
+//     and costs a mark and a release per element, which is what NL9012 says
+//     (`allocationWarning`).
 //   - **`dst` is not reachable from an element of `src`.** Purity is not
 //     enough: a body that only reads can still read `dst` through its argument
 //     (`T = Row { cells: f64[] }` with a `f64[]` `dst`) while another thread
@@ -31,20 +37,34 @@
 //     fold only when both hold. An arrow whose body is one operator on its two
 //     parameters is read; a named function is opaque, and the obligation is
 //     written in docs/LANGUAGE.md instead.
+//
+// And one thing that is not a rule: how finely a map is divided. That is sized
+// from a static estimate of what one element costs (`mapGrain`), so a region
+// is only divided once each thread's share is worth a thread.
 
 import { FactsTable, FunctionFacts } from "./attributes";
 import { CLI, STD_PREFIX } from "./branding";
 import { isScalarArgument } from "./escape";
+import { isTemplateExpression } from "./emit_util";
 import {
+  N_ARRAY,
+  N_ARROW,
   N_BLOCK,
+  N_CALL,
+  N_DO,
   N_FALSE,
+  N_FOR,
+  N_FOR_OF,
   N_IDENT,
+  N_NEW,
   N_NUMBER,
+  N_OBJECT,
   N_PAREN,
   N_RETURN,
   N_TRUE,
   N_UNARY,
   N_BINARY,
+  N_WHILE,
   Node,
 } from "./nodes";
 import {
@@ -159,17 +179,85 @@ export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: Fac
 };
 
 /**
- * P1's allocation rule, strict: the body allocates at all, itself or through a
- * callee. Kept apart from the others because it is the one stage 4 relaxes.
+ * Whether the allocations of a body with facts `f` can be given back after
+ * every element, which is what makes a body that allocates legal. Four things
+ * have to hold, and they are the ones the callee-scope rule in
+ * `self/attributes.ts` asks for (`settleCalleeScopes`), for the same reasons:
+ *
+ *   - `contained`: nothing allocated during the call is reachable once it
+ *     returns, except through the result;
+ *   - `returnsScalar`: and the result is not a pointer, so nothing is;
+ *   - `!usesArenaControl`: nothing in the call rewound the arena, so the mark
+ *     taken on entry still names where the element started;
+ *   - `!readsArenaState`: nothing in the call reads the bump position, whose
+ *     answer would depend on which thread's arena the element ran in.
  */
-export const allocationMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+export const recyclesPerElement = (f: FunctionFacts): boolean =>
+  f.contained && f.returnsScalar && !f.usesArenaControl && !f.readsArenaState;
+
+/**
+ * The body reads or moves the arena. Every thread has an arena of its own, so
+ * `Arena.used()` would answer differently depending on which thread ran the
+ * element, and a body that rewinds the arena could rewind past what the
+ * element scope is about to release.
+ */
+export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+  const own: FunctionFacts | null = facts.get(fn.name);
+  if (own === null || (!own.readsArenaState && !own.usesArenaControl)) {
+    return "";
+  }
+  return (
+    `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
+    "each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`"
+  );
+};
+
+/**
+ * The body allocates and the escape analysis cannot see every allocation die
+ * before it returns, so the scope that gives an element's memory back after
+ * it could free something still in use. The analysis stops following a value
+ * once it is stored into memory, so that is what this usually means, and the
+ * site is named when the function's own allocation is the one that escapes.
+ */
+export const escapeMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+  const own: FunctionFacts | null = facts.get(fn.name);
+  if (own === null || !own.allocates || own.contained) {
+    return "";
+  }
+  let where = "";
+  const site = own.escapeSite;
+  if (site !== null) {
+    const at = positionIn(fn, site);
+    where = at.length > 0 ? ` at ${at}` : "";
+  }
+  return (
+    `\`${fn.sourceName}\` allocates${where} and stores the allocation into memory, and \`${intrinsicName(sig)}\` ` +
+    "releases what a body allocates after every element: a parallel body may allocate only temporaries it drops " +
+    "before it returns, and this analysis stops following a value once it is stored"
+  );
+};
+
+/**
+ * NL9012, wp29 §8a: a legal body that allocates. Each element pays for its
+ * allocations and for the mark and release around it, which a body computing
+ * over what it was handed does not, and the fixpoint can see that before the
+ * program runs. `type` is the body's result type.
+ */
+export const allocationWarning = (
+  table: TypeTable,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  type: i32,
+  facts: FactsTable
+): string => {
   const own: FunctionFacts | null = facts.get(fn.name);
   if (own === null || !own.allocates) {
     return "";
   }
   return (
-    `\`${fn.sourceName}\` allocates, and \`${intrinsicName(sig)}\` runs it on threads whose arenas are freed when ` +
-    "they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)"
+    `the body of this \`${intrinsicName(sig)}\` allocates per element: \`${fn.sourceName}\` answers ` +
+    `\`${table.typeName(type)}\` but allocates on every call, so each thread marks and releases its arena around ` +
+    "every element. Compute the answer without building a string, an array or an object to save both"
   );
 };
 
@@ -377,4 +465,111 @@ export const reduceMessage = (
     `\`parallelReduce\` folds every block from its identity, and the identity of \`${op}\` is \`${want}\`, not ` +
     `\`${identityText}\`: any other value would be counted once per block`
   );
+};
+
+// ---- The grain ---------------------------------------------------------------------------
+//
+// A map region is divided into at most one chunk per `grain` elements, so the
+// grain decides whether a map is worth threads at all. A region divided four
+// ways costs about 125 µs of `pthread_create` and join (docs/wp20-threads.md
+// §8e), and it needs about a millisecond of work in each chunk before that is
+// under a tenth of the chunk. How many elements make a millisecond depends on
+// the body, so the grain is that target over an estimate of one element:
+//
+//     grain = clamp(REGION_COST / elementCost(f), 1, REGION_COST)
+//
+// The estimate is read off the body's syntax, in units of roughly one simple
+// operation — about a nanosecond on the machine it was calibrated on, which
+// is what makes `REGION_COST` a millisecond (the calibration is in
+// docs/wp29-thread-surface.md §8a). It is deliberately crude, and it errs one
+// way: a callee counts as a call and not as its body, so a body that hides its
+// work behind a call is estimated cheap and divided too little, which costs
+// speed and never makes a short array slower than the loop.
+
+/** The work, in estimate units, that one chunk of a map region should carry: about a millisecond. */
+export const REGION_COST: i32 = 4194304;
+
+/** One call: the jump, the frame and the return, beyond the arguments. */
+const CALL_COST: i32 = 4;
+
+/** One arena allocation: the bump and its initialisation, or formatting a number into a string. */
+const ALLOC_COST: i32 = 32;
+
+/** The iterations a loop is assumed to run when its bound is not a literal. */
+const DEFAULT_TRIPS: i32 = 64;
+
+/** `a * b`, saturated at `REGION_COST`: nothing above it changes the grain. */
+const scaled = (a: i32, b: i32): i32 => {
+  if (a <= 0 || b <= 0) {
+    return 0;
+  }
+  return a >= REGION_COST / b ? REGION_COST : a * b;
+};
+
+/** `a + b`, saturated at `REGION_COST`. */
+const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a + b);
+
+/**
+ * How many times the loop `node` runs its body: the literal of a
+ * `for (...; i < N; ...)` or `i <= N`, and `DEFAULT_TRIPS` for anything the
+ * syntax does not state.
+ */
+const tripsOf = (node: Node): i32 => {
+  if (node.kind !== N_FOR || node.children.length < 2) {
+    return DEFAULT_TRIPS;
+  }
+  const cond = unparen(node.children[1]);
+  if (cond.kind !== N_BINARY || cond.children.length < 2) {
+    return DEFAULT_TRIPS;
+  }
+  const bound = unparen(cond.children[1]);
+  if (bound.kind !== N_NUMBER || (cond.text !== "<" && cond.text !== "<=")) {
+    return DEFAULT_TRIPS;
+  }
+  const n = Number(bound.text);
+  if (n < 1.0) {
+    return 1;
+  }
+  if (n >= toF64(REGION_COST)) {
+    return REGION_COST;
+  }
+  return cond.text === "<=" ? toI32(n) + 1 : toI32(n);
+};
+
+/** The estimate for `node` and everything under it. */
+const costOf = (node: Node): i32 => {
+  // A nested arrow is lifted into a function of its own and runs only when called.
+  if (node.kind === N_ARROW) {
+    return 0;
+  }
+  let own = 1;
+  if (node.kind === N_CALL) {
+    own = CALL_COST;
+  } else if (node.kind === N_NEW || node.kind === N_OBJECT || node.kind === N_ARRAY || isTemplateExpression(node)) {
+    own = ALLOC_COST;
+  }
+  let inner = 0;
+  for (const child of node.children) {
+    inner = summed(inner, costOf(child));
+  }
+  if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
+    inner = scaled(inner, tripsOf(node));
+  }
+  return summed(own, inner);
+};
+
+/** What one call of `fn` is estimated to cost, at least 1. */
+export const elementCost = (fn: FunctionSig): i32 => {
+  const body = fn.body();
+  if (body === null) {
+    return 1;
+  }
+  const cost = costOf(body);
+  return cost < 1 ? 1 : cost;
+};
+
+/** The grain of a map whose body is `fn`: `REGION_COST` over its estimate, in `[1, REGION_COST]`. */
+export const mapGrain = (fn: FunctionSig): i32 => {
+  const grain = REGION_COST / elementCost(fn);
+  return grain < 1 ? 1 : grain;
 };
