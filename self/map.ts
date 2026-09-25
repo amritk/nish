@@ -1,33 +1,37 @@
 // `StringMap` and `StringSet`: the name lookup every phase of a compiler is
-// made of (docs/wp14-selfhost.md §2.2). `src/` reaches for `Map` and `Set` at
-// about 200 sites; the language has neither, and adding one would drag in
-// generics, which is a work package of its own and is not on the path. So
-// this is library code over the arrays and the bitwise operators the language
-// already has.
+// made of (docs/wp14-selfhost.md §2.2). `src/` reached for `Map` and `Set` at
+// about 200 sites, and Nish-0 has neither, so this is library code over the
+// arrays and the bitwise operators the language already has.
 //
-// **Open addressing over a dense entry list.** `slots` is a power-of-two
-// bucket table holding *entry indices plus one* (0 meaning empty), and the
-// entries themselves live in insertion order in `keys` / `values`. Two things
-// fall out of that shape and both matter here:
+// **Open addressing over a dense entry list**, in the layout WP32 chose for
+// the global `Map` (docs/wp32-map.md §2). The entries live in insertion order
+// in `keys` / `values`, beside `hashes`, the full 32-bit hash of each key.
+// `slots` is a power-of-two bucket table of `u32`s: the key's top eight hash
+// bits, the fingerprint, above a 24-bit entry index plus one. 0 is an empty
+// bucket. What that shape buys:
 //
 //   - Iteration is insertion order, so a dump built by walking a scope is
 //     deterministic. Golden-compared diagnostics need that; a hash order
 //     would make the output depend on the table size.
 //   - There is no empty-key sentinel to get wrong. `""` is a perfectly good
 //     key, which a table storing keys in the buckets has to special-case.
+//   - A probe reads the entry list only when a bucket's fingerprint matches,
+//     one foreign bucket in 256, and then compares the stored hash before the
+//     string, so a miss almost never touches a key.
+//   - Growth re-files the buckets from `hashes` and never hashes a key again.
 //
 // There is no `delete`. Nothing in a compiler removes a name from a scope —
-// scopes are popped whole — and leaving it out keeps the probe loop free of
-// tombstones.
+// scopes are popped whole — so the note's tombstone, its dead-entry hash of 0
+// and the compaction that clears the buckets in place (§6.1) have nothing to
+// do here: every rebuild is a doubling, and a hash of 0 is an ordinary hash.
 
 /**
  * FNV-1a over the bytes of `key`. The round is a multiply that is *supposed*
  * to overflow, so it is done in `u32`, whose arithmetic is defined as wrapping
  * whatever `--wrapping` says; on a signed accumulator the same multiply would
- * be undefined under the default `nsw` (WP15 §3). Same instructions, same
- * bits, same hash — `u32` is only where the claim is true.
+ * be undefined under the default `nsw` (WP15 §3).
  */
-export const hashString = (key: string): i32 => {
+const fnv1a = (key: string): u32 => {
   let hash: u32 = 2166136261;
   let i = 0;
   while (i < key.length) {
@@ -35,26 +39,41 @@ export const hashString = (key: string): i32 => {
     hash = hash * 16777619;
     i = i + 1;
   }
-  return toI32(hash);
+  return hash;
 };
+
+/** The same hash as an `i32`: same bits, which is what the support oracle prints. */
+export const hashString = (key: string): i32 => toI32(fnv1a(key));
 
 /** The initial bucket count. Small: most scopes hold a handful of names. */
 const INITIAL_SLOTS: i32 = 16;
 
+/** The most entries a 24-bit index-plus-one field holds, 2^24 - 1: Node's own `Map` limit. */
+const INDEX_CAP: i32 = 16777215;
+
+/** The first bucket for `hash`: its low bits folded with its high half. */
+const home = (hash: u32, mask: i32): i32 => toI32(hash ^ (hash >>> 16)) & mask;
+
+/** The bucket word for entry `index`: the fingerprint, then the index plus one. */
+const slotOf = (hash: u32, index: i32): u32 => ((hash >>> 24) << 24) | toU32(index + 1);
+
 export class StringMap {
-  /** Bucket -> index into `keys` / `values`, plus one. 0 is an empty bucket. */
-  slots: i32[];
+  /** Bucket -> fingerprint in the top 8 bits, entry index plus one in the low 24. 0 is empty. */
+  slots: u32[];
   /** `slots.length - 1`; the length is always a power of two. */
   mask: i32;
   /** The entries, in insertion order. */
   keys: string[];
   values: i32[];
+  /** Each entry's full hash, so a probe and a rebuild never hash a key again. */
+  hashes: u32[];
 
   constructor() {
-    this.slots = new Array<i32>(INITIAL_SLOTS);
+    this.slots = new Array<u32>(INITIAL_SLOTS);
     this.mask = INITIAL_SLOTS - 1;
     this.keys = [];
     this.values = [];
+    this.hashes = [];
   }
 
   /** How many entries the map holds. */
@@ -71,29 +90,37 @@ export class StringMap {
   }
 
   /**
-   * The bucket `key` occupies or would occupy: linear probing from its hash,
-   * stopping at the first empty bucket or the bucket already holding `key`.
-   * The load factor below keeps at least a quarter of the buckets empty, so
-   * this always terminates.
+   * The entry index of `key`, or `-1 - bucket` for the empty bucket it would
+   * take: linear probing from its hash, one probe for a lookup and an insert
+   * alike. A bucket is looked into only when its fingerprint matches, and its
+   * entry's stored hash is compared before the key. The load factor below
+   * keeps at least a quarter of the buckets empty, so this always terminates.
    */
-  probe(key: string, hash: i32): i32 {
-    let bucket = (hash ^ (hash >>> 16)) & this.mask;
-    while (this.slots[bucket] !== 0) {
-      if (this.keys[this.slots[bucket] - 1] === key) {
-        return bucket;
+  probe(key: string, hash: u32): i32 {
+    const fingerprint = hash >>> 24;
+    let bucket = home(hash, this.mask);
+    let slot = this.slots[bucket];
+    while (slot !== 0) {
+      if (slot >>> 24 === fingerprint) {
+        const at = toI32(slot & 16777215) - 1;
+        if (this.hashes[at] === hash && this.keys[at] === key) {
+          return at;
+        }
       }
       bucket = (bucket + 1) & this.mask;
+      slot = this.slots[bucket];
     }
-    return bucket;
+    return -1 - bucket;
   }
 
   /** The entry index for `key`, or -1 when the map does not hold it. */
   find(key: string): i32 {
-    return this.slots[this.probe(key, hashString(key))] - 1;
+    const at = this.probe(key, fnv1a(key));
+    return at < 0 ? -1 : at;
   }
 
   has(key: string): boolean {
-    return this.find(key) >= 0;
+    return this.probe(key, fnv1a(key)) >= 0;
   }
 
   /**
@@ -102,21 +129,30 @@ export class StringMap {
    * caller says what "absent" means.
    */
   get(key: string, missing: i32): i32 {
-    const index = this.find(key);
-    return index < 0 ? missing : this.values[index];
+    const at = this.probe(key, fnv1a(key));
+    return at < 0 ? missing : this.values[at];
   }
 
   /** Insert `key`, or overwrite the value it already has. */
   set(key: string, value: i32): void {
-    const bucket = this.probe(key, hashString(key));
-    const slot = this.slots[bucket];
-    if (slot !== 0) {
-      this.values[slot - 1] = value;
+    const hash = fnv1a(key);
+    const at = this.probe(key, hash);
+    if (at >= 0) {
+      this.values[at] = value;
       return;
+    }
+    this.insertAt(-1 - at, key, hash, value);
+  }
+
+  /** Append an entry and point `bucket`, the empty one a probe for `key` stopped at, to it. */
+  insertAt(bucket: i32, key: string, hash: u32, value: i32): void {
+    if (this.keys.length >= INDEX_CAP) {
+      panic("StringMap maximum size exceeded");
     }
     this.keys.push(key);
     this.values.push(value);
-    this.slots[bucket] = this.keys.length;
+    this.hashes.push(hash);
+    this.slots[bucket] = slotOf(hash, this.keys.length - 1);
     // Grow at three quarters full, before the probe chains get long.
     if (this.keys.length * 4 > this.slots.length * 3) {
       this.grow();
@@ -124,21 +160,22 @@ export class StringMap {
   }
 
   /**
-   * Double the bucket table and re-file every entry. The entries do not move,
-   * so insertion order — and every index a caller is holding — survives.
+   * Double the bucket table and re-file every entry from its stored hash. The
+   * entries do not move, so insertion order — and every index a caller is
+   * holding — survives, and no key is hashed or compared.
    */
   grow(): void {
     const wider = this.slots.length * 2;
-    this.slots = new Array<i32>(wider);
+    this.slots = new Array<u32>(wider);
     this.mask = wider - 1;
     let i = 0;
     while (i < this.keys.length) {
-      const hash = hashString(this.keys[i]);
-      let bucket = (hash ^ (hash >>> 16)) & this.mask;
+      const hash = this.hashes[i];
+      let bucket = home(hash, this.mask);
       while (this.slots[bucket] !== 0) {
         bucket = (bucket + 1) & this.mask;
       }
-      this.slots[bucket] = i + 1;
+      this.slots[bucket] = slotOf(hash, i);
       i = i + 1;
     }
   }
@@ -168,12 +205,14 @@ export class StringSet {
     return this.map.has(key);
   }
 
-  /** Add `key`; true when it was not already there. */
+  /** Add `key`; true when it was not already there. One probe either way. */
   add(key: string): boolean {
-    if (this.map.has(key)) {
+    const hash = fnv1a(key);
+    const at = this.map.probe(key, hash);
+    if (at >= 0) {
       return false;
     }
-    this.map.set(key, 0);
+    this.map.insertAt(-1 - at, key, hash, 0);
     return true;
   }
 }
