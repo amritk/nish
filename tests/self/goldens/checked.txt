@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 532 programs, 12427 dump lines.
+# 539 programs, 12691 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -939,6 +939,258 @@ function main(): i32 -> @nish_main [exported entry]
   local 32:9 c: C (const)
   callee 32:13 new C -> @C.constructor
   callee 33:18 sum -> @sum
+program tests/cases/arr_header_tbaa.ts
+module tests/cases/arr_header_tbaa.ts (entry)
+struct Disk (class) size=16 align=8
+  field size: i32 index=0 offset=0
+  field next: Disk | null index=1 offset=8 initialized
+  constructor -> @Disk.constructor
+struct Towers (class) size=16 align=8 exported
+  field piles: Disk | null[] index=0 offset=0
+  field moves: i32 index=1 offset=8 initialized
+  constructor -> @Towers.constructor
+  method pushDisk -> @Towers.pushDisk
+  method popDiskFrom -> @Towers.popDiskFrom
+  method moveTopDisk -> @Towers.moveTopDisk
+function Disk.constructor(this: Disk, size: i32): void -> @Disk.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: size
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Towers.constructor(this: Towers): void -> @Towers.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Towers.pushDisk(this: Towers, disk: Disk, pile: i32): void -> @Towers.pushDisk [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 31:5
+  escaping: disk pile
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=16 writesThrough=false captured=false
+  pointer disk: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 27:11 top: Disk | null (const)
+function Towers.popDiskFrom(this: Towers, pile: i32): Disk -> @Towers.popDiskFrom [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: 40:5
+  escaping: pile
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 36:11 top: Disk | null (const)
+function Towers.moveTopDisk(this: Towers, fromPile: i32, toPile: i32): void -> @Towers.moveTopDisk [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 47:5
+  escaping: fromPile toPile
+  calls: Towers.popDiskFrom Towers.pushDisk
+  pointer this: size=16 writesThrough=true captured=false passedTo=Towers.pushDisk#0 Towers.popDiskFrom#0
+  stackSites=0 stackLocals=0
+  callee 46:5 Towers.pushDisk -> @Towers.pushDisk
+  callee 46:19 Towers.popDiskFrom -> @Towers.popDiskFrom
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Towers.pushDisk
+  calls: Disk.constructor Towers.constructor Towers.moveTopDisk Towers.pushDisk nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=1 stackLocals=1
+  local 52:9 t: Towers (const)
+  callee 52:13 new Towers -> @Towers.constructor
+  callee 53:3 Towers.pushDisk -> @Towers.pushDisk
+  callee 53:14 new Disk -> @Disk.constructor
+  callee 54:3 Towers.pushDisk -> @Towers.pushDisk
+  callee 54:14 new Disk -> @Disk.constructor
+  callee 55:3 Towers.moveTopDisk -> @Towers.moveTopDisk
+  callee 56:3 Towers.moveTopDisk -> @Towers.moveTopDisk
+  callee 57:3 Towers.moveTopDisk -> @Towers.moveTopDisk
+  local 58:9 top: Disk | null (const)
+program tests/cases/arr_header_tbaa_pop.ts
+module tests/cases/arr_header_tbaa_pop.ts (entry)
+struct Stack (class) size=16 align=8
+  field items: i32[] index=0 offset=0
+  field top: i32 index=1 offset=8 initialized
+  constructor -> @Stack.constructor
+function Stack.constructor(this: Stack, items: i32[]): void -> @Stack.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: items
+  pointer this: size=16 writesThrough=true captured=false
+  pointer items: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function drop(a: i32[], s: Stack): i32 -> @drop
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 15:3
+  calls: nish_panic_index
+  pointer a: size=0 writesThrough=true captured=false
+  pointer s: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 25:3
+  calls: Stack.constructor drop nish_panic_index
+  stackSites=1 stackLocals=1
+  local 21:9 s: Stack (const)
+  callee 21:13 new Stack -> @Stack.constructor
+  local 22:9 alias: i32[] (const)
+  local 23:9 n0: i32 (const)
+  local 27:9 n1: i32 (const)
+  local 28:9 popped: i32 (const)
+  callee 28:18 drop -> @drop
+  local 29:9 n2: i32 (const)
+program tests/cases/arr_header_tbaa_push.ts
+module tests/cases/arr_header_tbaa_push.ts (entry)
+struct Bag (class) size=24 align=8
+  field xs: i32[] index=0 offset=0
+  field count: i32 index=1 offset=8 initialized
+  field next: Bag | null index=2 offset=16 initialized
+  constructor -> @Bag.constructor
+function Bag.constructor(this: Bag): void -> @Bag.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function fill(b: Bag, n: i32): void -> @fill
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 19:5
+  calls: nish_array_grow
+  pointer b: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 18:12 i: i32 (let)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 28:3
+  calls: Bag.constructor fill nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=0 stackLocals=0
+  local 25:9 b: Bag (const)
+  callee 25:13 new Bag -> @Bag.constructor
+  local 26:9 before: i32 (const)
+  local 27:9 first: i32 (const)
+  callee 30:3 fill -> @fill
+  local 32:9 after: i32 (const)
+program tests/cases/arr_header_tbaa_records.ts
+module tests/cases/arr_header_tbaa_records.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+struct Path (class) size=16 align=8
+  field points: Point[] index=0 offset=0
+  field moves: i32 index=1 offset=8 initialized
+  constructor -> @Path.constructor
+function Path.constructor(this: Path): void -> @Path.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=1 stackLocals=0
+function extend(p: Path, n: i32): void -> @extend
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 22:5
+  calls: nish_array_grow
+  pointer p: size=16 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 20:12 i: i32 (let)
+  local 21:11 q: Point (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 30:3
+  calls: Path.constructor extend nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=1 stackLocals=1
+  local 28:9 p: Path (const)
+  callee 28:13 new Path -> @Path.constructor
+  local 29:9 n0: i32 (const)
+  callee 32:3 extend -> @extend
+  local 34:9 n1: i32 (const)
+  local 35:9 last: Point (const)
+program tests/cases/arr_header_tbaa_stack.ts
+module tests/cases/arr_header_tbaa_stack.ts (entry)
+struct Counter (class) size=8 align=4
+  field n: i32 index=0 offset=0 initialized
+  field last: i32 index=1 offset=4 initialized
+function sum(c: Counter): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 14:3
+  pointer c: size=8 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 13:9 xs: i32[] (const)
+  local 15:7 total: i32 (let)
+  local 16:12 i: i32 (let)
+function widen(c: Counter): i32 -> @widen
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 26:3
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index
+  pointer c: size=8 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 24:9 xs: i32[] (const)
+  local 25:9 n0: i32 (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sum
+  calls: sum widen
+  stackSites=1 stackLocals=1
+  local 33:9 c: Counter (const)
+  local 34:9 a: i32 (const)
+  callee 34:13 sum -> @sum
+  local 35:9 b: i32 (const)
+  callee 35:13 sum -> @sum
+  local 36:9 w: i32 (const)
+  callee 36:13 widen -> @widen
+program tests/cases/arr_header_tbaa_threads.ts
+module tests/cases/arr_header_tbaa_threads.ts (entry)
+struct Disk (class) size=16 align=8
+  field size: i32 index=0 offset=0
+  field next: Disk | null index=1 offset=8 initialized
+  constructor -> @Disk.constructor
+struct Towers (class) size=16 align=8 exported
+  field piles: Disk | null[] index=0 offset=0
+  field moves: i32 index=1 offset=8 initialized
+  constructor -> @Towers.constructor
+  method pushDisk -> @Towers.pushDisk
+  method popDiskFrom -> @Towers.popDiskFrom
+  method moveTopDisk -> @Towers.moveTopDisk
+function Disk.constructor(this: Disk, size: i32): void -> @Disk.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: size
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Towers.constructor(this: Towers): void -> @Towers.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Towers.pushDisk(this: Towers, disk: Disk, pile: i32): void -> @Towers.pushDisk [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 28:5
+  escaping: disk pile
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=16 writesThrough=false captured=false
+  pointer disk: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 24:11 top: Disk | null (const)
+function Towers.popDiskFrom(this: Towers, pile: i32): Disk -> @Towers.popDiskFrom [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: 37:5
+  escaping: pile
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 33:11 top: Disk | null (const)
+function Towers.moveTopDisk(this: Towers, fromPile: i32, toPile: i32): void -> @Towers.moveTopDisk [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 44:5
+  escaping: fromPile toPile
+  calls: Towers.popDiskFrom Towers.pushDisk
+  pointer this: size=16 writesThrough=true captured=false passedTo=Towers.pushDisk#0 Towers.popDiskFrom#0
+  stackSites=0 stackLocals=0
+  callee 43:5 Towers.pushDisk -> @Towers.pushDisk
+  callee 43:19 Towers.popDiskFrom -> @Towers.popDiskFrom
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Towers.pushDisk
+  calls: Disk.constructor Towers.constructor Towers.moveTopDisk Towers.pushDisk nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=1 stackLocals=1
+  local 49:9 t: Towers (const)
+  callee 49:13 new Towers -> @Towers.constructor
+  callee 50:3 Towers.pushDisk -> @Towers.pushDisk
+  callee 50:14 new Disk -> @Disk.constructor
+  callee 51:3 Towers.pushDisk -> @Towers.pushDisk
+  callee 51:14 new Disk -> @Disk.constructor
+  callee 52:3 Towers.moveTopDisk -> @Towers.moveTopDisk
+  callee 53:3 Towers.moveTopDisk -> @Towers.moveTopDisk
+  callee 54:3 Towers.moveTopDisk -> @Towers.moveTopDisk
+  local 55:9 top: Disk | null (const)
 program tests/cases/arr_index_read_write.ts
 module tests/cases/arr_index_read_write.ts (entry)
 function set(a: i32[], i: i32, v: i32): void -> @set
@@ -8437,6 +8689,25 @@ function Perm.swap(this: Perm, i: i32, j: i32): void -> @Perm.swap [exported met
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 10:11 tmp: i32 (const)
+program docs/cookbook/arr_header_field.ts
+module docs/cookbook/arr_header_field.ts (entry)
+struct Link (class) size=8 align=8
+  field next: Link | null index=0 offset=0 initialized
+struct Pile (class) size=8 align=8 exported
+  field tops: Link | null[] index=0 offset=0
+  constructor -> @Pile.constructor
+  method drop -> @Pile.drop
+function Pile.constructor(this: Pile): void -> @Pile.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Pile.drop(this: Pile): Link | null -> @Pile.drop [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 15:7
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 13:11 top: Link | null (const)
 program docs/cookbook/arr_index.ts
 module docs/cookbook/arr_index.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get

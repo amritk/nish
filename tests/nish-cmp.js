@@ -1319,6 +1319,10 @@ const DECLARED = [
     changelog: "Keep a field array's header live across element stores",
     why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
   },
+  {
+    changelog: "Give array header loads and stores their own TBAA subtree",
+    why: "every load and store of an array header's length, capacity or data pointer now carries a `!tbaa` tag in an `array header` subtree of its own, so any module that builds, reads or resizes an array moves its metadata",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */
