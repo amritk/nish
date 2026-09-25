@@ -1,10 +1,10 @@
 # `std/` — the standard library
 
 Nish modules written in Nish, for Nish programs to import. There is no magic
-here and nothing the compiler knows about: a module in this directory is an
-ordinary Nish source file, compiled as part of whatever program imports it,
-and subject to the same rules as `examples/` or `self/`
-([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
+here and — with one exception, `threads.ts` — nothing the compiler knows about:
+a module in this directory is an ordinary Nish source file, compiled as part of
+whatever program imports it, and subject to the same rules as `examples/` or
+`self/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
 
 | Module | What it is |
 | --- | --- |
@@ -12,6 +12,7 @@ and subject to the same rules as `examples/` or `self/`
 | [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, and `firstDifference` over two arrays of lines |
 | [`json.ts`](./json.ts) | `jsonField(object, name)`: the value of one field of one flat JSON object, which is the shape the compiler's own `--json` diagnostics have. A reader and not a parser — it answers text, answers `null` for a field that is not there, and does not validate |
 | [`pair.ts`](./pair.ts) | `Pair<A, B>`: an interface with `first` and `second`, for a function that answers two values from one call. A type and nothing else — the caller writes an object literal at the return — and for returning two values rather than storing them side by side |
+| [`threads.ts`](./threads.ts) | `parallelMapInto(src, dst, f)` and `parallelReduce(src, f, identity)`: a function over every element of an array, on as many threads as the length is worth. Its bodies are the sequential meaning, which is what runs under Node; the compiler recognises the two templates by module and name, lowers the one loop in each onto `nish_parallel_range`, holds the function to the rules that make that safe, and compiles an importing program with `--threads` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#data-parallelism-nishthreads)). `tests/link/par_*` are its programs |
 
 ## How a program imports it
 

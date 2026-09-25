@@ -1,8 +1,8 @@
 // The Towers move again, compiled with `--threads`. The flag moves the arena
 // into thread-local storage and changes nothing about which allocation a
 // header access reaches, so the header tags are the same ones and the answer
-// is the same one: there is no language surface that shares an array between
-// threads, and a data race would be undefined behaviour with or without a tag.
+// is the same one. A `nish/threads` region shares arrays but writes no header
+// while it runs (docs/ARCHITECTURE.md), and a race is undefined behaviour anyway.
 class Disk {
   size: i32;
   next: Disk | null = null;

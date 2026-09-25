@@ -1753,6 +1753,66 @@ for (const name of linkTests) {
   );
 }
 
+// WP29 P1: `dst` shorter than `src` panics before any element is written, with
+// `std/threads.ts`'s own message. The link loop above compares stdout and the
+// exit code only, so the wording is pinned here, on stderr, the way
+// `arr_bounds_panic` pins `index out of range`.
+// The binary's existence is part of the assertion rather than a guard around it,
+// so a renamed or deleted fixture fails here instead of dropping the check.
+if (!only || "par_dst_short".includes(only)) {
+  // The fixture is asked for too: the link loop empties its output directory
+  // only when it runs the case, so a binary left by an earlier run would
+  // otherwise answer for a fixture that is gone.
+  const fixture = linkTests.includes("par_dst_short");
+  const exe = path.join(buildDir, "link", "par_dst_short", "app");
+  const run = fixture && fs.existsSync(exe) ? spawnSync(exe) : null;
+  check(
+    "link/par_dst_short: exits 1 with `parallelMapInto: dst has 2 elements and src has 3` on stderr",
+    run !== null &&
+      run.status === 1 &&
+      String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
+      String(run.stdout).trim() === "before",
+    run === null ? (fixture ? `no such binary: ${exe}` : "no such fixture: tests/link/par_dst_short") : `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+  );
+}
+
+// WP29: an allocating parallel body compiles with NL9012 at the call, which
+// the link loop above does not assert: it reads a successful compile's stderr
+// for nothing but a failure report. Asked of `--json`, whose `code` is the contract, and again under
+// `--no-warn-performance`, which must silence it and change nothing else. The
+// fixture's existence is part of the assertion, as for `par_dst_short`.
+if (!only || "par_alloc".includes(only)) {
+  const fixture = linkTests.includes("par_alloc");
+  const entry = path.join(linkDir, "par_alloc", "main.ts");
+  const compileJson = (extra) => {
+    const out = path.join(buildDir, "link", `par_alloc-json${extra.length}`) + path.sep;
+    fs.rmSync(out, { recursive: true, force: true });
+    const r = spawnSync(NISH, [entry, "--json", "-o", out, ...extra], { cwd: root, encoding: "utf8" });
+    return { status: r.status, objects: diagnosticsOf(r.stdout), stderr: r.stderr };
+  };
+  const warned = fixture ? compileJson([]) : null;
+  const quiet = fixture ? compileJson(["--no-warn-performance"]) : null;
+  const w = warned === null || warned.objects.length !== 1 ? null : warned.objects[0];
+  check(
+    "link/par_alloc: an allocating parallel body compiles with one NL9012 at the call, and --no-warn-performance silences it",
+    w !== null &&
+      quiet !== null &&
+      warned.status === 0 &&
+      w.code === "NL9012" &&
+      w.severity === "performance" &&
+      w.line === 23 &&
+      w.column === 3 &&
+      w.message.startsWith(
+        "the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call"
+      ) &&
+      quiet.status === 0 &&
+      quiet.objects.length === 0,
+    warned === null
+      ? "no such fixture: tests/link/par_alloc"
+      : `warned: exit ${warned.status} ${JSON.stringify(warned.objects)}\nquiet: exit ${quiet.status} ${JSON.stringify(quiet.objects)}`
+  );
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the

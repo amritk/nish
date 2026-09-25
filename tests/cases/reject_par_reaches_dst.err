@@ -1,0 +1,2 @@
+`(r) => ...` can reach a `f64[]` through `r.cells`
+so `dst` may not be reachable from an element of `src`

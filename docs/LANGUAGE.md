@@ -1835,6 +1835,128 @@ export const main = (): i32 => {
   describe no instantiation that was given a function, and no lifted arrow:
   neither has a name a host could call.
 
+### Data parallelism: `nish/threads`
+
+`parallelMapInto` and `parallelReduce` run a function over every element of an
+array on as many threads as the machine has and the length is worth
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.1). They are imported from
+the standard library, and the function is a [function parameter](#function-parameters):
+a top-level function by name, or an arrow written at the call.
+
+```typescript
+import { parallelMapInto, parallelReduce } from "nish/threads";
+
+const square = (x: f64): f64 => x * x;
+
+export const main = (): i32 => {
+  const src: f64[] = [1.0, 2.0, 3.0];
+  const dst: f64[] = [0.0, 0.0, 0.0];
+  parallelMapInto(src, dst, square);                         // dst[i] = square(src[i])
+  parallelMapInto(dst, dst, (x) => x + 1.0);                 // in place
+  const total = parallelReduce(dst, (a, b) => a + b, 0.0);   // 17
+  return toI32(total);
+};
+```
+
+- **The module is ordinary Nish, and its bodies are the meaning.**
+  `std/threads.ts` writes each function as the sequential loop, which is what
+  runs under Node and what `npm run check` type-checks. The compiler recognises
+  the two templates by module and name and lowers one call in each instance —
+  the loop over the whole range — onto `nish_parallel_range`
+  (`runtime/runtime_parallel.c`), which hands each thread a contiguous chunk
+  and joins them all before it returns. Everything else in the instance is
+  emitted as written (`tests/link/par_map`, whose `threads.ll` is the whole
+  lowering).
+- **`parallelMapInto(src, dst, f)`** writes `f(src[i])` into `dst[i]` for every
+  index of `src`. `dst` must be at least as long, which is checked once, before
+  any element is written or any thread started: a shorter one panics with
+  `parallelMapInto: dst has 2 elements and src has 3` and exits 1
+  (`tests/link/par_dst_short`). `src` and `dst` may be the same array
+  (`tests/link/par_map`).
+- **A short array is the loop it would have been.** A map is divided only
+  once every thread's share carries enough work to pay for starting it
+  ([wp20-threads.md](wp20-threads.md) §8e). How many elements that is — the
+  *grain* — is sized per call from a static estimate of what `f` costs: 2^22
+  over the estimate, which counts one per operation, 32 per allocation, 4 per
+  call, and a loop's body as many times as its literal bound says or 64 times
+  when the bound is not a literal. So `(x) => x * x` is divided past 1,398,101
+  elements (`tests/link/par_map`), `(x * 31 + 7) % 1000` past 524,288
+  (`tests/link/par_map_large`), and a body with a loop far sooner. Up to the
+  grain the map calls its loop directly on the calling thread, where it
+  inlines; there is no thread start-up and no indirect call. The estimate
+  counts a call as a call and not as the callee's body, so a body that hides
+  its work behind a call is divided too little rather than too much. There is
+  no knob for the grain, or for the thread count
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §9).
+- **`parallelReduce(src, f, identity)` is deterministic.** `src` is split into
+  `min(64, ceil(n / 2^20))` blocks, each block is folded from `identity`, and
+  the block results are combined left to right. `std/threads.ts` does the same
+  blocking on one thread, so an `f64` sum is the same bits on one core or
+  sixty-four, compiled or under Node — which is not the bits of a plain left
+  fold over the array (`tests/link/par_reduce`). An empty `src` answers
+  `identity`. For that to be the fold it looks like, `f` has to be associative
+  and `identity` its identity. An arrow whose whole body is one operator on its
+  two parameters is held to both: a non-associative one is
+  `` `(a, b) => ...` combines with `-`, which is not associative: `parallelReduce` folds each block from the identity and then combines the blocks, which is a left fold only for an associative operator ``
+  (`-`, `/`, `%`, `**` and the shifts; `tests/cases/reject_par_reduce_operator`),
+  and a recognised one given anything but its identity — `0` for `+`, `|` and
+  `^`, `1` for `*`, `true` for `&&`, `false` for `||`, written as a literal — is
+  `` `parallelReduce` folds every block from its identity, and the identity of `+` is `0`, not `1`: any other value would be counted once per block ``
+  (`tests/cases/reject_par_reduce_identity`). **A named function is opaque**:
+  its associativity, and the identity it is given, are its author's promise,
+  and a wrong one gives a deterministic answer that is not the fold.
+- **Importing `nish/threads` compiles the program with `--threads`**, because
+  every worker bumps an arena of its own: `@nish_arena` is declared
+  `thread_local` in every module and the runtime is built with
+  `-DNISH_THREADS` (`tests/link/par_map`). A program that does not import it is
+  compiled exactly as before.
+
+What makes a region safe to run on several threads is checked at the call,
+from the whole-program facts, and each rule is reported there:
+
+- **The function writes nothing its caller can see.** A store through a
+  parameter, a call that makes one, or a runtime call that writes — `console.log`
+  included — is
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``,
+  naming the write, or the callee that makes it (`tests/cases/reject_par_shared_write`,
+  `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
+  runtime's `nish_print`). A bounds check, an integer division and
+  `panic` are not writes: each prints and exits, and nothing runs again to see
+  memory. The instance performs every store itself, into slots the partitioner
+  has made disjoint, so a function that writes nothing cannot race.
+- **What the function allocates dies with its element.** A function may build
+  strings, arrays and objects on the way to its result. They are given back
+  after every element: the function gets an arena scope of its own, so each
+  call marks the arena of the thread it runs on and releases it before it
+  returns, and a map over a million elements holds one element's temporaries
+  at a time (`tests/link/par_alloc`). It compiles with a performance warning,
+  NL9012, because every element pays for the allocation and the release:
+  `` the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both ``.
+  Two things make that release unsound, and each is refused. An allocation
+  stored into memory, which the escape analysis stops following, is
+  `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
+  (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
+  the arena would see the arena of whichever thread ran the element:
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  (`tests/cases/reject_par_arena`).
+- **The result is a number, a `boolean` or an enum** — `U` for a map, `T` for a
+  reduce — because the element's memory is released before the result is
+  stored, and a worker's arena is freed when its thread exits:
+  `` `name` answers `string`, and `parallelMapInto` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
+  (`tests/cases/reject_par_result_type`).
+- **`dst` is not reachable from an element of `src`.** A function that only
+  reads can still read `dst` through its argument while another thread writes
+  it, so an array of `dst`'s element type reachable from `T`, through fields,
+  elements and `| null`, is
+  `` `(r) => ...` can reach a `f64[]` through `r.cells`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src` ``
+  (`tests/cases/reject_par_reaches_dst`). It is judged by type, so such an
+  array is refused whether or not it is `dst` at run time. A reduce writes no
+  array of its caller's and has no such rule.
+
+`parallelFor`, a scope of spawned tasks, locks, channels and non-scalar results
+are not in this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.2,
+§4.3, §7).
+
 ### Interfaces and object literals
 
 ```ts

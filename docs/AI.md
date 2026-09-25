@@ -665,6 +665,58 @@ export const main = (): i32 => {
 };
 ```
 
+### Data parallelism: `nish/threads`
+
+`parallelMapInto(src, dst, f)` writes `f(src[i])` into `dst[i]`, and
+`parallelReduce(src, f, identity)` folds `src` with `f` — each on as many
+threads as the array is long enough for. `f` is a [function parameter](#function-parameters).
+Importing the module compiles the program with `--threads`; there is nothing
+else to switch on and no thread count to choose. (A plain block: a program
+importing a `nish/` module writes two `.ll` files, so this one is compiled by
+`tests/link/par_map` and `tests/link/par_reduce` instead.)
+
+```ts
+import { parallelMapInto, parallelReduce } from "nish/threads";
+
+const square = (x: f64): f64 => x * x;
+
+export const main = (): i32 => {
+  const src: f64[] = [1.0, 2.0, 3.0];
+  const dst: f64[] = [0.0, 0.0, 0.0];                        // at least src.length, or it panics
+  parallelMapInto(src, dst, square);
+  const total = parallelReduce(dst, (a, b) => a + b, 0.0);   // 14, the same bits on any core count
+  return toI32(total);
+};
+```
+
+- **`f` writes nothing its caller can see.** No field or element store
+  through its argument and no `console.log` — each is refused at the call,
+  naming the write. Reading is fine; so are a bounds check, an integer
+  division and `panic`.
+- **What `f` allocates is freed after every element.** A string, array or
+  object built on the way to the result compiles, with performance warning
+  NL9012: each element pays for building it and for the release. Storing an
+  allocation into another object (NL2352) and touching `Arena` (NL2351) are
+  refused, because either would make that release unsound.
+- **The result is a number, a `boolean` or an enum.** A string or an object
+  made on another thread would be freed with it.
+- **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
+  `f64[]` is refused when `Row` holds an `f64[]`, because it could be `dst`.
+- **A reduce's `f` is associative and `identity` is its identity** — `0` for
+  `+`, `1` for `*`. The array is folded in fixed blocks and the blocks combined
+  in order, so `-` or a wrong identity is refused when `f` is an arrow of one
+  operator; a named function is trusted.
+- A short array runs on the calling thread at the cost of the loop, so there
+  is no reason to guard a call by size. How short is sized from what `f`
+  costs: a cheap body is divided only past about a million elements, one with
+  a loop far sooner.
+
+```ts nish:err NL2350
+import { parallelReduce } from "nish/threads";
+
+export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   // `+` folds from 0
+```
+
 ### Calling C
 
 `declare function name(params): T;` declares a C function this program calls but

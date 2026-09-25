@@ -1,0 +1,5 @@
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+define hidden noundef i32 @label(i32 noundef %x) #0 {
+%arena.mark = call i64 @nish_arena_mark()
+call void @nish_arena_release(i64 %arena.mark)
+call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.5.label$chunk, i8* %16, i64 %17, i64 74898)

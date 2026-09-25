@@ -816,19 +816,15 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next
 
-1. **The data-parallel call** — [wp29-thread-surface.md](wp29-thread-surface.md)
-   §4.1's stage P1, `parallelMapInto` and `parallelReduce`, over the
-   partitioner `runtime/runtime_parallel.c` already provides
-   ([wp20-threads.md](wp20-threads.md) §8d). It is first because it is where
-   the largest measured speedup in this plan is — **3.96x** on four cores for a
-   compute kernel, and 3.97x for an allocating one with its arena recycled
-   (wp20 §8), against 2.48x for the largest item left on the WP15 list — and
-   because it is the one threads stage that needs no handle, no join proof and
-   no capture analysis (wp29 §8). It brings
-   [wp23-language-surface.md](wp23-language-surface.md) §6's compile-time
-   function parameter with it, for a callee the checker can name and no other
-   kind (wp29 §6). The scope and the lock (wp29 P2 and P3) follow it in wp29's
-   order.
+1. **The data-parallel call's next stage** — [wp29-thread-surface.md](wp29-thread-surface.md)
+   §4.1's stage P1 is built: `parallelMapInto` and `parallelReduce` from
+   `nish/threads`, over [wp23-language-surface.md](wp23-language-surface.md)
+   §6's compile-time function parameter, with allocating bodies recycled per
+   element (NL9012) and a grain sized from the body. Measured on four cores
+   (`docs/BENCHMARKS.md`, wp29 §8a): **3.71x** for a compute kernel, 3.49x for
+   n-body partitioned, 2.23x for a body that allocates a string per element at
+   flat peak memory, and an eight-element map within noise of the loop. The
+   scope and the lock (wp29 P2 and P3) follow it in wp29's order.
 2. **Ranged integers**, [wp31-ranged-integers.md](wp31-ranged-integers.md) W1 to
    W4, none of them breaking now that the name is reserved.
 

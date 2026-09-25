@@ -101,6 +101,7 @@ import {
   Node,
 } from "./nodes";
 import { Options } from "./options";
+import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel";
 import { ParentTable } from "./parents";
 import {
   CheckedProgram,
@@ -1436,6 +1437,10 @@ export const collectFacts = (
   // call lowers to in `callees`, and because this has to hold in round 1:
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
+  if (isParallelEntry(sig)) {
+    markParallelEntry(facts);
+  }
+
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
   facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark");
 
@@ -1447,6 +1452,37 @@ export const collectFacts = (
   }
   facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn;
   return facts;
+};
+
+/**
+ * WP29 P1: the facts of a `parallelMapInto` or `parallelReduce` instance are
+ * its source walk's, plus what the region the emitter builds in place of one
+ * call does (`self/emit_parallel.ts`). The walk sees a direct call to the
+ * chunk loop with the parameters as arguments; the IR stores them into a
+ * context block and hands its address to `nish_parallel_range`, which passes
+ * it to other threads. So the runtime entry is a callee — it is a shared
+ * write and not `willreturn`, and the fixpoint carries both — and every
+ * parameter is treated as escaping, written through and captured:
+ *
+ *   - no `nocapture`, because the address is stored in memory another thread
+ *     reads, and whether that copy outlives the call is the partitioner's
+ *     join rather than anything this analysis can see;
+ *   - no `readonly`, because `dst` is written by those threads through the
+ *     copy, not through the parameter this function was handed.
+ *
+ * Both are claims LLVM would act on, and what each would buy is nothing: the
+ * instance is called once per region, and the loop inside it is the chunk
+ * function, whose own facts are unaffected.
+ */
+const markParallelEntry = (facts: FunctionFacts): void => {
+  facts.callees.add("nish_parallel_range");
+  for (const name of facts.paramNames) {
+    facts.escaping.add(name);
+  }
+  for (const pp of facts.pointerParams) {
+    pp.captured = true;
+    pp.writesThrough = true;
+  }
 };
 
 // ---- The fixpoint ------------------------------------------------------------------------
@@ -1497,6 +1533,7 @@ export const analyzeFunctions = (
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
     f.contained = f.contained || !f.allocEscapes;
   }
+  scopeParallelBodies(units, facts);
   settleCalleeScopes(facts);
   for (const f of facts.list) {
     if (f.arenaScope) {
@@ -1506,6 +1543,42 @@ export const analyzeFunctions = (
     }
   }
   return facts;
+};
+
+/**
+ * WP29: a data-parallel body that allocates gets an arena scope of its own, so
+ * every element gives back what it allocated before the next one starts. The
+ * WP6 rule above asks the function's own allocations to stay out of every
+ * local that is assigned, and the callee rule below asks for a callee that
+ * allocates; a body can fail both and still be one whose memory is garbage
+ * the moment it answers, and for a body that runs a million times on one
+ * thread's arena that difference is the peak resident size (wp20 §8a).
+ *
+ * **Why it is sound.** `recyclesPerElement` (`self/parallel.ts`) is the callee
+ * rule's own condition — contained, a scalar result, no arena control — plus
+ * not reading the bump position, and `Compilation.checkParallel` refuses any
+ * body that allocates without it, so a scope added here never frees what
+ * outlives the element. The arena is thread-local under `--threads`
+ * (`ARENA_GLOBAL_TLS`), and importing `nish/threads` implies `--threads`, so
+ * the mark and the release run in whichever thread the element runs in and
+ * name that thread's arena: a worker rewinds only what it bumped itself, and
+ * the calling thread, which runs chunk 0, rewinds its own arena to where the
+ * element found it. No other thread's allocation can sit between the two.
+ *
+ * It is set before the callee scopes are settled, so a caller that only calls
+ * the body — the chunk loop — sees a callee that no longer net-allocates and
+ * does not get a scope of its own around a whole chunk.
+ */
+const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => {
+  for (const unit of units) {
+    for (const call of unit.program.parallelCalls) {
+      const body = parallelBodyOf(call.sig);
+      const f: FunctionFacts | null = body === null ? null : facts.get(body.name);
+      if (f !== null && f.allocates && !f.arenaScope && recyclesPerElement(f)) {
+        f.arenaScope = true;
+      }
+    }
+  }
 };
 
 /**
@@ -1946,7 +2019,7 @@ const isName = (expr: Node, name: string): boolean => {
 };
 
 /** Signed step of `i++`, `++i`, `i--`, `--i`, `i += c`, `i -= c`; 0 for anything else. */
-const stepOf = (expr: Node, name: string): i32 => {
+export const stepOf = (expr: Node, name: string): i32 => {
   if (expr.kind === N_UNARY && isName(expr.children[0], name)) {
     if (expr.text === "++") {
       return 1;

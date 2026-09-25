@@ -1,0 +1,1 @@
+`shout` writes memory its caller can see in the runtime's `nish_print`, and `parallelMapInto`

@@ -650,6 +650,8 @@ Four, and none of them is a number:
    pay it. T1 should imply the flag from the language surface rather than ask
    for it beside it: a program that names a parallel construct gets the
    thread-local arena, one that does not gets today's binary, byte for byte.
+   **Done by WP29 P1:** importing `nish/threads` compiles the program with
+   `--threads`, and a program that does not import it is unchanged.
 4. **The scaling is measured on kernels, not on `BENCHMARKS.md`.** `nbody` and
    `spectral` are the shapes §4 T4 names, and neither has been partitioned,
    because nothing in the language can partition one. What a `parallelFor` over
@@ -710,6 +712,15 @@ spawn is under a tenth of its cost, which is the number the compiler's default
 [wp29-thread-surface.md](wp29-thread-surface.md)'s P1 chooses one — and it is
 also why `parallelMapInto` over a short array has to come out as an ordinary
 loop rather than as four threads.
+P1 first picked **2^20 elements** per chunk of a map, one constant. Its
+follow-up sizes the grain per call instead, as `2^22` over a static estimate of
+what one element costs (`mapGrain` in `self/parallel.ts`), which puts a cheap
+body's grain past a million elements and a body with a loop's far lower;
+[wp29-thread-surface.md](wp29-thread-surface.md) §8a has the calibration. A map
+within its grain calls its loop directly, so it does not even take the 3 ns
+row. A reduce's block width is a separate constant (`BLOCK` in
+`std/threads.ts`, 2^20), because it decides the reduce's answer and the grain
+decides only how work is divided.
 
 The 3 ns row is worth its own line because it was 3,734 ns until this was
 measured. `nish_cpu_count()` called `sysconf(_SC_NPROCESSORS_ONLN)` on every
