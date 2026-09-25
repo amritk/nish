@@ -1046,14 +1046,14 @@ struct StringSet (class) size=8 align=8 exported
 function fnv1a(key: string): u32 -> @fnv1a
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 35:7 hash: u32 (let)
-  local 36:7 i: i32 (let)
+  local 36:7 hash: u32 (let)
+  local 37:7 i: i32 (let)
 function hashString(key: string): i32 -> @hashString [exported]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: fnv1a
   stackSites=0 stackLocals=0
-  callee 46:55 fnv1a -> @fnv1a
+  callee 47:55 fnv1a -> @fnv1a
 function home(hash: u32, mask: i32): i32 -> @home [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1065,7 +1065,7 @@ function slotOf(hash: u32, index: i32): u32 -> @slotOf [exported]
   escaping: hash
   calls: fingerprint
   stackSites=0 stackLocals=0
-  callee 65:56 fingerprint -> @fingerprint
+  callee 66:56 fingerprint -> @fingerprint
 function entryOf(slot: u32): i32 -> @entryOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1095,50 +1095,50 @@ function StringMap.probe(this: StringMap, key: string, hash: u32): i32 -> @Strin
   calls: entryOf fingerprint home nish_panic_index nish_str_eq
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 110:11 wanted: u32 (const)
-  callee 110:20 fingerprint -> @fingerprint
-  local 111:9 bucket: i32 (let)
-  callee 111:18 home -> @home
-  local 112:9 slot: u32 (let)
-  callee 114:11 fingerprint -> @fingerprint
-  local 115:15 at: i32 (const)
-  callee 115:20 entryOf -> @entryOf
+  local 111:11 wanted: u32 (const)
+  callee 111:20 fingerprint -> @fingerprint
+  local 112:9 bucket: i32 (let)
+  callee 112:18 home -> @home
+  local 113:9 slot: u32 (let)
+  callee 115:11 fingerprint -> @fingerprint
+  local 116:15 at: i32 (const)
+  callee 116:20 entryOf -> @entryOf
 function StringMap.find(this: StringMap, key: string): i32 -> @StringMap.find [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: StringMap.probe fnv1a
   pointer this: size=40 writesThrough=false captured=false passedTo=StringMap.probe#0
   stackSites=0 stackLocals=0
-  local 128:11 at: i32 (const)
-  callee 128:16 StringMap.probe -> @StringMap.probe
-  callee 128:32 fnv1a -> @fnv1a
+  local 129:11 at: i32 (const)
+  callee 129:16 StringMap.probe -> @StringMap.probe
+  callee 129:32 fnv1a -> @fnv1a
 function StringMap.has(this: StringMap, key: string): boolean -> @StringMap.has [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: StringMap.find
   pointer this: size=40 writesThrough=false captured=false passedTo=StringMap.find#0
   stackSites=0 stackLocals=0
-  callee 133:12 StringMap.find -> @StringMap.find
+  callee 134:12 StringMap.find -> @StringMap.find
 function StringMap.get(this: StringMap, key: string, missing: i32): i32 -> @StringMap.get [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key missing
   calls: StringMap.find nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=StringMap.find#0
   stackSites=0 stackLocals=0
-  local 142:11 at: i32 (const)
-  callee 142:16 StringMap.find -> @StringMap.find
+  local 143:11 at: i32 (const)
+  callee 143:16 StringMap.find -> @StringMap.find
 function StringMap.set(this: StringMap, key: string, value: i32): void -> @StringMap.set [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 151:7
+  sharedWrite: 152:7
   escaping: key value
   calls: StringMap.insertAt StringMap.probe fnv1a nish_panic_index
   pointer this: size=40 writesThrough=true captured=false passedTo=StringMap.probe#0 StringMap.insertAt#0
   stackSites=0 stackLocals=0
-  local 148:11 hash: u32 (const)
-  callee 148:18 fnv1a -> @fnv1a
-  local 149:11 at: i32 (const)
-  callee 149:16 StringMap.probe -> @StringMap.probe
-  callee 154:5 StringMap.insertAt -> @StringMap.insertAt
+  local 149:11 hash: u32 (const)
+  callee 149:18 fnv1a -> @fnv1a
+  local 150:11 at: i32 (const)
+  callee 150:16 StringMap.probe -> @StringMap.probe
+  callee 155:5 StringMap.insertAt -> @StringMap.insertAt
 function StringMap.add(this: StringMap, key: string, value: i32): boolean -> @StringMap.add [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.insertAt
@@ -1146,58 +1146,58 @@ function StringMap.add(this: StringMap, key: string, value: i32): boolean -> @St
   calls: StringMap.insertAt StringMap.probe fnv1a
   pointer this: size=40 writesThrough=true captured=false passedTo=StringMap.probe#0 StringMap.insertAt#0
   stackSites=0 stackLocals=0
-  local 159:11 hash: u32 (const)
-  callee 159:18 fnv1a -> @fnv1a
-  local 160:11 at: i32 (const)
-  callee 160:16 StringMap.probe -> @StringMap.probe
-  callee 164:5 StringMap.insertAt -> @StringMap.insertAt
+  local 160:11 hash: u32 (const)
+  callee 160:18 fnv1a -> @fnv1a
+  local 161:11 at: i32 (const)
+  callee 161:16 StringMap.probe -> @StringMap.probe
+  callee 165:5 StringMap.insertAt -> @StringMap.insertAt
 function StringMap.insertAt(this: StringMap, bucket: i32, key: string, hash: u32, value: i32): void -> @StringMap.insertAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 173:5
+  sharedWrite: 174:5
   escaping: bucket hash key value
   calls: StringMap.grow nish_array_grow nish_exit nish_panic_index nish_write slotOf
   pointer this: size=40 writesThrough=true captured=false passedTo=StringMap.grow#0
   stackSites=0 stackLocals=0
-  callee 176:26 slotOf -> @slotOf
-  callee 179:7 StringMap.grow -> @StringMap.grow
+  callee 177:26 slotOf -> @slotOf
+  callee 180:7 StringMap.grow -> @StringMap.grow
 function StringMap.grow(this: StringMap): void -> @StringMap.grow [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 190:5
+  sharedWrite: 191:5
   calls: home nish_panic_index slotOf
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 189:11 wider: i32 (const)
-  local 192:9 i: i32 (let)
-  local 194:13 hash: u32 (const)
-  local 195:11 bucket: i32 (let)
-  callee 195:20 home -> @home
-  callee 199:28 slotOf -> @slotOf
+  local 190:11 wider: i32 (const)
+  local 193:9 i: i32 (let)
+  local 195:13 hash: u32 (const)
+  local 196:11 bucket: i32 (let)
+  callee 196:20 home -> @home
+  callee 200:28 slotOf -> @slotOf
 function StringSet.constructor(this: StringSet): void -> @StringSet.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 214:16 new StringMap -> @StringMap.constructor
+  callee 215:16 new StringMap -> @StringMap.constructor
 function StringSet.size(this: StringSet): i32 -> @StringSet.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.size
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 218:12 StringMap.size -> @StringMap.size
+  callee 219:12 StringMap.size -> @StringMap.size
 function StringSet.at(this: StringSet, index: i32): string -> @StringSet.at [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: StringMap.keyAt
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 222:12 StringMap.keyAt -> @StringMap.keyAt
+  callee 223:12 StringMap.keyAt -> @StringMap.keyAt
 function StringSet.has(this: StringSet, key: string): boolean -> @StringSet.has [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: StringMap.has
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 226:12 StringMap.has -> @StringMap.has
+  callee 227:12 StringMap.has -> @StringMap.has
 function StringSet.add(this: StringSet, key: string): boolean -> @StringSet.add [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.add
@@ -1205,7 +1205,7 @@ function StringSet.add(this: StringSet, key: string): boolean -> @StringSet.add 
   calls: StringMap.add
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 231:12 StringMap.add -> @StringMap.add
+  callee 232:12 StringMap.add -> @StringMap.add
 module self/nodes.ts
 const N_ERROR: i32 = 0 [exported]
 const N_EMPTY: i32 = 1 [exported]
@@ -19981,59 +19981,59 @@ function fmix32(emitter: Emitter, x: string): string -> @fmix32
   calls: IRFunction.emitValue nish_str_concat
   pointer emitter: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 141:9 fn: IRFunction (const)
-  local 142:9 a: string (const)
-  callee 142:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 142:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local 143:9 b: string (const)
-  callee 143:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local 144:9 c: string (const)
-  callee 144:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 144:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local 145:9 d: string (const)
+  local 144:9 fn: IRFunction (const)
+  local 145:9 a: string (const)
   callee 145:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 146:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 146:40 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 145:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local 146:9 b: string (const)
+  callee 146:13 IRFunction.emitValue -> @IRFunction.emitValue
+  local 147:9 c: string (const)
+  callee 147:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 147:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local 148:9 d: string (const)
+  callee 148:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 149:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 149:40 IRFunction.emitValue -> @IRFunction.emitValue
 function fmix64(emitter: Emitter, x: string): string -> @fmix64
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
   pointer emitter: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 151:9 fn: IRFunction (const)
-  local 152:9 a: string (const)
-  callee 152:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 152:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local 153:9 b: string (const)
-  callee 153:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local 154:9 c: string (const)
-  callee 154:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 154:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local 155:9 d: string (const)
+  local 154:9 fn: IRFunction (const)
+  local 155:9 a: string (const)
   callee 155:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local 156:9 e: string (const)
+  callee 155:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local 156:9 b: string (const)
   callee 156:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 156:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local 157:9 low: string (const)
-  callee 157:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 158:9 high: string (const)
-  callee 158:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 158:42 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 159:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 157:9 c: string (const)
+  callee 157:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 157:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local 158:9 d: string (const)
+  callee 158:13 IRFunction.emitValue -> @IRFunction.emitValue
+  local 159:9 e: string (const)
+  callee 159:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 159:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local 160:9 low: string (const)
+  callee 160:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 161:9 high: string (const)
+  callee 161:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 161:42 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 162:10 IRFunction.emitValue -> @IRFunction.emitValue
 function floatBits(emitter: Emitter, value: string): string -> @floatBits
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
   pointer emitter: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 168:9 fn: IRFunction (const)
-  local 169:9 plus: string (const)
-  callee 169:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 170:9 nan: string (const)
-  callee 170:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 171:9 bits: string (const)
-  callee 171:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 172:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 171:9 fn: IRFunction (const)
+  local 172:9 plus: string (const)
+  callee 172:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 173:9 nan: string (const)
+  callee 173:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 174:9 bits: string (const)
+  callee 174:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 175:10 IRFunction.emitValue -> @IRFunction.emitValue
 function sameKeyOf(emitter: Emitter, key: i32, a: string, b: string): string -> @sameKeyOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -20041,52 +20041,52 @@ function sameKeyOf(emitter: Emitter, key: i32, a: string, b: string): string -> 
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emitValue isFloat nish_str_concat
   pointer emitter: size=160 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.llvm#0 Emitter.llvm#0
   stackSites=0 stackLocals=0
-  local 177:9 fn: IRFunction (const)
-  callee 179:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 179:44 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 181:7 isFloat -> @isFloat
-  local 182:11 ty: string (const)
-  callee 182:16 Emitter.llvm -> @Emitter.llvm
-  local 183:11 equal: string (const)
-  callee 183:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 184:11 aNaN: string (const)
-  callee 184:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 185:11 bNaN: string (const)
-  callee 185:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 186:11 both: string (const)
-  callee 186:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 187:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 189:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 189:34 Emitter.llvm -> @Emitter.llvm
+  local 180:9 fn: IRFunction (const)
+  callee 182:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 182:44 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 184:7 isFloat -> @isFloat
+  local 185:11 ty: string (const)
+  callee 185:16 Emitter.llvm -> @Emitter.llvm
+  local 186:11 equal: string (const)
+  callee 186:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 187:11 aNaN: string (const)
+  callee 187:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 188:11 bNaN: string (const)
+  callee 188:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 189:11 both: string (const)
+  callee 189:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 190:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 192:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 192:34 Emitter.llvm -> @Emitter.llvm
 function libraryReach(emitter: Emitter, library: CheckedProgram): FunctionSig[] -> @libraryReach [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 224:7
+  sharedWrite: 227:7
   calls: FunctionSig.definedIn StringSet.add StringSet.constructor StringSet.has mapIntrinsicOf nish_array_grow noteCallees
   pointer emitter: size=160 writesThrough=false captured=false
   pointer library: size=480 writesThrough=false captured=false
   stackSites=3 stackLocals=3
-  local 201:9 facts: FactsTable (const)
-  local 202:9 bySymbol: StringSet (const)
-  callee 202:20 new StringSet -> @StringSet.constructor
-  local 203:14 sig: FunctionSig (const)
-  callee 204:9 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 205:7 StringSet.add -> @StringSet.add
-  local 208:9 reached: StringSet (const)
-  callee 208:19 new StringSet -> @StringSet.constructor
-  local 209:9 pending: string[] (const)
-  local 210:14 sig: FunctionSig (const)
-  callee 211:9 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 212:7 noteCallees -> @noteCallees
-  local 215:7 at: i32 (let)
-  local 217:11 name: string (const)
-  callee 219:5 noteCallees -> @noteCallees
-  local 221:9 out: FunctionSig[] (const)
-  local 222:14 sig: FunctionSig (const)
-  callee 223:9 StringSet.has -> @StringSet.has
-  callee 223:34 mapIntrinsicOf -> @mapIntrinsicOf
+  local 204:9 facts: FactsTable (const)
+  local 205:9 bySymbol: StringSet (const)
+  callee 205:20 new StringSet -> @StringSet.constructor
+  local 206:14 sig: FunctionSig (const)
+  callee 207:9 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 208:7 StringSet.add -> @StringSet.add
+  local 211:9 reached: StringSet (const)
+  callee 211:19 new StringSet -> @StringSet.constructor
+  local 212:9 pending: string[] (const)
+  local 213:14 sig: FunctionSig (const)
+  callee 214:9 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 215:7 noteCallees -> @noteCallees
+  local 218:7 at: i32 (let)
+  local 220:11 name: string (const)
+  callee 222:5 noteCallees -> @noteCallees
+  local 224:9 out: FunctionSig[] (const)
+  local 225:14 sig: FunctionSig (const)
+  callee 226:9 StringSet.has -> @StringSet.has
+  callee 226:34 mapIntrinsicOf -> @mapIntrinsicOf
 function noteCallees(facts: FactsTable, caller: string, bySymbol: StringSet, reached: StringSet, pending: string[]): void -> @noteCallees
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 241:7
+  sharedWrite: 244:7
   escaping: caller
   calls: FactsTable.get StringSet.add StringSet.at StringSet.has StringSet.size nish_array_grow
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
@@ -20094,34 +20094,34 @@ function noteCallees(facts: FactsTable, caller: string, bySymbol: StringSet, rea
   pointer reached: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   pointer pending: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 232:9 callerFacts: FunctionFacts | null (const)
-  callee 232:23 FactsTable.get -> @FactsTable.get
-  local 236:9 callees: StringSet (const)
-  local 237:7 i: i32 (let)
-  callee 238:14 StringSet.size -> @StringSet.size
-  local 239:11 callee: string (const)
-  callee 239:20 StringSet.at -> @StringSet.at
-  callee 240:9 StringSet.has -> @StringSet.has
-  callee 240:33 StringSet.add -> @StringSet.add
+  local 235:9 callerFacts: FunctionFacts | null (const)
+  callee 235:23 FactsTable.get -> @FactsTable.get
+  local 239:9 callees: StringSet (const)
+  local 240:7 i: i32 (let)
+  callee 241:14 StringSet.size -> @StringSet.size
+  local 242:11 callee: string (const)
+  callee 242:20 StringSet.at -> @StringSet.at
+  callee 243:9 StringSet.has -> @StringSet.has
+  callee 243:33 StringSet.add -> @StringSet.add
 function emitLibraryCopies(emitter: Emitter, library: CheckedProgram, sigs: FunctionSig[]): void -> @emitLibraryCopies [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 258:3
+  sharedWrite: 261:3
   escaping: library
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance DebugInfo.fileOf Emitter.emitFunction IRModule.addFunction
   pointer emitter: size=160 writesThrough=true captured=false passedTo=Emitter.emitFunction#0
   pointer library: size=480 writesThrough=true captured=true passedTo=CheckedProgram.enterInstance#0 CheckedProgram.leaveInstance#0
   pointer sigs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 257:9 own: CheckedProgram (const)
-  local 259:9 debug: DebugInfo | null (const)
-  local 260:7 savedFile: string (let)
-  callee 265:18 DebugInfo.fileOf -> @DebugInfo.fileOf
-  local 267:14 sig: FunctionSig (const)
-  local 268:11 instance: Instantiation | null (const)
-  callee 270:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee 272:5 IRModule.addFunction -> @IRModule.addFunction
-  callee 272:32 Emitter.emitFunction -> @Emitter.emitFunction
-  callee 274:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 260:9 own: CheckedProgram (const)
+  local 262:9 debug: DebugInfo | null (const)
+  local 263:7 savedFile: string (let)
+  callee 268:18 DebugInfo.fileOf -> @DebugInfo.fileOf
+  local 270:14 sig: FunctionSig (const)
+  local 271:11 instance: Instantiation | null (const)
+  callee 273:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee 275:5 IRModule.addFunction -> @IRModule.addFunction
+  callee 275:32 Emitter.emitFunction -> @Emitter.emitFunction
+  callee 277:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 module self/emit_parallel.ts
 import Emitter from "./emit" -> struct Emitter
 import internalErrorFor from "./ice" -> function @internalErrorFor

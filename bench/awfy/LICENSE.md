@@ -24,7 +24,7 @@ reproduced below, verbatim from the upstream sources.
 Some test programs and cookbook snippets reproduce parts of these ports, so
 that a compiler rule is pinned on the code that motivated it. Each carries the
 notice in the header below, and each is listed here with the program it comes
-from. `node tests/run.js awfy-licence` checks that the table and the headers
+from. `node tests/run.js third-party-licence` checks that the table and the headers
 agree, and that a program under `tests/`, `docs/cookbook/`, `examples/` or
 `bench/` which names the Are We Fast Yet suite or SOM carries the header.
 The npm package ships none of these files.

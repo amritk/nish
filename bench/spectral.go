@@ -1,3 +1,8 @@
+// Adapted from the Computer Language Benchmarks Game spectral-norm program
+// (Node.js #1, contributed by Ian Osgood, modified by Isaac Gouy),
+// https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+// Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+// Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 // Go twin of spectral.ts: same loops and evaluation order, []float64 indexed
 // by an int32 (bounds-checked, as in Nish).
 package main

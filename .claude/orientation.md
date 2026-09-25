@@ -131,4 +131,5 @@ takes `self/` to the fixed point with `scripts/bootstrap.sh --verify`.
 | What IR does X compile to? | `docs/IR_COOKBOOK.md` |
 | How do I write the code? | [`typescript.md`](./typescript.md) |
 | How do I test it? | [`testing.md`](./testing.md) |
+| I am copying or porting code from somewhere else | [`licensing.md`](./licensing.md) — the notice it keeps and the licences allowed |
 | What is the plan? | `docs/MASTER_PLAN.md`, `docs/wp14-selfhost.md` |

@@ -7683,6 +7683,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js",
       "bin/packaging.js",
       "runtime/runtime.c",
+      // Ryu's licence, which runtime.c's formatter is adapted under: the Boost
+      // licence asks for it in every source copy, and the tarball is one
+      // (THIRD_PARTY_NOTICES.md).
+      "runtime/LICENSE-ryu",
       // The runtime is two translation units since the operating-system half was
       // split out for its own size budget, and `--link` compiles both. A tarball
       // with only the core would install a compiler that cannot link any program
@@ -10056,19 +10060,140 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
   );
 }
 
-// ---- No tool attribution: the hook and the PR body check ------------------------------
-// ---- The Are We Fast Yet licence travels with every copy of its code -----------------
-// The ports in bench/awfy/ are under the SOM benchmarks' MIT licence (mandelbrot.ts
-// under the Benchmarks Game's Revised BSD one), not this repository's, and MIT asks
-// for its notice in "all copies or substantial portions". Some tests reproduce a port
-// so that a compiler rule is pinned on the code that motivated it, and a copy made
-// that way is easy to make without the notice. So bench/awfy/LICENSE.md lists every
-// copy outside bench/awfy/ in its "Copies outside this directory" table, and this
-// holds the table, the headers and the programs to each other in both directions.
-// A program that names the suite in a comment is taken at its word: it carries the
-// header, or it is in `AWFY_MENTIONS_ONLY` with the reason it copies nothing. Only
-// text is read, so it needs no toolchain.
-if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
+// ---- Third-party code keeps its own licence -------------------------------------------
+// Some files are copied, ported or adapted from code written elsewhere: Ryu in
+// runtime/runtime.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
+// Yet ports and the tests that reproduce parts of them. Their licences ask for the
+// upstream notice in every copy, and a copy is easy to make without it, so
+// THIRD_PARTY_NOTICES.md lists each file with the notice it carries and the licence text
+// that notice names, and this holds the list, the files and the package to each other
+// (.claude/licensing.md is the rule a new copy follows). Only text is read, so it needs
+// no toolchain.
+//
+// The Are We Fast Yet files have their own table in bench/awfy/LICENSE.md, because a
+// copy of a port names the port it comes from, and the checks after the first block hold
+// that table in both directions: every row is headed, and every program that is headed
+// or names the suite is a row. A program that names the suite in a comment is taken at
+// its word: it carries the header, or it is in `AWFY_MENTIONS_ONLY` with the reason it
+// copies nothing.
+if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.includes(only))) {
+  const noticesDoc = "THIRD_PARTY_NOTICES.md";
+  const readRel = (file) => fs.readFileSync(path.join(root, file), "utf8");
+  // A file's text with every line's comment marker dropped and the lines joined, so a
+  // notice matches however its file wraps a comment: `//`, `/* ... */`, ` * ` or `#`.
+  const flatten = (text) =>
+    text
+      .split("\n")
+      .map((line) =>
+        line
+          .replace(/^\s*(\/\/+|\/\*+|\*+|#+)?/, "")
+          .replace(/\*\/\s*$/, "")
+          .trim()
+      )
+      .join(" ")
+      .replace(/\s+/g, " ");
+
+  // `### \`<licence text>\`` sections, each with a ```notice fence, and the `## Files` table.
+  const notices = new Map();
+  const rows = [];
+  {
+    let section = "";
+    let licenceText = null;
+    let fence = null;
+    for (const line of readRel(noticesDoc).split("\n")) {
+      if (fence !== null) {
+        if (line === "```") {
+          notices.set(licenceText, flatten(fence.join("\n")));
+          fence = null;
+        } else {
+          fence.push(line);
+        }
+        continue;
+      }
+      if (line.startsWith("## ")) section = line;
+      const heading = /^### `([^`]+)`$/.exec(line);
+      if (heading !== null) licenceText = heading[1];
+      if (line === "```notice" && licenceText !== null) fence = [];
+      const row = section === "## Files" ? /^\| `([^`]+)` \|.*\| `([^`]+)` \|$/.exec(line) : null;
+      if (row !== null) rows.push({ file: row[1], licenceText: row[2] });
+    }
+  }
+
+  const rowProblems = rows.flatMap(({ file, licenceText }) => {
+    if (!fs.existsSync(path.join(root, file))) return [`${file}: listed, but there is no such file`];
+    const notice = notices.get(licenceText) ?? null;
+    if (notice === null) return [`${file}: names ${licenceText}, which has no \`\`\`notice section`];
+    return flatten(readRel(file)).includes(notice) ? [] : [`${file}: does not carry the notice\n  ${notice}`];
+  });
+  check(
+    `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
+    rows.length > 0 && rowProblems.length === 0,
+    rows.length === 0 ? 'no rows under "## Files"' : rowProblems.join("\n")
+  );
+
+  // Every licence text the notices name, the Are We Fast Yet one included (it has a
+  // heading but no notice fence, because its copies are checked below).
+  const licenceTexts = [
+    ...new Set([
+      ...[...readRel(noticesDoc).matchAll(/^### `([^`]+)`$/gm)].map((m) => m[1]),
+      ...rows.map((r) => r.licenceText),
+    ]),
+  ];
+  const missingTexts = licenceTexts.filter((file) => !fs.existsSync(path.join(root, file)));
+  check(
+    `third-party-licence: each of the ${licenceTexts.length} licence texts ${noticesDoc} names exists (${licenceTexts.join(", ")})`,
+    licenceTexts.length > 0 && missingTexts.length === 0,
+    missingTexts.join("\n")
+  );
+
+  // The other direction: a source file that carries one of the notices is listed. It is
+  // how a new copy made by the rule, header and all, still fails until it is recorded.
+  const SOURCE = /\.(ts|c|h|go|rs|js|mjs|py|sh)$/;
+  const sources = [];
+  const walkSources = (rel) => {
+    for (const entry of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+      const child = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith(".") && !["node_modules", "build", "dist"].includes(entry.name)) walkSources(child);
+      } else if (SOURCE.test(entry.name)) {
+        sources.push(child);
+      }
+    }
+  };
+  walkSources("");
+  const listedRows = new Set(rows.map((r) => r.file));
+  const unlistedCopies = sources.filter(
+    (file) =>
+      !listedRows.has(file) && [...notices.values()].some((notice) => flatten(readRel(file)).includes(notice))
+  );
+  check(
+    `third-party-licence: every one of the ${sources.length} source files that carries a notice from ${noticesDoc} is listed there`,
+    unlistedCopies.length === 0,
+    unlistedCopies.join("\n")
+  );
+
+  // A listed file that ships takes its licence text with it: in package.json's `files`,
+  // and in each of release.yml's three presence gates that names the file.
+  const pkgFiles = JSON.parse(readRel("package.json")).files;
+  const ships = (file) =>
+    pkgFiles.some((entry) => !entry.startsWith("!") && (file === entry || file.startsWith(`${entry}/`))) &&
+    !pkgFiles.includes(`!${file}`);
+  const gates = readRel(path.join(".github", "workflows", "release.yml"))
+    .split("\n")
+    .filter((line) => /^\s*for f in .*; do$/.test(line));
+  const shippedRows = rows.filter((r) => ships(r.file));
+  const unshippedTexts = shippedRows.flatMap(({ file, licenceText }) => [
+    ...(ships(licenceText) ? [] : [`${file} ships, but package.json's files does not ship ${licenceText}`]),
+    ...gates
+      .filter((gate) => gate.split(/\s+/).includes(file) && !gate.split(/\s+/).includes(licenceText))
+      .map((gate) => `a release.yml gate names ${file} but not ${licenceText}:\n  ${gate.trim()}`),
+  ]);
+  check(
+    `third-party-licence: each of the ${shippedRows.length} listed files the package ships takes its licence text with it (${[...new Set(shippedRows.map((r) => r.licenceText))].join(", ")})`,
+    shippedRows.length > 0 && gates.length === 3 && unshippedTexts.length === 0,
+    gates.length !== 3 ? `expected 3 \`for f in ...\` gates in release.yml, found ${gates.length}` : unshippedTexts.join("\n")
+  );
+
   const AWFY_HEADERS = new Map([
     [
       "MIT",
@@ -10109,7 +10234,7 @@ if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
     return startsWithHeader(c.file, header) ? [] : [`${c.file}: does not start with\n${header.join("\n")}`];
   });
   check(
-    `awfy-licence: bench/awfy/LICENSE.md lists ${copies.length} copies of the ports, and each exists and starts with its licence header`,
+    `third-party-licence: bench/awfy/LICENSE.md lists ${copies.length} copies of the ports, and each exists and starts with its licence header`,
     copies.length > 0 && wrong.length === 0,
     copies.length === 0 ? 'no rows under "## Copies outside this directory"' : wrong.join("\n")
   );
@@ -10130,7 +10255,7 @@ if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
   const headed = programs.filter((file) => headers.some((h) => firstLines(file, 1)[0] === h[0]));
   const unlisted = headed.filter((file) => !listed.has(file));
   check(
-    `awfy-licence: each of the ${headed.length} programs under ${AWFY_ROOTS.join("/, ")}/ that carries an Are We Fast Yet header is listed in bench/awfy/LICENSE.md`,
+    `third-party-licence: each of the ${headed.length} programs under ${AWFY_ROOTS.join("/, ")}/ that carries an Are We Fast Yet header is listed in bench/awfy/LICENSE.md`,
     unlisted.length === 0,
     unlisted.join("\n")
   );
@@ -10148,7 +10273,7 @@ if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
   );
   const staleExemptions = [...AWFY_MENTIONS_ONLY.keys()].filter((file) => !programs.includes(file));
   check(
-    "awfy-licence: every program that names Are We Fast Yet, AWFY or SOM in a comment carries the header or says why it copies nothing",
+    "third-party-licence: every program that names Are We Fast Yet, AWFY or SOM in a comment carries the header or says why it copies nothing",
     unmarked.length === 0 && staleExemptions.length === 0,
     [
       ...unmarked.map((file) => `${file}: names the suite, but is not in bench/awfy/LICENSE.md's table`),
@@ -10171,7 +10296,7 @@ if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
       (file.endsWith("/mandelbrot.ts") && !firstLines(file, 5).join("\n").includes("Revised BSD licence"))
   );
   check(
-    `awfy-licence: each of the ${ports.length} ports in bench/awfy/ carries its licence header`,
+    `third-party-licence: each of the ${ports.length} ports in bench/awfy/ carries its licence header`,
     ports.length > 0 && bareports.length === 0,
     bareports.join("\n")
   );
@@ -10183,9 +10308,10 @@ if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
   const leaked = [...ports, ...listed].filter((file) =>
     shipped.some((entry) => file === entry || file.startsWith(`${entry}/`))
   );
-  check("awfy-licence: package.json's files ships no port and no copy of one", leaked.length === 0, leaked.join("\n"));
+  check("third-party-licence: package.json's files ships no port and no copy of one", leaked.length === 0, leaked.join("\n"));
 }
 
+// ---- No tool attribution: the hook and the PR body check ------------------------------
 // CLAUDE.md keeps session links, model names and "Generated with" footers out of
 // commits and PR text. `.claude/hooks/no-attribution.mjs` refuses the tool call that
 // would write one, and `scripts/check-pr-body.mjs` fails the `PR body` workflow on a

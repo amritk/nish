@@ -1459,6 +1459,12 @@ Ryu (Adams, PLDI 2018) computes the digits directly: **72 ns, a 35x speedup**,
 and the shortest string by construction. Only digit generation moved; the
 ECMAScript layout around it is untouched.
 
+The port is derived from [Ryu](https://github.com/ulfjack/ryu)'s `ryu/d2s.c`
+(`d2d()`) and `ryu/common.h`, Copyright 2018 Ulf Adams, and keeps their names,
+constants and comments. It is used under the Boost Software License 1.0, one
+of the two upstream offers, whose text is `runtime/LICENSE-ryu` and ships in
+the package beside `runtime.c`; see `THIRD_PARTY_NOTICES.md`.
+
 **What it costs, and who pays.** Two power-of-five tables, 9,888 bytes of
 read-only data, generated with exact integer arithmetic rather than
 transcribed. `runtime.c`'s `.text` goes 2,775 -> 3,852, still inside §2's 4 KB

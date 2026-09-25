@@ -29,7 +29,8 @@
  * FNV-1a over the bytes of `key`. The round is a multiply that is *supposed*
  * to overflow, so it is done in `u32`, whose arithmetic is defined as wrapping
  * whatever `--wrapping` says; on a signed accumulator the same multiply would
- * be undefined under the default `nsw` (WP15 §3).
+ * be undefined under the default `nsw` (WP15 §3). FNV and its constants are
+ * public domain.
  */
 const fnv1a = (key: string): u32 => {
   let hash: u32 = 2166136261;

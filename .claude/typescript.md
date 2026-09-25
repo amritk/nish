@@ -207,7 +207,8 @@ linted. What still differs:
   ABI's spelling: `nish_*` runtime symbols, WASI's `fd_write` and `args_get` in
   `web/wasi.mjs`. And a benchmark ported from another language keeps the
   source program's constants, so `bench/nbody.ts` has `SOLAR_MASS` and `PI` as
-  locals.
+  locals. It keeps the source's licence notice too, at the top of the file,
+  and is listed in `THIRD_PARTY_NOTICES.md` ([`licensing.md`](./licensing.md)).
 - **This one is prose, not lint, and that is measured.** Biome's
   `useNamingConvention` was tried over the whole repo: with `strictCase` on
   it flags 82 places, and with it off (the setting that tolerates `IRBlock`)

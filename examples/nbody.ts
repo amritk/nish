@@ -1,3 +1,8 @@
+// Adapted from the Computer Language Benchmarks Game n-body program (Node.js #6,
+// contributed by Isaac Gouy, modified by Andrey Filatkin),
+// https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+// Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+// Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 // smoke: args --number-mode f64
 class Body {
   x: number;
