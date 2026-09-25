@@ -1,0 +1,3 @@
+define internal noundef nonnull align 8 dereferenceable(48) %struct.Map$str$i32* @nish.Map$str$i32.set(
+define internal noundef zeroext i1 @nish.Map$str$i32.has(
+%struct.Map$str$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array* }

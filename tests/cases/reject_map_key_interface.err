@@ -1,0 +1,1 @@
+`Point` cannot be the key type of `Map<Point, i32>`: a key is hashed and compared by value, or by identity for a class instance

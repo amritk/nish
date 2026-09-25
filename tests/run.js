@@ -2199,6 +2199,46 @@ if (has("opt")) {
   }
 }
 
+// ---- WP32: one probe, counted -----------------------------------------------------
+// docs/wp32-map.md §2.3, acceptance criterion 4: a probe reads the entry list
+// only on a fingerprint match and compares the stored hash before the key, so
+// an absent key costs no key compare and a present one exactly one. A golden
+// shows the call site and cannot count calls, so the program is linked with
+// `-Wl,--wrap=nish_str_eq` and `map_fingerprint_miss.c`, whose wrapper counts
+// every compare the compiled code makes and hands the count back. The fixture is
+// compiled here rather than read from section A's output, so its existence is
+// part of the assertion; only a toolchain without `ld.lld`, or an `ld.lld`
+// without `--wrap`, skips it.
+if (!only || "map_fingerprint_miss".includes(only)) {
+  if (!HAS_CLANG || !has("ld.lld")) {
+    skip("map_fingerprint_miss: the key-compare count needs clang and ld.lld for --wrap");
+  } else {
+    const dir = path.join(buildDir, "map_fingerprint");
+    fs.mkdirSync(dir, { recursive: true });
+    const source = path.join(root, "tests", "cases", "map_fingerprint_miss.ts");
+    const shim = path.join(root, "tests", "cases", "map_fingerprint_miss.c");
+    const ll = path.join(dir, "map_fingerprint_miss.ll");
+    const exe = path.join(dir, "map_fingerprint_miss");
+    const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" });
+    const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"];
+    const linked =
+      built.status === 0
+        ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
+        : built;
+    const wrapUnsupported = linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr);
+    if (wrapUnsupported) {
+      skip("map_fingerprint_miss: this ld.lld has no --wrap");
+    } else {
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : linked;
+      check(
+        "map_fingerprint_miss: 10000 absent string lookups compare no key, and 10000 hits compare exactly 10000",
+        run.status === 0 && run.stdout === "misses 10000: 0 key compares\nhits 10000: 10000 key compares\n",
+        `${run.stdout ?? ""}${run.stderr ?? ""}`
+      );
+    }
+  }
+}
+
 // ---- WP4: arrays ------------------------------------------------------------------
 // 1. Every arr_ module must pass the IR verifier (the bounds check adds blocks and `unreachable`).
 // 2. A failed bounds check exits 1 with "index out of range: <idx> >= <len>" on stderr.

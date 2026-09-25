@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 455;
+export const RULE_COUNT: i32 = 464;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -57,6 +57,8 @@ export const RULE_COUNT: i32 = 455;
  * contains.
  */
 export const diagnosticRules = (): string[] => [
+  "`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`",
+  "NL2353",
   "` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out",
   "NL2326",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
@@ -87,14 +89,20 @@ export const diagnosticRules = (): string[] => [
   "NL2351",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
+  "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
+  "NL2354",
   "` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory",
   "NL2348",
   "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
   "NL3028",
   "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
   "NL2346",
+  "` can only be the iterable of a `for...of`: an iterator is not a value in this version, and iterating a `Map` or `Set` is not lowered yet",
+  "NL2358",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
+  "`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function",
+  "NL2356",
   "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",
   "NL2327",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
@@ -141,14 +149,20 @@ export const diagnosticRules = (): string[] => [
   "NL3029",
   "; if (r.isErr()) { ... }`), propagate it with `.orReturn()`, or end on it with `.expect(message)`",
   "NL2025",
+  "`: a `Map` has size, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
+  "NL2359",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
   "NL2157",
+  "` is read-only: it counts the entries, and `set`, `add`, `delete` and `clear` are what change it",
+  "NL2360",
   "`, and the push may move that storage first; copy the fields you need into locals before pushing",
   "NL2291",
   "`, which is not a range this compiler reads: the one it accepts is a floor, `>=X.Y.Z` or `>=X.Y`",
   "NL3019",
   "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)",
   "NL2145",
+  "`; a class or interface name is program-wide, so one program cannot have both (rename this one)",
+  "NL3030",
   "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
   "NL2307",
   "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm",
@@ -171,10 +185,14 @@ export const diagnosticRules = (): string[] => [
   "NL2087",
   "` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)",
   "NL2038",
+  "` is not supported yet: its result is `V | undefined`, and this version cannot narrow one",
+  "NL2357",
   "`process.argv` requires a `main` entry point (this program has no `export function main`)",
   "NL2149",
   "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)",
   "NL2152",
+  "` takes no arguments in this version: a `Map` or `Set` starts empty, so create it with `",
+  "NL2355",
   "`integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as ",
   "NL2332",
   "`integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet",

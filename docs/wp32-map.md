@@ -30,7 +30,7 @@ it waits on generic classes. Those have landed.
 
 | # | Question | Decision | § | Rejected |
 | --- | --- | --- | --- | --- |
-| 1 | Layout | Insertion-ordered. A `u32[]` bucket table holds eight fingerprint bits above a 24-bit entry index plus one. The entries sit in parallel arrays (`keys`, `values`, `hashes`), and the full 32-bit hash of each is stored in `hashes`. The cap is 2^24 − 1 entries, which is exactly Node's own. | 2 | an `i64` slot holding the whole hash; the StringMap shape; an unordered table |
+| 1 | Layout | Insertion-ordered. A `u32[]` bucket table holds eight fingerprint bits above a 24-bit entry index plus one. The entries sit in parallel arrays (`keys`, `values`, `hashes`), and the full 32-bit hash of each is stored in `hashes`. The cap is 2^24 − 1 entries, one fewer than Node's 2^24. | 2 | an `i64` slot holding the whole hash; the StringMap shape; an unordered table |
 | 2 | Load factor | At most 3/4 of the buckets taken, counting deleted entries until a rebuild. | 2.4 | 7/8 |
 | 3 | `get`'s type | `V \| undefined`. It is narrowed by `!== undefined` / `=== undefined`, or collapsed by `??`. A maybe value may be bound to a `const`, annotated or not. It may not cross a call, and it is never in memory: S3 lowers it to two SSA values, a found bit and the value. That is a new lowering, analogous to WP17's in-module register shape. | 3 | `has` + `get(k)!`; `get(k, default)`; a maybe value as a parameter or return type |
 | 4 | Output | The implicitly loaded `std/collections.ts` writes no `.ll` of its own. Every instance, and every helper it reaches, is emitted into each module that uses it with `internal` linkage, so `-o x.ll` keeps working for a one-file program. | 4.1 | a separate module, with its tests in `tests/link/` |
@@ -205,15 +205,16 @@ on insert.
   RSS at 2^20. It retires 18.1 million more instructions than the `i64` slot
   at `n` = 16384, 7.6%, for the stored-hash compare and the index mask. It buys
   that back in cache lines once the table leaves the cache.
-- **The index cap costs nothing a JavaScript program can use.** Node's `Map`
-  and `Set` throw `RangeError: Map maximum size exceeded` at the 2^24-th
-  (16,777,216th) entry, measured on Node 22.22.2. A 24-bit field that holds the
-  index plus one holds 2^24 − 1 entries, exactly Node's limit. An empty bucket
-  is 0. A deleted entry's bucket is `0x01000000`, fingerprint 1 and index field
-  0, which no live entry has. So the field needs no reserved all-ones value, and
-  the cap is not one short of Node's. S2 panics with Node's wording, `Map
-  maximum size exceeded` (or `Set …`), when an insert would pass it after
-  compaction.
+- **The index cap is one entry short of Node's, deliberately.** Node's `Map`
+  and `Set` hold 2^24 (16,777,216) entries and throw `RangeError: Map maximum
+  size exceeded` on the 16,777,217th insert, measured on Node 22.22.2. A 24-bit
+  field that holds the index plus one holds 2^24 − 1 entries, one fewer. An
+  empty bucket is 0. A deleted entry's bucket is `0x01000000`, fingerprint 1
+  and index field 0, which no live entry has, so the field needs no reserved
+  all-ones value. Holding the 2^24-th entry would take an `i64` slot or a
+  reserved encoding, and keeping the `u32` slot is the trade: half the bucket
+  memory, for that one entry. S2 panics with Node's wording, `Map maximum size
+  exceeded` (or `Set …`), when an insert would pass the cap after compaction.
 - **The fingerprint is the hash's top eight bits, and the bucket its low bits
   folded with the high half:** `home = (h ^ (h >>> 16)) & mask`, as `StringMap`
   does. The fold brings the top bits into the bucket index only XORed with

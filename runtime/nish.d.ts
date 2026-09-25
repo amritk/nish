@@ -25,6 +25,13 @@
  * So a program that `tsc` accepts may still be rejected by `nish`; the
  * reverse should never happen, and a case where it does is a bug in this file.
  * `docs/LANGUAGE.md` is the normative description.
+ *
+ * **`Map` and `Set` are not declared here**, although `nish` has them as
+ * globals: the `"lib": ["ES2022"]` a program is checked against already
+ * declares JavaScript's, and a second declaration would clash with it.
+ * `nish`'s are that surface less what it defers — no `get` yet, no iteration,
+ * no `entries` or `forEach` — which `tsc` cannot know (docs/LANGUAGE.md ->
+ * `Map` and `Set`).
  */
 
 // ---- Numeric widths (docs/LANGUAGE.md -> Types) ------------------------------

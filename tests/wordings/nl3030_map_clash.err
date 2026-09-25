@@ -1,0 +1,1 @@
+`Map` is declared here and tests/wordings/map_clash_global.ts uses the global `Map`; a class or interface name is program-wide, so one program cannot have both (rename this one)

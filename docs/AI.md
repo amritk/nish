@@ -136,7 +136,8 @@ rejects. This table is the highest-value part of the page.
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
 | `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
-| `JSON.parse`, `RegExp`, `Map`, `Set`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
+| `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
+| `m.get(k)`, `for (const k of m.keys())`, `m.forEach(...)`, `new Map(entries)` | `` `get` on `Map<string, i32>` is not supported yet ``, and the other three refused by name | `Map` and `Set` exist, with `size`, `set` / `add`, `has`, `delete` and `clear` only — see [Map and Set](#map-and-set) |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
 
 A worked pair. This is the single most common rejection:
@@ -1067,6 +1068,34 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 
 **Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
 — see below.
+
+### Map and Set
+
+`Map<K, V>` and `Set<T>` are global, as in JavaScript: no import, insertion
+order, SameValueZero keys (`-0` is `+0`, `NaN` finds `NaN`). What they have is
+exactly `size` (a read-only `number`), `set(k, v)` / `add(x)` (both answer the
+receiver, so they chain), `has(k)`, `delete(k)` (answers whether it was there)
+and `clear()`. **There is no `get` yet, and no iteration**: `get`, `keys()`,
+`values()`, `entries` and `forEach` are refused by name, so keep a value you
+will need beside the key, or test membership with `has`.
+
+```ts nish:ok-body
+const seen = new Set<string>();
+const counts: Map<string, i32> = new Map();
+seen.add("a").add("b").add("a");
+counts.set("a", 1).set("b", 2);
+counts.delete("b");
+console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
+```
+
+- Write the type arguments on `new`, or annotate the declaration and write
+  `new Map()`. `new Map(entries)` and `new Set(array)` are refused: start empty
+  and `set` / `add` in a loop.
+- A key is a string, any number type, a `boolean`, an enum or a class instance
+  (by identity). An interface, an array, a nullable type or a `Result` is not a
+  key; a value is anything but `void` or an interface.
+- A module that declares its own `Map` or `Set` keeps it, but then no other
+  module of the program may name the global one.
 
 ## Memory
 
