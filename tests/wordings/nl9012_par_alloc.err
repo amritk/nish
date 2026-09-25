@@ -1,0 +1,1 @@
+the body of this `parallelReduce` allocates per element: `widest` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both

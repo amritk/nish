@@ -1,6 +1,6 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #0
 define noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, double noundef %identity) #0 {
-call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelReduce$f64$fn.16.nish_main$arrow1$chunk, i8* %20, i64 %21, i64 1)
+call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelReduce$f64$fn.16.nish_main$arrow1$chunk, i8* %21, i64 %22, i64 1)
 define internal void @nish.parallelReduce$i32$fn.3.add$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
 define hidden noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {

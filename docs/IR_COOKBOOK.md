@@ -958,17 +958,28 @@ function it was given in its symbol (`@nish.parallelMapInto$f64$f64$fn.6.square`
 Importing the module implies `--threads`, so a module that allocates declares
 `@nish_arena` `thread_local`; this one allocates nothing. The parallel part is in `threads.ll`: the instance's body
 is `std/threads.ts`'s own, except that its call to the chunk loop becomes a
-context block on the stack and a call to the partitioner,
+test against the grain, a direct call when the range is within it, and
+otherwise a context block on the stack and a call to the partitioner,
 
 ```llvm
-  %par.ctx = alloca { %struct.nish_array*, %struct.nish_array* }, align 8
-  ; ... src and dst stored into it ...
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %20, i64 %21, i64 1048576)
+  %13 = icmp sle i32 %12, 1398101
+  br i1 %13, label %par.seq, label %par.region
+
+par.seq:
+  call void @nish.mapRange$f64$f64$fn.6.square(%struct.nish_array* %src, %struct.nish_array* %dst, i32 0, i32 %12)
+  br label %par.done
+
+par.region:
+  ; ... src and dst stored into %par.ctx ...
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 1398101)
+  br label %par.done
 ```
 
 and `@...$chunk(lo, hi, ctx)` loads them back and calls the chunk loop,
-`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. A reduce divides its
-blocks rather than its elements, with a grain of one block. The whole of both
+`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 1,398,101,
+is 2^22 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
+parallelism"). A reduce divides its blocks rather than its elements, with a
+grain of one block. The whole of both
 modules is `tests/link/par_map`'s golden (docs/LANGUAGE.md, "Data
 parallelism").
 
@@ -1013,6 +1024,77 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 ```
 <!-- cookbook:end par_map -->
+
+### `nish/threads`: a body that allocates
+
+A parallel body may build a string on the way to its result. `label` assigns
+its string to a `let`, which is what keeps the ordinary WP6 scope off it; as a
+parallel body it gets one anyway, so each call marks the arena of whichever
+thread runs it and releases it before returning, and a map holds one element's
+string at a time. The call compiles with performance warning NL9012.
+
+<!-- cookbook:begin par_alloc -->
+```ts
+import { parallelMapInto } from "nish/threads";
+
+const label = (x: i32): i32 => {
+  let s = "small";
+  if (x > 9) {
+    s = `big ${x}`;
+  }
+  return s.length;
+};
+
+export const labelAll = (xs: i32[], out: i32[]): void => {
+  parallelMapInto(xs, out, label);
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"small\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"big \00" }, align 8
+
+declare void @nish.parallelMapInto$i32$i32$fn.5.label(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+
+define hidden noundef i32 @label(i32 noundef %x) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %s.addr, align 8
+  %0 = icmp sgt i32 %x, 9
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = call i8* @nish_str_from_i32(i32 %x)
+  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* %1)
+  store i8* %2, i8** %s.addr, align 8
+  br label %if.end
+
+if.end:
+  %3 = load i8*, i8** %s.addr, align 8
+  %4 = bitcast i8* %3 to i64*
+  %5 = load i64, i64* %4, align 8
+  %6 = trunc i64 %5 to i32
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %6
+}
+
+define void @labelAll(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out) #1 {
+entry:
+  call void @nish.parallelMapInto$i32$i32$fn.5.label(%struct.nish_array* %xs, %struct.nish_array* %out)
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end par_alloc -->
 
 ## Types
 

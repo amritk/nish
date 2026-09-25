@@ -1,1 +1,0 @@
-`digits` allocates, and `parallelMapInto` runs it on threads whose arenas are freed when they exit

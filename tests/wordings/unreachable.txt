@@ -36,6 +36,7 @@ NL2125  retired: `declare function` is a supported construct since WP27 S1, so "
 NL2110  retired: inheritance, removed
 NL2111  retired: inheritance, removed
 NL2112  retired: inheritance, removed
+NL2346  retired: WP29 P1's strict rule that a parallel body may not allocate at all; a body's allocations are recycled per element since, and what is refused instead is NL2351 (the arena) and NL2352 (an allocation that escapes), pinned by tests/cases/reject_par_arena and reject_par_alloc_escapes
 NL2123  retired: the `case` label rule before WP23 admitted an enum member; the live one is NL2284
 NL2132  retired: inheritance, removed
 NL2154  retired: `super(...)`, removed with inheritance

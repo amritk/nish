@@ -22,6 +22,12 @@
 //                       tolerance; with --update, rewrite the baseline (a PR that
 //                       does must say why). --runs N repeats each run (default 1)
 //
+// The data-parallel kernels (bench/par_*.ts) are not twins: each is one Nish
+// binary run twice, as the loop (`seq`) and as `parallelMapInto` (`par`), and
+// the two runs must print the same checksum. They run with the rest, or when
+// `--only` names one (`par` names all four), and are left out of
+// --instructions: see bench/README.md.
+//
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
 // are compared token by token; numeric tokens must agree to 1e-9 relative so
 // that `%.17g`, Rust's `{}`, Go's `%v` and Nish's JavaScript-style
@@ -79,6 +85,17 @@ const AWFY = [
   { name: "Storage", inner: 1000 },
 ];
 const AWFY_ITERATIONS = 30;
+
+/**
+ * The wp29 P1 kernels in bench/par_*.ts: one binary each, timed as the loop
+ * (`seq`) and as `parallelMapInto` (`par`) on every core the machine has.
+ */
+const PARALLEL = [
+  { name: "par_compute", what: "64 square roots per element, 2^21 elements (f64)" },
+  { name: "par_alloc", what: "a string formatted and summed per element, 2^22 elements; the body allocates (NL9012)" },
+  { name: "par_nbody", what: "n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step" },
+  { name: "par_short", what: "an 8-element map called 2^20 times, each call fed by the last" },
+];
 const AWFY_KEPT = 20;
 
 /** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
@@ -279,9 +296,9 @@ function build(bench) {
 // ---- Run and compare ------------------------------------------------------------------
 
 /** Run once; returns { ms, stdout }. Exit status other than 0 is a failure. */
-function timeOnce(exe) {
+function timeOnce(exe, args = []) {
   const t0 = process.hrtime.bigint();
-  const r = spawnSync(exe, [], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const r = spawnSync(exe, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   if (r.status !== 0) {
     console.error(`${exe} exited with ${r.status}\n${r.stderr}`);
@@ -291,12 +308,34 @@ function timeOnce(exe) {
 }
 
 /** Peak resident set in KB (see bench/rss.c), or null when the helper is unavailable. */
-function peakRssKb(exe) {
+function peakRssKb(exe, args = []) {
   if (!RSS_HELPER) return null;
-  const r = spawnSync(RSS_HELPER, [exe], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  const r = spawnSync(RSS_HELPER, [exe, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const m = r.stdout.trim();
   return r.status === 0 && /^\d+$/.test(m) ? Number(m) : null;
 }
+
+/**
+ * `exe args` run `--warmup` times and then `--runs` times (once under
+ * `--validate`): { min, median } of the timed runs in ms, the peak RSS of one
+ * more run (null under `--validate`), and the last run's stdout.
+ */
+const timeRuns = (exe, args = []) => {
+  const times = [];
+  let stdout = "";
+  const total = opts.validate ? 1 : opts.warmup + opts.runs;
+  for (let i = 0; i < total; i++) {
+    const r = timeOnce(exe, args);
+    stdout = r.stdout;
+    if (i >= opts.warmup || opts.validate) times.push(r.ms);
+  }
+  return {
+    min: Math.min(...times),
+    median: median(times),
+    rss: opts.validate ? null : peakRssKb(exe, args),
+    stdout,
+  };
+};
 
 /** Token-wise comparison; numbers agree when within 1e-9 relative (or 1e-12 absolute). */
 function sameOutput(a, b) {
@@ -536,7 +575,9 @@ if (opts.instructions) process.exit(runInstructions());
 
 fs.mkdirSync(srcDir, { recursive: true });
 const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name));
-if (opts.only) for (const name of opts.only) if (name !== "awfy" && !BENCHMARKS.some((b) => b.name === name)) fail(`unknown benchmark \`${name}\``);
+const selectedParallel = PARALLEL.filter((b) => !opts.only || opts.only.has(b.name) || opts.only.has("par"));
+const known = (name) => name === "awfy" || name === "par" || BENCHMARKS.some((b) => b.name === name) || PARALLEL.some((b) => b.name === name);
+if (opts.only) for (const name of opts.only) if (!known(name)) fail(`unknown benchmark \`${name}\``);
 
 /**
  * The AWFY ports: build the harness checked, the compiler's default, then run
@@ -569,8 +610,40 @@ const runAwfy = () => {
 };
 if (opts.only?.has("awfy")) {
   runAwfy();
-  if (selected.length === 0) process.exit(0);
+  if (selected.length === 0 && selectedParallel.length === 0) process.exit(0);
 }
+
+/**
+ * The data-parallel kernels: build each once, run it as the loop and as the
+ * map, and require the same checksum from both. The speedup is the loop's
+ * minimum over the map's. Nothing is compared across languages, so the C
+ * reference the table above uses has no part here.
+ */
+const runParallel = () => {
+  const rows = [];
+  let disagree = 0;
+  for (const bench of selectedParallel) {
+    process.stderr.write(`${bench.name}: building`);
+    const ts = prepare(`${bench.name}.ts`, opts.sizes.get(bench.name));
+    const exe = path.join(outDir, bench.name);
+    const args = [path.relative(root, ts), "--link", path.relative(root, exe), "--profile", "speed"];
+    run(nishc.cmd, [...nishc.prefix, ...args], bench.name);
+    process.stderr.write(" ok; running");
+    const modes = { seq: timeRuns(exe, ["seq"]), par: timeRuns(exe, ["par"]) };
+    if (!sameOutput(modes.seq.stdout, modes.par.stdout)) {
+      disagree++;
+      console.error(`\nCHECKSUM MISMATCH ${bench.name}:\n--- seq\n${modes.seq.stdout}--- par\n${modes.par.stdout}`);
+    }
+    rows.push({ bench, cmd: `nish ${args.join(" ")}`, ...modes });
+    process.stderr.write("\n");
+  }
+  if (disagree > 0) {
+    console.error(`${disagree} data-parallel kernel(s) print different checksums as the loop and as the map`);
+    process.exit(1);
+  }
+  return rows;
+};
+const parallelRows = runParallel();
 
 const results = []; // { bench, variants: [{ ...variant, min, median, bytes, rss, stdout }], reference }
 let mismatches = 0;
@@ -580,27 +653,13 @@ for (const bench of selected) {
   process.stderr.write(` ok; running`);
   const reference = timeOnce(variants.find((v) => v.id === "c").exe).stdout;
   for (const v of variants) {
-    const times = [];
-    let stdout = "";
-    const total = opts.validate ? 1 : opts.warmup + opts.runs;
-    for (let i = 0; i < total; i++) {
-      const r = timeOnce(v.exe);
-      stdout = r.stdout;
-      if (i >= opts.warmup || opts.validate) times.push(r.ms);
-    }
-    const agrees = sameOutput(stdout, reference);
+    const timed = timeRuns(v.exe);
+    const agrees = sameOutput(timed.stdout, reference);
     if (!agrees) {
       mismatches++;
-      console.error(`\nCHECKSUM MISMATCH ${bench.name}/${v.id}:\n--- C\n${reference}--- ${v.id}\n${stdout}`);
+      console.error(`\nCHECKSUM MISMATCH ${bench.name}/${v.id}:\n--- C\n${reference}--- ${v.id}\n${timed.stdout}`);
     }
-    Object.assign(v, {
-      min: Math.min(...times),
-      median: median(times),
-      bytes: fs.statSync(v.exe).size,
-      rss: opts.validate ? null : peakRssKb(v.exe),
-      stdout,
-      agrees,
-    });
+    Object.assign(v, { ...timed, bytes: fs.statSync(v.exe).size, agrees });
     process.stderr.write(".");
   }
   results.push({ bench, variants, reference });
@@ -615,6 +674,7 @@ if (opts.validate) {
   }
   console.log(`checksums agree: ${n} binaries over ${results.length} benchmark(s)${RUSTC ? "" : " (Rust skipped)"}${GO ? "" : " (Go skipped)"}`);
   for (const r of results) console.log(`  ${r.bench.name}: ${r.reference.trim().split("\n").join(" ")}  [${r.variants.map((v) => v.id).join(", ")}]`);
+  for (const r of parallelRows) console.log(`  ${r.bench.name}: ${r.seq.stdout.trim().split("\n").join(" ")}  [seq, par]`);
   process.exit(0);
 }
 
@@ -709,9 +769,26 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
   lines.push("", "Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String building holds every intermediate string until exit: each `join` returns its result, so it escapes and the automatic arena scopes (WP6) cannot reclaim it; per-call-site reclamation of a returned temporary is the open item in `docs/wp9-optimisation.md`.", "");
 }
 
+if (parallelRows.length > 0) {
+  lines.push("## Data parallelism (ms, min / median)", "");
+  lines.push(
+    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par_*.ts\`, and wp29 §8a reads the numbers.`,
+    ""
+  );
+  lines.push("| Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |", "| --- | --- | ---: | ---: | ---: | ---: |");
+  for (const r of parallelRows) {
+    const rss = r.seq.rss !== null && r.par.rss !== null ? `${r.seq.rss.toLocaleString("en-US")} / ${r.par.rss.toLocaleString("en-US")}` : "";
+    lines.push(
+      `| ${r.bench.name} | ${r.bench.what} | ${fmt(r.seq.min)} / ${fmt(r.seq.median)} | ${fmt(r.par.min)} / ${fmt(r.par.median)} | ${(r.seq.min / r.par.min).toFixed(2)}x | ${rss} |`
+    );
+  }
+  lines.push("");
+}
+
 lines.push("## Checksums", "");
 lines.push("Every binary of a benchmark printed the same output (numeric tokens compared to 1e-9 relative):", "");
 for (const r of results) lines.push(`- **${r.bench.name}** (${r.bench.what}): \`${r.reference.trim().split("\n").join(" ")}\``);
+for (const r of parallelRows) lines.push(`- **${r.bench.name}** (loop and map): \`${r.seq.stdout.trim().split("\n").join(" ")}\``);
 lines.push("");
 
 lines.push("## Commands", "");
@@ -720,6 +797,9 @@ for (const r of results) {
   lines.push(`### ${r.bench.name}`, "", "```");
   for (const v of r.variants) lines.push(v.cmd);
   lines.push("```", "");
+}
+for (const r of parallelRows) {
+  lines.push(`### ${r.bench.name}`, "", "```", r.cmd, "```", "");
 }
 lines.push("Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols`, plus `-C target-cpu=native` for the native column. Go has no optimisation level to choose: `-trimpath` and `-ldflags=-s -w` only strip the binary. `nish --link` runs `scripts/build.sh --profile speed` (`clang -O3 -flto` with section GC and stripping; see the README) over the module and `runtime/runtime.c`.", "");
 
@@ -734,6 +814,9 @@ for (const r of results) {
     return (v ? `${fmt(v.min)}/${fmt(v.median)}` : "-").padStart(18);
   };
   console.log(`${r.bench.name.padEnd(10)} ${columns.map(([id]) => cell(id)).join("")}${ratios.map(([id]) => (ratio(r, id) || "-").padStart(20)).join("")}`);
+}
+for (const r of parallelRows) {
+  console.log(`${r.bench.name.padEnd(12)} loop ${fmt(r.seq.min)}/${fmt(r.seq.median)}  map ${fmt(r.par.min)}/${fmt(r.par.median)}  ${(r.seq.min / r.par.min).toFixed(2)}x`);
 }
 console.log(`\nwrote ${path.relative(root, opts.out)}`);
 if (mismatches) {

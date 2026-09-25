@@ -14,10 +14,16 @@
 //     own sequential loop writes `dst[i]`, so it is always a shared write.
 //     The intrinsic performs every store, into slots the partitioner has made
 //     disjoint, so a body that writes nothing cannot race with anything.
-//   - **The body does not allocate.** A worker's arena is its own under
-//     `--threads` and is freed when its thread exits, so nothing a body
-//     allocates may outlive its element. P1 refuses every allocation; stage 4
-//     relaxes this rule alone (`allocationMessage`), which is why it is one.
+//   - **What the body allocates dies with its element.** A worker's arena is
+//     its own under `--threads` and is freed when its thread exits, so nothing
+//     a body allocates may outlive its element — and so it does not have to
+//     live even that long: a body that allocates gets an arena scope of its
+//     own (`scopeParallelBodies` in `self/attributes.ts`), and each element
+//     gives its temporaries back before the next one starts. That needs the
+//     escape analysis to see every allocation die (`escapeMessage`) and the
+//     body to leave the arena alone (`arenaMessage`); what is left is legal,
+//     and costs a mark and a release per element, which is what NL9012 says
+//     (`allocationWarning`).
 //   - **`dst` is not reachable from an element of `src`.** Purity is not
 //     enough: a body that only reads can still read `dst` through its argument
 //     (`T = Row { cells: f64[] }` with a `f64[]` `dst`) while another thread
@@ -31,20 +37,34 @@
 //     fold only when both hold. An arrow whose body is one operator on its two
 //     parameters is read; a named function is opaque, and the obligation is
 //     written in docs/LANGUAGE.md instead.
+//
+// And one thing that is not a rule: how finely a map is divided. That is sized
+// from a static estimate of what one element costs (`mapGrain`), so a region
+// is only divided once each thread's share is worth a thread.
 
-import { FactsTable, FunctionFacts } from "./attributes";
+import { FactsTable, FunctionFacts, stepOf } from "./attributes";
 import { CLI, STD_PREFIX } from "./branding";
 import { isScalarArgument } from "./escape";
+import { isTemplateExpression, unwrapParens } from "./emit_util";
 import {
+  N_ARRAY,
+  N_ARROW,
   N_BLOCK,
+  N_CALL,
+  N_DO,
   N_FALSE,
+  N_FOR,
+  N_FOR_OF,
   N_IDENT,
+  N_NEW,
   N_NUMBER,
-  N_PAREN,
+  N_OBJECT,
   N_RETURN,
   N_TRUE,
   N_UNARY,
   N_BINARY,
+  N_VAR,
+  N_WHILE,
   Node,
 } from "./nodes";
 import {
@@ -94,6 +114,12 @@ export const parallelRole = (template: TemplateInfo): i32 => {
 export const parallelRoleOf = (sig: FunctionSig): i32 => {
   const instance = sig.instance;
   return instance === null ? PAR_NONE : instance.parallel;
+};
+
+/** The body a `parallelMapInto` or `parallelReduce` instance runs per element: its one function argument. */
+export const parallelBodyOf = (sig: FunctionSig): FunctionSig | null => {
+  const instance = sig.instance;
+  return instance === null || instance.functionArgs.length !== 1 ? null : instance.functionArgs[0];
 };
 
 /** Whether `sig` is an instance of `parallelMapInto` or `parallelReduce`: one whose region the emitter builds. */
@@ -159,17 +185,85 @@ export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: Fac
 };
 
 /**
- * P1's allocation rule, strict: the body allocates at all, itself or through a
- * callee. Kept apart from the others because it is the one stage 4 relaxes.
+ * Whether the allocations of a body with facts `f` can be given back after
+ * every element, which is what makes a body that allocates legal. Four things
+ * have to hold, and they are the ones the callee-scope rule in
+ * `self/attributes.ts` asks for (`settleCalleeScopes`), for the same reasons:
+ *
+ *   - `contained`: nothing allocated during the call is reachable once it
+ *     returns, except through the result;
+ *   - `returnsScalar`: and the result is not a pointer, so nothing is;
+ *   - `!usesArenaControl`: nothing in the call rewound the arena, so the mark
+ *     taken on entry still names where the element started;
+ *   - `!readsArenaState`: nothing in the call reads the bump position, whose
+ *     answer would depend on which thread's arena the element ran in.
  */
-export const allocationMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+export const recyclesPerElement = (f: FunctionFacts): boolean =>
+  f.contained && f.returnsScalar && !f.usesArenaControl && !f.readsArenaState;
+
+/**
+ * The body reads or moves the arena. Every thread has an arena of its own, so
+ * `Arena.used()` would answer differently depending on which thread ran the
+ * element, and a body that rewinds the arena could rewind past what the
+ * element scope is about to release.
+ */
+export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+  const own: FunctionFacts | null = facts.get(fn.name);
+  if (own === null || (!own.readsArenaState && !own.usesArenaControl)) {
+    return "";
+  }
+  return (
+    `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
+    "each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`"
+  );
+};
+
+/**
+ * The body allocates and the escape analysis cannot see every allocation die
+ * before it returns, so the scope that gives an element's memory back after
+ * it could free something still in use. The analysis stops following a value
+ * once it is stored into memory, so that is what this usually means, and the
+ * site is named when the function's own allocation is the one that escapes.
+ */
+export const escapeMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+  const own: FunctionFacts | null = facts.get(fn.name);
+  if (own === null || !own.allocates || own.contained) {
+    return "";
+  }
+  let where = "";
+  const site = own.escapeSite;
+  if (site !== null) {
+    const at = positionIn(fn, site);
+    where = at.length > 0 ? ` at ${at}` : "";
+  }
+  return (
+    `\`${fn.sourceName}\` allocates${where} and stores the allocation into memory, and \`${intrinsicName(sig)}\` ` +
+    "releases what a body allocates after every element: a parallel body may allocate only temporaries it drops " +
+    "before it returns, and this analysis stops following a value once it is stored"
+  );
+};
+
+/**
+ * NL9012, wp29 §8a: a legal body that allocates. Each element pays for its
+ * allocations and for the mark and release around it, which a body computing
+ * over what it was handed does not, and the fixpoint can see that before the
+ * program runs. `type` is the body's result type.
+ */
+export const allocationWarning = (
+  table: TypeTable,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  type: i32,
+  facts: FactsTable
+): string => {
   const own: FunctionFacts | null = facts.get(fn.name);
   if (own === null || !own.allocates) {
     return "";
   }
   return (
-    `\`${fn.sourceName}\` allocates, and \`${intrinsicName(sig)}\` runs it on threads whose arenas are freed when ` +
-    "they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)"
+    `the body of this \`${intrinsicName(sig)}\` allocates per element: \`${fn.sourceName}\` answers ` +
+    `\`${table.typeName(type)}\` but allocates on every call, so each thread marks and releases its arena around ` +
+    "every element. Compute the answer without building a string, an array or an object to save both"
   );
 };
 
@@ -267,9 +361,6 @@ export const reachesDstMessage = (
   );
 };
 
-/** `(expr)` as the expression inside every pair of parentheses. */
-const unparen = (node: Node): Node => (node.kind === N_PAREN ? unparen(node.children[0]) : node);
-
 /**
  * The operator an arrow's whole body applies to its two parameters, in either
  * order, or "" when the body is anything else: a named function, a block with
@@ -286,12 +377,12 @@ const combiningOperator = (fn: FunctionSig): string => {
     }
     body = body.children[0].children[0];
   }
-  body = unparen(body);
+  body = unwrapParens(body);
   if (body.kind !== N_BINARY) {
     return "";
   }
-  const left = unparen(body.children[0]);
-  const right = unparen(body.children[1]);
+  const left = unwrapParens(body.children[0]);
+  const right = unwrapParens(body.children[1]);
   if (left.kind !== N_IDENT || right.kind !== N_IDENT) {
     return "";
   }
@@ -331,7 +422,7 @@ const identityOf = (op: string): string => {
  * checker cannot see is one it cannot hold to the rule.
  */
 const isLiteral = (node: Node, want: string): boolean => {
-  const e = unparen(node);
+  const e = unwrapParens(node);
   if (want === "true") {
     return e.kind === N_TRUE;
   }
@@ -339,7 +430,7 @@ const isLiteral = (node: Node, want: string): boolean => {
     return e.kind === N_FALSE;
   }
   if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
-    const operand = unparen(e.children[0]);
+    const operand = unwrapParens(e.children[0]);
     return operand.kind === N_NUMBER && want === "0" && Number(operand.text) === 0;
   }
   return e.kind === N_NUMBER && Number(e.text) === Number(want);
@@ -377,4 +468,122 @@ export const reduceMessage = (
     `\`parallelReduce\` folds every block from its identity, and the identity of \`${op}\` is \`${want}\`, not ` +
     `\`${identityText}\`: any other value would be counted once per block`
   );
+};
+
+// ---- The grain ---------------------------------------------------------------------------
+//
+// A map region is divided into at most one chunk per `grain` elements, so the
+// grain decides whether a map is worth threads at all. A region divided four
+// ways costs about 125 µs of `pthread_create` and join (docs/wp20-threads.md
+// §8e), and it needs about a millisecond of work in each chunk before that is
+// under a tenth of the chunk. How many elements make a millisecond depends on
+// the body, so the grain is that target over an estimate of one element:
+//
+//     grain = REGION_COST / cost(f), which is in [1, REGION_COST]
+//
+// The estimate is read off the body's syntax, in units of roughly one simple
+// operation, and `REGION_COST` was set by measurement rather than by what a
+// unit is worth: the cheapest body there is has to win at two chunks
+// (docs/wp29-thread-surface.md §8a has the calibration). It is deliberately
+// crude, and it errs both ways. A callee counts as a call and not as its body,
+// so work hidden behind a call is estimated cheap and divided too little. A
+// loop whose trip count the header does not state counts `DEFAULT_TRIPS`, which
+// overestimates a loop over a short array; that costs threads only once the
+// estimate reaches `REGION_COST` over the length, which for a map of eight
+// elements takes three such loops nested, or two around a hundred operations.
+
+/**
+ * The work, in estimate units, that one chunk of a map region should carry:
+ * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
+ * loop it replaces (2^20 lost to it by 12%; 2^22 wins by 1.54x).
+ */
+const REGION_COST: i32 = 4194304;
+
+/** One call: the jump, the frame and the return, beyond the arguments. */
+const CALL_COST: i32 = 4;
+
+/** One arena allocation: the bump and its initialisation, or formatting a number into a string. */
+const ALLOC_COST: i32 = 32;
+
+/** The iterations a loop is assumed to run when its bound is not a literal. */
+const DEFAULT_TRIPS: i32 = 64;
+
+/** `a * b`, saturated at `REGION_COST`: nothing above it changes the grain. */
+const scaled = (a: i32, b: i32): i32 => {
+  if (a <= 0 || b <= 0) {
+    return 0;
+  }
+  return a >= REGION_COST / b ? REGION_COST : a * b;
+};
+
+/** `a + b`, saturated at `REGION_COST`. */
+const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a + b);
+
+/**
+ * How many times the loop `node` runs its body, when its header says so
+ * outright — `for (let i = A; i < B; i += C)` with `A`, `B` and `C` literals
+ * (`<=` and `i++` too) — and `DEFAULT_TRIPS` for anything else. A `break` is
+ * not looked for.
+ */
+const tripsOf = (node: Node): i32 => {
+  if (node.kind !== N_FOR || node.children.length < 3 || node.children[0].kind !== N_VAR) {
+    return DEFAULT_TRIPS;
+  }
+  const decls = node.children[0].children[0];
+  if (decls.children.length !== 1 || decls.children[0].children.length < 3) {
+    return DEFAULT_TRIPS;
+  }
+  const name = decls.children[0].children[0].text;
+  const first = unwrapParens(decls.children[0].children[2]);
+  const cond = unwrapParens(node.children[1]);
+  if (first.kind !== N_NUMBER || cond.kind !== N_BINARY || cond.children.length < 2) {
+    return DEFAULT_TRIPS;
+  }
+  const iv = unwrapParens(cond.children[0]);
+  const bound = unwrapParens(cond.children[1]);
+  const step = stepOf(unwrapParens(node.children[2]), name);
+  if (iv.kind !== N_IDENT || iv.text !== name || bound.kind !== N_NUMBER || step <= 0) {
+    return DEFAULT_TRIPS;
+  }
+  if (cond.text !== "<" && cond.text !== "<=") {
+    return DEFAULT_TRIPS;
+  }
+  const span = Number(bound.text) - Number(first.text) + (cond.text === "<=" ? 1.0 : 0.0);
+  const trips = Math.ceil(span / toF64(step));
+  if (trips < 1.0) {
+    return 1;
+  }
+  return trips >= toF64(REGION_COST) ? REGION_COST : toI32(trips);
+};
+
+/** The estimate for `node` and everything under it. */
+const costOf = (node: Node): i32 => {
+  // A nested arrow is lifted into a function of its own and runs only when called.
+  if (node.kind === N_ARROW) {
+    return 0;
+  }
+  let own = 1;
+  if (node.kind === N_CALL) {
+    own = CALL_COST;
+  } else if (node.kind === N_NEW || node.kind === N_OBJECT || node.kind === N_ARRAY || isTemplateExpression(node)) {
+    own = ALLOC_COST;
+  }
+  let inner = 0;
+  for (const child of node.children) {
+    inner = summed(inner, costOf(child));
+  }
+  if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
+    inner = scaled(inner, tripsOf(node));
+  }
+  return summed(own, inner);
+};
+
+/**
+ * The grain of a map whose body is `fn`: `REGION_COST` over its estimate. The
+ * estimate is at least 1 and saturates at `REGION_COST`, so the grain is in
+ * `[1, REGION_COST]` without a clamp of its own.
+ */
+export const mapGrain = (fn: FunctionSig): i32 => {
+  const body = fn.body();
+  return body === null ? REGION_COST : REGION_COST / costOf(body);
 };

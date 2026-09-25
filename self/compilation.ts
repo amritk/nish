@@ -89,7 +89,10 @@ import {
 } from "./manifest";
 import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
 import {
-  allocationMessage,
+  allocationWarning,
+  arenaMessage,
+  escapeMessage,
+  parallelBodyOf,
   reachesDstMessage,
   reduceMessage,
   resultMessage,
@@ -866,7 +869,8 @@ export class Compilation {
    * rules that make its region safe on several threads (`self/parallel.ts`).
    * They ask the whole-program facts about the body, so they run here, after
    * the fixpoint `reportArenaLoops` has already paid for, and each refusal is
-   * reported at the call that asked for the region.
+   * reported at the call that asked for the region. A call the rules admit
+   * whose body allocates gets NL9012 there instead (`allocationWarning`).
    */
   checkParallel(): void {
     const facts = this.analyze();
@@ -875,10 +879,10 @@ export class Compilation {
       for (const call of program.parallelCalls) {
         const sig = call.sig;
         const instance = sig.instance;
-        if (instance === null || instance.functionArgs.length !== 1) {
+        const fn = parallelBodyOf(sig);
+        if (instance === null || fn === null) {
           continue;
         }
-        const fn = instance.functionArgs[0];
         // `U` for a map, `T` for a reduce: the last type argument either way.
         const result = instance.typeArgs[instance.typeArgs.length - 1];
         const args = call.node.children[1].children;
@@ -887,12 +891,22 @@ export class Compilation {
         messages.push(resultMessage(this.table, sig, fn, result));
         messages.push(reachesDstMessage(this.table, program, sig, fn));
         messages.push(sharedWriteMessage(sig, fn, facts));
-        messages.push(allocationMessage(sig, fn, facts));
+        messages.push(arenaMessage(sig, fn, facts));
+        messages.push(escapeMessage(sig, fn, facts));
         messages.push(reduceMessage(sig, fn, identity, program.source.text.substring(identity.start, identity.end)));
+        let refused = false;
         for (const message of messages) {
           if (message.length > 0) {
             this.sink.report(program.source, call.node.start, call.node.end, message);
+            refused = true;
           }
+        }
+        // A body the rules admit may still allocate, recycled per element
+        // (`scopeParallelBodies`); that costs every element, and it is said once
+        // the call is known to compile.
+        const warning = allocationWarning(this.table, sig, fn, result, facts);
+        if (!refused && warning.length > 0) {
+          this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning);
         }
       }
     }
