@@ -1,0 +1,23 @@
+module tests/cases/dump_shared_write_field.ts (entry)
+struct Counter (class) size=4 align=4
+  field count: i32 index=0 offset=0
+  constructor -> @Counter.constructor
+function Counter.constructor(this: Counter): void -> @Counter.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function bump(c: Counter, by: i32): void -> @bump
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 13:3
+  escaping: by
+  pointer c: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function run(n: i32): i32 -> @run [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via bump
+  escaping: n
+  calls: Counter.constructor bump
+  stackSites=1 stackLocals=1
+  local 17:9 c: Counter (const)
+  callee 17:13 new Counter -> @Counter.constructor
+  callee 18:3 bump -> @bump

@@ -74,7 +74,13 @@ const sortedStrings = (set: StringSet): string[] => {
  * does not return a struct, because `checked_oracle.js` compares these lines
  * byte for byte like all the others.
  */
-const factsText = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out: string[]): void => {
+const factsText = (
+  source: SourceFile,
+  table: TypeTable,
+  sig: FunctionSig,
+  facts: FunctionFacts,
+  out: string[]
+): void => {
   let effect = "none";
   if (facts.effect === EFFECT_READ) {
     effect = "read";
@@ -92,6 +98,7 @@ const factsText = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out
     `allocates=${flag(facts.allocates)}`,
     `arenaScope=${flag(facts.arenaScope)}`,
     `freshThis=${flag(facts.freshThis)}`,
+    `sharedWrite=${flag(facts.sharedWrite)}`,
   ];
   // stage0 leaves the field undefined unless the return type has a size to
   // dereference, which is a struct or a `Result` (`structSize` in
@@ -102,6 +109,17 @@ const factsText = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out
     flags.push(`returnDeref=${facts.returnDeref}`);
   }
   out.push(`  facts: ${flags.join(" ")}`);
+  // WP29 P1: what denies the function purity, which is what a data-parallel
+  // call will name when it refuses a body. A foreign function has neither a
+  // site nor a callee, only a C body nobody looked into.
+  const site = facts.writeSite;
+  if (site !== null) {
+    out.push(`  sharedWrite: ${position(source, site.start)}`);
+  } else if (facts.writeVia.length > 0) {
+    out.push(`  sharedWrite: via ${facts.writeVia}`);
+  } else if (facts.sharedWrite) {
+    out.push("  sharedWrite: foreign");
+  }
   const escaping = sortedStrings(facts.escaping);
   if (escaping.length > 0) {
     out.push(`  escaping: ${escaping.join(" ")}`);
@@ -346,7 +364,7 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
     out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`);
     const f = facts.get(sig.name);
     if (f !== null) {
-      factsText(table, sig, f, out);
+      factsText(source, table, sig, f, out);
     }
     if (instance !== null) {
       program.enterInstance(instance);
