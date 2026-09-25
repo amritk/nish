@@ -481,42 +481,48 @@ step below is done by hand.
    version dates the claim, so the workflow change and the file change land
    together and each release is judged against what it was due to attach.
 
-4. **npm publish is manual, and is now blocked on nothing but a person.** The
-   name was settled on 2026-09-19 (`@amritk/nish`, see "The npm name" below)
-   and the installer landed on 2026-09-20, so both of the things this step
-   used to wait on are done. It is **N+1 packages**, and the order matters:
+4. **npm publish is the `npm` job at the end of `release.yml`**, by npm's
+   trusted publishing, since 0.10.0 — the first version on the registry, which
+   was published by hand because trust can only be set on a package that
+   exists. It is **N+1 packages**, and the order matters:
 
-   ```bash
-   git checkout v0.4.0
-   npm ci && npm run build
-   # the platform packages first, then the one that depends on them
-   while IFS= read -r pkg; do npm publish "$pkg" --provenance --access public; done \
-     < build/release/packages.txt
-   npm publish --access public                # prepublishOnly re-runs check/build/test
-   ```
+   - **Platform packages first, the main package last.** In this order a
+     failure half way leaves a registry where the main package does not yet
+     exist for that version, so nobody can install one whose binaries are
+     missing; the other order publishes a launcher that resolves nothing and
+     refuses on every machine that installs it until the rest are up. That is
+     the partial-publish failure mode the decision below priced, and the
+     ordering is the whole of the answer to it.
+   - **No token.** Each of the N+1 packages trusts `release.yml` in
+     `amritk/nish`, set once per package with
+     `npm trust github <pkg> --repo amritk/nish --file release.yml --allow-publish`
+     (npm 11.15.0 or later, and 2FA on the account). The job proves it is that
+     workflow with a short-lived OIDC token, so there is no `NPM_TOKEN` secret
+     to leak or rotate, and a provenance attestation is attached to every
+     version. It is the only job holding `id-token: write`, and it runs no
+     `npm ci`.
+   - **The bytes the release carries.** The job downloads the tarballs back
+     from the GitHub release rather than packing again, so what is on npm is
+     what is attached.
+   - **A failed publish is re-run, not repaired.** "Re-run failed jobs" re-runs
+     `npm` alone; it skips every version already on the registry and publishes
+     the rest, in the same order. Re-running `release` would stop at
+     `gh release create`, because the release already exists.
+   - **A new package is published by hand once.** A platform added to
+     `.github/seed-targets.json` brings a package that does not exist yet, and
+     trust cannot be set on it until it does. The job checks every package
+     before it publishes any and fails naming the two commands: publish that
+     tarball from the release with `npm publish <tarball> --access public`,
+     then `npm trust github` it, then re-run the job.
 
-   **Platform packages first.** In this order a failure half way leaves a
-   registry where the main package does not yet exist for that version, so
-   nobody can install one whose binaries are missing; the other order publishes
-   a launcher that resolves nothing and refuses on every machine that installs
-   it until the loop is finished. That is the partial-publish
-   failure mode the decision below priced, and the ordering is the whole of the
-   answer to it.
+   `--access public` is not optional: a scoped package is private by default
+   and a private publish on a free account fails at the registry rather than
+   in the workflow.
 
-   To automate it, add an `NPM_TOKEN` repository secret and uncomment the
-   `Publish to npm` step at the end of `release.yml` (it uses
-   `NODE_AUTH_TOKEN` and `--provenance`, and carries the same loop in the same
-   order). It stays commented until somebody turns it on deliberately: a
-   publish cannot be taken back after 72 hours, and this one is N+1 packages
-   rather than one. `--access public` is not optional now that the name is
-   scoped: a scoped package is private by default and a private publish on a
-   free account fails at the registry rather than in the workflow.
-
-   Until a publish happens the release is the distribution, and it already
-   works: `release.yml` attaches the npm tarball, the four seed tarballs *and*
-   the four platform packages to every release, so `npm install -g` over the
-   pair for your machine installs exactly what `npm publish` would have
-   uploaded ([INSTALL.md](INSTALL.md), §2).
+   The release still attaches the npm tarball, the seed tarballs *and* the
+   platform packages, so a machine that cannot reach the registry can
+   `npm install -g` the pair for itself and get exactly what the registry
+   serves ([INSTALL.md](INSTALL.md), §2).
 
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
@@ -618,9 +624,9 @@ What it costs, stated rather than discovered later:
 
 - **`npm publish` needs `--access public`**, every time, because a scoped
   package is private by default and a private publish on a free account fails
-  at the registry rather than in the workflow. The commented-out publish step at
-  the end of `release.yml` already carries the flag; that is the whole of the
-  mitigation, and it is already written down.
+  at the registry rather than in the workflow. The `npm` job in `release.yml`
+  carries the flag; that is the whole of the mitigation, and it is already
+  written down.
 - **The install line and the command line are two different strings** —
   `npm install -g @amritk/nish`, then `nish`. Every README has to say so once.
 - **`npm pack` names the tarball `amritk-nish-<version>.tgz`**, not

@@ -36,8 +36,8 @@
 # that release's compiler for its own host and builds this one with it, the
 # same seed ci.yml's `bootstrap` job builds with (WP19 G3).
 #
-# Publishing to npm is deliberately NOT automated yet; see the commented step
-# at the end and docs/wp12-release.md.
+# The `npm` job at the end publishes the packages the release attached, by
+# npm's trusted publishing; see it and docs/wp12-release.md.
 #
 # Two ways in, because one of them does not work unattended. A tag pushed by a
 # workflow using the default GITHUB_TOKEN raises no `push` event -- that is
@@ -543,11 +543,10 @@ jobs:
           # the check are one list rather than two.
           assets=()
           while IFS= read -r path; do assets+=("$path"); done < build/release/assets.txt
-          # The platform packages are attached as well as published, for the
-          # same reason the npm tarball always has been: until a registry
-          # publish happens the release *is* the distribution, and a user who
-          # wants the native compiler without waiting for one can install the
-          # pair by hand (docs/INSTALL.md, §2).
+          # The platform packages are attached as well as published: the `npm`
+          # job below publishes these very files, downloaded back from this
+          # release, and a user who cannot reach the registry can still install
+          # the pair for their machine by hand (docs/INSTALL.md, §2).
           while IFS= read -r path; do assets+=("$path"); done < build/release/packages.txt
           gh release create "$GITHUB_REF_NAME" \
             "${{ steps.pack.outputs.tarball }}" \
@@ -556,27 +555,121 @@ jobs:
             --notes-file build/release/notes.md \
             --verify-tag
 
-      # npm publish stays manual, and is now the only step of the release it is
-      # not safe to automate without somebody deciding to: a publish cannot be
-      # taken back after 72 hours, and this one is N+1 packages rather than one.
+  # The registry half of the release: the N+1 packages `release` just attached,
+  # published by npm's trusted publishing. Each package trusts this workflow
+  # file in this repository (`npm trust github <pkg> --repo amritk/nish --file
+  # release.yml --allow-publish`), and the job proves it is that workflow with a
+  # short-lived OIDC token, so there is no NPM_TOKEN secret to leak or rotate.
+  #
+  # A job of its own rather than a step of `release`, for three reasons:
+  #
+  # - It is the only job that holds `id-token: write`, and it runs no `npm ci`,
+  #   so no third-party install code ever runs next to the token that publishes.
+  # - It publishes the bytes the GitHub release carries, downloaded back from
+  #   it, rather than a second pack: what is on npm is what is on the release.
+  # - A publish that fails half way is retried with "Re-run failed jobs", which
+  #   re-runs this job alone. Re-running `release` would stop at
+  #   `gh release create`, because the release already exists.
+  npm:
+    name: publish to npm
+    needs: [targets, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `registry-url`: that writes an .npmrc naming NODE_AUTH_TOKEN, and
+      # trusted publishing needs no token at all. npm exchanges the job's OIDC
+      # token for a publish credential itself, which needs npm 11.5.1 or later;
+      # Node 22 ships npm 10.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: npm new enough for trusted publishing
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+
+      - name: Download the packages the release attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/npm
+          gh release download "$GITHUB_REF_NAME" --pattern '*.tgz' --dir build/npm
+          ls -l build/npm
+
+      # The same derivation the `release` job's asset check makes, for the same
+      # reason: the platforms come from the matrix and the scope from
+      # package.json, so this file still names no platform. Platform packages
+      # first and the main package last, so a publish that fails half way leaves
+      # a registry where this version of the main package does not exist yet,
+      # and nobody can install a launcher whose binaries are missing.
+      - name: Publish order
+        env:
+          ROWS: ${{ needs.targets.outputs.rows }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          stem="$(node -p "require('./package.json').name.replace(/^@/, '').replace(/\//g, '-')")"
+          : > build/npm/order.txt
+          while read -r asset; do
+            [ -n "$asset" ] || continue
+            echo "build/npm/$stem-$asset-$version.tgz" >> build/npm/order.txt
+          done < <(printf '%s' "$ROWS" | jq -r '.[].asset')
+          echo "build/npm/$stem-$version.tgz" >> build/npm/order.txt
+          while IFS= read -r tgz; do
+            test -s "$tgz" || { echo "::error::$tgz is not on the $GITHUB_REF_NAME release"; exit 1; }
+          done < build/npm/order.txt
+          cat build/npm/order.txt
+
+      # Every package is asked about before any is published, so the one case
+      # this job cannot handle stops it before it has uploaded anything.
       #
-      # To automate it: create an npm automation token, store it as the
-      # NPM_TOKEN repository secret, add `id-token: write` under permissions
-      # for provenance, then uncomment:
+      # That case is a package that has never been published. Trust is set on a
+      # package, and a package exists only once something has published it, so
+      # the first version of every new package -- a platform added to
+      # .github/seed-targets.json, say -- is published by hand and then trusted.
+      # Without this check it fails as a bare 404 from the registry, part way
+      # through the list; with it, the error says what to do.
       #
-      # - name: Publish to npm
-      #   run: |
-      #     # The platform packages first, then the one that depends on them.
-      #     # In this order a failure half way leaves a registry where the main
-      #     # package does not yet exist, so nobody can install a version whose
-      #     # binaries are missing; the other order publishes a command that
-      #     # resolves nothing and refuses on every machine.
-      #     while IFS= read -r pkg; do
-      #       npm publish "$pkg" --provenance --access public
-      #     done < build/release/packages.txt
-      #     npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
-      #   env:
-      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # One lookup per package answers both questions. A package npm has never
+      # seen and a version it has not seen are both E404, so asking for the
+      # version alone could not tell a first publish from a routine one; any
+      # other failure is the registry or the network, and is fatal.
+      - name: Every package can be published from here
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          : > build/npm/todo.txt
+          while IFS= read -r tgz; do
+            name="$(tar -xzOf "$tgz" package/package.json | jq -r .name)"
+            if ! npm view "$name" versions --json > build/npm/versions.json 2> build/npm/view.err; then
+              if grep -q E404 build/npm/view.err; then
+                echo "::error::$name has never been published, so it cannot trust this workflow yet. Publish $(basename "$tgz") by hand with 'npm publish <tarball> --access public', run 'npm trust github $name --repo $GITHUB_REPOSITORY --file release.yml --allow-publish', then re-run this job."
+              else
+                cat build/npm/view.err
+                echo "::error::could not ask the registry about $name"
+              fi
+              exit 1
+            fi
+            if jq -e --arg v "$version" '[.] | flatten | index($v) != null' build/npm/versions.json > /dev/null; then
+              echo "$name@$version is already on the registry; skipping"
+            else
+              echo "$tgz" >> build/npm/todo.txt
+            fi
+          done < build/npm/order.txt
+
+      # Idempotent, so a re-run finishes what a failed run started: the step
+      # above left out every version already on the registry, and the order is
+      # still platforms first.
       #
-      # `--access public` is not optional: a scoped package is private by
-      # default and a private publish on a free account fails at the registry.
+      # `--access public` because a scoped package is private by default, and a
+      # private publish on a free account fails at the registry. Trusted
+      # publishing attaches a provenance attestation without being asked;
+      # `--provenance` says so where the command is read.
+      - name: Publish
+        run: |
+          while IFS= read -r tgz; do
+            npm publish "$tgz" --access public --provenance
+          done < build/npm/todo.txt
