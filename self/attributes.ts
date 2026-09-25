@@ -101,6 +101,7 @@ import {
   Node,
 } from "./nodes";
 import { Options } from "./options";
+import { isParallelEntry } from "./parallel";
 import { ParentTable } from "./parents";
 import {
   CheckedProgram,
@@ -1436,6 +1437,10 @@ export const collectFacts = (
   // call lowers to in `callees`, and because this has to hold in round 1:
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
+  if (isParallelEntry(sig)) {
+    markParallelEntry(facts);
+  }
+
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
   facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark");
 
@@ -1447,6 +1452,37 @@ export const collectFacts = (
   }
   facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn;
   return facts;
+};
+
+/**
+ * WP29 P1: the facts of a `parallelMapInto` or `parallelReduce` instance are
+ * its source walk's, plus what the region the emitter builds in place of one
+ * call does (`self/emit_parallel.ts`). The walk sees a direct call to the
+ * chunk loop with the parameters as arguments; the IR stores them into a
+ * context block and hands its address to `nish_parallel_range`, which passes
+ * it to other threads. So the runtime entry is a callee — it is a shared
+ * write and not `willreturn`, and the fixpoint carries both — and every
+ * parameter is treated as escaping, written through and captured:
+ *
+ *   - no `nocapture`, because the address is stored in memory another thread
+ *     reads, and whether that copy outlives the call is the partitioner's
+ *     join rather than anything this analysis can see;
+ *   - no `readonly`, because `dst` is written by those threads through the
+ *     copy, not through the parameter this function was handed.
+ *
+ * Both are claims LLVM would act on, and what each would buy is nothing: the
+ * instance is called once per region, and the loop inside it is the chunk
+ * function, whose own facts are unaffected.
+ */
+const markParallelEntry = (facts: FunctionFacts): void => {
+  facts.callees.add("nish_parallel_range");
+  for (const name of facts.paramNames) {
+    facts.escaping.add(name);
+  }
+  for (const pp of facts.pointerParams) {
+    pp.captured = true;
+    pp.writesThrough = true;
+  }
 };
 
 // ---- The fixpoint ------------------------------------------------------------------------

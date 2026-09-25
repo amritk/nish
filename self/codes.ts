@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 446;
+export const RULE_COUNT: i32 = 452;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -75,12 +75,20 @@ export const diagnosticRules = (): string[] => [
   "NL2039",
   "; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol",
   "NL3027",
+  "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src`",
+  "NL2347",
+  "`, which is not associative: `parallelReduce` folds each block from the identity and then combines the blocks, which is a left fold only for an associative operator",
+  "NL2349",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
+  "` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory",
+  "NL2348",
   "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
   "NL3028",
+  "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
+  "NL2346",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
   "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",
@@ -93,6 +101,8 @@ export const diagnosticRules = (): string[] => [
   "NL2334",
   "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
   "NL2284",
+  "` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result",
+  "NL2345",
   "Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)",
   "NL2276",
   "` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in ",
@@ -215,6 +225,8 @@ export const diagnosticRules = (): string[] => [
   "NL2342",
   "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
   "NL2135",
+  "`parallelReduce` folds every block from its identity, and the identity of `",
+  "NL2350",
   "attempt to compute with overflow in a constant: the result does not fit in ",
   "NL2175",
   "Empty array literal needs a type annotation, e.g. `const xs: number[] = []`",
