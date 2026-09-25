@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 532 programs, 12198 dump lines.
+# 533 programs, 12216 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -8689,6 +8689,25 @@ function Perm.swap(this: Perm, i: i32, j: i32): void -> @Perm.swap [exported met
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 10:11 tmp: i32 (const)
+program docs/cookbook/arr_header_field.ts
+module docs/cookbook/arr_header_field.ts (entry)
+struct Link (class) size=8 align=8
+  field next: Link | null index=0 offset=0 initialized
+struct Pile (class) size=8 align=8 exported
+  field tops: Link | null[] index=0 offset=0
+  constructor -> @Pile.constructor
+  method drop -> @Pile.drop
+function Pile.constructor(this: Pile): void -> @Pile.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Pile.drop(this: Pile): Link | null -> @Pile.drop [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 15:7
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 13:11 top: Link | null (const)
 program docs/cookbook/arr_index.ts
 module docs/cookbook/arr_index.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get
