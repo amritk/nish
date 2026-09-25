@@ -46,7 +46,7 @@ bounds.ok:
   %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4
   %7 = bitcast i8* %6 to i8**
   %8 = getelementptr inbounds i8*, i8** %7, i64 %1
-  %9 = load i8*, i8** %8, align 8, !alias.scope !4, !noalias !3
+  %9 = load i8*, i8** %8, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   ret i8* %9
 }
 
@@ -98,7 +98,7 @@ bounds.fail:
 bounds.ok:
   %22 = bitcast i8* %8 to i8**
   %23 = getelementptr inbounds i8*, i8** %22, i64 %20
-  %24 = load i8*, i8** %23, align 8, !alias.scope !4, !noalias !3
+  %24 = load i8*, i8** %23, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %25 = bitcast i8* %24 to i64*
   %26 = load i64, i64* %25, align 8
   %27 = trunc i64 %26 to i32
@@ -132,7 +132,7 @@ forof.body:
   %39 = load i8*, i8** %38, align 8, !alias.scope !3, !noalias !4
   %40 = bitcast i8* %39 to i8**
   %41 = getelementptr inbounds i8*, i8** %40, i64 %34
-  %42 = load i8*, i8** %41, align 8, !alias.scope !4, !noalias !3
+  %42 = load i8*, i8** %41, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store i8* %42, i8** %arg.addr, align 8
   %43 = load i32, i32* %sum.addr, align 4
   %44 = load i8*, i8** %arg.addr, align 8
@@ -191,3 +191,7 @@ attributes #4 = { nounwind willreturn readnone }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

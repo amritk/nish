@@ -103,16 +103,16 @@ entry:
   store i8* %10, i8** %11, align 8, !alias.scope !3, !noalias !4
   %12 = bitcast i8* %10 to %struct.Shape**
   %13 = getelementptr inbounds %struct.Shape*, %struct.Shape** %12, i64 0
-  store %struct.Shape* %5, %struct.Shape** %13, align 8, !alias.scope !4, !noalias !3
+  store %struct.Shape* %5, %struct.Shape** %13, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %14 = getelementptr inbounds %struct.Shape*, %struct.Shape** %12, i64 1
-  store %struct.Shape* %7, %struct.Shape** %14, align 8, !alias.scope !4, !noalias !3
+  store %struct.Shape* %7, %struct.Shape** %14, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %shapes.addr, align 8
   %15 = load %struct.nish_array*, %struct.nish_array** %shapes.addr, align 8
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
   %18 = bitcast i8* %17 to %struct.Shape**
   %19 = getelementptr inbounds %struct.Shape*, %struct.Shape** %18, i64 0
-  %20 = load %struct.Shape*, %struct.Shape** %19, align 8, !alias.scope !4, !noalias !3
+  %20 = load %struct.Shape*, %struct.Shape** %19, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %21 = call i32 @shift(%struct.Shape* %20, i32 5)
   %22 = call i8* @nish_str_from_i32(i32 %21)
   call void @nish_print(i8* %22)
@@ -131,7 +131,7 @@ bounds.ok:
   %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4
   %29 = bitcast i8* %28 to %struct.Shape**
   %30 = getelementptr inbounds %struct.Shape*, %struct.Shape** %29, i64 1
-  %31 = load %struct.Shape*, %struct.Shape** %30, align 8, !alias.scope !4, !noalias !3
+  %31 = load %struct.Shape*, %struct.Shape** %30, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %32 = call i32 @shift(%struct.Shape* %31, i32 5)
   %33 = call i8* @nish_str_from_i32(i32 %32)
   call void @nish_print(i8* %33)
@@ -171,3 +171,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

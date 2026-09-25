@@ -95,7 +95,7 @@ push.store:
   %17 = load i8*, i8** %16, align 8, !alias.scope !9, !noalias !10
   %18 = bitcast i8* %17 to %struct.Blob**
   %19 = getelementptr inbounds %struct.Blob*, %struct.Blob** %18, i64 %12
-  store %struct.Blob* %9, %struct.Blob** %19, align 8, !alias.scope !10, !noalias !9
+  store %struct.Blob* %9, %struct.Blob** %19, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %20 = add i64 %12, 1
   store i64 %20, i64* %11, align 8, !alias.scope !9, !noalias !10
   %21 = trunc i64 %20 to i32
@@ -139,7 +139,7 @@ bounds.ok:
   %8 = load i8*, i8** %7, align 8, !alias.scope !9, !noalias !10
   %9 = bitcast i8* %8 to %struct.Blob**
   %10 = getelementptr inbounds %struct.Blob*, %struct.Blob** %9, i64 999
-  %11 = load %struct.Blob*, %struct.Blob** %10, align 8, !alias.scope !10, !noalias !9
+  %11 = load %struct.Blob*, %struct.Blob** %10, align 8, !alias.scope !10, !noalias !9, !tbaa !12
   %12 = getelementptr inbounds %struct.Blob, %struct.Blob* %11, i32 0, i32 1
   %13 = load i32, i32* %12, align 4, !tbaa !5
   %14 = call i8* @nish_str_from_i32(i32 %13)
@@ -195,3 +195,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !8 = !{!"elements", !6}
 !9 = !{!7}
 !10 = !{!8}
+!11 = !{!"element ptr", !1, i64 0}
+!12 = !{!11, !11, i64 0}

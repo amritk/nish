@@ -167,7 +167,7 @@ bounds.fail:
 bounds.ok:
   %41 = bitcast i8* %31 to %struct.ArrayTree**
   %42 = getelementptr inbounds %struct.ArrayTree*, %struct.ArrayTree** %41, i64 %35
-  store %struct.ArrayTree* %37, %struct.ArrayTree** %42, align 8, !alias.scope !14, !noalias !13
+  store %struct.ArrayTree* %37, %struct.ArrayTree** %42, align 8, !alias.scope !14, !noalias !13, !tbaa !16
   br label %for.inc
 
 for.inc:
@@ -252,3 +252,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!"elements", !10}
 !13 = !{!11}
 !14 = !{!12}
+!15 = !{!"element ptr", !1, i64 0}
+!16 = !{!15, !15, i64 0}

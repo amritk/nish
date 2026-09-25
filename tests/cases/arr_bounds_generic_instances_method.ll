@@ -80,7 +80,7 @@ entry:
   store i8* %6, i8** %7, align 8, !alias.scope !11, !noalias !12
   %8 = bitcast i8* %6 to %struct.Box**
   %9 = getelementptr inbounds %struct.Box*, %struct.Box** %8, i64 0
-  store %struct.Box* %1, %struct.Box** %9, align 8, !alias.scope !12, !noalias !11
+  store %struct.Box* %1, %struct.Box** %9, align 8, !alias.scope !12, !noalias !11, !tbaa !14
   call void @Store$$Box.constructor(%struct.Store$$Box* %Store$$Box.obj, %struct.nish_array* %3)
   store %struct.Store$$Box* %Store$$Box.obj, %struct.Store$$Box** %boxes.addr, align 8
   %10 = load %struct.Store$$Box*, %struct.Store$$Box** %boxes.addr, align 8
@@ -100,11 +100,11 @@ entry:
   store i8* %19, i8** %20, align 8, !alias.scope !11, !noalias !12
   %21 = bitcast i8* %19 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 0
-  store i32 4, i32* %22, align 4, !alias.scope !12, !noalias !11
+  store i32 4, i32* %22, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %23 = getelementptr inbounds i32, i32* %21, i64 1
-  store i32 5, i32* %23, align 4, !alias.scope !12, !noalias !11
+  store i32 5, i32* %23, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %24 = getelementptr inbounds i32, i32* %21, i64 2
-  store i32 6, i32* %24, align 4, !alias.scope !12, !noalias !11
+  store i32 6, i32* %24, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %25 = getelementptr inbounds %struct.Rec, %struct.Rec* %14, i32 0, i32 0
   store %struct.nish_array* %16, %struct.nish_array** %25, align 8
   call void @H.constructor(%struct.H* %H.obj, %struct.Rec* %14)
@@ -122,11 +122,11 @@ entry:
   store i8* %32, i8** %33, align 8, !alias.scope !11, !noalias !12
   %34 = bitcast i8* %32 to i32*
   %35 = getelementptr inbounds i32, i32* %34, i64 0
-  store i32 1, i32* %35, align 4, !alias.scope !12, !noalias !11
+  store i32 1, i32* %35, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %36 = getelementptr inbounds i32, i32* %34, i64 1
-  store i32 2, i32* %36, align 4, !alias.scope !12, !noalias !11
+  store i32 2, i32* %36, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %37 = getelementptr inbounds i32, i32* %34, i64 2
-  store i32 3, i32* %37, align 4, !alias.scope !12, !noalias !11
+  store i32 3, i32* %37, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %38 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj, i32 0, i32 0
   store %struct.nish_array* %29, %struct.nish_array** %38, align 8
   %39 = call i8* @nish_alloc_struct(i64 24)
@@ -158,7 +158,7 @@ entry:
   store i8* %54, i8** %55, align 8, !alias.scope !11, !noalias !12
   %56 = bitcast i8* %54 to i32*
   %57 = getelementptr inbounds i32, i32* %56, i64 0
-  store i32 7, i32* %57, align 4, !alias.scope !12, !noalias !11
+  store i32 7, i32* %57, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %58 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj.1, i32 0, i32 0
   store %struct.nish_array* %51, %struct.nish_array** %58, align 8
   store %struct.Rec* %Rec.obj.1, %struct.Rec** %short.addr, align 8
@@ -191,7 +191,7 @@ bounds.ok:
 define internal void @Store$$Box.constructor(%struct.Store$$Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %rs) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Store$$Box, %struct.Store$$Box* %this, i32 0, i32 0
-  store %struct.nish_array* %rs, %struct.nish_array** %0, align 8, !tbaa !14
+  store %struct.nish_array* %rs, %struct.nish_array** %0, align 8, !tbaa !18
   ret void
 }
 
@@ -213,7 +213,7 @@ entry:
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 2
   %8 = load i8*, i8** %7, align 8, !alias.scope !11, !noalias !12
   %9 = getelementptr inbounds %struct.Store$$Box, %struct.Store$$Box* %this, i32 0, i32 0
-  %10 = load %struct.nish_array*, %struct.nish_array** %9, align 8, !tbaa !14
+  %10 = load %struct.nish_array*, %struct.nish_array** %9, align 8, !tbaa !18
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
   %12 = load i64, i64* %11, align 8, !alias.scope !11, !noalias !12
   %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
@@ -242,7 +242,7 @@ bounds.fail:
 bounds.ok:
   %21 = bitcast i8* %14 to %struct.Box**
   %22 = getelementptr inbounds %struct.Box*, %struct.Box** %21, i64 0
-  store %struct.Box* %x, %struct.Box** %22, align 8, !alias.scope !12, !noalias !11
+  store %struct.Box* %x, %struct.Box** %22, align 8, !alias.scope !12, !noalias !11, !tbaa !14
   br label %if.end
 
 if.end:
@@ -251,7 +251,7 @@ if.end:
   %25 = sext i32 %24 to i64
   %26 = bitcast i8* %8 to i32*
   %27 = getelementptr inbounds i32, i32* %26, i64 %25
-  %28 = load i32, i32* %27, align 4, !alias.scope !12, !noalias !11
+  %28 = load i32, i32* %27, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %29 = add nsw i32 %23, %28
   store i32 %29, i32* %t.addr, align 4
   %30 = load i32, i32* %i.addr, align 4
@@ -267,7 +267,7 @@ while.end:
 define internal void @Store$$Rec.constructor(%struct.Store$$Rec* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %rs) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Store$$Rec, %struct.Store$$Rec* %this, i32 0, i32 0
-  store %struct.nish_array* %rs, %struct.nish_array** %0, align 8, !tbaa !16
+  store %struct.nish_array* %rs, %struct.nish_array** %0, align 8, !tbaa !20
   ret void
 }
 
@@ -282,7 +282,7 @@ entry:
   %1 = load %struct.Rec*, %struct.Rec** %0, align 8, !tbaa !7
   store %struct.Rec* %1, %struct.Rec** %r.addr, align 8
   %2 = getelementptr inbounds %struct.Store$$Rec, %struct.Store$$Rec* %this, i32 0, i32 0
-  %3 = load %struct.nish_array*, %struct.nish_array** %2, align 8, !tbaa !16
+  %3 = load %struct.nish_array*, %struct.nish_array** %2, align 8, !tbaa !20
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
   %5 = load i64, i64* %4, align 8, !alias.scope !11, !noalias !12
   %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
@@ -342,7 +342,7 @@ bounds.ok.1:
   %33 = load i8*, i8** %32, align 8, !alias.scope !11, !noalias !12
   %34 = bitcast i8* %33 to i32*
   %35 = getelementptr inbounds i32, i32* %34, i64 %28
-  %36 = load i32, i32* %35, align 4, !alias.scope !12, !noalias !11
+  %36 = load i32, i32* %35, align 4, !alias.scope !12, !noalias !11, !tbaa !16
   %37 = add nsw i32 %23, %36
   store i32 %37, i32* %t.addr, align 4
   %38 = load i32, i32* %i.addr, align 4
@@ -381,7 +381,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !10 = !{!"elements", !8}
 !11 = !{!9}
 !12 = !{!10}
-!13 = !{!"Store$$Box", !5, i64 0}
-!14 = !{!13, !5, i64 0}
-!15 = !{!"Store$$Rec", !5, i64 0}
-!16 = !{!15, !5, i64 0}
+!13 = !{!"element ptr", !1, i64 0}
+!14 = !{!13, !13, i64 0}
+!15 = !{!"element i32", !1, i64 0}
+!16 = !{!15, !15, i64 0}
+!17 = !{!"Store$$Box", !5, i64 0}
+!18 = !{!17, !5, i64 0}
+!19 = !{!"Store$$Rec", !5, i64 0}
+!20 = !{!19, !5, i64 0}

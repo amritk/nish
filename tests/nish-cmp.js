@@ -1225,6 +1225,10 @@ const DECLARED = [
     changelog: "Give a function the arena scope when only its callees allocate",
     why: "a new program: `test` only calls allocating functions and gets the arena scope; its bounds checks are the reference compiler's",
   },
+  {
+    changelog: "Keep a field array's header live across element stores",
+    why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

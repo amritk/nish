@@ -28,7 +28,7 @@ forof.body:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to double*
   %7 = getelementptr inbounds double, double* %6, i64 %0
-  %8 = load double, double* %7, align 8, !alias.scope !4, !noalias !3
+  %8 = load double, double* %7, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store double %8, double* %x.addr, align 8
   %9 = load double, double* %total.addr, align 8
   %10 = load double, double* %x.addr, align 8
@@ -66,11 +66,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to double*
   %5 = getelementptr inbounds double, double* %4, i64 0
-  store double 0x3FF8000000000000, double* %5, align 8, !alias.scope !4, !noalias !3
+  store double 0x3FF8000000000000, double* %5, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds double, double* %4, i64 1
-  store double 0x4004000000000000, double* %6, align 8, !alias.scope !4, !noalias !3
+  store double 0x4004000000000000, double* %6, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds double, double* %4, i64 2
-  store double 0x4014000000000000, double* %7, align 8, !alias.scope !4, !noalias !3
+  store double 0x4014000000000000, double* %7, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %8 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %9 = call double @mean(%struct.nish_array* %8)
@@ -92,7 +92,7 @@ bounds.ok:
   %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
   %18 = bitcast i8* %17 to double*
   %19 = getelementptr inbounds double, double* %18, i64 %12
-  %20 = load double, double* %19, align 8, !alias.scope !4, !noalias !3
+  %20 = load double, double* %19, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %21 = call i8* @nish_str_from_f64(double %20)
   call void @nish_print(i8* %21)
   call void @nish_arena_release(i64 %arena.mark)
@@ -116,3 +116,7 @@ attributes #3 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element double", !6, i64 0}
+!8 = !{!7, !7, i64 0}

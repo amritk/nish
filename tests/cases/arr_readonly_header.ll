@@ -21,7 +21,7 @@ forof.body:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -61,7 +61,7 @@ while.body:
   %8 = sext i32 %7 to i64
   %9 = bitcast i8* %3 to i32*
   %10 = getelementptr inbounds i32, i32* %9, i64 %8
-  store i32 %v, i32* %10, align 4, !alias.scope !4, !noalias !3
+  store i32 %v, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = load i32, i32* %i.addr, align 4
   %12 = add nsw i32 %11, 1
   store i32 %12, i32* %i.addr, align 4
@@ -79,3 +79,7 @@ attributes #1 = { nounwind }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

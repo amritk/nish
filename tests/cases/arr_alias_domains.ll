@@ -30,7 +30,7 @@ while.body:
   %14 = sext i32 %13 to i64
   %15 = bitcast i8* %3 to i32*
   %16 = getelementptr inbounds i32, i32* %15, i64 %14
-  %17 = load i32, i32* %16, align 4, !alias.scope !4, !noalias !3
+  %17 = load i32, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %18 = mul nsw i32 %17, 2
   %19 = icmp ult i64 %12, %5
   br i1 %19, label %bounds.ok, label %bounds.fail
@@ -42,7 +42,7 @@ bounds.fail:
 bounds.ok:
   %20 = bitcast i8* %7 to i32*
   %21 = getelementptr inbounds i32, i32* %20, i64 %12
-  store i32 %18, i32* %21, align 4, !alias.scope !4, !noalias !3
+  store i32 %18, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %22 = load i32, i32* %i.addr, align 4
   %23 = add nsw i32 %22, 1
   store i32 %23, i32* %i.addr, align 4
@@ -69,13 +69,13 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 1, i32* %5, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %5, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds i32, i32* %4, i64 3
-  store i32 4, i32* %8, align 4, !alias.scope !4, !noalias !3
+  store i32 4, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %src.addr, align 8
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   store i64 4, i64* %9, align 8, !alias.scope !3, !noalias !4
@@ -105,7 +105,7 @@ bounds.ok:
   %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
   %22 = bitcast i8* %21 to i32*
   %23 = getelementptr inbounds i32, i32* %22, i64 0
-  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3
+  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %25 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
   %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 0
   %27 = load i64, i64* %26, align 8, !alias.scope !3, !noalias !4
@@ -121,7 +121,7 @@ bounds.ok.1:
   %30 = load i8*, i8** %29, align 8, !alias.scope !3, !noalias !4
   %31 = bitcast i8* %30 to i32*
   %32 = getelementptr inbounds i32, i32* %31, i64 1
-  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3
+  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %34 = add nsw i32 %24, %33
   %35 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
   %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 0
@@ -138,7 +138,7 @@ bounds.ok.2:
   %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4
   %41 = bitcast i8* %40 to i32*
   %42 = getelementptr inbounds i32, i32* %41, i64 2
-  %43 = load i32, i32* %42, align 4, !alias.scope !4, !noalias !3
+  %43 = load i32, i32* %42, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %44 = add nsw i32 %34, %43
   %45 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
   %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %45, i64 0, i32 0
@@ -155,7 +155,7 @@ bounds.ok.3:
   %50 = load i8*, i8** %49, align 8, !alias.scope !3, !noalias !4
   %51 = bitcast i8* %50 to i32*
   %52 = getelementptr inbounds i32, i32* %51, i64 3
-  %53 = load i32, i32* %52, align 4, !alias.scope !4, !noalias !3
+  %53 = load i32, i32* %52, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %54 = add nsw i32 %44, %53
   ret i32 %54
 }
@@ -168,3 +168,7 @@ attributes #1 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

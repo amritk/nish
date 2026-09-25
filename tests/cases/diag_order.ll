@@ -63,11 +63,11 @@ entry:
   store i8* %8, i8** %9, align 8, !alias.scope !3, !noalias !4
   %10 = bitcast i8* %8 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 0
-  store i32 1, i32* %11, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %12 = getelementptr inbounds i32, i32* %10, i64 1
-  store i32 2, i32* %12, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = getelementptr inbounds i32, i32* %10, i64 2
-  store i32 3, i32* %13, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %13, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %14 = call i64 @nish_arena_mark()
   %15 = call i8* @label$i32(%struct.nish_array* %arr.hdr)
   %16 = call i8* @nish_arena_keep(i64 %14, i8* %15)
@@ -118,3 +118,7 @@ attributes #2 = { nounwind willreturn }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

@@ -61,21 +61,21 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !8, !noalias !9
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 10, i32* %7, align 4, !alias.scope !9, !noalias !8
+  store i32 10, i32* %7, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 20, i32* %8, align 4, !alias.scope !9, !noalias !8
+  store i32 20, i32* %8, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 30, i32* %9, align 4, !alias.scope !9, !noalias !8
+  store i32 30, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %10 = getelementptr inbounds i32, i32* %6, i64 3
-  store i32 40, i32* %10, align 4, !alias.scope !9, !noalias !8
+  store i32 40, i32* %10, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %11 = getelementptr inbounds i32, i32* %6, i64 4
-  store i32 50, i32* %11, align 4, !alias.scope !9, !noalias !8
+  store i32 50, i32* %11, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %12 = getelementptr inbounds i32, i32* %6, i64 5
-  store i32 60, i32* %12, align 4, !alias.scope !9, !noalias !8
+  store i32 60, i32* %12, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %13 = getelementptr inbounds i32, i32* %6, i64 6
-  store i32 70, i32* %13, align 4, !alias.scope !9, !noalias !8
+  store i32 70, i32* %13, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %14 = getelementptr inbounds i32, i32* %6, i64 7
-  store i32 80, i32* %14, align 4, !alias.scope !9, !noalias !8
+  store i32 80, i32* %14, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   call void @H.constructor(%struct.H* %H.obj, %struct.nish_array* %1)
   store %struct.H* %H.obj, %struct.H** %h.addr, align 8
   store i32 0, i32* %n.addr, align 4
@@ -124,7 +124,7 @@ if.then:
   store i8* %35, i8** %36, align 8, !alias.scope !8, !noalias !9
   %37 = bitcast i8* %35 to i32*
   %38 = getelementptr inbounds i32, i32* %37, i64 0
-  store i32 1, i32* %38, align 4, !alias.scope !9, !noalias !8
+  store i32 1, i32* %38, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %39 = getelementptr inbounds %struct.H, %struct.H* %30, i32 0, i32 0
   store %struct.nish_array* %32, %struct.nish_array** %39, align 8, !tbaa !4
   store i32 7, i32* %i.addr, align 4
@@ -161,7 +161,7 @@ bounds.ok:
   %51 = load i8*, i8** %50, align 8, !alias.scope !8, !noalias !9
   %52 = bitcast i8* %51 to i32*
   %53 = getelementptr inbounds i32, i32* %52, i64 %46
-  store i32 1000000, i32* %53, align 4, !alias.scope !9, !noalias !8
+  store i32 1000000, i32* %53, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   br label %for.cond
 
 for.end:
@@ -199,3 +199,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}

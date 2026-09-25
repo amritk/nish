@@ -1,14 +1,18 @@
 /**
- * Type-based alias analysis metadata for class field access (WP9). The
- * reasoning, the soundness argument and the node shapes are written out in
- * `src/codegen/emit/tbaa.ts`; this is its mirror.
+ * Type-based alias analysis metadata for class field access (WP9) and for
+ * array element access.
  *
- * In short: `!tbaa` says what an access *is* rather than where it points, so a
- * `double` at offset 48 of a `Body` cannot be the `double` at offset 24 of a
- * `Body` whatever the two pointers are. It is sound here because Nish has no
+ * `!tbaa` says what an access *is* rather than where it points, so a `double`
+ * at offset 48 of a `Body` cannot be the `double` at offset 24 of a `Body`
+ * whatever the two pointers are. It is sound here because Nish has no
  * inheritance, no casts, no unions and no pointer arithmetic — with one
  * exception, `implements`, whose prefix layout really is subtyping, and which
  * `fieldTbaa` answers with no tag at all.
+ *
+ * Element slots get a subtree of their own beside the scalars the fields use,
+ * so that an element store is not read as a clobber of the class field that
+ * holds the array (`elementTbaa` has the argument). The whole rule is in
+ * `docs/ARCHITECTURE.md`, "Attribute soundness rules".
  */
 import { Emitter } from "./emit";
 import { FieldInfo, STRUCT_INTERFACE, StructInfo } from "./program";
@@ -20,15 +24,20 @@ const charNode = (emitter: Emitter): string => {
 };
 
 /**
- * The scalar node for a field type, named by its LLVM type so that two modules
- * agree under LTO. Every pointer shares one node (`ptr`): the struct path
- * already keeps one class's fields away from another's.
+ * A value type as a TBAA node names it: its LLVM type, so that two modules
+ * agree under LTO, with every pointer spelled `ptr`.
  */
-const scalarNode = (emitter: Emitter, type: i32): string => {
+const typeName = (emitter: Emitter, type: i32): string => {
   const ty = emitter.llvm(type);
-  const name = ty.endsWith("*") ? "ptr" : ty;
-  return emitter.metadata(`!{!"${name}", ${charNode(emitter)}, i64 0}`);
+  return ty.endsWith("*") ? "ptr" : ty;
 };
+
+/**
+ * The scalar node for a field type. Every pointer shares one node (`ptr`): the
+ * struct path already keeps one class's fields away from another's.
+ */
+const scalarNode = (emitter: Emitter, type: i32): string =>
+  emitter.metadata(`!{!"${typeName(emitter, type)}", ${charNode(emitter)}, i64 0}`);
 
 /** `!{!"Body", <double>, i64 0, <double>, i64 8, ...}`: the whole layout, in offset order. */
 const structNode = (emitter: Emitter, info: StructInfo): string => {
@@ -58,4 +67,32 @@ export const fieldTbaa = (emitter: Emitter, info: StructInfo, field: FieldInfo):
   const base = structNode(emitter, info);
   const scalar = scalarNode(emitter, field.type);
   return `, !tbaa ${emitter.metadata(`!{${base}, ${scalar}, i64 ${field.offset}}`)}`;
+};
+
+/**
+ * `, !tbaa !N` for a load or store of one array element slot holding a value
+ * of `elem`, or `""` under `--no-optimize-attributes`.
+ *
+ * The node is `element <type>`, a sibling of the field scalars under the root
+ * rather than a child of one, so an element access is NoAlias with every
+ * tagged field access — the pointer-typed ones included, which is what keeps
+ * `this.v` live across `this.v[i] = x` whatever `v` holds. That is sound
+ * because element storage and class objects are distinct allocations that
+ * never share a byte: a data block is an arena bump, an entry-block alloca, a
+ * `nish_alloc_array` block or the tail of `nish_argv_init`'s `malloc`, and a
+ * class object is a `nish_alloc_struct` bump or an alloca of its own. The one
+ * kind of object that does live inside element storage is an inline record
+ * (`inlineElementStruct`: an interface nothing implements), and its field
+ * accesses carry no tag (`fieldTbaa` answers `""` for every interface), while
+ * the slot itself is written by an untagged `llvm.memcpy` — so this must never
+ * be asked for an inline record, and the callers ask only on the scalar path.
+ * Two element types never share a slot either, because there is no cast and
+ * no view of one array's storage as another's.
+ */
+export const elementTbaa = (emitter: Emitter, elem: i32): string => {
+  if (!emitter.opts.optimizeAttributes) {
+    return "";
+  }
+  const node = emitter.metadata(`!{!"element ${typeName(emitter, elem)}", ${charNode(emitter)}, i64 0}`);
+  return `, !tbaa ${emitter.metadata(`!{${node}, ${node}, i64 0}`)}`;
 };

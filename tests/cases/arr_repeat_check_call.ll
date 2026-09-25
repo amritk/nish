@@ -58,7 +58,7 @@ pop.ok:
   %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
   %10 = bitcast i8* %9 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %7
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   br label %if.end
 
 if.end:
@@ -83,7 +83,7 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %8, i32* %a.addr, align 4
   %9 = call i32 @touch(%struct.nish_array* %xs)
   %10 = load i32, i32* %a.addr, align 4
@@ -102,7 +102,7 @@ bounds.ok.1:
   %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4
   %17 = bitcast i8* %16 to i32*
   %18 = getelementptr inbounds i32, i32* %17, i64 %11
-  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3
+  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %20 = add nsw i32 %10, %19
   ret i32 %20
 }
@@ -125,7 +125,7 @@ bounds.ok:
   %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4
   %7 = bitcast i8* %6 to i32*
   %8 = getelementptr inbounds i32, i32* %7, i64 %1
-  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = call i32 @touch(%struct.nish_array* %xs)
   %11 = add nsw i32 %9, %10
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
@@ -142,7 +142,7 @@ bounds.ok.1:
   %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4
   %17 = bitcast i8* %16 to i32*
   %18 = getelementptr inbounds i32, i32* %17, i64 %0
-  store i32 %11, i32* %18, align 4, !alias.scope !4, !noalias !3
+  store i32 %11, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %19 = sext i32 %j to i64
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %21 = load i64, i64* %20, align 8, !alias.scope !3, !noalias !4
@@ -158,7 +158,7 @@ bounds.ok.2:
   %24 = load i8*, i8** %23, align 8, !alias.scope !3, !noalias !4
   %25 = bitcast i8* %24 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 %19
-  %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3
+  %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %27
 }
 
@@ -175,15 +175,15 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 1, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 2, i32* %8, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 3, i32* %9, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = getelementptr inbounds i32, i32* %6, i64 3
-  store i32 4, i32* %10, align 4, !alias.scope !4, !noalias !3
+  store i32 4, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
-  store %struct.nish_array* %1, %struct.nish_array** %11, align 8, !tbaa !9
+  store %struct.nish_array* %1, %struct.nish_array** %11, align 8, !tbaa !11
   ret void
 }
 
@@ -200,22 +200,22 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 5, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 5, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 6, i32* %8, align 4, !alias.scope !4, !noalias !3
+  store i32 6, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 7, i32* %9, align 4, !alias.scope !4, !noalias !3
+  store i32 7, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = getelementptr inbounds i32, i32* %6, i64 3
-  store i32 8, i32* %10, align 4, !alias.scope !4, !noalias !3
+  store i32 8, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
-  store %struct.nish_array* %1, %struct.nish_array** %11, align 8, !tbaa !9
+  store %struct.nish_array* %1, %struct.nish_array** %11, align 8, !tbaa !11
   ret i32 10
 }
 
 define internal noundef i32 @Box.storeReplaced(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %i) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !9
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !11
   %2 = sext i32 %i to i64
   %3 = call i32 @Box.replace(%struct.Box* %this)
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
@@ -232,9 +232,9 @@ bounds.ok:
   %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4
   %9 = bitcast i8* %8 to i32*
   %10 = getelementptr inbounds i32, i32* %9, i64 %2
-  store i32 %3, i32* %10, align 4, !alias.scope !4, !noalias !3
+  store i32 %3, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
-  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !9
+  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !11
   %13 = sext i32 %i to i64
   %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
   %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4
@@ -250,7 +250,7 @@ bounds.ok.1:
   %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4
   %19 = bitcast i8* %18 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 %13
-  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3
+  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   ret i32 %21
 }
 
@@ -274,11 +274,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 1, i32* %5, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %5, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = call i32 @afterCall(%struct.nish_array* %arr.hdr, i32 2)
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   store i64 3, i64* %9, align 8, !alias.scope !3, !noalias !4
@@ -289,11 +289,11 @@ entry:
   store i8* %11, i8** %12, align 8, !alias.scope !3, !noalias !4
   %13 = bitcast i8* %11 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 0
-  store i32 1, i32* %14, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %15 = getelementptr inbounds i32, i32* %13, i64 1
-  store i32 2, i32* %15, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %16 = getelementptr inbounds i32, i32* %13, i64 2
-  store i32 3, i32* %16, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %17 = call i32 @storeCall(%struct.nish_array* %arr.hdr.1, i32 0, i32 1)
   %18 = add nsw i32 %8, %17
   %19 = load %struct.Box*, %struct.Box** %b.addr, align 8
@@ -316,6 +316,8 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"ptr", !6, i64 0}
-!8 = !{!"Box", !7, i64 0}
-!9 = !{!8, !7, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"ptr", !6, i64 0}
+!10 = !{!"Box", !9, i64 0}
+!11 = !{!10, !9, i64 0}

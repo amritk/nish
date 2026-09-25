@@ -71,7 +71,7 @@ pop.ok:
   %13 = load i8*, i8** %12, align 8, !alias.scope !8, !noalias !9
   %14 = bitcast i8* %13 to double*
   %15 = getelementptr inbounds double, double* %14, i64 %11
-  %16 = load double, double* %15, align 8, !alias.scope !9, !noalias !8
+  %16 = load double, double* %15, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   br label %while.cond
 
 while.end:
@@ -123,7 +123,7 @@ bounds.ok:
   %18 = load i8*, i8** %17, align 8, !alias.scope !8, !noalias !9
   %19 = bitcast i8* %18 to double*
   %20 = getelementptr inbounds double, double* %19, i64 %13
-  %21 = load double, double* %20, align 8, !alias.scope !9, !noalias !8
+  %21 = load double, double* %20, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   ret double %21
 
 if.end:
@@ -145,17 +145,17 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !8, !noalias !9
   %6 = bitcast i8* %4 to double*
   %7 = getelementptr inbounds double, double* %6, i64 0
-  store double 0x3FF0000000000000, double* %7, align 8, !alias.scope !9, !noalias !8
+  store double 0x3FF0000000000000, double* %7, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds double, double* %6, i64 1
-  store double 0x4000000000000000, double* %8, align 8, !alias.scope !9, !noalias !8
+  store double 0x4000000000000000, double* %8, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   %9 = getelementptr inbounds double, double* %6, i64 2
-  store double 0x4008000000000000, double* %9, align 8, !alias.scope !9, !noalias !8
+  store double 0x4008000000000000, double* %9, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   %10 = getelementptr inbounds double, double* %6, i64 3
-  store double 0x4010000000000000, double* %10, align 8, !alias.scope !9, !noalias !8
+  store double 0x4010000000000000, double* %10, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   %11 = getelementptr inbounds double, double* %6, i64 4
-  store double 0x4014000000000000, double* %11, align 8, !alias.scope !9, !noalias !8
+  store double 0x4014000000000000, double* %11, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   %12 = getelementptr inbounds double, double* %6, i64 5
-  store double 0x4018000000000000, double* %12, align 8, !alias.scope !9, !noalias !8
+  store double 0x4018000000000000, double* %12, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %1)
   %13 = call double @read(%struct.Holder* %Holder.obj, i32 5)
   %14 = call i32 @llvm.fptosi.sat.i32.f64(double %13)
@@ -179,3 +179,5 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element double", !1, i64 0}
+!11 = !{!10, !10, i64 0}

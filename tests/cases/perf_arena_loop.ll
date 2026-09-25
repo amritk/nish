@@ -77,7 +77,7 @@ push.store:
   %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
   %16 = bitcast i8* %15 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 %10
-  store i32 %8, i32* %17, align 4, !alias.scope !4, !noalias !3
+  store i32 %8, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %18 = add i64 %10, 1
   store i64 %18, i64* %9, align 8, !alias.scope !3, !noalias !4
   %19 = trunc i64 %18 to i32
@@ -128,7 +128,7 @@ for.end:
   %11 = load i32, i32* %total.addr, align 4
   %12 = call i8* @nish_str_from_i32(i32 %11)
   %13 = getelementptr inbounds %struct.Log, %struct.Log* %log, i32 0, i32 0
-  store i8* %12, i8** %13, align 8, !tbaa !9
+  store i8* %12, i8** %13, align 8, !tbaa !11
   %14 = load i32, i32* %total.addr, align 4
   ret i32 %14
 }
@@ -221,7 +221,7 @@ entry:
   %log.addr = alloca %struct.Log*, align 8
   %Log.obj = alloca %struct.Log, align 8
   %0 = getelementptr inbounds %struct.Log, %struct.Log* %Log.obj, i32 0, i32 0
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %0, align 8, !tbaa !9
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %0, align 8, !tbaa !11
   store %struct.Log* %Log.obj, %struct.Log** %log.addr, align 8
   %1 = load %struct.Log*, %struct.Log** %log.addr, align 8
   %2 = call i32 @tally(%struct.Log* %1, i32 10)
@@ -229,7 +229,7 @@ entry:
   call void @nish_print(i8* %3)
   %4 = load %struct.Log*, %struct.Log** %log.addr, align 8
   %5 = getelementptr inbounds %struct.Log, %struct.Log* %4, i32 0, i32 0
-  %6 = load i8*, i8** %5, align 8, !tbaa !9
+  %6 = load i8*, i8** %5, align 8, !tbaa !11
   call void @nish_print(i8* %6)
   %7 = call i32 @drain(i32 10)
   %8 = call i8* @nish_str_from_i32(i32 %7)
@@ -259,6 +259,8 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"ptr", !6, i64 0}
-!8 = !{!"Log", !7, i64 0}
-!9 = !{!8, !7, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"ptr", !6, i64 0}
+!10 = !{!"Log", !9, i64 0}
+!11 = !{!10, !9, i64 0}
