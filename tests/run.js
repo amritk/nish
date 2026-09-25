@@ -1637,8 +1637,11 @@ function functionHeaders(ir) {
   // instantiation as `identity$i32`, and a pattern without it silently found no
   // cross-module generic at all — which is exactly the pair this check exists
   // to compare since G7 put the `define` and the `declare` in two modules.
+  // `hidden` is WP29's: a private function another module's instantiation
+  // calls is in the link but exported from nothing, and its `declare` in that
+  // module has the same signature and attributes as any other.
   for (const m of ir.matchAll(
-    /^(define|declare) (?:internal )?(.*?) @([\w.$]+)\((.*?)\)(?: (#\d+))?(?: \{)?$/gm
+    /^(define|declare) (?:internal |hidden )?(.*?) @([\w.$]+)\((.*?)\)(?: (#\d+))?(?: \{)?$/gm
   )) {
     const params = m[4].replace(/ %[\w.]+(?=,|$)/g, ""); // drop parameter names: declares have none
     out.set(m[3], { kind: m[1], sig: `${m[2]} (${params})`, attrs: m[5] ? (groups.get(m[5]) ?? m[5]) : "" });

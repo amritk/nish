@@ -1,1 +1,1 @@
-expected `)`, found `:`
+`(n: i32) => i32` is a function type, which may only annotate a parameter of a top-level function

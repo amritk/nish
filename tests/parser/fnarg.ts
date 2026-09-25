@@ -26,5 +26,7 @@ function shapes(c: boolean, a: number, b: number): number {
   }, x);
   x = c ? (a) : b;
   x = c ? (a + b) : (b);
-  return x + pair((p, q) => p + q, ["a", null]);
+  const names: (string | null)[] = [];
+  names.push(null);
+  return x + pair((p, q) => p + q, names);
 }

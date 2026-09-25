@@ -1097,19 +1097,19 @@ export const checkGenericCall = (
   const functional = template.owner === null;
   const names = typeParamSet(template);
   const bindings = new StringMap();
-  const argTypes: i32[] = [];
+  let argTypes: i32[] = [];
   // Which arguments are checked after the others: a function argument, and a
   // literal that takes its type from what the others bind.
   const later: boolean[] = [];
   let i = 0;
-  while (i < args.children.length) {
+  while (i < args.children.length && i < parameters.children.length) {
     const deferred = (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i]);
     later.push(deferred);
     argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, -1));
     i = i + 1;
   }
   i = 0;
-  while (i < parameters.children.length) {
+  while (i < parameters.children.length && i < later.length && i < argTypes.length) {
     const annotation = parameters.children[i].children[1];
     if (!later[i] && annotation.kind !== N_EMPTY) {
       unifyAnnotation(ctx, annotation, argTypes[i], names, bindings);
@@ -1122,21 +1122,29 @@ export const checkGenericCall = (
   // either number mode, as it would be with the type written out. One that no
   // other argument binds is checked as a `number` and binds the parameter
   // itself, which is what it did before (WP29, for an identity argument).
+  const settled: i32[] = [];
   i = 0;
-  while (i < args.children.length) {
-    const annotation = parameters.children[i].children[1];
-    if (later[i] && !(functional && isFunctionParameter(parameters.children[i]))) {
+  while (i < args.children.length && i < parameters.children.length && i < later.length && i < argTypes.length) {
+    const param = parameters.children[i];
+    const arg = args.children[i];
+    const annotation = param.children[1];
+    const early = argTypes[i];
+    if (later[i] && !(functional && isFunctionParameter(param))) {
       let want = -1;
       if (annotation.kind !== N_EMPTY && template.owner === null && !mentionsUnbound(annotation, names, bindings)) {
         want = resolveInTemplate(template, annotation, bindings);
       }
-      argTypes[i] = checkExpression(ctx, args.children[i], scope, want);
+      const type = checkExpression(ctx, arg, scope, want);
       if (annotation.kind !== N_EMPTY) {
-        unifyAnnotation(ctx, annotation, argTypes[i], names, bindings);
+        unifyAnnotation(ctx, annotation, type, names, bindings);
       }
+      settled.push(type);
+    } else {
+      settled.push(early);
     }
     i = i + 1;
   }
+  argTypes = settled;
   const functions: FunctionSig[] = [];
   i = 0;
   while (i < parameters.children.length) {
@@ -1187,7 +1195,7 @@ export const checkGenericCall = (
   // A generic method's signature starts with `this` (WP18 G8).
   const offset = template.owner === null ? 0 : 1;
   i = 0;
-  while (i < args.children.length) {
+  while (i < args.children.length && i < argTypes.length) {
     if (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
@@ -1284,11 +1292,11 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
  * no type mangles to anything starting `fn.`, so the encoding stays injective.
  */
 export const withFunctionArguments = (symbol: string, functions: FunctionSig[]): string => {
-  let out = symbol;
+  const parts: string[] = [symbol];
   for (const fn of functions) {
-    out = `${out}$fn.${fn.name.length}.${fn.name}`;
+    parts.push(`fn.${fn.name.length}.${fn.name}`);
   }
-  return out;
+  return parts.join("$");
 };
 
 /** `apply<i32, square>`: the source spelling of a request that takes functions (WP29). */
@@ -1356,7 +1364,7 @@ const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
 const functionTypeText = (table: TypeTable, names: string[], types: i32[], returnType: i32): string => {
   const parts: string[] = [];
   let i = 0;
-  while (i < names.length) {
+  while (i < names.length && i < types.length) {
     parts.push(`${names[i]}: ${table.typeName(types[i])}`);
     i = i + 1;
   }
@@ -1491,42 +1499,51 @@ const liftArrowArgument = (
     return null;
   }
   const types: i32[] = [];
+  // Each element is read into a local before anything is called, which is
+  // what keeps the bounds proof: a call may reach an array, so a length fact
+  // does not survive one.
   let k = 0;
-  while (k < params.length) {
-    const annotation = params[k].children[1];
+  while (k < params.length && k < wanted.length) {
+    const written = params[k];
+    const expected = wanted[k].children[1];
+    const annotation = written.children[1];
     if (annotation.kind === N_EMPTY) {
       types.push(-1);
     } else if (unwrapTypeParens(annotation).kind === N_TYPE_FUNCTION) {
-      ctx.error(annotation, functionTypeHereMessage(params[k].children[0].text, "an arrow"));
+      ctx.error(annotation, functionTypeHereMessage(written.children[0].text, "an arrow"));
       return null;
     } else {
       const type = resolveType(annotation, ctx);
       if (type === T_ERROR) {
         return null;
       }
-      unifyAnnotation(ctx, wanted[k].children[1], type, names, bindings);
+      unifyAnnotation(ctx, expected, type, names, bindings);
       types.push(type);
     }
     k = k + 1;
   }
+  const resolved: i32[] = [];
   k = 0;
-  while (k < params.length) {
-    if (types[k] < 0) {
-      const annotation = wanted[k].children[1];
-      if (mentionsUnbound(annotation, names, bindings)) {
-        ctx.error(
-          params[k],
-          `Cannot infer the type of \`${params[k].children[0].text}\` in the arrow passed to ` +
-            `\`${template.sourceName}\`: \`${template.home.textOf(annotation)}\` mentions a type parameter no ` +
-            "other argument binds; annotate the parameter"
-        );
-        return null;
-      }
-      const type = resolveInTemplate(template, annotation, bindings);
+  while (k < params.length && k < wanted.length && k < types.length) {
+    const written = params[k];
+    const expected = wanted[k].children[1];
+    const given = types[k];
+    if (given >= 0) {
+      resolved.push(given);
+    } else if (mentionsUnbound(expected, names, bindings)) {
+      ctx.error(
+        written,
+        `Cannot infer the type of \`${written.children[0].text}\` in the arrow passed to ` +
+          `\`${template.sourceName}\`: \`${template.home.textOf(expected)}\` mentions a type parameter no ` +
+          "other argument binds; annotate the parameter"
+      );
+      return null;
+    } else {
+      const type = resolveInTemplate(template, expected, bindings);
       if (type === T_ERROR) {
         return null;
       }
-      types[k] = type;
+      resolved.push(type);
     }
     k = k + 1;
   }
@@ -1550,7 +1567,7 @@ const liftArrowArgument = (
     );
     return null;
   }
-  const fn = liftArrow(ctx, arrow, types, returnType, scope);
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope);
   if (fn === null) {
     return null;
   }
@@ -1609,7 +1626,8 @@ const liftArrow = (ctx: CheckContext, arrow: Node, types: i32[], returnType: i32
   let k = 0;
   for (const param of arrow.children[1].children) {
     const name = param.children[0].text;
-    const local = new Local(name, types[k], false, STORAGE_PARAM);
+    const type = k < types.length ? types[k] : T_ERROR;
+    const local = new Local(name, type, false, STORAGE_PARAM);
     // Inside an instantiation an arrow's parameter may be a `T`, and the rule
     // that a `T` has only its constraint's members has to see it; where it
     // came from is not followed through a lifted arrow, so it fails closed.
@@ -1619,7 +1637,7 @@ const liftArrow = (ctx: CheckContext, arrow: Node, types: i32[], returnType: i32
       return null;
     }
     fn.paramNames.push(name);
-    fn.paramTypes.push(types[k]);
+    fn.paramTypes.push(type);
     k = k + 1;
   }
   const enclosingInstance = enclosing.instance;
@@ -1692,7 +1710,7 @@ const matchFunctionArguments = (
   let k = 0;
   let i = 0;
   for (const param of template.decl.children[1].children) {
-    if (template.owner === null && isFunctionParameter(param)) {
+    if (template.owner === null && isFunctionParameter(param) && k < functions.length) {
       const fn = functions[k];
       const fnType = unwrapTypeParens(param.children[1]);
       const wanted = fnType.children[0].children;
@@ -1712,8 +1730,10 @@ const matchFunctionArguments = (
       }
       let same = fn.paramTypes.length === types.length;
       let j = 0;
-      while (same && j < types.length) {
-        same = canonicalArgument(table, fn.paramTypes[j]) === canonicalArgument(table, types[j]);
+      while (same && j < types.length && j < fn.paramTypes.length) {
+        const got = fn.paramTypes[j];
+        const want = types[j];
+        same = canonicalArgument(table, got) === canonicalArgument(table, want);
         j = j + 1;
       }
       same = same && canonicalArgument(table, fn.returnType) === canonicalArgument(table, returnType);

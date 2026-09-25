@@ -75,7 +75,6 @@
 reject_arr_forof_expression	expected `;`, found `IDENT`
 reject_arr_hole	expected an expression, found `,`
 reject_arr_spread	expected an expression, found `...`
-reject_arrow_annotated	expected `)`, found `:`
 reject_arrow_let	a module holds no top-level `let`; use `const`
 reject_arrow_return_type	a return type annotation is required
 reject_as_any	expected `;`, found `IDENT`

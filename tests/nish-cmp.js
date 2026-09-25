@@ -829,6 +829,48 @@ const DECLARED = [
     changelog: "Module and package identity is the real path",
     why: "the same program: HEAD stems `foo`'s own `helper.ts` from the package's real directory, a file the reference compiler does not write (#198)",
   },
+  {
+    program: "tests/cases/fnarg_named.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: a function-typed parameter given two named callees, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/fnarg_arrow.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: arrows written as function arguments, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/fnarg_generic.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: generic templates whose function argument binds a type parameter, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/fnarg_forward.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: a function parameter passed on to another template, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/cases/dbg_fnarg_arrow.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: a lifted arrow under -g, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/parser/fnarg.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new parser fixture for the function type and the arrow expression, which the reference compiler refuses to parse",
+  },
+  {
+    program: "tests/link/fnarg_private/main.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: a private function and arrows passed to another module's templates, which the reference compiler refuses to parse",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

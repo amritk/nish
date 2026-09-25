@@ -1,0 +1,1 @@
+`identity` is generic, so it names no one function to pass as argument 1 of `apply`

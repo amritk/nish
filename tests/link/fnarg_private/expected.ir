@@ -1,0 +1,7 @@
+define hidden noundef double @square(double noundef %x)
+declare noundef double @square(double noundef)
+define hidden noundef double @nish_main$arrow0(double noundef %a, double noundef %b)
+declare noundef double @nish_main$arrow0(double noundef, double noundef)
+define void @mapInto$f64$f64$fn.6.square(
+declare void @mapInto$f64$f64$fn.6.square(
+define noundef i32 @reduce$i32$fn.16.nish_main$arrow1(
