@@ -52,7 +52,9 @@ import {
   N_IMPORT,
   N_INDEX,
   N_INTERFACE,
+  N_LIST,
   N_MEMBER,
+  N_METHOD,
   N_MODULE_CONST,
   N_ARRAY,
   N_CALL,
@@ -261,7 +263,7 @@ export class Checker {
       return;
     }
     const names = new CollectionNames();
-    scanCollectionNames(this.program.file, names, this.program);
+    scanCollectionNames(this.program.file, names, this.program, false, false);
     this.importCollection("Map", names.map);
     this.importCollection("Set", names.set);
   }
@@ -2244,29 +2246,79 @@ class CollectionNames {
  * `const m: Map<K, V> = new Map()` whose `new` takes its type arguments from
  * the annotation (docs/wp32-map.md §7). One walk, because both are syntax: the
  * import has to exist before pass 1 resolves the first annotation.
+ *
+ * A type parameter called `Map` or `Set` shadows the global inside the
+ * declaration that binds it, as it does under `tsc`, so the walk carries which
+ * of the two names an enclosing function, class, interface or method has
+ * bound, and a name it has bound is not a use of the global.
  */
-const scanCollectionNames = (node: Node, names: CollectionNames, program: CheckedProgram): void => {
+const scanCollectionNames = (
+  node: Node,
+  names: CollectionNames,
+  program: CheckedProgram,
+  hideMap: boolean,
+  hideSet: boolean
+): void => {
+  const bound = boundTypeParameters(node);
+  let mapHidden = hideMap;
+  let setHidden = hideSet;
+  if (bound !== null) {
+    for (const param of bound.children) {
+      if (param.kind === N_IDENT && param.text === "Map") {
+        mapHidden = true;
+      } else if (param.kind === N_IDENT && param.text === "Set") {
+        setHidden = true;
+      }
+    }
+  }
+  let name = "";
+  let at: Node | null = null;
   if (node.kind === N_TYPE_REF) {
-    names.note(node.text, node);
+    name = node.text;
+    at = node;
   } else if (node.kind === N_NEW && node.children[0].kind === N_IDENT) {
-    names.note(node.children[0].text, node.children[0]);
-  } else if (node.kind === N_VAR_DECL) {
-    noteAnnotatedNew(node, program);
+    name = node.children[0].text;
+    at = node.children[0];
+  }
+  const hidden = (name === "Map" && mapHidden) || (name === "Set" && setHidden);
+  if (at !== null && !hidden) {
+    names.note(name, at);
+  }
+  if (node.kind === N_VAR_DECL) {
+    noteAnnotatedNew(node, program, mapHidden, setHidden);
   }
   for (const child of node.children) {
-    scanCollectionNames(child, names, program);
+    scanCollectionNames(child, names, program, mapHidden, setHidden);
   }
 };
 
+/**
+ * The type-parameter list a declaration binds for its own extent — a function
+ * in either spelling, a method, a class or an interface — or `null`.
+ */
+const boundTypeParameters = (node: Node): Node | null => {
+  let at = -1;
+  if (node.kind === N_FUNCTION || node.kind === N_METHOD || node.kind === N_CLASS) {
+    at = 4;
+  } else if (node.kind === N_INTERFACE) {
+    at = 2;
+  }
+  if (at < 0 || node.children.length <= at || node.children[at].kind !== N_LIST) {
+    return null;
+  }
+  return node.children[at];
+};
+
 /** `const m: Map<K, V> = new Map()`: the `new` names the annotation's class and writes no type arguments. */
-const noteAnnotatedNew = (decl: Node, program: CheckedProgram): void => {
+const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean, hideSet: boolean): void => {
   const annotation = decl.children[1];
   const init = decl.children[2];
   if (annotation.kind !== N_TYPE_REF || init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
     return;
   }
   const name = init.children[0].text;
-  if ((name !== "Map" && name !== "Set") || annotation.text !== name || init.children[1].children.length > 0) {
+  const global = (name === "Map" && !hideMap) || (name === "Set" && !hideSet);
+  if (!global || annotation.text !== name || init.children[1].children.length > 0) {
     return;
   }
   program.newTypeArgumentIds.set(`${init.id}`, program.newTypeArguments.length);

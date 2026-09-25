@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 575 programs, 21264 dump lines.
+# 576 programs, 21292 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -11244,6 +11244,35 @@ function hashKey<u8>(key: u8): u32 -> @nish.hashKey$u8 [instance]
   stackSites=0 stackLocals=0
 function sameKey<u8>(a: u8, b: u8): boolean -> @nish.sameKey$u8 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+program tests/cases/map_type_param_shadow.ts
+module tests/cases/map_type_param_shadow.ts (entry)
+struct Box<i32> (class) size=4 align=4
+  field v: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Box$i32.constructor id$i32 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pick$str$i32
+  stackSites=1 stackLocals=1
+  local 19:9 b: Box<i32> (const)
+  callee 19:13 new Box<i32> -> @Box$i32.constructor
+  local 20:9 x: i32 (const)
+  callee 20:18 id<i32> -> @id$i32
+  local 21:9 s: string (const)
+  callee 21:21 pick<string, i32> -> @pick$str$i32
+function Box<i32>.constructor(this: Box<i32>, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function id<i32>(x: i32): i32 -> @id$i32 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  stackSites=0 stackLocals=0
+function pick<string, i32>(a: string, b: i32): string -> @pick$str$i32 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a
   stackSites=0 stackLocals=0
 program tests/cases/math_i32.ts
 module tests/cases/math_i32.ts (entry)

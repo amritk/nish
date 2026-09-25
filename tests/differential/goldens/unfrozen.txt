@@ -74,6 +74,7 @@ cases/map_key_u16 added after R6: no rewriter to freeze it with
 cases/map_key_u32 added after R6: no rewriter to freeze it with
 cases/map_key_u64 added after R6: no rewriter to freeze it with
 cases/map_key_u8 added after R6: no rewriter to freeze it with
+cases/map_type_param_shadow added after R6: no rewriter to freeze it with
 cases/mem_callee_scope added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with

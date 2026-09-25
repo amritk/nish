@@ -1,1 +1,1 @@
-`forEach` is not available on `Set<i32>`
+`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`

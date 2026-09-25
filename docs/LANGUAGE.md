@@ -3188,7 +3188,10 @@ export const main = (): i32 => {
 - **A module's own `Map` or `Set` wins in that module.** A module that
   declares or imports a class, interface, alias or enum of either name gets no
   implicit import, as the declaration shadows the global under `tsc`
-  (`tests/link/map_own_class`). A class name is program-wide, though, so a
+  (`tests/link/map_own_class`). A type parameter called `Map` or `Set` shadows
+  it the same way inside the function, class, interface or method that binds
+  it, so such a program loads nothing and compiles as it did before `Map`
+  existed (`tests/cases/map_type_param_shadow`). A class name is program-wide, though, so a
   program in which one module declares `Map` and another names the global is
   refused at the declaration:
   `` `Map` is declared here and main.ts uses the global `Map`; a class or interface name is program-wide, so one program cannot have both ``
