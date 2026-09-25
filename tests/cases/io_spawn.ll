@@ -16,6 +16,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
@@ -76,6 +78,7 @@ entry:
 define noundef i32 @nish_main() #0 {
 entry:
   %empty.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @shell(i8* bitcast ({ i64, [7 x i8] }* @.str.3 to i8*))
   %1 = call i8* @nish_str_from_i32(i32 %0)
   %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* %1)
@@ -118,6 +121,7 @@ entry:
   %27 = call i8* @nish_str_from_i32(i32 %26)
   %28 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.10 to i8*), i8* %27)
   call void @nish_print(i8* %28)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

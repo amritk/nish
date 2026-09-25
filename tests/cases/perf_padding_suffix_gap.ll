@@ -11,6 +11,8 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
 entry:
@@ -74,6 +76,7 @@ entry:
   %mixed.addr = alloca %struct.Mixed*, align 8
   %Mixed.obj = alloca %struct.Mixed, align 8
   %view.addr = alloca %struct.One*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.FourGap, %struct.FourGap* %FourGap.obj, i32 0, i32 0
   store i32 0, i32* %0, align 4
   %1 = getelementptr inbounds %struct.FourGap, %struct.FourGap* %FourGap.obj, i32 0, i32 1
@@ -141,6 +144,7 @@ cond.end:
   %38 = load i64, i64* %37, align 8, !alias.scope !3, !noalias !4
   %39 = trunc i64 %38 to i32
   %40 = add nsw i32 %33, %39
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %40
 }
 

@@ -2348,14 +2348,14 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
 
   // An element store cannot write the class field that holds the array, and the
   // element's own `!tbaa` tag is what tells LLVM so (`elementTbaa`, self/tbaa.ts).
-  // Without it `opt -O3` reloaded `this.v` and its length after `this.v[i] = ...`
-  // in AWFY Permute's swap and checked `j` a second time: three checks, two field
-  // loads, two length loads. With it the swap keeps one of each load, and the
-  // repeat of `j`'s check folds into the first against the same length, leaving
-  // exactly two: `i`'s and `j`'s, which must stay on (a swap with none passes
-  // nothing it should). The field
-  // load is the one `load ptr` that carries `!tbaa` and no alias scope (elements
-  // carry both, header fields only the scope); the length is the header's `load i64`.
+  // Without it `opt -O3` reloads `this.v` and its `data` after `this.v[i] = ...` in
+  // AWFY Permute's swap: two field loads (before the repeated checks were proven in
+  // `self/bounds.ts` it reloaded the length too and checked `j` a second time). With
+  // it the swap loads the field once and the length once. The two checks left are
+  // `i`'s and `j`'s, and they must stay on: a swap with none passes nothing it
+  // should. The field load is the one `load ptr` that carries `!tbaa` and no alias
+  // scope (elements carry both, header fields only the scope); the length is the
+  // header's `load i64`.
   const reloadLl = path.join(buildDir, "arr_field_reload.ll");
   if (has("opt") && fs.existsSync(reloadLl)) {
     const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", reloadLl]);

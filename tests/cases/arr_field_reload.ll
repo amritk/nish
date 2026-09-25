@@ -5,6 +5,8 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
@@ -91,45 +93,25 @@ bounds.ok.1:
   %22 = bitcast i8* %21 to i32*
   %23 = getelementptr inbounds i32, i32* %22, i64 %16
   %24 = load i32, i32* %23, align 4, !alias.scope !10, !noalias !9, !tbaa !13
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
-  %26 = load i64, i64* %25, align 8, !alias.scope !9, !noalias !10
-  %27 = icmp ult i64 %13, %26
-  br i1 %27, label %bounds.ok.2, label %bounds.fail.2
-
-bounds.fail.2:
-  call void @nish_panic_index(i64 %13, i64 %26)
-  unreachable
-
-bounds.ok.2:
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
-  %29 = load i8*, i8** %28, align 8, !alias.scope !9, !noalias !10
-  %30 = bitcast i8* %29 to i32*
-  %31 = getelementptr inbounds i32, i32* %30, i64 %13
-  store i32 %24, i32* %31, align 4, !alias.scope !10, !noalias !9, !tbaa !13
-  %32 = getelementptr inbounds %struct.Swap, %struct.Swap* %this, i32 0, i32 1
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !11
-  %34 = sext i32 %j to i64
-  %35 = load i32, i32* %tmp.addr, align 4
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
-  %37 = load i64, i64* %36, align 8, !alias.scope !9, !noalias !10
-  %38 = icmp ult i64 %34, %37
-  br i1 %38, label %bounds.ok.3, label %bounds.fail.3
-
-bounds.fail.3:
-  call void @nish_panic_index(i64 %34, i64 %37)
-  unreachable
-
-bounds.ok.3:
-  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
-  %40 = load i8*, i8** %39, align 8, !alias.scope !9, !noalias !10
-  %41 = bitcast i8* %40 to i32*
-  %42 = getelementptr inbounds i32, i32* %41, i64 %34
-  store i32 %35, i32* %42, align 4, !alias.scope !10, !noalias !9, !tbaa !13
-  %43 = getelementptr inbounds %struct.Swap, %struct.Swap* %this, i32 0, i32 0
-  %44 = load i32, i32* %43, align 4, !tbaa !5
-  %45 = add nsw i32 %44, 1
-  %46 = getelementptr inbounds %struct.Swap, %struct.Swap* %this, i32 0, i32 0
-  store i32 %45, i32* %46, align 4, !tbaa !5
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
+  %26 = load i8*, i8** %25, align 8, !alias.scope !9, !noalias !10
+  %27 = bitcast i8* %26 to i32*
+  %28 = getelementptr inbounds i32, i32* %27, i64 %13
+  store i32 %24, i32* %28, align 4, !alias.scope !10, !noalias !9, !tbaa !13
+  %29 = getelementptr inbounds %struct.Swap, %struct.Swap* %this, i32 0, i32 1
+  %30 = load %struct.nish_array*, %struct.nish_array** %29, align 8, !tbaa !11
+  %31 = sext i32 %j to i64
+  %32 = load i32, i32* %tmp.addr, align 4
+  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
+  %34 = load i8*, i8** %33, align 8, !alias.scope !9, !noalias !10
+  %35 = bitcast i8* %34 to i32*
+  %36 = getelementptr inbounds i32, i32* %35, i64 %31
+  store i32 %32, i32* %36, align 4, !alias.scope !10, !noalias !9, !tbaa !13
+  %37 = getelementptr inbounds %struct.Swap, %struct.Swap* %this, i32 0, i32 0
+  %38 = load i32, i32* %37, align 4, !tbaa !5
+  %39 = add nsw i32 %38, 1
+  %40 = getelementptr inbounds %struct.Swap, %struct.Swap* %this, i32 0, i32 0
+  store i32 %39, i32* %40, align 4, !tbaa !5
   ret void
 }
 
@@ -137,6 +119,7 @@ define noundef i32 @test() #1 {
 entry:
   %s.addr = alloca %struct.Swap*, align 8
   %Swap.obj = alloca %struct.Swap, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Swap.constructor(%struct.Swap* %Swap.obj)
   store %struct.Swap* %Swap.obj, %struct.Swap** %s.addr, align 8
   %0 = load %struct.Swap*, %struct.Swap** %s.addr, align 8
@@ -225,6 +208,7 @@ bounds.ok.2:
   %53 = getelementptr inbounds %struct.Swap, %struct.Swap* %52, i32 0, i32 0
   %54 = load i32, i32* %53, align 4, !tbaa !5
   %55 = add nsw i32 %51, %54
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %55
 }
 

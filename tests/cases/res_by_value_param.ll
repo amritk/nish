@@ -6,6 +6,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_panic_div(i1 noundef zeroext) #4
@@ -129,6 +131,7 @@ entry:
   %nish_result.i32.i32.obj.1 = alloca %struct.nish_result.i32.i32, align 8
   %kept.addr = alloca %struct.Box*, align 8
   %inner.addr = alloca %struct.nish_result.i32.i32*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 41, 1
   %1 = call i32 @describe({ i1, i32, i32 } %0)
   %2 = call i8* @nish_str_from_i32(i32 %1)
@@ -198,6 +201,7 @@ if.then:
   br label %if.end
 
 if.end:
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

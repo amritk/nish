@@ -6,6 +6,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
@@ -109,6 +111,7 @@ for.end:
 define noundef i32 @nish_main() #1 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call %struct.nish_array* @makePoints(i32 4)
   store %struct.nish_array* %0, %struct.nish_array** %xs.addr, align 8
   %1 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
@@ -137,6 +140,7 @@ bounds.ok:
   %16 = trunc i64 %15 to i32
   %17 = call i8* @nish_str_from_i32(i32 %16)
   call void @nish_print(i8* %17)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

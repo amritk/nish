@@ -5,6 +5,7 @@
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"?\00" }, align 8
 
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 
@@ -46,6 +47,7 @@ define noundef i32 @test() #0 {
 entry:
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i64 @nish_arena_mark()
   %1 = call i8* @banner(i32 3)
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
@@ -73,6 +75,7 @@ entry:
   %18 = load i64, i64* %17, align 8
   %19 = trunc i64 %18 to i32
   %20 = add nsw i32 %5, %19
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %20
 }
 
