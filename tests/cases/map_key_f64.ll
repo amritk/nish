@@ -595,26 +595,16 @@ if.then:
   %7 = sext i32 %bucket to i64
   %8 = sub nsw i32 %used, 1
   %9 = call i32 @nish.slotWord(i32 %h, i32 %8)
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
-  %11 = load i64, i64* %10, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %12 = icmp ult i64 %7, %11
-  br i1 %12, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %7, i64 %11)
-  unreachable
-
-bounds.ok:
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
-  %14 = load i8*, i8** %13, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %15 = bitcast i8* %14 to i32*
-  %16 = getelementptr inbounds i32, i32* %15, i64 %7
-  store i32 %9, i32* %16, align 4, !alias.scope !11, !noalias !10, !tbaa !18
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8, !alias.scope !10, !noalias !11, !tbaa !16
+  %12 = bitcast i8* %11 to i32*
+  %13 = getelementptr inbounds i32, i32* %12, i64 %7
+  store i32 %9, i32* %13, align 4, !alias.scope !11, !noalias !10, !tbaa !18
   br label %if.end
 
 if.else:
-  %17 = sub nsw i32 %used, 1
-  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %17)
+  %14 = sub nsw i32 %used, 1
+  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %14)
   br label %if.end
 
 if.end:
