@@ -112,7 +112,11 @@ What the rest forces:
 - **One `TypeInfo`**: a type is an `i32` interned in a `TypeTable`
   (`self/types.ts`), so type equality is an integer compare.
 - **No `Map`**: `StringMap` / `StringSet` over parallel arrays with FNV-1a and
-  linear probing (`self/map.ts`). Iteration is insertion order, which is what a
+  linear probing (`self/map.ts`), in the layout WP32 chose for the global `Map`
+  (`docs/wp32-map.md` §2): a `u32` bucket of eight fingerprint bits above an
+  entry index plus one, and each entry's full hash stored beside its key, so a
+  probe reads a key only on a fingerprint and hash match and growth never
+  hashes a key again. Iteration is insertion order, which is what a
   golden-compared dump needs.
 - **No `try`/`catch`**: error-value threading. `ctx.error(node, msg)` reports and
   returns; callers test a status or a `T_ERROR` sentinel. `panic(msg)` is for
