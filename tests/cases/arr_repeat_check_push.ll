@@ -1,5 +1,7 @@
 %struct.nish_array = type { i64, i64, i8* }
 
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 
@@ -129,6 +131,7 @@ entry:
   %arr.data = alloca [3 x i32], align 8
   %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [3 x i32], align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -160,6 +163,7 @@ entry:
   store i32 3, i32* %16, align 4, !alias.scope !4, !noalias !3
   %17 = call i32 @afterPush(%struct.nish_array* %arr.hdr.1, i32 2)
   %18 = add nsw i32 %8, %17
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %18
 }
 

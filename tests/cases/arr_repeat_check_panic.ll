@@ -5,6 +5,8 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
@@ -259,16 +261,20 @@ entry:
 define noundef i32 @callStorePastEnd() #0 {
 entry:
   %Box.obj = alloca %struct.Box, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Box.constructor(%struct.Box* %Box.obj)
   %0 = call i32 @Box.afterCallStore(%struct.Box* %Box.obj, i32 3)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %0
 }
 
 define noundef i32 @fieldStorePastEnd() #0 {
 entry:
   %Box.obj = alloca %struct.Box, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Box.constructor(%struct.Box* %Box.obj)
   %0 = call i32 @Box.afterFieldStore(%struct.Box* %Box.obj, i32 3)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %0
 }
 
@@ -277,6 +283,7 @@ entry:
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
   %Box.obj = alloca %struct.Box, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -295,6 +302,7 @@ entry:
   call void @Box.constructor(%struct.Box* %Box.obj)
   %9 = call i32 @Box.afterFieldStore(%struct.Box* %Box.obj, i32 0)
   %10 = add nsw i32 %8, %9
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %10
 }
 

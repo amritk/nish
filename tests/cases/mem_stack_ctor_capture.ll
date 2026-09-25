@@ -6,6 +6,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
@@ -60,6 +62,7 @@ entry:
   %reg.addr = alloca %struct.Registry*, align 8
   %Registry.obj = alloca %struct.Registry, align 8
   %last.addr = alloca %struct.Item*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.Registry, %struct.Registry* %Registry.obj, i32 0, i32 0
   store %struct.Item* null, %struct.Item** %0, align 8, !tbaa !7
   store %struct.Registry* %Registry.obj, %struct.Registry** %reg.addr, align 8
@@ -88,6 +91,7 @@ if.then:
   br label %if.end
 
 if.end:
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

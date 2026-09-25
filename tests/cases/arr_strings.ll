@@ -11,6 +11,7 @@
 
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
@@ -63,6 +64,7 @@ entry:
   %words.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i8*], align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -146,6 +148,7 @@ bounds.ok.1:
   %47 = getelementptr inbounds i8*, i8** %46, i64 0
   %48 = load i8*, i8** %47, align 8, !alias.scope !4, !noalias !3
   call void @nish_print(i8* %48)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

@@ -5,6 +5,12 @@
     "std/ and examples/ are not here: they are held to zero. See .claude/testing.md, \"The performance gate\"."
   ],
   "counts": {
+    "self/arrays.ts": {
+      "NL9011": 3
+    },
+    "self/assignment.ts": {
+      "NL9011": 1
+    },
     "self/ast_text.ts": {
       "NL9002": 1,
       "NL9003": 2
@@ -16,10 +22,12 @@
       "NL9010": 1
     },
     "self/checker.ts": {
-      "NL9007": 1
+      "NL9007": 1,
+      "NL9011": 2
     },
     "self/compilation.ts": {
-      "NL9007": 8
+      "NL9007": 8,
+      "NL9011": 3
     },
     "self/compile.ts": {
       "NL9007": 2
@@ -28,13 +36,21 @@
       "NL9010": 1
     },
     "self/debug.ts": {
-      "NL9007": 7
+      "NL9007": 7,
+      "NL9011": 2
+    },
+    "self/declarations.ts": {
+      "NL9011": 1
     },
     "self/diagnostics.ts": {
       "NL9007": 7
     },
     "self/dump.ts": {
-      "NL9007": 2
+      "NL9007": 2,
+      "NL9011": 3
+    },
+    "self/emit.ts": {
+      "NL9011": 4
     },
     "self/emit_arrays.ts": {
       "NL9007": 2
@@ -45,16 +61,24 @@
     "self/emit_control.ts": {
       "NL9007": 3
     },
+    "self/escape.ts": {
+      "NL9011": 1
+    },
+    "self/expressions.ts": {
+      "NL9011": 3
+    },
     "self/generics.ts": {
       "NL9002": 1,
-      "NL9007": 10
+      "NL9007": 10,
+      "NL9011": 7
     },
     "self/ice.ts": {
       "NL9009": 1
     },
     "self/interop_abi.ts": {
       "NL9007": 1,
-      "NL9010": 1
+      "NL9010": 1,
+      "NL9011": 1
     },
     "self/interop_header.ts": {
       "NL9007": 1
@@ -69,6 +93,9 @@
       "NL9007": 6,
       "NL9009": 2
     },
+    "self/members.ts": {
+      "NL9011": 7
+    },
     "self/options.ts": {
       "NL9010": 1
     },
@@ -82,11 +109,18 @@
       "NL9010": 4
     },
     "self/result.ts": {
-      "NL9007": 2
+      "NL9007": 2,
+      "NL9011": 1
+    },
+    "self/statements.ts": {
+      "NL9011": 2
     },
     "self/strings.ts": {
       "NL9007": 1,
       "NL9009": 1
+    },
+    "self/structs.ts": {
+      "NL9011": 10
     },
     "self/tbaa.ts": {
       "NL9002": 1

@@ -5,6 +5,8 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
@@ -260,6 +262,7 @@ entry:
   %arr.data = alloca [3 x i32], align 8
   %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [3 x i32], align 8
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Box.constructor(%struct.Box* %Box.obj)
   store %struct.Box* %Box.obj, %struct.Box** %b.addr, align 8
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
@@ -296,6 +299,7 @@ entry:
   %19 = load %struct.Box*, %struct.Box** %b.addr, align 8
   %20 = call i32 @Box.storeReplaced(%struct.Box* %19, i32 1)
   %21 = add nsw i32 %18, %20
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %21
 }
 

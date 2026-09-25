@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 434;
+export const RULE_COUNT: i32 = 435;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -915,6 +915,8 @@ export const performanceRules = (): string[] => [
   "NL9002",
   "are padding the alignment rules insert and nothing reads",
   "NL9010",
+  "leaves arena memory behind on every pass of this loop",
+  "NL9011",
   "already holds an allocation and this one drops it",
   "NL9003",
   "this computes with overflow: the result",

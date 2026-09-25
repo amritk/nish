@@ -5271,6 +5271,184 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end mem_arena_scope -->
 
+### A scope earned through callees
+
+A function that allocates nothing itself gets the same bracket when a callee
+leaves memory behind and nothing can keep it. `size` returns an `i32`, and
+`n`, the only thing it was handed, has no room for a pointer, so every cell
+`chain` builds is unreachable once `size` returns — however `chain` links them
+together, which the WP6 rule alone cannot see past (`c.next = head` makes it
+leak). A function with a pointer-shaped parameter qualifies only when the
+escape analysis shows no allocation stored into memory anywhere in the call.
+The rule and its proof are in [ARCHITECTURE.md](ARCHITECTURE.md), "Escape
+analysis, stack allocation, and arena scopes" (`tests/cases/mem_callee_scope`,
+`mem_callee_scope_tree`, and the `_escape`, `_return`, `_control` and
+`_nested` negatives).
+
+<!-- cookbook:begin mem_callee_scope -->
+```ts
+// `size` allocates nothing itself: `chain` builds the list and `size` keeps a
+// number. `n` is the only thing it was handed and cannot hold a pointer, so
+// the list cannot outlive the call, and `size` brackets itself with the arena
+// scope. `chain` returns its list, so it gets none.
+class Cell {
+  v: i32;
+  next: Cell | null = null;
+
+  constructor(v: i32) {
+    this.v = v;
+  }
+}
+
+const chain = (n: i32): Cell | null => {
+  let head: Cell | null = null;
+  for (let i = 0; i < n; i++) {
+    const c = new Cell(i);
+    c.next = head;
+    head = c;
+  }
+  return head;
+};
+
+export const size = (n: i32): i32 => {
+  let k = 0;
+  let p = chain(n);
+  while (p !== null) {
+    k = k + 1;
+    p = p.next;
+  }
+  return k;
+};
+```
+
+```llvm
+%struct.Cell = type { i32, %struct.Cell* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Cell.constructor(%struct.Cell* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %v) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Cell, %struct.Cell* %this, i32 0, i32 1
+  store %struct.Cell* null, %struct.Cell** %0, align 8, !tbaa !5
+  %1 = getelementptr inbounds %struct.Cell, %struct.Cell* %this, i32 0, i32 0
+  store i32 %v, i32* %1, align 4, !tbaa !6
+  ret void
+}
+
+define internal noundef align 8 %struct.Cell* @chain(i32 noundef %n) #0 {
+entry:
+  %head.addr = alloca %struct.Cell*, align 8
+  %i.addr = alloca i32, align 4
+  %c.addr = alloca %struct.Cell*, align 8
+  store %struct.Cell* null, %struct.Cell** %head.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %n
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  %3 = bitcast i8* %2 to %struct.Cell*
+  %4 = load i32, i32* %i.addr, align 4
+  call void @Cell.constructor(%struct.Cell* %3, i32 %4)
+  store %struct.Cell* %3, %struct.Cell** %c.addr, align 8
+  %5 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
+  %6 = load %struct.Cell*, %struct.Cell** %head.addr, align 8
+  %7 = getelementptr inbounds %struct.Cell, %struct.Cell* %5, i32 0, i32 1
+  store %struct.Cell* %6, %struct.Cell** %7, align 8, !tbaa !5
+  %8 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
+  store %struct.Cell* %8, %struct.Cell** %head.addr, align 8
+  br label %for.inc
+
+for.inc:
+  %9 = load i32, i32* %i.addr, align 4
+  %10 = add nsw i32 %9, 1
+  store i32 %10, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %11 = load %struct.Cell*, %struct.Cell** %head.addr, align 8
+  ret %struct.Cell* %11
+}
+
+define noundef i32 @size(i32 noundef %n) #1 {
+entry:
+  %k.addr = alloca i32, align 4
+  %p.addr = alloca %struct.Cell*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 0, i32* %k.addr, align 4
+  %0 = call %struct.Cell* @chain(i32 %n)
+  store %struct.Cell* %0, %struct.Cell** %p.addr, align 8
+  br label %while.cond
+
+while.cond:
+  %1 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
+  %2 = icmp ne %struct.Cell* %1, null
+  br i1 %2, label %while.body, label %while.end
+
+while.body:
+  %3 = load i32, i32* %k.addr, align 4
+  %4 = add nsw i32 %3, 1
+  store i32 %4, i32* %k.addr, align 4
+  %5 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
+  %6 = getelementptr inbounds %struct.Cell, %struct.Cell* %5, i32 0, i32 1
+  %7 = load %struct.Cell*, %struct.Cell** %6, align 8, !tbaa !5
+  store %struct.Cell* %7, %struct.Cell** %p.addr, align 8
+  br label %while.cond
+
+while.end:
+  %8 = load i32, i32* %k.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %8
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"Cell", !2, i64 0, !3, i64 8}
+!5 = !{!4, !3, i64 8}
+!6 = !{!4, !2, i64 0}
+```
+<!-- cookbook:end mem_callee_scope -->
+
 ### A tail call, and the release ahead of it
 
 `sum` ends with its recursive call, so the call carries `tail`: the callee is

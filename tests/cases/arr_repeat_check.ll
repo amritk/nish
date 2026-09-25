@@ -6,6 +6,8 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
@@ -156,6 +158,7 @@ define noundef i32 @test() #1 {
 entry:
   %p.addr = alloca %struct.Perm*, align 8
   %Perm.obj = alloca %struct.Perm, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Perm.constructor(%struct.Perm* %Perm.obj, i32 4)
   store %struct.Perm* %Perm.obj, %struct.Perm** %p.addr, align 8
   %0 = load %struct.Perm*, %struct.Perm** %p.addr, align 8
@@ -217,6 +220,7 @@ bounds.ok.2:
   %32 = getelementptr inbounds i32, i32* %31, i64 0
   %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3
   %34 = add nsw i32 %22, %33
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %34
 }
 
