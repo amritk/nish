@@ -15,7 +15,7 @@ import { isNishSpecifier, nishModuleNames } from "./nish_modules";
 import { STD_PREFIX } from "./branding";
 import { parseBareSpecifier } from "./packages";
 import { rejectForeignPointer, resolveType } from "./annotations";
-import { isFunctionParameter } from "./generics";
+import { functionTypeHereMessage, isFunctionParameter } from "./generics";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
 import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types";
@@ -57,11 +57,7 @@ export const collectParams = (
     if (isFunctionParameter(param)) {
       if (owner >= 0 || foreign) {
         const what = foreign ? "a `declare function`" : "a method or a constructor";
-        ctx.error(
-          param.children[1],
-          `\`${name}\` cannot have a function type here: a function type may only annotate a parameter of a ` +
-            `top-level function, which is monomorphised for each function it is given, and this is a parameter of ${what}`
-        );
+        ctx.error(param.children[1], functionTypeHereMessage(name, what));
         continue;
       }
       if (sig.paramNames.indexOf(name) >= 0) {

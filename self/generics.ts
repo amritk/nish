@@ -1228,7 +1228,7 @@ export const checkGenericCall = (
 // are call it and pass it on to another such parameter.
 
 /** An annotation with its parentheses taken off, which is where a function type is recognised. */
-export const unwrapTypeParens = (node: Node): Node => node.kind === N_TYPE_PAREN ? unwrapTypeParens(node.children[0]) : node;
+const unwrapTypeParens = (node: Node): Node => node.kind === N_TYPE_PAREN ? unwrapTypeParens(node.children[0]) : node;
 
 /** Whether a declared parameter is annotated with a function type (WP29). */
 export const isFunctionParameter = (param: Node): boolean =>
@@ -1291,7 +1291,7 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
  * so a symbol that holds a `$` of its own cannot run into the next segment, and
  * no type mangles to anything starting `fn.`, so the encoding stays injective.
  */
-export const withFunctionArguments = (symbol: string, functions: FunctionSig[]): string => {
+const withFunctionArguments = (symbol: string, functions: FunctionSig[]): string => {
   const parts: string[] = [symbol];
   for (const fn of functions) {
     parts.push(`fn.${fn.name.length}.${fn.name}`);
@@ -1300,7 +1300,7 @@ export const withFunctionArguments = (symbol: string, functions: FunctionSig[]):
 };
 
 /** `apply<i32, square>`: the source spelling of a request that takes functions (WP29). */
-export const functionInstanceDisplayName = (
+const functionInstanceDisplayName = (
   table: TypeTable,
   base: string,
   args: i32[],
@@ -1371,6 +1371,23 @@ const functionTypeText = (table: TypeTable, names: string[], types: i32[], retur
   }
   return `(${parts.join(", ")}) => ${table.typeName(returnType)}`;
 };
+
+/**
+ * The refusal for a function argument whose signature is not its parameter's
+ * function type, `wanted` spelled as the caller has it: as written while a
+ * type parameter may still be unbound, and resolved once every one is.
+ */
+const mismatchMessage = (
+  table: TypeTable,
+  template: TemplateInfo,
+  index: i32,
+  fn: FunctionSig,
+  param: Node,
+  wanted: string
+): string =>
+  `Argument ${index + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
+  `\`${functionTypeText(table, fn.paramNames, fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
+  `\`${wanted}\`; a function argument must have exactly its parameter's type`;
 
 /**
  * Resolve an annotation written in `template`'s declaration, with `bindings`
@@ -1461,12 +1478,7 @@ const resolveFunctionArgument = (
   if (fn.paramTypes.length !== wanted.length) {
     // Said now, in the words of the exact-type rule, rather than as a type
     // parameter the callee failed to bind.
-    ctx.error(
-      arg,
-      `Argument ${index + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
-        `\`${functionTypeText(ctx.table, fn.paramNames, fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
-        `\`${template.home.textOf(fnType)}\`; a function argument must have exactly its parameter's type`
-    );
+    ctx.error(arg, mismatchMessage(ctx.table, template, index, fn, param, template.home.textOf(fnType)));
     return null;
   }
   let k = 0;
@@ -1720,7 +1732,7 @@ const matchFunctionArguments = (
   let k = 0;
   let i = 0;
   for (const param of template.decl.children[1].children) {
-    if (template.owner === null && isFunctionParameter(param) && k < functions.length) {
+    if (isFunctionParameter(param) && k < functions.length) {
       const fn = functions[k];
       const fnType = unwrapTypeParens(param.children[1]);
       const wanted = fnType.children[0].children;
@@ -1750,9 +1762,7 @@ const matchFunctionArguments = (
       if (!same) {
         ctx.error(
           args.children[i],
-          `Argument ${i + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
-            `\`${functionTypeText(table, fn.paramNames, fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
-            `\`${functionTypeText(table, names, types, returnType)}\`; a function argument must have exactly its parameter's type`
+          mismatchMessage(table, template, i, fn, param, functionTypeText(table, names, types, returnType))
         );
         return false;
       }

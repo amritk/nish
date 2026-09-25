@@ -1679,6 +1679,11 @@ export class Parser {
    * else makes it a parenthesised expression.
    */
   startsArrowExpression(): boolean {
+    // An arrow's list opens with a name or closes at once; anything else after
+    // the `(` is an expression, known without scanning to its end, which keeps
+    // nested parentheses from being rescanned at every level.
+    const next = this.peek();
+    if (next !== TOK_IDENT && next !== TOK_RPAREN) return false;
     const scan = new Lexer(this.file.text);
     scan.pos = this.start;
     scan.next(); // `(`
