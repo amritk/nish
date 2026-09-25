@@ -21,7 +21,7 @@ import {
   splitByte,
   StringBuilder,
 } from "../../self/strings";
-import { hashString, StringMap, StringSet } from "../../self/map";
+import { entryOf, fingerprint, hashString, home, slotOf, StringMap, StringSet } from "../../self/map";
 import { nishExportTarget } from "../../self/manifest";
 import { parseBareSpecifier } from "../../self/packages";
 import {
@@ -156,6 +156,83 @@ function reportGrowth(out: string[]): void {
   }
   out.push(`grow size ${map.size()} sum ${sum} slots ${map.slots.length}`);
   out.push(`grow order ${jsonQuote(map.keyAt(0))} ${jsonQuote(map.keyAt(299))}`);
+
+  // 100000 keys take the table to 2^18 buckets, past the 2^16 where the
+  // bucket index starts to draw on the bits the fold XORs in. Every re-file
+  // is from the stored hashes, so a wrong one loses a key here. The 2^24 - 1
+  // entry cap is not driven: reaching it is gigabytes of arena for a panic.
+  const big = new StringMap();
+  i = 0;
+  while (i < 100000) {
+    big.set(`n${i}`, i);
+    i = i + 1;
+  }
+  let wrong = 0;
+  let strays = 0;
+  i = 0;
+  while (i < 100000) {
+    if (big.get(`n${i}`, -1) !== i) {
+      wrong = wrong + 1;
+    }
+    if (big.has(`m${i}`)) {
+      strays = strays + 1;
+    }
+    i = i + 1;
+  }
+  out.push(`grow size ${big.size()} wrong ${wrong} slots ${big.slots.length} strays ${strays}`);
+  out.push(`grow order ${jsonQuote(big.keyAt(0))} ${jsonQuote(big.keyAt(99999))}`);
+}
+
+/**
+ * The probe's two filters, each turned away on purpose. The first is a key
+ * with the resident key's fingerprint and home bucket (of a fresh map's 16)
+ * but another hash: the probe looks into the entry and the stored hash sends
+ * it on. The second is a real FNV-1a collision, found by a birthday search:
+ * the hash matches too, and only the string compare tells the keys apart.
+ */
+function reportProbe(out: string[]): void {
+  const resident = toU32(hashString("k0"));
+  let i = 1;
+  let twin = "";
+  while (twin.length === 0) {
+    const candidate = `k${i}`;
+    const hash = toU32(hashString(candidate));
+    const sameFingerprint = fingerprint(hash) === fingerprint(resident);
+    if (sameFingerprint && home(hash, 15) === home(resident, 15) && hash !== resident) {
+      twin = candidate;
+    }
+    i = i + 1;
+  }
+  const map = new StringMap();
+  map.set("k0", 1);
+  const before = map.get(twin, -1);
+  map.set(twin, 2);
+  out.push(`probe fingerprint ${jsonQuote(twin)} ${before} ${map.get("k0", -1)} ${map.get(twin, -1)} ${map.size()}`);
+
+  const collided = new StringMap();
+  collided.set("c2ya8", 1);
+  const missed = collided.get("czki6", -1);
+  collided.set("czki6", 2);
+  out.push(
+    `probe collision ${hashString("c2ya8")} ${hashString("czki6")} ${missed} ${collided.get("c2ya8", -1)} ${collided.get("czki6", -1)} ${collided.size()} ${jsonQuote(collided.keyAt(1))}`
+  );
+  const set = new StringSet();
+  const first = set.add("c2ya8");
+  const second = set.add("czki6");
+  const again = set.add("c2ya8");
+  out.push(`probe set ${first ? 1 : 0} ${second ? 1 : 0} ${again ? 1 : 0} ${set.size()}`);
+
+  // The slot packing at both ends, without a 16M-entry map: the largest legal
+  // index (2^24 - 2, whose index + 1 fills the field) under a fingerprint of
+  // 0xFF, and index 0 under a fingerprint of 0. Both halves must survive, and
+  // neither word may be the empty bucket's 0.
+  const high: u32 = 4294967295;
+  const top = slotOf(high, 16777214);
+  const low: u32 = 0;
+  const bottom = slotOf(low, 0);
+  out.push(
+    `probe pack ${toI32(fingerprint(top))} ${entryOf(top)} ${top !== 0 ? 1 : 0} ${toI32(fingerprint(bottom))} ${entryOf(bottom)} ${bottom !== 0 ? 1 : 0}`
+  );
 }
 
 export function main(): number {
@@ -236,6 +313,7 @@ export function main(): number {
 
   reportMap(out, texts);
   reportGrowth(out);
+  reportProbe(out);
 
   write(`${out.join("\n")}\n`);
   return 0;

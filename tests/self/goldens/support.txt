@@ -978,3 +978,9 @@ map first after overwrite "hello" 1000
 set size 11 added 11
 grow size 300 sum 313950 slots 512
 grow order "key0" "key299"
+grow size 100000 wrong 0 slots 262144 strays 0
+grow order "n0" "n99999"
+probe fingerprint "k7664" -1 1 2 2
+probe collision 713304578 713304578 -1 1 2 2 "czki6"
+probe set 1 1 0 2
+probe pack 255 16777214 1 0 0 1
