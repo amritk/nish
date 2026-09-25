@@ -1,7 +1,18 @@
 ---
 name: Nish on Are We Fast Yet, round 2 — header TBAA, call-site ranges, loop-body arena scopes, inline fixed arrays
-overview: Follow-up to awfy-perf (#207), closing the gaps its acceptance escalated in #215 and #216. Tag array-header accesses so class-field stores stop forcing reloads, and carry index ranges across calls so Permute's remaining checks can be proven. Reclaim each loop iteration's temporaries when they cannot outlive the pass, and store fixed-length array fields inline in their object. Then re-measure all seven benchmarks against 0.10.0.
+overview: Follow-up to awfy-perf (#207), closing the gaps its acceptance escalated in #215 and #216. Tag array-header accesses so class-field stores stop forcing reloads, and carry index ranges across calls so Permute's remaining checks can be proven. Reclaim each loop iteration's temporaries when they cannot outlive the pass, and store fixed-length array fields inline in their object. Then re-measure all seven benchmarks against 0.10.0. Every stage has to show it made nothing worse: a deterministic instruction-count guard lands first, and each PR measures wall time, compile time, size and correctness against the main it started from.
 stages:
+  - id: regression-guard
+    title: "test(bench): fail the suite when a benchmark executes more instructions than its baseline"
+    goal: A committed per-benchmark instruction-count baseline for the seven bench/ programs and the seven AWFY ports, checked by npm test under cachegrind, so any later codegen regression fails deterministically instead of hiding in timing noise
+    verification: npm run check && npm test (undegraded) && node bench/run.mjs --instructions --check
+    todos:
+      - id: guard-counter
+        content: Add an --instructions mode to bench/run.mjs that runs each program once under valgrind --tool=cachegrind and records its instruction count — see Regression guard
+      - id: guard-baseline
+        content: Commit bench/instructions.json measured on main, with a tolerance and a documented --update procedure — see Regression guard
+      - id: guard-check
+        content: Add a tests/run.js check that fails on any count above baseline plus tolerance, and skips with a counted reason when valgrind is absent — see Regression guard
   - id: header-tbaa
     title: "perf(codegen): give array header loads and stores their own TBAA subtree"
     goal: A class-field store no longer forces LLVM to reload an array header's length or data pointer, with a soundness argument covering every writer of a header
@@ -50,11 +61,13 @@ stages:
         content: Add cls_inline_array goldens with native round trips, negatives for every disqualifier, and a tests/layout check — see Inline fixed arrays
   - id: awfy-remeasure
     title: "docs(bench): Are We Fast Yet after round 2"
-    goal: The before/after table for all seven, 0.10.0 against main after round 2, is re-measured and published beside round 1's, with the RSS rows and the Queens/Towers gap to C++
+    goal: The before/after table for all seven, 0.10.0 against main after round 2, is re-measured on two machines and published beside round 1's, with the RSS rows and the Queens/Towers gap to C++; round 1's Bounce and Queens slowdowns are root-caused
     verification: npm test (undegraded) && node bench/run.mjs --validate --only awfy
     todos:
       - id: remeasure-table
-        content: Re-run the round-1 protocol for all seven, add the round-2 table and the C++ comparison to docs/wp9-optimisation.md — see Re-measure
+        content: Re-run the round-1 protocol for all seven on two machines, add the round-2 table and the C++ comparison to docs/wp9-optimisation.md — see Re-measure
+      - id: remeasure-rootcause
+        content: Root-cause round 1's Bounce and Queens slowdowns with evidence, and bring any fix that needs a build flag to the owner — see Re-measure
 ---
 
 # Nish on Are We Fast Yet, round 2
@@ -87,7 +100,7 @@ Development runs as follows:
 - inline-fixed-arrays starts after header-tbaa merges, because it builds on the same tagging and owns the same two files.
 - awfy-remeasure starts after everything else merges.
 
-Merge order: **header-tbaa → range-facts → loop-arena-scopes → inline-fixed-arrays → awfy-remeasure.**
+Merge order: **regression-guard → header-tbaa → range-facts → loop-arena-scopes → inline-fixed-arrays → awfy-remeasure.** regression-guard is small and starts first; the three parallel stages start at the same time and bring its baseline in when they merge `main`.
 
 The files below are shared and regenerated, never hand-merged. After its predecessor merges, a stage merges `main` in and regenerates them with the repo's tools:
 - existing `tests/cases/*.ll` and `tests/link/**`
@@ -96,6 +109,38 @@ The files below are shared and regenerated, never hand-merged. After its predece
 - `tests/nish-cmp.js` (DECLARED) and `tests/perf-baseline.json`
 - `docs/LANGUAGE.md` and `docs/ARCHITECTURE.md` (each stage edits its own section)
 - `tests/run.js`: each stage adds its own named check and touches no other
+
+## No regressions, no downsides
+
+This is a merge gate for every stage, on top of the review loop. Each PR measures the main it started from against its own head, in its own container, and puts the numbers in its body:
+
+| What | How | Limit |
+|---|---|---|
+| Instructions executed | `node bench/run.mjs --instructions --check` (the regression-guard baseline) | no increase for any benchmark, unless explained and the baseline raised in the same PR with the reason |
+| Wall time | all 7 AWFY and all 7 `bench/` programs, pinned with `taskset`, median of the last 20 of 30, 3 alternating rounds | no benchmark more than 3% slower beyond its round spread |
+| Compile time and memory | wall time and peak RSS of building `self/` (stage 2) and of compiling `bench/awfy/main.ts` | no more than 3% worse |
+| Size | `npm run size-report`, and `node tests/run.js budget` for the runtime | no growth, unless the stage is a layout change and says why |
+| Correctness beyond goldens | `npm run test:diff`, `node tests/differential/fuzz.js --stage1 --count 500`, `node tests/nish-cmp.js` against 0.10.0 | all clean |
+
+What happens when a limit is exceeded:
+- The worker root-causes it and fixes it in the same PR.
+- If the regression is the price of a larger gain, the PR does not merge automatically: the lead escalates it to the owner with both numbers.
+- "Noise" is not an explanation: a result inside the spread must show the spread.
+
+Risks specific to each stage, which each PR must measure:
+- **header-tbaa.** A wrong tag is a silent miscompile. Run the fuzzer at 2000 programs, not 500, plus a hand-written case for every writer of a header.
+- **range-facts.** Whole-program analysis costs compile time. Report `self/`'s build time before and after.
+- **loop-arena-scopes.** Mark/release on every pass is a cost in a tight loop that allocates little. Add a microbench with a hot loop allocating one small array per pass, and scope only when it measures as a win. Otherwise narrow the rule and record why.
+- **inline-fixed-arrays.** Objects get bigger, and reassigning a field copies K elements. Measure a class with a large K reassigned in a loop. Cap K where the copy costs more than the saved load.
+
+## Regression guard
+
+**Owns:** `bench/run.mjs`, `bench/instructions.json` (new), `bench/README.md`, plus its own named check in `tests/run.js`.
+
+- `--instructions` runs each of the 14 programs once under `valgrind --tool=cachegrind --cache-sim=no`, at inner counts small enough to finish in about a minute in total. It prints the count for each.
+- `--instructions --check` compares against `bench/instructions.json`, with a tolerance of 0.5% per program. Cachegrind is deterministic up to libc start-up noise, so measure that noise and state it.
+- `--instructions --update` rewrites the baseline. The README says a PR that runs it must give the reason in its body.
+- `tests/run.js` runs the check when `valgrind` is on `PATH`, and skips with a counted reason when it is not (per `.claude/testing.md`). Check whether CI's image has valgrind. If it does not, say so in the PR and propose the workflow line, but do not edit `.github/workflows`.
 
 ## Header TBAA
 
@@ -168,7 +213,9 @@ Re-run round 1's protocol on one machine:
 - the `--unchecked-indexing` and C++ columns;
 - the RSS rows, plus #216's `summarise` probe at 100, 1000 and 4000 rounds.
 
-Add a round-2 table beside round 1's, and say plainly which targets are met.
+Add a round-2 table beside round 1's, and say plainly which targets are met. Measure on two machines (two separate cloud sessions or VMs), because round 1's slowdowns appeared on one machine and not the other.
+
+**Root-cause round 1's slowdowns.** Bounce was +19.2% and Queens +5.2% on round 1's reference VM. Explain them with evidence: `perf stat` if available, otherwise the `-O3` machine-code layout of the hot loops in both builds. If they persist after round 2, list the fixes that are not a build flag and apply any that fits this stage's lane. Bring a fix that needs a compiler flag (`-align-loops`) to the owner rather than shipping it.
 
 ## Out of scope
 
