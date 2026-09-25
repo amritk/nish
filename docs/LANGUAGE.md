@@ -1873,13 +1873,21 @@ export const main = (): i32 => {
   `parallelMapInto: dst has 2 elements and src has 3` and exits 1
   (`tests/link/par_dst_short`). `src` and `dst` may be the same array
   (`tests/link/par_map`).
-- **A short array is the loop it would have been.** A map is divided into
-  chunks of at least 2^20 elements — about a millisecond of simple work, what a
-  region has to carry before dividing it costs under a tenth of it
-  ([wp20-threads.md](wp20-threads.md) §8e) — so up to 2^20 elements runs on
-  the calling thread (`tests/link/par_map`), and three million elements runs
-  on up to three (`tests/link/par_map_large`). There is no knob for it, or for
-  the thread count ([wp29-thread-surface.md](wp29-thread-surface.md) §9).
+- **A short array is the loop it would have been.** A map is divided only
+  once every thread's share carries enough work to pay for starting it
+  ([wp20-threads.md](wp20-threads.md) §8e). How many elements that is — the
+  *grain* — is sized per call from a static estimate of what `f` costs: 2^22
+  over the estimate, which counts one per operation, 32 per allocation, 4 per
+  call, and a loop's body as many times as its literal bound says or 64 times
+  when the bound is not a literal. So `(x) => x * x` is divided past 1,398,101
+  elements (`tests/link/par_map`), `(x * 31 + 7) % 1000` past 524,288
+  (`tests/link/par_map_large`), and a body with a loop far sooner. Up to the
+  grain the map calls its loop directly on the calling thread, where it
+  inlines; there is no thread start-up and no indirect call. The estimate
+  counts a call as a call and not as the callee's body, so a body that hides
+  its work behind a call is divided too little rather than too much. There is
+  no knob for the grain, or for the thread count
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §9).
 - **`parallelReduce(src, f, identity)` is deterministic.** `src` is split into
   `min(64, ceil(n / 2^20))` blocks, each block is folded from `identity`, and
   the block results are combined left to right. `std/threads.ts` does the same
@@ -1916,11 +1924,24 @@ from the whole-program facts, and each rule is reported there:
   `panic` are not writes: each prints and exits, and nothing runs again to see
   memory. The instance performs every store itself, into slots the partitioner
   has made disjoint, so a function that writes nothing cannot race.
-- **The function does not allocate.** A worker's arena is freed when its thread
-  exits, so `` `digits` allocates, and `parallelMapInto` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`) ``
-  (`tests/cases/reject_par_allocates`).
+- **What the function allocates dies with its element.** A function may build
+  strings, arrays and objects on the way to its result. They are given back
+  after every element: the function gets an arena scope of its own, so each
+  call marks the arena of the thread it runs on and releases it before it
+  returns, and a map over a million elements holds one element's temporaries
+  at a time (`tests/link/par_alloc`). It compiles with a performance warning,
+  NL9012, because every element pays for the allocation and the release:
+  `` the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both ``.
+  Two things make that release unsound, and each is refused. An allocation
+  stored into memory, which the escape analysis stops following, is
+  `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
+  (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
+  the arena would see the arena of whichever thread ran the element:
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  (`tests/cases/reject_par_arena`).
 - **The result is a number, a `boolean` or an enum** — `U` for a map, `T` for a
-  reduce — for the same reason:
+  reduce — because the element's memory is released before the result is
+  stored, and a worker's arena is freed when its thread exits:
   `` `name` answers `string`, and `parallelMapInto` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
   (`tests/cases/reject_par_result_type`).
 - **`dst` is not reachable from an element of `src`.** A function that only

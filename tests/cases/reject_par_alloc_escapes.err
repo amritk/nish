@@ -1,0 +1,3 @@
+`width` allocates at 
+reject_par_alloc_escapes.ts:21:21 and stores the allocation into memory, and `parallelMapInto`
+` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored

@@ -19,8 +19,9 @@
  *
  * What makes the region safe is checked at the call, not trusted
  * (docs/LANGUAGE.md, "Data parallelism"): the function passed as `f` may write
- * nothing its caller could observe and may not allocate, `dst` may not be
- * reachable from an element of `src`, and the result type is a number or a
+ * nothing its caller could observe, may allocate only temporaries it drops
+ * before it returns — they are given back after every element — `dst` may not
+ * be reachable from an element of `src`, and the result type is a number or a
  * `boolean`. Importing this module compiles the program with `--threads`,
  * because every worker needs an arena of its own.
  *
@@ -37,8 +38,8 @@
  * Elements per block of a reduce: 2^20, about a millisecond of simple work
  * (docs/wp20-threads.md §8e). It decides the blocking, and so the answer's
  * bits: an array this short is one block, folded as the loop it would have
- * been. It is independent of the map's grain (`GRAIN` in
- * `self/emit_parallel.ts`), which decides only how a map is divided and may
+ * been. It is independent of the map's grain (`mapGrain` in
+ * `self/parallel.ts`), which decides only how a map is divided and may
  * change without changing any result; this one may not.
  */
 const BLOCK: i32 = 1048576;
@@ -107,6 +108,16 @@ const reduceBlocks = <T>(
 };
 
 /**
+ * The panic of a map whose `dst` is shorter than its `src`. A function of its
+ * own so that the message it builds is its allocation and not the map's: an
+ * allocation anywhere in `parallelMapInto` would give every call an arena mark
+ * and release, which is most of what a map over a few elements costs.
+ */
+const dstTooShort = (have: i32, want: i32): void => {
+  panic(`parallelMapInto: dst has ${have} elements and src has ${want}`);
+};
+
+/**
  * `dst[i] = f(src[i])` for every index of `src`, on as many threads as the
  * machine has and the length is worth. `dst` must be at least as long as
  * `src`, which is checked once, before any element is written.
@@ -114,7 +125,7 @@ const reduceBlocks = <T>(
 export const parallelMapInto = <T, U>(src: T[], dst: U[], f: (x: T) => U): void => {
   const n: i32 = toI32(src.length);
   if (toI32(dst.length) < n) {
-    panic(`parallelMapInto: dst has ${toI32(dst.length)} elements and src has ${n}`);
+    dstTooShort(toI32(dst.length), n);
   }
   mapRange(src, dst, f, 0, n);
 };

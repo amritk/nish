@@ -9,10 +9,15 @@
 // partials, 0, blocks)` in a reduce. It becomes a region:
 //
 //   %par.ctx = alloca { <every argument but the range> }   ; in the entry block
+//   br i1 (<hi> <= <grain>), label %par.seq, label %par.region
+// par.seq:                          ; one chunk: the loop, called directly
+//   call void @<chunk>(<every argument>, i32 0, i32 <hi>)
+// par.region:
 //   store ... into each field
 //   call void @nish_parallel_range(@<instance>$chunk, i8* <ctx>, i64 <hi>, i64 <grain>)
 //
-// and `@<instance>$chunk(lo, hi, ctx)` loads the arguments back and calls the
+// where `<grain>` is a constant sized from the body (`regionGrain`), and
+// `@<instance>$chunk(lo, hi, ctx)` loads the arguments back and calls the
 // chunk loop over `[lo, hi)`. That loop is an ordinary instance of a private
 // template, with its bounds proofs and TBAA, and the partitioner runs it once
 // per contiguous chunk, chunk 0 on the calling thread. What each thread may do
@@ -28,22 +33,25 @@
 import { Emitter } from "./emit";
 import { internalErrorFor } from "./ice";
 import { IRFunction, IRParam } from "./ir";
-import { isParallelEntry, parallelRoleOf } from "./parallel";
+import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf } from "./parallel";
 import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
 
 /**
- * Elements per chunk of a map region: 2^20, about a millisecond of simple
- * work, which is what a region has to carry before the ~125 µs of dividing it
- * four ways is under a tenth of its cost (docs/wp20-threads.md §8e). A map
- * over at most this many elements is one chunk, and runs on the calling
- * thread as the loop it would have been.
+ * The grain the region in `caller` is divided at: for a map, the one its body
+ * earns (`mapGrain`, `self/parallel.ts`), so a map whose elements are cheap
+ * stays one chunk on the calling thread — the loop it would have been — until
+ * there is a millisecond of work for each thread, and one whose elements are
+ * dear is divided sooner.
  *
- * It governs a map alone. A reduce's region divides its blocks, with a grain
- * of one block, and the block width is `BLOCK` in `std/threads.ts`, which
- * decides the reduce's answer and is independent of this constant: tuning one
- * never obliges the other to move.
+ * A reduce's region divides its blocks, with a grain of one block. The block
+ * width is `BLOCK` in `std/threads.ts`, which decides the reduce's answer and is
+ * independent of this: the grain decides only how a map is divided, and moving
+ * it never changes a result.
  */
-export const GRAIN: i32 = 1048576;
+const regionGrain = (caller: FunctionSig): i32 => {
+  const body = parallelBodyOf(caller);
+  return body === null || parallelRoleOf(caller) !== PAR_MAP ? 1 : mapGrain(body);
+};
 
 /** Whether the call from `caller` to `callee` is the one that becomes a region. */
 export const isParallelRegionCall = (caller: FunctionSig | null, callee: FunctionSig): boolean =>
@@ -86,6 +94,27 @@ export const emitParallelRegion = (
   const ctxType = `{ ${fieldTypes.join(", ")} }`;
   const fn = emitter.fn;
   const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0);
+  const hi = values[count - 1];
+  const grain = regionGrain(caller);
+  // A range the partitioner would not divide is the chunk loop over all of it
+  // on this thread, which is what `nish_parallel_range` would run too; called
+  // directly it is a call LLVM can inline, where the partitioner's is through a
+  // pointer. That is what keeps a short map as cheap as the loop it replaces.
+  const seqBlock = fn.newBlock("par.seq");
+  const regionBlock = fn.newBlock("par.region");
+  const doneBlock = fn.newBlock("par.done");
+  const small = fn.emitValue(`icmp sle i32 ${hi}, ${grain}`);
+  fn.emit(`br i1 ${small}, label %${seqBlock.label}, label %${regionBlock.label}`);
+  fn.placeBlock(seqBlock);
+  const operands: string[] = [];
+  i = 0;
+  while (i < types.length && i < values.length) {
+    operands.push(`${types[i]} ${values[i]}`);
+    i = i + 1;
+  }
+  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`);
+  fn.emit(`br label %${doneBlock.label}`);
+  fn.placeBlock(regionBlock);
   i = 0;
   while (i < fieldTypes.length && i < values.length) {
     // Read before the call below, which ends the length facts.
@@ -96,12 +125,13 @@ export const emitParallelRegion = (
     i = i + 1;
   }
   const raw = fn.emitValue(`bitcast ${ctxType}* ${slot} to i8*`);
-  const len = fn.emitValue(`sext i32 ${values[count - 1]} to i64`);
-  const grain = parallelRoleOf(caller) === PAR_MAP ? GRAIN : 1;
+  const len = fn.emitValue(`sext i32 ${hi} to i64`);
   const trampoline = `${caller.name}$chunk`;
   fn.emit(
     `call void ${emitter.useRuntime("nish_parallel_range")}(void (i64, i64, i8*)* @${trampoline}, i8* ${raw}, i64 ${len}, i64 ${grain})`
   );
+  fn.emit(`br label %${doneBlock.label}`);
+  fn.placeBlock(doneBlock);
   emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes));
 };
 

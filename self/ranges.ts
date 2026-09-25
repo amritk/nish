@@ -66,9 +66,10 @@
 // the output is what it was. `--threads` changes nothing here. The one thing
 // in the language that runs code on other threads is a `nish/threads` region
 // (`self/parallel.ts`): its body is called from an instantiation, so it is
-// entered knowing nothing; it is held to writing nothing its caller can see and
-// allocating nothing, so no worker resizes an array or rebinds a field while
-// another thread holds a fact about it; and its caller waits at the join. Any
+// entered knowing nothing; it is held to writing nothing its caller can see,
+// and what it allocates lives in the worker's own arena and dies with its
+// element, so no worker resizes an array or rebinds a field that another
+// thread holds a fact about; and its caller waits at the join. Any
 // other call runs on its caller's thread, and a host thread resizing an array
 // a Nish function is using is a data race that breaks the facts inside one
 // body just as much as across a call.
