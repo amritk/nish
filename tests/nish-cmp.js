@@ -1452,6 +1452,15 @@ const DECLARED = [
     changelog: "Give array header loads and stores their own TBAA subtree",
     why: "every load and store of an array header's length, capacity or data pointer now carries a `!tbaa` tag in an `array header` subtree of its own, so any module that builds, reads or resizes an array moves its metadata",
   },
+  // WP15 §2.4: a call whose callee resizes nothing keeps the caller's length
+  // facts, a function every caller of which is visible is entered with what
+  // they prove, and a count-down loop keeps its upper bound. Any program with
+  // an access past a call, or in a function called with a proven index, loses
+  // checks and the attributes a dropped panic frees, in any module of it.
+  {
+    changelog: "Prove an index in range from what every call site guarantees",
+    why: "call-site ranges and callee summaries prove accesses the reference compiler checks, across the corpus, so those modules drop `nish_panic_index` calls and the attributes they cost",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

@@ -1,0 +1,1 @@
+--threads --emit-napi-async build/test/link/range_export_napi_async/shim.c

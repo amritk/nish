@@ -79,6 +79,14 @@ export class Options {
    */
   emitNapiAsync: string;
   /**
+   * `--link`: the executable this invocation writes, or the empty string when
+   * it writes IR alone; and `--profile`, the recipe `scripts/build.sh` links it
+   * with. The IR reads both only through `hostVisible` (`self/visibility.ts`):
+   * a build that is its own final link sees every call its exports receive.
+   */
+  link: string;
+  profile: string;
+  /**
    * The directory holding `scripts/`, `runtime/` and `std/`, as the driver
    * worked it out from `argv[0]`. It is here rather than derived where it is
    * needed because `process.argv` is legal only in a program that has an entry
@@ -113,6 +121,8 @@ export class Options {
     this.emitDts = "";
     this.emitNapi = "";
     this.emitNapiAsync = "";
+    this.link = "";
+    this.profile = "speed";
     this.packageRoot = "";
     this.json = false;
   }

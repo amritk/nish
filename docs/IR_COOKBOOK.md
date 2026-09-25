@@ -1619,13 +1619,12 @@ export const main = (): number => {
 
 @.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"sum = \00" }, align 8
 
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 
 define internal noundef i32 @widen(i8 noundef %b) #0 {
 entry:
@@ -1665,31 +1664,21 @@ entry:
   %15 = load i8, i8* %14, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   %16 = call i32 @widen(i8 %15)
   %17 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
-  %19 = load i64, i64* %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %20 = icmp ult i64 1, %19
-  br i1 %20, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 1, i64 %19)
-  unreachable
-
-bounds.ok:
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
-  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %23 = bitcast i8* %22 to i8*
-  %24 = getelementptr inbounds i8, i8* %23, i64 1
-  %25 = load i8, i8* %24, align 1, !alias.scope !4, !noalias !3, !tbaa !14
-  %26 = call i32 @widen(i8 %25)
-  %27 = add nsw i32 %16, %26
-  %28 = call i8* @nish_str_from_i32(i32 %27)
-  %29 = call i8* @nish_str_concat(i8* %9, i8* %28)
-  call void @nish_print(i8* %29)
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %20 = bitcast i8* %19 to i8*
+  %21 = getelementptr inbounds i8, i8* %20, i64 1
+  %22 = load i8, i8* %21, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %23 = call i32 @widen(i8 %22)
+  %24 = add nsw i32 %16, %23
+  %25 = call i8* @nish_str_from_i32(i32 %24)
+  %26 = call i8* @nish_str_concat(i8* %9, i8* %25)
+  call void @nish_print(i8* %26)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -1697,9 +1686,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -19,9 +19,9 @@ function log(n: i32): void -> @log
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
 function run(): i32 -> @run [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reset
-  calls: log nish_panic_index reset
+  calls: log reset
   stackSites=1 stackLocals=1
   local 18:9 xs: i32[] (const)
   callee 19:3 reset -> @reset

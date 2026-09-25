@@ -1,11 +1,10 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 
 define internal noundef double @mean(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
@@ -78,28 +77,18 @@ entry:
   call void @nish_print(i8* %10)
   %11 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %12 = fptosi double 0x3FF0000000000000 to i64
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
-  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %15 = icmp ult i64 %12, %14
-  br i1 %15, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %12, i64 %14)
-  unreachable
-
-bounds.ok:
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
-  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %18 = bitcast i8* %17 to double*
-  %19 = getelementptr inbounds double, double* %18, i64 %12
-  %20 = load double, double* %19, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %21 = call i8* @nish_str_from_f64(double %20)
-  call void @nish_print(i8* %21)
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %15 = bitcast i8* %14 to double*
+  %16 = getelementptr inbounds double, double* %15, i64 %12
+  %17 = load double, double* %16, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %18 = call i8* @nish_str_from_f64(double %17)
+  call void @nish_print(i8* %18)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
   call void @nish_main()
   call void @nish_free_arena()
@@ -107,9 +96,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

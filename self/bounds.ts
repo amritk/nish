@@ -38,7 +38,7 @@
 // in `s.substring(k, (k = s.length))` and read three bytes before the string
 // body.
 //
-// The five families of fact, keyed by *variable* — a local cannot be written
+// The six families of fact, keyed by *variable* — a local cannot be written
 // through an alias, so no store and no call can invalidate a fact behind the
 // checker's back:
 //
@@ -47,6 +47,9 @@
 //   atMost(i, w)     `i <= w.length`
 //   maxIndex(i, n)   `i < n`, `n` a literal
 //   minLength(w, n)  `w.length >= n`, `n` a literal
+//   minValue(i, n)   `i >= n`, `n` a literal of 1 or more, recorded beside
+//                    `nonNegative(i)`: what makes `i - 1` a valid index after
+//                    `if (i !== 0)`, and what `i - c` keeps
 //
 // Guards and initialisers are not the only source. A checked access that
 // *ran* is one too: `a[i]` and `s.charCodeAt(i)` either branch to
@@ -69,7 +72,19 @@
 // while a string's length cannot change at all once the variable holding it is
 // bound; and an increment keeps its variable's lower
 // bound only when `nsw` is on, because `--wrapping` *defines* the step past
-// `INT_MAX` to land on `INT_MIN`.
+// `INT_MAX` to land on `INT_MIN`. A decrement is the mirror: it keeps the upper
+// bounds, under `nsw` or where the variable is known non-negative, and never
+// for an unsigned variable, which wraps at zero.
+//
+// "Any call" is pass 2's answer, which runs before every body is checked and
+// so knows no callee. `self/ranges.ts` walks each body again once the whole
+// program is checked (WP15 §2.4), with a `CallSummary` per callee — the field
+// names and record types it may store, and no summary at all for one that may
+// resize an array — and with the facts every call site proves about the
+// function's parameters as its entry state. A call with a summary drops only
+// the paths its stores reach and keeps every array length; a call without one
+// is "any call" still. Every rule below applies to the entry facts exactly as
+// to a guard's.
 //
 // The length holder `w` may also be a **property path** (#106): a root local,
 // parameter or `this`, then a chain of field names — `h.xs`,
@@ -88,12 +103,13 @@
 //     record type, because that is the only memory the store can reach
 //     (`recordReaches`);
 //   - an assignment to the root, or its declaration running again;
-//   - **any** call and any `new`, strings included. `FunctionFacts.resizesArray`
-//     would answer "can this callee grow an array", but it is the attribute
-//     fixpoint's, which runs after every body is checked, so here it is always
-//     "not known yet" — and it would not be enough if it were known, because a
-//     callee that stores `h.xs = shorter` resizes nothing and still rebinds the
-//     path. `push` and `pop` are calls, so they are in this rule too;
+//   - **any** call and any `new`, strings included, in pass 2 — and, once
+//     `self/ranges.ts` knows the callee, a call whose summary has no stores
+//     that reach the path and resizes nothing. Resizing alone would not be
+//     enough to know: a callee that stores `h.xs = shorter` resizes nothing
+//     and still rebinds the path, which is why a summary lists field names.
+//     `push` and `pop` are calls with no summary, so they are in this rule
+//     too;
 //   - a link whose **declared** type is not a plain struct: a path is never
 //     built through `T | null`, whatever a guard narrowed it to, and neither is
 //     one whose last link is a nullable array. #104's first hoist miscompiled
@@ -137,9 +153,10 @@ import {
   N_WHILE,
   Node,
 } from "./nodes";
-import { CheckedProgram, inlineElementStruct } from "./program";
-import { Local, STORAGE_LOCAL } from "./symbols";
-import { T_I32, T_I64, T_STRING, TypeTable, isUnsigned } from "./types";
+import { StringMap } from "./map";
+import { CheckedProgram, FunctionSig, ROLE_METHOD, inlineElementStruct } from "./program";
+import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
+import { T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types";
 
 /** The largest bound the fold carries; a literal past it is answered "not a bound". */
 const I32_MAX: i64 = 2147483647;
@@ -149,11 +166,12 @@ export const FACT_BELOW: i32 = 1;
 export const FACT_AT_MOST: i32 = 2;
 export const FACT_MAX_INDEX: i32 = 3;
 export const FACT_MIN_LENGTH: i32 = 4;
+export const FACT_MIN_VALUE: i32 = 5;
 
 /**
- * One fact. `v` is the index variable for the first three kinds and the length
- * holder for `minLength`; `w` is the length holder of `below`; `n` is the
- * literal of the two constant families.
+ * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
+ * is the length holder; `w` is the length holder of `below` and `atMost`; `n`
+ * is the literal of the three constant families.
  */
 export class Fact {
   kind: i32;
@@ -181,7 +199,7 @@ export class ConditionFacts {
 }
 
 /**
- * The facts that hold at one program point. Four parallel-array families,
+ * The facts that hold at one program point, as parallel arrays per family,
  * because entry order is the order everything is compared in.
  */
 export class State {
@@ -194,6 +212,8 @@ export class State {
   maxIndexValue: i32[];
   minLengthVar: Local[];
   minLengthValue: i32[];
+  minValueVar: Local[];
+  minValueValue: i32[];
 
   constructor() {
     this.nonNegative = [];
@@ -205,6 +225,8 @@ export class State {
     this.maxIndexValue = [];
     this.minLengthVar = [];
     this.minLengthValue = [];
+    this.minValueVar = [];
+    this.minValueValue = [];
   }
 }
 
@@ -237,6 +259,12 @@ const cloneState = (s: State): State => {
     out.minLengthValue.push(s.minLengthValue[k]);
     k = k + 1;
   }
+  k = 0;
+  while (k < s.minValueVar.length) {
+    out.minValueVar.push(s.minValueVar[k]);
+    out.minValueValue.push(s.minValueValue[k]);
+    k = k + 1;
+  }
   return out;
 };
 
@@ -252,6 +280,8 @@ const copyInto = (into: State, from: State): void => {
   into.maxIndexValue = copy.maxIndexValue;
   into.minLengthVar = copy.minLengthVar;
   into.minLengthValue = copy.minLengthValue;
+  into.minValueVar = copy.minValueVar;
+  into.minValueValue = copy.minValueValue;
 };
 
 // ---- Reading the state ------------------------------------------------------------
@@ -353,6 +383,27 @@ const knownMinLength = (state: State, w: Local, n: i32): boolean => {
   return best >= 0 && best >= n;
 };
 
+/**
+ * The largest `n` known to satisfy `v >= n`: a recorded floor, 0 for a
+ * variable that is only known non-negative, or -1 when nothing bounds it from
+ * below. The floor is what `n - 1` needs to stay non-negative, and it is how
+ * `if (n !== 0)` on a non-negative `n` says `n >= 1`.
+ */
+const minValueOf = (state: State, v: Local): i32 => {
+  let best = -1;
+  let k = 0;
+  while (k < state.minValueVar.length) {
+    if (state.minValueVar[k] === v && state.minValueValue[k] > best) {
+      best = state.minValueValue[k];
+    }
+    k = k + 1;
+  }
+  if (best < 0 && knownNonNegative(state, v)) {
+    return 0;
+  }
+  return best;
+};
+
 // ---- Writing the state ------------------------------------------------------------
 
 const addFact = (state: State, fact: Fact): void => {
@@ -386,6 +437,16 @@ const addFact = (state: State, fact: Fact): void => {
     state.maxIndexValue.push(fact.n);
     return;
   }
+  if (fact.kind === FACT_MIN_VALUE) {
+    // A floor of 1 or more is a lower bound of 0 as well, and recording both
+    // keeps every reader of `nonNegative` unaware of this family.
+    addFact(state, new Fact(FACT_NON_NEGATIVE, fact.v, null, 0));
+    if (fact.n > 0 && minValueOf(state, fact.v) < fact.n) {
+      state.minValueVar.push(fact.v);
+      state.minValueValue.push(fact.n);
+    }
+    return;
+  }
   // A weaker floor than one already recorded changes no answer, and a checked
   // literal index offers the same one at every access it passes.
   if (knownMinLength(state, fact.v, fact.n)) {
@@ -401,8 +462,61 @@ const addFacts = (state: State, facts: Fact[]): void => {
   }
 };
 
+/**
+ * Whether any fact in `state` names `v`, as an index or as a holder. The
+ * `forget` family rebuilds every array it filters, and most of what it is
+ * asked to forget is not there: a call forgets every path, an assignment
+ * forgets its variable, whether or not either holds a fact.
+ */
+const mentions = (state: State, v: Local): boolean => {
+  for (const x of state.nonNegative) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.belowIndex) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.belowHolder) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.atMostIndex) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.atMostHolder) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.maxIndexVar) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.minLengthVar) {
+    if (x === v) {
+      return true;
+    }
+  }
+  for (const x of state.minValueVar) {
+    if (x === v) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /** Drop the upper bounds of `v` and keep its lower one: what an increment leaves behind. */
 const forgetUpperBounds = (state: State, v: Local): void => {
+  if (!mentions(state, v)) {
+    return;
+  }
   const index: Local[] = [];
   const holder: Local[] = [];
   let k = 0;
@@ -446,6 +560,9 @@ const forgetUpperBounds = (state: State, v: Local): void => {
  * and the accesses indexed *into* it.
  */
 const forget = (state: State, v: Local): void => {
+  if (!mentions(state, v)) {
+    return;
+  }
   const kept: Local[] = [];
   for (const x of state.nonNegative) {
     if (x !== v) {
@@ -490,6 +607,48 @@ const forget = (state: State, v: Local): void => {
   }
   state.minLengthVar = lengthVar;
   state.minLengthValue = lengthValue;
+  forgetLowerBounds(state, v);
+};
+
+/**
+ * An unsigned increment wraps at the top of its range to zero, which keeps
+ * `v >= 0` — its type says so anyway — and breaks any higher floor, so after
+ * one only zero is left. A signed one keeps its floor under `nsw` or loses
+ * everything under `--wrapping` (`keepsLowerBound`), and this leaves it alone.
+ */
+const forgetWrappedFloor = (state: State, v: Local): void => {
+  if (isUnsigned(v.type)) {
+    forgetLowerBounds(state, v);
+  }
+};
+
+/**
+ * Drop the lower bounds of `v` and keep its upper ones: what a decrement
+ * leaves behind, where `forgetUpperBounds` is what an increment does.
+ */
+const forgetLowerBounds = (state: State, v: Local): void => {
+  if (!mentions(state, v)) {
+    return;
+  }
+  const kept: Local[] = [];
+  for (const x of state.nonNegative) {
+    if (x !== v) {
+      kept.push(x);
+    }
+  }
+  state.nonNegative = kept;
+  const floorVar: Local[] = [];
+  const floorValue: i32[] = [];
+  let k = 0;
+  while (k < state.minValueVar.length) {
+    if (state.minValueVar[k] !== v) {
+      floorVar.push(state.minValueVar[k]);
+      floorValue.push(state.minValueValue[k]);
+    }
+    k = k + 1;
+  }
+  state.minValueVar = floorVar;
+  state.minValueValue = floorValue;
 };
 
 /**
@@ -498,6 +657,9 @@ const forget = (state: State, v: Local): void => {
  * operation at all, so only rebinding the variable can change `s.length`.
  */
 const forgetArrayLengths = (ctx: CheckContext, state: State): void => {
+  if (state.belowHolder.length === 0 && state.atMostHolder.length === 0 && state.minLengthVar.length === 0) {
+    return;
+  }
   const index: Local[] = [];
   const holder: Local[] = [];
   let k = 0;
@@ -583,12 +745,22 @@ const intersect = (a: State, b: State): State => {
     }
     k = k + 1;
   }
+  // The lower of two floors, as with a length's.
+  k = 0;
+  while (k < a.minValueVar.length) {
+    const other = minValueOf(b, a.minValueVar[k]);
+    if (other > 0) {
+      out.minValueVar.push(a.minValueVar[k]);
+      out.minValueValue.push(a.minValueValue[k] < other ? a.minValueValue[k] : other);
+    }
+    k = k + 1;
+  }
   return out;
 };
 
 // ---- Reading the syntax -----------------------------------------------------------
 
-const unwrapBoundsParens = (expr: Node): Node => {
+export const unwrapBoundsParens = (expr: Node): Node => {
   let inner = expr;
   while (inner.kind === N_PAREN) {
     inner = inner.children[0];
@@ -668,6 +840,11 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
   if (root === null) {
     return null;
   }
+  return internHolder(walk, root, fields, links, type);
+};
+
+/** The one stand-in for the path `root.fields`, made the first time it is asked for. */
+const internHolder = (walk: BoundsWalk, root: Local, fields: string[], links: i32[], type: i32): Local => {
   const name = `${root.name}.${fields.join(".")}`;
   for (const path of walk.paths) {
     if (path.root === root && path.holder.name === name) {
@@ -677,6 +854,38 @@ const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
   const holder = new Local(name, type, false, STORAGE_LOCAL);
   walk.paths.push(new PathHolder(root, fields, links, holder));
   return holder;
+};
+
+/**
+ * `pathHolder` for a path given as a root and its field names rather than as
+ * an expression: the entry facts of `self/ranges.ts` name one that way. Every
+ * link is resolved on its declared type, by the rule `declaredPathType` holds
+ * an expression to, and `null` is the answer wherever that one would refuse.
+ */
+const internPath = (walk: BoundsWalk, root: Local, fields: string[]): Local | null => {
+  const program = walk.ctx.program;
+  const table = walk.ctx.table;
+  const links: i32[] = [];
+  let type = root.type;
+  for (const name of fields) {
+    if (!table.isStruct(type)) {
+      return null;
+    }
+    const info = program.struct(table.nameOf(type));
+    if (info === null) {
+      return null;
+    }
+    const field = info.field(name);
+    if (field === null) {
+      return null;
+    }
+    links.push(type);
+    type = field.type;
+  }
+  if (fields.length === 0 || (!table.isArray(type) && type !== T_STRING)) {
+    return null;
+  }
+  return internHolder(walk, root, fields, links, type);
 };
 
 /**
@@ -904,9 +1113,11 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   if (loVar !== null && hiConst >= 0) {
     out.push(new Fact(FACT_MAX_INDEX, loVar, null, strict ? hiConst : hiConst + 1));
   }
-  // `n < i` / `n <= i`: a lower bound, and zero is the only one that matters.
+  // `n < i` / `n <= i`: a lower bound. Zero is the one an access needs, and a
+  // floor above it is what lets `i - 1` keep one.
   if (hiVar !== null && loConst >= 0) {
     out.push(new Fact(FACT_NON_NEGATIVE, hiVar, null, 0));
+    out.push(new Fact(FACT_MIN_VALUE, hiVar, null, strict ? loConst + 1 : loConst));
   }
   // `n < w.length` / `n <= w.length`: §2.2's length guard.
   if (loConst >= 0 && hiLength !== null) {
@@ -946,12 +1157,39 @@ const addEqualityFacts = (walk: BoundsWalk, out: Fact[], value: Node, other: Nod
   }
   const v = indexLocal(walk.ctx.program, value);
   if (v !== null) {
-    out.push(new Fact(FACT_NON_NEGATIVE, v, null, 0));
+    out.push(new Fact(FACT_MIN_VALUE, v, null, n));
     out.push(new Fact(FACT_MAX_INDEX, v, null, n + 1));
   }
   const holder = lengthOf(walk, value);
   if (holder !== null) {
     out.push(new Fact(FACT_MIN_LENGTH, holder, null, n));
+  }
+};
+
+/**
+ * What `a !== b` proves where it holds: nothing on its own, but a literal at
+ * one end of a range already known moves that end in by one. `n !== 0` on a
+ * non-negative `n` is `n >= 1`, which is what makes `n - 1` a valid index in
+ * the recursion that counts `n` down, and `i !== n` on an `i <= n` is `i < n`.
+ */
+const disequalityFacts = (walk: BoundsWalk, state: State, left: Node, right: Node): Fact[] => {
+  const out: Fact[] = [];
+  addDisequalityFacts(walk, state, out, left, right);
+  addDisequalityFacts(walk, state, out, right, left);
+  return out;
+};
+
+const addDisequalityFacts = (walk: BoundsWalk, state: State, out: Fact[], value: Node, other: Node): void => {
+  const n = literalValue(other);
+  const v = indexLocal(walk.ctx.program, value);
+  if (n < 0 || v === null) {
+    return;
+  }
+  if (minValueOf(state, v) === n) {
+    out.push(new Fact(FACT_MIN_VALUE, v, null, n + 1));
+  }
+  if (n > 0 && maxIndexOf(state, v) === n + 1) {
+    out.push(new Fact(FACT_MAX_INDEX, v, null, n));
   }
 };
 
@@ -991,10 +1229,10 @@ const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFa
     return factsFrom([], concatFacts(survivingFacts(walk, l.whenFalse, right), r.whenFalse));
   }
   if (op === "===") {
-    return factsFrom(equalityFacts(walk, left, right), []);
+    return factsFrom(equalityFacts(walk, left, right), disequalityFacts(walk, state, left, right));
   }
   if (op === "!==") {
-    return factsFrom([], equalityFacts(walk, left, right));
+    return factsFrom(disequalityFacts(walk, state, left, right), equalityFacts(walk, left, right));
   }
   // `a < b` is false exactly when `b <= a`, and so on around the four
   // relations: each one proves something on both sides of the branch.
@@ -1059,6 +1297,11 @@ const factsOf = (state: State): Fact[] => {
     out.push(new Fact(FACT_MIN_LENGTH, state.minLengthVar[k], null, state.minLengthValue[k]));
     k = k + 1;
   }
+  k = 0;
+  while (k < state.minValueVar.length) {
+    out.push(new Fact(FACT_MIN_VALUE, state.minValueVar[k], null, state.minValueValue[k]));
+    k = k + 1;
+  }
   return out;
 };
 
@@ -1101,6 +1344,58 @@ const isIncrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
 const keepsLowerBound = (ctx: CheckContext, v: Local): boolean => !ctx.wrapping || isUnsigned(v.type);
 
 /**
+ * `v = v - <non-negative literal>`, the mirror of `isIncrement`. Only the left
+ * operand may be `v`: `c - v` moves the other way.
+ */
+const isDecrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
+  const e = unwrapBoundsParens(rhs);
+  if (e.kind !== N_BINARY || e.text !== "-") {
+    return false;
+  }
+  const left = localOf(program, e.children[0]);
+  return left !== null && left === v && literalValue(e.children[1]) >= 0;
+};
+
+/**
+ * Whether a decrement of `v` keeps its upper bounds. `v - c <= v` unless the
+ * subtraction wraps past `INT_MIN` to the top of the range, which `nsw` makes
+ * undefined behaviour the compiler may assume away and `--wrapping` defines;
+ * `known` is the caller's word that `v >= 0` there, which rules the wrap out
+ * either way. An unsigned `v` wraps at zero by definition, so it never keeps
+ * one.
+ */
+const keepsUpperBound = (ctx: CheckContext, v: Local, known: boolean): boolean =>
+  !isUnsigned(v.type) && isIndexType(v.type) && (!ctx.wrapping || known);
+
+/**
+ * The facts `v = <local> - c` and `v = <local>` give `v`, read off what the
+ * state knows about the local. Removing `c` lowers every floor by `c` — so a
+ * floor of at least `c` leaves `v` non-negative — and every upper bound too,
+ * which with `c >= 1` turns `w <= xs.length` into `v < xs.length`. The upper
+ * half needs the subtraction not to wrap (`keepsUpperBound`).
+ */
+const differenceFacts = (walk: BoundsWalk, state: State, v: Local, w: Local, c: i32, out: Fact[]): void => {
+  const floor = minValueOf(state, w);
+  if (floor >= c) {
+    out.push(new Fact(FACT_MIN_VALUE, v, null, floor - c));
+  }
+  if (c > 0 && !keepsUpperBound(walk.ctx, w, floor >= c)) {
+    return;
+  }
+  const max = maxIndexOf(state, w);
+  if (max >= 0 && max - c >= 1) {
+    out.push(new Fact(FACT_MAX_INDEX, v, null, max - c));
+  }
+  for (const above of holdersAbove(state, w)) {
+    if (c >= 1 || knownBelow(state, w, above)) {
+      out.push(new Fact(FACT_BELOW, v, above, 0));
+    } else {
+      out.push(new Fact(FACT_AT_MOST, v, above, 0));
+    }
+  }
+};
+
+/**
  * Whether the value of `expr` cannot be negative. A literal and a `.length`
  * say so outright, a variable says so when the state does, and a sum says so
  * when both ends do — under `nsw`, where a sum that would pass `INT_MAX` is
@@ -1134,8 +1429,9 @@ const impliesNonNegative = (walk: BoundsWalk, state: State, expr: Node): boolean
 /**
  * What a value gives the variable it is written into: a non-negative value
  * pins the lower end, a literal pins the upper one too, a `.length` bounds the
- * variable by that length, and an array of known size starts with that many
- * elements.
+ * variable by that length, a copy or a difference carries the bounds of the
+ * local it is taken from (`differenceFacts`), and an array of known size
+ * starts with that many elements.
  */
 const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node): Fact[] => {
   const ctx = walk.ctx;
@@ -1146,6 +1442,7 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
   }
   const n = literalValue(e);
   if (n >= 0 && isIndexType(v.type)) {
+    out.push(new Fact(FACT_MIN_VALUE, v, null, n));
     out.push(new Fact(FACT_MAX_INDEX, v, null, n + 1));
     return out;
   }
@@ -1156,6 +1453,34 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
     out.push(new Fact(FACT_AT_MOST, v, holder, 0));
     return out;
   }
+  if (!isIndexType(v.type)) {
+    return initialiserArrayFacts(ctx, v, e, out);
+  }
+  // `let j = i`: the copy has every bound the original has.
+  const copied = indexLocal(ctx.program, e);
+  if (copied !== null && copied.type === v.type) {
+    differenceFacts(walk, state, v, copied, 0, out);
+    return out;
+  }
+  if (e.kind === N_BINARY && e.text === "-") {
+    const c = literalValue(e.children[1]);
+    const w = indexLocal(ctx.program, e.children[0]);
+    if (c >= 0 && w !== null && w.type === v.type) {
+      differenceFacts(walk, state, v, w, c, out);
+    }
+    // `xs.length - 1` is the last index, when there is one: no floor, since
+    // the array may be empty, but below the length whatever it holds. A
+    // length is never negative, so the subtraction cannot wrap.
+    const above = lengthOf(walk, e.children[0]);
+    if (c >= 1 && above !== null) {
+      out.push(new Fact(FACT_BELOW, v, above, 0));
+    }
+  }
+  return out;
+};
+
+/** An array of known size starts with that many elements. */
+const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]): Fact[] => {
   if (ctx.table.isArray(v.type) && e.kind === N_ARRAY) {
     out.push(new Fact(FACT_MIN_LENGTH, v, null, e.children.length));
     return out;
@@ -1182,6 +1507,12 @@ export class BoundsWalk {
   unproven: Node[];
   loops: i32;
   uncheckedIndexing: boolean;
+  /**
+   * Whether a proof is written to the side tables. `self/ranges.ts` walks a
+   * body while its entry facts are still being settled, and a proof drawn from
+   * an entry fact that has not settled may not be kept.
+   */
+  record: boolean;
   /** The property paths this body's facts have been keyed by, in first-use order. */
   paths: PathHolder[];
   /**
@@ -1199,6 +1530,22 @@ export class BoundsWalk {
    * counterpart).
    */
   breaks: State[];
+  /**
+   * What the whole program knows about callees (`self/ranges.ts`), or `null`
+   * in pass 2, which runs before every body is checked and so knows nothing:
+   * there, any call drops every array length and every path.
+   */
+  tables: RangeTables | null;
+  /**
+   * The accesses this walk proved that nothing had proved before it, in source
+   * order: written to the side table already when `record` is set, and
+   * waiting on the caller's word that they may be (`commitProofs`) when not.
+   */
+  proved: Node[];
+  /** The `substring` bounds an unrecorded walk proved, waiting as `proved` does. */
+  clamps: Node[];
+  /** Every call to a function taking entry facts, with what this site proves for it. */
+  sites: RangeSite[];
 
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx;
@@ -1208,6 +1555,11 @@ export class BoundsWalk {
     this.breaks = [];
     this.loops = 0;
     this.uncheckedIndexing = uncheckedIndexing;
+    this.tables = null;
+    this.record = true;
+    this.proved = [];
+    this.clamps = [];
+    this.sites = [];
   }
 }
 
@@ -1249,7 +1601,7 @@ const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
  * drop the fact `const n: i32 = toI32(xs.length)` recorded one line above.
  * The walk and the loop-effect scan both ask this, so they cannot disagree.
  */
-const callsNothing = (ctx: CheckContext, call: Node): boolean => isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call);
+export const callsNothing = (ctx: CheckContext, call: Node): boolean => isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call);
 
 /**
  * What an access leaves behind on the path that continues past it: its check
@@ -1309,7 +1661,12 @@ const judge = (walk: BoundsWalk, state: State, node: Node, receiver: Node, index
     recordPassedCheck(walk, state, holder, index);
   }
   if (proven) {
-    ctx.program.nodeProvenIndex[node.id] = true;
+    if (!ctx.program.nodeProvenIndex[node.id]) {
+      walk.proved.push(node);
+      if (walk.record) {
+        ctx.program.nodeProvenIndex[node.id] = true;
+      }
+    }
     return;
   }
   // A path receiver is proved when it can be and never warned about: the
@@ -1393,9 +1750,14 @@ const provesClamp = (ctx: CheckContext, state: State, holder: Local | null, boun
  * shape from the syntax and reads this table for the verdict, so that all of
  * WP15 §8's warnings still come out of one source-order walk.
  */
-const judgeClampBound = (ctx: CheckContext, state: State, holder: Local | null, bound: Node): void => {
-  if (provesClamp(ctx, state, holder, bound)) {
-    ctx.program.nodeProvenClamp[bound.id] = true;
+const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, bound: Node): void => {
+  if (!provesClamp(walk.ctx, state, holder, bound)) {
+    return;
+  }
+  if (walk.record) {
+    walk.ctx.program.nodeProvenClamp[bound.id] = true;
+  } else {
+    walk.clamps.push(bound);
   }
 };
 
@@ -1541,7 +1903,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
           holder = null;
         }
-        judgeClampBound(ctx, state, holder, arg);
+        judgeClampBound(walk, state, holder, arg);
       }
     }
     if (isCharCodeAt(ctx, e)) {
@@ -1550,10 +1912,15 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (callsNothing(ctx, e)) {
       return;
     }
+    // The state here is the one the callee starts in: every argument has run
+    // and the call has not.
+    if (walk.tables !== null) {
+      noteCallSite(walk, state, e);
+    }
     // `nish_str_new` is a callee like any other, so the array lengths go here
     // whether or not this call was a `substring` — and every path goes, string
     // or array, because a callee can store to any field it can reach.
-    forgetCallEffects(walk, state);
+    applyCallEffects(walk, state, e);
     return;
   }
 
@@ -1561,7 +1928,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     for (const arg of e.children[2].children) {
       walkExpression(walk, state, arg);
     }
-    forgetCallEffects(walk, state); // a constructor body is a callee like any other
+    applyCallEffects(walk, state, e); // a constructor body is a callee like any other
     return;
   }
 
@@ -1601,7 +1968,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (e.text === "++") {
       applyAssignment(walk, state, v, null, true);
     } else {
-      forgetLocal(walk, state, v);
+      applyDecrement(walk, state, v, 1);
     }
     return;
   }
@@ -1621,6 +1988,7 @@ const applyAssignment = (walk: BoundsWalk, state: State, v: Local, rhs: Node | n
   const steps = increment || (rhs !== null && isIncrement(ctx.program, v, rhs));
   if (steps && knownNonNegative(state, v) && keepsLowerBound(ctx, v)) {
     forgetUpperBounds(state, v);
+    forgetWrappedFloor(state, v);
     addFact(state, new Fact(FACT_NON_NEGATIVE, v, null, 0));
     return;
   }
@@ -1635,12 +2003,30 @@ const applyAssignment = (walk: BoundsWalk, state: State, v: Local, rhs: Node | n
 };
 
 /**
+ * Apply `v = v - c` to the state: the floor drops by `c` and every upper bound
+ * stays, when the subtraction cannot wrap (`keepsUpperBound`). A loop that
+ * counts down from a last index, `for (let i = n - 1; i >= 0; i -= 1)`, is
+ * proved by exactly this: the condition gives the floor back on each pass.
+ */
+const applyDecrement = (walk: BoundsWalk, state: State, v: Local, c: i32): void => {
+  const floor = minValueOf(state, v);
+  if (!keepsUpperBound(walk.ctx, v, floor >= 0)) {
+    forgetLocal(walk, state, v);
+    return;
+  }
+  forgetLowerBounds(state, v);
+  if (floor >= c) {
+    addFact(state, new Fact(FACT_MIN_VALUE, v, null, floor - c));
+  }
+};
+
+/**
  * Whether an operator writes its left operand: `=` and every `op=`. The same
  * rule `self/emit_util.ts` states, spelled again here rather than imported,
  * because a checker module that reaches into the emitter is a dependency
  * neither compiler has.
  */
-const isBoundsAssignment = (op: string): boolean => {
+export const isBoundsAssignment = (op: string): boolean => {
   if (op === "=") {
     return true;
   }
@@ -1703,7 +2089,7 @@ export const recordReaches = (stored: i32, holder: i32): boolean =>
 const rebindsAccess = (walk: BoundsWalk, effects: Effects, target: Node): boolean => {
   const ctx = walk.ctx;
   const index = localOf(ctx.program, target.children[1]);
-  if (index !== null && (contains(effects.stepped, index) || contains(effects.clobbered, index))) {
+  if (index !== null && (contains(effects.stepped, index) || contains(effects.decremented, index) || contains(effects.clobbered, index))) {
     return true;
   }
   const receiver = unwrapBoundsParens(target.children[0]);
@@ -1748,6 +2134,36 @@ const rebindsAccess = (walk: BoundsWalk, effects: Effects, target: Node): boolea
  */
 const storeReadsHolder = (walk: BoundsWalk, effects: Effects, target: Node): boolean =>
   lengthHolder(walk.ctx, target.children[0]) !== null || !effects.calls;
+
+/**
+ * The length of the array `value` builds, when it is a fresh array whose
+ * evaluation changes nothing the walk tracks: `new Array<T>(n)` with a literal
+ * `n`, or an array literal whose elements write nothing and call nothing.
+ * -1 for every other value.
+ */
+const freshLength = (walk: BoundsWalk, value: Node): i32 => {
+  const ctx = walk.ctx;
+  const e = unwrapBoundsParens(value);
+  if (!ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
+    return -1;
+  }
+  if (e.kind === N_NEW && e.children[2].children.length === 1) {
+    return literalValue(e.children[2].children[0]);
+  }
+  if (e.kind !== N_ARRAY) {
+    return -1;
+  }
+  const effects = new Effects();
+  collectEffects(walk, e, effects);
+  const quiet =
+    !effects.calls &&
+    effects.stepped.length === 0 &&
+    effects.decremented.length === 0 &&
+    effects.clobbered.length === 0 &&
+    effects.fields.length === 0 &&
+    effects.records.length === 0;
+  return quiet ? e.children.length : -1;
+};
 
 /** Assignments and the short-circuit operators; every other binary is left then right. */
 const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
@@ -1794,7 +2210,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
       // stored through the old one.
       walkExpression(walk, state, right);
       const effects = new Effects();
-      collectEffects(ctx, right, effects);
+      collectEffects(walk, right, effects);
       if (!rebindsAccess(walk, effects, target)) {
         judge(walk, state, target, target.children[0], target.children[1], storeReadsHolder(walk, effects, target));
       }
@@ -1813,6 +2229,17 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     walkExpression(walk, state, target.children[0]);
     walkExpression(walk, state, right);
     forgetPathsThrough(walk, state, target.text);
+    // `this.v = new Array<i32>(6)` leaves the path naming an array of six,
+    // which is what a later `this.v[5]` — or a callee handed `this` — needs.
+    // The size is a literal and the value has no effects of its own, so
+    // nothing between reading the receiver and the store can rebind the root.
+    const size = op === "=" ? freshLength(walk, right) : -1;
+    if (size >= 0) {
+      const holder = pathHolder(walk, target);
+      if (holder !== null) {
+        addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, size));
+      }
+    }
     return;
   }
   walkExpression(walk, state, right);
@@ -1820,8 +2247,16 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   if (v === null) {
     return;
   }
+  if (op === "=" && isDecrement(ctx.program, v, right)) {
+    applyDecrement(walk, state, v, literalValue(unwrapBoundsParens(right).children[1]));
+    return;
+  }
   if (op === "=") {
     applyAssignment(walk, state, v, right, false);
+    return;
+  }
+  if (op === "-=" && literalValue(right) >= 0) {
+    applyDecrement(walk, state, v, literalValue(right));
     return;
   }
   // `i += <non-negative literal>` steps the same way `i = i + n` does; every
@@ -1838,17 +2273,19 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
  * Every variable the node assigns loses its facts, because the second
  * iteration reaches the top of the body with the assignment behind it — except
  * a variable whose every assignment is an increment, which keeps its lower
- * bound and loses its upper ones. Every array length goes too as soon as the
- * node contains a call. A path goes with its root, with a store to any field it
- * names, with a call or a `new` anywhere in the node, and with a whole-record
- * store there that can reach one of its links (`recordReaches`).
+ * bound and loses its upper ones, and one whose every assignment is a
+ * decrement, which does the opposite. Every array length goes too as soon as
+ * the node contains a call with no summary. A path goes with its root, with a
+ * store to any field it names — its calls' summaries included — with a call or
+ * a `new` with no summary anywhere in the node, and with a whole-record store
+ * there that can reach one of its links (`recordReaches`).
  * That leaves the loop *condition* to re-establish the upper bound on each
  * pass, which is exactly what it does.
  */
 const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
   const ctx = walk.ctx;
   const effects = new Effects();
-  collectEffects(ctx, root, effects);
+  collectEffects(walk, root, effects);
   for (const v of effects.clobbered) {
     forgetLocal(walk, state, v);
   }
@@ -1856,8 +2293,23 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
     if (contains(effects.clobbered, v)) {
       continue;
     }
-    if (keepsLowerBound(ctx, v)) {
+    if (keepsLowerBound(ctx, v) && !contains(effects.decremented, v)) {
       forgetUpperBounds(state, v);
+      forgetWrappedFloor(state, v);
+    } else {
+      forgetLocal(walk, state, v);
+    }
+  }
+  // A variable only ever counted down keeps its upper bounds, as one only
+  // ever counted up keeps its lower one. The state reaching the loop says
+  // nothing about the value at each decrement, so the wrap is ruled out by
+  // `nsw` alone here.
+  for (const v of effects.decremented) {
+    if (contains(effects.clobbered, v) || contains(effects.stepped, v)) {
+      continue;
+    }
+    if (keepsUpperBound(ctx, v, false)) {
+      forgetLowerBounds(state, v);
     } else {
       forgetLocal(walk, state, v);
     }
@@ -1882,6 +2334,8 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
  */
 class Effects {
   stepped: Local[];
+  /** Written only by `v -= c`, `v = v - c` and `v--`, with `c` a non-negative literal. */
+  decremented: Local[];
   clobbered: Local[];
   fields: string[];
   calls: boolean;
@@ -1890,6 +2344,7 @@ class Effects {
 
   constructor() {
     this.stepped = [];
+    this.decremented = [];
     this.clobbered = [];
     this.fields = [];
     this.calls = false;
@@ -1920,14 +2375,12 @@ const noteStoredField = (ctx: CheckContext, target: Node, effects: Effects): voi
   }
 };
 
-const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void => {
+const collectEffects = (walk: BoundsWalk, node: Node, effects: Effects): void => {
+  const ctx = walk.ctx;
   const stepped = effects.stepped;
   const clobbered = effects.clobbered;
-  if (node.kind === N_NEW) {
-    effects.calls = true;
-  }
-  if (node.kind === N_CALL && !callsNothing(ctx, node)) {
-    effects.calls = true;
+  if (node.kind === N_NEW || (node.kind === N_CALL && !callsNothing(ctx, node))) {
+    noteCallEffects(walk, node, effects);
   }
   if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
     noteStoredField(ctx, node.children[0], effects);
@@ -1936,8 +2389,13 @@ const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void =
       const steps =
         (node.text === "=" && isIncrement(ctx.program, v, node.children[1])) ||
         (node.text === "+=" && literalValue(node.children[1]) >= 0);
+      const falls =
+        (node.text === "=" && isDecrement(ctx.program, v, node.children[1])) ||
+        (node.text === "-=" && literalValue(node.children[1]) >= 0);
       if (steps) {
         stepped.push(v);
+      } else if (falls) {
+        effects.decremented.push(v);
       } else {
         clobbered.push(v);
       }
@@ -1950,12 +2408,34 @@ const collectEffects = (ctx: CheckContext, node: Node, effects: Effects): void =
       if (node.text === "++") {
         stepped.push(v);
       } else {
-        clobbered.push(v);
+        effects.decremented.push(v);
       }
     }
   }
   for (const child of node.children) {
-    collectEffects(ctx, child, effects);
+    collectEffects(walk, child, effects);
+  }
+};
+
+/**
+ * A call's share of `Effects`: what its summary says it stores, or `calls`
+ * when nothing does (`callSummary`).
+ */
+const noteCallEffects = (walk: BoundsWalk, call: Node, effects: Effects): void => {
+  const summary = callSummary(walk, call);
+  if (summary === null) {
+    effects.calls = true;
+    return;
+  }
+  for (const field of summary.fields) {
+    if (effects.fields.indexOf(field) < 0) {
+      effects.fields.push(field);
+    }
+  }
+  for (const stored of summary.records) {
+    if (effects.records.indexOf(stored) < 0) {
+      effects.records.push(stored);
+    }
   }
 };
 
@@ -2235,4 +2715,592 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
     walkExpression(walk, state, body);
   }
   return walk.unproven;
+};
+
+// ---- What crosses a call (self/ranges.ts) -----------------------------------------
+
+/**
+ * What a call can do to the facts, as far as the whole program can tell: the
+ * field names the callee, or anything it calls, may store to, and the record
+ * types it may store whole. A summary exists only for a callee that resizes no
+ * array — it calls nothing that could (`self/ranges.ts` builds them) — so a
+ * call with one keeps every array length the caller knows, and every path
+ * whose fields and links it leaves alone. Everything else is `null` and drops
+ * them all, which is what every call does in pass 2.
+ */
+export class CallSummary {
+  fields: string[];
+  records: i32[];
+
+  constructor() {
+    this.fields = [];
+    this.records = [];
+  }
+}
+
+/**
+ * The whole-program facts a walk may read, keyed by `FunctionSig.name`:
+ * each function's `CallSummary` (`null` for one that may do anything), and
+ * whether it takes entry facts from its call sites. `none` is the summary of a
+ * call that stores nothing at all.
+ */
+export class RangeTables {
+  index: StringMap;
+  summaries: (CallSummary | null)[];
+  candidates: boolean[];
+  none: CallSummary;
+
+  constructor() {
+    this.index = new StringMap();
+    this.summaries = [];
+    this.candidates = [];
+    this.none = new CallSummary();
+  }
+
+  add(sig: FunctionSig, candidate: boolean): void {
+    this.index.set(sig.name, this.summaries.length);
+    const unknown: CallSummary | null = null;
+    this.summaries.push(unknown);
+    this.candidates.push(candidate);
+  }
+
+  dropCandidate(at: i32): void {
+    if (at >= 0 && at < this.candidates.length) {
+      this.candidates[at] = false;
+    }
+  }
+
+  setSummary(at: i32, summary: CallSummary): void {
+    if (at >= 0 && at < this.summaries.length) {
+      this.summaries[at] = summary;
+    }
+  }
+
+  summaryOf(sig: FunctionSig): CallSummary | null {
+    const at = this.index.get(sig.name, -1);
+    return at < 0 ? null : this.summaries[at];
+  }
+
+  isCandidate(sig: FunctionSig): boolean {
+    const at = this.index.get(sig.name, -1);
+    return at >= 0 && this.candidates[at];
+  }
+}
+
+/** A value no call can reach memory through: a number, a boolean or a string, which is immutable. */
+const inertType = (type: i32): boolean => type >= 0 && (isNumeric(type) || type === T_BOOL || type === T_STRING);
+
+const inertOperands = (program: CheckedProgram, args: Node[]): boolean => {
+  for (const arg of args) {
+    if (!inertType(program.nodeTypes[arg.id])) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/**
+ * What `call` (an `N_CALL` or an `N_NEW`) may do, or `null` for "anything a
+ * call can". A user function answers with its summary. A builtin, or a `new`
+ * with no constructor, can reach memory only through what it is handed —
+ * there is no mutable module state, and no function value to call back
+ * through — so one handed nothing but numbers, booleans and strings stores
+ * nothing and resizes nothing. `Arena` is the exception, and it is named: a
+ * release takes no reference and still hands the memory behind every array
+ * built since the mark to whatever allocates next.
+ */
+export const callSummary = (walk: BoundsWalk, call: Node): CallSummary | null => {
+  const tables = walk.tables;
+  if (tables === null) {
+    return null;
+  }
+  const callee = walk.ctx.program.nodeCallees[call.id];
+  if (callee !== null) {
+    return tables.summaryOf(callee);
+  }
+  return isInertBuiltin(walk.ctx.program, call) ? tables.none : null;
+};
+
+/** A call with no user function behind it, handed nothing a store could reach (`callSummary`). */
+export const isInertBuiltin = (program: CheckedProgram, call: Node): boolean => {
+  if (program.nodeCallees[call.id] !== null) {
+    return false;
+  }
+  if (call.kind === N_NEW) {
+    return inertOperands(program, call.children[2].children);
+  }
+  const target = unwrapBoundsParens(call.children[0]);
+  if (target.kind === N_MEMBER) {
+    const receiver = unwrapBoundsParens(target.children[0]);
+    const type = program.nodeTypes[receiver.id];
+    const namespace = receiver.kind === N_IDENT && program.nodeLocals[receiver.id] === null && receiver.text !== "Arena";
+    if (!inertType(type) && !(type < 0 && namespace)) {
+      return false;
+    }
+  } else if (target.kind !== N_IDENT) {
+    return false;
+  }
+  return inertOperands(program, call.children[1].children);
+};
+
+/** What a call leaves: its summary's stores, or every array length and every path. */
+const applyCallEffects = (walk: BoundsWalk, state: State, call: Node): void => {
+  const summary = callSummary(walk, call);
+  if (summary === null) {
+    forgetCallEffects(walk, state);
+    return;
+  }
+  for (const field of summary.fields) {
+    forgetPathsThrough(walk, state, field);
+  }
+  for (const stored of summary.records) {
+    forgetPathsRecord(walk, state, stored);
+  }
+};
+
+/**
+ * The facts that hold where a function is entered, stated against its
+ * parameters by position — `params[0]` is `this` for a method — so that one
+ * call site's facts and another's can be compared. Per parameter, a floor
+ * (`p >= floor`, -1 for none) and a `maxIndex` (`p < n`, -1 for none); then
+ * a list of length facts, each about a holder named by a parameter and the
+ * fields read off it (`fields`, empty for the parameter itself, and `keys`,
+ * the same joined with dots): `FACT_MIN_LENGTH` with its `values`, or
+ * `FACT_BELOW` / `FACT_AT_MOST` with the parameter that is the index.
+ */
+export class EntryFacts {
+  floor: i32[];
+  maxIndex: i32[];
+  kinds: i32[];
+  index: i32[];
+  roots: i32[];
+  keys: string[];
+  fields: string[][];
+  values: i32[];
+
+  constructor(count: i32) {
+    this.floor = [];
+    this.maxIndex = [];
+    let k = 0;
+    while (k < count) {
+      this.floor.push(-1);
+      this.maxIndex.push(-1);
+      k = k + 1;
+    }
+    this.kinds = [];
+    this.index = [];
+    this.roots = [];
+    this.keys = [];
+    this.fields = [];
+    this.values = [];
+  }
+
+  addLength(kind: i32, index: i32, root: i32, fields: string[], value: i32): void {
+    const key = fields.join(".");
+    if (this.find(kind, index, root, key) >= 0) {
+      return;
+    }
+    this.kinds.push(kind);
+    this.index.push(index);
+    this.roots.push(root);
+    this.keys.push(key);
+    this.fields.push(fields);
+    this.values.push(value);
+  }
+
+  find(kind: i32, index: i32, root: i32, key: string): i32 {
+    let k = 0;
+    while (k < this.kinds.length) {
+      if (this.kinds[k] === kind && this.index[k] === index && this.roots[k] === root && this.keys[k] === key) {
+        return k;
+      }
+      k = k + 1;
+    }
+    return -1;
+  }
+
+  isEmpty(): boolean {
+    if (this.kinds.length > 0) {
+      return false;
+    }
+    let k = 0;
+    while (k < this.floor.length) {
+      if (this.floor[k] >= 0 || this.maxIndex[k] >= 0) {
+        return false;
+      }
+      k = k + 1;
+    }
+    return true;
+  }
+}
+
+/**
+ * What holds at both of two call sites: the lower floor, the higher `maxIndex`,
+ * the shorter minimum length, and a relation only where both state it.
+ */
+export const joinEntryFacts = (a: EntryFacts, b: EntryFacts): EntryFacts => {
+  const out = new EntryFacts(a.floor.length);
+  let k = 0;
+  while (k < a.floor.length && k < b.floor.length) {
+    if (a.floor[k] >= 0 && b.floor[k] >= 0) {
+      out.floor[k] = a.floor[k] < b.floor[k] ? a.floor[k] : b.floor[k];
+    }
+    if (a.maxIndex[k] >= 0 && b.maxIndex[k] >= 0) {
+      out.maxIndex[k] = a.maxIndex[k] > b.maxIndex[k] ? a.maxIndex[k] : b.maxIndex[k];
+    }
+    k = k + 1;
+  }
+  k = 0;
+  while (k < a.kinds.length) {
+    const other = b.find(a.kinds[k], a.index[k], a.roots[k], a.keys[k]);
+    if (other >= 0) {
+      const value = a.values[k] < b.values[other] ? a.values[k] : b.values[other];
+      out.addLength(a.kinds[k], a.index[k], a.roots[k], a.fields[k], value);
+    }
+    k = k + 1;
+  }
+  return out;
+};
+
+/** Whether two sets of entry facts say the same thing, which is when the fixpoint stops. */
+export const sameEntryFacts = (a: EntryFacts, b: EntryFacts): boolean => {
+  if (a.floor.length !== b.floor.length || a.kinds.length !== b.kinds.length) {
+    return false;
+  }
+  let k = 0;
+  while (k < a.floor.length) {
+    if (a.floor[k] !== b.floor[k] || a.maxIndex[k] !== b.maxIndex[k]) {
+      return false;
+    }
+    k = k + 1;
+  }
+  k = 0;
+  while (k < a.kinds.length) {
+    const other = b.find(a.kinds[k], a.index[k], a.roots[k], a.keys[k]);
+    if (other < 0 || b.values[other] !== a.values[k]) {
+      return false;
+    }
+    k = k + 1;
+  }
+  return true;
+};
+
+/** One call to a function that takes entry facts, and what the call proves for it. */
+export class RangeSite {
+  call: Node;
+  callee: FunctionSig;
+  facts: EntryFacts;
+
+  constructor(call: Node, callee: FunctionSig, facts: EntryFacts) {
+    this.call = call;
+    this.callee = callee;
+    this.facts = facts;
+  }
+}
+
+const noteCallSite = (walk: BoundsWalk, state: State, call: Node): void => {
+  const tables = walk.tables;
+  const callee = walk.ctx.program.nodeCallees[call.id];
+  if (tables === null || callee === null || !tables.isCandidate(callee)) {
+    return;
+  }
+  walk.sites.push(new RangeSite(call, callee, siteFacts(walk, state, call, callee)));
+};
+
+/** Whether evaluating something with these `effects` can write `v`. */
+const writesVariable = (effects: Effects, v: Local): boolean =>
+  contains(effects.stepped, v) || contains(effects.decremented, v) || contains(effects.clobbered, v);
+
+/**
+ * What one call site proves for its callee's parameters, read off `state`,
+ * which is the state once every argument has run. The receiver and the
+ * arguments are evaluated in order before the call, so a fact about the local
+ * an argument named is a fact about the value passed only while nothing
+ * evaluated after it writes that local; and a fact about a path read off an
+ * argument is one about the object passed only while nothing after it stores
+ * to a link of the path, or calls something that might.
+ */
+const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionSig): EntryFacts => {
+  const program = walk.ctx.program;
+  const count = callee.paramNames.length;
+  const out = new EntryFacts(count);
+  const args: Node[] = [];
+  const target = unwrapBoundsParens(call.children[0]);
+  if (callee.role === ROLE_METHOD) {
+    if (target.kind !== N_MEMBER) {
+      return out;
+    }
+    args.push(target.children[0]);
+  }
+  for (const arg of call.children[1].children) {
+    args.push(arg);
+  }
+  if (args.length !== count) {
+    return out;
+  }
+  // Per parameter: the caller's local an index was read from, and the root
+  // and fields a holder was.
+  const indexVars: (Local | null)[] = [];
+  const holderRoots: (Local | null)[] = [];
+  const holderFields: string[][] = [];
+  let k = 0;
+  for (const arg of args) {
+    let indexVar: Local | null = null;
+    let holderRoot: Local | null = null;
+    let fields: string[] = [];
+    const type = callee.paramTypes[k];
+    if (isIndexType(type)) {
+      const constant = literalValue(arg);
+      const v = indexLocal(program, arg);
+      if (constant >= 0) {
+        out.floor[k] = constant;
+        out.maxIndex[k] = constant + 1;
+      } else if (v !== null && v.type === type && !writesVariable(laterEffects(walk, args, k), v)) {
+        // The same type, or no fact at all: an `i32` with an upper bound and
+        // no floor may be negative, and handed to a `u32` it is not below
+        // anything.
+        indexVar = v;
+        out.floor[k] = minValueOf(state, v);
+        out.maxIndex[k] = maxIndexOf(state, v);
+      }
+    } else {
+      const links: i32[] = [];
+      const root = argumentRoot(walk, arg, fields, links);
+      if (root !== null) {
+        const later = laterEffects(walk, args, k);
+        const moved = later.calls || later.records.length > 0 || sharesField(later.fields, fields);
+        if (!writesVariable(later, root) && (fields.length === 0 || !moved)) {
+          holderRoot = root;
+        }
+      }
+      if (holderRoot === null) {
+        fields = [];
+      }
+    }
+    indexVars.push(indexVar);
+    holderRoots.push(holderRoot);
+    holderFields.push(fields);
+    k = k + 1;
+  }
+  let r = 0;
+  for (const root of holderRoots) {
+    if (root !== null && r < holderFields.length) {
+      mapHolderFacts(walk, state, out, r, root, holderFields[r], indexVars);
+    }
+    r = r + 1;
+  }
+  return out;
+};
+
+/** What evaluating every argument after the `k`th can do. */
+const laterEffects = (walk: BoundsWalk, args: Node[], k: i32): Effects => {
+  const later = new Effects();
+  let j = 0;
+  for (const next of args) {
+    if (j > k) {
+      collectEffects(walk, next, later);
+    }
+    j = j + 1;
+  }
+  return later;
+};
+
+/**
+ * The local an argument is rooted at, pushing the fields it reads off it on to
+ * `fields`: a local or `this` alone, or a path of plain struct links from one.
+ * `null` for anything else.
+ */
+const argumentRoot = (walk: BoundsWalk, arg: Node, fields: string[], links: i32[]): Local | null => {
+  const program = walk.ctx.program;
+  let e = unwrapBoundsParens(arg);
+  if (e.kind === N_MEMBER && declaredPathType(walk, e, fields, links) < 0) {
+    return null;
+  }
+  while (e.kind === N_MEMBER) {
+    e = unwrapBoundsParens(e.children[0]);
+  }
+  if (e.kind !== N_IDENT && e.kind !== N_THIS) {
+    return null;
+  }
+  return program.nodeLocals[e.id];
+};
+
+const sharesField = (stored: string[], fields: string[]): boolean => {
+  for (const field of fields) {
+    if (stored.indexOf(field) >= 0) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * The length facts of every caller holder that parameter `r` reaches — the
+ * argument itself, and every path the caller has facts about that extends it
+ * — restated against `r` and the fields past the argument.
+ */
+const mapHolderFacts = (
+  walk: BoundsWalk,
+  state: State,
+  out: EntryFacts,
+  r: i32,
+  root: Local,
+  prefix: string[],
+  indexVars: (Local | null)[]
+): void => {
+  if (prefix.length === 0 && (walk.ctx.table.isArray(root.type) || root.type === T_STRING)) {
+    mapOneHolder(state, out, r, root, [], indexVars);
+  }
+  for (const path of walk.paths) {
+    if (path.root !== root || path.fields.length < prefix.length) {
+      continue;
+    }
+    let k = 0;
+    let matches = true;
+    while (k < prefix.length) {
+      if (path.fields[k] !== prefix[k]) {
+        matches = false;
+      }
+      k = k + 1;
+    }
+    if (!matches) {
+      continue;
+    }
+    const rest: string[] = [];
+    while (k < path.fields.length) {
+      rest.push(path.fields[k]);
+      k = k + 1;
+    }
+    mapOneHolder(state, out, r, path.holder, rest, indexVars);
+  }
+};
+
+const mapOneHolder = (state: State, out: EntryFacts, r: i32, holder: Local, rest: string[], indexVars: (Local | null)[]): void => {
+  const length = minLengthOf(state, holder);
+  if (length > 0) {
+    out.addLength(FACT_MIN_LENGTH, -1, r, rest, length);
+  }
+  let k = 0;
+  while (k < indexVars.length) {
+    const v = indexVars[k];
+    if (v !== null && knownBelow(state, v, holder)) {
+      out.addLength(FACT_BELOW, k, r, rest, 0);
+    } else if (v !== null && knownAtMost(state, v, holder)) {
+      out.addLength(FACT_AT_MOST, k, r, rest, 0);
+    }
+    k = k + 1;
+  }
+};
+
+/**
+ * The `Local` of each of `sig`'s parameters as `body` uses them, by position,
+ * or `null` for one it never reads. The checker binds a parameter to a fresh
+ * `Local` in a scope it does not keep, so the uses are where it is found; an
+ * arrow's own parameters are not this function's, and its body is skipped.
+ */
+const parameterLocals = (program: CheckedProgram, sig: FunctionSig, body: Node): (Local | null)[] => {
+  const out: (Local | null)[] = [];
+  for (const name of sig.paramNames) {
+    out.push(findParameter(program, body, name));
+  }
+  return out;
+};
+
+const findParameter = (program: CheckedProgram, node: Node, name: string): Local | null => {
+  if (node.kind === N_ARROW) {
+    return null;
+  }
+  if (node.kind === N_IDENT || node.kind === N_THIS) {
+    const local = program.nodeLocals[node.id];
+    if (local !== null && local.storage === STORAGE_PARAM && local.name === name) {
+      return local;
+    }
+  }
+  for (const child of node.children) {
+    const found = findParameter(program, child, name);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
+};
+
+/** Put `entering` into `state`, stated against the parameters' own locals. */
+const seedEntry = (walk: BoundsWalk, state: State, sig: FunctionSig, body: Node, entering: EntryFacts): void => {
+  const params = parameterLocals(walk.ctx.program, sig, body);
+  let k = 0;
+  while (k < params.length && k < entering.floor.length) {
+    const p = params[k];
+    if (p !== null && isIndexType(p.type)) {
+      if (entering.floor[k] >= 0) {
+        addFact(state, new Fact(FACT_MIN_VALUE, p, null, entering.floor[k]));
+      }
+      if (entering.maxIndex[k] >= 0) {
+        addFact(state, new Fact(FACT_MAX_INDEX, p, null, entering.maxIndex[k]));
+      }
+    }
+    k = k + 1;
+  }
+  k = 0;
+  while (k < entering.kinds.length) {
+    const root = params[entering.roots[k]];
+    let holder: Local | null = null;
+    if (root !== null && entering.fields[k].length === 0) {
+      holder = walk.ctx.table.isArray(root.type) || root.type === T_STRING ? root : null;
+    } else if (root !== null) {
+      holder = internPath(walk, root, entering.fields[k]);
+    }
+    if (holder !== null && entering.kinds[k] === FACT_MIN_LENGTH) {
+      addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, entering.values[k]));
+    } else if (holder !== null && entering.index[k] >= 0) {
+      const i = params[entering.index[k]];
+      if (i !== null && isIndexType(i.type)) {
+        addFact(state, new Fact(entering.kinds[k], i, holder, 0));
+      }
+    }
+    k = k + 1;
+  }
+};
+
+/**
+ * Record what an unrecorded walk proved, once its caller knows the facts it
+ * started from hold: `self/ranges.ts` knows that when the entry fixpoint has
+ * settled, and the last walk of a body was the one under its settled entry.
+ */
+export const commitProofs = (program: CheckedProgram, walk: BoundsWalk): void => {
+  for (const node of walk.proved) {
+    program.nodeProvenIndex[node.id] = true;
+  }
+  for (const bound of walk.clamps) {
+    program.nodeProvenClamp[bound.id] = true;
+  }
+};
+
+/**
+ * Walk one body the way `analyzeBounds` does, with what the whole program
+ * knows: callee summaries in `tables`, and `entering` — or nothing — as the facts
+ * that hold where it starts. The walk comes back with the call sites it saw
+ * and, when `record` is set, the proofs it added.
+ */
+export const walkWithRanges = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  body: Node,
+  tables: RangeTables,
+  entering: EntryFacts | null,
+  record: boolean
+): BoundsWalk => {
+  const walk = new BoundsWalk(ctx, ctx.uncheckedIndexing);
+  walk.tables = tables;
+  walk.record = record;
+  const state = new State();
+  if (entering !== null && !entering.isEmpty()) {
+    seedEntry(walk, state, sig, body, entering);
+  }
+  if (body.kind === N_BLOCK) {
+    walkBoundsStatement(walk, state, body);
+  } else {
+    walkExpression(walk, state, body);
+  }
+  return walk;
 };

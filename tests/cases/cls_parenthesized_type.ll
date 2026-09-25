@@ -6,9 +6,8 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -59,51 +58,40 @@ entry:
   store i32 7, i32* %9, align 4, !tbaa !15
   %10 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %11 = load %struct.Node*, %struct.Node** %first.addr, align 8
-  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %14 = icmp ult i64 0, %13
-  br i1 %14, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %13)
-  unreachable
-
-bounds.ok:
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %17 = bitcast i8* %16 to %struct.Node**
-  %18 = getelementptr inbounds %struct.Node*, %struct.Node** %17, i64 0
-  store %struct.Node* %11, %struct.Node** %18, align 8, !alias.scope !4, !noalias !3, !tbaa !17
-  %19 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %22 = bitcast i8* %21 to %struct.Node**
-  %23 = getelementptr inbounds %struct.Node*, %struct.Node** %22, i64 0
-  %24 = load %struct.Node*, %struct.Node** %23, align 8, !alias.scope !4, !noalias !3, !tbaa !17
-  store %struct.Node* %24, %struct.Node** %found.addr, align 8
-  %25 = load %struct.Node*, %struct.Node** %found.addr, align 8
-  %26 = icmp eq %struct.Node* %25, null
-  br i1 %26, label %cond.true, label %cond.false
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %14 = bitcast i8* %13 to %struct.Node**
+  %15 = getelementptr inbounds %struct.Node*, %struct.Node** %14, i64 0
+  store %struct.Node* %11, %struct.Node** %15, align 8, !alias.scope !4, !noalias !3, !tbaa !17
+  %16 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 2
+  %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %19 = bitcast i8* %18 to %struct.Node**
+  %20 = getelementptr inbounds %struct.Node*, %struct.Node** %19, i64 0
+  %21 = load %struct.Node*, %struct.Node** %20, align 8, !alias.scope !4, !noalias !3, !tbaa !17
+  store %struct.Node* %21, %struct.Node** %found.addr, align 8
+  %22 = load %struct.Node*, %struct.Node** %found.addr, align 8
+  %23 = icmp eq %struct.Node* %22, null
+  br i1 %23, label %cond.true, label %cond.false
 
 cond.true:
-  %27 = sub nsw i32 0, 1
+  %24 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.false:
-  %28 = load %struct.Node*, %struct.Node** %found.addr, align 8
-  %29 = getelementptr inbounds %struct.Node, %struct.Node* %28, i32 0, i32 0
-  %30 = load i32, i32* %29, align 4, !tbaa !15
+  %25 = load %struct.Node*, %struct.Node** %found.addr, align 8
+  %26 = getelementptr inbounds %struct.Node, %struct.Node* %25, i32 0, i32 0
+  %27 = load i32, i32* %26, align 4, !tbaa !15
   br label %cond.end
 
 cond.end:
-  %31 = phi i32 [ %27, %cond.true ], [ %30, %cond.false ]
-  ret i32 %31
+  %28 = phi i32 [ %24, %cond.true ], [ %27, %cond.false ]
+  ret i32 %28
 }
 
-attributes #0 = { nounwind }
+attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
