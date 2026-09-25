@@ -6597,7 +6597,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // The benchmark programs in bench/ must keep printing identical checksums across
 // Nish, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
 // every variant (speed, --nsw, size profile, C, Rust, Rust native) at a small size and
-// compares the outputs; nothing is timed. Also: `--target host` pins a module to a
+// compares the outputs; nothing is timed. The Are We Fast Yet ports in bench/awfy/
+// have no twins, so `awfy` builds their harness and runs each one once, which panics
+// when a port's own `verifyResult` fails. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
 // every user-level integer add/sub/mul but nothing else.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
@@ -6611,15 +6613,16 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       path.relative(root, NISH),
       "--validate",
       "--only",
-      "fib,sieve",
+      "fib,sieve,awfy",
       "--n",
       "fib=25,sieve=100000",
     ],
     { cwd: root, encoding: "utf8" }
   );
   check(
-    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc)",
+    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc), and the seven AWFY ports verify",
     v.status === 0 &&
+      v.stdout.includes("awfy: 7 benchmarks verified") &&
       v.stdout.includes("checksums agree") &&
       v.stdout.includes("fib: 75025") &&
       v.stdout.includes("sieve: 191840"),

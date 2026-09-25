@@ -135,6 +135,46 @@ minimum by that language's minimum. The WP9 target is 1.10x or better for loop
 and math code, and it is set against Rust: Go is reported for scale, not as a
 gate.
 
+## Are We Fast Yet
+
+`bench/awfy/` holds Nish ports of seven of the
+[Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) benchmarks —
+Bounce, List, Mandelbrot, Permute, Queens, Storage and Towers — with their
+harness as `main.ts`, which makes the directory one multi-module program of the
+self-hosting corpus (`tests/self/corpus.js`). They are not twins: there is no C
+or Rust version to compare a checksum with, because each benchmark checks its
+own result (`verifyResult`) and the harness panics when one is wrong. They
+come from the port in `benchmarks/Nish/` of
+[amritk/are-we-fast-yet](https://github.com/amritk/are-we-fast-yet) and keep
+its code, under the licences in [awfy/LICENSE.md](awfy/LICENSE.md), with one
+change: `Storage.benchmark` no longer brackets its tree with
+`Arena.mark`/`Arena.release`, because the compiler gives it that scope itself
+(the automatic arena scope in [docs/LANGUAGE.md](../docs/LANGUAGE.md#memory-model),
+item 2). The rest is housekeeping: the harness is `main.ts` rather than
+`harness.ts`, Mandelbrot's `escape` is `escaped` and `isKnownBenchmark` has a
+concise body, both for the linter, and Mandelbrot's header names the licence
+its kernel carries. The harness still releases the arena after
+every measured iteration, standing in for the collector the other ports have.
+
+```bash
+node bench/run.mjs --only awfy              # build checked, time all seven
+node bench/run.mjs --validate --only awfy   # one iteration of each, results verified
+build/nish bench/awfy/main.ts --link build/awfy-harness --profile speed
+build/awfy-harness Queens 30 1000           # benchmark, outer iterations, inner iterations
+```
+
+`--only awfy` builds the harness with `--profile speed` and nothing else, so
+bounds checks stay on, and runs each benchmark for 30 outer iterations at the
+inner counts the AWFY suite uses (Permute 1000, Queens 1000, Towers 600, List
+1500, Bounce 1500, Mandelbrot 500, Storage 1000). It prints the median of the
+last 20, with their minimum and maximum; the first 10 are the warm-up. It
+writes nothing to `docs/BENCHMARKS.md`, and it runs only when `--only` names
+it. `--validate` runs one outer and one inner iteration of each and fails when
+any exits non-zero, and `tests/run.js` runs it in its `WP9: bench` check with
+`fib` and `sieve`. The numbers against 0.10.0 and the profile of the gap to
+C++ are in
+[docs/wp9-optimisation.md](../docs/wp9-optimisation.md#are-we-fast-yet).
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),

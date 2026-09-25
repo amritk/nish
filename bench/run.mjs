@@ -5,7 +5,9 @@
 //
 //   npm run build && node bench/run.mjs [options]
 //     --runs N          timed runs per binary (default 5), after --warmup N (default 1)
-//     --only a,b        benchmark names to include (default: all)
+//     --only a,b        benchmark names to include (default: all); `awfy` names
+//                       the Are We Fast Yet ports in bench/awfy/, which run only
+//                       when named (see bench/README.md)
 //     --n name=value    override a benchmark's size (the `bench:n` line in its sources)
 //     --validate        build and compare checksums only: no timing, no docs written
 //     --no-rust         skip Rust even when rustc is installed
@@ -17,7 +19,9 @@
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
 // are compared token by token; numeric tokens must agree to 1e-9 relative so
 // that `%.17g`, Rust's `{}`, Go's `%v` and Nish's JavaScript-style
-// formatting of the same double all count as equal.
+// formatting of the same double all count as equal. The Are We Fast Yet ports
+// have no twins to compare with: each checks its own result, and the harness
+// panics when one is wrong.
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -52,6 +56,24 @@ const BENCHMARKS = [
   { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)", integer: false },
   { name: "result", what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)", integer: true },
 ];
+
+/**
+ * The Are We Fast Yet ports in bench/awfy/, one harness binary for all seven,
+ * at the inner iteration counts the AWFY suite runs them with. `--only awfy`
+ * runs each for `AWFY_ITERATIONS` outer iterations and reports the median of
+ * the last `AWFY_KEPT`; the ones before are the warm-up.
+ */
+const AWFY = [
+  { name: "Permute", inner: 1000 },
+  { name: "Queens", inner: 1000 },
+  { name: "Towers", inner: 600 },
+  { name: "List", inner: 1500 },
+  { name: "Bounce", inner: 1500 },
+  { name: "Mandelbrot", inner: 500 },
+  { name: "Storage", inner: 1000 },
+];
+const AWFY_ITERATIONS = 30;
+const AWFY_KEPT = 20;
 
 /** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
 function sourceArgs(name) {
@@ -266,7 +288,43 @@ function median(xs) {
 
 fs.mkdirSync(srcDir, { recursive: true });
 const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name));
-if (opts.only) for (const name of opts.only) if (!BENCHMARKS.some((b) => b.name === name)) fail(`unknown benchmark \`${name}\``);
+if (opts.only) for (const name of opts.only) if (name !== "awfy" && !BENCHMARKS.some((b) => b.name === name)) fail(`unknown benchmark \`${name}\``);
+
+/**
+ * The AWFY ports: build the harness checked, the compiler's default, then run
+ * each benchmark once with one inner iteration (`--validate`) or time it. A
+ * wrong result is the port's own `verifyResult` failing, which panics, so a
+ * nonzero exit is the whole check.
+ */
+const runAwfy = () => {
+  process.stderr.write("awfy: building");
+  const exe = path.join(outDir, "awfy-harness");
+  const args = ["bench/awfy/main.ts", "-o", `${path.relative(root, path.join(outDir, "awfy"))}/`, "--link", path.relative(root, exe), "--profile", "speed"];
+  run(nishc.cmd, [...nishc.prefix, ...args], "awfy");
+  process.stderr.write(" ok; running\n");
+  const rows = [];
+  for (const b of AWFY) {
+    const [iterations, inner] = opts.validate ? [1, 1] : [AWFY_ITERATIONS, b.inner];
+    const r = run(exe, [b.name, String(iterations), String(inner)], `awfy ${b.name}`);
+    const times = [...r.stdout.matchAll(/^\S+: iterations=1 runtime: (\d+)us$/gm)].map((m) => Number(m[1]) / 1000);
+    if (times.length !== iterations) fail(`awfy ${b.name}: ${times.length} of ${iterations} iterations timed\n${r.stdout}`);
+    if (opts.validate) continue;
+    const kept = times.slice(-AWFY_KEPT);
+    rows.push({ ...b, median: median(kept), min: Math.min(...kept), max: Math.max(...kept) });
+  }
+  if (opts.validate) {
+    console.log(`awfy: ${AWFY.length} benchmarks verified (${AWFY.map((b) => b.name).join(", ")})`);
+    return;
+  }
+  const ms = (x) => x.toFixed(1).padStart(10);
+  console.log(`\nAre We Fast Yet: median, min and max of the last ${AWFY_KEPT} of ${AWFY_ITERATIONS} iterations (ms)`);
+  console.log(`${"benchmark".padEnd(12)}${"inner".padStart(7)}${"median".padStart(10)}${"min".padStart(10)}${"max".padStart(10)}`);
+  for (const r of rows) console.log(`${r.name.padEnd(12)}${String(r.inner).padStart(7)}${ms(r.median)}${ms(r.min)}${ms(r.max)}`);
+};
+if (opts.only?.has("awfy")) {
+  runAwfy();
+  if (selected.length === 0) process.exit(0);
+}
 
 const results = []; // { bench, variants: [{ ...variant, min, median, bytes, rss, stdout }], reference }
 let mismatches = 0;
