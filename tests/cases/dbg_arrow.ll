@@ -36,41 +36,41 @@ entry:
   call void @llvm.dbg.declare(metadata i32* %acc.addr, metadata !26, metadata !DIExpression()), !dbg !24
   call void @llvm.dbg.declare(metadata i32* %v.addr, metadata !28, metadata !DIExpression()), !dbg !27
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0, !dbg !29
-  store i64 3, i64* %0, align 8, !alias.scope !36, !noalias !37, !dbg !29
+  store i64 3, i64* %0, align 8, !alias.scope !36, !noalias !37, !tbaa !43, !dbg !29
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1, !dbg !29
-  store i64 3, i64* %1, align 8, !alias.scope !36, !noalias !37, !dbg !29
+  store i64 3, i64* %1, align 8, !alias.scope !36, !noalias !37, !tbaa !44, !dbg !29
   %2 = bitcast [3 x i32]* %arr.data to i8*, !dbg !29
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2, !dbg !29
-  store i8* %2, i8** %3, align 8, !alias.scope !36, !noalias !37, !dbg !29
+  store i8* %2, i8** %3, align 8, !alias.scope !36, !noalias !37, !tbaa !45, !dbg !29
   %4 = bitcast i8* %2 to i32*, !dbg !29
   %5 = getelementptr inbounds i32, i32* %4, i64 0, !dbg !29
-  store i32 1, i32* %5, align 4, !alias.scope !37, !noalias !36, !tbaa !41, !dbg !29
+  store i32 1, i32* %5, align 4, !alias.scope !37, !noalias !36, !tbaa !47, !dbg !29
   %6 = getelementptr inbounds i32, i32* %4, i64 1, !dbg !29
-  store i32 2, i32* %6, align 4, !alias.scope !37, !noalias !36, !tbaa !41, !dbg !29
+  store i32 2, i32* %6, align 4, !alias.scope !37, !noalias !36, !tbaa !47, !dbg !29
   %7 = getelementptr inbounds i32, i32* %4, i64 2, !dbg !29
-  store i32 3, i32* %7, align 4, !alias.scope !37, !noalias !36, !tbaa !41, !dbg !29
+  store i32 3, i32* %7, align 4, !alias.scope !37, !noalias !36, !tbaa !47, !dbg !29
   store i64 0, i64* %forof.idx, align 8, !dbg !27
   br label %forof.cond, !dbg !27
 
 forof.cond:
   %8 = load i64, i64* %forof.idx, align 8, !dbg !27
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0, !dbg !27
-  %10 = load i64, i64* %9, align 8, !alias.scope !36, !noalias !37, !dbg !27
+  %10 = load i64, i64* %9, align 8, !alias.scope !36, !noalias !37, !tbaa !43, !dbg !27
   %11 = icmp ult i64 %8, %10, !dbg !27
   br i1 %11, label %forof.body, label %forof.end, !dbg !27
 
 forof.body:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2, !dbg !27
-  %13 = load i8*, i8** %12, align 8, !alias.scope !36, !noalias !37, !dbg !27
+  %13 = load i8*, i8** %12, align 8, !alias.scope !36, !noalias !37, !tbaa !45, !dbg !27
   %14 = bitcast i8* %13 to i32*, !dbg !27
   %15 = getelementptr inbounds i32, i32* %14, i64 %8, !dbg !27
-  %16 = load i32, i32* %15, align 4, !alias.scope !37, !noalias !36, !tbaa !41, !dbg !27
+  %16 = load i32, i32* %15, align 4, !alias.scope !37, !noalias !36, !tbaa !47, !dbg !27
   store i32 %16, i32* %v.addr, align 4, !dbg !27
-  %17 = load i32, i32* %acc.addr, align 4, !dbg !43
-  %18 = load i32, i32* %v.addr, align 4, !dbg !44
-  %19 = mul nsw i32 %18, %n, !dbg !44
-  %20 = add nsw i32 %17, %19, !dbg !43
-  store i32 %20, i32* %acc.addr, align 4, !dbg !43
+  %17 = load i32, i32* %acc.addr, align 4, !dbg !49
+  %18 = load i32, i32* %v.addr, align 4, !dbg !50
+  %19 = mul nsw i32 %18, %n, !dbg !50
+  %20 = add nsw i32 %17, %19, !dbg !49
+  store i32 %20, i32* %acc.addr, align 4, !dbg !49
   br label %forof.inc, !dbg !27
 
 forof.inc:
@@ -80,31 +80,31 @@ forof.inc:
   br label %forof.cond, !dbg !27
 
 forof.end:
-  %23 = load i32, i32* %acc.addr, align 4, !dbg !47
-  ret i32 %23, !dbg !46
+  %23 = load i32, i32* %acc.addr, align 4, !dbg !53
+  ret i32 %23, !dbg !52
 }
 
-define noundef i32 @nish_main() #2 !dbg !50 {
+define noundef i32 @nish_main() #2 !dbg !56 {
 entry:
-  %arena.mark = call i64 @nish_arena_mark(), !dbg !51
-  %0 = call i32 @add(i32 2, i32 3), !dbg !54
-  %1 = call i8* @nish_str_from_i32(i32 %0), !dbg !53
-  call void @nish_print(i8* %1), !dbg !52
-  %2 = call i32 @span(i32 1, i32 9), !dbg !59
-  %3 = call i8* @nish_str_from_i32(i32 %2), !dbg !58
-  call void @nish_print(i8* %3), !dbg !57
-  %4 = call i32 @scaled(i32 2), !dbg !64
-  %5 = call i8* @nish_str_from_i32(i32 %4), !dbg !63
-  call void @nish_print(i8* %5), !dbg !62
-  call void @nish_arena_release(i64 %arena.mark), !dbg !66
-  ret i32 0, !dbg !66
+  %arena.mark = call i64 @nish_arena_mark(), !dbg !57
+  %0 = call i32 @add(i32 2, i32 3), !dbg !60
+  %1 = call i8* @nish_str_from_i32(i32 %0), !dbg !59
+  call void @nish_print(i8* %1), !dbg !58
+  %2 = call i32 @span(i32 1, i32 9), !dbg !65
+  %3 = call i8* @nish_str_from_i32(i32 %2), !dbg !64
+  call void @nish_print(i8* %3), !dbg !63
+  %4 = call i32 @scaled(i32 2), !dbg !70
+  %5 = call i8* @nish_str_from_i32(i32 %4), !dbg !69
+  call void @nish_print(i8* %5), !dbg !68
+  call void @nish_arena_release(i64 %arena.mark), !dbg !72
+  ret i32 0, !dbg !72
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 !dbg !68 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 !dbg !74 {
 entry:
-  %0 = call i32 @nish_main(), !dbg !69
-  call void @nish_free_arena(), !dbg !69
-  ret i32 %0, !dbg !69
+  %0 = call i32 @nish_main(), !dbg !75
+  call void @nish_free_arena(), !dbg !75
+  ret i32 %0, !dbg !75
 }
 
 attributes #0 = { nounwind willreturn readnone }
@@ -154,33 +154,39 @@ attributes #3 = { nounwind }
 !37 = !{!35}
 !38 = !{!"nish TBAA"}
 !39 = !{!"omnipotent char", !38, i64 0}
-!40 = !{!"element i32", !39, i64 0}
-!41 = !{!40, !40, i64 0}
-!42 = !DILocation(line: 23, column: 30, scope: !21)
-!43 = !DILocation(line: 24, column: 5, scope: !21)
-!44 = !DILocation(line: 24, column: 12, scope: !21)
-!45 = !DILocation(line: 24, column: 16, scope: !21)
-!46 = !DILocation(line: 26, column: 3, scope: !21)
-!47 = !DILocation(line: 26, column: 10, scope: !21)
-!48 = !{!4}
-!49 = !DISubroutineType(types: !48)
-!50 = distinct !DISubprogram(name: "main", linkageName: "nish_main", scope: !1, file: !1, line: 29, type: !49, scopeLine: 29, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
-!51 = !DILocation(line: 29, column: 1, scope: !50)
-!52 = !DILocation(line: 30, column: 3, scope: !50)
-!53 = !DILocation(line: 30, column: 15, scope: !50)
-!54 = !DILocation(line: 30, column: 18, scope: !50)
-!55 = !DILocation(line: 30, column: 22, scope: !50)
-!56 = !DILocation(line: 30, column: 25, scope: !50)
-!57 = !DILocation(line: 31, column: 3, scope: !50)
-!58 = !DILocation(line: 31, column: 15, scope: !50)
-!59 = !DILocation(line: 31, column: 18, scope: !50)
-!60 = !DILocation(line: 31, column: 23, scope: !50)
-!61 = !DILocation(line: 31, column: 26, scope: !50)
-!62 = !DILocation(line: 32, column: 3, scope: !50)
-!63 = !DILocation(line: 32, column: 15, scope: !50)
-!64 = !DILocation(line: 32, column: 18, scope: !50)
-!65 = !DILocation(line: 32, column: 25, scope: !50)
-!66 = !DILocation(line: 33, column: 3, scope: !50)
-!67 = !DILocation(line: 33, column: 10, scope: !50)
-!68 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 29, type: !49, scopeLine: 29, flags: DIFlagPrototyped | DIFlagArtificial, spFlags: DISPFlagDefinition, unit: !0)
-!69 = !DILocation(line: 29, column: 1, scope: !68)
+!40 = !{!"header i64", !39, i64 0}
+!41 = !{!"header ptr", !39, i64 0}
+!42 = !{!"array header", !40, i64 0, !40, i64 8, !41, i64 16}
+!43 = !{!42, !40, i64 0}
+!44 = !{!42, !40, i64 8}
+!45 = !{!42, !41, i64 16}
+!46 = !{!"element i32", !39, i64 0}
+!47 = !{!46, !46, i64 0}
+!48 = !DILocation(line: 23, column: 30, scope: !21)
+!49 = !DILocation(line: 24, column: 5, scope: !21)
+!50 = !DILocation(line: 24, column: 12, scope: !21)
+!51 = !DILocation(line: 24, column: 16, scope: !21)
+!52 = !DILocation(line: 26, column: 3, scope: !21)
+!53 = !DILocation(line: 26, column: 10, scope: !21)
+!54 = !{!4}
+!55 = !DISubroutineType(types: !54)
+!56 = distinct !DISubprogram(name: "main", linkageName: "nish_main", scope: !1, file: !1, line: 29, type: !55, scopeLine: 29, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!57 = !DILocation(line: 29, column: 1, scope: !56)
+!58 = !DILocation(line: 30, column: 3, scope: !56)
+!59 = !DILocation(line: 30, column: 15, scope: !56)
+!60 = !DILocation(line: 30, column: 18, scope: !56)
+!61 = !DILocation(line: 30, column: 22, scope: !56)
+!62 = !DILocation(line: 30, column: 25, scope: !56)
+!63 = !DILocation(line: 31, column: 3, scope: !56)
+!64 = !DILocation(line: 31, column: 15, scope: !56)
+!65 = !DILocation(line: 31, column: 18, scope: !56)
+!66 = !DILocation(line: 31, column: 23, scope: !56)
+!67 = !DILocation(line: 31, column: 26, scope: !56)
+!68 = !DILocation(line: 32, column: 3, scope: !56)
+!69 = !DILocation(line: 32, column: 15, scope: !56)
+!70 = !DILocation(line: 32, column: 18, scope: !56)
+!71 = !DILocation(line: 32, column: 25, scope: !56)
+!72 = !DILocation(line: 33, column: 3, scope: !56)
+!73 = !DILocation(line: 33, column: 10, scope: !56)
+!74 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 29, type: !55, scopeLine: 29, flags: DIFlagPrototyped | DIFlagArtificial, spFlags: DISPFlagDefinition, unit: !0)
+!75 = !DILocation(line: 29, column: 1, scope: !74)

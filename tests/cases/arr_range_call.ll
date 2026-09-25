@@ -43,13 +43,13 @@ entry:
   %1 = call i8* @nish_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.nish_array*
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  store i64 0, i64* %3, align 8, !alias.scope !9, !noalias !10
+  store i64 0, i64* %3, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
-  store i64 0, i64* %4, align 8, !alias.scope !9, !noalias !10
+  store i64 0, i64* %4, align 8, !alias.scope !9, !noalias !10, !tbaa !15
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
-  store i8* null, i8** %5, align 8, !alias.scope !9, !noalias !10
+  store i8* null, i8** %5, align 8, !alias.scope !9, !noalias !10, !tbaa !16
   %6 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 1
-  store %struct.nish_array* %2, %struct.nish_array** %6, align 8, !tbaa !11
+  store %struct.nish_array* %2, %struct.nish_array** %6, align 8, !tbaa !17
   ret void
 }
 
@@ -60,16 +60,16 @@ entry:
   %1 = call i8* @nish_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.nish_array*
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  store i64 6, i64* %3, align 8, !alias.scope !9, !noalias !10
+  store i64 6, i64* %3, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
-  store i64 6, i64* %4, align 8, !alias.scope !9, !noalias !10
+  store i64 6, i64* %4, align 8, !alias.scope !9, !noalias !10, !tbaa !15
   %5 = mul i64 6, 4
   %6 = call i8* @nish_alloc_struct(i64 %5)
   call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !10, !noalias !9
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8, !alias.scope !9, !noalias !10
+  store i8* %6, i8** %7, align 8, !alias.scope !9, !noalias !10, !tbaa !16
   %8 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 1
-  store %struct.nish_array* %2, %struct.nish_array** %8, align 8, !tbaa !11
+  store %struct.nish_array* %2, %struct.nish_array** %8, align 8, !tbaa !17
   call void @Permute.permute(%struct.Permute* %this, i32 6)
   %9 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 0
   %10 = load i32, i32* %9, align 4, !tbaa !5
@@ -129,39 +129,39 @@ define internal void @Permute.swap(%struct.Permute* noundef nonnull readonly ali
 entry:
   %tmp.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !11
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
   %2 = sext i32 %i to i64
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !9, !noalias !10
+  %4 = load i8*, i8** %3, align 8, !alias.scope !9, !noalias !10, !tbaa !16
   %5 = bitcast i8* %4 to i32*
   %6 = getelementptr inbounds i32, i32* %5, i64 %2
-  %7 = load i32, i32* %6, align 4, !alias.scope !10, !noalias !9, !tbaa !13
+  %7 = load i32, i32* %6, align 4, !alias.scope !10, !noalias !9, !tbaa !19
   store i32 %7, i32* %tmp.addr, align 4
   %8 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !11
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !17
   %10 = sext i32 %i to i64
   %11 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 1
-  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !11
+  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !17
   %13 = sext i32 %j to i64
   %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !9, !noalias !10
+  %15 = load i8*, i8** %14, align 8, !alias.scope !9, !noalias !10, !tbaa !16
   %16 = bitcast i8* %15 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 %13
-  %18 = load i32, i32* %17, align 4, !alias.scope !10, !noalias !9, !tbaa !13
+  %18 = load i32, i32* %17, align 4, !alias.scope !10, !noalias !9, !tbaa !19
   %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %20 = load i8*, i8** %19, align 8, !alias.scope !9, !noalias !10
+  %20 = load i8*, i8** %19, align 8, !alias.scope !9, !noalias !10, !tbaa !16
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 %10
-  store i32 %18, i32* %22, align 4, !alias.scope !10, !noalias !9, !tbaa !13
+  store i32 %18, i32* %22, align 4, !alias.scope !10, !noalias !9, !tbaa !19
   %23 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 1
-  %24 = load %struct.nish_array*, %struct.nish_array** %23, align 8, !tbaa !11
+  %24 = load %struct.nish_array*, %struct.nish_array** %23, align 8, !tbaa !17
   %25 = sext i32 %j to i64
   %26 = load i32, i32* %tmp.addr, align 4
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %24, i64 0, i32 2
-  %28 = load i8*, i8** %27, align 8, !alias.scope !9, !noalias !10
+  %28 = load i8*, i8** %27, align 8, !alias.scope !9, !noalias !10, !tbaa !16
   %29 = bitcast i8* %28 to i32*
   %30 = getelementptr inbounds i32, i32* %29, i64 %25
-  store i32 %26, i32* %30, align 4, !alias.scope !10, !noalias !9, !tbaa !13
+  store i32 %26, i32* %30, align 4, !alias.scope !10, !noalias !9, !tbaa !19
   ret void
 }
 
@@ -203,6 +203,12 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !8 = !{!"elements", !6}
 !9 = !{!7}
 !10 = !{!8}
-!11 = !{!4, !3, i64 8}
-!12 = !{!"element i32", !1, i64 0}
-!13 = !{!12, !12, i64 0}
+!11 = !{!"header i64", !1, i64 0}
+!12 = !{!"header ptr", !1, i64 0}
+!13 = !{!"array header", !11, i64 0, !11, i64 8, !12, i64 16}
+!14 = !{!13, !11, i64 0}
+!15 = !{!13, !11, i64 8}
+!16 = !{!13, !12, i64 16}
+!17 = !{!4, !3, i64 8}
+!18 = !{!"element i32", !1, i64 0}
+!19 = !{!18, !18, i64 0}

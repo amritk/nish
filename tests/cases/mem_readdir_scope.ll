@@ -91,7 +91,7 @@ for.end:
   call void @nish_print(i8* %20)
   %21 = load %struct.nish_array*, %struct.nish_array** %entries.addr, align 8
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
-  %23 = load i64, i64* %22, align 8, !alias.scope !3, !noalias !4
+  %23 = load i64, i64* %22, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %24 = icmp ult i64 0, %23
   br i1 %24, label %bounds.ok, label %bounds.fail
 
@@ -101,10 +101,10 @@ bounds.fail:
 
 bounds.ok:
   %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
-  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4
+  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %27 = bitcast i8* %26 to i8**
   %28 = getelementptr inbounds i8*, i8** %27, i64 0
-  %29 = load i8*, i8** %28, align 8, !alias.scope !4, !noalias !3, !tbaa !8
+  %29 = load i8*, i8** %28, align 8, !alias.scope !4, !noalias !3, !tbaa !13
   %30 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.9 to i8*), i8* %29)
   call void @nish_print(i8* %30)
   call void @nish_arena_release(i64 %arena.mark)
@@ -129,5 +129,10 @@ attributes #2 = { nounwind noreturn cold }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"element ptr", !6, i64 0}
-!8 = !{!7, !7, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element ptr", !6, i64 0}
+!13 = !{!12, !12, i64 0}
