@@ -1448,37 +1448,37 @@ const resolveFunctionArgument = (
   }
   const lead = `Argument ${index + 1} of \`${template.sourceName}\` must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`;
   if (written.kind !== N_IDENT) {
-    ctx.error(arg, `${lead}; a function is never a value computed at run time`);
+    refuseOnce(ctx, arg, `${lead}; a function is never a value computed at run time`);
     return null;
   }
   const name = written.text;
   if (scope.lookup(name) !== null) {
-    ctx.error(arg, `${lead}; \`${name}\` is a local, and a local is never a function`);
+    refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`);
     return null;
   }
   if (ctx.capturesOuter(name)) {
-    ctx.error(arg, capturedMessage(name));
+    refuseOnce(ctx, arg, capturedMessage(name));
     return null;
   }
   const bound = ctx.functionBindings.get(name);
   const fn = bound !== null ? bound : ctx.signature(name);
   if (fn === null) {
     if (ctx.template(name) !== null) {
-      ctx.error(
+      refuseOnce(ctx, 
         arg,
         `\`${name}\` is generic, so it names no one function to pass as argument ${index + 1} of ` +
           `\`${template.sourceName}\`; pass an arrow that calls it, such as \`(x) => ${name}(x)\``
       );
       return null;
     }
-    ctx.error(arg, `Unknown function \`${name}\``);
+    refuseOnce(ctx, arg, `Unknown function \`${name}\``);
     return null;
   }
   const wanted = fnType.children[0].children;
   if (fn.paramTypes.length !== wanted.length) {
     // Said now, in the words of the exact-type rule, rather than as a type
     // parameter the callee failed to bind.
-    ctx.error(arg, mismatchMessage(ctx.table, template, index, fn, param, template.home.textOf(fnType)));
+    refuseOnce(ctx, arg, mismatchMessage(ctx.table, template, index, fn, param, template.home.textOf(fnType)));
     return null;
   }
   let k = 0;
@@ -1513,7 +1513,7 @@ const liftArrowArgument = (
   const returns = fnType.children[1];
   const params = arrow.children[1].children;
   if (params.length !== wanted.length) {
-    ctx.error(
+    refuseOnce(ctx, 
       arrow,
       `The arrow passed as argument ${index + 1} of \`${template.sourceName}\` takes ${params.length} ` +
         `parameter(s), and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\``
@@ -1532,7 +1532,7 @@ const liftArrowArgument = (
     if (annotation.kind === N_EMPTY) {
       types.push(-1);
     } else if (unwrapTypeParens(annotation).kind === N_TYPE_FUNCTION) {
-      ctx.error(annotation, functionTypeHereMessage(written.children[0].text, "an arrow"));
+      refuseOnce(ctx, annotation, functionTypeHereMessage(written.children[0].text, "an arrow"));
       return null;
     } else {
       const type = resolveType(annotation, ctx);
@@ -1553,7 +1553,7 @@ const liftArrowArgument = (
     if (given >= 0) {
       resolved.push(given);
     } else if (mentionsUnbound(expected, names, bindings)) {
-      ctx.error(
+      refuseOnce(ctx, 
         written,
         `Cannot infer the type of \`${written.children[0].text}\` in the arrow passed to ` +
           `\`${template.sourceName}\`: \`${template.home.textOf(expected)}\` mentions a type parameter no ` +
@@ -1582,7 +1582,7 @@ const liftArrowArgument = (
       return null;
     }
   } else if (arrow.children[3].kind === N_BLOCK) {
-    ctx.error(
+    refuseOnce(ctx, 
       arrow,
       `The arrow passed to \`${template.sourceName}\` needs a return type annotation: its result is ` +
         `\`${template.home.textOf(returns)}\`, which only its body could bind, and a block body's type is not inferred`
@@ -1635,7 +1635,7 @@ const liftArrow = (ctx: CheckContext, arrow: Node, types: i32[], returnType: i32
   }
   const enclosing = ctx.current;
   if (enclosing === null) {
-    ctx.error(arrow, arrowElsewhereMessage());
+    refuseOnce(ctx, arrow, arrowElsewhereMessage());
     return null;
   }
   const fn = new FunctionSig(`${enclosing.name}$arrow${enclosing.arrowCount}`, arrowDisplayName(arrow), arrow);
@@ -1655,7 +1655,7 @@ const liftArrow = (ctx: CheckContext, arrow: Node, types: i32[], returnType: i32
     // came from is not followed through a lifted arrow, so it fails closed.
     local.origin = ctx.typeBindings.size() === 0 ? null : unknownOrigin(param);
     if (!scope.declare(local)) {
-      ctx.error(param, `Duplicate parameter \`${name}\``);
+      refuseOnce(ctx, param, `Duplicate parameter \`${name}\``);
       return null;
     }
     fn.paramNames.push(name);
@@ -1701,6 +1701,16 @@ const liftArrow = (ctx: CheckContext, arrow: Node, types: i32[], returnType: i32
   ctx.errored = savedErrored;
   ctx.program.functions.push(fn);
   return fn;
+};
+
+/**
+ * Report a refusal about a function argument once per node (WP29). The call
+ * that makes it may sit in a template's body, which is checked once per
+ * instantiation, and a mistake written once is reported once: the same rule
+ * `refuseParameterMember` follows (`CheckContext.errorOnce`).
+ */
+export const refuseOnce = (ctx: CheckContext, node: Node, message: string): void => {
+  ctx.errorOnce(node, node.start, message);
 };
 
 /** The refusal for an arrow anywhere but as a function argument. */
@@ -1760,7 +1770,7 @@ const matchFunctionArguments = (
       }
       same = same && canonicalArgument(table, fn.returnType) === canonicalArgument(table, returnType);
       if (!same) {
-        ctx.error(
+        refuseOnce(ctx, 
           args.children[i],
           mismatchMessage(table, template, i, fn, param, functionTypeText(table, names, types, returnType))
         );

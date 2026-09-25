@@ -136,7 +136,7 @@ push.store:
   %21 = load i8*, i8** %20, align 8, !alias.scope !13, !noalias !14
   %22 = bitcast i8* %21 to %struct.Cell**
   %23 = getelementptr inbounds %struct.Cell*, %struct.Cell** %22, i64 %16
-  store %struct.Cell* %13, %struct.Cell** %23, align 8, !alias.scope !14, !noalias !13
+  store %struct.Cell* %13, %struct.Cell** %23, align 8, !alias.scope !14, !noalias !13, !tbaa !16
   %24 = add i64 %16, 1
   store i64 %24, i64* %15, align 8, !alias.scope !13, !noalias !14
   %25 = trunc i64 %24 to i32
@@ -220,3 +220,5 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!"elements", !10}
 !13 = !{!11}
 !14 = !{!12}
+!15 = !{!"element ptr", !1, i64 0}
+!16 = !{!15, !15, i64 0}

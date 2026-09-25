@@ -22,7 +22,7 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %8, i32* %first.addr, align 4
   %9 = sext i32 %i to i64
   %10 = load i32, i32* %first.addr, align 4
@@ -31,13 +31,13 @@ bounds.ok:
   %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4
   %14 = bitcast i8* %13 to i32*
   %15 = getelementptr inbounds i32, i32* %14, i64 %9
-  store i32 %11, i32* %15, align 4, !alias.scope !4, !noalias !3
+  store i32 %11, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %16 = sext i32 %i to i64
   %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4
   %19 = bitcast i8* %18 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 %16
-  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3
+  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %22 = load i32, i32* %first.addr, align 4
   %23 = add nsw i32 %21, %22
   ret i32 %23
@@ -85,18 +85,18 @@ bounds.ok:
   %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
   %5 = bitcast i8* %4 to i32*
   %6 = getelementptr inbounds i32, i32* %5, i64 2
-  %7 = load i32, i32* %6, align 4, !alias.scope !4, !noalias !3
+  %7 = load i32, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
   %10 = bitcast i8* %9 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 0
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = add nsw i32 %7, %12
   %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
   %16 = bitcast i8* %15 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 1
-  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3
+  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %19 = add nsw i32 %13, %18
   ret i32 %19
 }
@@ -116,11 +116,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 5, i32* %5, align 4, !alias.scope !4, !noalias !3
+  store i32 5, i32* %5, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 6, i32* %6, align 4, !alias.scope !4, !noalias !3
+  store i32 6, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 7, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 7, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = call i32 @pick(%struct.nish_array* %arr.hdr, i32 1)
   %9 = call i32 @scan(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i32 2)
   %10 = add nsw i32 %8, %9
@@ -133,11 +133,11 @@ entry:
   store i8* %13, i8** %14, align 8, !alias.scope !3, !noalias !4
   %15 = bitcast i8* %13 to i32*
   %16 = getelementptr inbounds i32, i32* %15, i64 0
-  store i32 1, i32* %16, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %17 = getelementptr inbounds i32, i32* %15, i64 1
-  store i32 2, i32* %17, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %18 = getelementptr inbounds i32, i32* %15, i64 2
-  store i32 3, i32* %18, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %19 = call i32 @lowest(%struct.nish_array* %arr.hdr.1)
   %20 = add nsw i32 %10, %19
   ret i32 %20
@@ -151,3 +151,7 @@ attributes #1 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

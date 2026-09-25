@@ -59,6 +59,20 @@ export const EFFECT_WRITE: i32 = 2;
 /** The more impure of two effects, which is how a caller inherits its callees'. */
 export const maxEffect = (a: i32, b: i32): i32 => a >= b ? a : b;
 
+// WP29 P1: what a runtime symbol writes, for `FunctionFacts.sharedWrite`.
+// `effect` answers what LLVM may reorder a call across; this answers whether a
+// caller could observe the write, which is a narrower question with more of
+// the `EFFECT_WRITE` entries on the harmless side of it.
+
+/** Writes nothing a program can observe: every `EFFECT_NONE` and `EFFECT_READ` entry, and a few more. */
+export const WRITES_NOTHING: i32 = 0;
+/** Writes memory or external state a caller could observe. The default for `EFFECT_WRITE`. */
+export const WRITES_SHARED: i32 = 1;
+/** Prints to fd 2 and `_exit`s: no user memory is written, and no caller runs again to look. */
+export const WRITES_PANIC: i32 = 2;
+/** Writes only the arena and the fresh block it answers, or a header its caller already counted. */
+export const WRITES_ALLOC: i32 = 3;
+
 export class RuntimeFunction {
   name: string;
   /** The full `declare` line, minus the trailing attribute group. */
@@ -74,6 +88,8 @@ export class RuntimeFunction {
   intrinsic: boolean;
   /** Never returns to the caller (`nish_exit`); callers lose `willreturn`. */
   noreturn: boolean;
+  /** One of the `WRITES_*` classes. Whatever writes is `WRITES_SHARED` until its entry says why not. */
+  writes: i32;
 
   constructor(name: string, signature: string, attrs: string[], effect: i32) {
     this.name = name;
@@ -82,6 +98,11 @@ export class RuntimeFunction {
     this.effect = effect;
     this.intrinsic = false;
     this.noreturn = false;
+    this.writes = effect === EFFECT_WRITE ? WRITES_SHARED : WRITES_NOTHING;
+  }
+
+  sharedWrite(): boolean {
+    return this.writes === WRITES_SHARED;
   }
 }
 
@@ -148,6 +169,12 @@ export class RuntimeTable {
     this.functions.push(fn);
   }
 
+  /** `add`, with the `WRITES_*` class narrowed from the default; the line above the call says why. */
+  addWrites(writes: i32, fn: RuntimeFunction): void {
+    fn.writes = writes;
+    this.add(fn);
+  }
+
   /** The entry for `name`, or `null` when it is not a runtime symbol. */
   lookup(name: string): RuntimeFunction | null {
     const at = this.index.get(name, -1);
@@ -166,14 +193,25 @@ export class RuntimeTable {
       ["nounwind", "willreturn", "cold", "noinline", "allocsize(0)"],
       EFFECT_WRITE
     );
-    this.add(grow);
+    // The slow path of the inline allocator: it moves the arena to a new chunk
+    // and answers a block nobody else holds, which is an allocation and nothing
+    // more (`writesShared` in attributes.ts gives `nish_alloc_struct` the same answer).
+    this.addWrites(WRITES_ALLOC, grow);
     this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE));
     this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE));
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
-    this.add(plain("nish_arena_mark", "declare noundef i64 @nish_arena_mark()", EFFECT_WRITE));
+    // `EFFECT_WRITE` so nothing is reordered across it, but it only reads the bump position.
+    this.addWrites(
+      WRITES_NOTHING,
+      plain("nish_arena_mark", "declare noundef i64 @nish_arena_mark()", EFFECT_WRITE)
+    );
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE));
-    this.add(plain("nish_arena_used", "declare noundef i64 @nish_arena_used()", EFFECT_WRITE));
+    // Reads the offset, and writes nothing, as `nish_arena_mark` does.
+    this.addWrites(
+      WRITES_NOTHING,
+      plain("nish_arena_used", "declare noundef i64 @nish_arena_used()", EFFECT_WRITE)
+    );
     // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
     // which it moves down to the mark and answers at its new address. Neither
     // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
@@ -187,14 +225,18 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
-    this.add(
+    // A fresh arena string, written before anyone holds it: an allocation. The
+    // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_str_new",
         "declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef)",
         EFFECT_WRITE
       )
     );
-    this.add(
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_str_concat",
         `declare noalias noundef nonnull align 8 i8* @nish_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
@@ -237,14 +279,16 @@ export class RuntimeTable {
       plain("nish_write", `declare void @nish_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`, EFFECT_WRITE)
     );
     this.add(plain("nish_print", `declare void @nish_print(${STR_NOCAP})`, EFFECT_WRITE));
-    this.add(
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_str_from_i32",
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef)",
         EFFECT_WRITE
       )
     );
-    this.add(
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_str_from_f64",
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef)",
@@ -252,7 +296,8 @@ export class RuntimeTable {
       )
     );
     // WP7: i64 strings, Math.random, process, files.
-    this.add(
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_str_from_i64",
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef)",
@@ -262,7 +307,8 @@ export class RuntimeTable {
     // WP15: the one unsigned formatter. `u8`/`u16`/`u32` are `zext`ed to i64 at
     // the call site rather than getting three more symbols of their own, which
     // is what keeps `runtime.c` inside its `.text` budget.
-    this.add(
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_str_from_u64",
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef)",
@@ -303,7 +349,10 @@ export class RuntimeTable {
     // mode 0 parseFloat, 1 Number, 2 parseInt (as a double; the caller saturates it).
     // The string is only read and never retained (`readonly nocapture`), but the
     // function itself is not `readonly`: strtod/strtoll may store errno on overflow.
-    this.add(
+    // That one store is per thread, and no program in the language can read it,
+    // so it writes nothing a caller could observe.
+    this.addWrites(
+      WRITES_NOTHING,
       plain("nish_parse_number", `declare noundef double @nish_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
     );
     // WP14 D4: the directory and subprocess calls a self-hosted driver needs
@@ -421,8 +470,12 @@ export class RuntimeTable {
       )
     );
     // WP4: arrays. `nish_array_grow` doubles `cap` (4 when 0) and moves the
-    // elements into fresh arena storage; `len` is untouched.
-    this.add(
+    // elements into fresh arena storage; `len` is untouched. It stores to the
+    // header it is handed, but its only caller is `push`, and `FactCollector`
+    // counts that store at the `push`, where it can tell a shared array from the
+    // function's own stack one. What is left is the fresh storage: an allocation.
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_array_grow",
         "declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef)",
@@ -432,7 +485,8 @@ export class RuntimeTable {
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
     // C hosts do, so it is part of the declared ABI and of nish.h.
-    this.add(
+    this.addWrites(
+      WRITES_ALLOC,
       plain(
         "nish_alloc_array",
         "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef)",
@@ -447,7 +501,7 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     panicIndex.noreturn = true;
-    this.add(panicIndex);
+    this.addWrites(WRITES_PANIC, panicIndex);
     // `slice` range-check failure (WP15 section 4): prints "slice out of range:
     // [<start>, <end>) of length <len>" and exits 1. Its own symbol rather than
     // `nish_panic_index` because a reversed pair is as common a mistake as an
@@ -459,7 +513,7 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     panicSlice.noreturn = true;
-    this.add(panicSlice);
+    this.addWrites(WRITES_PANIC, panicSlice);
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
       "nish_panic_div",
@@ -468,7 +522,7 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     panicDiv.noreturn = true;
-    this.add(panicDiv);
+    this.addWrites(WRITES_PANIC, panicDiv);
     this.buildIntrinsics();
   }
 

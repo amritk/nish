@@ -65,7 +65,7 @@ bounds.fail:
 bounds.ok:
   %10 = bitcast i8* %3 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %7
-  store i32 %8, i32* %11, align 4, !alias.scope !4, !noalias !3
+  store i32 %8, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   br label %for.inc
 
 for.inc:
@@ -109,7 +109,7 @@ bounds.fail:
 bounds.ok:
   %10 = bitcast i8* %3 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %8
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = add nsw i32 %6, %12
   store i32 %13, i32* %total.addr, align 4
   br label %for.inc
@@ -175,3 +175,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

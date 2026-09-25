@@ -104,7 +104,7 @@ bounds.ok:
   %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4
   %27 = bitcast i8* %26 to i8**
   %28 = getelementptr inbounds i8*, i8** %27, i64 0
-  %29 = load i8*, i8** %28, align 8, !alias.scope !4, !noalias !3
+  %29 = load i8*, i8** %28, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %30 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.9 to i8*), i8* %29)
   call void @nish_print(i8* %30)
   call void @nish_arena_release(i64 %arena.mark)
@@ -127,3 +127,7 @@ attributes #2 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

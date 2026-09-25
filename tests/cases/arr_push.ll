@@ -51,7 +51,7 @@ push.store:
   %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
   %16 = bitcast i8* %15 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 %10
-  store i32 %8, i32* %17, align 4, !alias.scope !4, !noalias !3
+  store i32 %8, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %18 = add i64 %10, 1
   store i64 %18, i64* %9, align 8, !alias.scope !3, !noalias !4
   %19 = trunc i64 %18 to i32
@@ -81,7 +81,7 @@ push.store.1:
   %29 = load i8*, i8** %28, align 8, !alias.scope !3, !noalias !4
   %30 = bitcast i8* %29 to i32*
   %31 = getelementptr inbounds i32, i32* %30, i64 %24
-  store i32 100, i32* %31, align 4, !alias.scope !4, !noalias !3
+  store i32 100, i32* %31, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %32 = add i64 %24, 1
   store i64 %32, i64* %23, align 8, !alias.scope !3, !noalias !4
   %33 = trunc i64 %32 to i32
@@ -114,7 +114,7 @@ for.body.1:
   %50 = sext i32 %49 to i64
   %51 = bitcast i8* %45 to i32*
   %52 = getelementptr inbounds i32, i32* %51, i64 %50
-  %53 = load i32, i32* %52, align 4, !alias.scope !4, !noalias !3
+  %53 = load i32, i32* %52, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %54 = call i8* @nish_str_from_i32(i32 %53)
   call void @nish_print(i8* %54)
   br label %for.inc.1
@@ -145,3 +145,7 @@ attributes #1 = { nounwind willreturn }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

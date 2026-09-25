@@ -58,7 +58,7 @@ bounds.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !8, !noalias !9
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8
+  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   store i32 %10, i32* %a.addr, align 4
   %11 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
   store %struct.nish_array* %fresh, %struct.nish_array** %11, align 8, !tbaa !4
@@ -80,7 +80,7 @@ bounds.ok.1:
   %20 = load i8*, i8** %19, align 8, !alias.scope !8, !noalias !9
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 %15
-  %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8
+  %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %24 = add nsw i32 %12, %23
   ret i32 %24
 }
@@ -105,7 +105,7 @@ bounds.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !8, !noalias !9
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8
+  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   store i32 %10, i32* %a.addr, align 4
   %11 = getelementptr inbounds %struct.Holder, %struct.Holder* %other, i32 0, i32 0
   store %struct.nish_array* %fresh, %struct.nish_array** %11, align 8, !tbaa !4
@@ -127,7 +127,7 @@ bounds.ok.1:
   %20 = load i8*, i8** %19, align 8, !alias.scope !8, !noalias !9
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 %15
-  %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8
+  %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %24 = add nsw i32 %12, %23
   ret i32 %24
 }
@@ -152,7 +152,7 @@ bounds.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !8, !noalias !9
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8
+  %10 = load i32, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   store i32 %10, i32* %a.addr, align 4
   %11 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
   %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !4
@@ -171,7 +171,7 @@ bounds.ok.1:
   %18 = load i8*, i8** %17, align 8, !alias.scope !8, !noalias !9
   %19 = bitcast i8* %18 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 0
-  store i32 %13, i32* %20, align 4, !alias.scope !9, !noalias !8
+  store i32 %13, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %21 = load i32, i32* %a.addr, align 4
   %22 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
   %23 = load %struct.nish_array*, %struct.nish_array** %22, align 8, !tbaa !4
@@ -180,7 +180,7 @@ bounds.ok.1:
   %26 = load i8*, i8** %25, align 8, !alias.scope !8, !noalias !9
   %27 = bitcast i8* %26 to i32*
   %28 = getelementptr inbounds i32, i32* %27, i64 %24
-  %29 = load i32, i32* %28, align 4, !alias.scope !9, !noalias !8
+  %29 = load i32, i32* %28, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %30 = add nsw i32 %21, %29
   ret i32 %30
 }
@@ -201,11 +201,11 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !8, !noalias !9
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 1, i32* %7, align 4, !alias.scope !9, !noalias !8
+  store i32 1, i32* %7, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 2, i32* %8, align 4, !alias.scope !9, !noalias !8
+  store i32 2, i32* %8, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 3, i32* %9, align 4, !alias.scope !9, !noalias !8
+  store i32 3, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %1)
   store %struct.Holder* %Holder.obj, %struct.Holder** %h.addr, align 8
   %10 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
@@ -220,11 +220,11 @@ entry:
   store i8* %15, i8** %16, align 8, !alias.scope !8, !noalias !9
   %17 = bitcast i8* %15 to i32*
   %18 = getelementptr inbounds i32, i32* %17, i64 0
-  store i32 4, i32* %18, align 4, !alias.scope !9, !noalias !8
+  store i32 4, i32* %18, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %19 = getelementptr inbounds i32, i32* %17, i64 1
-  store i32 5, i32* %19, align 4, !alias.scope !9, !noalias !8
+  store i32 5, i32* %19, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %20 = getelementptr inbounds i32, i32* %17, i64 2
-  store i32 6, i32* %20, align 4, !alias.scope !9, !noalias !8
+  store i32 6, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %21 = call i32 @Holder.rebind(%struct.Holder* %10, i32 2, %struct.nish_array* %12)
   store i32 %21, i32* %r.addr, align 4
   %22 = load i32, i32* %r.addr, align 4
@@ -241,11 +241,11 @@ entry:
   store i8* %29, i8** %30, align 8, !alias.scope !8, !noalias !9
   %31 = bitcast i8* %29 to i32*
   %32 = getelementptr inbounds i32, i32* %31, i64 0
-  store i32 7, i32* %32, align 4, !alias.scope !9, !noalias !8
+  store i32 7, i32* %32, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %33 = getelementptr inbounds i32, i32* %31, i64 1
-  store i32 8, i32* %33, align 4, !alias.scope !9, !noalias !8
+  store i32 8, i32* %33, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %34 = getelementptr inbounds i32, i32* %31, i64 2
-  store i32 9, i32* %34, align 4, !alias.scope !9, !noalias !8
+  store i32 9, i32* %34, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %35 = call i32 @Holder.rebindThrough(%struct.Holder* %23, i32 1, %struct.Holder* %24, %struct.nish_array* %26)
   %36 = add nsw i32 %22, %35
   %37 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
@@ -270,3 +270,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}

@@ -56,6 +56,7 @@ import {
 import { elementLLVMType, elementStride, inlineElementStruct, StructInfo } from "./program";
 import { Local, STORAGE_PARAM } from "./symbols";
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime";
+import { elementTbaa } from "./tbaa";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
 
 const HEADER: string = ARRAY_STRUCT;
@@ -120,6 +121,15 @@ export const elementAccess = (emitter: Emitter): string => {
   }
   return `, !alias.scope ${aliasScopeList(emitter, false)}, !noalias ${aliasScopeList(emitter, true)}`;
 };
+
+/**
+ * The same, for a load or store of one slot holding a value of `elem`, which
+ * also carries the element's `!tbaa` tag so that the store is not read as a
+ * clobber of the class field that holds the array (`elementTbaa`). Never for
+ * an inline record's slot: that is a `memcpy` and takes `elementAccess` alone.
+ */
+const valueSlotAccess = (emitter: Emitter, elem: i32): string =>
+  `${elementAccess(emitter)}${elementTbaa(emitter, elem)}`;
 
 // ---- Loop header hoisting (WP15 section 2c) ------------------------------------------
 
@@ -593,7 +603,7 @@ const loadElement = (emitter: Emitter, base: ArrayBase, elem: i32, idx: string):
   }
   const ty = emitter.llvm(elem);
   return emitter.fn.emitValue(
-    `load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
+    `load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   );
 };
 
@@ -608,7 +618,7 @@ const storeElement = (emitter: Emitter, ptr: string, elem: i32, value: string): 
   if (info === null) {
     const ty = emitter.llvm(elem);
     emitter.fn.emit(
-      `store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
+      `store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
     );
     return;
   }
@@ -845,7 +855,9 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
   emitBoundsCheck(emitter, base, idx, target);
   const slot = elementPointer(emitter, base, elem, idx);
-  const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
+  const old = emitter.fn.emitValue(
+    `load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
+  );
   let value = "";
   if (isBitwiseAssignment(expr.text)) {
     value = emitBitwiseCombine(emitter, expr.text, elem, old, expr.children[1]);
@@ -855,7 +867,9 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs);
   }
-  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
+  emitter.fn.emit(
+    `store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
+  );
   return value;
 };
 
@@ -1031,7 +1045,9 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
 
   fn.placeBlock(sumBodyBlock);
   const partPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, sumAt);
-  const part = fn.emitValue(`load i8*, i8** ${partPtr}${emitter.align8()}${elementAccess(emitter)}`);
+  const part = fn.emitValue(
+    `load i8*, i8** ${partPtr}${emitter.align8()}${valueSlotAccess(emitter, T_STRING)}`
+  );
   const total = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
   const grown = fn.emitValue(`add i64 ${total}, ${stringLength(emitter, part)}`);
   fn.emit(`store i64 ${grown}, i64* ${totalSlot}, align 8`);
@@ -1065,7 +1081,9 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   fn.emit(`call void @${MEMCPY}(i8* ${cursor}, i8* ${sepData}, i64 ${gapLen}, i1 false)`);
   const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`);
   const itemPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, copyAt);
-  const item = fn.emitValue(`load i8*, i8** ${itemPtr}${emitter.align8()}${elementAccess(emitter)}`);
+  const item = fn.emitValue(
+    `load i8*, i8** ${itemPtr}${emitter.align8()}${valueSlotAccess(emitter, T_STRING)}`
+  );
   const itemLen = stringLength(emitter, item);
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`);
   fn.emit(`call void @${MEMCPY}(i8* ${afterGap}, i8* ${itemData}, i64 ${itemLen}, i1 false)`);

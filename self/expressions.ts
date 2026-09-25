@@ -16,7 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding";
-import { arrowElsewhereMessage, capturedMessage, checkGenericCall } from "./generics";
+import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
 import {
@@ -155,7 +155,8 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_ARROW:
       // WP29: an arrow is legal as the argument for a function-typed
       // parameter, which `checkGenericCall` resolves without coming here.
-      return ctx.errorType(expr, arrowElsewhereMessage());
+      refuseOnce(ctx, expr, arrowElsewhereMessage());
+      return T_ERROR;
     case N_SUPER:
       // WP25. Every spelling of `super` lands here -- `super(...)` and
       // `super.m()` are routed through the callee and the receiver -- so the
@@ -305,15 +306,18 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   // WP29: inside an arrow argument, a name of the function around it — which
   // would shadow a module constant there — is a capture the arrow cannot make.
   if (ctx.capturesOuter(expr.text)) {
-    return ctx.errorType(expr, capturedMessage(expr.text));
+    refuseOnce(ctx, expr, capturedMessage(expr.text));
+    return T_ERROR;
   }
   // WP29: a compile-time function parameter names a callee, not a value.
   if (ctx.functionBindings.get(expr.text) !== null) {
-    return ctx.errorType(
+    refuseOnce(
+      ctx,
       expr,
       `\`${expr.text}\` is a function parameter and can only be called or passed on as a function argument: a ` +
         `function is never a value in ${LANGUAGE}, so it cannot be stored, returned, compared or put in an array`
     );
+    return T_ERROR;
   }
   // A local shadows a module constant, as it would in TypeScript, so the
   // constant table is consulted only after the scope chain.
@@ -339,7 +343,8 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
 const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const self = scope.lookup("this");
   if (self === null && ctx.capturesOuter("this")) {
-    return ctx.errorType(expr, capturedMessage("this")); // WP29: an arrow argument has no `this`
+    refuseOnce(ctx, expr, capturedMessage("this")); // WP29: an arrow argument has no `this`
+    return T_ERROR;
   }
   if (self === null) {
     return ctx.errorType(expr, "`this` is only valid inside a method or constructor");
@@ -1074,7 +1079,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   // this call is written inside is one it cannot reach.
   if (scope.lookup(callee.text) === null) {
     if (ctx.capturesOuter(callee.text)) {
-      return ctx.errorType(callee, capturedMessage(callee.text));
+      refuseOnce(ctx, callee, capturedMessage(callee.text));
+      return T_ERROR;
     }
     const bound = ctx.functionBindings.get(callee.text);
     if (bound !== null) {

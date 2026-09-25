@@ -53,23 +53,23 @@ bounds.fail:
 bounds.ok:
   %11 = bitcast i8* %3 to i32*
   %12 = getelementptr inbounds i32, i32* %11, i64 %9
-  %13 = load i32, i32* %12, align 4, !alias.scope !9, !noalias !8
+  %13 = load i32, i32* %12, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %14 = add i32 %7, %13
   store i32 %14, i32* %s.addr, align 4
   %15 = load i32, i32* %i.addr, align 4
   %16 = sext i32 %15 to i64
   %17 = bitcast i8* %3 to i32*
   %18 = getelementptr inbounds i32, i32* %17, i64 %16
-  %19 = load i32, i32* %18, align 4, !alias.scope !9, !noalias !8
+  %19 = load i32, i32* %18, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %20 = mul i32 %19, 2
-  store i32 %20, i32* %18, align 4, !alias.scope !9, !noalias !8
+  store i32 %20, i32* %18, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %21 = getelementptr inbounds %struct.Acc, %struct.Acc* %acc, i32 0, i32 0
   %22 = load i32, i32* %21, align 4
   %23 = load i32, i32* %i.addr, align 4
   %24 = sext i32 %23 to i64
   %25 = bitcast i8* %3 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 %24
-  %27 = load i32, i32* %26, align 4, !alias.scope !9, !noalias !8
+  %27 = load i32, i32* %26, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %28 = icmp eq i32 2, 0
   %29 = icmp eq i32 %27, -2147483648
   %30 = icmp eq i32 2, -1
@@ -146,13 +146,13 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !8, !noalias !9
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 1, i32* %5, align 4, !alias.scope !9, !noalias !8
+  store i32 1, i32* %5, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 2, i32* %6, align 4, !alias.scope !9, !noalias !8
+  store i32 2, i32* %6, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 3, i32* %7, align 4, !alias.scope !9, !noalias !8
+  store i32 3, i32* %7, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds i32, i32* %4, i64 3
-  store i32 4, i32* %8, align 4, !alias.scope !9, !noalias !8
+  store i32 4, i32* %8, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %9 = call i32 @poly(i32 5, i32 2)
   store i32 %9, i32* %n.addr, align 4
@@ -191,3 +191,5 @@ attributes #3 = { nounwind noreturn cold }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}

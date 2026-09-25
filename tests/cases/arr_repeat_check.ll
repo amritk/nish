@@ -73,7 +73,7 @@ bounds.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3
+  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   store i32 %10, i32* %tmp.addr, align 4
   %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
   %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !9
@@ -95,12 +95,12 @@ bounds.ok.1:
   %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
   %22 = bitcast i8* %21 to i32*
   %23 = getelementptr inbounds i32, i32* %22, i64 %16
-  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3
+  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
   %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4
   %27 = bitcast i8* %26 to i32*
   %28 = getelementptr inbounds i32, i32* %27, i64 %13
-  store i32 %24, i32* %28, align 4, !alias.scope !4, !noalias !3
+  store i32 %24, i32* %28, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %29 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
   %30 = load %struct.nish_array*, %struct.nish_array** %29, align 8, !tbaa !9
   %31 = sext i32 %j to i64
@@ -109,7 +109,7 @@ bounds.ok.1:
   %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4
   %35 = bitcast i8* %34 to i32*
   %36 = getelementptr inbounds i32, i32* %35, i64 %31
-  store i32 %32, i32* %36, align 4, !alias.scope !4, !noalias !3
+  store i32 %32, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   ret void
 }
 
@@ -132,7 +132,7 @@ bounds.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3
+  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
   %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !9
   %13 = sext i32 %i to i64
@@ -140,9 +140,9 @@ bounds.ok:
   %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
   %16 = bitcast i8* %15 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 %13
-  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3
+  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %19 = add nsw i32 %10, %18
-  store i32 %19, i32* %9, align 4, !alias.scope !4, !noalias !3
+  store i32 %19, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %20 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
   %21 = load %struct.nish_array*, %struct.nish_array** %20, align 8, !tbaa !9
   %22 = sext i32 %i to i64
@@ -150,7 +150,7 @@ bounds.ok:
   %24 = load i8*, i8** %23, align 8, !alias.scope !3, !noalias !4
   %25 = bitcast i8* %24 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 %22
-  %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3
+  %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   ret i32 %27
 }
 
@@ -178,7 +178,7 @@ bounds.ok:
   %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 0
-  store i32 1, i32* %9, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %10 = load %struct.Perm*, %struct.Perm** %p.addr, align 8
   %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %10, i32 0, i32 0
   %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !9
@@ -196,7 +196,7 @@ bounds.ok.1:
   %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
   %18 = bitcast i8* %17 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 3
-  store i32 20, i32* %19, align 4, !alias.scope !4, !noalias !3
+  store i32 20, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %20 = load %struct.Perm*, %struct.Perm** %p.addr, align 8
   call void @Perm.swap(%struct.Perm* %20, i32 0, i32 3)
   %21 = load %struct.Perm*, %struct.Perm** %p.addr, align 8
@@ -218,7 +218,7 @@ bounds.ok.2:
   %30 = load i8*, i8** %29, align 8, !alias.scope !3, !noalias !4
   %31 = bitcast i8* %30 to i32*
   %32 = getelementptr inbounds i32, i32* %31, i64 0
-  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3
+  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !11
   %34 = add nsw i32 %22, %33
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 %34
@@ -240,3 +240,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"ptr", !6, i64 0}
 !8 = !{!"Perm", !7, i64 0}
 !9 = !{!8, !7, i64 0}
+!10 = !{!"element i32", !6, i64 0}
+!11 = !{!10, !10, i64 0}

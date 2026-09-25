@@ -1,0 +1,3 @@
+Unknown function `notAFunction`
+Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call
+2 errors

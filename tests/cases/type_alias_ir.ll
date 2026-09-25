@@ -65,7 +65,7 @@ forof.body:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i8*
   %7 = getelementptr inbounds i8, i8* %6, i64 %0
-  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3
+  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   store i8 %8, i8* %b.addr, align 1
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i8, i8* %b.addr, align 1
@@ -98,7 +98,7 @@ cond.true:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   br label %cond.end
 
 cond.false:
@@ -119,7 +119,7 @@ if.then:
 
 if.end:
   %1 = getelementptr inbounds %struct.Sample, %struct.Sample* %r, i32 0, i32 1
-  %2 = load i8*, i8** %1, align 8, !tbaa !10
+  %2 = load i8*, i8** %1, align 8, !tbaa !14
   ret i8* %2
 }
 
@@ -129,16 +129,16 @@ entry:
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Sample*
   %2 = getelementptr inbounds %struct.Sample, %struct.Sample* %1, i32 0, i32 0
-  store i32 0, i32* %2, align 4, !tbaa !11
+  store i32 0, i32* %2, align 4, !tbaa !15
   %3 = getelementptr inbounds %struct.Sample, %struct.Sample* %1, i32 0, i32 1
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %3, align 8, !tbaa !10
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %3, align 8, !tbaa !14
   store %struct.Sample* %1, %struct.Sample** %s.addr, align 8
   %4 = load %struct.Sample*, %struct.Sample** %s.addr, align 8
   %5 = getelementptr inbounds %struct.Sample, %struct.Sample* %4, i32 0, i32 0
-  store i32 %value, i32* %5, align 4, !tbaa !11
+  store i32 %value, i32* %5, align 4, !tbaa !15
   %6 = load %struct.Sample*, %struct.Sample** %s.addr, align 8
   %7 = getelementptr inbounds %struct.Sample, %struct.Sample* %6, i32 0, i32 1
-  store i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*), i8** %7, align 8, !tbaa !10
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*), i8** %7, align 8, !tbaa !14
   %8 = load %struct.Sample*, %struct.Sample** %s.addr, align 8
   ret %struct.Sample* %8
 }
@@ -190,11 +190,11 @@ entry:
   store i8* %5, i8** %6, align 8, !alias.scope !3, !noalias !4
   %7 = bitcast i8* %5 to i8*
   %8 = getelementptr inbounds i8, i8* %7, i64 0
-  store i8 %0, i8* %8, align 1, !alias.scope !4, !noalias !3
+  store i8 %0, i8* %8, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = getelementptr inbounds i8, i8* %7, i64 1
-  store i8 %1, i8* %9, align 1, !alias.scope !4, !noalias !3
+  store i8 %1, i8* %9, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = getelementptr inbounds i8, i8* %7, i64 2
-  store i8 %2, i8* %10, align 1, !alias.scope !4, !noalias !3
+  store i8 %2, i8* %10, align 1, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %data.addr, align 8
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   store i64 2, i64* %11, align 8, !alias.scope !3, !noalias !4
@@ -205,9 +205,9 @@ entry:
   store i8* %13, i8** %14, align 8, !alias.scope !3, !noalias !4
   %15 = bitcast i8* %13 to i32*
   %16 = getelementptr inbounds i32, i32* %15, i64 0
-  store i32 10, i32* %16, align 4, !alias.scope !4, !noalias !3
+  store i32 10, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   %17 = getelementptr inbounds i32, i32* %15, i64 1
-  store i32 20, i32* %17, align 4, !alias.scope !4, !noalias !3
+  store i32 20, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %view.addr, align 8
   %18 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
   %19 = call i32 @sum(%struct.nish_array* %18)
@@ -233,7 +233,7 @@ cond.true:
   %32 = load i32, i32* %31, align 4
   %33 = load %struct.Sample*, %struct.Sample** %r.addr, align 8
   %34 = getelementptr inbounds %struct.Sample, %struct.Sample* %33, i32 0, i32 0
-  %35 = load i32, i32* %34, align 4, !tbaa !11
+  %35 = load i32, i32* %34, align 4, !tbaa !15
   %36 = add nsw i32 %32, %35
   br label %cond.end
 
@@ -260,8 +260,12 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"i32", !6, i64 0}
-!8 = !{!"ptr", !6, i64 0}
-!9 = !{!"Sample", !7, i64 0, !8, i64 8}
-!10 = !{!9, !8, i64 8}
-!11 = !{!9, !7, i64 0}
+!7 = !{!"element i8", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"element i32", !6, i64 0}
+!10 = !{!9, !9, i64 0}
+!11 = !{!"i32", !6, i64 0}
+!12 = !{!"ptr", !6, i64 0}
+!13 = !{!"Sample", !11, i64 0, !12, i64 8}
+!14 = !{!13, !12, i64 8}
+!15 = !{!13, !11, i64 0}

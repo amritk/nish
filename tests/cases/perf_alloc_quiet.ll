@@ -78,14 +78,14 @@ for.body:
   %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
   %11 = bitcast i8* %10 to i32*
   %12 = getelementptr inbounds i32, i32* %11, i64 0
-  store i32 %8, i32* %12, align 4, !alias.scope !4, !noalias !3
+  store i32 %8, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = load i32, i32* %total.addr, align 4
   %14 = load %struct.nish_array*, %struct.nish_array** %fixed.addr, align 8
   %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
   %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4
   %17 = bitcast i8* %16 to i32*
   %18 = getelementptr inbounds i32, i32* %17, i64 0
-  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3
+  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %20 = add nsw i32 %13, %19
   %21 = load %struct.nish_array*, %struct.nish_array** %fixed.addr, align 8
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -112,9 +112,9 @@ for.cond.1:
 
 for.body.1:
   %30 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
-  store i32 0, i32* %30, align 4, !tbaa !9
+  store i32 0, i32* %30, align 4, !tbaa !11
   %31 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 1
-  store i32 0, i32* %31, align 4, !tbaa !10
+  store i32 0, i32* %31, align 4, !tbaa !12
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %32 = load i32, i32* %i.addr.1, align 4
   %33 = load i32, i32* %i.addr.1, align 4
@@ -128,21 +128,21 @@ for.body.1:
   store i8* %37, i8** %38, align 8, !alias.scope !3, !noalias !4
   %39 = bitcast i8* %37 to i32*
   %40 = getelementptr inbounds i32, i32* %39, i64 0
-  store i32 %32, i32* %40, align 4, !alias.scope !4, !noalias !3
+  store i32 %32, i32* %40, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %41 = getelementptr inbounds i32, i32* %39, i64 1
-  store i32 %34, i32* %41, align 4, !alias.scope !4, !noalias !3
+  store i32 %34, i32* %41, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %pair.addr, align 8
   %42 = load i32, i32* %total.addr, align 4
   %43 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %44 = getelementptr inbounds %struct.Point, %struct.Point* %43, i32 0, i32 0
-  %45 = load i32, i32* %44, align 4, !tbaa !9
+  %45 = load i32, i32* %44, align 4, !tbaa !11
   %46 = add nsw i32 %42, %45
   %47 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
   %49 = load i8*, i8** %48, align 8, !alias.scope !3, !noalias !4
   %50 = bitcast i8* %49 to i32*
   %51 = getelementptr inbounds i32, i32* %50, i64 1
-  %52 = load i32, i32* %51, align 4, !alias.scope !4, !noalias !3
+  %52 = load i32, i32* %51, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %53 = add nsw i32 %46, %52
   store i32 %53, i32* %total.addr, align 4
   br label %for.inc.1
@@ -203,7 +203,7 @@ bounds.ok:
   %78 = load i8*, i8** %77, align 8, !alias.scope !3, !noalias !4
   %79 = bitcast i8* %78 to i32*
   %80 = getelementptr inbounds i32, i32* %79, i64 0
-  store i32 %73, i32* %80, align 4, !alias.scope !4, !noalias !3
+  store i32 %73, i32* %80, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %81 = load %struct.nish_array*, %struct.nish_array** %kept.addr, align 8
   %82 = load %struct.nish_array*, %struct.nish_array** %row.addr, align 8
   %83 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
@@ -222,7 +222,7 @@ push.store:
   %89 = load i8*, i8** %88, align 8, !alias.scope !3, !noalias !4
   %90 = bitcast i8* %89 to %struct.nish_array**
   %91 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %90, i64 %84
-  store %struct.nish_array* %82, %struct.nish_array** %91, align 8, !alias.scope !4, !noalias !3
+  store %struct.nish_array* %82, %struct.nish_array** %91, align 8, !alias.scope !4, !noalias !3, !tbaa !14
   %92 = add i64 %84, 1
   store i64 %92, i64* %83, align 8, !alias.scope !3, !noalias !4
   %93 = trunc i64 %92 to i32
@@ -264,7 +264,7 @@ bounds.ok.1:
   %110 = load i8*, i8** %109, align 8, !alias.scope !3, !noalias !4
   %111 = bitcast i8* %110 to i32*
   %112 = getelementptr inbounds i32, i32* %111, i64 0
-  store i32 7, i32* %112, align 4, !alias.scope !4, !noalias !3
+  store i32 7, i32* %112, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %113 = load i32, i32* %total.addr, align 4
   %114 = load %struct.nish_array*, %struct.nish_array** %kept.addr, align 8
   %115 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %114, i64 0, i32 0
@@ -276,7 +276,7 @@ bounds.ok.1:
   %121 = load i8*, i8** %120, align 8, !alias.scope !3, !noalias !4
   %122 = bitcast i8* %121 to i32*
   %123 = getelementptr inbounds i32, i32* %122, i64 0
-  %124 = load i32, i32* %123, align 4, !alias.scope !4, !noalias !3
+  %124 = load i32, i32* %123, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %125 = add nsw i32 %118, %124
   ret i32 %125
 }
@@ -294,7 +294,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"i32", !6, i64 0}
-!8 = !{!"Point", !7, i64 0, !7, i64 4}
-!9 = !{!8, !7, i64 0}
-!10 = !{!8, !7, i64 4}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"i32", !6, i64 0}
+!10 = !{!"Point", !9, i64 0, !9, i64 4}
+!11 = !{!10, !9, i64 0}
+!12 = !{!10, !9, i64 4}
+!13 = !{!"element ptr", !6, i64 0}
+!14 = !{!13, !13, i64 0}
