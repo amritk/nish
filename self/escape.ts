@@ -31,10 +31,12 @@ import {
   CallSite,
   FactsTable,
   FunctionFacts,
+  LoopScope,
   USE_ARGUMENT,
   USE_NONE,
   USE_READ,
   USE_WRITE,
+  yieldsInteriorPointer,
 } from "./attributes";
 import {
   dottedName,
@@ -44,6 +46,7 @@ import {
   isPushCall,
   isStringAllocCall,
   isTemplateExpression,
+  storesInlineElements,
   unwrapParens,
   unwrapStringPassthrough,
 } from "./emit_util";
@@ -51,19 +54,30 @@ import {
   N_ARRAY,
   N_ARROW,
   N_BINARY,
+  N_BLOCK,
   N_CALL,
+  N_CASE,
   N_CONDITIONAL,
+  N_DEFAULT,
   N_DO,
   N_EMPTY,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
+  N_IF,
+  N_INDEX,
+  N_LIST,
+  N_MEMBER,
   N_NEW,
+  N_NULL,
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
   N_RETURN,
+  N_STRING,
+  N_SWITCH,
+  N_THIS,
   N_VAR_DECL,
   N_WHILE,
   Node,
@@ -148,8 +162,18 @@ export class EscapeResult {
    * `localOutcome` decides for a local holding an allocation.
    */
   stackParams: StringSet;
+  /**
+   * Every allocation site, `push` and by-value `Result` parameter whose value
+   * `escapes`, in the order `decide` met them. The per-pass rule
+   * (`decideLoopScopes`) asks which of them lie inside a loop body.
+   */
+  escapingNodes: Node[];
+  /** Every site of this body that bumps the arena itself: an allocation that is not an alloca, a `push`, a logged number. */
+  arenaNodes: Node[];
 
   constructor(nodeCount: i32) {
+    this.escapingNodes = [];
+    this.arenaNodes = [];
     this.stackSites = new Array<boolean>(nodeCount);
     this.stackLocals = [];
     this.stackParams = new StringSet();
@@ -164,6 +188,7 @@ export class EscapeResult {
 
   /** Set `allocEscapes`, remembering `node` unless an earlier escape already is its site. */
   noteEscape(node: Node): void {
+    this.escapingNodes.push(node);
     this.allocEscapes = true;
     if (this.escapeSite === null) {
       this.escapeSite = node;
@@ -452,6 +477,7 @@ class EscapeAnalysis {
       if (type >= 0 && isNumeric(type)) {
         // `nish_str_from_*` allocates the text; `nish_print` does not retain it.
         this.logsNumbers = true;
+        this.result.arenaNodes.push(call);
       }
     }
   }
@@ -483,6 +509,20 @@ class EscapeAnalysis {
       if (parent.kind === N_PAREN || (parent.kind === N_CONDITIONAL && parent.children[0] !== node)) {
         node = parent;
         continue;
+      }
+      // An inline element used as a value is the address of a slot in this
+      // array, so it goes wherever the element goes (`yieldsInteriorPointer`),
+      // and the variable of a `for...of` over such an array holds each slot.
+      if (parent.kind === N_INDEX && parent.children[0] === node && yieldsInteriorPointer(this.unit, this.table, parent)) {
+        node = parent;
+        continue;
+      }
+      if (
+        parent.kind === N_FOR_OF &&
+        parent.children[1] === node &&
+        storesInlineElements(this.unit.program, this.table, node)
+      ) {
+        return new FlowTarget(this.unit.program.nodeLocals[parent.children[0].children[0].children[0].id], false);
       }
       if (parent.kind === N_VAR_DECL && parent.children[2] === node) {
         return new FlowTarget(this.unit.program.nodeLocals[parent.id], false);
@@ -528,7 +568,11 @@ class EscapeAnalysis {
       if (parent === null) {
         return null;
       }
-      if (parent.kind === N_PAREN || (parent.kind === N_CONDITIONAL && parent.children[0] !== node)) {
+      if (
+        parent.kind === N_PAREN ||
+        (parent.kind === N_CONDITIONAL && parent.children[0] !== node) ||
+        (parent.kind === N_INDEX && parent.children[0] === node && yieldsInteriorPointer(this.unit, this.table, parent))
+      ) {
         node = parent;
         continue;
       }
@@ -665,6 +709,7 @@ class EscapeAnalysis {
         this.result.stackSites[site.node.id] = true;
         continue;
       }
+      this.result.arenaNodes.push(site.node);
       if (flow === FLOW_LOCAL) {
         this.result.directArena = true;
       } else if (flow === FLOW_RETURNED) {
@@ -748,6 +793,7 @@ class EscapeAnalysis {
       if (escapes) {
         this.result.noteEscape(push);
       }
+      this.result.arenaNodes.push(push);
       if (owned) {
         this.result.directArena = true;
       } else {
@@ -999,6 +1045,360 @@ export const analyzeEscapes = (
   return analysis.result;
 };
 
+// ---- Per-pass arena scopes ----------------------------------------------------------------
+//
+// The function scope above reclaims what a call allocated when the call
+// returns, so a loop that builds and drops a temporary on every pass still
+// holds every pass's temporaries until then, and holds them for good when the
+// function returns a pointer and gets no scope at all (#216). This brackets
+// the pass instead: `nish_arena_mark` at the top of the body, and
+// `nish_arena_release` on every edge that leaves it.
+//
+// **The rule.** Nothing allocated during one pass, by the body or by anything
+// it calls, is reachable once the pass is over except through a scalar. The
+// ways out of a pass are a local declared outside the body, memory older than
+// the pass, and a `return`, and each is closed by one clause:
+//
+//  - **Memory.** No allocation of the pass is stored into memory at all: no
+//    site in the body `escapes` (`escapingNodes`), and no callee lets one out
+//    (`allocEscapes`, already propagated over its own callees). This is the
+//    fact `FunctionFacts.contained` is built on, and it has the same
+//    consequence here: a pointer read back out of memory during the pass was
+//    not allocated during it, so reading one is safe to keep. The one read
+//    that answers memory it did not load is an inline element (`xs[i]` is the
+//    address of a slot), which the classifiers follow as the array itself
+//    (`yieldsInteriorPointer`), and `isOld` asks for its array.
+//  - **Outer locals.** An assignment in the body to a local declared outside
+//    it (a parameter, a `for` initialiser, the variable of the `for...of`
+//    being scoped) of a type that can hold a pointer stores a value `isOld`
+//    proves predates the pass: a literal, `this`, an outer local, a field or
+//    element read, the `const` variable of a nested `for...of` over an old
+//    array, a call to a function that allocates nothing, or a choice between
+//    two of those. `s = s + x` is refused, and so is every `+=` on a
+//    pointer type. A `push` grows an array's data block in the arena, so it is
+//    allowed only onto a `const` the pass itself initialised with a fresh
+//    array.
+//  - **Return.** A `return` in the body that answers a pointer answers one
+//    `isOld` proves, because the release runs before the `ret`. A scalar is
+//    computed first and returned after the release; `orReturn` builds a
+//    `Result` and is refused.
+//  - **Arena control.** A function that calls `Arena.mark`, `release` or
+//    `reset` itself, or reaches a callee that releases or resets, takes no
+//    per-pass scope: the mark would not name the top of the pass once the
+//    program rewound under it.
+//
+// **The placement** is the emitter's (`emitPass` in emit.ts): the mark is the
+// first instruction of the body, so it dominates every release inside it; a
+// `break` or `continue` releases the passes it leaves, a `return` releases the
+// outermost scope open (the function's own, or the outermost scoped loop's),
+// and the body falling through releases before the back-edge. A `for` loop's
+// condition and incrementor run outside the bracket, after the release, and
+// can only read outer locals, which hold nothing the release freed.
+//
+// **Profit**, not proof, is the last clause: the pass must bump the arena
+// itself (`arenaNodes`) or call something that leaves memory behind
+// (`netAllocates`), or the bracket would be two runtime calls around nothing.
+
+/** Why a loop's passes are not scoped, for the arena-loop diagnostic. */
+export const LOOP_NOTHING: i32 = 0;
+/** An allocation of the pass is stored into memory (`at`). */
+export const LOOP_STORED: i32 = 1;
+/** A callee stores an allocation into memory (`name`). */
+export const LOOP_CALLEE_STORES: i32 = 2;
+/** The pass keeps an allocation in a local declared outside the loop (`at`, `name`). */
+export const LOOP_OUTER_LOCAL: i32 = 3;
+/** The pass grows an array older than itself (`at`, `name`). */
+export const LOOP_OUTER_PUSH: i32 = 4;
+/** The pass returns an allocation (`at`). */
+export const LOOP_RETURN: i32 = 5;
+/** The function or a callee releases or resets the arena (`name`, `""` for the function itself). */
+export const LOOP_CONTROL: i32 = 6;
+/** A callee has no facts to read (`name`). */
+export const LOOP_UNSEEN: i32 = 7;
+
+/** The walk over one loop body that decides its `LoopScope`. */
+class PassWalk {
+  unit: AnalysisUnit;
+  table: TypeTable;
+  facts: FactsTable;
+  scope: LoopScope;
+  /** The locals the body declares, nested loops' included: a fresh binding every pass. */
+  locals: Local[];
+  /** The `const` variables of the `for...of` loops nested in the body, and the arrays they walk. */
+  elementLocals: Local[];
+  elementSources: Node[];
+  /** The pass bumps the arena, itself or through a callee that leaves memory behind. */
+  allocates: boolean;
+
+  constructor(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, scope: LoopScope) {
+    this.unit = unit;
+    this.table = table;
+    this.facts = facts;
+    this.scope = scope;
+    this.locals = [];
+    this.elementLocals = [];
+    this.elementSources = [];
+    this.allocates = false;
+  }
+
+  /** Record the first reason, in the order the body is read. */
+  refuse(why: i32, at: Node | null, name: string): void {
+    if (this.scope.why === LOOP_NOTHING) {
+      this.scope.why = why;
+      this.scope.at = at;
+      this.scope.name = name;
+    }
+  }
+
+  declaredInPass(local: Local): boolean {
+    for (const candidate of this.locals) {
+      if (candidate === local) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * `expr` answers nothing the pass allocated: see the header. Anything not
+   * listed is assumed fresh.
+   */
+  isOld(expr: Node): boolean {
+    const program = this.unit.program;
+    const e = unwrapParens(expr);
+    const type = program.nodeTypes[e.id];
+    if (type >= 0 && isScalarArgument(this.table, type)) {
+      return true;
+    }
+    if (e.kind === N_NULL || e.kind === N_STRING || e.kind === N_THIS) {
+      return true;
+    }
+    if (e.kind === N_IDENT) {
+      const local = program.nodeLocals[e.id];
+      if (local === null || !this.declaredInPass(local)) {
+        return true;
+      }
+      // A `const` element of an array older than the pass is as old as a read of it.
+      let i = 0;
+      while (i < this.elementLocals.length) {
+        if (this.elementLocals[i] === local) {
+          return this.isOld(this.elementSources[i]);
+        }
+        i = i + 1;
+      }
+      return false;
+    }
+    if (e.kind === N_MEMBER) {
+      return true;
+    }
+    if (e.kind === N_INDEX) {
+      return !storesInlineElements(program, this.table, e.children[0]) || this.isOld(e.children[0]);
+    }
+    if (e.kind === N_CONDITIONAL) {
+      return this.isOld(e.children[1]) && this.isOld(e.children[2]);
+    }
+    if (e.kind === N_CALL) {
+      const callee = program.nodeCallees[e.id];
+      const g: FunctionFacts | null = callee === null ? null : this.facts.get(callee.name);
+      return g !== null && !g.allocates;
+    }
+    return false;
+  }
+
+  /** A call of `callee` in the pass, at `node`. */
+  visitCallee(callee: FunctionSig, node: Node): void {
+    const g = this.facts.get(callee.name);
+    if (g === null) {
+      this.refuse(LOOP_UNSEEN, node, callee.sourceName);
+      return;
+    }
+    if (g.allocEscapes) {
+      this.refuse(LOOP_CALLEE_STORES, node, callee.sourceName);
+    }
+    if (g.netAllocates) {
+      this.allocates = true;
+    }
+  }
+
+  /** `xs.push(v)` grows `xs` in the arena: fine for an array this pass made, a leak into any other. */
+  visitPush(call: Node): void {
+    const program = this.unit.program;
+    const receiver = unwrapParens(call.children[0].children[0]);
+    const local: Local | null = receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null;
+    if (local !== null && !local.mutable && this.declaredInPass(local) && this.freshArray(local)) {
+      return;
+    }
+    this.refuse(LOOP_OUTER_PUSH, call, receiver.kind === N_IDENT ? receiver.text : "");
+  }
+
+  /** The body declares `local` with a fresh array: a literal or `new Array`. */
+  freshArray(local: Local): boolean {
+    return this.initialiserIsFresh(this.scope.body, local);
+  }
+
+  initialiserIsFresh(node: Node, local: Local): boolean {
+    const declared: Local | null = node.kind === N_VAR_DECL ? this.unit.program.nodeLocals[node.id] : null;
+    if (declared !== null && declared === local) {
+      const init = unwrapParens(node.children[2]);
+      return init.kind === N_ARRAY || init.kind === N_NEW;
+    }
+    for (const child of node.children) {
+      if (this.initialiserIsFresh(child, local)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * One walk, in source order, which is also declaration order: a local is
+   * recorded as the body's own when its declaration is reached, before any
+   * use of it can be.
+   */
+  visit(node: Node): void {
+    const program = this.unit.program;
+    if (node.kind === N_ARROW) {
+      return;
+    }
+    if (node.kind === N_VAR_DECL) {
+      const local = program.nodeLocals[node.id];
+      if (local !== null) {
+        this.locals.push(local);
+      }
+    } else if (node.kind === N_FOR_OF) {
+      const variable = program.nodeLocals[node.children[0].children[0].children[0].id];
+      if (variable !== null && !variable.mutable) {
+        this.elementLocals.push(variable);
+        this.elementSources.push(node.children[1]);
+      }
+    }
+    if (node.kind === N_CALL) {
+      const callee = program.nodeCallees[node.id];
+      if (callee !== null) {
+        this.visitCallee(callee, node);
+      } else if (isPushCall(program, this.table, node)) {
+        this.visitPush(node);
+      } else if (resultMethodName(program, this.table, node) === "orReturn") {
+        this.scope.handsBack = true;
+        this.refuse(LOOP_RETURN, node, "");
+      }
+    } else if (node.kind === N_NEW) {
+      const ctor = constructorOf(program, this.table, intrinsicType(program, node));
+      if (ctor !== null) {
+        this.visitCallee(ctor, node);
+      }
+    } else if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+      const target = unwrapParens(node.children[0]);
+      const local: Local | null = target.kind === N_IDENT ? program.nodeLocals[target.id] : null;
+      if (
+        local !== null &&
+        !this.declaredInPass(local) &&
+        !isScalarArgument(this.table, local.type) &&
+        (node.text !== "=" || !this.isOld(node.children[1]))
+      ) {
+        this.refuse(LOOP_OUTER_LOCAL, node, local.name);
+      }
+    } else if (node.kind === N_RETURN) {
+      const value = node.children[0];
+      if (value.kind !== N_EMPTY && !this.isOld(value)) {
+        this.scope.handsBack = true;
+        this.refuse(LOOP_RETURN, node, "");
+      }
+    }
+    for (const child of node.children) {
+      this.visit(child);
+    }
+  }
+}
+
+/** The statement a loop runs on every pass. */
+const loopBody = (loop: Node): Node => {
+  if (loop.kind === N_WHILE) {
+    return loop.children[1];
+  }
+  if (loop.kind === N_DO) {
+    return loop.children[0];
+  }
+  return loop.kind === N_FOR ? loop.children[3] : loop.children[2];
+};
+
+const within = (outer: Node, node: Node): boolean => node.start >= outer.start && node.end <= outer.end;
+
+/** The first callee of `f` that releases or resets the arena, by source name, or `""`. */
+const controllingCallee = (facts: FactsTable, f: FunctionFacts): string => {
+  let c = 0;
+  while (c < f.callees.size()) {
+    const g = facts.get(f.callees.at(c));
+    if (g !== null && g.usesArenaControl) {
+      return g.sourceName;
+    }
+    c = c + 1;
+  }
+  return "";
+};
+
+/**
+ * Decide the per-pass scope of every loop in `sig`, into `f.loopScopes`, once
+ * the fixpoint and the function scopes are settled. See the header above.
+ */
+export const decideLoopScopes = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  sig: FunctionSig,
+  f: FunctionFacts,
+  facts: FactsTable
+): void => {
+  const body = sig.body();
+  // A function that allocates nothing, itself or through a callee, has no
+  // pass to reclaim and no loop the arena-loop diagnostic could name.
+  if (body !== null && f.allocates) {
+    collectLoopScopes(unit, table, f, facts, body);
+  }
+};
+
+/**
+ * Every loop under `node`, found through statements alone: a loop is a
+ * statement, and an arrow's body is another function's, so no expression can
+ * hold one.
+ */
+const collectLoopScopes = (unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, node: Node): void => {
+  const kind = node.kind;
+  if (kind === N_FOR || kind === N_FOR_OF || kind === N_WHILE || kind === N_DO) {
+    const scope = new LoopScope(node, loopBody(node));
+    decidePass(unit, table, f, facts, scope);
+    f.loopScopes.push(scope);
+    collectLoopScopes(unit, table, f, facts, scope.body);
+  } else if (kind === N_BLOCK || kind === N_LIST || kind === N_SWITCH || kind === N_CASE || kind === N_DEFAULT) {
+    for (const child of node.children) {
+      collectLoopScopes(unit, table, f, facts, child);
+    }
+  } else if (kind === N_IF) {
+    collectLoopScopes(unit, table, f, facts, node.children[1]);
+    collectLoopScopes(unit, table, f, facts, node.children[2]);
+  }
+};
+
+const decidePass = (unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, scope: LoopScope): void => {
+  const walk = new PassWalk(unit, table, facts, scope);
+  if (f.managesArena || f.usesArenaControl) {
+    walk.refuse(LOOP_CONTROL, null, f.managesArena ? "" : controllingCallee(facts, f));
+    return;
+  }
+  const body = scope.body;
+  for (const node of f.escapingNodes) {
+    if (within(body, node)) {
+      walk.refuse(LOOP_STORED, node, "");
+    }
+  }
+  for (const node of f.arenaNodes) {
+    if (within(body, node)) {
+      walk.allocates = true;
+    }
+  }
+  walk.visit(body);
+  scope.scoped = scope.why === LOOP_NOTHING && walk.allocates;
+};
+
 // ---- The arena-loop diagnostic ------------------------------------------------------------
 //
 // A WP15 section 8 performance warning, and the one that needs the whole
@@ -1022,14 +1422,18 @@ export class ArenaFinding {
 /**
  * The arena-loop warnings of one module: a call inside a loop to a function
  * that leaves arena memory behind, whose result does not outlive the pass,
- * in a function that gets no automatic arena scope. Each pass adds to memory
- * nothing will release before the function returns, and the function will not
- * release it then either.
+ * where neither a scope around the pass (`decideLoopScopes`) nor one around
+ * the function takes that memory back. Each pass adds to memory nothing will
+ * release before the function returns, and the function will not release it
+ * then either. The message names the first thing that refused the pass its
+ * scope, and what refused the function its own.
  *
  * Silent in a function that calls `Arena.mark`, `Arena.release` or
  * `Arena.reset` itself, because its author is already managing that memory;
  * silent when the result is kept (returned, stored, pushed), because then the
- * program asked for one object per pass. A generic instantiation is not
+ * program asked for one object per pass; silent in a loop whose pass can
+ * `return` what it allocated (`LoopScope.handsBack`), because no bracket
+ * could release that pass, so there is no rewrite to name. A generic instantiation is not
  * walked, so that a template instantiated twice warns once, at its template.
  */
 export const arenaLoopFindings = (unit: AnalysisUnit, facts: FactsTable): ArenaFinding[] => {
@@ -1045,44 +1449,107 @@ export const arenaLoopFindings = (unit: AnalysisUnit, facts: FactsTable): ArenaF
     }
     const reason = noScopeReason(unit, facts, f);
     if (reason.length > 0) {
-      findArenaLoops(unit, facts, f, reason, body, 0, out);
+      findArenaLoops(unit, facts, f, reason, body, null, false, false, out);
     }
   }
   return out;
 };
 
+/**
+ * `loop` is the innermost loop around `node` and `reclaimed` says whether a
+ * scoped pass encloses it; `head` that `node` is in `loop`'s condition or
+ * update, which run outside the bracket its body takes.
+ */
 const findArenaLoops = (
   unit: AnalysisUnit,
   facts: FactsTable,
   f: FunctionFacts,
   reason: string,
   node: Node,
-  depth: i32,
+  loop: LoopScope | null,
+  reclaimed: boolean,
+  head: boolean,
   out: ArenaFinding[]
 ): void => {
-  if (depth > 0 && node.kind === N_CALL) {
+  if (node.kind === N_ARROW) {
+    return;
+  }
+  if (loop !== null && !reclaimed && !loop.handsBack && node.kind === N_CALL) {
     const callee = unit.program.nodeCallees[node.id];
     const g: FunctionFacts | null = callee === null ? null : facts.get(callee.name);
-    if (callee !== null && g !== null && leavesGarbage(g) && diesWithPass(f, g, node)) {
+    const why = head ? "the call is in the loop's condition or update, which run outside the scope each pass takes" : passReason(unit, loop);
+    if (callee !== null && g !== null && leavesGarbage(g) && diesWithPass(f, g, node) && why.length > 0) {
+      // One refusal often stops both scopes; it is named once.
+      const fn = why === reason
+        ? `and neither can \`${f.sourceName}\` when it returns`
+        : `and \`${f.sourceName}\` cannot release it when it returns because ${reason}`;
       out.push(
         new ArenaFinding(
           node.children[0],
-          `\`${callee.sourceName}\` leaves arena memory behind on every pass of this loop, and \`${f.sourceName}\` ` +
-            `cannot release it when it returns because ${reason}, so all of it lives as long as the caller's memory ` +
-            `does. Move the loop into a function that returns a number, a boolean or nothing and lets no allocation ` +
-            `out, or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
+          `\`${callee.sourceName}\` leaves arena memory behind on every pass of this loop, which cannot release it ` +
+            `after each pass because ${why}, ${fn}, so all of it lives as long as the caller's memory does. Keep ` +
+            `what a pass allocates out of locals declared outside the loop and out of memory older than the pass, ` +
+            `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
         )
       );
     }
   }
-  const loop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO;
+  const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO;
+  const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null;
   let i = 0;
   while (i < node.children.length) {
+    const child = node.children[i];
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1);
-    findArenaLoops(unit, facts, f, reason, node.children[i], loop && !once ? depth + 1 : depth, out);
+    if (scope === null || once) {
+      findArenaLoops(unit, facts, f, reason, child, loop, reclaimed, head, out);
+    } else if (child === scope.body) {
+      findArenaLoops(unit, facts, f, reason, child, scope, reclaimed || scope.scoped, false, out);
+    } else {
+      findArenaLoops(unit, facts, f, reason, child, scope, reclaimed, scope.scoped, out);
+    }
     i = i + 1;
   }
+};
+
+const loopScopeOf = (f: FunctionFacts, loop: Node): LoopScope | null => {
+  for (const scope of f.loopScopes) {
+    if (scope.loop === loop) {
+      return scope;
+    }
+  }
+  return null;
+};
+
+/** What refused `loop`'s passes their scope, in words for the diagnostic, or `""`. */
+const passReason = (unit: AnalysisUnit, loop: LoopScope): string => {
+  const at = loop.at;
+  const line = at === null ? "" : `${unit.program.source.lineOf(at.start)}`;
+  const why = loop.why;
+  if (why === LOOP_STORED) {
+    return `the allocation on line ${line} is stored into memory, where this analysis stops following it`;
+  }
+  if (why === LOOP_CALLEE_STORES) {
+    return `it calls \`${loop.name}\`, which stores an allocation into memory, where this analysis stops following it`;
+  }
+  if (why === LOOP_OUTER_LOCAL) {
+    return `line ${line} keeps what the pass allocated in \`${loop.name}\`, which is declared outside the loop`;
+  }
+  if (why === LOOP_OUTER_PUSH) {
+    return loop.name.length > 0
+      ? `line ${line} grows \`${loop.name}\`, an array older than the pass`
+      : `line ${line} grows an array older than the pass`;
+  }
+  if (why === LOOP_RETURN) {
+    return `line ${line} returns what the pass allocated`;
+  }
+  if (why === LOOP_CONTROL && loop.name.length > 0) {
+    return `it calls \`${loop.name}\`, which releases or resets the arena`;
+  }
+  if (why === LOOP_UNSEEN) {
+    return `it calls \`${loop.name}\`, whose memory this analysis cannot see`;
+  }
+  return "";
 };
 
 /**
@@ -1108,7 +1575,7 @@ const diesWithPass = (f: FunctionFacts, g: FunctionFacts, call: Node): boolean =
  */
 const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts): string => {
   if (!f.returnsScalar) {
-    return "";
+    return "it returns a value that is not a number, a boolean, an enum or nothing";
   }
   if (!f.contained) {
     const site = f.escapeSite;

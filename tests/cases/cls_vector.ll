@@ -125,21 +125,42 @@ for.cond:
   br i1 %3, label %for.body, label %for.end
 
 for.body:
-  %4 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
+  %4 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %5 = load i8*, i8** %4, align 8
+  %6 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %7 = load i64, i64* %6, align 8
+  %8 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
   call void @Vec3.constructor(%struct.Vec3* %Vec3.obj, double 0x3FF0000000000000, double 0x4000000000000000, double 0x4008000000000000)
-  %5 = call %struct.Vec3* @Vec3.scaled(%struct.Vec3* %Vec3.obj, double 0x3FE0000000000000)
-  call void @Vec3.addInPlace(%struct.Vec3* %4, %struct.Vec3* %5)
+  %9 = call %struct.Vec3* @Vec3.scaled(%struct.Vec3* %Vec3.obj, double 0x3FE0000000000000)
+  call void @Vec3.addInPlace(%struct.Vec3* %8, %struct.Vec3* %9)
+  %10 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %11 = load i8*, i8** %10, align 8
+  %12 = icmp eq i8* %11, %5
+  br i1 %12, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %13 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %7, i64* %13, align 8
+  br label %pass.done
+
+pass.free:
+  %14 = ptrtoint i8* %5 to i64
+  %15 = add i64 %14, %7
+  call void @nish_arena_release(i64 %15)
+  br label %pass.done
+
+pass.done:
   br label %for.inc
 
 for.inc:
-  %6 = load double, double* %i.addr, align 8
-  %7 = fadd double %6, 0x3FF0000000000000
-  store double %7, double* %i.addr, align 8
+  %16 = load double, double* %i.addr, align 8
+  %17 = fadd double %16, 0x3FF0000000000000
+  store double %17, double* %i.addr, align 8
   br label %for.cond
 
 for.end:
-  %8 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
-  ret %struct.Vec3* %8
+  %18 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
+  ret %struct.Vec3* %18
 }
 
 define void @nish_main() #2 {
