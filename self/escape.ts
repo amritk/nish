@@ -161,8 +161,9 @@ export class EscapeResult {
     this.escapeSite = null;
   }
 
-  /** Remember `node` as the escaping allocation, unless one earlier in the walk already is. */
+  /** Set `allocEscapes`, remembering `node` unless an earlier escape already is its site. */
   noteEscape(node: Node): void {
+    this.allocEscapes = true;
     if (this.escapeSite === null) {
       this.escapeSite = node;
     }
@@ -648,7 +649,6 @@ class EscapeAnalysis {
         }
       }
       if (escapes) {
-        this.result.allocEscapes = true;
         this.result.noteEscape(site.node);
       }
       if (site.callee.length > 0) {
@@ -685,7 +685,6 @@ class EscapeAnalysis {
           flow = outcome.flow;
           stable = outcome.stable;
           if (outcome.escapes) {
-            this.result.allocEscapes = true;
             this.result.noteEscape(this.refsOf(v)[0]);
           }
         }
@@ -741,7 +740,6 @@ class EscapeAnalysis {
         escapes = outcome.escapes;
       }
       if (escapes) {
-        this.result.allocEscapes = true;
         this.result.noteEscape(push);
       }
       if (owned) {
@@ -1036,7 +1034,7 @@ export const arenaLoopFindings = (unit: AnalysisUnit, facts: FactsTable): ArenaF
     }
     const f = facts.get(sig.name);
     const body = sig.body();
-    if (f === null || body === null || f.arenaScope || f.managesArena) {
+    if (f === null || body === null || f.arenaScope || f.managesArena || calleeWhere(facts, f, CALLEE_GARBAGE) === null) {
       continue;
     }
     const reason = noScopeReason(unit, facts, f);
@@ -1059,7 +1057,7 @@ const findArenaLoops = (
   if (depth > 0 && node.kind === N_CALL) {
     const callee = unit.program.nodeCallees[node.id];
     const g: FunctionFacts | null = callee === null ? null : facts.get(callee.name);
-    if (callee !== null && g !== null && g.netAllocates && g.contained && diesWithPass(f, g, node)) {
+    if (callee !== null && g !== null && leavesGarbage(g) && diesWithPass(f, g, node)) {
       out.push(
         new ArenaFinding(
           node.children[0],
@@ -1071,11 +1069,11 @@ const findArenaLoops = (
       );
     }
   }
+  const loop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO;
   let i = 0;
   while (i < node.children.length) {
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1);
-    const loop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO;
     findArenaLoops(unit, facts, f, reason, node.children[i], loop && !once ? depth + 1 : depth, out);
     i = i + 1;
   }
@@ -1111,13 +1109,13 @@ const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
     if (site !== null) {
       return `the allocation on line ${unit.program.source.lineOf(site.start)} is stored into memory, where this analysis stops following it`;
     }
-    const leaky = calleeWhere(facts, f, false);
+    const leaky = calleeWhere(facts, f, CALLEE_ESCAPES);
     if (leaky !== null) {
       return `it calls \`${leaky.sourceName}\`, which stores an allocation into memory, where this analysis stops following it`;
     }
   }
   if (f.usesArenaControl) {
-    const control = calleeWhere(facts, f, true);
+    const control = calleeWhere(facts, f, CALLEE_CONTROL);
     if (control !== null) {
       return `it calls \`${control.sourceName}\`, which releases or resets the arena`;
     }
@@ -1125,12 +1123,25 @@ const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
   return "";
 };
 
-/** The first callee that lets an allocation escape (`control` false) or that uses arena control (`control` true). */
-const calleeWhere = (facts: FactsTable, f: FunctionFacts, control: boolean): FunctionFacts | null => {
+/** What `calleeWhere` looks for. */
+const CALLEE_ESCAPES: i32 = 0;
+const CALLEE_CONTROL: i32 = 1;
+const CALLEE_GARBAGE: i32 = 2;
+
+/** A callee's allocations are garbage once its result is: it leaves memory behind and lets none of it escape. */
+const leavesGarbage = (g: FunctionFacts): boolean => g.netAllocates && g.contained;
+
+/** The first callee that lets an allocation escape, uses arena control, or leaves garbage, by `mode`. */
+const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFacts | null => {
   let c = 0;
   while (c < f.callees.size()) {
     const g = facts.get(f.callees.at(c));
-    if (g !== null && (control ? g.usesArenaControl : g.allocEscapes)) {
+    if (
+      g !== null &&
+      ((mode === CALLEE_ESCAPES && g.allocEscapes) ||
+        (mode === CALLEE_CONTROL && g.usesArenaControl) ||
+        (mode === CALLEE_GARBAGE && leavesGarbage(g)))
+    ) {
       return g;
     }
     c = c + 1;

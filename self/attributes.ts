@@ -317,8 +317,6 @@ export class FunctionFacts {
    * `tests/cases/mem_callee_scope_nested` is that program.
    */
   contained: boolean;
-  /** `rootsHoldNoPointer` (escape.ts): nothing older than the call can be made to hold a pointer. */
-  rootsHoldNoPointer: boolean;
   /** The first allocation of this function's own that escapes, or null; see `EscapeResult.escapeSite`. */
   escapeSite: Node | null;
   /** The return type is a number, a `boolean`, an `enum` or `void`: nothing a release could free. */
@@ -375,8 +373,7 @@ export class FunctionFacts {
     this.usesArenaControl = false;
     this.readsArenaState = false;
     this.callSites = [];
-    this.contained = true;
-    this.rootsHoldNoPointer = false;
+    this.contained = false;
     this.escapeSite = null;
     this.returnsScalar = false;
     this.sourceName = "";
@@ -1298,7 +1295,8 @@ export const collectFacts = (
     facts.usesArenaControl = memory.usesArenaControl;
     facts.callSites = memory.callSites;
     facts.escapeSite = memory.escapeSite;
-    facts.rootsHoldNoPointer = rootsHoldNoPointer(program, table, sig);
+    // The half of `contained` that needs no fixpoint; the other is added after it.
+    facts.contained = rootsHoldNoPointer(program, table, sig);
   }
   // A `returned` or `leaked` allocation is still an allocation.
   if (facts.returnsAllocation || facts.allocLeaks) {
@@ -1413,9 +1411,7 @@ export const analyzeFunctions = (
   propagate(facts, runtime);
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
-  }
-  for (const f of facts.list) {
-    f.contained = f.rootsHoldNoPointer || !f.allocEscapes;
+    f.contained = f.contained || !f.allocEscapes;
   }
   settleCalleeScopes(facts);
   for (const f of facts.list) {
