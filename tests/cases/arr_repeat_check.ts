@@ -1,3 +1,6 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // A passed bounds check proves the same index on the same array for as long as
 // nothing could change either. AWFY Permute's `swap` on a field array: four
 // accesses, and only the first read of each index keeps its check. The emitter

@@ -19,6 +19,47 @@ reproduced below, verbatim from the upstream sources.
   program, adapted to match the SOM version, which carries the Revised BSD
   licence below.
 
+## Copies outside this directory
+
+Some test programs and cookbook snippets reproduce parts of these ports, so
+that a compiler rule is pinned on the code that motivated it. Each carries the
+notice in the header below, and each is listed here with the program it comes
+from. `node tests/run.js awfy-licence` checks that the table and the headers
+agree, and that a program under `tests/`, `docs/cookbook/`, `examples/` or
+`bench/` which names the Are We Fast Yet suite or SOM carries the header.
+The npm package ships none of these files.
+
+A copy of a SOM-derived port starts with
+
+```
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+```
+
+and a copy of `mandelbrot.ts` would start with
+
+```
+// This code is derived from the Computer Language Benchmarks Game, see bench/awfy/LICENSE.md.
+// Copyright (c) 2004-2013 Brent Fulgham, 2008-2012 Isaac Gouy; Revised BSD licence, reproduced in bench/awfy/LICENSE.md.
+```
+
+| File | Derived from | Licence |
+| --- | --- | --- |
+| `tests/cases/arr_range_call.ts` | `permute.ts` (upstream `permute.js`): the `Permute` class, less `innerBenchmarkLoop` and `verifyResult` | MIT |
+| `tests/link/range_export/permute.ts` | `permute.ts` (upstream `permute.js`): the whole `Permute` class | MIT |
+| `tests/cases/arr_field_reload.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
+| `tests/cases/arr_repeat_check.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
+| `docs/cookbook/arr_repeat_check.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
+| `docs/cookbook/arr_field_element.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
+| `tests/cases/arr_header_tbaa.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk`, `pushDisk`, `popDiskFrom` and `moveTopDisk` | MIT |
+| `tests/cases/arr_header_tbaa_threads.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk`, `pushDisk`, `popDiskFrom` and `moveTopDisk` | MIT |
+| `tests/cases/arr_field_reload_alias.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk` | MIT |
+| `tests/cases/mem_callee_scope.ts` | `list.ts` (upstream `list.js`): `Element` and `List`, less `innerBenchmarkLoop` and `verifyResult` | MIT |
+| `tests/cases/mem_callee_scope_tree.ts` | `storage.ts` and `som.ts` (upstream `storage.js` and `som.js`): `Random`, `ArrayTree`, `benchmark` and `buildTreeDepth` | MIT |
+
+`docs/IR_COOKBOOK.md` prints the two cookbook snippets, header included, because
+`docs/cookbook/regen.sh` copies each snippet into it whole.
+
 ## SOM benchmarks (JavaScript versions)
 
 From the header of each of `benchmarks/JavaScript/{bounce,harness,list,permute,queens,som,storage,towers}.js`:

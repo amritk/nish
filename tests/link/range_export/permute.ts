@@ -1,8 +1,10 @@
+// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
+// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
+
 // bench/awfy/permute.ts as it is, less its benchmark harness: an exported class
 // in a module of its own, called from another module. A `--link` build is its
 // own final link, so `export` only means "importable" and `Permute.swap` takes
 // the facts its two call sites prove (`hostVisible` in `self/visibility.ts`).
-// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
 
 export class Permute {
   count: i32 = 0;

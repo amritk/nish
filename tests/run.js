@@ -10057,6 +10057,135 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- No tool attribution: the hook and the PR body check ------------------------------
+// ---- The Are We Fast Yet licence travels with every copy of its code -----------------
+// The ports in bench/awfy/ are under the SOM benchmarks' MIT licence (mandelbrot.ts
+// under the Benchmarks Game's Revised BSD one), not this repository's, and MIT asks
+// for its notice in "all copies or substantial portions". Some tests reproduce a port
+// so that a compiler rule is pinned on the code that motivated it, and a copy made
+// that way is easy to make without the notice. So bench/awfy/LICENSE.md lists every
+// copy outside bench/awfy/ in its "Copies outside this directory" table, and this
+// holds the table, the headers and the programs to each other in both directions.
+// A program that names the suite in a comment is taken at its word: it carries the
+// header, or it is in `AWFY_MENTIONS_ONLY` with the reason it copies nothing. Only
+// text is read, so it needs no toolchain.
+if (!only || "awfy-licence".includes(only) || "licence".includes(only)) {
+  const AWFY_HEADERS = new Map([
+    [
+      "MIT",
+      [
+        "// This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.",
+        "// Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.",
+      ],
+    ],
+    [
+      "BSD",
+      [
+        "// This code is derived from the Computer Language Benchmarks Game, see bench/awfy/LICENSE.md.",
+        "// Copyright (c) 2004-2013 Brent Fulgham, 2008-2012 Isaac Gouy; Revised BSD licence, reproduced in bench/awfy/LICENSE.md.",
+      ],
+    ],
+  ]);
+  const AWFY_MENTIONS_ONLY = new Map([
+    ["tests/link/range_export/main.ts", "imports the Permute copy beside it and calls it; it copies nothing"],
+  ]);
+  const AWFY_ROOTS = ["tests", "docs/cookbook", "examples", "bench"];
+  const licenceDoc = path.join(root, "bench", "awfy", "LICENSE.md");
+  const firstLines = (file, n) => fs.readFileSync(path.join(root, file), "utf8").split("\n").slice(0, n);
+  const startsWithHeader = (file, header) => firstLines(file, header.length).join("\n") === header.join("\n");
+
+  // The table: one `| \`file\` | from | licence |` row per copy, under its own heading.
+  const copies = [];
+  let inTable = false;
+  for (const line of fs.readFileSync(licenceDoc, "utf8").split("\n")) {
+    if (line.startsWith("## ")) inTable = line === "## Copies outside this directory";
+    const row = inTable ? /^\| `([^`]+)` \|.*\| (\w+) \|$/.exec(line) : null;
+    if (row !== null) copies.push({ file: row[1], licence: row[2] });
+  }
+  const listed = new Set(copies.map((c) => c.file));
+  const wrong = copies.flatMap((c) => {
+    const header = AWFY_HEADERS.get(c.licence);
+    if (header === undefined) return [`${c.file}: no header for the licence "${c.licence}"`];
+    if (!fs.existsSync(path.join(root, c.file))) return [`${c.file}: listed, but there is no such file`];
+    return startsWithHeader(c.file, header) ? [] : [`${c.file}: does not start with\n${header.join("\n")}`];
+  });
+  check(
+    `awfy-licence: bench/awfy/LICENSE.md lists ${copies.length} copies of the ports, and each exists and starts with its licence header`,
+    copies.length > 0 && wrong.length === 0,
+    copies.length === 0 ? 'no rows under "## Copies outside this directory"' : wrong.join("\n")
+  );
+
+  const programs = [];
+  const walk = (rel) => {
+    for (const entry of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (child !== "bench/awfy" && entry.name !== "node_modules") walk(child);
+      } else if (entry.name.endsWith(".ts")) {
+        programs.push(child);
+      }
+    }
+  };
+  for (const dir of AWFY_ROOTS) walk(dir);
+  const headers = [...AWFY_HEADERS.values()];
+  const headed = programs.filter((file) => headers.some((h) => firstLines(file, 1)[0] === h[0]));
+  const unlisted = headed.filter((file) => !listed.has(file));
+  check(
+    `awfy-licence: each of the ${headed.length} programs under ${AWFY_ROOTS.join("/, ")}/ that carries an Are We Fast Yet header is listed in bench/awfy/LICENSE.md`,
+    unlisted.length === 0,
+    unlisted.join("\n")
+  );
+
+  const mentions = /\bAWFY\b|Are We Fast Yet|\bSOM\b/;
+  const comment = /^\s*(\/\/|\/\*|\*)/;
+  const unmarked = programs.filter(
+    (file) =>
+      !listed.has(file) &&
+      !AWFY_MENTIONS_ONLY.has(file) &&
+      fs
+        .readFileSync(path.join(root, file), "utf8")
+        .split("\n")
+        .some((line) => comment.test(line) && mentions.test(line))
+  );
+  const staleExemptions = [...AWFY_MENTIONS_ONLY.keys()].filter((file) => !programs.includes(file));
+  check(
+    "awfy-licence: every program that names Are We Fast Yet, AWFY or SOM in a comment carries the header or says why it copies nothing",
+    unmarked.length === 0 && staleExemptions.length === 0,
+    [
+      ...unmarked.map((file) => `${file}: names the suite, but is not in bench/awfy/LICENSE.md's table`),
+      ...staleExemptions.map((file) => `${file}: in AWFY_MENTIONS_ONLY, but there is no such program`),
+    ].join("\n")
+  );
+
+  // The ports' own header, in the form upstream gave it; mandelbrot.ts adds the BSD notice.
+  const portHeader = [
+    "// This code is derived from the SOM benchmarks, see AUTHORS.md file.",
+    "// Ported to Nish from the JavaScript version; licensed as LICENSE.md.",
+  ];
+  const ports = fs
+    .readdirSync(path.join(root, "bench", "awfy"))
+    .filter((name) => name.endsWith(".ts"))
+    .map((name) => `bench/awfy/${name}`);
+  const bareports = ports.filter(
+    (file) =>
+      !startsWithHeader(file, portHeader) ||
+      (file.endsWith("/mandelbrot.ts") && !firstLines(file, 5).join("\n").includes("Revised BSD licence"))
+  );
+  check(
+    `awfy-licence: each of the ${ports.length} ports in bench/awfy/ carries its licence header`,
+    ports.length > 0 && bareports.length === 0,
+    bareports.join("\n")
+  );
+
+  // The package whitelist, read rather than packed: `npm pack` is the package block's.
+  const shipped = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).files.filter(
+    (entry) => !entry.startsWith("!")
+  );
+  const leaked = [...ports, ...listed].filter((file) =>
+    shipped.some((entry) => file === entry || file.startsWith(`${entry}/`))
+  );
+  check("awfy-licence: package.json's files ships no port and no copy of one", leaked.length === 0, leaked.join("\n"));
+}
+
 // CLAUDE.md keeps session links, model names and "Generated with" footers out of
 // commits and PR text. `.claude/hooks/no-attribution.mjs` refuses the tool call that
 // would write one, and `scripts/check-pr-body.mjs` fails the `PR body` workflow on a
