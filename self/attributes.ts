@@ -101,7 +101,15 @@ import {
   ROLE_CONSTRUCTOR,
   StructInfo,
 } from "./program";
-import { EFFECT_NONE, EFFECT_READ, EFFECT_WRITE, inlineAllocatorAttrs, maxEffect, RuntimeTable } from "./runtime";
+import {
+  EFFECT_NONE,
+  EFFECT_READ,
+  EFFECT_WRITE,
+  inlineAllocatorAttrs,
+  maxEffect,
+  RuntimeFunction,
+  RuntimeTable,
+} from "./runtime";
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
 import { isResultConstructorCall, resultMethodName } from "./emit_result";
 import { resultLayout } from "./result";
@@ -892,11 +900,14 @@ class FactCollector {
    * store through `this.inner` may reach an object that came from outside.
    */
   initialisesThis(receiver: Node): boolean {
-    return this.sig.role === ROLE_CONSTRUCTOR && unwrapParens(receiver).kind === N_THIS;
+    return this.facts.freshThis && unwrapParens(receiver).kind === N_THIS;
   }
 
   /** A store into `receiver`'s array: shared unless the array is this function's own stack object. */
   noteArrayWrite(node: Node, receiver: Node | null): void {
+    if (this.facts.sharedWrite) {
+      return; // already named; no need to ask whose array it is
+    }
     if (receiver === null || !this.isStackOwned(receiver)) {
       this.noteSharedWrite(node);
     }
@@ -1565,7 +1576,7 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
     calleeReturns = hasAttr(rt.attrs, "willreturn");
     calleeNoReturn = rt.noreturn;
   }
-  if (!f.sharedWrite && calleeWritesShared(facts, runtime, callee)) {
+  if (!f.sharedWrite && writesShared(calleeFacts, rt, callee)) {
     f.sharedWrite = true;
     changed = true;
   }
@@ -1619,16 +1630,22 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
 
 const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0;
 
-/** WP29 P1: calling `callee` writes shared memory. An unknown callee is assumed to, as it is assumed to write. */
-const calleeWritesShared = (facts: FactsTable, runtime: RuntimeTable, callee: string): boolean => {
-  const calleeFacts = facts.get(callee);
+/**
+ * WP29 P1: calling `callee`, whose facts and runtime entry the caller has
+ * already looked up, writes shared memory. An unknown callee is assumed to, as
+ * it is assumed to write at all.
+ */
+const writesShared = (
+  calleeFacts: FunctionFacts | null,
+  rt: RuntimeFunction | null,
+  callee: string
+): boolean => {
   if (calleeFacts !== null) {
     return calleeFacts.sharedWrite;
   }
   if (callee === "nish_alloc_struct") {
     return false; // the inline arena allocator; see `FunctionFacts.sharedWrite`
   }
-  const rt = runtime.lookup(callee);
   return rt === null || rt.sharedWrite();
 };
 
@@ -1647,8 +1664,9 @@ const nameWriteVia = (facts: FactsTable, runtime: RuntimeTable): void => {
     }
     let c = 0;
     while (c < f.callees.size() && f.writeVia.length === 0) {
-      if (calleeWritesShared(facts, runtime, f.callees.at(c))) {
-        f.writeVia = f.callees.at(c);
+      const callee = f.callees.at(c);
+      if (writesShared(facts.get(callee), runtime.lookup(callee), callee)) {
+        f.writeVia = callee;
       }
       c = c + 1;
     }
