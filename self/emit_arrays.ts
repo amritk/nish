@@ -40,6 +40,7 @@ import {
 import { arrayMethodName, isAssignmentOperator, unwrapParens } from "./emit_util";
 import { internalErrorFor } from "./ice";
 import {
+  N_ARRAY,
   N_ARROW,
   N_BINARY,
   N_CALL,
@@ -53,7 +54,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes";
-import { elementLLVMType, elementStride, inlineElementStruct, StructInfo } from "./program";
+import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program";
 import { Local, STORAGE_PARAM } from "./symbols";
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime";
 import { elementTbaa, headerTbaa } from "./tbaa";
@@ -177,10 +178,21 @@ class ArrayPath {
 class ArrayBase {
   arr: string;
   header: HoistedHeader | null;
+  /**
+   * An inline field's class, object and field, whose slots sit at a constant
+   * offset in the object, so element 0's address is known without reading
+   * `data` (`inlineFieldBase`). `null` for every other array.
+   */
+  owner: StructInfo | null;
+  receiver: string;
+  field: FieldInfo | null;
 
   constructor(arr: string, header: HoistedHeader | null) {
     this.arr = arr;
     this.header = header;
+    this.owner = null;
+    this.receiver = "";
+    this.field = null;
   }
 }
 
@@ -275,7 +287,179 @@ const emitArrayBase = (emitter: Emitter, expr: Node): ArrayBase => {
   if (header !== null) {
     return new ArrayBase(header.arr, header);
   }
+  const inline = inlineFieldBase(emitter, expr);
+  if (inline !== null) {
+    return inline;
+  }
   return new ArrayBase(emitter.emitExpression(expr), null);
+};
+
+// ---- Inline array fields ----------------------------------------------------------
+
+/**
+ * The class and field `expr` reads when it is an array field stored inside its
+ * object (`FieldInfo.inlineCapacity`, decided by `self/inline_arrays.ts`), or
+ * `null`. The field is only ever indexed, asked its `.length` or assigned a
+ * fresh array, so these three lowerings are the whole of what reaches it.
+ */
+const inlineField = (emitter: Emitter, expr: Node): FieldInfo | null => {
+  const e = unwrapParens(expr);
+  if (e.kind !== N_MEMBER) {
+    return null;
+  }
+  // Read the table rather than `typeOf`: `process.argv` is a member whose
+  // receiver is no value and has no type.
+  const recorded = emitter.program.nodeTypes[e.children[0].id];
+  if (recorded < 0) {
+    return null;
+  }
+  const receiver = emitter.table.stripNull(recorded);
+  if (!emitter.table.isStruct(receiver)) {
+    return null;
+  }
+  const info = emitter.program.struct(emitter.table.nameOf(receiver));
+  if (info === null) {
+    return null;
+  }
+  const field = info.field(e.text);
+  return field !== null && field.inline() ? field : null;
+};
+
+/** The `%struct.<Name>` a struct-typed expression points at. */
+const inlineOwnerOf = (emitter: Emitter, expr: Node): StructInfo => {
+  const info = emitter.program.struct(emitter.table.nameOf(emitter.table.stripNull(emitter.typeOf(expr))));
+  if (info === null) {
+    process.exit(internalErrorFor("emitter: an inline array field with no class", emitter.opts.json));
+  }
+  return info;
+};
+
+/**
+ * The header an inline field starts with, inside the object at `receiver`:
+ * member 0 of the field's `{ %struct.nish_array, [K x T] }`. It is a
+ * `%struct.nish_array*` like any other, and every read and write of it still
+ * goes through `loadHeaderField` / `storeHeaderField`, which is what the
+ * header's `!tbaa` argument needs.
+ */
+export const inlineHeaderPointer = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
+  emitter.declareType(ARRAY_TYPE);
+  const ty = `%struct.${info.name}`;
+  return emitter.fn.emitValue(
+    `getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${field.index}, i32 0`
+  );
+};
+
+/** Element 0 of an inline field, as an `i8*`: member 1 of the field, right after the header. */
+const inlineDataPointer = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
+  const ty = `%struct.${info.name}`;
+  const slot = emitter.llvm(emitter.table.refOf(field.type));
+  const first = emitter.fn.emitValue(
+    `getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${field.index}, i32 1, i64 0`
+  );
+  return emitter.fn.emitValue(`bitcast ${slot}* ${first} to i8*`);
+};
+
+/**
+ * An inline field as an array base: its header's address, and its slots'
+ * address known without a load. `data` points at those slots from the moment
+ * the object is made (`initInlineArrays`) and nothing ever moves it — no
+ * `push`, `pop` or runtime call is handed the field — so reading it would only
+ * put back the dependent load the layout exists to remove.
+ */
+const inlineFieldBase = (emitter: Emitter, expr: Node): ArrayBase | null => {
+  const field = inlineField(emitter, expr);
+  if (field === null) {
+    return null;
+  }
+  const e = unwrapParens(expr);
+  const info = inlineOwnerOf(emitter, e.children[0]);
+  const receiver = emitter.emitExpression(e.children[0]);
+  const base = new ArrayBase(inlineHeaderPointer(emitter, info, receiver, field), null);
+  base.owner = info;
+  base.receiver = receiver;
+  base.field = field;
+  return base;
+};
+
+/**
+ * Point every inline field of a fresh object at its own slots: `len` 0, `cap`
+ * `K`, `data` the slots. Runs before the constructor, which is where the first
+ * assignment is, so no header is ever read before it is whole.
+ */
+export const initInlineArrays = (emitter: Emitter, info: StructInfo, receiver: string): void => {
+  for (const field of info.fields) {
+    if (field.inline()) {
+      const header = inlineHeaderPointer(emitter, info, receiver, field);
+      storeHeaderField(emitter, header, 0, "0", "i64");
+      storeHeaderField(emitter, header, 1, `${field.inlineCapacity}`, "i64");
+      storeHeaderField(emitter, header, 2, inlineDataPointer(emitter, info, receiver, field), "i8*");
+    }
+  }
+};
+
+/**
+ * `x.f = e;` for an inline field: write the fresh array's elements into the
+ * slots and its length into the header, which leaves the object exactly as if
+ * it held `e` (`self/inline_arrays.ts` has why nobody can tell the
+ * difference). The length is the one the checker proved `e` has.
+ *
+ *   - a literal stores its elements straight into the slots;
+ *   - `new Array<T>(n)` zeroes `n` slots, as it would have zeroed its block;
+ *   - a call makes its array as always, and the slots copy it.
+ *
+ * The receiver is evaluated first and the right-hand side second, as for any
+ * field store.
+ */
+export const emitInlineArrayAssignment = (emitter: Emitter, expr: Node, field: FieldInfo): string => {
+  const target = unwrapParens(expr.children[0]);
+  const info = inlineOwnerOf(emitter, target.children[0]);
+  const n = emitter.program.inlineAssignLength(expr);
+  if (n < 0 || n > field.inlineCapacity) {
+    process.exit(internalErrorFor(`emitter: no proven length for \`${field.name}\``, emitter.opts.json));
+  }
+  const elem = emitter.table.refOf(field.type);
+  const size = elementSize(emitter, elem);
+  const receiver = emitter.emitExpression(target.children[0]);
+  const rhs = unwrapParens(expr.children[1]);
+  const values: string[] = [];
+  let source = "";
+  if (rhs.kind === N_ARRAY) {
+    for (const element of rhs.children) {
+      values.push(emitter.emitExpression(element));
+    }
+  } else if (rhs.kind !== N_NEW) {
+    source = emitter.emitExpression(rhs);
+  }
+  const header = inlineHeaderPointer(emitter, info, receiver, field);
+  const data = n > 0 ? inlineDataPointer(emitter, info, receiver, field) : "";
+  const ty = slotType(emitter, elem);
+  if (rhs.kind === N_ARRAY) {
+    if (n > 0) {
+      const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
+      let i = 0;
+      for (const value of values) {
+        const slot = emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${i}`);
+        storeElement(emitter, slot, elem, value);
+        i = i + 1;
+      }
+    }
+  } else if (n > 0) {
+    const a = emitter.opts.optimizeAttributes ? "align 8 " : "";
+    if (rhs.kind === N_NEW) {
+      emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
+      emitter.fn.emit(`call void @${MEMSET}(i8* ${a}${data}, i8 0, i64 ${n * size}, i1 false)${elementAccess(emitter)}`);
+    } else {
+      const from = loadHeaderField(emitter, source, 2, "i8*");
+      emitter.declare(
+        `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
+      );
+      emitter.fn.emit(
+        `call void @${MEMCPY}(i8* ${a}${data}, i8* ${a}${from}, i64 ${n * size}, i1 false)${elementAccess(emitter)}`
+      );
+    }
+  }
+  storeHeaderField(emitter, header, 0, `${n}`, "i64");
+  return header;
 };
 
 /** The array's `len`: the preheader's value inside a hoisted loop, a fresh load outside one. */
@@ -287,11 +471,16 @@ const baseLength = (emitter: Emitter, base: ArrayBase): string => {
   return loadHeaderField(emitter, base.arr, 0, "i64");
 };
 
-/** The array's `data`, on the same terms as `baseLength`. */
+/** The array's `data`, on the same terms as `baseLength`, and never loaded for an inline field. */
 const baseData = (emitter: Emitter, base: ArrayBase): string => {
   const header = base.header;
   if (header !== null) {
     return header.data;
+  }
+  const owner = base.owner;
+  const field = base.field;
+  if (owner !== null && field !== null) {
+    return inlineDataPointer(emitter, owner, base.receiver, field);
   }
   return loadHeaderField(emitter, base.arr, 2, "i8*");
 };
@@ -536,7 +725,10 @@ export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
       continue;
     }
     emitter.declareType(ARRAY_TYPE);
-    const arr = emitter.emitExpression(use.expr);
+    // An inline field lifts its header's address and its slots' address, and
+    // loads only `len`: `data` is where the slots are (`inlineFieldBase`).
+    const inline = inlineFieldBase(emitter, use.expr);
+    const arr = inline !== null ? inline.arr : emitter.emitExpression(use.expr);
     // An array's header is `dereferenceable(24)` wherever one is reachable, so
     // both loads are safe in a preheader the body may never leave. The unused
     // one is not emitted: a loop that only reads `.length` should not grow a
@@ -547,7 +739,7 @@ export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
     }
     let data = "";
     if (use.data) {
-      data = loadHeaderField(emitter, arr, 2, "i8*");
+      data = inline !== null ? baseData(emitter, inline) : loadHeaderField(emitter, arr, 2, "i8*");
     }
     facts.hoistedHeaders.push(new HoistedHeader(root, use.path, arr, len, data));
   }
