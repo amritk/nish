@@ -23,7 +23,9 @@
  *     `..` normalised differently from Node's loads one file twice.
  *   - `jsonQuote` against `JSON.stringify`, `compareStrings` against
  *     `Buffer.compare`, and `StringMap` against a JavaScript `Map` driven
- *     through the same script — insertion order included.
+ *     through the same script — insertion order included — and its probe
+ *     against keys chosen to pass the fingerprint and fail the stored hash,
+ *     and to share the hash and fail the key (docs/wp32-map.md §2).
  *
  * The golden holds the whole expected output, not only stage0's lines, so a
  * reader sees each recorded answer beside the case that produced it. Its
@@ -108,7 +110,7 @@ function compareStrings(a, b) {
   return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
 }
 
-/** The growth policy documented in `self/map.ts`, to check the table actually rehashed. */
+/** The growth policy documented in `self/map.ts`, to check the table actually re-filed. */
 function slotsAfter(entries) {
   let slots = 16;
   for (let i = 1; i <= entries; i++) {
@@ -209,6 +211,29 @@ function expected(caseText) {
   for (let i = 0; i < 300; i++) sum += i * 7;
   out.push(`grow size 300 sum ${sum} slots ${slotsAfter(300)}`);
   out.push(`grow order ${JSON.stringify("key0")} ${JSON.stringify("key299")}`);
+  out.push(`grow size 100000 wrong 0 slots ${slotsAfter(100000)} strays 0`);
+  out.push(`grow order ${JSON.stringify("n0")} ${JSON.stringify("n99999")}`);
+
+  // The probe's fingerprint and stored-hash filters (`reportProbe`). The twin
+  // is found here by the same rule, so the line checks that the driver found
+  // the same key and that the map told the two apart.
+  const resident = hashString("k0");
+  const home = (h) => (h ^ (h >>> 16)) & 15;
+  const isTwin = (h) => h >>> 24 === resident >>> 24 && home(h) === home(resident) && h !== resident;
+  let twin = 1;
+  while (!isTwin(hashString(`k${twin}`))) twin++;
+  out.push(`probe fingerprint ${JSON.stringify(`k${twin}`)} -1 1 2 2`);
+  // A real FNV-1a collision: equal hashes, unequal keys. The line prints both
+  // hashes, so a pair that stopped colliding would fail here, not pass.
+  const a = "c2ya8";
+  const b = "czki6";
+  if (hashString(a) !== hashString(b)) throw new Error(`${a} and ${b} no longer collide`);
+  out.push(`probe collision ${hashString(a)} ${hashString(b)} -1 1 2 2 ${JSON.stringify(b)}`);
+  out.push("probe set 1 1 0 2");
+  // The slot packing at its extremes: fingerprint, index, and not the empty 0.
+  const slotOf = (h, index) => ((h & 0xff000000) | (index + 1)) >>> 0;
+  const unpack = (slot) => `${slot >>> 24} ${(slot & 0xffffff) - 1} ${slot !== 0 ? 1 : 0}`;
+  out.push(`probe pack ${unpack(slotOf(0xffffffff, 0xffffff - 1))} ${unpack(slotOf(0, 0))}`);
 
   return `${out.join("\n")}\n`;
 }

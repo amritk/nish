@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 68 programs, 750771 dump lines live, 68 distinct modules.
+# 68 programs, 753631 dump lines live, 68 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/emit_parallel.ts self/target.ts self/parents.ts self/std_modules.ts self/paths.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_util.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/emit_parallel.ts self/target.ts self/parents.ts self/std_modules.ts self/paths.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -1016,11 +1016,13 @@ function repeatString(s: string, count: i32): string -> @repeatString [exported]
   callee 219:10 StringBuilder.toText -> @StringBuilder.toText
 module self/map.ts
 const INITIAL_SLOTS: i32 = 16
-struct StringMap (class) size=32 align=8 exported
-  field slots: i32[] index=0 offset=0
+const INDEX_CAP: i32 = 16777215
+struct StringMap (class) size=40 align=8 exported
+  field slots: u32[] index=0 offset=0
   field mask: i32 index=1 offset=8
   field keys: string[] index=2 offset=16
   field values: i32[] index=3 offset=24
+  field hashes: u32[] index=4 offset=32
   constructor -> @StringMap.constructor
   method size -> @StringMap.size
   method keyAt -> @StringMap.keyAt
@@ -1030,6 +1032,8 @@ struct StringMap (class) size=32 align=8 exported
   method has -> @StringMap.has
   method get -> @StringMap.get
   method set -> @StringMap.set
+  method add -> @StringMap.add
+  method insertAt -> @StringMap.insertAt
   method grow -> @StringMap.grow
 struct StringSet (class) size=8 align=8 exported
   field map: StringMap index=0 offset=0
@@ -1038,118 +1042,169 @@ struct StringSet (class) size=8 align=8 exported
   method at -> @StringSet.at
   method has -> @StringSet.has
   method add -> @StringSet.add
-function hashString(key: string): i32 -> @hashString [exported]
+function fnv1a(key: string): u32 -> @fnv1a
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 31:7 hash: u32 (let)
-  local 32:7 i: i32 (let)
+  local 35:7 hash: u32 (let)
+  local 36:7 i: i32 (let)
+function hashString(key: string): i32 -> @hashString [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  calls: fnv1a
+  stackSites=0 stackLocals=0
+  callee 46:55 fnv1a -> @fnv1a
+function home(hash: u32, mask: i32): i32 -> @home [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function fingerprint(hash: u32): u32 -> @fingerprint [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function slotOf(hash: u32, index: i32): u32 -> @slotOf [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: hash
+  calls: fingerprint
+  stackSites=0 stackLocals=0
+  callee 65:56 fingerprint -> @fingerprint
+function entryOf(slot: u32): i32 -> @entryOf [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function StringMap.constructor(this: StringMap): void -> @StringMap.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function StringMap.size(this: StringMap): i32 -> @StringMap.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StringMap.keyAt(this: StringMap, index: i32): string -> @StringMap.keyAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: nish_panic_index
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StringMap.valueAt(this: StringMap, index: i32): i32 -> @StringMap.valueAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: nish_panic_index
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function StringMap.probe(this: StringMap, key: string, hash: i32): i32 -> @StringMap.probe [exported method]
+function StringMap.probe(this: StringMap, key: string, hash: u32): i32 -> @StringMap.probe [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false
+  escaping: hash
+  calls: entryOf fingerprint home nish_panic_index nish_str_eq
+  pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 80:9 bucket: i32 (let)
+  local 110:11 wanted: u32 (const)
+  callee 110:20 fingerprint -> @fingerprint
+  local 111:9 bucket: i32 (let)
+  callee 111:18 home -> @home
+  local 112:9 slot: u32 (let)
+  callee 114:11 fingerprint -> @fingerprint
+  local 115:15 at: i32 (const)
+  callee 115:20 entryOf -> @entryOf
 function StringMap.find(this: StringMap, key: string): i32 -> @StringMap.find [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
-  calls: StringMap.probe hashString nish_panic_index
-  pointer this: size=32 writesThrough=false captured=false passedTo=StringMap.probe#0
+  calls: StringMap.probe fnv1a
+  pointer this: size=40 writesThrough=false captured=false passedTo=StringMap.probe#0
   stackSites=0 stackLocals=0
-  callee 92:23 StringMap.probe -> @StringMap.probe
-  callee 92:39 hashString -> @hashString
+  local 128:11 at: i32 (const)
+  callee 128:16 StringMap.probe -> @StringMap.probe
+  callee 128:32 fnv1a -> @fnv1a
 function StringMap.has(this: StringMap, key: string): boolean -> @StringMap.has [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: StringMap.find
-  pointer this: size=32 writesThrough=false captured=false passedTo=StringMap.find#0
+  pointer this: size=40 writesThrough=false captured=false passedTo=StringMap.find#0
   stackSites=0 stackLocals=0
-  callee 96:12 StringMap.find -> @StringMap.find
+  callee 133:12 StringMap.find -> @StringMap.find
 function StringMap.get(this: StringMap, key: string, missing: i32): i32 -> @StringMap.get [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key missing
   calls: StringMap.find nish_panic_index
-  pointer this: size=32 writesThrough=false captured=false passedTo=StringMap.find#0
+  pointer this: size=40 writesThrough=false captured=false passedTo=StringMap.find#0
   stackSites=0 stackLocals=0
-  local 105:11 index: i32 (const)
-  callee 105:19 StringMap.find -> @StringMap.find
+  local 142:11 at: i32 (const)
+  callee 142:16 StringMap.find -> @StringMap.find
 function StringMap.set(this: StringMap, key: string, value: i32): void -> @StringMap.set [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 114:7
+  sharedWrite: 151:7
   escaping: key value
-  calls: StringMap.grow StringMap.probe hashString nish_array_grow nish_panic_index
-  pointer this: size=32 writesThrough=true captured=false passedTo=StringMap.probe#0 StringMap.grow#0
+  calls: StringMap.insertAt StringMap.probe fnv1a nish_panic_index
+  pointer this: size=40 writesThrough=true captured=false passedTo=StringMap.probe#0 StringMap.insertAt#0
   stackSites=0 stackLocals=0
-  local 111:11 bucket: i32 (const)
-  callee 111:20 StringMap.probe -> @StringMap.probe
-  callee 111:36 hashString -> @hashString
-  local 112:11 slot: i32 (const)
-  callee 122:7 StringMap.grow -> @StringMap.grow
+  local 148:11 hash: u32 (const)
+  callee 148:18 fnv1a -> @fnv1a
+  local 149:11 at: i32 (const)
+  callee 149:16 StringMap.probe -> @StringMap.probe
+  callee 154:5 StringMap.insertAt -> @StringMap.insertAt
+function StringMap.add(this: StringMap, key: string, value: i32): boolean -> @StringMap.add [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringMap.insertAt
+  escaping: key value
+  calls: StringMap.insertAt StringMap.probe fnv1a
+  pointer this: size=40 writesThrough=true captured=false passedTo=StringMap.probe#0 StringMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 159:11 hash: u32 (const)
+  callee 159:18 fnv1a -> @fnv1a
+  local 160:11 at: i32 (const)
+  callee 160:16 StringMap.probe -> @StringMap.probe
+  callee 164:5 StringMap.insertAt -> @StringMap.insertAt
+function StringMap.insertAt(this: StringMap, bucket: i32, key: string, hash: u32, value: i32): void -> @StringMap.insertAt [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 173:5
+  escaping: bucket hash key value
+  calls: StringMap.grow nish_array_grow nish_exit nish_panic_index nish_write slotOf
+  pointer this: size=40 writesThrough=true captured=false passedTo=StringMap.grow#0
+  stackSites=0 stackLocals=0
+  callee 176:26 slotOf -> @slotOf
+  callee 179:7 StringMap.grow -> @StringMap.grow
 function StringMap.grow(this: StringMap): void -> @StringMap.grow [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 132:5
-  calls: hashString nish_panic_index
-  pointer this: size=32 writesThrough=true captured=false
+  sharedWrite: 190:5
+  calls: home nish_panic_index slotOf
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 131:11 wider: i32 (const)
-  local 134:9 i: i32 (let)
-  local 136:13 hash: i32 (const)
-  callee 136:20 hashString -> @hashString
-  local 137:11 bucket: i32 (let)
+  local 189:11 wider: i32 (const)
+  local 192:9 i: i32 (let)
+  local 194:13 hash: u32 (const)
+  local 195:11 bucket: i32 (let)
+  callee 195:20 home -> @home
+  callee 199:28 slotOf -> @slotOf
 function StringSet.constructor(this: StringSet): void -> @StringSet.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 156:16 new StringMap -> @StringMap.constructor
+  callee 214:16 new StringMap -> @StringMap.constructor
 function StringSet.size(this: StringSet): i32 -> @StringSet.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.size
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 160:12 StringMap.size -> @StringMap.size
+  callee 218:12 StringMap.size -> @StringMap.size
 function StringSet.at(this: StringSet, index: i32): string -> @StringSet.at [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: StringMap.keyAt
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 164:12 StringMap.keyAt -> @StringMap.keyAt
+  callee 222:12 StringMap.keyAt -> @StringMap.keyAt
 function StringSet.has(this: StringSet, key: string): boolean -> @StringSet.has [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: StringMap.has
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 168:12 StringMap.has -> @StringMap.has
+  callee 226:12 StringMap.has -> @StringMap.has
 function StringSet.add(this: StringSet, key: string): boolean -> @StringSet.add [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringMap.set
+  sharedWrite: via StringMap.add
   escaping: key
-  calls: StringMap.has StringMap.set
+  calls: StringMap.add
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 173:9 StringMap.has -> @StringMap.has
-  callee 176:5 StringMap.set -> @StringMap.set
+  callee 231:12 StringMap.add -> @StringMap.add
 module self/nodes.ts
 const N_ERROR: i32 = 0 [exported]
 const N_EMPTY: i32 = 1 [exported]
@@ -1634,7 +1689,7 @@ function StructInstantiation.constructor(this: StructInstantiation, template: St
   pointer template: size=64 writesThrough=true captured=true
   pointer typeArgs: size=0 writesThrough=true captured=true
   pointer info: size=128 writesThrough=true captured=true
-  pointer bindings: size=32 writesThrough=true captured=true
+  pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Instantiation.constructor(this: Instantiation, template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32): void -> @Instantiation.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
@@ -1645,7 +1700,7 @@ function Instantiation.constructor(this: Instantiation, template: TemplateInfo |
   pointer template: size=64 writesThrough=true captured=true
   pointer typeArgs: size=0 writesThrough=true captured=true
   pointer sig: size=104 writesThrough=true captured=true
-  pointer bindings: size=32 writesThrough=true captured=true
+  pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee 473:29 new FunctionBindings -> @FunctionBindings.constructor
   local 487:9 i: i32 (let)
@@ -3058,7 +3113,7 @@ function unifyAnnotation(ctx: CheckContext, annotation: Node, arg: i32, names: S
   pointer ctx: size=184 writesThrough=false captured=false passedTo=unifyAnnotation#0 unifyAnnotation#0 unifyAnnotation#0 unifyAnnotation#0 unifyAnnotation#0 unifyAnnotation#0 unifyAnnotation#0 unifyAnnotation#0
   pointer annotation: size=40 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 StringSet.has#0 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3 unifyAnnotation#3
-  pointer bindings: size=32 writesThrough=true captured=false passedTo=unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 StringMap.get#0 StringMap.set#0 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4
+  pointer bindings: size=40 writesThrough=true captured=false passedTo=unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 StringMap.get#0 StringMap.set#0 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4 unifyAnnotation#4
   stackSites=0 stackLocals=0
   local 399:9 table: TypeTable (const)
   callee 401:5 unifyAnnotation -> @unifyAnnotation
@@ -3568,7 +3623,7 @@ function resolveInTemplate(template: TemplateInfo, annotation: Node, bindings: S
   calls: resolveType
   pointer template: size=64 writesThrough=false captured=false
   pointer annotation: size=40 writesThrough=true captured=true passedTo=resolveType#0
-  pointer bindings: size=32 writesThrough=true captured=true
+  pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local 1404:9 home: CheckContext (const)
   local 1405:9 saved: StringMap (const)
@@ -3580,7 +3635,7 @@ function mentionsUnbound(annotation: Node, names: StringSet, bindings: StringMap
   calls: StringMap.get StringSet.add StringSet.at StringSet.constructor StringSet.size mentionsTypeParam
   pointer annotation: size=40 writesThrough=false captured=false passedTo=mentionsTypeParam#0
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.size#0 StringSet.at#0
-  pointer bindings: size=32 writesThrough=false captured=false passedTo=StringMap.get#0
+  pointer bindings: size=40 writesThrough=false captured=false passedTo=StringMap.get#0
   stackSites=1 stackLocals=1
   local 1414:9 unbound: StringSet (const)
   callee 1414:19 new StringSet -> @StringSet.constructor
@@ -3601,7 +3656,7 @@ function resolveFunctionArgument(ctx: CheckContext, template: TemplateInfo, inde
   pointer template: size=64 writesThrough=false captured=false passedTo=liftArrowArgument#1 mismatchMessage#1
   pointer arg: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1
   pointer names: size=8 writesThrough=false captured=false passedTo=liftArrowArgument#4 unifyAnnotation#3 unifyAnnotation#3
-  pointer bindings: size=32 writesThrough=true captured=true passedTo=liftArrowArgument#5 unifyAnnotation#4 unifyAnnotation#4
+  pointer bindings: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#5 unifyAnnotation#4 unifyAnnotation#4
   pointer scope: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#6 Scope.lookup#0
   stackSites=0 stackLocals=0
   local 1442:9 param: Node (const)
@@ -3642,7 +3697,7 @@ function liftArrowArgument(ctx: CheckContext, template: TemplateInfo, index: i32
   pointer template: size=64 writesThrough=false captured=false passedTo=resolveInTemplate#0 resolveInTemplate#0
   pointer arrow: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 refuseOnce#1 liftArrow#1
   pointer names: size=8 writesThrough=false captured=false passedTo=unifyAnnotation#3 mentionsUnbound#1 mentionsUnbound#1 unifyAnnotation#3
-  pointer bindings: size=32 writesThrough=true captured=true passedTo=unifyAnnotation#4 mentionsUnbound#2 resolveInTemplate#2 mentionsUnbound#2 resolveInTemplate#2 unifyAnnotation#4
+  pointer bindings: size=40 writesThrough=true captured=true passedTo=unifyAnnotation#4 mentionsUnbound#2 resolveInTemplate#2 mentionsUnbound#2 resolveInTemplate#2 unifyAnnotation#4
   pointer scope: size=40 writesThrough=true captured=true passedTo=liftArrow#4
   stackSites=2 stackLocals=2
   local 1520:9 param: Node (const)
@@ -3758,7 +3813,7 @@ function matchFunctionArguments(ctx: CheckContext, template: TemplateInfo, bindi
   calls: canonicalArgument functionTypeText isFunctionParameter mismatchMessage nish_array_grow nish_panic_index refuseOnce resolveInTemplate unwrapTypeParens
   pointer ctx: size=184 writesThrough=true captured=false passedTo=refuseOnce#0
   pointer template: size=64 writesThrough=false captured=false passedTo=resolveInTemplate#0 resolveInTemplate#0 mismatchMessage#1
-  pointer bindings: size=32 writesThrough=true captured=true passedTo=resolveInTemplate#2 resolveInTemplate#2
+  pointer bindings: size=40 writesThrough=true captured=true passedTo=resolveInTemplate#2 resolveInTemplate#2
   pointer functions: size=0 writesThrough=false captured=false
   pointer args: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=2
@@ -24191,7 +24246,7 @@ function noteResultTypes(table: TypeTable, uses: ResultUse[], index: StringMap, 
   calls: ResultUse.constructor StringMap.get StringMap.set cResultName nish_alloc_struct nish_array_grow nish_panic_index resultLayout resultTypesIn
   pointer table: size=72 writesThrough=false captured=false passedTo=resultTypesIn#0 cResultName#0 resultLayout#0
   pointer uses: size=0 writesThrough=true captured=false
-  pointer index: size=32 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0
+  pointer index: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0
   stackSites=1 stackLocals=1
   local 459:9 inner: i32[] (const)
   callee 460:3 resultTypesIn -> @resultTypesIn
