@@ -407,24 +407,28 @@ AWFY both ways and requires byte-identical IR and warnings):
     later-argument effects collected only when a later argument can write,
     the summaries swept callees first.
 
-Measured with cachegrind over the same input — main's `self/` and
-`bench/awfy/main.ts`, compiled by each compiler — against `f2c2cfa`, main just
-before the pass, and against main with it (`67bc669`):
+Measured with cachegrind over one input — main's `self/` and
+`bench/awfy/main.ts` at `7d40e07`, compiled by each compiler — against
+`f2c2cfa`, main just before the pass. `#222` is main with the pass
+(`67bc669`); the next column is this stage on top of it and nothing else, the
+like-for-like number; main (`7d40e07`) and this stage on it also carry #229 and
+#230, whose own analyses cost the same 30.8 M instructions of `self/`'s
+`--link` compile on either side:
 
-| Compile | `f2c2cfa` | main | this stage | vs `f2c2cfa` | vs main |
+| Compile, instructions | `f2c2cfa` | #222 | #222 + this stage | main | main + this stage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `self/`, `--link` | 1,193,878,129 | 1,250,548,224 | 1,212,159,253 | +1.53% | −3.07% |
-| `self/`, IR only | 1,193,824,566 | 1,224,756,507 | 1,206,345,564 | +1.05% | −1.50% |
-| `bench/awfy`, `--link` | 10,674,730 | 11,397,967 | 10,971,825 | +2.78% | −3.74% |
-| `bench/awfy`, IR only | 10,660,683 | 10,865,126 | 10,607,164 | −0.50% | −2.37% |
+| `self/`, `--link` | 1,263,591,465 | +4.71% | **+1.52%** | +7.14% | +3.96% (−2.97% vs main) |
+| `self/`, IR only | 1,263,551,862 | +2.60% | **+1.06%** | +4.80% | +3.25% (−1.48%) |
+| `bench/awfy`, `--link` | 10,674,647 | +6.78% | **+2.81%** | +6.94% | +2.96% (−3.72%) |
+| `bench/awfy`, IR only | 10,660,692 | +1.92% | **−0.50%** | +4.32% | +1.89% (−2.33%) |
 
-CPU time, median of 100 runs pinned to one core and alternated between the
-three compilers, moves with the instructions: `self/` under `--link` +1.2%
-against `f2c2cfa` and −6.3% against main, IR only +1.0% and −1.9%; peak RSS is
-below both (−0.5% and −4.8% under `--link`). A single batch of 20 moves by
-±2.5% on the machine it was measured on, which is why the pooled median is the
-number quoted. The proofs, the IR and every program's instruction count are
-unchanged.
+CPU time, the median of 100 runs pinned to one core and alternated between the
+compilers, moves with the instructions: `self/` under `--link` +7.8% for #222
+and +2.3% with this stage, IR only +2.4% and +1.3%; peak RSS, +4.3% under
+`--link` for #222, is 0.5% below `f2c2cfa` with this stage. A single batch of 20
+moves by ±2.5% on the machine it was measured on, which is why the pooled
+median is the number quoted. The proofs, the IR and every program's
+instruction count are unchanged.
 
 **Floor: the runtime check stays.** When none of the above proves it, the panic
 is emitted, as today. Safety is the default; speed is what the proofs buy.
