@@ -289,18 +289,26 @@ const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRB
   return endBlock;
 };
 
+/** `break` leaves the pass of the loop it targets, and releases it when it is scoped; a `switch` has no pass. */
 export const emitBreak = (emitter: Emitter): void => {
   const target = emitter.loops[emitter.loops.length - 1];
   target.hasBreak = true;
+  if (target.scopesPass()) {
+    emitter.releasePass(target);
+  }
   branch(emitter, target.breakBlock);
 };
 
-/** `continue` looks past any enclosing `switch` for the innermost loop. */
+/** `continue` looks past any enclosing `switch` for the innermost loop, and ends that loop's pass. */
 export const emitContinue = (emitter: Emitter): void => {
   let i = emitter.loops.length - 1;
   while (i >= 0) {
-    const target = emitter.loops[i].continueBlock;
+    const loop = emitter.loops[i];
+    const target = loop.continueBlock;
     if (target !== null) {
+      if (loop.scopesPass()) {
+        emitter.releasePass(loop);
+      }
       branch(emitter, target);
       return;
     }

@@ -147,11 +147,24 @@ export class LoopTarget {
   continueBlock: IRBlock | null;
   /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
   hasBreak: boolean;
+  /**
+   * The arena's `buf` and `off` at the top of the current pass when the
+   * loop's passes are scoped (`emitPass`), and `""` otherwise; a `switch`
+   * never has them.
+   */
+  markBuf: string;
+  markOff: string;
 
   constructor(breakBlock: IRBlock, continueBlock: IRBlock | null) {
     this.breakBlock = breakBlock;
     this.continueBlock = continueBlock;
     this.hasBreak = false;
+    this.markBuf = "";
+    this.markOff = "";
+  }
+
+  scopesPass(): boolean {
+    return this.markBuf.length > 0;
   }
 }
 
@@ -173,6 +186,8 @@ export class Emitter {
    * or `-1` for none. See `planTailCall`.
    */
   tailCallId: i32;
+  /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
+  readsArenaGlobal: boolean;
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[];
   /** Alloca slots of the locals of the function being emitted, by identity. */
@@ -208,6 +223,7 @@ export class Emitter {
     this.paramObjectNames = [];
     this.paramObjectValues = [];
     this.usedRuntime = new StringSet();
+    this.readsArenaGlobal = false;
     this.strings = new StringMap();
     this.stringRefs = [];
     this.debug = null;
@@ -443,6 +459,13 @@ export class Emitter {
     if (!marksTailCall(this.table, this.current, callee, argTypes, this.facts)) {
       return false;
     }
+    // The release a tail call sinks ahead of itself is a pass's too, inside a
+    // scoped loop, and the callee reading the bump position is what
+    // `marksTailCall` refuses for the function's scope.
+    const g = this.facts.get(callee.name);
+    if (this.outermostPass() !== null && g !== null && g.readsArenaState) {
+      return false;
+    }
     this.tailCallId = inner.id;
     return true;
   }
@@ -456,11 +479,21 @@ export class Emitter {
     return expr.id === this.tailCallId;
   }
 
+  /**
+   * Leave every arena scope open at a `return`: the function's own when it
+   * has one, the outermost scoped pass otherwise. One release is all of them,
+   * because the outermost mark is the lowest and releasing to it frees
+   * everything bumped since, the inner passes' memory included.
+   */
   emitScopeExit(): void {
-    if (!this.current.arenaScope) {
+    if (this.current.arenaScope) {
+      this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`);
       return;
     }
-    this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`);
+    const pass = this.outermostPass();
+    if (pass !== null) {
+      this.releasePass(pass);
+    }
   }
 
   /**
@@ -670,6 +703,8 @@ export class Emitter {
     const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct");
     if (wantsAlloc) {
       this.usedRuntime.add("nish_arena_grow");
+    }
+    if (wantsAlloc || this.readsArenaGlobal) {
       this.module.addTypeDecl(ARENA_TYPE);
       // WP20 T0: `--threads` gives every thread its own arena, and the only
       // thing that changes in the IR is this declaration.
@@ -715,8 +750,79 @@ export class Emitter {
    */
   emitStatement(stmt: Node): void {
     const saved = this.enterLocation(stmt);
-    this.emitStatementKind(stmt);
+    if (this.current.loopScopes.length > 0 && this.current.scopesPass(stmt)) {
+      this.emitPass(stmt);
+    } else {
+      this.emitStatementKind(stmt);
+    }
     this.fn.setLocation(saved);
+  }
+
+  /**
+   * One pass of a loop whose passes are scoped (`decideLoopScopes`, escape.ts):
+   * the mark first, so that it dominates every release in the body, and the
+   * release before the back-edge when the body falls through. The loop is the
+   * innermost target, pushed by its emitter before the body; `break`,
+   * `continue` and `return` release on their own edges.
+   *
+   * The mark is the arena's `buf` and `off`, read inline rather than through
+   * `nish_arena_mark`, because a pass is short: two runtime calls cost a
+   * short loop that drops one small array per pass twice its time, where
+   * these loads and the rewind in `releasePass` cost nothing measurable.
+   */
+  emitPass(body: Node): void {
+    const loop = this.loops[this.loops.length - 1];
+    this.readsArenaGlobal = true;
+    loop.markBuf = this.fn.emitValue(`load i8*, i8** ${this.arenaField(0)}, align 8`);
+    loop.markOff = this.fn.emitValue(`load i64, i64* ${this.arenaField(1)}, align 8`);
+    this.emitStatementKind(body);
+    if (!this.fn.currentBlock().terminated()) {
+      this.releasePass(loop);
+    }
+  }
+
+  /**
+   * Rewind the arena to the top of `loop`'s pass. `buf` is the newest chunk,
+   * and a chunk is only ever pushed in front of the others (`nish_arena_grow`),
+   * so a `buf` unchanged since the mark means every chunk the pass pushed is
+   * gone again and rewinding `off` is the whole release. Otherwise the runtime
+   * frees the newer chunks: `nish_arena_release` of `buf + off`, which is the
+   * mark `nish_arena_mark` answers, `0` for an arena that had no chunk yet.
+   */
+  releasePass(loop: LoopTarget): void {
+    const fn = this.fn;
+    const rewind = fn.newBlock("pass.rewind");
+    const free = fn.newBlock("pass.free");
+    const done = fn.newBlock("pass.done");
+    const buf = fn.emitValue(`load i8*, i8** ${this.arenaField(0)}, align 8`);
+    const same = fn.emitValue(`icmp eq i8* ${buf}, ${loop.markBuf}`);
+    fn.emit(`br i1 ${same}, label %${rewind.label}, label %${free.label}`);
+    fn.placeBlock(rewind);
+    fn.emit(`store i64 ${loop.markOff}, i64* ${this.arenaField(1)}, align 8`);
+    fn.emit(`br label %${done.label}`);
+    fn.placeBlock(free);
+    const base = fn.emitValue(`ptrtoint i8* ${loop.markBuf} to i64`);
+    const mark = fn.emitValue(`add i64 ${base}, ${loop.markOff}`);
+    fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 ${mark})`);
+    fn.emit(`br label %${done.label}`);
+    fn.placeBlock(done);
+  }
+
+  /** The address of field `index` of `@nish_arena`: `buf` is 0, `off` is 1. */
+  arenaField(index: i32): string {
+    return this.fn.emitValue(
+      `getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 ${index}`
+    );
+  }
+
+  /** The outermost scoped pass being emitted, or null. */
+  outermostPass(): LoopTarget | null {
+    for (const loop of this.loops) {
+      if (loop.scopesPass()) {
+        return loop;
+      }
+    }
+    return null;
   }
 
   emitStatementKind(stmt: Node): void {

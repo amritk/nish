@@ -124,14 +124,35 @@ while.cond:
   br i1 %6, label %while.body, label %while.end
 
 while.body:
+  %7 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %8 = load i8*, i8** %7, align 8
+  %9 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %10 = load i64, i64* %9, align 8
   call void @Stack.shrink(%struct.Stack* %this)
-  %7 = load i32, i32* %i.addr, align 4
-  %8 = call i32 @Stack.get(%struct.Stack* %this, i32 %7)
-  %9 = call i8* @nish_str_from_i32(i32 %8)
-  call void @nish_print(i8* %9)
-  %10 = load i32, i32* %i.addr, align 4
-  %11 = add nsw i32 %10, 1
-  store i32 %11, i32* %i.addr, align 4
+  %11 = load i32, i32* %i.addr, align 4
+  %12 = call i32 @Stack.get(%struct.Stack* %this, i32 %11)
+  %13 = call i8* @nish_str_from_i32(i32 %12)
+  call void @nish_print(i8* %13)
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = add nsw i32 %14, 1
+  store i32 %15, i32* %i.addr, align 4
+  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %17 = load i8*, i8** %16, align 8
+  %18 = icmp eq i8* %17, %8
+  br i1 %18, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %19 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %10, i64* %19, align 8
+  br label %pass.done
+
+pass.free:
+  %20 = ptrtoint i8* %8 to i64
+  %21 = add i64 %20, %10
+  call void @nish_arena_release(i64 %21)
+  br label %pass.done
+
+pass.done:
   br label %while.cond
 
 while.end:

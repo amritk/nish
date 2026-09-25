@@ -6,6 +6,7 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
@@ -204,65 +205,86 @@ land.end:
   br i1 %32, label %while.body, label %while.end
 
 while.body:
-  %33 = load i32, i32* %i.addr, align 4
-  %34 = icmp eq i32 %33, 1
-  br i1 %34, label %if.then, label %if.end
+  %33 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %34 = load i8*, i8** %33, align 8
+  %35 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %36 = load i64, i64* %35, align 8
+  %37 = load i32, i32* %i.addr, align 4
+  %38 = icmp eq i32 %37, 1
+  br i1 %38, label %if.then, label %if.end
 
 if.then:
-  %35 = load %struct.Holder*, %struct.Holder** %other.addr, align 8
-  store %struct.Holder* %35, %struct.Holder** %h.addr, align 8
+  %39 = load %struct.Holder*, %struct.Holder** %other.addr, align 8
+  store %struct.Holder* %39, %struct.Holder** %h.addr, align 8
   br label %if.end
 
 if.end:
-  %36 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
-  %37 = icmp ne %struct.Holder* %36, null
-  br i1 %37, label %if.then.1, label %if.end.1
+  %40 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %41 = icmp ne %struct.Holder* %40, null
+  br i1 %41, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %38 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
-  %39 = getelementptr inbounds %struct.Holder, %struct.Holder* %38, i32 0, i32 0
-  %40 = load %struct.nish_array*, %struct.nish_array** %39, align 8, !tbaa !4
-  %41 = load i32, i32* %i.addr, align 4
-  %42 = sext i32 %41 to i64
-  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %40, i64 0, i32 0
-  %44 = load i64, i64* %43, align 8, !alias.scope !8, !noalias !9, !tbaa !13
-  %45 = icmp ult i64 %42, %44
-  br i1 %45, label %bounds.ok, label %bounds.fail
+  %42 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %43 = getelementptr inbounds %struct.Holder, %struct.Holder* %42, i32 0, i32 0
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !4
+  %45 = load i32, i32* %i.addr, align 4
+  %46 = sext i32 %45 to i64
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 0
+  %48 = load i64, i64* %47, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %49 = icmp ult i64 %46, %48
+  br i1 %49, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %42, i64 %44)
+  call void @nish_panic_index(i64 %46, i64 %48)
   unreachable
 
 bounds.ok:
-  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %40, i64 0, i32 2
-  %47 = load i8*, i8** %46, align 8, !alias.scope !8, !noalias !9, !tbaa !14
-  %48 = bitcast i8* %47 to i32*
-  %49 = getelementptr inbounds i32, i32* %48, i64 %42
-  %50 = load i32, i32* %49, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %51 = call i8* @nish_str_from_i32(i32 %50)
-  call void @nish_print(i8* %51)
+  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2
+  %51 = load i8*, i8** %50, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %52 = bitcast i8* %51 to i32*
+  %53 = getelementptr inbounds i32, i32* %52, i64 %46
+  %54 = load i32, i32* %53, align 4, !alias.scope !9, !noalias !8, !tbaa !16
+  %55 = call i8* @nish_str_from_i32(i32 %54)
+  call void @nish_print(i8* %55)
   br label %if.end.1
 
 if.end.1:
-  %52 = load i32, i32* %i.addr, align 4
-  %53 = add nsw i32 %52, 1
-  store i32 %53, i32* %i.addr, align 4
+  %56 = load i32, i32* %i.addr, align 4
+  %57 = add nsw i32 %56, 1
+  store i32 %57, i32* %i.addr, align 4
+  %58 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %59 = load i8*, i8** %58, align 8
+  %60 = icmp eq i8* %59, %34
+  br i1 %60, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %61 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %36, i64* %61, align 8
+  br label %pass.done
+
+pass.free:
+  %62 = ptrtoint i8* %34 to i64
+  %63 = add i64 %62, %36
+  call void @nish_arena_release(i64 %63)
+  br label %pass.done
+
+pass.done:
   br label %while.cond
 
 while.end:
-  %54 = call i32 @narrowed(%struct.Holder* null)
-  %55 = call i8* @nish_alloc_struct(i64 24)
-  %56 = bitcast i8* %55 to %struct.nish_array*
-  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %56, i64 0, i32 0
-  store i64 0, i64* %57, align 8, !alias.scope !8, !noalias !9, !tbaa !13
-  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %56, i64 0, i32 1
-  store i64 0, i64* %58, align 8, !alias.scope !8, !noalias !9, !tbaa !17
-  %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %56, i64 0, i32 2
-  store i8* null, i8** %59, align 8, !alias.scope !8, !noalias !9, !tbaa !14
-  call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %56)
-  %60 = call i32 @plain(%struct.Holder* %Holder.obj)
-  %61 = add nsw i32 %54, %60
-  ret i32 %61
+  %64 = call i32 @narrowed(%struct.Holder* null)
+  %65 = call i8* @nish_alloc_struct(i64 24)
+  %66 = bitcast i8* %65 to %struct.nish_array*
+  %67 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %66, i64 0, i32 0
+  store i64 0, i64* %67, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %66, i64 0, i32 1
+  store i64 0, i64* %68, align 8, !alias.scope !8, !noalias !9, !tbaa !17
+  %69 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %66, i64 0, i32 2
+  store i8* null, i8** %69, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %66)
+  %70 = call i32 @plain(%struct.Holder* %Holder.obj)
+  %71 = add nsw i32 %64, %70
+  ret i32 %71
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {

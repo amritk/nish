@@ -1,4 +1,7 @@
 %struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -63,23 +66,44 @@ while.cond:
   br i1 %13, label %while.body, label %while.end
 
 while.body:
-  %14 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = call i32 @at(%struct.nish_array* %14, i32 %15)
-  %17 = call i8* @nish_str_from_i32(i32 %16)
-  call void @nish_print(i8* %17)
-  %18 = load i32, i32* %i.addr, align 4
-  %19 = add nsw i32 %18, 1
-  store i32 %19, i32* %i.addr, align 4
+  %14 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %15 = load i8*, i8** %14, align 8
+  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %17 = load i64, i64* %16, align 8
+  %18 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = call i32 @at(%struct.nish_array* %18, i32 %19)
+  %21 = call i8* @nish_str_from_i32(i32 %20)
+  call void @nish_print(i8* %21)
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = add nsw i32 %22, 1
+  store i32 %23, i32* %i.addr, align 4
+  %24 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %25 = load i8*, i8** %24, align 8
+  %26 = icmp eq i8* %25, %15
+  br i1 %26, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %27 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %17, i64* %27, align 8
+  br label %pass.done
+
+pass.free:
+  %28 = ptrtoint i8* %15 to i64
+  %29 = add i64 %28, %17
+  call void @nish_arena_release(i64 %29)
+  br label %pass.done
+
+pass.done:
   br label %while.cond
 
 while.end:
-  %20 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %21 = load i32, i32* %i.addr, align 4
-  %22 = add nsw i32 %21, 2
-  %23 = call i32 @at(%struct.nish_array* %20, i32 %22)
-  %24 = call i8* @nish_str_from_i32(i32 %23)
-  call void @nish_print(i8* %24)
+  %30 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %31 = load i32, i32* %i.addr, align 4
+  %32 = add nsw i32 %31, 2
+  %33 = call i32 @at(%struct.nish_array* %30, i32 %32)
+  %34 = call i8* @nish_str_from_i32(i32 %33)
+  call void @nish_print(i8* %34)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
