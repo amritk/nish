@@ -6,6 +6,7 @@
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"#\00" }, align 8
 
 declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 
@@ -69,6 +70,7 @@ entry:
   %Slot.obj = alloca %struct.Slot, align 8
   %frame.addr = alloca %struct.Frame*, align 8
   %Frame.obj = alloca %struct.Frame, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.Slot, %struct.Slot* %Slot.obj, i32 0, i32 0
   store i1 false, i1* %0, align 1, !tbaa !6
   %1 = getelementptr inbounds %struct.Slot, %struct.Slot* %Slot.obj, i32 0, i32 1
@@ -110,6 +112,7 @@ entry:
   %28 = getelementptr inbounds %struct.Frame, %struct.Frame* %27, i32 0, i32 2
   %29 = load i32, i32* %28, align 4, !tbaa !12
   %30 = add nsw i32 %26, %29
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %30
 }
 

@@ -7,6 +7,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
@@ -77,6 +79,7 @@ entry:
   %c.addr = alloca %struct.Config*, align 8
   %Config.obj = alloca %struct.Config, align 8
   %Point.obj = alloca %struct.Point, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 2, i64* %0, align 8, !alias.scope !9, !noalias !10
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -138,6 +141,7 @@ bounds.ok.1:
   %34 = load double, double* %33, align 8, !tbaa !13
   %35 = call i8* @nish_str_from_f64(double %34)
   call void @nish_print(i8* %35)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

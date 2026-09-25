@@ -52,7 +52,10 @@ import {
   N_BINARY,
   N_CALL,
   N_CONDITIONAL,
+  N_DO,
   N_EMPTY,
+  N_FOR,
+  N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
   N_NEW,
@@ -61,6 +64,7 @@ import {
   N_PAREN,
   N_RETURN,
   N_VAR_DECL,
+  N_WHILE,
   Node,
 } from "./nodes";
 import { literalLength } from "./emit_arrays";
@@ -128,6 +132,13 @@ export class EscapeResult {
   /** Calls to pointer-returning user functions, with the flow of each result. */
   callSites: CallSite[];
   /**
+   * Where `allocEscapes` was first set: the allocation site, the call whose
+   * result escapes, the `push`, or the by-value `Result` parameter. Null
+   * exactly when `allocEscapes` is false. The arena-loop diagnostic names its
+   * line as the reason a function gets no scope.
+   */
+  escapeSite: Node | null;
+  /**
    * WP17: names of the by-value `Result` parameters whose unpacked object may
    * be an entry-block alloca. The word arrives in a register, so the object
    * the body reads is built by the callee; it is this function's own memory
@@ -147,6 +158,15 @@ export class EscapeResult {
     this.returnsAllocation = false;
     this.usesArenaControl = false;
     this.callSites = [];
+    this.escapeSite = null;
+  }
+
+  /** Set `allocEscapes`, remembering `node` unless an earlier escape already is its site. */
+  noteEscape(node: Node): void {
+    this.allocEscapes = true;
+    if (this.escapeSite === null) {
+      this.escapeSite = node;
+    }
   }
 }
 
@@ -629,10 +649,10 @@ class EscapeAnalysis {
         }
       }
       if (escapes) {
-        this.result.allocEscapes = true;
+        this.result.noteEscape(site.node);
       }
       if (site.callee.length > 0) {
-        this.result.callSites.push(new CallSite(site.callee, flow, escapes));
+        this.result.callSites.push(new CallSite(site.callee, flow, escapes, site.node));
         continue;
       }
       if (site.stackable && this.opts.stackAlloc && flow === FLOW_LOCAL && outcome.stable) {
@@ -665,7 +685,7 @@ class EscapeAnalysis {
           flow = outcome.flow;
           stable = outcome.stable;
           if (outcome.escapes) {
-            this.result.allocEscapes = true;
+            this.result.noteEscape(this.refsOf(v)[0]);
           }
         }
         if (this.opts.stackAlloc && flow === FLOW_LOCAL && stable) {
@@ -720,7 +740,7 @@ class EscapeAnalysis {
         escapes = outcome.escapes;
       }
       if (escapes) {
-        this.result.allocEscapes = true;
+        this.result.noteEscape(push);
       }
       if (owned) {
         this.result.directArena = true;
@@ -883,8 +903,70 @@ export const marksTailCall = (
  * attributes.ts does: the next pointer-shaped type has to be admitted by
  * someone on purpose.
  */
-const isScalarArgument = (table: TypeTable, type: i32): boolean =>
+export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
   isNumeric(type) || type === T_BOOL || table.kindOf(type) === K_ENUM;
+
+/**
+ * Whether nothing that existed before a call to `sig` can be made to hold a
+ * pointer while it runs: every parameter, `this` included, is a scalar, a
+ * string, or an object whose every field is a number, a boolean or an enum.
+ *
+ * This is the half of `FunctionFacts.contained` that needs no escape analysis
+ * at all, and the argument is about where a pointer could be written rather
+ * than about what the body does:
+ *
+ *  - **Memory older than the call is reachable only from the parameters.** The
+ *    language has no mutable global: a module constant is a scalar or a
+ *    string, a class has no `static` member, and `process.argv` refuses every
+ *    store and `push` (`reject_argv_assign`, `reject_argv_push`). A callee can
+ *    reach no more than it is handed, and what it is handed is either one of
+ *    these parameters, something reached through them, or memory allocated
+ *    during the call. No pointer this compiler allocated crosses the C
+ *    boundary either (`docs/wp27-ffi.md` §7), so C holds none of them.
+ *  - **None of that memory has a slot a pointer fits in.** A pointer outlives
+ *    a call only by being stored, and a scalar field has no room for one. A
+ *    string is immutable. An array is refused even of numbers, because a
+ *    `push` that grows it moves its data block into the arena and leaves the
+ *    old header pointing at it, and so is every field of an object, array,
+ *    string or `Result` type.
+ *
+ * So everything the call allocates is reachable afterwards only through its
+ * return value, whatever its callees do with it, which is the whole of
+ * containment. `List.benchmark` in the Are We Fast Yet suite is the shape this
+ * is for: it hands three fresh lists to a callee that returns one of them, which
+ * the per-value analysis above has to count as a capture.
+ */
+export const rootsHoldNoPointer = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): boolean => {
+  for (const type of sig.paramTypes) {
+    if (!holdsNoPointerSlot(program, table, type)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const holdsNoPointerSlot = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  if (isScalarArgument(table, type)) {
+    return true;
+  }
+  const inner = table.stripNull(type);
+  if (inner === T_STRING) {
+    return true;
+  }
+  if (!table.isStruct(inner)) {
+    return false;
+  }
+  const info = program.struct(table.nameOf(inner));
+  if (info === null) {
+    return false;
+  }
+  for (const field of info.fields) {
+    if (!isScalarArgument(table, field.type)) {
+      return false;
+    }
+  }
+  return true;
+};
 
 export const analyzeEscapes = (
   unit: AnalysisUnit,
@@ -909,4 +991,160 @@ export const analyzeEscapes = (
   analysis.visit(body);
   analysis.decide();
   return analysis.result;
+};
+
+// ---- The arena-loop diagnostic ------------------------------------------------------------
+//
+// A WP15 section 8 performance warning, and the one that needs the whole
+// program: whether a call leaves memory behind is the fixpoint's answer
+// (`netAllocates`), and so is whether the function around the loop gets the
+// scope that would take it back. So it is found here, after the analysis, and
+// handed to the driver as findings; `Compilation.check` reports them into the
+// sink with the checker's warnings. The emitter still reports nothing.
+
+/** One arena-loop warning: where it goes, and what it says. */
+export class ArenaFinding {
+  node: Node;
+  message: string;
+
+  constructor(node: Node, message: string) {
+    this.node = node;
+    this.message = message;
+  }
+}
+
+/**
+ * The arena-loop warnings of one module: a call inside a loop to a function
+ * that leaves arena memory behind, whose result does not outlive the pass,
+ * in a function that gets no automatic arena scope. Each pass adds to memory
+ * nothing will release before the function returns, and the function will not
+ * release it then either.
+ *
+ * Silent in a function that calls `Arena.mark`, `Arena.release` or
+ * `Arena.reset` itself, because its author is already managing that memory;
+ * silent when the result is kept (returned, stored, pushed), because then the
+ * program asked for one object per pass. A generic instantiation is not
+ * walked, so that a template instantiated twice warns once, at its template.
+ */
+export const arenaLoopFindings = (unit: AnalysisUnit, facts: FactsTable): ArenaFinding[] => {
+  const out: ArenaFinding[] = [];
+  for (const sig of unit.program.functions) {
+    if (!sig.definedIn(unit.program.source) || sig.instance !== null) {
+      continue;
+    }
+    const f = facts.get(sig.name);
+    const body = sig.body();
+    if (f === null || body === null || f.arenaScope || f.managesArena || calleeWhere(facts, f, CALLEE_GARBAGE) === null) {
+      continue;
+    }
+    const reason = noScopeReason(unit, facts, f);
+    if (reason.length > 0) {
+      findArenaLoops(unit, facts, f, reason, body, 0, out);
+    }
+  }
+  return out;
+};
+
+const findArenaLoops = (
+  unit: AnalysisUnit,
+  facts: FactsTable,
+  f: FunctionFacts,
+  reason: string,
+  node: Node,
+  depth: i32,
+  out: ArenaFinding[]
+): void => {
+  if (depth > 0 && node.kind === N_CALL) {
+    const callee = unit.program.nodeCallees[node.id];
+    const g: FunctionFacts | null = callee === null ? null : facts.get(callee.name);
+    if (callee !== null && g !== null && leavesGarbage(g) && diesWithPass(f, g, node)) {
+      out.push(
+        new ArenaFinding(
+          node.children[0],
+          `\`${callee.sourceName}\` leaves arena memory behind on every pass of this loop, and \`${f.sourceName}\` ` +
+            `cannot release it when it returns because ${reason}, so all of it lives as long as the caller's memory ` +
+            `does. Move the loop into a function that returns a number, a boolean or nothing and lets no allocation ` +
+            `out, or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
+        )
+      );
+    }
+  }
+  const loop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO;
+  let i = 0;
+  while (i < node.children.length) {
+    // A `for` initialiser and a `for...of` iterable run once, before the first pass.
+    const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1);
+    findArenaLoops(unit, facts, f, reason, node.children[i], loop && !once ? depth + 1 : depth, out);
+    i = i + 1;
+  }
+};
+
+/**
+ * The call's result is garbage once the pass is over: a number, a `boolean` or
+ * nothing, or a pointer that flows `local` and does not escape.
+ */
+const diesWithPass = (f: FunctionFacts, g: FunctionFacts, call: Node): boolean => {
+  if (g.returnsScalar) {
+    return true;
+  }
+  for (const site of f.callSites) {
+    if (site.node === call) {
+      return site.flow === FLOW_LOCAL && !site.escapes;
+    }
+  }
+  return false;
+};
+
+/**
+ * Why `f` has no automatic arena scope, in words for the diagnostic, or `""`
+ * when nothing refused it. The order is the rule's, so the reason named is the
+ * first one a reader would have to fix.
+ */
+const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts): string => {
+  if (!f.returnsScalar) {
+    return "";
+  }
+  if (!f.contained) {
+    const site = f.escapeSite;
+    if (site !== null) {
+      return `the allocation on line ${unit.program.source.lineOf(site.start)} is stored into memory, where this analysis stops following it`;
+    }
+    const leaky = calleeWhere(facts, f, CALLEE_ESCAPES);
+    if (leaky !== null) {
+      return `it calls \`${leaky.sourceName}\`, which stores an allocation into memory, where this analysis stops following it`;
+    }
+  }
+  if (f.usesArenaControl) {
+    const control = calleeWhere(facts, f, CALLEE_CONTROL);
+    if (control !== null) {
+      return `it calls \`${control.sourceName}\`, which releases or resets the arena`;
+    }
+  }
+  return "";
+};
+
+/** What `calleeWhere` looks for. */
+const CALLEE_ESCAPES: i32 = 0;
+const CALLEE_CONTROL: i32 = 1;
+const CALLEE_GARBAGE: i32 = 2;
+
+/** A callee's allocations are garbage once its result is: it leaves memory behind and lets none of it escape. */
+const leavesGarbage = (g: FunctionFacts): boolean => g.netAllocates && g.contained;
+
+/** The first callee that lets an allocation escape, uses arena control, or leaves garbage, by `mode`. */
+const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFacts | null => {
+  let c = 0;
+  while (c < f.callees.size()) {
+    const g = facts.get(f.callees.at(c));
+    if (
+      g !== null &&
+      ((mode === CALLEE_ESCAPES && g.allocEscapes) ||
+        (mode === CALLEE_CONTROL && g.usesArenaControl) ||
+        (mode === CALLEE_GARBAGE && leavesGarbage(g)))
+    ) {
+      return g;
+    }
+    c = c + 1;
+  }
+  return null;
 };

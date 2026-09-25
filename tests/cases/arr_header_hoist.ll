@@ -6,6 +6,8 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
@@ -372,6 +374,7 @@ entry:
   %Holder.obj.4 = alloca %struct.Holder, align 8
   %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [1 x %struct.Holder*], align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
@@ -605,6 +608,7 @@ bounds.ok.7:
   store %struct.Holder* %130, %struct.Holder** %137, align 8, !alias.scope !9, !noalias !8
   %138 = call i32 @declaredInside(%struct.nish_array* %arr.hdr.1, i32 3)
   %139 = add nsw i32 %128, %138
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %139
 }
 
