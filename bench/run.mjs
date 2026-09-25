@@ -6,21 +6,30 @@
 //   npm run build && node bench/run.mjs [options]
 //     --runs N          timed runs per binary (default 5), after --warmup N (default 1)
 //     --only a,b        benchmark names to include (default: all); `awfy` names
-//                       the Are We Fast Yet ports in bench/awfy/, which run only
-//                       when named (see bench/README.md)
-//     --n name=value    override a benchmark's size (the `bench:n` line in its sources)
+//                       the Are We Fast Yet ports in bench/awfy/ and `maps` the
+//                       map layout prototypes, which run only when named (see
+//                       bench/README.md)
+//     --n name=value    override a benchmark's size (the `bench:n` line in its
+//                       sources); `maps=<n>` sizes all the map prototypes
 //     --validate        build and compare checksums only: no timing, no docs written
 //     --no-rust         skip Rust even when rustc is installed
 //     --no-go           skip Go even when the go tool is installed
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md)
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 14 programs executes
+//     --instructions    count the instructions each of the 18 programs executes
 //                       under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
 //                       tolerance; with --update, rewrite the baseline (a PR that
 //                       does must say why). --runs N repeats each run (default 1)
+//
+// The WP32 map layout prototypes (bench/map_proto_*.ts) run only when `--only`
+// names `maps` (or one of them). Each runs five workloads over string and
+// integer keys and prints one checksum line per workload, which must equal what
+// bench/map_node.mjs prints from Node's `Map`; each workload is timed by the
+// program itself, and the table goes to stdout, not to docs/BENCHMARKS.md.
+// `--n maps=<power of two>` resizes all five. See bench/README.md.
 //
 // The data-parallel kernels (bench/par_*.ts) are not twins: each is one Nish
 // binary run twice, as the loop (`seq`) and as `parallelMapInto` (`par`), and
@@ -97,6 +106,18 @@ const PARALLEL = [
   { name: "par_short", what: "an 8-element map called 2^20 times, each call fed by the last" },
 ];
 const AWFY_KEPT = 20;
+
+/**
+ * The WP32 layout prototypes in bench/map_proto_*.ts, in the order of
+ * docs/wp32-map.md §2, and the Node twin every one of them must agree with.
+ */
+const MAPS = [
+  { name: "map_proto_ordered", label: "ordered" },
+  { name: "map_proto_ordered_fp", label: "ordered+i64 fp" },
+  { name: "map_proto_ordered_fp32", label: "ordered+u32 fp" },
+  { name: "map_proto_unordered", label: "unordered" },
+];
+const MAPS_NODE = "map_node";
 
 /** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
 function sourceArgs(name) {
@@ -441,9 +462,9 @@ const countInstructions = (valgrind, exe, args, name) => {
 };
 
 /**
- * `--instructions`: build the seven bench/ programs and the seven AWFY ports at
- * the sizes bench/instructions.json names, count each run, and print the counts
- * against the baseline. `--check` fails on any count above it by more than the
+ * `--instructions`: build the seven bench/ programs, the four map layout
+ * prototypes and the seven AWFY ports at the sizes bench/instructions.json
+ * names, count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */
 const runInstructions = () => {
@@ -454,14 +475,15 @@ const runInstructions = () => {
   if ((opts.check || opts.update) && host !== baseline.platform) {
     fail(`the baseline is counted on ${baseline.platform}, so this ${host} host can neither check nor update it`);
   }
-  const names = [...BENCHMARKS.map((b) => b.name), ...AWFY.map((b) => b.name)];
+  const names = [...BENCHMARKS.map((b) => b.name), ...MAPS.map((b) => b.name), ...AWFY.map((b) => b.name)];
   const listed = Object.keys(baseline.programs);
   if (listed.join(",") !== names.join(",")) {
     fail(`bench/instructions.json must list ${names.join(", ")} in that order; it lists ${listed.join(", ")}`);
   }
-  const wanted = (name, awfy) => !opts.only || opts.only.has(name) || (awfy && opts.only.has("awfy"));
+  // `awfy` and `maps` name their whole group, as they do outside --instructions.
+  const wanted = (name, group) => !opts.only || opts.only.has(name) || (group !== "" && opts.only.has(group));
   for (const name of opts.only ?? []) {
-    if (name !== "awfy" && !names.includes(name)) fail(`unknown benchmark \`${name}\``);
+    if (name !== "awfy" && name !== "maps" && !names.includes(name)) fail(`unknown benchmark \`${name}\``);
   }
 
   const dir = path.join(outDir, "instructions");
@@ -470,7 +492,8 @@ const runInstructions = () => {
   const rel = (p) => path.relative(root, p);
   const jobs = []; // { name, size, exe, args }
   process.stderr.write("instructions: building");
-  for (const b of BENCHMARKS.filter((x) => wanted(x.name, false))) {
+  const programs = [...BENCHMARKS.filter((x) => wanted(x.name, "")), ...MAPS.filter((x) => wanted(x.name, "maps"))];
+  for (const b of programs) {
     const n = baseline.programs[b.name].n;
     const ts = prepare(`${b.name}.ts`, String(n), src);
     const exe = path.join(dir, b.name);
@@ -482,7 +505,7 @@ const runInstructions = () => {
     jobs.push({ name: b.name, size: `n=${n}`, exe, args: [] });
     process.stderr.write(".");
   }
-  const awfy = AWFY.filter((b) => wanted(b.name, true));
+  const awfy = AWFY.filter((b) => wanted(b.name, "awfy"));
   if (awfy.length > 0) {
     const exe = buildAwfy(dir);
     for (const b of awfy) {
@@ -519,13 +542,14 @@ const runInstructions = () => {
   console.log(
     `instructions: ${version(valgrind)} cachegrind, whole process, --profile speed; tolerance ${pct(tolerance)}`
   );
+  const width = Math.max(12, ...rows.map((r) => r.name.length + 2));
   console.log(
-    `${"program".padEnd(12)}${"size".padEnd(12)}${"instructions".padStart(16)}${"baseline".padStart(16)}${"change".padStart(10)}${runs > 1 ? `${"spread".padStart(8)}` : ""}  status`
+    `${"program".padEnd(width)}${"size".padEnd(12)}${"instructions".padStart(16)}${"baseline".padStart(16)}${"change".padStart(10)}${runs > 1 ? `${"spread".padStart(8)}` : ""}  status`
   );
   for (const r of rows) {
     const spread = runs > 1 ? String(r.spread).padStart(8) : "";
     console.log(
-      `${r.name.padEnd(12)}${r.size.padEnd(12)}${num(r.count).padStart(16)}${num(r.base).padStart(16)}${pct(r.change).padStart(10)}${spread}  ${status(r)}`
+      `${r.name.padEnd(width)}${r.size.padEnd(12)}${num(r.count).padStart(16)}${num(r.base).padStart(16)}${pct(r.change).padStart(10)}${spread}  ${status(r)}`
     );
   }
 
@@ -576,7 +600,13 @@ if (opts.instructions) process.exit(runInstructions());
 fs.mkdirSync(srcDir, { recursive: true });
 const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name));
 const selectedParallel = PARALLEL.filter((b) => !opts.only || opts.only.has(b.name) || opts.only.has("par"));
-const known = (name) => name === "awfy" || name === "par" || BENCHMARKS.some((b) => b.name === name) || PARALLEL.some((b) => b.name === name);
+const known = (name) =>
+  name === "awfy" ||
+  name === "par" ||
+  name === "maps" ||
+  BENCHMARKS.some((b) => b.name === name) ||
+  PARALLEL.some((b) => b.name === name) ||
+  MAPS.some((b) => b.name === name);
 if (opts.only) for (const name of opts.only) if (!known(name)) fail(`unknown benchmark \`${name}\``);
 
 /**
@@ -610,6 +640,79 @@ const runAwfy = () => {
 };
 if (opts.only?.has("awfy")) {
   runAwfy();
+  if (selected.length === 0 && selectedParallel.length === 0) process.exit(0);
+}
+
+/**
+ * The map layout prototypes: build each with `--profile speed`, run it and the
+ * Node twin once for the checksums, which must be the same lines, then (unless
+ * `--validate`) run each `--warmup` + `--runs` times with `time`, which makes
+ * the program print `time <workload> <kind> <ns>` to stderr per workload. The
+ * table is each workload's minimum over the timed runs, in ms.
+ */
+const runMaps = () => {
+  const wanted = MAPS.filter((b) => opts.only.has("maps") || opts.only.has(b.name));
+  const size = opts.sizes.get("maps");
+  if (size !== undefined && (Number(size) < 16 || (Number(size) & (Number(size) - 1)) !== 0)) {
+    fail(`--n maps=${size}: the map prototypes draw keys by masking, so the size is a power of two, 16 or more`);
+  }
+  const node = prepare(`${MAPS_NODE}.mjs`, size);
+  const programs = [];
+  for (const b of wanted) {
+    process.stderr.write(`${b.name}: building`);
+    const ts = prepare(`${b.name}.ts`, size);
+    const exe = path.join(outDir, b.name);
+    const args = [path.relative(root, ts), ...sourceArgs(b.name), "--link", path.relative(root, exe), "--profile", "speed"];
+    run(nishc.cmd, [...nishc.prefix, ...args], b.name);
+    programs.push({ ...b, cmd: exe, args: [] });
+    process.stderr.write(" ok\n");
+  }
+  programs.push({ name: MAPS_NODE, label: "Node Map", cmd: process.execPath, args: [node] });
+
+  const reference = run(process.execPath, [node], MAPS_NODE).stdout;
+  let disagree = 0;
+  for (const p of programs.slice(0, -1)) {
+    const out = run(p.cmd, p.args, p.name).stdout;
+    if (out !== reference) {
+      disagree++;
+      console.error(`CHECKSUM MISMATCH ${p.name}:\n--- ${MAPS_NODE}\n${reference}--- ${p.name}\n${out}`);
+    }
+  }
+  if (disagree > 0) {
+    console.error(`${disagree} map prototype(s) disagree with Node's Map`);
+    process.exit(1);
+  }
+  const workloads = reference.trim().split("\n").map((l) => l.split(" ").slice(0, 2).join(" "));
+  if (opts.validate) {
+    console.log(`maps: ${programs.length - 1} prototype(s) agree with Node's Map over ${workloads.length} workloads`);
+    for (const line of reference.trim().split("\n")) console.log(`  ${line}`);
+    return;
+  }
+
+  process.stderr.write("maps: timing");
+  for (const p of programs) {
+    p.best = new Map();
+    for (let i = 0; i < opts.warmup + opts.runs; i++) {
+      const r = spawnSync(p.cmd, [...p.args, "time"], { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] });
+      if (r.status !== 0) fail(`${p.name} time exited with ${r.status}\n${r.stderr}`);
+      if (i < opts.warmup) continue;
+      for (const [, workload, ns] of r.stderr.matchAll(/^time (\S+ \S+) (\d+)$/gm)) {
+        p.best.set(workload, Math.min(p.best.get(workload) ?? Infinity, Number(ns) / 1e6));
+      }
+      process.stderr.write(".");
+    }
+  }
+  process.stderr.write("\n");
+  const width = 16;
+  console.log(`\nWP32 map layouts: each workload's minimum over ${opts.runs} runs after ${opts.warmup} warm-up (ms)`);
+  console.log(`${"workload".padEnd(12)}${programs.map((p) => p.label.padStart(width)).join("")}`);
+  for (const w of workloads) {
+    const cells = programs.map((p) => (p.best.has(w) ? p.best.get(w).toFixed(1) : "-").padStart(width));
+    console.log(`${w.padEnd(12)}${cells.join("")}`);
+  }
+};
+if (opts.only?.has("maps") || MAPS.some((b) => opts.only?.has(b.name))) {
+  runMaps();
   if (selected.length === 0 && selectedParallel.length === 0) process.exit(0);
 }
 
