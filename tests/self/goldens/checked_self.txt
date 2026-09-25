@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 66 programs, 694504 dump lines live, 66 distinct modules.
+# 66 programs, 694708 dump lines live, 66 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/emit_parallel.ts self/target.ts self/parents.ts self/std_modules.ts self/paths.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_util.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/options.ts self/emit_parallel.ts self/target.ts self/parents.ts self/std_modules.ts self/paths.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -10527,64 +10527,65 @@ import stdModuleName from "./std_modules" -> function @stdModuleName
 import StringSet from "./map" -> struct StringSet
 import K_ARRAY from "./types" -> const K_ARRAY
 import K_NULLABLE from "./types" -> const K_NULLABLE
+import K_RESULT from "./types" -> const K_RESULT
 import K_STRUCT from "./types" -> const K_STRUCT
 import TypeTable from "./types" -> struct TypeTable
 function threadsModuleName(): string -> @threadsModuleName [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat stdModuleName
   stackSites=0 stackLocals=0
-  callee 54:48 stdModuleName -> @stdModuleName
+  callee 65:48 stdModuleName -> @stdModuleName
 function isThreadsModule(program: CheckedProgram): boolean -> @isThreadsModule [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq threadsModuleName
   pointer program: size=456 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 62:58 threadsModuleName -> @threadsModuleName
+  callee 73:58 threadsModuleName -> @threadsModuleName
 function parallelRole(template: TemplateInfo): i32 -> @parallelRole [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsModule nish_str_eq
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 66:35 isThreadsModule -> @isThreadsModule
-  local 69:9 name: string (const)
+  callee 77:35 isThreadsModule -> @isThreadsModule
+  local 80:9 name: string (const)
 function parallelRoleOf(sig: FunctionSig): i32 -> @parallelRoleOf [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer sig: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 84:9 instance: Instantiation | null (const)
+  local 95:9 instance: Instantiation | null (const)
 function isParallelEntry(sig: FunctionSig): boolean -> @isParallelEntry [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
   pointer sig: size=104 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
-  local 90:9 role: i32 (const)
-  callee 90:16 parallelRoleOf -> @parallelRoleOf
+  local 101:9 role: i32 (const)
+  callee 101:16 parallelRoleOf -> @parallelRoleOf
 function recordParallelCall(program: CheckedProgram, node: Node, sig: FunctionSig): void -> @recordParallelCall [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 108:3
+  sharedWrite: 119:3
   calls: ParallelCall.constructor isParallelEntry nish_alloc_struct nish_array_grow
   pointer program: size=456 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=ParallelCall.constructor#1
   pointer sig: size=104 writesThrough=true captured=true passedTo=isParallelEntry#0 ParallelCall.constructor#2
   stackSites=0 stackLocals=0
-  callee 100:8 isParallelEntry -> @isParallelEntry
-  local 103:14 call: ParallelCall (const)
-  callee 108:30 new ParallelCall -> @ParallelCall.constructor
+  callee 111:8 isParallelEntry -> @isParallelEntry
+  local 114:14 call: ParallelCall (const)
+  callee 119:30 new ParallelCall -> @ParallelCall.constructor
 function positionIn(fn: FunctionSig, node: Node): string -> @positionIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.columnOf SourceFile.lineOf nish_str_concat nish_str_from_i32
   pointer fn: size=104 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 115:9 origin: SourceFile | null (const)
-  callee 116:51 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 116:80 SourceFile.columnOf -> @SourceFile.columnOf
+  local 126:9 origin: SourceFile | null (const)
+  callee 127:51 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 127:80 SourceFile.columnOf -> @SourceFile.columnOf
 function intrinsicName(sig: FunctionSig): string -> @intrinsicName
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
   pointer sig: size=104 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
-  callee 121:3 parallelRoleOf -> @parallelRoleOf
+  callee 132:3 parallelRoleOf -> @parallelRoleOf
 function sharedWriteMessage(sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string -> @sharedWriteMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get intrinsicName nish_str_concat positionIn
@@ -10592,15 +10593,15 @@ function sharedWriteMessage(sig: FunctionSig, fn: FunctionSig, facts: FactsTable
   pointer fn: size=104 writesThrough=false captured=false passedTo=positionIn#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
   stackSites=0 stackLocals=0
-  local 129:9 own: FunctionFacts | null (const)
-  callee 129:15 FactsTable.get -> @FactsTable.get
-  local 133:7 where: string (let)
-  local 134:9 site: Node | null (const)
-  local 136:11 at: string (const)
-  callee 136:16 positionIn -> @positionIn
-  local 141:11 via: FunctionFacts | null (const)
-  callee 141:17 FactsTable.get -> @FactsTable.get
-  callee 145:77 intrinsicName -> @intrinsicName
+  local 140:9 own: FunctionFacts | null (const)
+  callee 140:15 FactsTable.get -> @FactsTable.get
+  local 144:7 where: string (let)
+  local 145:9 site: Node | null (const)
+  local 147:11 at: string (const)
+  callee 147:16 positionIn -> @positionIn
+  local 152:11 via: FunctionFacts | null (const)
+  callee 152:17 FactsTable.get -> @FactsTable.get
+  callee 156:77 intrinsicName -> @intrinsicName
 function allocationMessage(sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string -> @allocationMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get intrinsicName nish_str_concat
@@ -10608,9 +10609,9 @@ function allocationMessage(sig: FunctionSig, fn: FunctionSig, facts: FactsTable)
   pointer fn: size=104 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
-  local 155:9 own: FunctionFacts | null (const)
-  callee 155:37 FactsTable.get -> @FactsTable.get
-  callee 160:46 intrinsicName -> @intrinsicName
+  local 166:9 own: FunctionFacts | null (const)
+  callee 166:37 FactsTable.get -> @FactsTable.get
+  callee 171:46 intrinsicName -> @intrinsicName
 function resultMessage(table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string -> @resultMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -10619,34 +10620,39 @@ function resultMessage(table: TypeTable, sig: FunctionSig, fn: FunctionSig, type
   pointer sig: size=104 writesThrough=false captured=false passedTo=intrinsicName#0
   pointer fn: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 167:7 isScalarArgument -> @isScalarArgument
-  callee 171:39 TypeTable.typeName -> @TypeTable.typeName
-  callee 171:72 intrinsicName -> @intrinsicName
+  callee 178:7 isScalarArgument -> @isScalarArgument
+  callee 182:39 TypeTable.typeName -> @TypeTable.typeName
+  callee 182:72 intrinsicName -> @intrinsicName
 function reachingPath(table: TypeTable, program: CheckedProgram, type: i32, element: i32, root: string, seen: StringSet): string -> @reachingPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachingPath
   escaping: element root type
-  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.kindOf TypeTable.nameOf TypeTable.refOf nish_str_concat reachingPath
-  pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 reachingPath#0 TypeTable.refOf#0 TypeTable.refOf#0 reachingPath#0 TypeTable.nameOf#0 reachingPath#0
-  pointer program: size=456 writesThrough=false captured=false passedTo=reachingPath#1 reachingPath#1 CheckedProgram.struct#0 reachingPath#1
-  pointer seen: size=8 writesThrough=false captured=false passedTo=reachingPath#5 reachingPath#5 StringSet.has#0 StringSet.add#0 reachingPath#5
+  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf nish_str_concat reachingPath
+  pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 reachingPath#0 TypeTable.refOf#0 TypeTable.refOf#0 reachingPath#0 reachingPath#0 TypeTable.okOf#0 reachingPath#0 TypeTable.errOf#0 TypeTable.nameOf#0 reachingPath#0
+  pointer program: size=456 writesThrough=false captured=false passedTo=reachingPath#1 reachingPath#1 reachingPath#1 reachingPath#1 CheckedProgram.struct#0 reachingPath#1
+  pointer seen: size=8 writesThrough=false captured=false passedTo=reachingPath#5 reachingPath#5 reachingPath#5 reachingPath#5 StringSet.has#0 StringSet.add#0 reachingPath#5
   stackSites=0 stackLocals=0
-  local 189:9 kind: i32 (const)
-  callee 189:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 191:12 reachingPath -> @reachingPath
-  callee 191:41 TypeTable.refOf -> @TypeTable.refOf
-  local 194:11 inner: i32 (const)
-  callee 194:19 TypeTable.refOf -> @TypeTable.refOf
-  callee 198:12 reachingPath -> @reachingPath
-  local 203:9 name: string (const)
-  callee 203:16 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 204:7 StringSet.has -> @StringSet.has
-  callee 207:3 StringSet.add -> @StringSet.add
-  local 208:9 info: StructInfo | null (const)
-  callee 208:16 CheckedProgram.struct -> @CheckedProgram.struct
-  local 214:14 field: FieldInfo (const)
-  local 215:11 path: string (const)
-  callee 215:18 reachingPath -> @reachingPath
+  local 200:9 kind: i32 (const)
+  callee 200:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 202:12 reachingPath -> @reachingPath
+  callee 202:41 TypeTable.refOf -> @TypeTable.refOf
+  local 205:11 inner: i32 (const)
+  callee 205:19 TypeTable.refOf -> @TypeTable.refOf
+  callee 209:12 reachingPath -> @reachingPath
+  local 212:11 ok: string (const)
+  callee 212:16 reachingPath -> @reachingPath
+  callee 212:45 TypeTable.okOf -> @TypeTable.okOf
+  callee 215:9 reachingPath -> @reachingPath
+  callee 215:38 TypeTable.errOf -> @TypeTable.errOf
+  local 220:9 name: string (const)
+  callee 220:16 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 221:7 StringSet.has -> @StringSet.has
+  callee 224:3 StringSet.add -> @StringSet.add
+  local 225:9 info: StructInfo | null (const)
+  callee 225:16 CheckedProgram.struct -> @CheckedProgram.struct
+  local 232:14 field: FieldInfo (const)
+  local 233:11 path: string (const)
+  callee 233:18 reachingPath -> @reachingPath
 function reachesDstMessage(table: TypeTable, program: CheckedProgram, sig: FunctionSig, fn: FunctionSig): string -> @reachesDstMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachingPath
@@ -10656,34 +10662,34 @@ function reachesDstMessage(table: TypeTable, program: CheckedProgram, sig: Funct
   pointer sig: size=104 writesThrough=false captured=false
   pointer fn: size=104 writesThrough=false captured=false
   stackSites=1 stackLocals=0
-  local 230:9 instance: Instantiation | null (const)
-  local 234:9 element: i32 (const)
-  local 235:9 target: i32 (const)
-  local 236:9 root: string (const)
-  local 237:9 path: string (const)
-  callee 237:16 reachingPath -> @reachingPath
-  callee 237:68 new StringSet -> @StringSet.constructor
-  callee 242:43 TypeTable.typeName -> @TypeTable.typeName
+  local 253:9 instance: Instantiation | null (const)
+  local 257:9 element: i32 (const)
+  local 258:9 target: i32 (const)
+  local 259:9 root: string (const)
+  local 260:9 path: string (const)
+  callee 260:16 reachingPath -> @reachingPath
+  callee 260:68 new StringSet -> @StringSet.constructor
+  callee 265:43 TypeTable.typeName -> @TypeTable.typeName
 function unparen(node: Node): Node -> @unparen
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node
   calls: nish_panic_index unparen
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 248:63 unparen -> @unparen
+  callee 271:64 unparen -> @unparen
 function combiningOperator(fn: FunctionSig): string -> @combiningOperator
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unparen
   pointer fn: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 259:7 body: Node (let)
-  callee 266:10 unparen -> @unparen
-  local 270:9 left: Node (const)
-  callee 270:16 unparen -> @unparen
-  local 271:9 right: Node (const)
-  callee 271:17 unparen -> @unparen
-  local 275:9 a: string (const)
-  local 276:9 b: string (const)
+  local 282:7 body: Node (let)
+  callee 289:10 unparen -> @unparen
+  local 293:9 left: Node (const)
+  callee 293:16 unparen -> @unparen
+  local 294:9 right: Node (const)
+  callee 294:17 unparen -> @unparen
+  local 298:9 a: string (const)
+  local 299:9 b: string (const)
 function isNonAssociative(op: string): boolean -> @isNonAssociative
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -10697,10 +10703,10 @@ function isLiteral(node: Node, want: string): boolean -> @isLiteral
   calls: nish_panic_index nish_parse_number nish_str_eq unparen
   pointer node: size=40 writesThrough=true captured=true passedTo=unparen#0
   stackSites=0 stackLocals=0
-  local 311:9 e: Node (const)
-  callee 311:13 unparen -> @unparen
-  local 319:11 operand: Node (const)
-  callee 319:21 unparen -> @unparen
+  local 334:9 e: Node (const)
+  callee 334:13 unparen -> @unparen
+  local 342:11 operand: Node (const)
+  callee 342:21 unparen -> @unparen
 function reduceMessage(sig: FunctionSig, fn: FunctionSig, identity: Node, identityText: string): string -> @reduceMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: combiningOperator identityOf isLiteral isNonAssociative nish_str_concat parallelRoleOf
@@ -10708,13 +10714,13 @@ function reduceMessage(sig: FunctionSig, fn: FunctionSig, identity: Node, identi
   pointer fn: size=104 writesThrough=false captured=false passedTo=combiningOperator#0
   pointer identity: size=40 writesThrough=true captured=true passedTo=isLiteral#0
   stackSites=0 stackLocals=0
-  callee 331:7 parallelRoleOf -> @parallelRoleOf
-  local 334:9 op: string (const)
-  callee 334:14 combiningOperator -> @combiningOperator
-  callee 338:7 isNonAssociative -> @isNonAssociative
-  local 344:9 want: string (const)
-  callee 344:16 identityOf -> @identityOf
-  callee 345:28 isLiteral -> @isLiteral
+  callee 359:7 parallelRoleOf -> @parallelRoleOf
+  local 362:9 op: string (const)
+  callee 362:14 combiningOperator -> @combiningOperator
+  callee 366:7 isNonAssociative -> @isNonAssociative
+  local 372:9 want: string (const)
+  callee 372:16 identityOf -> @identityOf
+  callee 373:28 isLiteral -> @isLiteral
 module self/attributes.ts
 import builtinCallees from "./emit_builtins" -> function @builtinCallees
 import builtinCalleesNamed from "./emit_builtins" -> function @builtinCalleesNamed
@@ -18121,66 +18127,66 @@ function emitParallelRegion(emitter: Emitter, chunk: FunctionSig, types: string[
   pointer types: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 57:9 caller: FunctionSig | null (const)
-  callee 59:18 internalErrorFor -> @internalErrorFor
-  local 61:9 count: i32 (const)
-  callee 69:18 internalErrorFor -> @internalErrorFor
-  local 71:9 fieldTypes: string[] (const)
-  local 72:7 i: i32 (let)
-  local 77:9 ctxType: string (const)
-  local 78:9 fn: IRFunction (const)
-  local 79:9 slot: string (const)
-  callee 79:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  local 83:11 type: string (const)
-  local 84:11 value: string (const)
-  local 85:11 at: string (const)
-  callee 85:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 86:5 IRFunction.emit -> @IRFunction.emit
-  local 89:9 raw: string (const)
-  callee 89:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 90:9 len: string (const)
-  callee 90:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 91:9 grain: i32 (const)
-  callee 91:17 parallelRoleOf -> @parallelRoleOf
-  local 92:9 trampoline: string (const)
-  callee 93:3 IRFunction.emit -> @IRFunction.emit
-  callee 94:18 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 96:3 IRModule.addFunction -> @IRModule.addFunction
-  callee 96:30 chunkTrampoline -> @chunkTrampoline
+  local 62:9 caller: FunctionSig | null (const)
+  callee 64:18 internalErrorFor -> @internalErrorFor
+  local 66:9 count: i32 (const)
+  callee 75:7 internalErrorFor -> @internalErrorFor
+  local 78:9 fieldTypes: string[] (const)
+  local 79:7 i: i32 (let)
+  local 84:9 ctxType: string (const)
+  local 85:9 fn: IRFunction (const)
+  local 86:9 slot: string (const)
+  callee 86:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  local 90:11 type: string (const)
+  local 91:11 value: string (const)
+  local 92:11 at: string (const)
+  callee 92:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 93:5 IRFunction.emit -> @IRFunction.emit
+  local 96:9 raw: string (const)
+  callee 96:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 97:9 len: string (const)
+  callee 97:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 98:9 grain: i32 (const)
+  callee 98:17 parallelRoleOf -> @parallelRoleOf
+  local 99:9 trampoline: string (const)
+  callee 100:3 IRFunction.emit -> @IRFunction.emit
+  callee 101:18 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 103:3 IRModule.addFunction -> @IRModule.addFunction
+  callee 103:30 chunkTrampoline -> @chunkTrampoline
 function chunkTrampoline(emitter: Emitter, name: string, chunk: FunctionSig, ctxType: string, fieldTypes: string[]): IRFunction -> @chunkTrampoline
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
-  sharedWrite: 115:5
+  sharedWrite: 122:5
   escaping: name
   calls: IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer emitter: size=152 writesThrough=false captured=false
   pointer chunk: size=104 writesThrough=false captured=false
   pointer fieldTypes: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 112:9 optimize: boolean (const)
-  local 113:9 attrs: string[] (const)
-  local 117:9 params: IRParam[] (const)
-  callee 118:15 new IRParam -> @IRParam.constructor
-  callee 119:15 new IRParam -> @IRParam.constructor
-  callee 120:15 new IRParam -> @IRParam.constructor
-  local 121:9 fn: IRFunction (const)
-  callee 121:14 new IRFunction -> @IRFunction.constructor
-  local 126:11 group: string[] (const)
-  callee 128:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  local 130:9 typed: string (const)
-  callee 130:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 131:9 operands: string[] (const)
-  local 132:7 i: i32 (let)
-  local 134:11 type: string (const)
-  local 135:11 at: string (const)
-  callee 135:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 136:11 value: string (const)
-  callee 136:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 140:9 lo: string (const)
-  callee 140:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 141:9 hi: string (const)
-  callee 141:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 144:3 IRFunction.emit -> @IRFunction.emit
-  callee 145:3 IRFunction.emit -> @IRFunction.emit
+  local 119:9 optimize: boolean (const)
+  local 120:9 attrs: string[] (const)
+  local 124:9 params: IRParam[] (const)
+  callee 125:15 new IRParam -> @IRParam.constructor
+  callee 126:15 new IRParam -> @IRParam.constructor
+  callee 127:15 new IRParam -> @IRParam.constructor
+  local 128:9 fn: IRFunction (const)
+  callee 128:14 new IRFunction -> @IRFunction.constructor
+  local 133:11 group: string[] (const)
+  callee 135:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  local 137:9 typed: string (const)
+  callee 137:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 138:9 operands: string[] (const)
+  local 139:7 i: i32 (let)
+  local 141:11 type: string (const)
+  local 142:11 at: string (const)
+  callee 142:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 143:11 value: string (const)
+  callee 143:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 147:9 lo: string (const)
+  callee 147:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local 148:9 hi: string (const)
+  callee 148:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 151:3 IRFunction.emit -> @IRFunction.emit
+  callee 152:3 IRFunction.emit -> @IRFunction.emit
 module self/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"

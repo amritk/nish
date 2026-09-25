@@ -80,11 +80,24 @@ const reduceBlockCount = (n: i32): i32 => {
 const reduceBlockStart = (n: i32, blocks: i32, k: i32): i32 => toI32((toI64(n) * toI64(k)) / toI64(blocks));
 
 /** Folds blocks `[lo, hi)` of `src` into `partials`, one result per block: one thread's share of a reduce. */
-const reduceBlocks = <T>(src: T[], f: (acc: T, x: T) => T, identity: T, partials: T[], lo: i32, hi: i32): void => {
+const reduceBlocks = <T>(
+  src: T[],
+  f: (acc: T, x: T) => T,
+  identity: T,
+  partials: T[],
+  lo: i32,
+  hi: i32
+): void => {
   const n: i32 = toI32(src.length);
   const blocks: i32 = toI32(partials.length);
   for (let k: i32 = lo; k >= 0 && k < hi && k < blocks; k++) {
-    const partial = reduceRange(src, f, identity, reduceBlockStart(n, blocks, k), reduceBlockStart(n, blocks, k + 1));
+    const partial = reduceRange(
+      src,
+      f,
+      identity,
+      reduceBlockStart(n, blocks, k),
+      reduceBlockStart(n, blocks, k + 1)
+    );
     if (k < toI32(partials.length)) {
       partials[k] = partial;
     }

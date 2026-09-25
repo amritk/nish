@@ -35,7 +35,18 @@
 import { FactsTable, FunctionFacts } from "./attributes";
 import { CLI, STD_PREFIX } from "./branding";
 import { isScalarArgument } from "./escape";
-import { N_BLOCK, N_FALSE, N_IDENT, N_NUMBER, N_PAREN, N_RETURN, N_TRUE, N_UNARY, N_BINARY, Node } from "./nodes";
+import {
+  N_BLOCK,
+  N_FALSE,
+  N_IDENT,
+  N_NUMBER,
+  N_PAREN,
+  N_RETURN,
+  N_TRUE,
+  N_UNARY,
+  N_BINARY,
+  Node,
+} from "./nodes";
 import {
   CheckedProgram,
   FunctionSig,
@@ -48,7 +59,7 @@ import {
 } from "./program";
 import { stdModuleName } from "./std_modules";
 import { StringSet } from "./map";
-import { K_ARRAY, K_NULLABLE, K_STRUCT, TypeTable } from "./types";
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types";
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
 export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`);
@@ -197,6 +208,12 @@ const reachingPath = (
     }
     return reachingPath(table, program, inner, element, `${root}[i]`, seen);
   }
+  if (kind === K_RESULT) {
+    const ok = reachingPath(table, program, table.okOf(type), element, `${root}.value`, seen);
+    return ok.length > 0
+      ? ok
+      : reachingPath(table, program, table.errOf(type), element, `${root}.error`, seen);
+  }
   if (kind !== K_STRUCT) {
     return "";
   }
@@ -208,8 +225,9 @@ const reachingPath = (
   const info = program.struct(name);
   if (info === null) {
     // Every layout a module can hold a value of is in its table
-    // (`closeReachableStructs`), so this is a struct nothing can reach.
-    return "";
+    // (`closeReachableStructs`), so this is not expected; a layout the rule
+    // cannot see is refused rather than trusted.
+    return root;
   }
   for (const field of info.fields) {
     const path = reachingPath(table, program, field.type, element, `${root}.${field.name}`, seen);
@@ -226,7 +244,12 @@ const reachingPath = (
  * array here: an array of `dst`'s element type reachable from `T`, whether or
  * not it is `dst` at run time.
  */
-export const reachesDstMessage = (table: TypeTable, program: CheckedProgram, sig: FunctionSig, fn: FunctionSig): string => {
+export const reachesDstMessage = (
+  table: TypeTable,
+  program: CheckedProgram,
+  sig: FunctionSig,
+  fn: FunctionSig
+): string => {
   const instance = sig.instance;
   if (instance === null || instance.parallel !== PAR_MAP || instance.typeArgs.length < 2) {
     return "";
@@ -245,7 +268,7 @@ export const reachesDstMessage = (table: TypeTable, program: CheckedProgram, sig
 };
 
 /** `(expr)` as the expression inside every pair of parentheses. */
-const unparen = (node: Node): Node => node.kind === N_PAREN ? unparen(node.children[0]) : node;
+const unparen = (node: Node): Node => (node.kind === N_PAREN ? unparen(node.children[0]) : node);
 
 /**
  * The operator an arrow's whole body applies to its two parameters, in either
@@ -327,7 +350,12 @@ const isLiteral = (node: Node, want: string): boolean => {
  * that is one non-associative operator, or a recognised associative one given
  * something other than its identity. `identityText` is the argument as written.
  */
-export const reduceMessage = (sig: FunctionSig, fn: FunctionSig, identity: Node, identityText: string): string => {
+export const reduceMessage = (
+  sig: FunctionSig,
+  fn: FunctionSig,
+  identity: Node,
+  identityText: string
+): string => {
   if (parallelRoleOf(sig) !== PAR_REDUCE) {
     return "";
   }

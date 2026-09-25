@@ -9515,8 +9515,8 @@ function parallelMapInto<f64, f64, square>(src: f64[], dst: f64[], f: void): voi
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.6.square#0
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.6.square#1
   stackSites=0 stackLocals=0
-  local 100:9 n: i32 (const)
-  callee 104:3 mapRange<f64, f64, square> -> @nish.mapRange$f64$f64$fn.6.square
+  local 113:9 n: i32 (const)
+  callee 117:3 mapRange<f64, f64, square> -> @nish.mapRange$f64$f64$fn.6.square
 function parallelReduce<f64, (a, b) => ...>(src: f64[], f: void, identity: f64): f64 -> @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0 [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0
@@ -9524,13 +9524,13 @@ function parallelReduce<f64, (a, b) => ...>(src: f64[], f: void, identity: f64):
   calls: nish.reduceBlockCount nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0 nish_arena_mark nish_arena_release nish_panic_index nish_parallel_range sumOfSquares$arrow0
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0#0
   stackSites=0 stackLocals=0
-  local 113:9 blocks: i32 (const)
-  callee 113:23 reduceBlockCount -> @nish.reduceBlockCount
-  local 117:9 partials: f64[] (const)
-  callee 118:3 reduceBlocks<f64, (a, b) => ...> -> @nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0
-  local 119:7 acc: f64 (let)
-  local 120:12 k: i32 (let)
-  callee 121:11 (a, b) => ... -> @sumOfSquares$arrow0
+  local 126:9 blocks: i32 (const)
+  callee 126:23 reduceBlockCount -> @nish.reduceBlockCount
+  local 130:9 partials: f64[] (const)
+  callee 131:3 reduceBlocks<f64, (a, b) => ...> -> @nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0
+  local 132:7 acc: f64 (let)
+  local 133:12 k: i32 (let)
+  callee 134:11 (a, b) => ... -> @sumOfSquares$arrow0
 function mapRange<f64, f64, square>(src: f64[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$f64$f64$fn.6.square [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 59:7
@@ -9544,19 +9544,19 @@ function mapRange<f64, f64, square>(src: f64[], dst: f64[], f: void, lo: i32, hi
   callee 57:15 square -> @square
 function reduceBlocks<f64, (a, b) => ...>(src: f64[], f: void, identity: f64, partials: f64[], lo: i32, hi: i32): void -> @nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0 [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 89:7
+  sharedWrite: 102:7
   escaping: identity lo
   calls: nish.reduceBlockStart nish.reduceRange$f64$fn.19.sumOfSquares$arrow0
   pointer src: size=0 writesThrough=true captured=false passedTo=nish.reduceRange$f64$fn.19.sumOfSquares$arrow0#0
   pointer partials: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 84:9 n: i32 (const)
-  local 85:9 blocks: i32 (const)
-  local 86:12 k: i32 (let)
-  local 87:11 partial: f64 (const)
-  callee 87:21 reduceRange<f64, (a, b) => ...> -> @nish.reduceRange$f64$fn.19.sumOfSquares$arrow0
-  callee 87:51 reduceBlockStart -> @nish.reduceBlockStart
-  callee 87:83 reduceBlockStart -> @nish.reduceBlockStart
+  local 91:9 n: i32 (const)
+  local 92:9 blocks: i32 (const)
+  local 93:12 k: i32 (let)
+  local 94:11 partial: f64 (const)
+  callee 94:21 reduceRange<f64, (a, b) => ...> -> @nish.reduceRange$f64$fn.19.sumOfSquares$arrow0
+  callee 98:7 reduceBlockStart -> @nish.reduceBlockStart
+  callee 99:7 reduceBlockStart -> @nish.reduceBlockStart
 function reduceRange<f64, (a, b) => ...>(src: f64[], f: void, identity: f64, lo: i32, hi: i32): f64 -> @nish.reduceRange$f64$fn.19.sumOfSquares$arrow0 [instance]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: identity lo

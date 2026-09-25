@@ -53,7 +53,12 @@ export const isParallelRegionCall = (caller: FunctionSig | null, callee: Functio
  * `std/threads.ts` writes it, and a region covers `[0, len)` — so anything else
  * is a broken invariant, not a program to compile.
  */
-export const emitParallelRegion = (emitter: Emitter, chunk: FunctionSig, types: string[], values: string[]): void => {
+export const emitParallelRegion = (
+  emitter: Emitter,
+  chunk: FunctionSig,
+  types: string[],
+  values: string[]
+): void => {
   const caller = emitter.currentSig;
   if (caller === null) {
     process.exit(internalErrorFor(`emitter: \`${chunk.name}\` called outside a function`, emitter.opts.json));
@@ -66,7 +71,9 @@ export const emitParallelRegion = (emitter: Emitter, chunk: FunctionSig, types: 
     types[count - 2] !== "i32" ||
     types[count - 1] !== "i32"
   ) {
-    process.exit(internalErrorFor(`emitter: \`${chunk.name}\` is not a chunk loop over [0, n)`, emitter.opts.json));
+    process.exit(
+      internalErrorFor(`emitter: \`${chunk.name}\` is not a chunk loop over [0, n)`, emitter.opts.json)
+    );
   }
   const fieldTypes: string[] = [];
   let i = 0;
