@@ -1,0 +1,1 @@
+`m.get("a")` is `i32 | undefined` and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`

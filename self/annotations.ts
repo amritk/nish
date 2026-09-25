@@ -402,6 +402,15 @@ const resolveNullableUnion = (node: Node, ctx: CheckContext): i32 => {
       "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"
     );
   }
+  return nullableOfChecked(ctx, node, inner);
+};
+
+/**
+ * `inner | null`, refused where `inner` has no null value to add: a `Result`,
+ * which models absence itself, and a scalar. Shared with the maybe spelling
+ * `Node | null | undefined` (WP32, `resolveMaybeAnnotation`).
+ */
+export const nullableOfChecked = (ctx: CheckContext, node: Node, inner: i32): i32 => {
   if (inner === T_ERROR) {
     return T_ERROR;
   }
