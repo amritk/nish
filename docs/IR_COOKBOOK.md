@@ -892,7 +892,7 @@ forof.body:
   %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
   %11 = bitcast i8* %10 to i32*
   %12 = getelementptr inbounds i32, i32* %11, i64 %5
-  %13 = load i32, i32* %12, align 4, !alias.scope !4, !noalias !3
+  %13 = load i32, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %13, i32* %x.addr, align 4
   %14 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %15 = load i32, i32* %x.addr, align 4
@@ -913,7 +913,7 @@ push.store:
   %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4
   %24 = bitcast i8* %23 to double*
   %25 = getelementptr inbounds double, double* %24, i64 %18
-  store double %16, double* %25, align 8, !alias.scope !4, !noalias !3
+  store double %16, double* %25, align 8, !alias.scope !4, !noalias !3, !tbaa !10
   %26 = add i64 %18, 1
   store i64 %26, i64* %17, align 8, !alias.scope !3, !noalias !4
   %27 = trunc i64 %26 to i32
@@ -941,6 +941,12 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"element double", !6, i64 0}
+!10 = !{!9, !9, i64 0}
 ```
 <!-- cookbook:end fnarg_arrow -->
 
