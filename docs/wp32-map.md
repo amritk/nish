@@ -488,12 +488,11 @@ what any program prints.
 - **Compaction reuses the bucket array.** There is no collector, so a new array
   leaves the old one in the arena until the enclosing scope ends. On the churn
   workload that is one abandoned table per compaction, with no bound. The first
-  version of the prototypes allocated one per rebuild: at 2^20 the `i64` layout
-  peaked at 1,057,848 KB against 775,224 KB for the `u32` one. Integer churn
-  took 1,673 ms against 632 ms, most of it faulting in fresh pages. Clearing
-  the array in place took the `i64` layout to 917 ms. Doubling still abandons
-  the old array. Its sizes sum to less than the final one, so growth's garbage
-  is bounded by the table's own size.
+  version of the prototypes allocated a new array for every rebuild. Clearing
+  the array in place instead took the `i64` layout at 2^20 from 1,673 ms to
+  917 ms on integer churn, and its peak RSS from 1,057,848 KB to 828,212 KB.
+  Doubling still abandons the old array, but the abandoned sizes sum to less
+  than the final one, so growth's garbage is bounded by the table's own size.
 - **The table never shrinks.** V8's does, but a smaller table here is a new
   allocation with the old one abandoned. A map keeps the memory of its largest
   size, as an array keeps its capacity after `pop`.
