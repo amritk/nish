@@ -69,7 +69,7 @@ export const emitMapIntrinsic = (emitter: Emitter, sig: FunctionSig, values: str
 const hashOf = (emitter: Emitter, key: i32, value: string): string => {
   const fn = emitter.fn;
   if (key === T_STRING) {
-    return fnv1a(emitter, value);
+    return emitStringHash(emitter, value);
   }
   if (key === T_F64) {
     return fmix64(emitter, floatBits(emitter, value));
@@ -104,7 +104,7 @@ const nonZero = (emitter: Emitter, h: string): string => {
  * it. The loop state lives in two entry-block slots, as every loop the emitter
  * writes keeps its state, and `mem2reg` makes them the phis.
  */
-const fnv1a = (emitter: Emitter, str: string): string => {
+const emitStringHash = (emitter: Emitter, str: string): string => {
   const fn = emitter.fn;
   const index = fn.emitAlloca("hash.i", "i64", emitter.align(T_I64));
   const state = fn.emitAlloca("hash.h", "i32", emitter.align(T_I32));
