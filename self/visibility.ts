@@ -53,10 +53,20 @@ export class BuildMode {
    * build a host can call a function nobody exported.
    */
   everySymbolPublic: boolean;
+  /**
+   * Some code this compiler did not write is handed the program's class
+   * layouts, whatever `export` says: a header lists every class's C struct, a
+   * wasm module or an N-API shim is driven by a host through the declarations
+   * written for it, and a declared C function may be handed an object. A
+   * layout decision that is only this program's to make (`self/inline_arrays.ts`)
+   * keeps the declared layout in such a build, for every class.
+   */
+  layoutsShared: boolean;
 
-  constructor(closedWorld: boolean, everySymbolPublic: boolean) {
+  constructor(closedWorld: boolean, everySymbolPublic: boolean, layoutsShared: boolean) {
     this.closedWorld = closedWorld;
     this.everySymbolPublic = everySymbolPublic;
+    this.layoutsShared = layoutsShared;
   }
 }
 
@@ -82,13 +92,10 @@ export const buildModeOf = (opts: Options, programs: CheckedProgram[]): BuildMod
     opts.emitDts.length > 0 ||
     opts.emitNapi.length > 0 ||
     opts.emitNapiAsync.length > 0;
-  const closed =
-    opts.link.length > 0 &&
-    opts.profile !== "wasi" &&
-    !wasmTarget(opts.target) &&
-    !sidecar &&
-    !declaresForeign(programs);
-  return new BuildMode(closed, !opts.strictExports);
+  const foreign = declaresForeign(programs);
+  const wasm = opts.profile === "wasi" || wasmTarget(opts.target);
+  const closed = opts.link.length > 0 && !wasm && !sidecar && !foreign;
+  return new BuildMode(closed, !opts.strictExports, sidecar || foreign || wasm);
 };
 
 /**

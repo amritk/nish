@@ -54,6 +54,7 @@ import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
+import { layoutInlineArrays } from "./inline_arrays";
 import { proveCallSiteRanges } from "./ranges";
 import {
   PACKAGE_ROOT_SEGMENT,
@@ -878,7 +879,12 @@ export class Compilation {
       contexts.push(unit.checker.ctx);
       programs.push(unit.checker.program);
     }
-    proveCallSiteRanges(contexts, buildModeOf(this.opts, programs));
+    const mode = buildModeOf(this.opts, programs);
+    // Which array fields live inside their objects (`self/inline_arrays.ts`).
+    // Every body has to be checked to know, and everything after this reads
+    // the layout it settles: the ranges, the attribute facts, the emitter.
+    layoutInlineArrays(contexts, mode);
+    proveCallSiteRanges(contexts, mode);
     this.reportArenaLoops();
     this.checkParallel();
     return !this.sink.hasErrors();

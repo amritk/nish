@@ -47,8 +47,13 @@ const structNode = (emitter: Emitter, info: StructInfo): string => {
   let i = 0;
   while (i < info.fields.length) {
     const field = info.fields[i];
-    // Interned in stage0's order, so the two compilers number the nodes alike.
-    members = `${members}, ${scalarNode(emitter, field.type)}, i64 ${field.offset}`;
+    // An inline array field is not a member of the path: its bytes are the
+    // array's header and slots, read and written only through `headerTbaa`
+    // and `elementTbaa` tags, never through a field access of this class.
+    if (!field.inline()) {
+      // Interned in stage0's order, so the two compilers number the nodes alike.
+      members = `${members}, ${scalarNode(emitter, field.type)}, i64 ${field.offset}`;
+    }
     i = i + 1;
   }
   return emitter.metadata(`!{!"${info.name}"${members}}`);
@@ -79,10 +84,13 @@ export const fieldTbaa = (emitter: Emitter, info: StructInfo, field: FieldInfo):
  * rather than a child of one, so an element access is NoAlias with every
  * tagged field access — the pointer-typed ones included, which is what keeps
  * `this.v` live across `this.v[i] = x` whatever `v` holds. That is sound
- * because element storage and class objects are distinct allocations that
- * never share a byte: a data block is an arena bump, an entry-block alloca, a
+ * because element storage and the bytes a class field access reaches never
+ * overlap: a data block is an arena bump, an entry-block alloca, a
  * `nish_alloc_array` block or the tail of `nish_argv_init`'s `malloc`, and a
- * class object is a `nish_alloc_struct` bump or an alloca of its own. The one
+ * class object is a `nish_alloc_struct` bump or an alloca of its own. An
+ * inline array field (`self/inline_arrays.ts`) does put slots inside a class
+ * object, but never where a field access goes: the field is never loaded or
+ * stored as a field, and `structNode` leaves it out of the class's path. The one
  * kind of object that does live inside element storage is an inline record
  * (`inlineElementStruct`: an interface nothing implements), and its field
  * accesses carry no tag (`fieldTbaa` answers `""` for every interface), while
@@ -116,7 +124,10 @@ export const elementTbaa = (emitter: Emitter, elem: i32): string => {
  * and `pop`, whether the header is an arena bump or an entry-block alloca. Or
  * it is C behind a call: `nish_array_grow`, `nish_alloc_array`,
  * `nish_readdir`, `nish_argv_init`, a C caller's stack header or the N-API
- * shim's. A call is opaque to TBAA, and under `-flto` the inlined C carries
+ * shim's. An inline array field's header sits inside a class object and is
+ * written by `storeHeaderField` alone (`initInlineArrays`,
+ * `emitInlineArrayAssignment`), never through the class's field path, which
+ * leaves that member out. A call is opaque to TBAA, and under `-flto` the inlined C carries
  * clang's own root, which LLVM answers MayAlias against this one. A header is
  * never a class object, an element slot or an inline record, and is never
  * copied with `llvm.memcpy`. `docs/ARCHITECTURE.md` has the whole argument.

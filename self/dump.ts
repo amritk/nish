@@ -183,6 +183,9 @@ const structText = (table: TypeTable, info: StructInfo, out: string[]): void => 
     if (field.initializer !== null) {
       parts.push("initialized");
     }
+    if (field.inline()) {
+      parts.push(`inline=${field.inlineCapacity}`);
+    }
     const extras = parts.length > 0 ? ` ${parts.join(" ")}` : "";
     out.push(
       `  field ${field.name}: ${table.typeName(field.type)} index=${field.index} offset=${field.offset}${extras}`
