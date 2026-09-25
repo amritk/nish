@@ -53,6 +53,7 @@ and a copy of `mandelbrot.ts` would start with
 | `docs/cookbook/arr_field_element.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
 | `tests/cases/arr_header_tbaa.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk`, `pushDisk`, `popDiskFrom` and `moveTopDisk` | MIT |
 | `tests/cases/arr_header_tbaa_threads.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk`, `pushDisk`, `popDiskFrom` and `moveTopDisk` | MIT |
+| `tests/cases/cls_inline_array_call.ts` | `queens.ts` (upstream `queens.js`): `queens` filling a field from `filledBooleans(8)` / `filledBooleans(16)`, with the helper | MIT |
 | `tests/cases/arr_field_reload_alias.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk` | MIT |
 | `tests/cases/mem_callee_scope.ts` | `list.ts` (upstream `list.js`): `Element` and `List`, less `innerBenchmarkLoop` and `verifyResult` | MIT |
 | `tests/cases/mem_callee_scope_tree.ts` | `storage.ts` and `som.ts` (upstream `storage.js` and `som.js`): `Random`, `ArrayTree`, `benchmark` and `buildTreeDepth` | MIT |

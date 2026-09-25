@@ -3808,37 +3808,37 @@ function Rows.constructor(this: Rows): void -> @Rows.constructor [constructor]
   stackSites=0 stackLocals=0
 function Rows.fill(this: Rows, n: i32): void -> @Rows.fill [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 15:7
+  sharedWrite: 17:7
   calls: filled
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 15:19 filled -> @filled
   callee 17:19 filled -> @filled
+  callee 19:19 filled -> @filled
 function Rows.count(this: Rows): i32 -> @Rows.count [method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 22:9 n: i32 (let)
-  local 23:14 i: i32 (let)
+  local 24:9 n: i32 (let)
+  local 25:14 i: i32 (let)
 function filled(n: i32): boolean[] -> @filled
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 35:5
+  sharedWrite: 37:5
   escaping: n
   stackSites=0 stackLocals=0
-  local 33:9 arr: boolean[] (const)
-  local 34:12 i: i32 (let)
+  local 35:9 arr: boolean[] (const)
+  local 36:12 i: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 44:3
+  sharedWrite: 46:3
   calls: Rows.constructor Rows.count Rows.fill nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
   stackSites=1 stackLocals=1
-  local 41:9 r: Rows (const)
-  callee 41:13 new Rows -> @Rows.constructor
-  callee 42:18 Rows.count -> @Rows.count
-  callee 43:3 Rows.fill -> @Rows.fill
-  callee 45:18 Rows.count -> @Rows.count
-  callee 46:3 Rows.fill -> @Rows.fill
+  local 43:9 r: Rows (const)
+  callee 43:13 new Rows -> @Rows.constructor
+  callee 44:18 Rows.count -> @Rows.count
+  callee 45:3 Rows.fill -> @Rows.fill
   callee 47:18 Rows.count -> @Rows.count
+  callee 48:3 Rows.fill -> @Rows.fill
+  callee 49:18 Rows.count -> @Rows.count
 program tests/cases/cls_inline_array_dts.ts
 module tests/cases/cls_inline_array_dts.ts (entry)
 struct Tally (class) size=40 align=8
