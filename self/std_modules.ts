@@ -7,7 +7,7 @@
 // into whatever imports it, so all this module answers is a path and a listing;
 // everything after that is the ordinary module path.
 
-import { STD_PREFIX } from "./branding";
+import { CLI, STD_PREFIX } from "./branding";
 import { normalizePath } from "./paths";
 import { splitByte } from "./strings";
 
@@ -78,4 +78,22 @@ export const isStdModuleName = (name: string): boolean => {
  * arrangement that keeps `VERSION` in `branding.ts` honest against
  * `package.json`.
  */
-export const stdModuleNames = (): string => "json, pair, testing, text, threads";
+export const stdModuleNames = (): string => "collections, json, pair, testing, text, threads";
+
+/**
+ * `nish/collections`: the module the global `Map` and `Set` are declared in
+ * (docs/wp32-map.md §4). A program never has to import it — naming `Map` or
+ * `Set` is what loads it — and it writes no `.ll` of its own: every instance a
+ * module uses is emitted into that module.
+ */
+export const COLLECTIONS_SPECIFIER: string = "nish/collections";
+
+/**
+ * Whether a module is the standard library's `std/collections.ts`. The
+ * package is part of the test, as it is for `nish/threads`: a root-package
+ * file that happens to sit at `std/collections.ts` is an ordinary module, so
+ * the compiler that tests the library by compiling it directly compiles it as
+ * written.
+ */
+export const isCollectionsModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(COLLECTIONS_SPECIFIER);

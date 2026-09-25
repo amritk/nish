@@ -1,0 +1,1 @@
+`Point` cannot be the value type of `Map<string, Point>`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)

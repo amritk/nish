@@ -48,7 +48,7 @@ Compilation                                                            self/comp
 | Attributes | `self/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts, allocation facts) and the call-graph fixpoint that turns them into LLVM attributes, arena scopes, and stack slots. Runs over the whole program at once. |
 | Escape analysis | `self/escape.ts` | Per allocation site (`new`, object literal, array literal, `new Array<T>(<literal>)`, `Ok(v)` / `Err(e)`): does the value stay `local`, is it `returned`, or does it `leak`? Decides stack allocation and feeds the arena-scope facts (WP6). |
 | Target | `self/target.ts` | The `--target` table: canonical triples, their aliases, `host` resolution from `process.platform`/`arch`, and the clang 18 data-layout string written into the module header (WP9). |
-| Emitter | `self/emit.ts` + `emit_util.ts`, `emit_ops.ts`, `emit_control.ts`, `emit_strings.ts`, `emit_arrays.ts`, `emit_classes.ts`, `emit_builtins.ts`, `emit_result.ts`, `tbaa.ts`, `debug.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct lowerings. Contains no user-facing error handling. |
+| Emitter | `self/emit.ts` + `emit_util.ts`, `emit_ops.ts`, `emit_control.ts`, `emit_strings.ts`, `emit_arrays.ts`, `emit_classes.ts`, `emit_builtins.ts`, `emit_result.ts`, `emit_map.ts`, `tbaa.ts`, `debug.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct lowerings. Contains no user-facing error handling. |
 | IR builder | `self/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `self/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic (the `RuntimeTable`); the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
 | Runtime | `runtime/runtime.c`, `runtime/runtime_os.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation, in two translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime_os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. `runtime/nish.d.ts` declares the builtins so that `tsc` can type-check a Nish program. |
@@ -529,6 +529,36 @@ the assembly, the measurement and the one gap the packing does not close:
 [wp17-result-abi.md](wp17-result-abi.md); why the in-memory representation
 is still a pointer: [wp16-results.md](wp16-results.md).
 
+### `Map` and `Set`
+
+The global `Map` and `Set` are ordinary generic classes in
+`std/collections.ts`, and three small pieces make them global
+([wp32-map.md](wp32-map.md)):
+
+- **Loading.** Pass 1 walks a module for the names in a type or after `new`
+  and, when the module does not declare or import its own, synthesises the
+  `ImportBinding` `import { Map } from "nish/collections"` would have written
+  (`Checker.importCollections`). Everything after that is an imported generic
+  class. A module that names neither loads nothing, so every other program's
+  IR is unchanged.
+- **Output.** The library is checked like any module and writes no `.ll`
+  (`Compilation.writesOutput`). Each module's emitter follows the fixpoint's
+  call graph (`FunctionFacts.callees`) from its own functions into the library
+  and emits what it reaches there as `internal` copies, with the library's
+  program installed so the side tables it reads are the library's
+  (`libraryReach` and `emitLibraryCopies` in `self/emit_map.ts`), and it never
+  `declare`s a library function.
+- **Hashing.** `hashKey<K>` and `sameKey<K>` are templates whose bodies the
+  checker and the fixpoint read and the emitter never emits: an instance's
+  `mapIntrinsic` role routes each call to its per-type lowering in
+  `self/emit_map.ts`, so no runtime function was added.
+
+The checker's rules for the surface (the members a program sees, the key and
+value types, `new` without arguments) are keyed on `isCollectionTemplate` /
+`isCollectionStruct` in `self/generics.ts`, which ask whether the class is
+`std/collections.ts`'s in package `nish` — so a program's own `Map` is an
+ordinary class.
+
 ### `nsw`, `--wrapping`, `--strict-exports` and `--target`
 
 - **`nsw`** (WP9, on by default since WP15 §3): `intOpcode` in
@@ -742,7 +772,7 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | `runtime/` | `runtime.c` (the core every program touches) and `runtime_os.c` (the system-call half, measured against its own ceiling), `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests), `nish.d.ts` (the builtins' declarations `npm run check` type-checks against) |
 | `bin/` | the npm package's installer: `nish` hands over to the prebuilt native compiler from the platform package `@amritk/nish-<asset>`; an unsupported platform is an error, not a fallback |
 | `scripts/` | `build.sh`, `bootstrap.sh`, `fetch-seed.sh`, `size-report.sh`, `smoke.sh`, `changelog-gen.mjs`, `gen-diagnostic-codes.mjs` (frozen; `--check` only) |
-| `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
+| `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself, and `collections.ts`, the global `Map` and `Set`. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `self/` (the bootstrap and the compiler's own goldens), `wordings/`, `nish/`, `nish-cmp.js`, `differential/` (`run.js`, `lib.js`, `fuzz.js`, `corpus/`, `goldens/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |
 | `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |

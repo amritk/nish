@@ -1,0 +1,1 @@
+`new Map<string, i32>` takes no arguments in this version: a `Map` or `Set` starts empty

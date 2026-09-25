@@ -26,7 +26,7 @@
       "NL9011": 2
     },
     "self/compilation.ts": {
-      "NL9007": 7,
+      "NL9007": 5,
       "NL9011": 7
     },
     "self/compile.ts": {
@@ -84,7 +84,7 @@
     },
     "self/interop_header.ts": {
       "NL9007": 1,
-      "NL9011": 7
+      "NL9011": 6
     },
     "self/interop_napi.ts": {
       "NL9010": 1,
