@@ -1,9 +1,13 @@
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
 @.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"ab\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c".\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"#\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"z\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
 
+declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef i32 @test() #0 {
@@ -69,41 +73,62 @@ for.cond.1:
   br i1 %13, label %for.body.1, label %for.end.1
 
 for.body.1:
+  %14 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %15 = load i8*, i8** %14, align 8
+  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %17 = load i64, i64* %16, align 8
   store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %row.addr, align 8
   store i32 0, i32* %j.addr, align 4
   br label %for.cond.2
 
 for.cond.2:
-  %14 = load i32, i32* %j.addr, align 4
-  %15 = icmp slt i32 %14, 3
-  br i1 %15, label %for.body.2, label %for.end.2
+  %18 = load i32, i32* %j.addr, align 4
+  %19 = icmp slt i32 %18, 3
+  br i1 %19, label %for.body.2, label %for.end.2
 
 for.body.2:
-  %16 = load i8*, i8** %row.addr, align 8
-  %17 = call i8* @nish_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
-  store i8* %17, i8** %row.addr, align 8
+  %20 = load i8*, i8** %row.addr, align 8
+  %21 = call i8* @nish_str_concat(i8* %20, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  store i8* %21, i8** %row.addr, align 8
   br label %for.inc.2
 
 for.inc.2:
-  %18 = load i32, i32* %j.addr, align 4
-  %19 = add nsw i32 %18, 1
-  store i32 %19, i32* %j.addr, align 4
+  %22 = load i32, i32* %j.addr, align 4
+  %23 = add nsw i32 %22, 1
+  store i32 %23, i32* %j.addr, align 4
   br label %for.cond.2
 
 for.end.2:
-  %20 = load i32, i32* %rows.addr, align 4
-  %21 = load i8*, i8** %row.addr, align 8
-  %22 = bitcast i8* %21 to i64*
-  %23 = load i64, i64* %22, align 8
-  %24 = trunc i64 %23 to i32
-  %25 = add nsw i32 %20, %24
-  store i32 %25, i32* %rows.addr, align 4
+  %24 = load i32, i32* %rows.addr, align 4
+  %25 = load i8*, i8** %row.addr, align 8
+  %26 = bitcast i8* %25 to i64*
+  %27 = load i64, i64* %26, align 8
+  %28 = trunc i64 %27 to i32
+  %29 = add nsw i32 %24, %28
+  store i32 %29, i32* %rows.addr, align 4
+  %30 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %31 = load i8*, i8** %30, align 8
+  %32 = icmp eq i8* %31, %15
+  br i1 %32, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %33 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %17, i64* %33, align 8
+  br label %pass.done
+
+pass.free:
+  %34 = ptrtoint i8* %15 to i64
+  %35 = add i64 %34, %17
+  call void @nish_arena_release(i64 %35)
+  br label %pass.done
+
+pass.done:
   br label %for.inc.1
 
 for.inc.1:
-  %26 = load i32, i32* %i.addr.1, align 4
-  %27 = add nsw i32 %26, 1
-  store i32 %27, i32* %i.addr.1, align 4
+  %36 = load i32, i32* %i.addr.1, align 4
+  %37 = add nsw i32 %36, 1
+  store i32 %37, i32* %i.addr.1, align 4
   br label %for.cond.1
 
 for.end.1:
@@ -112,37 +137,37 @@ for.end.1:
   br label %do.body
 
 do.body:
-  %28 = load i8*, i8** %tail.addr, align 8
-  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
-  store i8* %29, i8** %tail.addr, align 8
-  %30 = load i32, i32* %k.addr, align 4
-  %31 = add nsw i32 %30, 1
-  store i32 %31, i32* %k.addr, align 4
+  %38 = load i8*, i8** %tail.addr, align 8
+  %39 = call i8* @nish_str_concat(i8* %38, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  store i8* %39, i8** %tail.addr, align 8
+  %40 = load i32, i32* %k.addr, align 4
+  %41 = add nsw i32 %40, 1
+  store i32 %41, i32* %k.addr, align 4
   br label %do.cond
 
 do.cond:
-  %32 = load i32, i32* %k.addr, align 4
-  %33 = icmp slt i32 %32, 2
-  br i1 %33, label %do.body, label %do.end
+  %42 = load i32, i32* %k.addr, align 4
+  %43 = icmp slt i32 %42, 2
+  br i1 %43, label %do.body, label %do.end
 
 do.end:
-  %34 = load i8*, i8** %out.addr, align 8
-  %35 = bitcast i8* %34 to i64*
-  %36 = load i64, i64* %35, align 8
-  %37 = trunc i64 %36 to i32
-  %38 = load i8*, i8** %tagged.addr, align 8
-  %39 = bitcast i8* %38 to i64*
-  %40 = load i64, i64* %39, align 8
-  %41 = trunc i64 %40 to i32
-  %42 = add nsw i32 %37, %41
-  %43 = load i32, i32* %rows.addr, align 4
-  %44 = add nsw i32 %42, %43
-  %45 = load i8*, i8** %tail.addr, align 8
-  %46 = bitcast i8* %45 to i64*
-  %47 = load i64, i64* %46, align 8
-  %48 = trunc i64 %47 to i32
-  %49 = add nsw i32 %44, %48
-  ret i32 %49
+  %44 = load i8*, i8** %out.addr, align 8
+  %45 = bitcast i8* %44 to i64*
+  %46 = load i64, i64* %45, align 8
+  %47 = trunc i64 %46 to i32
+  %48 = load i8*, i8** %tagged.addr, align 8
+  %49 = bitcast i8* %48 to i64*
+  %50 = load i64, i64* %49, align 8
+  %51 = trunc i64 %50 to i32
+  %52 = add nsw i32 %47, %51
+  %53 = load i32, i32* %rows.addr, align 4
+  %54 = add nsw i32 %52, %53
+  %55 = load i8*, i8** %tail.addr, align 8
+  %56 = bitcast i8* %55 to i64*
+  %57 = load i64, i64* %56, align 8
+  %58 = trunc i64 %57 to i32
+  %59 = add nsw i32 %54, %58
+  ret i32 %59
 }
 
 attributes #0 = { nounwind }

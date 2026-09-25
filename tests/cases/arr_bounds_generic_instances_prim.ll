@@ -51,8 +51,6 @@ entry:
   %H.obj = alloca %struct.H, align 8
   %rs.addr = alloca %struct.nish_array*, align 8
   %Rec.obj = alloca %struct.Rec, align 8
-  %arr.hdr.1 = alloca %struct.nish_array, align 8
-  %arr.data.1 = alloca [1 x %struct.Rec], align 8
   %short.addr = alloca %struct.Rec*, align 8
   %Rec.obj.1 = alloca %struct.Rec, align 8
   %h.addr = alloca %struct.H*, align 8
@@ -111,47 +109,49 @@ entry:
   store i32 3, i32* %31, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %32 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj, i32 0, i32 0
   store %struct.nish_array* %23, %struct.nish_array** %32, align 8
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
-  store i64 1, i64* %33, align 8, !alias.scope !8, !noalias !9
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 1
-  store i64 1, i64* %34, align 8, !alias.scope !8, !noalias !9
-  %35 = bitcast [1 x %struct.Rec]* %arr.data.1 to i8*
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
-  store i8* %35, i8** %36, align 8, !alias.scope !8, !noalias !9
-  %37 = bitcast i8* %35 to %struct.Rec*
-  %38 = getelementptr inbounds %struct.Rec, %struct.Rec* %37, i64 0
-  %39 = bitcast %struct.Rec* %38 to i8*
-  %40 = bitcast %struct.Rec* %Rec.obj to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %39, i8* align 8 %40, i64 8, i1 false), !alias.scope !9, !noalias !8
-  store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %rs.addr, align 8
-  %41 = call i8* @nish_alloc_struct(i64 24)
-  %42 = bitcast i8* %41 to %struct.nish_array*
-  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 0
-  store i64 1, i64* %43, align 8, !alias.scope !8, !noalias !9
-  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 1
-  store i64 1, i64* %44, align 8, !alias.scope !8, !noalias !9
-  %45 = call i8* @nish_alloc_struct(i64 4)
-  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 2
-  store i8* %45, i8** %46, align 8, !alias.scope !8, !noalias !9
-  %47 = bitcast i8* %45 to i32*
-  %48 = getelementptr inbounds i32, i32* %47, i64 0
-  store i32 7, i32* %48, align 4, !alias.scope !9, !noalias !8, !tbaa !11
-  %49 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj.1, i32 0, i32 0
-  store %struct.nish_array* %42, %struct.nish_array** %49, align 8
+  %33 = call i8* @nish_alloc_struct(i64 24)
+  %34 = bitcast i8* %33 to %struct.nish_array*
+  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 0
+  store i64 1, i64* %35, align 8, !alias.scope !8, !noalias !9
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 1
+  store i64 1, i64* %36, align 8, !alias.scope !8, !noalias !9
+  %37 = call i8* @nish_alloc_struct(i64 8)
+  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 2
+  store i8* %37, i8** %38, align 8, !alias.scope !8, !noalias !9
+  %39 = bitcast i8* %37 to %struct.Rec*
+  %40 = getelementptr inbounds %struct.Rec, %struct.Rec* %39, i64 0
+  %41 = bitcast %struct.Rec* %40 to i8*
+  %42 = bitcast %struct.Rec* %Rec.obj to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %41, i8* align 8 %42, i64 8, i1 false), !alias.scope !9, !noalias !8
+  store %struct.nish_array* %34, %struct.nish_array** %rs.addr, align 8
+  %43 = call i8* @nish_alloc_struct(i64 24)
+  %44 = bitcast i8* %43 to %struct.nish_array*
+  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 0
+  store i64 1, i64* %45, align 8, !alias.scope !8, !noalias !9
+  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 1
+  store i64 1, i64* %46, align 8, !alias.scope !8, !noalias !9
+  %47 = call i8* @nish_alloc_struct(i64 4)
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2
+  store i8* %47, i8** %48, align 8, !alias.scope !8, !noalias !9
+  %49 = bitcast i8* %47 to i32*
+  %50 = getelementptr inbounds i32, i32* %49, i64 0
+  store i32 7, i32* %50, align 4, !alias.scope !9, !noalias !8, !tbaa !11
+  %51 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj.1, i32 0, i32 0
+  store %struct.nish_array* %44, %struct.nish_array** %51, align 8
   store %struct.Rec* %Rec.obj.1, %struct.Rec** %short.addr, align 8
-  %50 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %50, i64 0, i32 2
-  %52 = load i8*, i8** %51, align 8, !alias.scope !8, !noalias !9
-  %53 = bitcast i8* %52 to %struct.Rec*
-  %54 = getelementptr inbounds %struct.Rec, %struct.Rec* %53, i64 0
-  call void @H.constructor(%struct.H* %H.obj.1, %struct.Rec* %54)
+  %52 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
+  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %52, i64 0, i32 2
+  %54 = load i8*, i8** %53, align 8, !alias.scope !8, !noalias !9
+  %55 = bitcast i8* %54 to %struct.Rec*
+  %56 = getelementptr inbounds %struct.Rec, %struct.Rec* %55, i64 0
+  call void @H.constructor(%struct.H* %H.obj.1, %struct.Rec* %56)
   store %struct.H* %H.obj.1, %struct.H** %h.addr, align 8
-  %55 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
-  %56 = load %struct.Rec*, %struct.Rec** %short.addr, align 8
-  %57 = load %struct.H*, %struct.H** %h.addr, align 8
-  %58 = call i32 @walk$$Rec(%struct.nish_array* %55, %struct.Rec* %56, %struct.H* %57)
-  %59 = call i8* @nish_str_from_i32(i32 %58)
-  call void @nish_print(i8* %59)
+  %57 = load %struct.nish_array*, %struct.nish_array** %rs.addr, align 8
+  %58 = load %struct.Rec*, %struct.Rec** %short.addr, align 8
+  %59 = load %struct.H*, %struct.H** %h.addr, align 8
+  %60 = call i32 @walk$$Rec(%struct.nish_array* %57, %struct.Rec* %58, %struct.H* %59)
+  %61 = call i8* @nish_str_from_i32(i32 %60)
+  call void @nish_print(i8* %61)
   ret i32 0
 }
 

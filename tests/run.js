@@ -1396,6 +1396,69 @@ if (!only || "performance".includes(only)) {
     );
   }
 
+  // #216: the arena-loop warning (NL9011) names the loops that neither a scope
+  // around each pass nor one around the function reclaims, in a function of any
+  // return type, and names what refused both. `tally` stores into memory on
+  // every pass, `drain` calls a function that releases the arena, and
+  // `collect`, which returns a pointer, grows an array older than the pass;
+  // `quiet`'s passes are scoped and say nothing. `perf_arena_control` is the
+  // silence the issue found untested: a function that brackets its own passes
+  // with `Arena.mark()` / `Arena.release(m)` gets no warning although it
+  // returns a pointer and stores a string, and neither does a pointer-returning
+  // function whose passes the compiler scopes.
+  const arenaLoop = compile("perf_arena_loop", "perf_arena_loop_report.ll");
+  const arenaLoopLines = summaries(arenaLoop.stderr);
+  check(
+    "mem_loop_scope: NL9011 names each loop no scope reclaims, and what refused its passes and its function",
+    arenaLoop.status === 0 &&
+      arenaLoopLines.length === 3 &&
+      positions(arenaLoopLines) === "25:14,39:14,48:18" &&
+      arenaLoopLines[0].includes(
+        "`makeList` leaves arena memory behind on every pass of this loop, which cannot release it after each " +
+          "pass because the allocation on line 26 is stored into memory, where this analysis stops following it, " +
+          "and neither can `tally` when it returns, so all of it lives as long as the caller's memory does"
+      ) &&
+      arenaLoopLines[1].includes("because it calls `flush`, which releases or resets the arena, and neither can `drain`") &&
+      arenaLoopLines[2].includes(
+        "because line 48 grows `lengths`, an array older than the pass, and `collect` cannot release it when it " +
+          "returns because it returns a value that is not a number, a boolean, an enum or nothing"
+      ),
+    arenaLoop.stderr
+  );
+  const arenaControl = compile("perf_arena_control", "perf_arena_control_report.ll");
+  check(
+    "mem_loop_scope: no NL9011 under Arena control, nor for a pointer-returning loop whose passes are scoped",
+    arenaControl.status === 0 && summaries(arenaControl.stderr).length === 0,
+    arenaControl.stderr
+  );
+
+  // #216's acceptance, as a peak resident set rather than as `Arena.used()`:
+  // `mem_loop_scope_chunk`'s pointer-returning loop allocates more than an
+  // arena chunk on every pass, so every release frees a chunk through
+  // `nish_arena_release` rather than rewinding `off`. Kept, 2000 passes are
+  // about 160 MB; released, the peak at 2000 is the peak at 20. The bound is a
+  // ratio rather than a size, so the runtime's own footprint can move freely.
+  if (has("clang")) {
+    const chunk = compile("mem_loop_scope_chunk", "mem_loop_scope_chunk_rss.ll");
+    const exe = path.join(buildDir, "mem_loop_scope_chunk");
+    const rssExe = path.join(buildDir, "rss");
+    const cc = chunk.status === 0 ? linkNative(exe, path.join(buildDir, "mem_loop_scope_chunk_rss.ll")) : chunk;
+    const rc = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" });
+    const peak = (rounds) => {
+      const r = spawnSync(rssExe, [exe, String(rounds)], { encoding: "utf8" });
+      return r.status === 0 ? Number(r.stdout.trim()) : -1;
+    };
+    const few = cc.status === 0 && rc.status === 0 ? peak(20) : -1;
+    const many = cc.status === 0 && rc.status === 0 ? peak(2000) : -1;
+    check(
+      "mem_loop_scope: a pass that pushes an arena chunk frees it, so 2000 passes peak where 20 do",
+      few > 0 && many > 0 && many < few * 2,
+      `peak at 20 passes: ${few}, at 2000: ${many}\n${cc.stderr}${rc.stderr}`
+    );
+  } else {
+    skip("mem_loop_scope: the peak resident set run needs clang");
+  }
+
   // Only the length converts to a length: the conversion of anything else
   // leaves the check, and the warning, where they were.
   const toI32Loop = compile("perf_bounds_toi32_loop", "perf_bounds_toi32_loop_report.ll");

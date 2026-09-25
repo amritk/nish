@@ -82,39 +82,60 @@ for.cond:
   br i1 %21, label %for.body, label %for.end
 
 for.body:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = sext i32 %22 to i64
-  %24 = bitcast i8* %18 to i32*
-  %25 = getelementptr inbounds i32, i32* %24, i64 %23
-  %26 = load i32, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !8
-  %27 = call i8* @nish_str_from_i32(i32 %26)
-  call void @nish_print(i8* %27)
+  %22 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %23 = load i8*, i8** %22, align 8
+  %24 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %25 = load i64, i64* %24, align 8
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = sext i32 %26 to i64
+  %28 = bitcast i8* %18 to i32*
+  %29 = getelementptr inbounds i32, i32* %28, i64 %27
+  %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %31 = call i8* @nish_str_from_i32(i32 %30)
+  call void @nish_print(i8* %31)
+  %32 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %33 = load i8*, i8** %32, align 8
+  %34 = icmp eq i8* %33, %23
+  br i1 %34, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %35 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %25, i64* %35, align 8
+  br label %pass.done
+
+pass.free:
+  %36 = ptrtoint i8* %23 to i64
+  %37 = add i64 %36, %25
+  call void @nish_arena_release(i64 %37)
+  br label %pass.done
+
+pass.done:
   br label %for.inc
 
 for.inc:
-  %28 = load i32, i32* %i.addr, align 4
-  %29 = add nsw i32 %28, 1
-  store i32 %29, i32* %i.addr, align 4
+  %38 = load i32, i32* %i.addr, align 4
+  %39 = add nsw i32 %38, 1
+  store i32 %39, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 2, i64* %30, align 8, !alias.scope !3, !noalias !4
-  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 2, i64* %31, align 8, !alias.scope !3, !noalias !4
-  %32 = bitcast [2 x i1]* %arr.data to i8*
-  call void @llvm.memset.p0i8.i64(i8* align 8 %32, i8 0, i64 2, i1 false), !alias.scope !4, !noalias !3
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* %32, i8** %33, align 8, !alias.scope !3, !noalias !4
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %40, align 8, !alias.scope !3, !noalias !4
+  %41 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %41, align 8, !alias.scope !3, !noalias !4
+  %42 = bitcast [2 x i1]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %42, i8 0, i64 2, i1 false), !alias.scope !4, !noalias !3
+  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %42, i8** %43, align 8, !alias.scope !3, !noalias !4
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %flags.addr, align 8
-  %34 = load %struct.nish_array*, %struct.nish_array** %flags.addr, align 8
-  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 2
-  %36 = load i8*, i8** %35, align 8, !alias.scope !3, !noalias !4
-  %37 = bitcast i8* %36 to i1*
-  %38 = getelementptr inbounds i1, i1* %37, i64 0
-  %39 = load i1, i1* %38, align 1, !alias.scope !4, !noalias !3, !tbaa !10
-  %40 = select i1 %39, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @nish_print(i8* %40)
+  %44 = load %struct.nish_array*, %struct.nish_array** %flags.addr, align 8
+  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2
+  %46 = load i8*, i8** %45, align 8, !alias.scope !3, !noalias !4
+  %47 = bitcast i8* %46 to i1*
+  %48 = getelementptr inbounds i1, i1* %47, i64 0
+  %49 = load i1, i1* %48, align 1, !alias.scope !4, !noalias !3, !tbaa !10
+  %50 = select i1 %49, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %50)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
