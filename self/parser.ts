@@ -1182,21 +1182,25 @@ export class Parser {
   /**
    * Whether the `(` about to be read opens a function type's parameter list,
    * `(x: i32) => i32`, rather than a parenthesised type, `(T | null)[]`. The
-   * two share their first token, so a scratch lexer runs to the parenthesis
-   * that closes this one and looks at what follows, exactly as
-   * `startsArrowDeclaration` does: only a function type puts `=>` there.
+   * two share their first token, so a scratch lexer looks at the next ones the
+   * way the `typescript` parser does (`isUnambiguouslyStartOfFunctionType`): an
+   * empty list, or a name followed by what only a parameter puts after one —
+   * `:`, `,`, `?`, `=`, or `)` and then `=>`. Looking for `=>` after the
+   * closing parenthesis alone would misread an arrow's parenthesised return
+   * type, `(x: T): (T | null) => x`, where the `=>` is the arrow's own.
    */
   startsFunctionType(): boolean {
     const scan = new Lexer(this.file.text);
     scan.pos = this.start;
     scan.next(); // `(`
-    let depth = 1;
-    while (depth > 0) {
-      scan.next();
-      if (scan.kind === TOK_END) return false;
-      if (scan.kind === TOK_LPAREN) depth = depth + 1;
-      else if (scan.kind === TOK_RPAREN) depth = depth - 1;
+    scan.next();
+    if (scan.kind === TOK_RPAREN) return true;
+    if (scan.kind !== TOK_IDENT && scan.kind !== TOK_THIS) return false;
+    scan.next();
+    if (scan.kind === TOK_COLON || scan.kind === TOK_COMMA || scan.kind === TOK_QUESTION || scan.kind === TOK_ASSIGN) {
+      return true;
     }
+    if (scan.kind !== TOK_RPAREN) return false;
     scan.next();
     return scan.kind === TOK_ARROW;
   }

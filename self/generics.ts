@@ -2460,6 +2460,28 @@ const originOfGenericCall = (ctx: CheckContext, call: Node, template: TemplateIn
   return new TypeOrigin(template.decl.children[2], chainParameters(template), args);
 };
 
+/**
+ * The return annotation of the function type of the parameter `name` of the
+ * instantiation whose body is being checked, or `null` when `name` is not one
+ * of its function parameters (WP29).
+ */
+const functionParameterReturn = (ctx: CheckContext, name: string): Node | null => {
+  if (ctx.functionBindings.get(name) === null) {
+    return null;
+  }
+  const instance = ctx.currentInstance;
+  const template: TemplateInfo | null = instance === null ? null : instance.template;
+  if (template === null) {
+    return null;
+  }
+  for (const param of template.decl.children[1].children) {
+    if (isFunctionParameter(param) && param.children[0].text === name) {
+      return unwrapTypeParens(param.children[1]).children[1];
+    }
+  }
+  return null;
+};
+
 /** An array literal's origin: the literal, standing for its first element that came from somewhere. */
 const originOfArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
   for (const element of expr.children) {
@@ -2532,6 +2554,13 @@ export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigi
         return originOfMember(ctx, callee.children[0], callee.text, true, scope);
       }
       if (callee.kind === N_IDENT && scope.lookup(callee.text) === null) {
+        // WP29: a call through a function parameter answers what its function
+        // type says it does, as the template wrote it: `f(x)` with
+        // `f: (a: T) => T` is a `T`, whatever the callee's declared type is.
+        const returns = functionParameterReturn(ctx, callee.text);
+        if (returns !== null) {
+          return new TypeOrigin(returns, [], []);
+        }
         const template = ctx.program.template(callee.text);
         if (template !== null) {
           return originOfGenericCall(ctx, expr, template, scope);

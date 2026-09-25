@@ -883,6 +883,12 @@ const DECLARED = [
     changelog: "Compile-time function parameters, monomorphised per callee",
     why: "the cookbook snippet for a lifted arrow argument, which the reference compiler refuses to parse",
   },
+  {
+    program: "tests/cases/fnarg_loop_hoist.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "a new program: an arrow argument written inside a loop whose headers are hoisted, which the reference compiler refuses to parse",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

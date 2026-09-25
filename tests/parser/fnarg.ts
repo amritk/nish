@@ -15,6 +15,11 @@ function twice(x: number): number {
   return x * 2;
 }
 
+// A parenthesised return type followed by the arrow's own `=>`, which is not
+// a function type: the name in it is followed by `|`, not by what a parameter
+// is followed by.
+const orNull = (s: string): (string | null) => s;
+
 function shapes(c: boolean, a: number, b: number): number {
   let x = apply(twice, a);
   x = apply((y) => y + 1, x);

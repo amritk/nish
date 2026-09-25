@@ -40,6 +40,7 @@ import {
 import { arrayMethodName, isAssignmentOperator, unwrapParens } from "./emit_util";
 import { internalErrorFor } from "./ice";
 import {
+  N_ARROW,
   N_BINARY,
   N_CALL,
   N_IDENT,
@@ -415,6 +416,11 @@ const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean,
  * loop reads is hoisted by the inner loop's own scope.
  */
 const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
+  // WP29: an arrow argument's body is a function of its own, whose parameters
+  // do not exist in this one, so nothing it reads can be hoisted here.
+  if (node.kind === N_ARROW) {
+    return;
+  }
   if (node.kind === N_INDEX) {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never

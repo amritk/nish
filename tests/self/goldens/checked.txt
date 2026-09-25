@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 499 programs, 9877 dump lines.
+# 500 programs, 9903 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3779,6 +3779,29 @@ function countWhere<string, isLong>(pred: void, xs: string[]): i32 -> @countWher
   local 23:7 n: i32 (let)
   local 24:14 x: string (const)
   callee 25:9 isLong -> @isLong
+program tests/cases/fnarg_loop_hoist.ts
+module tests/cases/fnarg_loop_hoist.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_str_from_i32 sumBy$arr.i32$fn.16.nish_main$arrow0
+  stackSites=1 stackLocals=1
+  local 14:9 rows: i32[][] (const)
+  local 15:7 t: i32 (let)
+  local 16:12 i: i32 (let)
+  callee 17:13 sumBy<i32[], (r) => ...> -> @sumBy$arr.i32$fn.16.nish_main$arrow0
+function (r) => ...(r: i32[]): i32 -> @nish_main$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  pointer r: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sumBy<i32[], (r) => ...>(xs: i32[][], f: void): i32 -> @sumBy$arr.i32$fn.16.nish_main$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_main$arrow0
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 6:7 s: i32 (let)
+  local 7:14 x: i32[] (const)
+  callee 8:13 (r) => ... -> @nish_main$arrow0
 program tests/cases/fnarg_named.ts
 module tests/cases/fnarg_named.ts (entry)
 function square(x: i32): i32 -> @square
@@ -8681,20 +8704,24 @@ module tests/parser/fnarg.ts (entry)
 function twice(x: i32): i32 -> @twice
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
+function orNull(s: string): string | null -> @orNull
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: s
+  stackSites=0 stackLocals=0
 function shapes(c: boolean, a: i32, b: i32): i32 -> @shapes
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   escaping: a b
   calls: apply$fn.13.shapes$arrow0 apply$fn.13.shapes$arrow1 apply$fn.13.shapes$arrow2 apply$fn.13.shapes$arrow3 apply$fn.5.twice nish_arena_mark nish_arena_release nish_array_grow pair$fn.13.shapes$arrow4
   stackSites=1 stackLocals=1
-  local 19:7 x: i32 (let)
-  callee 19:11 apply<twice> -> @apply$fn.5.twice
-  callee 20:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow0
-  callee 21:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow1
-  callee 22:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow2
-  callee 23:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow3
-  local 24:11 z: i32 (const)
-  local 29:9 names: string | null[] (const)
-  callee 31:14 pair<(p, q) => ...> -> @pair$fn.13.shapes$arrow4
+  local 24:7 x: i32 (let)
+  callee 24:11 apply<twice> -> @apply$fn.5.twice
+  callee 25:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow0
+  callee 26:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow1
+  callee 27:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow2
+  callee 28:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow3
+  local 29:11 z: i32 (const)
+  local 34:9 names: string | null[] (const)
+  callee 36:14 pair<(p, q) => ...> -> @pair$fn.13.shapes$arrow4
 function (y) => ...(y: i32): i32 -> @shapes$arrow0
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -8707,7 +8734,7 @@ function (y) => ...(y: i32): i32 -> @shapes$arrow2
 function (y) => ...(y: i32): i32 -> @shapes$arrow3
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
-  local 24:11 z: i32 (const)
+  local 29:11 z: i32 (const)
 function (p, q) => ...(p: i32, q: i32): i32 -> @shapes$arrow4
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
