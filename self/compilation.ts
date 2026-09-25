@@ -46,6 +46,7 @@
 // use, and `self/compile.ts` writes them. There is no `mkdir` here (D4).
 
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes";
+import { arenaLoopFindings } from "./escape";
 import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
@@ -828,7 +829,28 @@ export class Compilation {
       }
     }
     this.rejectInstantiatedStructClashes();
-    return !this.sink.hasErrors();
+    if (this.sink.hasErrors()) {
+      return false;
+    }
+    this.reportArenaLoops();
+    return true;
+  }
+
+  /**
+   * The one performance warning that needs the whole-program facts: a loop
+   * over a call that leaves arena memory behind, in a function that gets no
+   * automatic scope (`arenaLoopFindings`, escape.ts). It is reported here, at
+   * the end of checking, so that it reaches the report with every other
+   * warning, which the driver prints before it emits anything. The analysis is
+   * the one `emit` runs, memoised by `analyze`, so it is not paid twice.
+   */
+  reportArenaLoops(): void {
+    const facts = this.analyze();
+    for (const unit of this.analysisUnits) {
+      for (const finding of arenaLoopFindings(unit, facts)) {
+        this.sink.reportPerformance(unit.program.source, finding.node.start, finding.node.end, finding.message);
+      }
+    }
   }
 
   /**

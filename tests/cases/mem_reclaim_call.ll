@@ -3,6 +3,7 @@
 
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
@@ -51,10 +52,12 @@ for.end:
 
 define noundef i32 @nish_main() #0 {
 entry:
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i64 @nish_arena_mark()
   %1 = call i8* @join(i32 4)
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   call void @nish_print(i8* %2)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

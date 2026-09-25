@@ -55,6 +55,13 @@ cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
+cases/mem_callee_scope added after R6: no rewriter to freeze it with
+cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
+cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with
+cases/mem_callee_scope_nested added after R6: no rewriter to freeze it with
+cases/mem_callee_scope_return added after R6: no rewriter to freeze it with
+cases/mem_callee_scope_tree added after R6: no rewriter to freeze it with
+cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with

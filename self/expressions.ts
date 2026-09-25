@@ -1137,15 +1137,24 @@ const checkDirectCall = (ctx: CheckContext, expr: Node, sig: FunctionSig, shown:
   if (args.children.length !== sig.paramTypes.length) {
     return ctx.errorType(expr, `\`${shown}\` expects ${sig.paramTypes.length} argument(s), got ${args.children.length}`);
   }
+  // The first mismatch is reported after the loop, because only the first is
+  // ever reported (`ctx.error`), and spelling the types inside the loop would
+  // allocate on every pass for a message nobody reads.
+  let bad = -1;
+  let badType = T_ERROR;
   let i = 0;
-  while (i < args.children.length) {
-    const arg = args.children[i];
-    const got = checkExpression(ctx, arg, scope, sig.paramTypes[i]);
-    if (got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
-      const want = ctx.table.typeName(sig.paramTypes[i]);
-      ctx.error(arg, `Argument ${i + 1} of \`${shown}\`: expected ${want}, got ${ctx.table.typeName(got)}`);
+  while (i < args.children.length && i < sig.paramTypes.length) {
+    const want = sig.paramTypes[i];
+    const got = checkExpression(ctx, args.children[i], scope, want);
+    if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, want)) {
+      bad = i;
+      badType = got;
     }
     i = i + 1;
+  }
+  if (bad >= 0 && bad < args.children.length && bad < sig.paramTypes.length) {
+    const want = ctx.table.typeName(sig.paramTypes[bad]);
+    ctx.error(args.children[bad], `Argument ${bad + 1} of \`${shown}\`: expected ${want}, got ${ctx.table.typeName(badType)}`);
   }
   ctx.program.nodeCallees[expr.id] = sig;
   return sig.returnType;
