@@ -970,6 +970,27 @@ and their `.ll` goldens are byte-identical files.
   `export * from`, and `export =` are rejected
   (`Only functions can be exported`; `` `export default` is not supported ``,
   `tests/cases/reject_export_default`).
+- **What `export` promises depends on the build.** In every build it makes a
+  declaration importable by another module of the program. A build whose
+  output something else links or loads — `-o` alone (IR for a C host to link),
+  `--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`,
+  `--profile wasi` or a wasm `--target` — also makes an exported function, and
+  every method of an exported class, callable by that host with any arguments,
+  so the compiler assumes nothing about them from the program's own calls
+  (`tests/cases/arr_range_call_exported`, where a C host's `pick(7)` panics).
+  A **`--link` build with none of those flags and no `declare function`** is
+  its own final link: the executable holds the program's modules and the
+  runtime and nothing else, so every call to an exported function is one the
+  compiler sees, and it may, for example, prove an exported method's index in
+  range from what every caller passes (`tests/link/range_export`, AWFY Permute
+  as an exported class, whose `swap` carries no bounds check;
+  `tests/link/range_export_unproven`, where one caller proves nothing, so the
+  check stays and panics). The `.ll` such a build writes beside the executable
+  is that executable's, not an object for another link; build with `-o` alone,
+  or with a sidecar, to hand a host the program. `main` is the one exception:
+  the runtime calls it, and it is never assumed anything about. The rule is
+  `hostVisible` in `self/visibility.ts`, and `docs/ARCHITECTURE.md` (the
+  call-site ranges row of the attribute soundness rules) is why it is sound.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -2648,14 +2669,17 @@ length, a relation only where every site states it
 fixpoint, so `permute(n)` calling `permute(n - 1)` under `if (n !== 0)` keeps
 `n <= 6` and a recursion that grows its index keeps nothing
 (`arr_range_call_grow`). Inside the function the facts end by the rules above
-(`arr_range_call_rebind_callee`). **Not entered with anything:** an exported
+(`arr_range_call_rebind_callee`). **Not entered with anything:** `main`; an exported
 function or a method of an exported class, since a host may call it with
-anything (`arr_range_call_exported`), a `hidden` one, a constructor, a
-lifted arrow, a function taking a compile-time function, and any function
-called from an arrow or from an instantiation's body
+anything (`arr_range_call_exported`) — unless the build is a closed-world
+`--link`, where `export` means only "importable" (see
+[`export` and `import`](#export-and-import): `tests/link/range_export`, and
+`range_export_unproven` for a caller that proves nothing); a `hidden` one, a
+constructor, a lifted arrow, a function taking a compile-time function, and
+any function called from an arrow or from an instantiation's body
 (`arr_range_call_arrow`, `arr_range_call_generic`). AWFY Permute with its
 class not exported is proved throughout: `swap` carries no check
-(`arr_range_call`). `--unchecked-indexing` skips the pass, and its output
+(`arr_range_call`), and with it exported the same holds in a `--link` build. `--unchecked-indexing` skips the pass, and its output
 is byte for byte what it was.
 
 A generic's instantiations are proved one at a time, each against its own

@@ -3,7 +3,7 @@
   "tolerance": 0.001,
   "platform": "linux-x64",
   "valgrind": "valgrind-3.22.0",
-  "commit": "9047797",
+  "commit": "60c1213",
   "programs": {
     "fib": { "n": 35, "instructions": 328600033 },
     "nbody": { "n": 600000, "instructions": 340936265 },
@@ -16,7 +16,7 @@
     "map_proto_ordered_fp": { "n": 16384, "instructions": 225666014 },
     "map_proto_ordered_fp32": { "n": 16384, "instructions": 237755219 },
     "map_proto_unordered": { "n": 16384, "instructions": 206997262 },
-    "Permute": { "inner": 1000, "instructions": 286429789 },
+    "Permute": { "inner": 1000, "instructions": 164701789 },
     "Queens": { "inner": 1000, "instructions": 229686492 },
     "Towers": { "inner": 600, "instructions": 233554787 },
     "List": { "inner": 1500, "instructions": 298271729 },

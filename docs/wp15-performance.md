@@ -319,10 +319,14 @@ still end them.
     `u32` is not below anything.
 
 *Who takes entry facts.* Only a function every call to which the pass can
-see: not an exported function or a method of an exported class, whose symbol
-a C, wasm or N-API host can call with anything; not a `hidden` one, a
-constructor, an instantiation, a lifted arrow or a function taking a
-compile-time function. Calls made from where the walk keeps no state — an
+see, which `hostVisible` in `self/visibility.ts` decides from the build: not
+the entry point, which the runtime calls; not an exported function or a method
+of an exported class *unless the build is closed* — `--link`, a native profile
+and triple, no sidecar and no `declare function`, so that the executable is
+the whole of the program and every call to an export is one of its imports —
+and otherwise never, because a C, wasm or N-API host can call its symbol with
+anything; not a `hidden` one, a constructor, an instantiation, a lifted arrow
+or a function taking a compile-time function. Calls made from where the walk keeps no state — an
 instantiation's body, an arrow's, code after a `return` — are found by scanning
 every call in the program rather than by trusting the walk to have seen them,
 and leave their callee entered knowing nothing. Only a candidate that has an
@@ -353,13 +357,15 @@ loop's `i` runs from `n1` down to `0` with `n1 < 6`. `permute` stores only
 `count` and `swap` stores no field, so `this.v.length >= 6` survives every
 call, and `swap` is entered with `i, j` in `[0, 6)` and the length: its four
 accesses are proven, and `tests/cases/arr_range_call` has no check in it.
-**The port in `bench/awfy/permute.ts` keeps both checks**, and soundly:
-`export class Permute` makes `Permute.swap` an external symbol that
-`--emit-header` declares as `Permute_swap(Permute*, int32_t, int32_t)`, and
-a host that calls it with `(p, 100, 0)` must meet a panic. Proving it would
-need a second, internal copy of `swap` for the calls the compiler can see,
-which is a change to the emitter and a larger one than this. After `opt -O3`
-AWFY Permute carries the same two panics in `swap` as before.
+**The port in `bench/awfy/permute.ts` is an exported class**, so the proof
+there depends on the build. `bench/run.mjs` builds the harness with `--link
+--profile speed` and nothing else, a closed world, and `Permute.swap` goes
+from two panics to none after `opt -O3` (`tests/link/range_export` pins the
+same shape across two modules). Built with `--emit-header` it keeps both, and
+soundly: the header declares `Permute_swap(Permute*, int32_t, int32_t)`, and a
+host that calls it with `(p, 100, 0)` must meet a panic
+(`tests/link/range_export_header` and its siblings, one per host-facing
+mode).
 
 *What it bought.* Towers executes 5.6% fewer instructions and Storage 3.3%
 fewer (cachegrind, one pass at 50 inner iterations); the other five AWFY

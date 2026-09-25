@@ -2279,6 +2279,119 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
   }
 }
 
+// WP15 §2.4, the build-mode rule (`hostVisible` in `self/visibility.ts`). A
+// `--link` build with no sidecar, no wasm and no C function declared is its own
+// final link, so an exported function takes the facts its call sites prove:
+// `tests/link/range_export` is AWFY Permute as an exported class, and its
+// `Permute.swap` carries no check. Every host-facing mode builds the same class
+// and keeps both checks. The `tests/link/` loop above has already built and run
+// the modes that link natively; the wasm and IR-only modes are built here, and
+// their IR is read whether or not a link was possible.
+if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
+  const swapChecks = (file) =>
+    fs.existsSync(file) ? panicCount(fs.readFileSync(file, "utf8"), "Permute\\.swap") : -1;
+  for (const [name, count, mode] of [
+    ["range_export", 0, "`--link`, closed world"],
+    ["range_export_header", 2, "`--emit-header`"],
+    ["range_export_napi", 2, "`--emit-napi`"],
+    ["range_export_napi_async", 2, "`--emit-napi-async`"],
+    ["range_export_dts", 2, "`--emit-dts`"],
+    ["range_export_foreign", 2, "a `declare function`"],
+  ]) {
+    const ll = path.join(buildDir, "link", name, "permute.ll");
+    if (!fs.existsSync(ll)) continue;
+    const got = swapChecks(ll);
+    check(
+      `link/${name}: ${mode} leaves \`Permute.swap\` ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    );
+  }
+  // Closed is not a licence: `pick`'s two call sites, in another module, are
+  // joined, one proves nothing, and the link loop has seen the second panic.
+  const unproven = path.join(buildDir, "link", "range_export_unproven", "pick.ll");
+  if (fs.existsSync(unproven)) {
+    const got = panicCount(fs.readFileSync(unproven, "utf8"), "pick");
+    check(
+      "link/range_export_unproven: a call site that proves nothing leaves `pick` 1 bounds check",
+      got === 1,
+      `found ${got}`
+    );
+  }
+  const entry = path.join(linkDir, "range_export", "main.ts");
+  const built = (name, args) => {
+    const dir = path.join(buildDir, "range_export_modes", name);
+    fs.rmSync(dir, { recursive: true, force: true });
+    const r = spawnSync(NISH, [entry, "-o", `${dir}${path.sep}`, ...args], { cwd: root, encoding: "utf8" });
+    return { dir, status: r.status, stderr: r.stderr, checks: swapChecks(path.join(dir, "permute.ll")) };
+  };
+  // IR only: a host links the modules. Linked here with the runtime alone, the
+  // program still runs as the executable does.
+  const irOnly = built("ir_only", []);
+  check(
+    "range_export: `-o` without `--link` leaves `Permute.swap` 2 bounds checks",
+    irOnly.checks === 2,
+    `found ${irOnly.checks}\n${irOnly.stderr}`
+  );
+  if (has("clang") && irOnly.status === 0) {
+    const exe = path.join(irOnly.dir, "app");
+    const lls = fs
+      .readdirSync(irOnly.dir)
+      .filter((f) => f.endsWith(".ll"))
+      .map((f) => path.join(irOnly.dir, f));
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ...lls, ...RUNTIME_C, "-lm", "-o", exe], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const run = cc.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : null;
+    check(
+      "range_export: the IR-only build, linked by hand, prints `true` and 8660",
+      run !== null && run.status === 0 && run.stdout === "true\n8660\n",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : cc.stderr
+    );
+  }
+  // wasm: a host instantiates the module and calls its exports. The link needs
+  // a WASI sysroot, and the IR is written before it is attempted.
+  const wasi = built("wasi", [
+    "--link",
+    path.join(buildDir, "range_export_modes", "wasi.wasm"),
+    "--profile",
+    "wasi",
+  ]);
+  check(
+    "range_export: `--profile wasi` leaves `Permute.swap` 2 bounds checks",
+    wasi.checks === 2,
+    `found ${wasi.checks}\n${wasi.stderr}`
+  );
+  const wasm = path.join(buildDir, "range_export_modes", "wasi.wasm");
+  if (wasi.status === 0 && fs.existsSync(wasm)) {
+    const run = spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      "range_export: the `--profile wasi` module prints `true` and 8660 under Node's WASI",
+      run.status === 0 && run.stdout === "true\n8660\n",
+      `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+    );
+  } else {
+    skip("skipped: range_export: `--profile wasi` did not link (no WASI sysroot), so its module is not run");
+  }
+  // The same with a wasm triple and the default profile: whatever the link
+  // makes of it, the IR was written for a wasm host.
+  const target = built("wasm_target", [
+    "--link",
+    path.join(buildDir, "range_export_modes", "wasm_target.app"),
+    "--target",
+    "wasm32-unknown-unknown",
+  ]);
+  check(
+    "range_export: `--target wasm32-unknown-unknown` leaves `Permute.swap` 2 bounds checks",
+    target.checks === 2,
+    `found ${target.checks}\n${target.stderr}`
+  );
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.

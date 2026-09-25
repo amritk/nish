@@ -23,8 +23,14 @@
 // `this.v.length >= 6`, `i < this.v.length`. A function takes them only when
 // every call to it is one this pass can see, which rules out:
 //
-//   - an exported function or a method of an exported class, and a `hidden`
-//     one: a C, wasm or N-API host may call it with anything (`visibleOutside`);
+//   - a function a host can call with anything (`hostVisible` in
+//     `self/visibility.ts`): the entry point, which the runtime calls, and —
+//     unless the build is its own final link, with no sidecar, no wasm and no
+//     C function declared — an exported function or a method of an exported
+//     class, which a C, wasm or N-API host may call. In such a closed-world
+//     build `export` only means "importable", every call to an exported
+//     function is in the program, and it takes entry facts like any other;
+//   - a `hidden` function, which another module's instantiation calls;
 //   - a constructor, an instantiation, a lifted arrow and a function taking a
 //     compile-time function, whose calls are made from an instantiation's
 //     body, which has side tables of its own;
@@ -95,6 +101,7 @@ import { CheckContext } from "./context";
 import { Diagnostic } from "./diagnostics";
 import { N_BINARY, N_CALL, N_INDEX, N_MEMBER, N_NEW, N_UNARY, Node } from "./nodes";
 import { CheckedProgram, FunctionSig, Instantiation, ROLE_CONSTRUCTOR } from "./program";
+import { BuildMode, hostVisible } from "./visibility";
 
 /**
  * How many rounds the entry fixpoint may take before it gives up and proves
@@ -152,8 +159,12 @@ class RangeBody {
  * Whether every call to `sig` is one the pass can see: the rules in the
  * header, less the last, which is found by scanning.
  */
-const takesEntryFacts = (sig: FunctionSig): boolean =>
-  !sig.visibleOutside() && sig.role !== ROLE_CONSTRUCTOR && sig.compileTime.length === 0 && !sig.foreign();
+const takesEntryFacts = (sig: FunctionSig, mode: BuildMode, isEntry: boolean): boolean =>
+  !hostVisible(mode, sig.exported, isEntry) &&
+  !sig.hidden &&
+  sig.role !== ROLE_CONSTRUCTOR &&
+  sig.compileTime.length === 0 &&
+  !sig.foreign();
 
 /** The walked body `sig` is, or `null` for one with no body here. */
 const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): RangeBody | null => {
@@ -166,7 +177,7 @@ const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): Ran
  * Runs after pass 3, so every body — every instantiation's included — has its
  * side tables, and before the attribute analysis, which reads the proofs.
  */
-export const proveCallSiteRanges = (contexts: CheckContext[]): void => {
+export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode): void => {
   if (contexts.length === 0 || contexts[0].uncheckedIndexing) {
     return;
   }
@@ -187,7 +198,8 @@ export const proveCallSiteRanges = (contexts: CheckContext[]): void => {
         hidden.push(new RangeBody(ctx, sig, body, sig.instance));
       } else if (!sig.lifted) {
         const walked = new RangeBody(ctx, sig, body, null);
-        walked.candidate = takesEntryFacts(sig);
+        const entryMain = program.entryMain;
+        walked.candidate = takesEntryFacts(sig, mode, entryMain !== null && entryMain === sig);
         tables.add(sig, walked.candidate);
         bodies.push(walked);
       }

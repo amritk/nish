@@ -105,6 +105,7 @@ import { splitByte } from "./strings";
 import { TypeTable } from "./types";
 import { columnOf, lineOf } from "./lexer";
 import { validate } from "./validator";
+import { buildModeOf } from "./visibility";
 import { CheckContext, NUMBER_MODE_F64 } from "./context";
 
 const SLASH: i32 = 47;
@@ -863,11 +864,14 @@ export class Compilation {
     // WP15 §2.4: what every call site proves for its callee's parameters. It
     // needs every body checked, instantiations included, and the attribute
     // analysis below reads the proofs it adds.
+    // Which of them a host may also call is the build's to say (`hostVisible`).
     const contexts: CheckContext[] = [];
+    const programs: CheckedProgram[] = [];
     for (const unit of this.modules) {
       contexts.push(unit.checker.ctx);
+      programs.push(unit.checker.program);
     }
-    proveCallSiteRanges(contexts);
+    proveCallSiteRanges(contexts, buildModeOf(this.opts, programs));
     this.reportArenaLoops();
     this.checkParallel();
     return !this.sink.hasErrors();
