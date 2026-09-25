@@ -120,26 +120,27 @@ const structDefinitions = (compilation: Compilation): string[] => {
   let i = 0;
   while (i < structs.length) {
     const info = structs[i];
+    const file = files[i];
     const ifaces = info.implementsNames.length > 0 ? ` implements ${info.implementsNames.join(", ")}` : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
+    const cName = cStructName(info.name);
     lines.push("");
     // WP32 (docs/wp32-map.md §8): a `Map` or `Set` is opaque. A C host may hold
     // one it was given and hand it back, and nothing more: its fields are the
     // library's private layout, which is free to change.
     if (isCollectionStruct(info)) {
-      const opaque = cStructName(info.name);
-      lines.push(`/* ${table.typeName(info.type)}: opaque; hold it and pass it back, its layout is not part of the ABI */`);
-      lines.push(`typedef struct ${opaque} ${opaque};`);
+      lines.push(`/* ${file}: ${kind} ${info.name}, opaque: hold it and pass it back; its layout is not part of the ABI */`);
+      lines.push(`typedef struct ${cName} ${cName};`);
       i = i + 1;
       continue;
     }
-    lines.push(`/* ${files[i]}: ${kind} ${info.name}${ifaces} */`);
+    lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`);
     if (info.fields.length === 0) {
-      lines.push(`/* struct ${cStructName(info.name)} has no fields; it stays incomplete (pointers only). */`);
+      lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`);
       i = i + 1;
       continue;
     }
-    lines.push(`struct ${cStructName(info.name)} {`);
+    lines.push(`struct ${cName} {`);
     for (const f of info.fields) {
       const t = cFieldType(table, f.type);
       // A C keyword as a field name gets the same `_` suffix as a parameter.
