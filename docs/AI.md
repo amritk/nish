@@ -689,10 +689,15 @@ export const main = (): i32 => {
 };
 ```
 
-- **`f` writes nothing its caller can see and allocates nothing.** No field or
-  element store through its argument, no `console.log`, no string, array or
-  object built — each is refused at the call, naming the write. Reading is
-  fine; so are a bounds check, an integer division and `panic`.
+- **`f` writes nothing its caller can see.** No field or element store
+  through its argument and no `console.log` — each is refused at the call,
+  naming the write. Reading is fine; so are a bounds check, an integer
+  division and `panic`.
+- **What `f` allocates is freed after every element.** A string, array or
+  object built on the way to the result compiles, with performance warning
+  NL9012: each element pays for building it and for the release. Storing an
+  allocation into another object (NL2352) and touching `Arena` (NL2351) are
+  refused, because either would make that release unsound.
 - **The result is a number, a `boolean` or an enum.** A string or an object
   made on another thread would be freed with it.
 - **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
@@ -701,8 +706,10 @@ export const main = (): i32 => {
   `+`, `1` for `*`. The array is folded in fixed blocks and the blocks combined
   in order, so `-` or a wrong identity is refused when `f` is an arrow of one
   operator; a named function is trusted.
-- A short array (up to 2^20 elements for a map) runs on the calling thread
-  at the cost of the loop, so there is no reason to guard a call by size.
+- A short array runs on the calling thread at the cost of the loop, so there
+  is no reason to guard a call by size. How short is sized from what `f`
+  costs: a cheap body is divided only past about a million elements, one with
+  a loop far sooner.
 
 ```ts nish:err NL2350
 import { parallelReduce } from "nish/threads";

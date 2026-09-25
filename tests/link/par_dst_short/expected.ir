@@ -1,2 +1,2 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
-call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0$chunk, i8* %20, i64 %21, i64 1048576)
+call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0$chunk, i8* %16, i64 %17, i64 1398101)
