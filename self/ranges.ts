@@ -63,10 +63,15 @@
 // a whole-record store that reaches it, and a call whose summary says either.
 //
 // `--unchecked-indexing` has no check to remove, so the pass does not run and
-// the output is what it was. `--threads` changes nothing here: nothing in the
-// language starts a thread, a call runs on its caller's, and a host thread
-// resizing an array a Nish function is using is a data race that breaks the
-// facts inside one body just as much as across a call.
+// the output is what it was. `--threads` changes nothing here. The one thing
+// in the language that runs code on other threads is a `nish/threads` region
+// (`self/parallel.ts`): its body is called from an instantiation, so it is
+// entered knowing nothing; it is held to writing nothing its caller can see and
+// allocating nothing, so no worker resizes an array or rebinds a field while
+// another thread holds a fact about it; and its caller waits at the join. Any
+// other call runs on its caller's thread, and a host thread resizing an array
+// a Nish function is using is a data race that breaks the facts inside one
+// body just as much as across a call.
 
 import {
   BoundsWalk,

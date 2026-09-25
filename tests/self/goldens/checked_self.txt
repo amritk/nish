@@ -19877,14 +19877,14 @@ function RangeBody.constructor(this: RangeBody, ctx: CheckContext, sig: Function
   pointer body: size=40 writesThrough=true captured=true
   pointer instance: size=136 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 134:17 new StoreScan -> @StoreScan.constructor
+  callee 139:17 new StoreScan -> @StoreScan.constructor
 function takesEntryFacts(sig: FunctionSig): boolean -> @takesEntryFacts
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.foreign FunctionSig.visibleOutside
   pointer sig: size=104 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
-  callee 150:4 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside
-  callee 150:94 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 155:4 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside
+  callee 155:94 FunctionSig.foreign -> @FunctionSig.foreign
 function bodyOf(tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): RangeBody | null -> @bodyOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.get
@@ -19892,104 +19892,104 @@ function bodyOf(tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): Ran
   pointer bodies: size=0 writesThrough=false captured=false
   pointer sig: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 154:9 at: i32 (const)
-  callee 154:14 StringMap.get -> @StringMap.get
+  local 159:9 at: i32 (const)
+  callee 159:14 StringMap.get -> @StringMap.get
 function proveCallSiteRanges(contexts: CheckContext[]): void -> @proveCallSiteRanges [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 184:9
+  sharedWrite: 189:9
   calls: EntryFacts.isEmpty FunctionSig.body FunctionSig.definedIn RangeBody.constructor RangeTables.add RangeTables.constructor commitProofs forceCalls narrowCandidates nish_alloc_struct nish_array_grow nish_panic_index retractWarnings settleEntries summarise takesEntryFacts walkWithRanges
   pointer contexts: size=0 writesThrough=false captured=false
   stackSites=3 stackLocals=2
-  local 167:9 tables: RangeTables (const)
-  callee 167:18 new RangeTables -> @RangeTables.constructor
-  local 168:9 bodies: RangeBody[] (const)
-  local 169:9 hidden: RangeBody[] (const)
-  local 170:14 ctx: CheckContext (const)
-  local 171:11 program: CheckedProgram (const)
-  local 175:16 sig: FunctionSig (const)
-  local 176:13 body: Node | null (const)
-  callee 176:20 FunctionSig.body -> @FunctionSig.body
-  callee 177:29 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 181:21 new RangeBody -> @RangeBody.constructor
-  local 183:15 walked: RangeBody (const)
-  callee 183:24 new RangeBody -> @RangeBody.constructor
-  callee 184:28 takesEntryFacts -> @takesEntryFacts
-  callee 185:9 RangeTables.add -> @RangeTables.add
-  local 189:16 info: Instantiation (const)
-  local 190:13 body: Node | null (const)
-  callee 190:20 FunctionSig.body -> @FunctionSig.body
-  callee 192:21 new RangeBody -> @RangeBody.constructor
-  callee 196:3 summarise -> @summarise
-  callee 197:3 narrowCandidates -> @narrowCandidates
-  local 200:14 body: RangeBody (const)
-  local 201:11 instance: Instantiation | null (const)
-  callee 203:7 forceCalls -> @forceCalls
-  local 207:9 settled: boolean (const)
-  callee 207:19 settleEntries -> @settleEntries
-  local 215:14 body: RangeBody (const)
-  local 216:11 last: BoundsWalk | null (const)
-  callee 218:7 commitProofs -> @commitProofs
-  callee 219:7 retractWarnings -> @retractWarnings
-  local 222:11 entering: EntryFacts | null (const)
-  local 223:11 known: boolean (const)
-  callee 223:41 EntryFacts.isEmpty -> @EntryFacts.isEmpty
-  local 227:11 walk: BoundsWalk (const)
-  callee 227:18 walkWithRanges -> @walkWithRanges
-  callee 228:5 retractWarnings -> @retractWarnings
+  local 172:9 tables: RangeTables (const)
+  callee 172:18 new RangeTables -> @RangeTables.constructor
+  local 173:9 bodies: RangeBody[] (const)
+  local 174:9 hidden: RangeBody[] (const)
+  local 175:14 ctx: CheckContext (const)
+  local 176:11 program: CheckedProgram (const)
+  local 180:16 sig: FunctionSig (const)
+  local 181:13 body: Node | null (const)
+  callee 181:20 FunctionSig.body -> @FunctionSig.body
+  callee 182:29 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 186:21 new RangeBody -> @RangeBody.constructor
+  local 188:15 walked: RangeBody (const)
+  callee 188:24 new RangeBody -> @RangeBody.constructor
+  callee 189:28 takesEntryFacts -> @takesEntryFacts
+  callee 190:9 RangeTables.add -> @RangeTables.add
+  local 194:16 info: Instantiation (const)
+  local 195:13 body: Node | null (const)
+  callee 195:20 FunctionSig.body -> @FunctionSig.body
+  callee 197:21 new RangeBody -> @RangeBody.constructor
+  callee 201:3 summarise -> @summarise
+  callee 202:3 narrowCandidates -> @narrowCandidates
+  local 205:14 body: RangeBody (const)
+  local 206:11 instance: Instantiation | null (const)
+  callee 208:7 forceCalls -> @forceCalls
+  local 212:9 settled: boolean (const)
+  callee 212:19 settleEntries -> @settleEntries
+  local 220:14 body: RangeBody (const)
+  local 221:11 last: BoundsWalk | null (const)
+  callee 223:7 commitProofs -> @commitProofs
+  callee 224:7 retractWarnings -> @retractWarnings
+  local 227:11 entering: EntryFacts | null (const)
+  local 228:11 known: boolean (const)
+  callee 228:41 EntryFacts.isEmpty -> @EntryFacts.isEmpty
+  local 232:11 walk: BoundsWalk (const)
+  callee 232:18 walkWithRanges -> @walkWithRanges
+  callee 233:5 retractWarnings -> @retractWarnings
 function narrowCandidates(tables: RangeTables, bodies: RangeBody[]): void -> @narrowCandidates
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 259:7
+  sharedWrite: 264:7
   calls: RangeTables.dropCandidate callsUseful nish_arena_mark nish_arena_release nish_array_grow
   pointer tables: size=32 writesThrough=false captured=false passedTo=RangeTables.dropCandidate#0
   pointer bodies: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 240:9 useful: boolean[] (const)
-  local 241:14 body: RangeBody (const)
-  local 244:7 changed: boolean (let)
-  local 247:9 at: i32 (let)
-  local 248:16 body: RangeBody (const)
-  callee 249:66 callsUseful -> @callsUseful
-  local 256:7 at: i32 (let)
-  local 257:14 body: RangeBody (const)
-  callee 260:7 RangeTables.dropCandidate -> @RangeTables.dropCandidate
-  local 264:14 body: RangeBody (const)
-  callee 265:32 callsUseful -> @callsUseful
+  local 245:9 useful: boolean[] (const)
+  local 246:14 body: RangeBody (const)
+  local 249:7 changed: boolean (let)
+  local 252:9 at: i32 (let)
+  local 253:16 body: RangeBody (const)
+  callee 254:66 callsUseful -> @callsUseful
+  local 261:7 at: i32 (let)
+  local 262:14 body: RangeBody (const)
+  callee 265:7 RangeTables.dropCandidate -> @RangeTables.dropCandidate
+  local 269:14 body: RangeBody (const)
+  callee 270:32 callsUseful -> @callsUseful
 function callsUseful(scan: StoreScan, useful: boolean[]): boolean -> @callsUseful
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer scan: size=48 writesThrough=false captured=false
   pointer useful: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 270:14 callee: i32 (const)
+  local 275:14 callee: i32 (const)
 function settleEntries(tables: RangeTables, bodies: RangeBody[]): boolean -> @settleEntries
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 298:9
+  sharedWrite: 303:9
   calls: EntryFacts.constructor bodyOf forceUnseen joinEntryFacts nish_alloc_struct sameEntryFacts walkWithRanges
   pointer tables: size=32 writesThrough=true captured=true passedTo=walkWithRanges#3 bodyOf#0
   pointer bodies: size=0 writesThrough=true captured=false passedTo=forceUnseen#0 bodyOf#1
   stackSites=0 stackLocals=0
-  local 284:7 rounds: i32 (let)
-  local 285:7 changed: boolean (let)
-  local 292:16 body: RangeBody (const)
-  local 295:13 reached: boolean (const)
-  local 297:15 walk: BoundsWalk (const)
-  callee 297:22 walkWithRanges -> @walkWithRanges
-  callee 300:9 forceUnseen -> @forceUnseen
-  local 305:16 body: RangeBody (const)
-  local 306:13 sites: RangeSite[] | null (const)
-  local 310:18 site: RangeSite (const)
-  local 311:15 callee: RangeBody | null (const)
-  callee 311:24 bodyOf -> @bodyOf
-  local 313:17 joined: EntryFacts | null (const)
-  callee 314:58 joinEntryFacts -> @joinEntryFacts
-  local 318:16 body: RangeBody (const)
-  local 323:11 next: EntryFacts | null (let)
-  callee 325:16 new EntryFacts -> @EntryFacts.constructor
-  local 327:13 now: EntryFacts | null (const)
-  local 328:13 same: boolean (const)
-  callee 328:53 sameEntryFacts -> @sameEntryFacts
+  local 289:7 rounds: i32 (let)
+  local 290:7 changed: boolean (let)
+  local 297:16 body: RangeBody (const)
+  local 300:13 reached: boolean (const)
+  local 302:15 walk: BoundsWalk (const)
+  callee 302:22 walkWithRanges -> @walkWithRanges
+  callee 305:9 forceUnseen -> @forceUnseen
+  local 310:16 body: RangeBody (const)
+  local 311:13 sites: RangeSite[] | null (const)
+  local 315:18 site: RangeSite (const)
+  local 316:15 callee: RangeBody | null (const)
+  callee 316:24 bodyOf -> @bodyOf
+  local 318:17 joined: EntryFacts | null (const)
+  callee 319:58 joinEntryFacts -> @joinEntryFacts
+  local 323:16 body: RangeBody (const)
+  local 328:11 next: EntryFacts | null (let)
+  callee 330:16 new EntryFacts -> @EntryFacts.constructor
+  local 332:13 now: EntryFacts | null (const)
+  local 333:13 same: boolean (const)
+  callee 333:53 sameEntryFacts -> @sameEntryFacts
 function forceCalls(tables: RangeTables, bodies: RangeBody[], callees: FunctionSig | null[], node: Node, seen: RangeSite[]): void -> @forceCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 355:7
+  sharedWrite: 360:7
   calls: bodyOf forceCalls nish_panic_index sawCall
   pointer tables: size=32 writesThrough=false captured=false passedTo=bodyOf#0 forceCalls#0
   pointer bodies: size=0 writesThrough=false captured=false passedTo=bodyOf#1 forceCalls#1
@@ -19997,61 +19997,61 @@ function forceCalls(tables: RangeTables, bodies: RangeBody[], callees: FunctionS
   pointer node: size=40 writesThrough=false captured=false passedTo=sawCall#1
   pointer seen: size=0 writesThrough=false captured=false passedTo=sawCall#0 forceCalls#4
   stackSites=0 stackLocals=0
-  local 352:11 callee: FunctionSig | null (const)
-  local 353:11 target: RangeBody | null (const)
-  callee 353:63 bodyOf -> @bodyOf
-  callee 354:49 sawCall -> @sawCall
-  local 358:14 child: Node (const)
-  callee 359:5 forceCalls -> @forceCalls
+  local 357:11 callee: FunctionSig | null (const)
+  local 358:11 target: RangeBody | null (const)
+  callee 358:63 bodyOf -> @bodyOf
+  callee 359:49 sawCall -> @sawCall
+  local 363:14 child: Node (const)
+  callee 364:5 forceCalls -> @forceCalls
 function forceUnseen(bodies: RangeBody[], scan: StoreScan, seen: RangeSite[]): void -> @forceUnseen
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 374:7
+  sharedWrite: 379:7
   calls: sawCall
   pointer bodies: size=0 writesThrough=true captured=false
   pointer scan: size=48 writesThrough=false captured=false
   pointer seen: size=0 writesThrough=false captured=false passedTo=sawCall#0
   stackSites=0 stackLocals=0
-  local 370:7 k: i32 (let)
-  local 371:14 call: Node (const)
-  local 372:11 at: i32 (const)
-  callee 373:67 sawCall -> @sawCall
+  local 375:7 k: i32 (let)
+  local 376:14 call: Node (const)
+  local 377:11 at: i32 (const)
+  callee 378:67 sawCall -> @sawCall
 function sawCall(seen: RangeSite[], call: Node): boolean -> @sawCall
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer seen: size=0 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 381:14 site: RangeSite (const)
+  local 386:14 site: RangeSite (const)
 function summarise(tables: RangeTables, bodies: RangeBody[]): void -> @summarise
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 411:11
+  sharedWrite: 416:11
   calls: CallSummary.constructor RangeTables.setSummary mergeNumbers mergeStrings nish_alloc_struct scanStores
   pointer tables: size=32 writesThrough=false captured=false passedTo=scanStores#1 RangeTables.setSummary#0
   pointer bodies: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 397:14 body: RangeBody (const)
-  callee 398:5 scanStores -> @scanStores
-  local 400:7 changed: boolean (let)
-  local 403:16 body: RangeBody (const)
-  local 404:13 scan: StoreScan (const)
-  local 408:18 callee: i32 (const)
-  local 409:15 other: StoreScan | null (const)
-  callee 415:13 mergeStrings -> @mergeStrings
-  callee 415:56 mergeNumbers -> @mergeNumbers
-  local 421:14 body: RangeBody (const)
-  local 422:11 scan: StoreScan (const)
-  local 424:16 callee: i32 (const)
-  local 430:7 at: i32 (let)
-  local 431:14 body: RangeBody (const)
-  local 433:13 summary: CallSummary (const)
-  callee 433:23 new CallSummary -> @CallSummary.constructor
-  callee 436:7 RangeTables.setSummary -> @RangeTables.setSummary
+  local 402:14 body: RangeBody (const)
+  callee 403:5 scanStores -> @scanStores
+  local 405:7 changed: boolean (let)
+  local 408:16 body: RangeBody (const)
+  local 409:13 scan: StoreScan (const)
+  local 413:18 callee: i32 (const)
+  local 414:15 other: StoreScan | null (const)
+  callee 420:13 mergeStrings -> @mergeStrings
+  callee 420:56 mergeNumbers -> @mergeNumbers
+  local 426:14 body: RangeBody (const)
+  local 427:11 scan: StoreScan (const)
+  local 429:16 callee: i32 (const)
+  local 435:7 at: i32 (let)
+  local 436:14 body: RangeBody (const)
+  local 438:13 summary: CallSummary (const)
+  callee 438:23 new CallSummary -> @CallSummary.constructor
+  callee 441:7 RangeTables.setSummary -> @RangeTables.setSummary
 function StoreScan.constructor(this: StoreScan): void -> @StoreScan.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function scanStores(ctx: CheckContext, tables: RangeTables, node: Node, scan: StoreScan): void -> @scanStores
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 489:5
+  sharedWrite: 494:5
   escaping: node
   calls: StringMap.get callsNothing isBoundedCall isBoundsAssignment isInertBuiltin nish_array_grow nish_panic_index nish_str_eq noteStore scanStores
   pointer ctx: size=184 writesThrough=false captured=false passedTo=noteStore#1 noteStore#1 callsNothing#0 scanStores#0
@@ -20059,67 +20059,67 @@ function scanStores(ctx: CheckContext, tables: RangeTables, node: Node, scan: St
   pointer node: size=40 writesThrough=true captured=true passedTo=isBoundedCall#0 callsNothing#1 isInertBuiltin#1
   pointer scan: size=48 writesThrough=true captured=false passedTo=noteStore#3 noteStore#3 scanStores#3
   stackSites=0 stackLocals=0
-  local 481:9 program: CheckedProgram (const)
-  callee 482:33 isBoundsAssignment -> @isBoundsAssignment
-  callee 483:5 noteStore -> @noteStore
-  callee 486:5 noteStore -> @noteStore
-  callee 491:31 isBoundedCall -> @isBoundedCall
-  callee 494:56 callsNothing -> @callsNothing
-  local 495:11 callee: FunctionSig | null (const)
-  local 496:11 at: i32 (const)
-  callee 496:39 StringMap.get -> @StringMap.get
-  callee 505:16 isInertBuiltin -> @isInertBuiltin
-  local 511:14 child: Node (const)
-  callee 512:5 scanStores -> @scanStores
+  local 486:9 program: CheckedProgram (const)
+  callee 487:33 isBoundsAssignment -> @isBoundsAssignment
+  callee 488:5 noteStore -> @noteStore
+  callee 491:5 noteStore -> @noteStore
+  callee 496:31 isBoundedCall -> @isBoundedCall
+  callee 499:56 callsNothing -> @callsNothing
+  local 500:11 callee: FunctionSig | null (const)
+  local 501:11 at: i32 (const)
+  callee 501:39 StringMap.get -> @StringMap.get
+  callee 510:16 isInertBuiltin -> @isInertBuiltin
+  local 516:14 child: Node (const)
+  callee 517:5 scanStores -> @scanStores
 function isBoundedCall(call: Node): boolean -> @isBoundedCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unwrapBoundsParens
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 518:9 callee: Node (const)
-  callee 518:18 unwrapBoundsParens -> @unwrapBoundsParens
+  local 523:9 callee: Node (const)
+  callee 523:18 unwrapBoundsParens -> @unwrapBoundsParens
 function noteStore(program: CheckedProgram, ctx: CheckContext, target: Node, scan: StoreScan): void -> @noteStore
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 528:7
+  sharedWrite: 533:7
   calls: nish_array_grow nish_str_eq recordStoreType unwrapBoundsParens
   pointer program: size=456 writesThrough=false captured=false passedTo=recordStoreType#0
   pointer ctx: size=184 writesThrough=false captured=false
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer scan: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 523:9 t: Node (const)
-  callee 523:13 unwrapBoundsParens -> @unwrapBoundsParens
-  local 535:11 stored: i32 (const)
-  callee 535:20 recordStoreType -> @recordStoreType
+  local 528:9 t: Node (const)
+  callee 528:13 unwrapBoundsParens -> @unwrapBoundsParens
+  local 540:11 stored: i32 (const)
+  callee 540:20 recordStoreType -> @recordStoreType
 function mergeStrings(into: string[], from: string[]): boolean -> @mergeStrings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 546:7
+  sharedWrite: 551:7
   calls: nish_array_grow nish_str_eq
   pointer into: size=0 writesThrough=true captured=false
   pointer from: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 543:7 grew: boolean (let)
-  local 544:14 item: string (const)
+  local 548:7 grew: boolean (let)
+  local 549:14 item: string (const)
 function mergeNumbers(into: i32[], from: i32[]): boolean -> @mergeNumbers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 557:7
+  sharedWrite: 562:7
   calls: nish_array_grow
   pointer into: size=0 writesThrough=true captured=false
   pointer from: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 554:7 grew: boolean (let)
-  local 555:14 item: i32 (const)
+  local 559:7 grew: boolean (let)
+  local 560:14 item: i32 (const)
 function retractWarnings(ctx: CheckContext, proved: Node[]): void -> @retractWarnings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 580:7
+  sharedWrite: 585:7
   calls: answeredBy nish_array_grow
   pointer ctx: size=184 writesThrough=false captured=false passedTo=answeredBy#0
   pointer proved: size=0 writesThrough=false captured=false passedTo=answeredBy#2
   stackSites=0 stackLocals=0
-  local 576:9 sink: DiagnosticSink (const)
-  local 577:9 kept: Diagnostic[] (const)
-  local 578:14 warning: Diagnostic (const)
-  callee 579:10 answeredBy -> @answeredBy
+  local 581:9 sink: DiagnosticSink (const)
+  local 582:9 kept: Diagnostic[] (const)
+  local 583:14 warning: Diagnostic (const)
+  callee 584:10 answeredBy -> @answeredBy
 function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boolean -> @answeredBy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_at
@@ -20127,8 +20127,8 @@ function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
   pointer warning: size=40 writesThrough=false captured=false
   pointer proved: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 590:14 access: Node (const)
-  local 591:11 index: Node (const)
+  local 595:14 access: Node (const)
+  local 596:11 index: Node (const)
 module self/parser.ts
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import SourceFile from "./diagnostics" -> struct SourceFile
