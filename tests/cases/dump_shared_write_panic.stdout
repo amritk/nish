@@ -1,0 +1,23 @@
+module tests/cases/dump_shared_write_panic.ts (entry)
+function pick(xs: i32[], i: i32): i32 -> @pick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function ratio(a: i32, b: i32): i32 -> @ratio
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function head(s: string, n: i32): string -> @head
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function run(xs: i32[]): i32 -> @run [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: head nish_arena_mark nish_arena_release pick ratio
+  pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
+  stackSites=0 stackLocals=0
+  callee 12:46 ratio -> @ratio
+  callee 12:52 pick -> @pick
+  callee 12:78 head -> @head

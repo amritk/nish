@@ -229,6 +229,37 @@ export class FunctionFacts {
    * hold one array and nothing here proves they do not.
    */
   resizesArray: boolean;
+  /**
+   * WP29 P1: the function writes memory its caller could observe, directly or
+   * through a callee (fixpoint over the call graph). `effect` is the wrong
+   * question for that, because it is about what LLVM may reorder: a panic, a
+   * `throw` and an arena allocation are all `EFFECT_WRITE` there, and a data
+   * parallel body with a bounds check or an integer division would be refused
+   * for them. This leaves those three out, and is what a caller asks when it
+   * needs to know whether two calls can run at once.
+   *
+   * Why each is safe to leave out:
+   *   - A panic (`nish_panic_index`, `_slice`, `_div`) prints to fd 2 and
+   *     `_exit`s (runtime/runtime.c): no user memory is written, and no caller
+   *     runs again to observe any.
+   *   - A `throw` lowers to `llvm.trap`, which writes nothing and never returns.
+   *   - An arena allocation writes the arena's bump state and the fresh block.
+   *     The block is unreachable until the function hands it out, and the bump
+   *     state is per thread under `--threads` (`ARENA_GLOBAL_TLS`).
+   *
+   * A store into the function's own stack object (`stackLocals`), or into the
+   * `this` a constructor initialises, is to memory nobody else holds yet, and
+   * does not count either. `writesThrough` per pointer parameter is the finer
+   * fact; this one is whole-function and deliberately coarse.
+   */
+  sharedWrite: boolean;
+  /** The first node in the body that writes shared memory; `null` when a callee is the reason. */
+  writeSite: Node | null;
+  /**
+   * The first callee, by symbol and in the order the body reaches them, that
+   * carries `sharedWrite`; `""` when `writeSite` is set.
+   */
+  writeVia: string;
   effect: i32;
   willReturn: boolean;
   /** Can reach a `noreturn` runtime call, directly or through a callee. */
@@ -300,6 +331,9 @@ export class FunctionFacts {
     this.loopsBounded = true;
     this.hasTrap = false;
     this.resizesArray = false;
+    this.sharedWrite = false;
+    this.writeSite = null;
+    this.writeVia = "";
     this.effect = EFFECT_NONE;
     this.willReturn = true;
     this.callsNoReturn = false;
@@ -843,6 +877,31 @@ class FactCollector {
     return local !== null && this.facts.holdsStackObject(local);
   }
 
+  /** WP29 P1: `node` writes memory a caller could observe. The first one in the walk is the one named. */
+  noteSharedWrite(node: Node): void {
+    if (!this.facts.sharedWrite) {
+      this.facts.sharedWrite = true;
+      this.facts.writeSite = node;
+    }
+  }
+
+  /**
+   * `this.f = v` in a constructor: `this` is the fresh object the `new` that
+   * called it allocated, so the store initialises an allocation rather than
+   * writing anything a caller already holds. Only `this` itself qualifies; a
+   * store through `this.inner` may reach an object that came from outside.
+   */
+  initialisesThis(receiver: Node): boolean {
+    return this.sig.role === ROLE_CONSTRUCTOR && unwrapParens(receiver).kind === N_THIS;
+  }
+
+  /** A store into `receiver`'s array: shared unless the array is this function's own stack object. */
+  noteArrayWrite(node: Node, receiver: Node | null): void {
+    if (receiver === null || !this.isStackOwned(receiver)) {
+      this.noteSharedWrite(node);
+    }
+  }
+
   visit(node: Node): void {
     const program = this.unit.program;
     if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
@@ -955,6 +1014,9 @@ class FactCollector {
       }
       if (isAssignmentTarget(above, node) && above !== null) {
         this.facts.effect = EFFECT_WRITE;
+        if (!this.initialisesThis(receiver)) {
+          this.noteSharedWrite(above);
+        }
         if (above.text !== "=") {
           this.facts.readsMemory = true;
         }
@@ -1089,6 +1151,7 @@ class FactCollector {
     }
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
       this.facts.effect = EFFECT_WRITE;
+      this.noteArrayWrite(node, node.children[0].children[0]);
     }
   }
 
@@ -1101,6 +1164,7 @@ class FactCollector {
   collectMethodFacts(call: Node, method: string): void {
     if (method === "push") {
       this.facts.effect = EFFECT_WRITE;
+      this.noteArrayWrite(call, methodReceiver(call));
       this.facts.resizesArray = true;
       this.facts.callees.add("nish_array_grow");
       return;
@@ -1108,6 +1172,7 @@ class FactCollector {
     if (method === "pop") {
       // Stores the shortened length back, and panics on an empty array.
       this.facts.effect = EFFECT_WRITE;
+      this.noteArrayWrite(call, methodReceiver(call));
       this.facts.resizesArray = true;
       if (!this.opts.uncheckedIndexing) {
         this.facts.callees.add("nish_panic_index");
@@ -1264,6 +1329,7 @@ export const collectFacts = (
   // foreign callee has no pointer to capture (`docs/wp27-ffi.md` §3).
   if (sig.foreign()) {
     facts.effect = EFFECT_WRITE;
+    facts.sharedWrite = true; // no site and no callee to name: the body is C
     facts.willReturn = false;
     facts.readsMemory = true;
     // S1's boundary is scalars only, so a C body cannot reach an array header
@@ -1472,6 +1538,7 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
       }
     }
   }
+  nameWriteVia(facts, runtime);
 };
 
 /** One caller/callee edge; answers whether anything about the caller moved. */
@@ -1497,6 +1564,10 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
     calleeEffect = rt.effect;
     calleeReturns = hasAttr(rt.attrs, "willreturn");
     calleeNoReturn = rt.noreturn;
+  }
+  if (!f.sharedWrite && calleeWritesShared(facts, runtime, callee)) {
+    f.sharedWrite = true;
+    changed = true;
   }
   const merged = maxEffect(f.effect, calleeEffect);
   if (merged !== f.effect) {
@@ -1547,6 +1618,42 @@ const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
 };
 
 const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0;
+
+/** WP29 P1: calling `callee` writes shared memory. An unknown callee is assumed to, as it is assumed to write. */
+const calleeWritesShared = (facts: FactsTable, runtime: RuntimeTable, callee: string): boolean => {
+  const calleeFacts = facts.get(callee);
+  if (calleeFacts !== null) {
+    return calleeFacts.sharedWrite;
+  }
+  if (callee === "nish_alloc_struct") {
+    return false; // the inline arena allocator; see `FunctionFacts.sharedWrite`
+  }
+  const rt = runtime.lookup(callee);
+  return rt === null || rt.sharedWrite();
+};
+
+/**
+ * WP29 P1: `writeVia` for every function whose shared write is a callee's,
+ * named once the fixpoint has settled. Naming it inside the loop would name
+ * whichever callee the loop happened to reach first, and that order is the
+ * whole program's function order, so one module would name different callees
+ * depending on which entry point loaded it. Here it is the first callee in the
+ * function's own call order: the order its body reaches them.
+ */
+const nameWriteVia = (facts: FactsTable, runtime: RuntimeTable): void => {
+  for (const f of facts.list) {
+    if (!f.sharedWrite || f.writeSite !== null) {
+      continue;
+    }
+    let c = 0;
+    while (c < f.callees.size() && f.writeVia.length === 0) {
+      if (calleeWritesShared(facts, runtime, f.callees.at(c))) {
+        f.writeVia = f.callees.at(c);
+      }
+      c = c + 1;
+    }
+  }
+};
 
 // ---- Counted loops ------------------------------------------------------------------------
 

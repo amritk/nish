@@ -59,6 +59,20 @@ export const EFFECT_WRITE: i32 = 2;
 /** The more impure of two effects, which is how a caller inherits its callees'. */
 export const maxEffect = (a: i32, b: i32): i32 => a >= b ? a : b;
 
+// WP29 P1: what a runtime symbol writes, for `FunctionFacts.sharedWrite`.
+// `effect` answers what LLVM may reorder a call across; this answers whether a
+// caller could observe the write, which is a narrower question with more of
+// the `EFFECT_WRITE` entries on the harmless side of it.
+
+/** Writes nothing a program can observe: every `EFFECT_NONE` and `EFFECT_READ` entry, and a few more. */
+export const WRITES_NOTHING: i32 = 0;
+/** Writes memory or external state a caller could observe. The default for `EFFECT_WRITE`. */
+export const WRITES_SHARED: i32 = 1;
+/** Prints to fd 2 and `_exit`s: no user memory is written, and no caller runs again to look. */
+export const WRITES_PANIC: i32 = 2;
+/** Writes only the arena and the fresh block it answers, or a header its caller already counted. */
+export const WRITES_ALLOC: i32 = 3;
+
 export class RuntimeFunction {
   name: string;
   /** The full `declare` line, minus the trailing attribute group. */
@@ -74,6 +88,8 @@ export class RuntimeFunction {
   intrinsic: boolean;
   /** Never returns to the caller (`nish_exit`); callers lose `willreturn`. */
   noreturn: boolean;
+  /** One of the `WRITES_*` classes. Whatever writes is `WRITES_SHARED` until its entry says why not. */
+  writes: i32;
 
   constructor(name: string, signature: string, attrs: string[], effect: i32) {
     this.name = name;
@@ -82,6 +98,11 @@ export class RuntimeFunction {
     this.effect = effect;
     this.intrinsic = false;
     this.noreturn = false;
+    this.writes = effect === EFFECT_WRITE ? WRITES_SHARED : WRITES_NOTHING;
+  }
+
+  sharedWrite(): boolean {
+    return this.writes === WRITES_SHARED;
   }
 }
 
@@ -148,6 +169,18 @@ export class RuntimeTable {
     this.functions.push(fn);
   }
 
+  /**
+   * Narrows the `WRITES_*` class of the entry `name`, with the reason written
+   * beside the call. A name that is not in the table changes nothing, which
+   * leaves the conservative answer rather than a wrong one.
+   */
+  classifyWrites(name: string, writes: i32): void {
+    const fn = this.lookup(name);
+    if (fn !== null) {
+      fn.writes = writes;
+    }
+  }
+
   /** The entry for `name`, or `null` when it is not a runtime symbol. */
   lookup(name: string): RuntimeFunction | null {
     const at = this.index.get(name, -1);
@@ -167,13 +200,20 @@ export class RuntimeTable {
       EFFECT_WRITE
     );
     this.add(grow);
+    // The slow path of the inline allocator: it moves the arena to a new chunk
+    // and answers a block nobody else holds, which is an allocation and nothing
+    // more (`propagateCallee` gives `nish_alloc_struct` the same answer).
+    this.classifyWrites("nish_arena_grow", WRITES_ALLOC);
     this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE));
     this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE));
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
     this.add(plain("nish_arena_mark", "declare noundef i64 @nish_arena_mark()", EFFECT_WRITE));
+    // `EFFECT_WRITE` so nothing is reordered across it, but it only reads the bump position.
+    this.classifyWrites("nish_arena_mark", WRITES_NOTHING);
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE));
     this.add(plain("nish_arena_used", "declare noundef i64 @nish_arena_used()", EFFECT_WRITE));
+    this.classifyWrites("nish_arena_used", WRITES_NOTHING); // reads the offset, as `nish_arena_mark` does
     // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
     // which it moves down to the mark and answers at its new address. Neither
     // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
@@ -194,6 +234,8 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    // A fresh arena string, written before anyone holds it: an allocation.
+    this.classifyWrites("nish_str_new", WRITES_ALLOC);
     this.add(
       plain(
         "nish_str_concat",
@@ -201,6 +243,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    this.classifyWrites("nish_str_concat", WRITES_ALLOC);
     this.add(
       new RuntimeFunction(
         "nish_str_eq",
@@ -244,6 +287,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    this.classifyWrites("nish_str_from_i32", WRITES_ALLOC);
     this.add(
       plain(
         "nish_str_from_f64",
@@ -251,6 +295,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    this.classifyWrites("nish_str_from_f64", WRITES_ALLOC);
     // WP7: i64 strings, Math.random, process, files.
     this.add(
       plain(
@@ -259,6 +304,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    this.classifyWrites("nish_str_from_i64", WRITES_ALLOC);
     // WP15: the one unsigned formatter. `u8`/`u16`/`u32` are `zext`ed to i64 at
     // the call site rather than getting three more symbols of their own, which
     // is what keeps `runtime.c` inside its `.text` budget.
@@ -269,6 +315,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    this.classifyWrites("nish_str_from_u64", WRITES_ALLOC);
     // xorshift64* over a global state word: reads and writes memory.
     this.add(plain("nish_random", "declare noundef double @nish_random()", EFFECT_WRITE));
     const exit = new RuntimeFunction(
@@ -306,6 +353,9 @@ export class RuntimeTable {
     this.add(
       plain("nish_parse_number", `declare noundef double @nish_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
     );
+    // Its one store is to `errno`, which is per thread and which no program in
+    // the language can read.
+    this.classifyWrites("nish_parse_number", WRITES_NOTHING);
     // WP14 D4: the directory and subprocess calls a self-hosted driver needs
     // to link its own output, and the WP14 §7a `stat` beside them. Each
     // answers a value rather than exiting.
@@ -429,6 +479,11 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    // It stores to the header it is handed, but its only caller is `push`, and
+    // `FactCollector` counts that store at the `push`, where it can tell a
+    // shared array from the function's own stack one. What is left is the
+    // fresh arena storage the elements move to.
+    this.classifyWrites("nish_array_grow", WRITES_ALLOC);
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
     // C hosts do, so it is part of the declared ABI and of nish.h.
@@ -439,6 +494,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    this.classifyWrites("nish_alloc_array", WRITES_ALLOC);
     // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
     const panicIndex = new RuntimeFunction(
       "nish_panic_index",
@@ -448,6 +504,7 @@ export class RuntimeTable {
     );
     panicIndex.noreturn = true;
     this.add(panicIndex);
+    this.classifyWrites("nish_panic_index", WRITES_PANIC);
     // `slice` range-check failure (WP15 section 4): prints "slice out of range:
     // [<start>, <end>) of length <len>" and exits 1. Its own symbol rather than
     // `nish_panic_index` because a reversed pair is as common a mistake as an
@@ -460,6 +517,7 @@ export class RuntimeTable {
     );
     panicSlice.noreturn = true;
     this.add(panicSlice);
+    this.classifyWrites("nish_panic_slice", WRITES_PANIC);
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
       "nish_panic_div",
@@ -469,6 +527,7 @@ export class RuntimeTable {
     );
     panicDiv.noreturn = true;
     this.add(panicDiv);
+    this.classifyWrites("nish_panic_div", WRITES_PANIC);
     this.buildIntrinsics();
   }
 
