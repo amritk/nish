@@ -72,6 +72,7 @@ import {
   N_ARRAY,
   N_BINARY,
   N_BLOCK,
+  N_ARROW,
   N_CALL,
   N_CONDITIONAL,
   N_CONSTRUCTOR,
@@ -976,6 +977,12 @@ class FactCollector {
 
   visit(node: Node): void {
     const program = this.unit.program;
+    // WP29: an arrow argument is lifted into a function of its own, which has
+    // facts of its own; its body is not this function's, and neither it nor a
+    // function named as an argument is a value this function holds.
+    if (node.kind === N_ARROW) {
+      return;
+    }
     if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
       this.facts.hasLoops = true;
       if (!isCountedLoop(this.unit, this.table, node, this.known)) {

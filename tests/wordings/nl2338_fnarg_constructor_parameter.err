@@ -1,0 +1,1 @@
+`step` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is given, and this is a parameter of a method or a constructor

@@ -28,6 +28,7 @@ import { CLI } from "./branding";
 import { Compilation, ModuleUnit } from "./compilation";
 import { StringMap, StringSet } from "./map";
 import { ROOT_PACKAGE } from "./packages";
+import { hasFunctionParameter } from "./generics";
 import { basename } from "./paths";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program";
@@ -138,6 +139,12 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
         continue;
       }
       if (!sig.exported && compilation.opts.strictExports) {
+        continue;
+      }
+      // WP29: an instantiation that was given a function, or an arrow lifted
+      // out of one, is a symbol of the compiled program and nothing a host can
+      // call by name, so no sidecar describes it.
+      if (sig.compileTimeOnly()) {
         continue;
       }
       out.push(
@@ -751,6 +758,11 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
       continue;
     }
     for (const template of program.templateList) {
+      // WP29: a template over a function has no instantiation a host could
+      // call, so its having none is not a gap in the sidecar.
+      if (hasFunctionParameter(template.decl)) {
+        continue;
+      }
       if (template.origin === unit.source && template.exported && template.count === 0) {
         reportUninstantiated(compilation, unit, template.sourceName, template.decl, "C signature", "function", "a symbol");
         ok = false;

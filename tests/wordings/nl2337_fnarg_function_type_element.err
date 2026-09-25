@@ -1,0 +1,1 @@
+`(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in Nish, so it cannot be the type of a field, a local, an element, a return value or an alias

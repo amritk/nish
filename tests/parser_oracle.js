@@ -103,6 +103,12 @@ function printTypeScriptTree(source, sf) {
     emit(depth, "IDENT", s, e, node.text);
   };
 
+  // WP29: a function type and an arrow need printers declared further down;
+  // the indirection is `statementOf`'s, for the same reason.
+  const parameterOf = () => parameter;
+  const arrowParameterOf = () => arrowParameter;
+  const blockOf = () => block;
+
   const type = (node, depth) => {
     const [s, e] = span(node);
     switch (node.kind) {
@@ -150,6 +156,15 @@ function printTypeScriptTree(source, sf) {
       case ts.SyntaxKind.LiteralType:
         if (node.literal.kind !== ts.SyntaxKind.NullKeyword) unsupported(node);
         emit(depth, "TYPE_NULL", s, e);
+        return;
+      // WP29: `(x: T) => U`, the type of a compile-time function parameter.
+      // `parameterOf` rather than `parameter`, because `parameter` is declared
+      // below this printer and a `const` is not hoisted.
+      case ts.SyntaxKind.FunctionType:
+        if (node.typeParameters !== undefined) unsupported(node);
+        emit(depth, "TYPE_FUNCTION", s, e);
+        list(depth + 1, node.parameters, parameterOf());
+        type(node.type, depth + 1);
         return;
       default:
         unsupported(node);
@@ -280,6 +295,19 @@ function printTypeScriptTree(source, sf) {
         emit(depth, "PAREN", s, e);
         expression(node.expression, depth + 1);
         return;
+      // WP29: an arrow written as an argument. stage1 shapes it like its
+      // `N_FUNCTION` — an absent name first, the type parameters last — and a
+      // parameter's type and the return type may both be left out.
+      case ts.SyntaxKind.ArrowFunction:
+        if (node.typeParameters !== undefined || node.modifiers !== undefined) unsupported(node);
+        emit(depth, "ARROW", s, e);
+        empty(depth + 1);
+        list(depth + 1, node.parameters, arrowParameterOf());
+        optional(depth + 1, node.type, type);
+        if (ts.isBlock(node.body)) blockOf()(node.body, depth + 1);
+        else expression(node.body, depth + 1);
+        list(depth + 1, [], identifier);
+        return;
       default:
         unsupported(node);
     }
@@ -315,6 +343,15 @@ function printTypeScriptTree(source, sf) {
     identifier(node.name, depth + 1);
     if (node.type === undefined) unsupported(node);
     type(node.type, depth + 1);
+  };
+  // An arrow argument's parameter may leave its type out (WP29).
+  const arrowParameter = (node, depth) => {
+    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) unsupported(node);
+    if (node.questionToken !== undefined || node.initializer !== undefined) unsupported(node);
+    const [s, e] = span(node);
+    emit(depth, "PARAM", s, e);
+    identifier(node.name, depth + 1);
+    optional(depth + 1, node.type, type);
   };
 
   const block = (node, depth) => {

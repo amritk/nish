@@ -72,6 +72,57 @@ export class FunctionSig {
    * walks the body installs before it starts (`CheckedProgram.enterInstance`).
    */
   instance: Instantiation | null;
+  /**
+   * WP29: which parameters are compile-time function parameters, parallel to
+   * `paramNames` — or empty, which is every signature that has none. Such a
+   * parameter is a position in the argument list and nothing else: it has no
+   * LLVM parameter, no local in the body and no value at run time, and its
+   * `paramTypes` entry is `void` so that an analysis indexing arguments by
+   * position still lines up with the ones that do. `isCompileTime` is the
+   * only reader, and the emitter's `emitCall` and `emitFunction` are what
+   * skip the position (docs/wp23-language-surface.md §6).
+   */
+  compileTime: boolean[];
+  /**
+   * WP29: this function is called by an instantiation another module defines
+   * — a private function or an arrow passed to an imported template — so it
+   * cannot be `internal` (`exposeTo` in `self/generics.ts`). It gets `hidden`
+   * linkage rather than an exported one, and takes the public `Result` ABI,
+   * because the `declare` the other module writes is the public one.
+   */
+  hidden: boolean;
+  /**
+   * WP29: an arrow written as a function argument and lifted into a function
+   * of its own. Its body was checked where the arrow was written, into the
+   * enclosing function's side tables, so pass 2 skips it.
+   */
+  lifted: boolean;
+  /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
+  arrowCount: i32;
+
+  /** Whether parameter `index` is a compile-time function parameter (WP29). */
+  isCompileTime(index: i32): boolean {
+    return index < this.compileTime.length && this.compileTime[index];
+  }
+
+  /**
+   * WP29: whether this function exists because a call named a function for a
+   * function-typed parameter — an instantiation that was given one, or an
+   * arrow lifted out of such a call. A host has no way to name either: there
+   * is no C spelling for "`apply` at `square`", and the arrow has no name at
+   * all, so the interop sidecars describe neither.
+   */
+  compileTimeOnly(): boolean {
+    return this.lifted || this.compileTime.length > 0;
+  }
+
+  /**
+   * Whether this signature's own module is not the only one that may call it:
+   * exported, or `hidden` (WP29). The `Result` ABI and the linkage follow it.
+   */
+  visibleOutside(): boolean {
+    return this.exported || this.hidden;
+  }
 
   /**
    * The body, or `null` when the declaration has none. A `BLOCK` for every
@@ -122,6 +173,44 @@ export class FunctionSig {
     this.owner = null;
     this.poisoned = false;
     this.instance = null;
+    this.compileTime = [];
+    this.hidden = false;
+    this.lifted = false;
+    this.arrowCount = 0;
+  }
+}
+
+/**
+ * The compile-time function parameters in scope (WP29): each parameter name of
+ * the instantiation whose body is being checked, and the function its call
+ * site named for it. `typeBindings` is the type half of the same idea, and this
+ * is the whole of how `f(x)` in a template body becomes a direct call to
+ * `square` in `apply<i32, square>`.
+ */
+export class FunctionBindings {
+  names: string[];
+  sigs: FunctionSig[];
+
+  constructor() {
+    this.names = [];
+    this.sigs = [];
+  }
+
+  add(name: string, sig: FunctionSig): void {
+    this.names.push(name);
+    this.sigs.push(sig);
+  }
+
+  /** The function bound to `name`, or `null` when `name` is not a function parameter here. */
+  get(name: string): FunctionSig | null {
+    let i = 0;
+    while (i < this.names.length) {
+      if (this.names[i] === name) {
+        return this.sigs[i];
+      }
+      i = i + 1;
+    }
+    return null;
   }
 }
 
@@ -157,6 +246,12 @@ export class ConstraintList {
  * parameter and return annotations mention `typeParams`, so they mean nothing
  * until an instantiation binds them, and a template therefore has no signature,
  * no symbol and no entry in `functions`.
+ *
+ * WP29: a function with a function-typed parameter is one too, with or without
+ * type parameters, because each callee a call gives it is an instantiation of
+ * its own (`Instantiation.functionArgs`). Such a parameter is read off `decl`
+ * whenever it is needed (`isFunctionParameter` in `self/generics.ts`), so
+ * nothing about it is stored here.
  */
 export class TemplateInfo {
   /**
@@ -330,10 +425,21 @@ export class Instantiation {
    * and what its diagnostic quotes.
    */
   from: Instantiation | null;
+  /**
+   * WP29: the function each compile-time function parameter was given, in
+   * parameter order — the third component of the instantiation key, after the
+   * template and the type arguments, and mangled into the symbol beside them
+   * (`instanceSymbol`). Empty for a template that takes no function.
+   */
+  functionArgs: FunctionSig[];
+  /** WP29: the same, by parameter name, as the body sees them. */
+  functionBindings: FunctionBindings;
 
   constructor(template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
     this.template = template;
     this.owner = null;
+    this.functionArgs = [];
+    this.functionBindings = new FunctionBindings();
     this.typeArgs = typeArgs;
     this.sig = sig;
     this.bindings = bindings;
@@ -352,6 +458,25 @@ export class Instantiation {
       this.nodeCoercions[i] = -1;
       i = i + 1;
     }
+  }
+
+  /**
+   * WP29: read and write `outer`'s side tables rather than tables of this
+   * instantiation's own. An arrow lifted out of an instantiation's body is
+   * checked where it was written, in the middle of that body, so its nodes'
+   * types are recorded in the body's tables — and a node is checked once per
+   * enclosing instantiation, which is exactly once per lifted arrow, so there
+   * is never a second answer for the tables to hold.
+   */
+  shareTablesOf(outer: Instantiation): void {
+    this.nodeTypes = outer.nodeTypes;
+    this.nodeLocals = outer.nodeLocals;
+    this.nodeConstants = outer.nodeConstants;
+    this.nodeCallees = outer.nodeCallees;
+    this.nodeCoercions = outer.nodeCoercions;
+    this.nodeCaseValues = outer.nodeCaseValues;
+    this.nodeProvenIndex = outer.nodeProvenIndex;
+    this.nodeProvenClamp = outer.nodeProvenClamp;
   }
 }
 

@@ -16,7 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding";
-import { checkGenericCall } from "./generics";
+import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
 import {
@@ -41,6 +41,7 @@ import {
 import {
   FLAG_POSTFIX,
   N_ARRAY,
+  N_ARROW,
   N_BIGINT,
   N_BINARY,
   N_CALL,
@@ -63,7 +64,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes";
-import { FieldInfo, StructInfo, TemplateInfo } from "./program";
+import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program";
 import { coercesTo } from "./structs";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
@@ -151,6 +152,11 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
       return checkArrayLiteral(ctx, expr, scope, want);
     case N_OBJECT:
       return checkObjectLiteral(ctx, expr, scope, want);
+    case N_ARROW:
+      // WP29: an arrow is legal as the argument for a function-typed
+      // parameter, which `checkGenericCall` resolves without coming here.
+      refuseOnce(ctx, expr, arrowElsewhereMessage());
+      return T_ERROR;
     case N_SUPER:
       // WP25. Every spelling of `super` lands here -- `super(...)` and
       // `super.m()` are routed through the callee and the receiver -- so the
@@ -297,6 +303,22 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     ctx.program.nodeLocals[expr.id] = local;
     return scope.typeOf(local); // the declared type, or the narrowed one inside `if (p !== null)`
   }
+  // WP29: inside an arrow argument, a name of the function around it — which
+  // would shadow a module constant there — is a capture the arrow cannot make.
+  if (ctx.capturesOuter(expr.text)) {
+    refuseOnce(ctx, expr, capturedMessage(expr.text));
+    return T_ERROR;
+  }
+  // WP29: a compile-time function parameter names a callee, not a value.
+  if (ctx.functionBindings.get(expr.text) !== null) {
+    refuseOnce(
+      ctx,
+      expr,
+      `\`${expr.text}\` is a function parameter and can only be called or passed on as a function argument: a ` +
+        `function is never a value in ${LANGUAGE}, so it cannot be stored, returned, compared or put in an array`
+    );
+    return T_ERROR;
+  }
   // A local shadows a module constant, as it would in TypeScript, so the
   // constant table is consulted only after the scope chain.
   const constant = ctx.program.constant(expr.text);
@@ -320,6 +342,10 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
 
 const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const self = scope.lookup("this");
+  if (self === null && ctx.capturesOuter("this")) {
+    refuseOnce(ctx, expr, capturedMessage("this")); // WP29: an arrow argument has no `this`
+    return T_ERROR;
+  }
   if (self === null) {
     return ctx.errorType(expr, "`this` is only valid inside a method or constructor");
   }
@@ -1048,6 +1074,19 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   if (callee.kind !== N_IDENT) {
     return ctx.errorType(expr, "Only direct calls to named functions are supported");
   }
+  // WP29: a compile-time function parameter is a direct call to whichever
+  // function this instantiation was given, and a function the arrow around
+  // this call is written inside is one it cannot reach.
+  if (scope.lookup(callee.text) === null) {
+    if (ctx.capturesOuter(callee.text)) {
+      refuseOnce(ctx, callee, capturedMessage(callee.text));
+      return T_ERROR;
+    }
+    const bound = ctx.functionBindings.get(callee.text);
+    if (bound !== null) {
+      return checkDirectCall(ctx, expr, bound, callee.text, scope);
+    }
+  }
   const template = ctx.template(callee.text);
   if (template !== null) {
     return checkGenericCall(ctx, expr, template, scope); // WP18: infer, instantiate, then check
@@ -1087,6 +1126,41 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       );
     }
     i = i + 1;
+  }
+  ctx.program.nodeCallees[expr.id] = sig;
+  return sig.returnType;
+};
+
+/**
+ * A call through a compile-time function parameter (WP29): the arguments
+ * against the bound function's signature, and the callee recorded, so the
+ * emitter writes a direct call to it. The messages name the parameter as the
+ * body wrote it; the call that chose the callee already held it to the
+ * parameter's function type, so a mistake here is the template's.
+ */
+const checkDirectCall = (ctx: CheckContext, expr: Node, sig: FunctionSig, shown: string, scope: Scope): i32 => {
+  const args = expr.children[1];
+  if (args.children.length !== sig.paramTypes.length) {
+    return ctx.errorType(expr, `\`${shown}\` expects ${sig.paramTypes.length} argument(s), got ${args.children.length}`);
+  }
+  // The first mismatch is reported after the loop, because only the first is
+  // ever reported (`ctx.error`), and spelling the types inside the loop would
+  // allocate on every pass for a message nobody reads.
+  let bad = -1;
+  let badType = T_ERROR;
+  let i = 0;
+  while (i < args.children.length && i < sig.paramTypes.length) {
+    const want = sig.paramTypes[i];
+    const got = checkExpression(ctx, args.children[i], scope, want);
+    if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, want)) {
+      bad = i;
+      badType = got;
+    }
+    i = i + 1;
+  }
+  if (bad >= 0 && bad < args.children.length && bad < sig.paramTypes.length) {
+    const want = ctx.table.typeName(sig.paramTypes[bad]);
+    ctx.error(args.children[bad], `Argument ${bad + 1} of \`${shown}\`: expected ${want}, got ${ctx.table.typeName(badType)}`);
   }
   ctx.program.nodeCallees[expr.id] = sig;
   return sig.returnType;

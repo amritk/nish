@@ -12,6 +12,7 @@
 
 import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations";
 import { checkElementReferences } from "./arrays";
+import { checkExpression } from "./expressions";
 import { checkDefiniteAssignment } from "./assignment";
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
@@ -24,8 +25,9 @@ import {
   collectTypeParamNames,
   declareMethodTypeParameters,
   instantiateStruct,
-  isGenericFunction,
   isGenericStruct,
+  isTemplateFunction,
+  refuseNestedFunctionTypes,
   parameterOrigin,
   refuseUninferable,
   rejectDollarInSymbolName,
@@ -36,6 +38,7 @@ import {
   FLAG_CONST,
   FLAG_FOREIGN,
   FLAG_PREFIX,
+  N_ARROW,
   N_BINARY,
   N_BLOCK,
   N_CLASS,
@@ -385,7 +388,10 @@ export class Checker {
     if (rejectRangedIntegerName(this.ctx, stmt.children[0], "function")) {
       return;
     }
-    if (isGenericFunction(stmt)) {
+    // WP29: a function with a function-typed parameter is a template too,
+    // with or without type parameters, because each callee it is given names
+    // a different function.
+    if (isTemplateFunction(stmt)) {
       this.registerTemplate(stmt);
       return;
     }
@@ -473,6 +479,9 @@ export class Checker {
       return;
     }
     if (refuseUninferable(this.ctx, stmt, template.typeParams, name)) {
+      return;
+    }
+    if (refuseNestedFunctionTypes(this.ctx, stmt)) {
       return;
     }
     this.program.addTemplate(template);
@@ -580,7 +589,9 @@ export class Checker {
     const savedInstance = this.ctx.currentInstance;
     const savedStruct = this.ctx.currentStructInstance;
     this.program.enterInstance(info);
+    const savedFunctions = this.ctx.functionBindings;
     this.ctx.typeBindings = info.bindings;
+    this.ctx.functionBindings = info.functionBindings;
     this.ctx.currentInstance = info;
     // A method of an instantiated class continues its class's chain: a body
     // that names `Box<T[]>` expands exactly as a field of that type would.
@@ -589,6 +600,7 @@ export class Checker {
     this.ctx.currentStructInstance = savedStruct;
     this.ctx.currentInstance = savedInstance;
     this.ctx.typeBindings = savedBindings;
+    this.ctx.functionBindings = savedFunctions;
     this.program.leaveInstance();
   }
 
@@ -650,7 +662,9 @@ export class Checker {
       // `collectStructMembers` put it where a declared class's method goes —
       // but its body means something only with its own tables and type bindings
       // installed, so `drainInstantiations` is what checks it.
-      if (sig.instance === null && sig.definedIn(this.program.source)) {
+      // WP29: a lifted arrow was checked where it was written, inside the body
+      // of the function this loop is on when it is appended.
+      if (sig.instance === null && !sig.lifted && sig.definedIn(this.program.source)) {
         this.checkFunctionBody(sig);
       }
     }
@@ -664,6 +678,13 @@ export class Checker {
     const scope = new Scope(null);
     let i = 0;
     while (i < sig.paramNames.length) {
+      // WP29: a compile-time function parameter is no local at all. The body
+      // reaches it through `ctx.functionBindings`, and only by calling it or
+      // passing it on, so there is nothing for a scope to hold.
+      if (sig.isCompileTime(i)) {
+        i = i + 1;
+        continue;
+      }
       // A parameter is an SSA value, so it is immutable, and `this` is one
       // too — which is what makes `this = x` a parameter assignment error.
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM);
@@ -673,61 +694,7 @@ export class Checker {
       }
       i = i + 1;
     }
-    const body = sig.body();
-    if (body === null) {
-      return;
-    }
-    // The body shares the parameter scope rather than opening a child, so
-    // `function f(a) { let a; }` is a duplicate declaration as in TypeScript.
-    const before = this.ctx.sink.count();
-    // A concise arrow body (`=> n * 2`) is a block with one `return`, so it
-    // always terminates and its expression is checked as that return's.
-    let terminates = true;
-    if (body.kind === N_BLOCK) {
-      terminates = checkStatements(this.ctx, body.children, scope);
-    } else {
-      checkReturnValue(this.ctx, body, scope);
-    }
-    let failed = this.ctx.sink.count() > before;
-    // Outside a statement list the flag is always clear, so a diagnostic from
-    // constant folding or from another module is never dropped by this body.
-    this.ctx.errored = false;
-    if (failed) {
-      sig.poisoned = true;
-    } else {
-      // WP16: a `Result` local nobody reads is an unhandled failure. Reported
-      // after the body so the diagnostic names a variable whose type is known.
-      checkResultLocalsHandled(this.ctx, sig, body);
-      // WP15 §2.1/§2.2: prove what indices are in range before the warnings
-      // are reported, because one of the warnings is about the proofs that did
-      // not come off, and it has to be reported by the same source-order walk
-      // as the rest of the class.
-      const unprovenIndices = analyzeBounds(this.ctx, body, this.ctx.uncheckedIndexing);
-      // WP15 §8: the performance warnings, over the same body and the same
-      // side tables. Only for a body that checked cleanly — advice about code
-      // that does not compile is noise, and a poisoned body has incomplete
-      // side tables anyway.
-      checkPerformance(this.ctx, sig, body, unprovenIndices);
-      // WP15 §2a: an element reference into contiguous struct storage may not
-      // be held across a `push`. Same placement and same reason as the line
-      // above — the walk reads types and bindings pass 2 has just written.
-      const beforeElements = this.ctx.sink.count();
-      checkElementReferences(this.ctx, body);
-      if (this.ctx.sink.count() > beforeElements) {
-        sig.poisoned = true;
-        failed = true;
-        this.ctx.errored = false;
-      }
-    }
-    // A body with a rejected statement may have lost its `return`; reporting
-    // a missing one on top of that is a cascade, not a second bug.
-    if (sig.returnType !== T_VOID && sig.returnType !== T_ERROR && !terminates && !failed) {
-      const spelled = this.ctx.table.typeName(sig.returnType);
-      this.ctx.error(
-        nameOf(sig),
-        `Function \`${sig.sourceName}\` must return a value of type ${spelled} on every path`
-      );
-    }
+    checkSignatureBody(this.ctx, sig, scope, false);
     this.ctx.current = null;
   }
 
@@ -1168,7 +1135,9 @@ export class Checker {
 }
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
-const nameOf = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
+// A lifted arrow (WP29) has no name to point at, so the arrow itself is the span.
+const nameOf = (sig: FunctionSig): Node =>
+  sig.decl.kind === N_CONSTRUCTOR || sig.decl.kind === N_ARROW ? sig.decl : sig.decl.children[0];
 
 // ---- WP15 §8: the `performance` diagnostic class --------------------------------
 //
@@ -1268,6 +1237,74 @@ class PerfWalk {
     return -1;
   }
 }
+
+/**
+ * The body of `sig`, checked in `scope`, which already holds its parameters,
+ * and every rule that runs over a body once it has checked cleanly. Shared by
+ * pass 2 and by an arrow lifted out of a call (WP29), which is checked where it
+ * was written rather than on a pass of its own.
+ *
+ * `inferReturn` is the arrow's case with no return type to check against: a
+ * concise body's own type becomes the function's (`map(xs, (x) => x * 2)`
+ * binds `U` from `x * 2`). The caller refuses a block body before it gets
+ * here, because a block has many returns and no single type to take.
+ */
+export const checkSignatureBody = (ctx: CheckContext, sig: FunctionSig, scope: Scope, inferReturn: boolean): void => {
+  const body = sig.body();
+  if (body === null) {
+    return;
+  }
+  // The body shares the parameter scope rather than opening a child, so
+  // `function f(a) { let a; }` is a duplicate declaration as in TypeScript.
+  const before = ctx.sink.count();
+  // A concise arrow body (`=> n * 2`) is a block with one `return`, so it
+  // always terminates and its expression is checked as that return's.
+  let terminates = true;
+  if (body.kind === N_BLOCK) {
+    terminates = checkStatements(ctx, body.children, scope);
+  } else if (inferReturn) {
+    sig.returnType = checkExpression(ctx, body, scope, -1);
+  } else {
+    checkReturnValue(ctx, body, scope);
+  }
+  let failed = ctx.sink.count() > before;
+  // Outside a statement list the flag is always clear, so a diagnostic from
+  // constant folding or from another module is never dropped by this body.
+  ctx.errored = false;
+  if (failed) {
+    sig.poisoned = true;
+  } else {
+    // WP16: a `Result` local nobody reads is an unhandled failure. Reported
+    // after the body so the diagnostic names a variable whose type is known.
+    checkResultLocalsHandled(ctx, sig, body);
+    // WP15 §2.1/§2.2: prove what indices are in range before the warnings
+    // are reported, because one of the warnings is about the proofs that did
+    // not come off, and it has to be reported by the same source-order walk
+    // as the rest of the class.
+    const unprovenIndices = analyzeBounds(ctx, body, ctx.uncheckedIndexing);
+    // WP15 §8: the performance warnings, over the same body and the same
+    // side tables. Only for a body that checked cleanly — advice about code
+    // that does not compile is noise, and a poisoned body has incomplete
+    // side tables anyway.
+    checkPerformance(ctx, sig, body, unprovenIndices);
+    // WP15 §2a: an element reference into contiguous struct storage may not
+    // be held across a `push`. Same placement and same reason as the line
+    // above — the walk reads types and bindings pass 2 has just written.
+    const beforeElements = ctx.sink.count();
+    checkElementReferences(ctx, body);
+    if (ctx.sink.count() > beforeElements) {
+      sig.poisoned = true;
+      failed = true;
+      ctx.errored = false;
+    }
+  }
+  // A body with a rejected statement may have lost its `return`; reporting
+  // a missing one on top of that is a cascade, not a second bug.
+  if (sig.returnType !== T_VOID && sig.returnType !== T_ERROR && !terminates && !failed) {
+    const spelled = ctx.table.typeName(sig.returnType);
+    ctx.error(nameOf(sig), `Function \`${sig.sourceName}\` must return a value of type ${spelled} on every path`);
+  }
+};
 
 /**
  * Report the performance warnings of one checked function body. Called after
@@ -1490,6 +1527,11 @@ const perfLocalName = (ctx: CheckContext, expr: Node): string => {
  * binding every pass and must not.
  */
 const walkPerformance = (walk: PerfWalk, node: Node): void => {
+  // WP29: an arrow argument is a function of its own, whose body was walked
+  // when it was lifted; walking it again here would report its warnings twice.
+  if (node.kind === N_ARROW) {
+    return;
+  }
   if (node.kind === N_FOR) {
     walkPerformance(walk, node.children[0]);
     walk.loops.push(node);

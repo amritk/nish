@@ -1,0 +1,1 @@
+The arrow passed as argument 2 of `fold` takes 3 parameter(s), and `f` is `(acc: i32, x: i32) => i32`

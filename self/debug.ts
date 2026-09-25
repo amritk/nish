@@ -534,8 +534,13 @@ export class DebugInfo {
       types.push(this.typeRef(T_I32));
     } else {
       types.push(this.abiTypeRef(sig.returnType));
-      for (const paramType of sig.paramTypes) {
-        types.push(this.abiTypeRef(paramType));
+      let k = 0;
+      while (k < sig.paramTypes.length) {
+        // WP29: a compile-time function parameter has no LLVM parameter to describe.
+        if (!sig.isCompileTime(k)) {
+          types.push(this.abiTypeRef(sig.paramTypes[k]));
+        }
+        k = k + 1;
       }
     }
     const signature = this.module.addMetadata(
@@ -556,11 +561,17 @@ export class DebugInfo {
 
     this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)");
     let i = 0;
+    let arg = 0;
     while (i < sig.paramNames.length) {
+      if (sig.isCompileTime(i)) {
+        i = i + 1;
+        continue;
+      }
+      arg = arg + 1;
       const isThis = sig.owner !== null && i === 0;
       const extra = isThis ? ", flags: DIFlagArtificial | DIFlagObjectPointer" : "";
       const variable = this.module.addMetadata(
-        `!DILocalVariable(name: ${quote(sig.paramNames[i])}, arg: ${i + 1}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(sig.paramTypes[i])}${extra})`
+        `!DILocalVariable(name: ${quote(sig.paramNames[i])}, arg: ${arg}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(sig.paramTypes[i])}${extra})`
       );
       fn.emit(
         `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}, metadata ${variable}, metadata !DIExpression())`

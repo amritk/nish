@@ -1,0 +1,1 @@
+The arrow passed to `make` needs a return type annotation: its result is `U`, which only its body could bind, and a block body's type is not inferred

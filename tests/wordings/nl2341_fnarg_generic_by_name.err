@@ -1,0 +1,1 @@
+`keep` is generic, so it names no one function to pass as argument 2 of `each`; pass an arrow that calls it, such as `(x) => keep(x)`

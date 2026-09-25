@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 517 programs, 11609 dump lines.
+# 526 programs, 11952 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3514,6 +3514,23 @@ function test(): i32 -> @test [exported]
   calls: weight
   stackSites=0 stackLocals=0
   callee 29:10 weight -> @weight
+program tests/cases/dbg_fnarg_arrow.ts
+module tests/cases/dbg_fnarg_arrow.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: apply$fn.16.nish_main$arrow0 nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 7:18 apply<(x) => ...> -> @apply$fn.16.nish_main$arrow0
+function (x) => ...(x: i32): i32 -> @nish_main$arrow0
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function apply<(x) => ...>(f: void, x: i32): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 4:52 (x) => ... -> @nish_main$arrow0
 program tests/cases/dbg_generic.ts
 module tests/cases/dbg_generic.ts (entry)
 struct Box<i32> (class) size=4 align=4
@@ -4406,6 +4423,218 @@ function countdown(n: i32): i32 -> @countdown
   calls: countdown
   stackSites=0 stackLocals=0
   callee 31:54 countdown -> @countdown
+program tests/cases/fnarg_arrow.ts
+module tests/cases/fnarg_arrow.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: apply$fn.16.nish_main$arrow0 apply$fn.16.nish_main$arrow1 apply$fn.16.nish_main$arrow2 apply$fn.16.nish_main$arrow3 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 7:9 a: i32 (const)
+  callee 7:13 apply<(x) => ...> -> @apply$fn.16.nish_main$arrow0
+  local 8:9 b: i32 (const)
+  callee 8:13 apply<(x) => ...> -> @apply$fn.16.nish_main$arrow1
+  local 9:9 c: i32 (const)
+  callee 9:13 apply<(x) => ...> -> @apply$fn.16.nish_main$arrow2
+  local 10:9 d: i32 (const)
+  callee 10:13 apply<(x) => ...> -> @apply$fn.16.nish_main$arrow3
+  local 11:9 n: i32 (let)
+  local 12:14 i: i32 (let)
+function (x) => ...(x: i32): i32 -> @nish_main$arrow0
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (x) => ...(x: i32): i32 -> @nish_main$arrow1
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (x) => ...(x: i32): i32 -> @nish_main$arrow2
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (x) => ...(x: i32): i32 -> @nish_main$arrow3
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 11:9 n: i32 (let)
+  local 12:14 i: i32 (let)
+function apply<(x) => ...>(f: void, x: i32): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 4:52 (x) => ... -> @nish_main$arrow0
+function apply<(x) => ...>(f: void, x: i32): i32 -> @apply$fn.16.nish_main$arrow1 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_main$arrow1
+  stackSites=0 stackLocals=0
+  callee 4:52 (x) => ... -> @nish_main$arrow1
+function apply<(x) => ...>(f: void, x: i32): i32 -> @apply$fn.16.nish_main$arrow2 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_main$arrow2
+  stackSites=0 stackLocals=0
+  callee 4:52 (x) => ... -> @nish_main$arrow2
+function apply<(x) => ...>(f: void, x: i32): i32 -> @apply$fn.16.nish_main$arrow3 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_main$arrow3
+  stackSites=0 stackLocals=0
+  callee 4:52 (x) => ... -> @nish_main$arrow3
+program tests/cases/fnarg_forward.ts
+module tests/cases/fnarg_forward.ts (entry)
+function square(x: i32): i32 -> @square
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 twice$i32$fn.6.square twice$str$fn.16.nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 12:18 twice<i32, square> -> @twice$i32$fn.6.square
+  callee 12:38 twice<string, (s) => ...> -> @twice$str$fn.16.nish_main$arrow0
+function (s) => ...(s: string): string -> @nish_main$arrow0
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function twice<i32, square>(f: void, x: i32): i32 -> @twice$i32$fn.6.square [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: applyOnce$i32$fn.6.square
+  stackSites=0 stackLocals=0
+  callee 7:47 applyOnce<i32, square> -> @applyOnce$i32$fn.6.square
+  callee 7:60 applyOnce<i32, square> -> @applyOnce$i32$fn.6.square
+function twice<string, (s) => ...>(f: void, x: string): string -> @twice$str$fn.16.nish_main$arrow0 [instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: applyOnce$str$fn.16.nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 7:47 applyOnce<string, (s) => ...> -> @applyOnce$str$fn.16.nish_main$arrow0
+  callee 7:60 applyOnce<string, (s) => ...> -> @applyOnce$str$fn.16.nish_main$arrow0
+function applyOnce<i32, square>(g: void, x: i32): i32 -> @applyOnce$i32$fn.6.square [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: square
+  stackSites=0 stackLocals=0
+  callee 5:51 square -> @square
+function applyOnce<string, (s) => ...>(g: void, x: string): string -> @applyOnce$str$fn.16.nish_main$arrow0 [instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 5:51 (s) => ... -> @nish_main$arrow0
+program tests/cases/fnarg_generic.ts
+module tests/cases/fnarg_generic.ts (entry)
+function isLong(s: string): boolean -> @isLong
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via map$i32$str$fn.16.nish_main$arrow0
+  calls: countWhere$str$fn.6.isLong fold$f64$fn.16.nish_main$arrow2 map$f64$f64$fn.16.nish_main$arrow1 map$i32$str$fn.16.nish_main$arrow0 nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32
+  stackSites=3 stackLocals=1
+  local 35:9 labels: string[] (const)
+  callee 35:18 map<i32, string, (n) => ...> -> @map$i32$str$fn.16.nish_main$arrow0
+  local 36:9 xs: f64[] (const)
+  local 37:9 halves: f64[] (const)
+  callee 37:18 map<f64, f64, (x) => ...> -> @map$f64$f64$fn.16.nish_main$arrow1
+  local 38:9 sum: f64 (const)
+  callee 38:15 fold<f64, (a, b) => ...> -> @fold$f64$fn.16.nish_main$arrow2
+  callee 39:38 countWhere<string, isLong> -> @countWhere$str$fn.6.isLong
+function (n) => ...(n: i32): string -> @nish_main$arrow0
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function (x) => ...(x: f64): f64 -> @nish_main$arrow1
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (a, b) => ...(a: f64, b: f64): f64 -> @nish_main$arrow2
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function map<i32, string, (n) => ...>(xs: i32[], f: void): string[] -> @map$i32$str$fn.16.nish_main$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:5
+  calls: nish_array_grow nish_main$arrow0
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 7:9 out: string[] (const)
+  local 8:14 x: i32 (const)
+  callee 9:14 (n) => ... -> @nish_main$arrow0
+function map<f64, f64, (x) => ...>(xs: f64[], f: void): f64[] -> @map$f64$f64$fn.16.nish_main$arrow1 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:5
+  calls: nish_array_grow nish_main$arrow1
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 7:9 out: f64[] (const)
+  local 8:14 x: f64 (const)
+  callee 9:14 (x) => ... -> @nish_main$arrow1
+function fold<f64, (a, b) => ...>(xs: f64[], f: void, identity: f64): f64 -> @fold$f64$fn.16.nish_main$arrow2 [instance]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: identity
+  calls: nish_main$arrow2
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 15:7 acc: f64 (let)
+  local 16:14 x: f64 (const)
+  callee 17:11 (a, b) => ... -> @nish_main$arrow2
+function countWhere<string, isLong>(pred: void, xs: string[]): i32 -> @countWhere$str$fn.6.isLong [instance]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isLong
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 23:7 n: i32 (let)
+  local 24:14 x: string (const)
+  callee 25:9 isLong -> @isLong
+program tests/cases/fnarg_loop_hoist.ts
+module tests/cases/fnarg_loop_hoist.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print nish_str_from_i32 sumBy$arr.i32$fn.16.nish_main$arrow0
+  stackSites=1 stackLocals=1
+  local 14:9 rows: i32[][] (const)
+  local 15:7 t: i32 (let)
+  local 16:12 i: i32 (let)
+  callee 17:13 sumBy<i32[], (r) => ...> -> @sumBy$arr.i32$fn.16.nish_main$arrow0
+function (r) => ...(r: i32[]): i32 -> @nish_main$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer r: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sumBy<i32[], (r) => ...>(xs: i32[][], f: void): i32 -> @sumBy$arr.i32$fn.16.nish_main$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_main$arrow0
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 6:7 s: i32 (let)
+  local 7:14 x: i32[] (const)
+  callee 8:13 (r) => ... -> @nish_main$arrow0
+program tests/cases/fnarg_named.ts
+module tests/cases/fnarg_named.ts (entry)
+function square(x: i32): i32 -> @square
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function cube(x: i32): i32 -> @cube
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: apply$fn.4.cube apply$fn.6.square nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 11:18 apply<square> -> @apply$fn.6.square
+  callee 11:38 apply<cube> -> @apply$fn.4.cube
+  callee 11:56 apply<square> -> @apply$fn.6.square
+function apply<square>(f: void, x: i32): i32 -> @apply$fn.6.square [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: square
+  stackSites=0 stackLocals=0
+  callee 5:52 square -> @square
+function apply<cube>(f: void, x: i32): i32 -> @apply$fn.4.cube [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: cube
+  stackSites=0 stackLocals=0
+  callee 5:52 cube -> @cube
 program tests/cases/gen_box_i32.ts
 module tests/cases/gen_box_i32.ts (entry)
 struct Box<i32> (class) size=4 align=4
@@ -8791,6 +9020,54 @@ module docs/cookbook/fn_f64.ts (entry)
 function halve(x: f64): f64 -> @halve
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+program docs/cookbook/fnarg_arrow.ts
+module docs/cookbook/fnarg_arrow.ts (entry)
+function halves(xs: i32[]): f64[] -> @halves [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via map$i32$f64$fn.13.halves$arrow0
+  calls: map$i32$f64$fn.13.halves$arrow0
+  pointer xs: size=0 writesThrough=false captured=false passedTo=map$i32$f64$fn.13.halves$arrow0#0
+  stackSites=0 stackLocals=0
+  callee 11:45 map<i32, f64, (n) => ...> -> @map$i32$f64$fn.13.halves$arrow0
+function (n) => ...(n: i32): f64 -> @halves$arrow0
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function map<i32, f64, (n) => ...>(xs: i32[], f: void): f64[] -> @map$i32$f64$fn.13.halves$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 6:5
+  calls: halves$arrow0 nish_array_grow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 4:9 out: f64[] (const)
+  local 5:14 x: i32 (const)
+  callee 6:14 (n) => ... -> @halves$arrow0
+program docs/cookbook/fnarg_named.ts
+module docs/cookbook/fnarg_named.ts (entry)
+function square(x: i32): i32 -> @square
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function cube(x: i32): i32 -> @cube
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function both(x: i32): i32 -> @both [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: apply$fn.4.cube apply$fn.6.square
+  stackSites=0 stackLocals=0
+  callee 8:38 apply<square> -> @apply$fn.6.square
+  callee 8:57 apply<cube> -> @apply$fn.4.cube
+function apply<square>(f: void, x: i32): i32 -> @apply$fn.6.square [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: square
+  stackSites=0 stackLocals=0
+  callee 3:52 square -> @square
+function apply<cube>(f: void, x: i32): i32 -> @apply$fn.4.cube [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: cube
+  stackSites=0 stackLocals=0
+  callee 3:52 cube -> @cube
 program docs/cookbook/gen_class.ts
 module docs/cookbook/gen_class.ts (entry)
 struct Box<i32> (class) size=4 align=4
@@ -10410,6 +10687,81 @@ function main(): i32 -> @nish_main [exported entry]
   callee 58:5 Vec3.addScaled -> @Vec3.addScaled
   callee 59:29 Vec3.dot -> @Vec3.dot
   callee 59:40 Vec3.norm -> @Vec3.norm
+program tests/parser/fnarg.ts
+module tests/parser/fnarg.ts (entry)
+function twice(x: i32): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function orNull(s: string): string | null -> @orNull
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  stackSites=0 stackLocals=0
+function shapes(c: boolean, a: i32, b: i32): i32 -> @shapes
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: a b
+  calls: apply$fn.13.shapes$arrow0 apply$fn.13.shapes$arrow1 apply$fn.13.shapes$arrow2 apply$fn.13.shapes$arrow3 apply$fn.5.twice nish_arena_mark nish_arena_release nish_array_grow pair$fn.13.shapes$arrow4
+  stackSites=1 stackLocals=1
+  local 24:7 x: i32 (let)
+  callee 24:11 apply<twice> -> @apply$fn.5.twice
+  callee 25:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow0
+  callee 26:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow1
+  callee 27:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow2
+  callee 28:7 apply<(y) => ...> -> @apply$fn.13.shapes$arrow3
+  local 29:11 z: i32 (const)
+  local 34:9 names: string | null[] (const)
+  callee 36:14 pair<(p, q) => ...> -> @pair$fn.13.shapes$arrow4
+function (y) => ...(y: i32): i32 -> @shapes$arrow0
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (y) => ...(y: i32): i32 -> @shapes$arrow1
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (y) => ...(y: i32): i32 -> @shapes$arrow2
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (y) => ...(y: i32): i32 -> @shapes$arrow3
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 29:11 z: i32 (const)
+function (p, q) => ...(p: i32, q: i32): i32 -> @shapes$arrow4
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function apply<twice>(f: void, x: i32): i32 -> @apply$fn.5.twice [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: twice
+  stackSites=0 stackLocals=0
+  callee 7:10 twice -> @twice
+function apply<(y) => ...>(f: void, x: i32): i32 -> @apply$fn.13.shapes$arrow0 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: shapes$arrow0
+  stackSites=0 stackLocals=0
+  callee 7:10 (y) => ... -> @shapes$arrow0
+function apply<(y) => ...>(f: void, x: i32): i32 -> @apply$fn.13.shapes$arrow1 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: shapes$arrow1
+  stackSites=0 stackLocals=0
+  callee 7:10 (y) => ... -> @shapes$arrow1
+function apply<(y) => ...>(f: void, x: i32): i32 -> @apply$fn.13.shapes$arrow2 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: shapes$arrow2
+  stackSites=0 stackLocals=0
+  callee 7:10 (y) => ... -> @shapes$arrow2
+function apply<(y) => ...>(f: void, x: i32): i32 -> @apply$fn.13.shapes$arrow3 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: shapes$arrow3
+  stackSites=0 stackLocals=0
+  callee 7:10 (y) => ... -> @shapes$arrow3
+function pair<(p, q) => ...>(f: void, n: string | null[]): i32 -> @pair$fn.13.shapes$arrow4 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: shapes$arrow4
+  pointer n: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 11:10 (p, q) => ... -> @shapes$arrow4
 reject tests/parser/precedence.ts: error: Operator `||` requires boolean operands, got i32 and i32
 program tests/parser/types.ts
 module tests/parser/types.ts (entry)

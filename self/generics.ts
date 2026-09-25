@@ -29,15 +29,19 @@ import { resolveType } from "./annotations";
 import { LANGUAGE } from "./branding";
 import { rejectForeignPointer } from "./annotations";
 import { CheckContext } from "./context";
+import { checkSignatureBody } from "./checker";
 import { collectFunctionSignature } from "./declarations";
 import { internalErrorFor } from "./ice";
 import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
 import { collectMethodSignature, collectStructMembers, noteStructNames, referencedStructNames } from "./structs";
 import {
+  FLAG_FOREIGN,
   N_ARRAY,
+  N_ARROW,
   N_BIGINT,
   N_BINARY,
+  N_BLOCK,
   N_CALL,
   N_CLASS,
   N_CONDITIONAL,
@@ -55,6 +59,7 @@ import {
   N_NULL,
   N_NUMBER,
   N_OBJECT,
+  N_PARAM,
   N_PAREN,
   N_STRING,
   N_SUPER,
@@ -62,6 +67,7 @@ import {
   N_THIS,
   N_TRUE,
   N_TYPE_ARRAY,
+  N_TYPE_FUNCTION,
   N_TYPE_NULL,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
@@ -74,17 +80,19 @@ import {
   ConstraintList,
   DeferredConstraint,
   DeferredInstance,
+  FunctionBindings,
   FunctionSig,
   ImportBinding,
   Instantiation,
+  ROLE_FUNCTION,
   STRUCT_CLASS,
   StructInfo,
   StructInstantiation,
   StructTemplateInfo,
   TemplateInfo,
 } from "./program";
-import { Scope, TypeOrigin, unknownOrigin } from "./symbols";
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, R_UNKNOWN, T_ERROR, TypeTable } from "./types";
+import { Local, STORAGE_PARAM, Scope, TypeOrigin, unknownOrigin } from "./symbols";
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, R_UNKNOWN, T_ERROR, T_VOID, TypeTable } from "./types";
 
 /**
  * This compiler's instantiation limits. They are a backstop for a program that
@@ -910,10 +918,11 @@ export const instantiate = (
   ctx: CheckContext,
   template: TemplateInfo,
   args: i32[],
+  functions: FunctionSig[],
   at: Node
 ): FunctionSig | null => {
   const home = template.home;
-  const sig = instantiateHere(home, template, args, at, new RequestSite(ctx));
+  const sig = instantiateHere(home, template, args, functions, at, new RequestSite(ctx));
   // The definition is the declaring module's; this module links against it.
   if (sig !== null && home !== ctx) {
     useExternalInstance(ctx, sig);
@@ -930,6 +939,7 @@ export const instantiateHere = (
   ctx: CheckContext,
   template: TemplateInfo,
   args: i32[],
+  functions: FunctionSig[],
   at: Node,
   site: RequestSite
 ): FunctionSig | null => {
@@ -953,7 +963,14 @@ export const instantiateHere = (
   // `Box$i32.pick` (WP18 G8, §15.8).
   const owner = template.owner;
   const base = owner === null ? template.sourceName : `${owner.name}.${template.decl.children[0].text}`;
-  const symbol = instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args);
+  // WP29: a callee another module defines has to be callable from this one.
+  for (const fn of functions) {
+    exposeTo(ctx, fn);
+  }
+  const symbol = withFunctionArguments(
+    instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args),
+    functions
+  );
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
     // One symbol is one (template, tuple): the mangling is injective because
@@ -1026,7 +1043,7 @@ export const instantiateHere = (
   // The template's own annotations, resolved once with its parameters bound:
   // the signature collector a monomorphic declaration goes through, over a
   // resolver that now answers `T`.
-  const display = instanceDisplayName(ctx.table, template.sourceName, args);
+  const display = functionInstanceDisplayName(ctx.table, template.sourceName, args, functions);
   const saved = ctx.typeBindings;
   ctx.typeBindings = bindings;
   const sig =
@@ -1038,6 +1055,8 @@ export const instantiateHere = (
   const info = new Instantiation(template, args, sig, bindings, ctx.program.nodeTypes.length);
   info.owner = receiverOf(template);
   info.from = site.fromFunction;
+  info.functionArgs = functions;
+  info.functionBindings = bindFunctionParameters(template.decl, functions);
   sig.instance = info;
   template.count = template.count + 1;
   ctx.program.addInstantiation(symbol, info);
@@ -1052,6 +1071,12 @@ export const instantiateHere = (
  * the resolution is: check the arguments, unify, request the instantiation, and
  * then check the arguments *again* against the signature that came back — which
  * is the ordinary monomorphic check and reports the ordinary message.
+ *
+ * WP29 puts a second phase between the unification and the request. A
+ * function-typed parameter's argument is not a value to check: it is a name or
+ * an arrow, resolved once the value arguments have bound what they can, so an
+ * arrow's parameters can take their types from `xs` and its body can bind `U`.
+ * What it resolves to is part of the request, beside the type arguments.
  */
 export const checkGenericCall = (
   ctx: CheckContext,
@@ -1067,19 +1092,68 @@ export const checkGenericCall = (
       `\`${template.sourceName}\` expects ${parameters.children.length} argument(s), got ${args.children.length}`
     );
   }
+  // A generic method never has a function parameter: its signature collector
+  // refuses one, so its arguments are all values and are checked as values.
+  const functional = template.owner === null;
   const names = typeParamSet(template);
   const bindings = new StringMap();
-  const argTypes: i32[] = [];
+  let argTypes: i32[] = [];
+  // Which arguments are checked after the others: a function argument, and a
+  // literal that takes its type from what the others bind.
+  const later: boolean[] = [];
   let i = 0;
-  while (i < args.children.length) {
-    argTypes.push(checkExpression(ctx, args.children[i], scope, -1));
+  while (i < args.children.length && i < parameters.children.length) {
+    const deferred = (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i]);
+    later.push(deferred);
+    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, -1));
     i = i + 1;
   }
   i = 0;
-  while (i < parameters.children.length) {
+  while (i < parameters.children.length && i < later.length && i < argTypes.length) {
     const annotation = parameters.children[i].children[1];
-    if (annotation.kind !== N_EMPTY) {
+    if (!later[i] && annotation.kind !== N_EMPTY) {
       unifyAnnotation(ctx, annotation, argTypes[i], names, bindings);
+    }
+    i = i + 1;
+  }
+  // A bare numeric literal takes its type from its context, so one written
+  // for a parameter the other arguments have already bound is checked against
+  // that binding: `reduce(xs, add, 0.0)` over an `f64[]` is an `f64` zero in
+  // either number mode, as it would be with the type written out. One that no
+  // other argument binds is checked as a `number` and binds the parameter
+  // itself, which is what it did before (WP29, for an identity argument).
+  const settled: i32[] = [];
+  i = 0;
+  while (i < args.children.length && i < parameters.children.length && i < later.length && i < argTypes.length) {
+    const param = parameters.children[i];
+    const arg = args.children[i];
+    const annotation = param.children[1];
+    const early = argTypes[i];
+    if (later[i] && !(functional && isFunctionParameter(param))) {
+      let want = -1;
+      if (annotation.kind !== N_EMPTY && template.owner === null && !mentionsUnbound(annotation, names, bindings)) {
+        want = resolveInTemplate(template, annotation, bindings);
+      }
+      const type = checkExpression(ctx, arg, scope, want);
+      if (annotation.kind !== N_EMPTY) {
+        unifyAnnotation(ctx, annotation, type, names, bindings);
+      }
+      settled.push(type);
+    } else {
+      settled.push(early);
+    }
+    i = i + 1;
+  }
+  argTypes = settled;
+  const functions: FunctionSig[] = [];
+  i = 0;
+  while (i < parameters.children.length) {
+    if (functional && isFunctionParameter(parameters.children[i])) {
+      const fn = resolveFunctionArgument(ctx, template, i, args.children[i], names, bindings, scope);
+      if (fn === null) {
+        return T_ERROR;
+      }
+      functions.push(fn);
     }
     i = i + 1;
   }
@@ -1111,15 +1185,22 @@ export const checkGenericCall = (
     }
     tuple.push(bound);
   }
-  const sig = instantiate(ctx, template, tuple, expr);
+  if (!matchFunctionArguments(ctx, template, bindings, functions, args)) {
+    return T_ERROR;
+  }
+  const sig = instantiate(ctx, template, tuple, functions, expr);
   if (sig === null) {
     return T_ERROR;
   }
   // A generic method's signature starts with `this` (WP18 G8).
   const offset = template.owner === null ? 0 : 1;
   i = 0;
-  while (i < args.children.length) {
-    if (argTypes[i] !== T_ERROR && !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])) {
+  while (i < args.children.length && i < argTypes.length) {
+    if (
+      !sig.isCompileTime(i + offset) &&
+      argTypes[i] !== T_ERROR &&
+      !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
+    ) {
       const want = ctx.table.typeName(sig.paramTypes[i + offset]);
       ctx.error(
         args.children[i],
@@ -1131,6 +1212,579 @@ export const checkGenericCall = (
   }
   ctx.program.nodeCallees[expr.id] = sig;
   return sig.returnType;
+};
+
+// ---- Compile-time function parameters (WP29) ------------------------------------------
+//
+// docs/wp23-language-surface.md §6, built for a callee the checker can name and
+// for no other kind. A parameter annotated with a function type makes its
+// function a template even with no type parameters, and each call names the
+// function it passes — a top-level function by name, or an arrow written right
+// there, which is lifted into a function of its own. The instantiation key
+// gains that function as a third component and the symbol a segment for it, so
+// `apply(square, 3)` and `apply(cube, 3)` are two `define`s, each with a direct
+// call in it. There is no function pointer anywhere: the parameter has no LLVM
+// parameter, no local and no value, and the only things a body can do with it
+// are call it and pass it on to another such parameter.
+
+/** An annotation with its parentheses taken off, which is where a function type is recognised. */
+const unwrapTypeParens = (node: Node): Node => node.kind === N_TYPE_PAREN ? unwrapTypeParens(node.children[0]) : node;
+
+/** Whether a declared parameter is annotated with a function type (WP29). */
+export const isFunctionParameter = (param: Node): boolean =>
+  param.kind === N_PARAM && param.children.length > 1 && unwrapTypeParens(param.children[1]).kind === N_TYPE_FUNCTION;
+
+/** Whether any parameter of a function declaration is annotated with a function type (WP29). */
+export const hasFunctionParameter = (decl: Node): boolean => {
+  if (decl.children.length < 2 || decl.children[1].kind !== N_LIST) {
+    return false;
+  }
+  for (const param of decl.children[1].children) {
+    if (isFunctionParameter(param)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Whether a top-level function declaration is a template: it has type
+ * parameters (WP18), or a function-typed parameter (WP29). A `declare
+ * function` is never one; its collector refuses the function type instead.
+ */
+export const isTemplateFunction = (decl: Node): boolean =>
+  isGenericFunction(decl) || ((decl.flags & FLAG_FOREIGN) === 0 && hasFunctionParameter(decl));
+
+/**
+ * The refusal for a function type written where a parameter may not take one,
+ * shared by every such position, which `what` names.
+ */
+export const functionTypeHereMessage = (name: string, what: string): string =>
+  `\`${name}\` cannot have a function type here: a function type may only annotate a parameter of a ` +
+  `top-level function, which is monomorphised for each function it is given, and this is a parameter of ${what}`;
+
+/**
+ * A function type inside a function type — a callee that itself takes a
+ * function — is refused once, against the declaration. Such a parameter would
+ * need its argument's own function argument at the same call, which is a
+ * function value by another name.
+ */
+export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolean => {
+  for (const param of decl.children[1].children) {
+    if (!isFunctionParameter(param)) {
+      continue;
+    }
+    const fnType = unwrapTypeParens(param.children[1]);
+    for (const inner of fnType.children[0].children) {
+      if (inner.children.length > 1 && unwrapTypeParens(inner.children[1]).kind === N_TYPE_FUNCTION) {
+        ctx.error(inner.children[1], functionTypeHereMessage(inner.children[0].text, "a function type"));
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+/**
+ * One segment per function argument, after the type arguments' (WP29). It is
+ * prefix-coded like theirs — `fn.` and the symbol's length, then the symbol —
+ * so a symbol that holds a `$` of its own cannot run into the next segment, and
+ * no type mangles to anything starting `fn.`, so the encoding stays injective.
+ */
+const withFunctionArguments = (symbol: string, functions: FunctionSig[]): string => {
+  const parts: string[] = [symbol];
+  for (const fn of functions) {
+    parts.push(`fn.${fn.name.length}.${fn.name}`);
+  }
+  return parts.join("$");
+};
+
+/** `apply<i32, square>`: the source spelling of a request that takes functions (WP29). */
+const functionInstanceDisplayName = (
+  table: TypeTable,
+  base: string,
+  args: i32[],
+  functions: FunctionSig[]
+): string => {
+  if (functions.length === 0) {
+    return instanceDisplayName(table, base, args);
+  }
+  const parts: string[] = [];
+  for (const arg of args) {
+    parts.push(table.typeName(arg));
+  }
+  for (const fn of functions) {
+    parts.push(fn.sourceName);
+  }
+  return `${base}<${parts.join(", ")}>`;
+};
+
+/** Each function-typed parameter of `decl` by name, bound to the function the request gave it. */
+const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionBindings => {
+  const out = new FunctionBindings();
+  let k = 0;
+  for (const param of decl.children[1].children) {
+    if (isFunctionParameter(param) && k < functions.length) {
+      out.add(param.children[0].text, functions[k]);
+      k = k + 1;
+    }
+  }
+  return out;
+};
+
+/**
+ * Make `fn` callable from `home`, which is where an instantiation that calls it
+ * is being made (WP29).
+ *
+ * A template is monomorphised in its own module (WP18 G7), so an instantiation
+ * of an imported template that was given a caller's *private* function, or an
+ * arrow the caller wrote, calls a function another module defines. Such a
+ * function would be `internal`, so it becomes `hidden` instead: in the final
+ * link, and exported from nothing. Its symbol needs no change for that, because
+ * a function's symbol is already unique across the program whether or not it
+ * is exported (`rejectSymbolClashes`), and a lifted arrow's is its enclosing
+ * function's with a `$` no declared name can spell. The module that calls it
+ * gets a `declare`, the way an instantiation it calls and another module
+ * defines does.
+ */
+const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
+  if (fn.definedIn(home.source)) {
+    return;
+  }
+  // A `declare function` is C's symbol, and has no linkage of this program's.
+  if (!fn.exported && !fn.foreign()) {
+    fn.hidden = true;
+  }
+  useExternalInstance(home, fn);
+};
+
+/**
+ * `(x: i32) => i64`: a function's signature spelled as the function type it
+ * would have to match, for the message that says it does not.
+ */
+const functionTypeText = (table: TypeTable, names: string[], types: i32[], returnType: i32): string => {
+  const parts: string[] = [];
+  let i = 0;
+  while (i < names.length && i < types.length) {
+    parts.push(`${names[i]}: ${table.typeName(types[i])}`);
+    i = i + 1;
+  }
+  return `(${parts.join(", ")}) => ${table.typeName(returnType)}`;
+};
+
+/**
+ * The refusal for a function argument whose signature is not its parameter's
+ * function type, `wanted` spelled as the caller has it: as written while a
+ * type parameter may still be unbound, and resolved once every one is.
+ */
+const mismatchMessage = (
+  table: TypeTable,
+  template: TemplateInfo,
+  index: i32,
+  fn: FunctionSig,
+  param: Node,
+  wanted: string
+): string =>
+  `Argument ${index + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
+  `\`${functionTypeText(table, fn.paramNames, fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
+  `\`${wanted}\`; a function argument must have exactly its parameter's type`;
+
+/**
+ * Resolve an annotation written in `template`'s declaration, with `bindings`
+ * standing for its type parameters: in the template's own module, whose names
+ * the annotation uses, exactly as an instantiation's signature is resolved.
+ */
+const resolveInTemplate = (template: TemplateInfo, annotation: Node, bindings: StringMap): i32 => {
+  const home = template.home;
+  const saved = home.typeBindings;
+  home.typeBindings = bindings;
+  const type = resolveType(annotation, home);
+  home.typeBindings = saved;
+  return type;
+};
+
+/** Whether `annotation` mentions a type parameter of `names` that `bindings` has not bound yet. */
+const mentionsUnbound = (annotation: Node, names: StringSet, bindings: StringMap): boolean => {
+  const unbound = new StringSet();
+  let i = 0;
+  while (i < names.size()) {
+    const name = names.at(i);
+    if (bindings.get(name, -1) < 0) {
+      unbound.add(name);
+    }
+    i = i + 1;
+  }
+  return unbound.size() > 0 && mentionsTypeParam(annotation, unbound);
+};
+
+/**
+ * The function a call gives the function-typed parameter at `index`, or
+ * `null` once it has been refused: the name of a top-level function (or of a
+ * function parameter of the body being checked, which passes its callee on),
+ * or an arrow written right there. What it binds is unified into `bindings`,
+ * so a type parameter that only the callee mentions is inferred from it.
+ */
+const resolveFunctionArgument = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  index: i32,
+  arg: Node,
+  names: StringSet,
+  bindings: StringMap,
+  scope: Scope
+): FunctionSig | null => {
+  const param = template.decl.children[1].children[index];
+  const fnType = unwrapTypeParens(param.children[1]);
+  // The argument is no value, and the walks after this one read a type off
+  // every node they visit; `void` is the one that says so.
+  let written = arg;
+  ctx.program.nodeTypes[written.id] = T_VOID;
+  while (written.kind === N_PAREN) {
+    written = written.children[0];
+    ctx.program.nodeTypes[written.id] = T_VOID;
+  }
+  if (written.kind === N_ARROW) {
+    return liftArrowArgument(ctx, template, index, written, names, bindings, scope);
+  }
+  const lead = `Argument ${index + 1} of \`${template.sourceName}\` must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`;
+  if (written.kind !== N_IDENT) {
+    refuseOnce(ctx, arg, `${lead}; a function is never a value computed at run time`);
+    return null;
+  }
+  const name = written.text;
+  if (scope.lookup(name) !== null) {
+    refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`);
+    return null;
+  }
+  if (ctx.capturesOuter(name)) {
+    refuseOnce(ctx, arg, capturedMessage(name));
+    return null;
+  }
+  const bound = ctx.functionBindings.get(name);
+  const fn = bound !== null ? bound : ctx.signature(name);
+  if (fn === null) {
+    if (ctx.template(name) !== null) {
+      refuseOnce(ctx, 
+        arg,
+        `\`${name}\` is generic, so it names no one function to pass as argument ${index + 1} of ` +
+          `\`${template.sourceName}\`; pass an arrow that calls it, such as \`(x) => ${name}(x)\``
+      );
+      return null;
+    }
+    if (ctx.program.constant(name) !== null) {
+      refuseOnce(ctx, arg, `${lead}; \`${name}\` is a constant, and a constant is never a function`);
+      return null;
+    }
+    refuseOnce(ctx, arg, `Unknown function \`${name}\``);
+    return null;
+  }
+  const wanted = fnType.children[0].children;
+  if (fn.paramTypes.length !== wanted.length) {
+    // Said now, in the words of the exact-type rule, rather than as a type
+    // parameter the callee failed to bind.
+    refuseOnce(ctx, arg, mismatchMessage(ctx.table, template, index, fn, param, template.home.textOf(fnType)));
+    return null;
+  }
+  let k = 0;
+  while (k < wanted.length && k < fn.paramTypes.length) {
+    unifyAnnotation(ctx, wanted[k].children[1], fn.paramTypes[k], names, bindings);
+    k = k + 1;
+  }
+  unifyAnnotation(ctx, fnType.children[1], fn.returnType, names, bindings);
+  return fn;
+};
+
+/**
+ * An arrow given for the function-typed parameter at `index`: its parameters'
+ * types — as written, or as the function type says once the value arguments
+ * have bound what it mentions — and then its body, checked where it stands.
+ * A result type the function type leaves to a type parameter nothing else has
+ * bound is inferred from a concise body; a block body has many `return`s and
+ * has to say.
+ */
+const liftArrowArgument = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  index: i32,
+  arrow: Node,
+  names: StringSet,
+  bindings: StringMap,
+  scope: Scope
+): FunctionSig | null => {
+  const param = template.decl.children[1].children[index];
+  const fnType = unwrapTypeParens(param.children[1]);
+  const wanted = fnType.children[0].children;
+  const returns = fnType.children[1];
+  const params = arrow.children[1].children;
+  if (params.length !== wanted.length) {
+    refuseOnce(ctx, 
+      arrow,
+      `The arrow passed as argument ${index + 1} of \`${template.sourceName}\` takes ${params.length} ` +
+        `parameter(s), and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\``
+    );
+    return null;
+  }
+  const types: i32[] = [];
+  // Each element is read into a local before anything is called, which is
+  // what keeps the bounds proof: a call may reach an array, so a length fact
+  // does not survive one.
+  let k = 0;
+  while (k < params.length && k < wanted.length) {
+    const written = params[k];
+    const expected = wanted[k].children[1];
+    const annotation = written.children[1];
+    if (annotation.kind === N_EMPTY) {
+      types.push(-1);
+    } else if (unwrapTypeParens(annotation).kind === N_TYPE_FUNCTION) {
+      refuseOnce(ctx, annotation, functionTypeHereMessage(written.children[0].text, "an arrow"));
+      return null;
+    } else {
+      const type = resolveType(annotation, ctx);
+      if (type === T_ERROR) {
+        return null;
+      }
+      unifyAnnotation(ctx, expected, type, names, bindings);
+      types.push(type);
+    }
+    k = k + 1;
+  }
+  const resolved: i32[] = [];
+  k = 0;
+  while (k < params.length && k < wanted.length && k < types.length) {
+    const written = params[k];
+    const expected = wanted[k].children[1];
+    const given = types[k];
+    if (given >= 0) {
+      resolved.push(given);
+    } else if (mentionsUnbound(expected, names, bindings)) {
+      refuseOnce(ctx, 
+        written,
+        `Cannot infer the type of \`${written.children[0].text}\` in the arrow passed to ` +
+          `\`${template.sourceName}\`: \`${template.home.textOf(expected)}\` mentions a type parameter no ` +
+          "other argument binds; annotate the parameter"
+      );
+      return null;
+    } else {
+      const type = resolveInTemplate(template, expected, bindings);
+      if (type === T_ERROR) {
+        return null;
+      }
+      resolved.push(type);
+    }
+    k = k + 1;
+  }
+  let returnType = -1;
+  const annotated = arrow.children[2];
+  if (annotated.kind !== N_EMPTY) {
+    returnType = resolveType(annotated, ctx);
+    if (returnType === T_ERROR) {
+      return null;
+    }
+  } else if (!mentionsUnbound(returns, names, bindings)) {
+    returnType = resolveInTemplate(template, returns, bindings);
+    if (returnType === T_ERROR) {
+      return null;
+    }
+  } else if (arrow.children[3].kind === N_BLOCK) {
+    refuseOnce(ctx, 
+      arrow,
+      `The arrow passed to \`${template.sourceName}\` needs a return type annotation: its result is ` +
+        `\`${template.home.textOf(returns)}\`, which only its body could bind, and a block body's type is not inferred`
+    );
+    return null;
+  }
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope);
+  if (fn === null) {
+    return null;
+  }
+  unifyAnnotation(ctx, returns, fn.returnType, names, bindings);
+  return fn;
+};
+
+/** A numeric literal, negated or not, whose type is whatever its context says it is. */
+const isContextualLiteral = (arg: Node): boolean =>
+  arg.kind === N_NUMBER || (arg.kind === N_UNARY && arg.text === "-" && arg.children[0].kind === N_NUMBER);
+
+/** `(a, b) => ...`: how a lifted arrow is named in a diagnostic and in an instantiation's display name. */
+const arrowDisplayName = (arrow: Node): string => {
+  const names: string[] = [];
+  for (const param of arrow.children[1].children) {
+    names.push(param.children[0].text);
+  }
+  return `(${names.join(", ")}) => ...`;
+};
+
+/**
+ * Lift an arrow argument into a function of its own and check its body now,
+ * where it was written (WP29).
+ *
+ * The body is checked into the enclosing function's side tables — its nodes
+ * are the enclosing function's nodes, and the enclosing body is checked once
+ * per instantiation, so each node still has exactly one answer — and an arrow
+ * inside an instantiation's body shares that instantiation's tables for the
+ * passes after this one. It sees its parameters and the module's top-level
+ * names and nothing else: a name of the function around it is a capture, and
+ * is refused as one (`capturesOuter`).
+ *
+ * The symbol is the enclosing function's and a counter, behind a `$`, which is
+ * unique in the module because the enclosing symbol is. `returnType` is -1 when
+ * the concise body's own type is the result.
+ */
+const liftArrow = (ctx: CheckContext, arrow: Node, types: i32[], returnType: i32, outer: Scope): FunctionSig | null => {
+  // Checked twice in one body (a caller that re-checks an argument): the arrow
+  // is lifted once, and the call node's table slot for it says which.
+  const existing = ctx.program.nodeCallees[arrow.id];
+  if (existing !== null) {
+    return existing;
+  }
+  const enclosing = ctx.current;
+  if (enclosing === null) {
+    refuseOnce(ctx, arrow, arrowElsewhereMessage());
+    return null;
+  }
+  const fn = new FunctionSig(`${enclosing.name}$arrow${enclosing.arrowCount}`, arrowDisplayName(arrow), arrow);
+  enclosing.arrowCount = enclosing.arrowCount + 1;
+  fn.origin = ctx.source;
+  fn.role = ROLE_FUNCTION;
+  fn.lifted = true;
+  fn.returnType = returnType < 0 ? T_ERROR : returnType;
+  const scope = new Scope(null);
+  let k = 0;
+  for (const param of arrow.children[1].children) {
+    const name = param.children[0].text;
+    const type = k < types.length ? types[k] : T_ERROR;
+    const local = new Local(name, type, false, STORAGE_PARAM);
+    // Inside an instantiation an arrow's parameter may be a `T`, and the rule
+    // that a `T` has only its constraint's members has to see it; where it
+    // came from is not followed through a lifted arrow, so it fails closed.
+    local.origin = ctx.typeBindings.size() === 0 ? null : unknownOrigin(param);
+    if (!scope.declare(local)) {
+      refuseOnce(ctx, param, `Duplicate parameter \`${name}\``);
+      return null;
+    }
+    fn.paramNames.push(name);
+    fn.paramTypes.push(type);
+    k = k + 1;
+  }
+  const enclosingInstance = enclosing.instance;
+  if (enclosingInstance !== null) {
+    const shared = new Instantiation(null, enclosingInstance.typeArgs, fn, enclosingInstance.bindings, 0);
+    shared.shareTablesOf(enclosingInstance);
+    shared.owner = enclosingInstance.owner;
+    shared.from = enclosingInstance;
+    fn.instance = shared;
+  }
+  ctx.program.nodeCallees[arrow.id] = fn;
+
+  const savedErrored = ctx.errored;
+  const savedLoopKinds = ctx.loopKinds;
+  const savedLoopBreaks = ctx.loopBreaks;
+  const savedStatement = ctx.statementExpression;
+  const savedFunctions = ctx.functionBindings;
+  ctx.arrowOuterScopes.push(outer);
+  ctx.arrowOuterFunctions.push(savedFunctions);
+  ctx.functionBindings = new FunctionBindings();
+  ctx.current = fn;
+  ctx.errored = false;
+  ctx.loopKinds = [];
+  ctx.loopBreaks = [];
+  ctx.statementExpression = null;
+  checkSignatureBody(ctx, fn, scope, returnType < 0);
+  ctx.current = enclosing;
+  ctx.loopKinds = savedLoopKinds;
+  ctx.loopBreaks = savedLoopBreaks;
+  ctx.statementExpression = savedStatement;
+  ctx.functionBindings = savedFunctions;
+  ctx.arrowOuterScopes.pop();
+  ctx.arrowOuterFunctions.pop();
+  if (fn.poisoned) {
+    // The arrow's own diagnostic stands for the call around it.
+    ctx.errored = true;
+    return null;
+  }
+  ctx.errored = savedErrored;
+  ctx.program.functions.push(fn);
+  return fn;
+};
+
+/**
+ * Report a refusal about a function argument once per node (WP29). The call
+ * that makes it may sit in a template's body, which is checked once per
+ * instantiation, and a mistake written once is reported once: the same rule
+ * `refuseParameterMember` follows (`CheckContext.errorOnce`).
+ */
+export const refuseOnce = (ctx: CheckContext, node: Node, message: string): void => {
+  ctx.errorOnce(node, node.start, message);
+};
+
+/** The refusal for an arrow anywhere but as a function argument. */
+export const arrowElsewhereMessage = (): string =>
+  "An arrow may only be written as the argument for a function-typed parameter of a top-level function, which " +
+  `lifts it into a function of its own: a function is never a value in ${LANGUAGE}, so it cannot be stored, ` +
+  "returned or called where it stands";
+
+/** The refusal for an arrow argument that reads a name of the function it is written in. */
+export const capturedMessage = (name: string): string =>
+  `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow argument is lifted into a ` +
+  "function of its own and sees only its parameters and the module's top-level names, so it can capture nothing";
+
+/**
+ * Every function argument of a request against the function type its
+ * parameter has once every type parameter is bound (WP29). They must agree
+ * exactly — the body calls the callee with the parameter's types and reads
+ * the parameter's result type — so the check is here, at the call that chose
+ * the callee, rather than as an error inside the template's body.
+ */
+const matchFunctionArguments = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  bindings: StringMap,
+  functions: FunctionSig[],
+  args: Node
+): boolean => {
+  const table = ctx.table;
+  let k = 0;
+  let i = 0;
+  for (const param of template.decl.children[1].children) {
+    if (isFunctionParameter(param) && k < functions.length) {
+      const fn = functions[k];
+      const fnType = unwrapTypeParens(param.children[1]);
+      const wanted = fnType.children[0].children;
+      const names: string[] = [];
+      const types: i32[] = [];
+      for (const inner of wanted) {
+        names.push(inner.children[0].text);
+        const type = resolveInTemplate(template, inner.children[1], bindings);
+        if (type === T_ERROR) {
+          return false;
+        }
+        types.push(type);
+      }
+      const returnType = resolveInTemplate(template, fnType.children[1], bindings);
+      if (returnType === T_ERROR) {
+        return false;
+      }
+      let same = fn.paramTypes.length === types.length;
+      let j = 0;
+      while (same && j < types.length && j < fn.paramTypes.length) {
+        const got = fn.paramTypes[j];
+        const want = types[j];
+        same = canonicalArgument(table, got) === canonicalArgument(table, want);
+        j = j + 1;
+      }
+      same = same && canonicalArgument(table, fn.returnType) === canonicalArgument(table, returnType);
+      if (!same) {
+        refuseOnce(ctx, 
+          args.children[i],
+          mismatchMessage(table, template, i, fn, param, functionTypeText(table, names, types, returnType))
+        );
+        return false;
+      }
+      k = k + 1;
+    }
+    i = i + 1;
+  }
+  return true;
 };
 
 /**
@@ -1830,6 +2484,28 @@ const originOfGenericCall = (ctx: CheckContext, call: Node, template: TemplateIn
   return new TypeOrigin(template.decl.children[2], chainParameters(template), args);
 };
 
+/**
+ * The return annotation of the function type of the parameter `name` of the
+ * instantiation whose body is being checked, or `null` when `name` is not one
+ * of its function parameters (WP29).
+ */
+const functionParameterReturn = (ctx: CheckContext, name: string): Node | null => {
+  if (ctx.functionBindings.get(name) === null) {
+    return null;
+  }
+  const instance = ctx.currentInstance;
+  const template: TemplateInfo | null = instance === null ? null : instance.template;
+  if (template === null) {
+    return null;
+  }
+  for (const param of template.decl.children[1].children) {
+    if (isFunctionParameter(param) && param.children[0].text === name) {
+      return unwrapTypeParens(param.children[1]).children[1];
+    }
+  }
+  return null;
+};
+
 /** An array literal's origin: the literal, standing for its first element that came from somewhere. */
 const originOfArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
   for (const element of expr.children) {
@@ -1902,6 +2578,13 @@ export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigi
         return originOfMember(ctx, callee.children[0], callee.text, true, scope);
       }
       if (callee.kind === N_IDENT && scope.lookup(callee.text) === null) {
+        // WP29: a call through a function parameter answers what its function
+        // type says it does, as the template wrote it: `f(x)` with
+        // `f: (a: T) => T` is a `T`, whatever the callee's declared type is.
+        const returns = functionParameterReturn(ctx, callee.text);
+        if (returns !== null) {
+          return new TypeOrigin(returns, [], []);
+        }
         const template = ctx.program.template(callee.text);
         if (template !== null) {
           return originOfGenericCall(ctx, expr, template, scope);

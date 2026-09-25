@@ -49,6 +49,7 @@ import {
 } from "./emit_util";
 import {
   N_ARRAY,
+  N_ARROW,
   N_BINARY,
   N_CALL,
   N_CONDITIONAL,
@@ -319,6 +320,11 @@ class EscapeAnalysis {
 
   visit(node: Node): void {
     const program = this.unit.program;
+    // WP29: an arrow argument's body belongs to the function it was lifted
+    // into, whose own walk finds its sites; nothing in it is this function's.
+    if (node.kind === N_ARROW) {
+      return;
+    }
     if (node.kind === N_IDENT) {
       const local = program.nodeLocals[node.id];
       // WP17: a by-value `Result` parameter owns its object, so its uses are
@@ -488,7 +494,7 @@ class EscapeAnalysis {
       // is returned rather than local. The parser normalises the arrow into an
       // N_FUNCTION whose body slot holds the expression itself, which is the
       // only place a body is not a block: a method's never is.
-      if (parent.kind === N_FUNCTION && parent.children[3] === node) {
+      if ((parent.kind === N_FUNCTION || parent.kind === N_ARROW) && parent.children[3] === node) {
         return new FlowTarget(null, true);
       }
       return new FlowTarget(null, false);

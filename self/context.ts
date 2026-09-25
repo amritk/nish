@@ -13,12 +13,14 @@ import { Node } from "./nodes";
 import {
   CheckedProgram,
   DeferredConstraint,
+  FunctionBindings,
   FunctionSig,
   Instantiation,
   StructInfo,
   StructInstantiation,
   TemplateInfo,
 } from "./program";
+import { Scope } from "./symbols";
 import { T_ERROR, T_F64, T_I32, TypeTable } from "./types";
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
@@ -68,6 +70,22 @@ export class CheckContext {
    * of how `T` becomes `i32`.
    */
   typeBindings: StringMap;
+  /**
+   * WP29: the compile-time function parameters in scope, bound to the
+   * functions this instantiation was given. Empty outside an instantiation's
+   * body, and read by `checkCall`, which is the whole of how `f(x)` becomes a
+   * direct call to `square`.
+   */
+  functionBindings: FunctionBindings;
+  /**
+   * WP29: while the body of an arrow argument is checked, the scopes and the
+   * function bindings of every function it is written inside, innermost last.
+   * Nothing in them is visible to the arrow, which becomes a function of its
+   * own; they are kept only so that reading one is refused as a capture,
+   * naming what was captured, rather than as an unknown name.
+   */
+  arrowOuterScopes: Scope[];
+  arrowOuterFunctions: FunctionBindings[];
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   currentInstance: Instantiation | null;
   /**
@@ -157,6 +175,9 @@ export class CheckContext {
     this.statementExpression = null;
     this.errored = false;
     this.typeBindings = new StringMap();
+    this.functionBindings = new FunctionBindings();
+    this.arrowOuterScopes = [];
+    this.arrowOuterFunctions = [];
     this.currentInstance = null;
     this.currentStructInstance = null;
     this.constraintsDeferred = true;
@@ -281,6 +302,26 @@ export class CheckContext {
     if (current !== null) {
       current.poisoned = true;
     }
+  }
+
+  /**
+   * WP29: whether `name` would be read from a function an arrow argument is
+   * written inside — a local, a parameter, `this` or a function parameter of
+   * it — rather than from the arrow's own scope or the module. The caller
+   * has already looked in the arrow's scope, which shadows these.
+   */
+  capturesOuter(name: string): boolean {
+    for (const scope of this.arrowOuterScopes) {
+      if (scope.lookup(name) !== null) {
+        return true;
+      }
+    }
+    for (const bindings of this.arrowOuterFunctions) {
+      if (bindings.get(name) !== null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Report and answer the sentinel type, for the many callers that want both. */

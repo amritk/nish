@@ -1,0 +1,1 @@
+Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, because `f` is a function parameter, resolved at compile time; `notAFunction` is a constant, and a constant is never a function

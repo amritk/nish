@@ -49,6 +49,12 @@ cases/arr_path_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs_compound added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs_field added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
+cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
+cases/fnarg_arrow added after R6: no rewriter to freeze it with
+cases/fnarg_forward added after R6: no rewriter to freeze it with
+cases/fnarg_generic added after R6: no rewriter to freeze it with
+cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
+cases/fnarg_named added after R6: no rewriter to freeze it with
 cases/mem_callee_scope added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with

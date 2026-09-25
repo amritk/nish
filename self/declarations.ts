@@ -15,6 +15,7 @@ import { isNishSpecifier, nishModuleNames } from "./nish_modules";
 import { STD_PREFIX } from "./branding";
 import { parseBareSpecifier } from "./packages";
 import { rejectForeignPointer, resolveType } from "./annotations";
+import { functionTypeHereMessage, isFunctionParameter } from "./generics";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
 import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types";
@@ -49,6 +50,28 @@ export const collectParams = (
   }
   for (const param of list.children) {
     const name = param.children[0].text;
+    // WP29: a function-typed parameter is resolved at each call rather than
+    // here — it names a callee, not a type — so it takes its position and no
+    // more. Only a top-level function may have one; everywhere else the
+    // parameter is refused by what it belongs to.
+    if (isFunctionParameter(param)) {
+      if (owner >= 0 || foreign) {
+        const what = foreign ? "a `declare function`" : "a method or a constructor";
+        ctx.error(param.children[1], functionTypeHereMessage(name, what));
+        continue;
+      }
+      if (sig.paramNames.indexOf(name) >= 0) {
+        ctx.error(param, `Duplicate parameter \`${name}\``);
+        continue;
+      }
+      while (sig.compileTime.length < sig.paramNames.length) {
+        sig.compileTime.push(false);
+      }
+      sig.compileTime.push(true);
+      sig.paramNames.push(name);
+      sig.paramTypes.push(T_VOID);
+      continue;
+    }
     const type = resolveType(param.children[1], ctx);
     let duplicate = false;
     for (const seen of sig.paramNames) {
