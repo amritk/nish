@@ -950,6 +950,70 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end fnarg_arrow -->
 
+### `nish/threads`: a map and a reduce over the partitioner
+
+`parallelMapInto` and `parallelReduce` are templates in `std/threads.ts`, so the
+importing module sees two instantiations called like any other, each with the
+function it was given in its symbol (`@nish.parallelMapInto$f64$f64$fn.6.square`).
+Importing the module implies `--threads`, so a module that allocates declares
+`@nish_arena` `thread_local`; this one allocates nothing. The parallel part is in `threads.ll`: the instance's body
+is `std/threads.ts`'s own, except that its call to the chunk loop becomes a
+context block on the stack and a call to the partitioner,
+
+```llvm
+  %par.ctx = alloca { %struct.nish_array*, %struct.nish_array* }, align 8
+  ; ... src and dst stored into it ...
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %20, i64 %21, i64 1048576)
+```
+
+and `@...$chunk(lo, hi, ctx)` loads them back and calls the chunk loop,
+`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. A reduce divides its
+blocks rather than its elements, with a grain of one block. The whole of both
+modules is `tests/link/par_map`'s golden (docs/LANGUAGE.md, "Data
+parallelism").
+
+<!-- cookbook:begin par_map -->
+```ts
+import { parallelMapInto, parallelReduce } from "nish/threads";
+
+const square = (x: f64): f64 => x * x;
+
+export const sumOfSquares = (xs: f64[], scratch: f64[]): f64 => {
+  parallelMapInto(xs, scratch, square);
+  return parallelReduce(scratch, (a, b) => a + b, 0.0);
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish.parallelMapInto$f64$f64$fn.6.square(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
+declare noundef double @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), double noundef) #1
+
+define hidden noundef double @square(double noundef %x) #0 {
+entry:
+  %0 = fmul double %x, %x
+  ret double %0
+}
+
+define noundef double @sumOfSquares(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %scratch) #1 {
+entry:
+  call void @nish.parallelMapInto$f64$f64$fn.6.square(%struct.nish_array* %xs, %struct.nish_array* %scratch)
+  %0 = call double @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0(%struct.nish_array* %scratch, double 0x0000000000000000)
+  ret double %0
+}
+
+define hidden noundef double @sumOfSquares$arrow0(double noundef %a, double noundef %b) #0 {
+entry:
+  %0 = fadd double %a, %b
+  ret double %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end par_map -->
+
 ## Types
 
 ### `i64` and the explicit conversions
@@ -7704,6 +7768,8 @@ declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i6
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
 declare void @nish_panic_div(i1 noundef zeroext) #6
+declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #5
+declare noundef i64 @nish_cpu_count() #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:

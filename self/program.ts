@@ -180,6 +180,35 @@ export class FunctionSig {
   }
 }
 
+// WP29 P1: what an instantiation is to the data-parallel lowering
+// (`self/parallel.ts` decides, `self/emit_parallel.ts` reads).
+
+/** An ordinary instantiation, lowered as its body is written. */
+export const PAR_NONE: i32 = 0;
+/** `parallelMapInto` from `nish/threads`: its call to `mapRange` becomes a region. */
+export const PAR_MAP: i32 = 1;
+/** `parallelReduce` from `nish/threads`: its call to `reduceBlocks` becomes a region. */
+export const PAR_REDUCE: i32 = 2;
+/** `mapRange` or `reduceBlocks`: the loop one thread runs over its share of a region. */
+export const PAR_CHUNK: i32 = 3;
+
+/**
+ * One call of `parallelMapInto` or `parallelReduce`, recorded where it was
+ * checked so that the rules which need the whole-program facts can be judged
+ * once those exist (`Compilation.checkParallel`) and reported at the call.
+ */
+export class ParallelCall {
+  /** The `N_CALL`, in the module whose `parallelCalls` holds this. */
+  node: Node;
+  /** The instantiation it calls, whose `functionArgs[0]` is the body. */
+  sig: FunctionSig;
+
+  constructor(node: Node, sig: FunctionSig) {
+    this.node = node;
+    this.sig = sig;
+  }
+}
+
 /**
  * The compile-time function parameters in scope (WP29): each parameter name of
  * the instantiation whose body is being checked, and the function its call
@@ -434,12 +463,15 @@ export class Instantiation {
   functionArgs: FunctionSig[];
   /** WP29: the same, by parameter name, as the body sees them. */
   functionBindings: FunctionBindings;
+  /** WP29 P1: one of the `PAR_*` roles; `PAR_NONE` for everything but `nish/threads`'s four templates. */
+  parallel: i32;
 
   constructor(template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
     this.template = template;
     this.owner = null;
     this.functionArgs = [];
     this.functionBindings = new FunctionBindings();
+    this.parallel = PAR_NONE;
     this.typeArgs = typeArgs;
     this.sig = sig;
     this.bindings = bindings;
@@ -989,6 +1021,8 @@ export class CheckedProgram {
   entryMain: FunctionSig | null;
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
   usesArgv: boolean;
+  /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
+  parallelCalls: ParallelCall[];
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[];
@@ -1098,6 +1132,7 @@ export class CheckedProgram {
     this.enums = new StringMap();
     this.enumList = [];
     this.entryMain = null;
+    this.parallelCalls = [];
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
     this.nodeLocals = new Array<Local | null>(nodeCount);

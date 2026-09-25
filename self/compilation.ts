@@ -89,6 +89,14 @@ import {
   nishExportEntry,
 } from "./manifest";
 import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
+import {
+  allocationMessage,
+  reachesDstMessage,
+  reduceMessage,
+  resultMessage,
+  sharedWriteMessage,
+  threadsModuleName,
+} from "./parallel";
 import { RuntimeTable } from "./runtime";
 import { splitByte } from "./strings";
 import { TypeTable } from "./types";
@@ -442,6 +450,15 @@ export class Compilation {
       packageName
     );
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName);
+    // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
+    // with `--threads`, because every worker a region starts bumps an arena of
+    // its own. It is a soundness requirement rather than a default: the rules
+    // in `self/parallel.ts` leave arena allocation out of a shared write only
+    // because the arena is thread-local. A program that does not import it is
+    // compiled exactly as it was.
+    if (packageName === CLI && name === threadsModuleName()) {
+      this.opts.threads = true;
+    }
     this.byPath.set(identity, this.modules.length);
     this.modules.push(unit);
 
@@ -546,8 +563,15 @@ export class Compilation {
       // Two strings, deliberately: the path says where the file is on *this*
       // install and the name says where the module is in the package, and only
       // the second one reaches the IR (§A7's third bullet).
+      //
+      // A driver that never looked for its package — the `--emit-checked`
+      // dump entries the stage1 oracles build (`self/dump_checked.ts`) — is
+      // answered from the working directory, which is the last place
+      // `compile.ts` looks too. Without it `/std/<name>.ts` was asked for, and
+      // a corpus program importing the library could not be dumped at all.
+      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : ".";
       const std: ResolvedModule = {
-        path: stdModulePath(this.opts.packageRoot, specifier),
+        path: stdModulePath(root, specifier),
         name: stdModuleName(specifier),
         packageName: CLI,
         error: "",
@@ -842,7 +866,45 @@ export class Compilation {
     }
     proveCallSiteRanges(contexts);
     this.reportArenaLoops();
-    return true;
+    this.checkParallel();
+    return !this.sink.hasErrors();
+  }
+
+  /**
+   * WP29 P1: every `parallelMapInto` and `parallelReduce` call, against the
+   * rules that make its region safe on several threads (`self/parallel.ts`).
+   * They ask the whole-program facts about the body, so they run here, after
+   * the fixpoint `reportArenaLoops` has already paid for, and each refusal is
+   * reported at the call that asked for the region.
+   */
+  checkParallel(): void {
+    const facts = this.analyze();
+    for (const unit of this.modules) {
+      const program = unit.checker.program;
+      for (const call of program.parallelCalls) {
+        const sig = call.sig;
+        const instance = sig.instance;
+        if (instance === null || instance.functionArgs.length !== 1) {
+          continue;
+        }
+        const fn = instance.functionArgs[0];
+        // `U` for a map, `T` for a reduce: the last type argument either way.
+        const result = instance.typeArgs[instance.typeArgs.length - 1];
+        const args = call.node.children[1].children;
+        const identity = args.length > 2 ? args[2] : call.node;
+        const messages: string[] = [];
+        messages.push(resultMessage(this.table, sig, fn, result));
+        messages.push(reachesDstMessage(this.table, program, sig, fn));
+        messages.push(sharedWriteMessage(sig, fn, facts));
+        messages.push(allocationMessage(sig, fn, facts));
+        messages.push(reduceMessage(sig, fn, identity, program.source.text.substring(identity.start, identity.end)));
+        for (const message of messages) {
+          if (message.length > 0) {
+            this.sink.report(program.source, call.node.start, call.node.end, message);
+          }
+        }
+      }
+    }
   }
 
   /**
