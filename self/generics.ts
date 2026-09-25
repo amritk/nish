@@ -1471,6 +1471,10 @@ const resolveFunctionArgument = (
       );
       return null;
     }
+    if (ctx.program.constant(name) !== null) {
+      refuseOnce(ctx, arg, `${lead}; \`${name}\` is a constant, and a constant is never a function`);
+      return null;
+    }
     refuseOnce(ctx, arg, `Unknown function \`${name}\``);
     return null;
   }
