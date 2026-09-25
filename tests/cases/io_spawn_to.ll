@@ -82,11 +82,11 @@ entry:
   store i8* %11, i8** %12, align 8, !alias.scope !3, !noalias !4
   %13 = bitcast i8* %11 to i8**
   %14 = getelementptr inbounds i8*, i8** %13, i64 0
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %14, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %14, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %15 = getelementptr inbounds i8*, i8** %13, i64 1
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %15, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %15, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %16 = getelementptr inbounds i8*, i8** %13, i64 2
-  store i8* bitcast ({ i64, [43 x i8] }* @.str.6 to i8*), i8** %16, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [43 x i8] }* @.str.6 to i8*), i8** %16, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %17 = load i8*, i8** %out.addr, align 8
   %18 = load i8*, i8** %err.addr, align 8
   %19 = call i32 @nish_spawn_to(%struct.nish_array* %8, i8* %17, i8* %18)
@@ -167,11 +167,11 @@ if.end:
   store i8* %73, i8** %74, align 8, !alias.scope !3, !noalias !4
   %75 = bitcast i8* %73 to i8**
   %76 = getelementptr inbounds i8*, i8** %75, i64 0
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %76, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %76, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %77 = getelementptr inbounds i8*, i8** %75, i64 1
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %77, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %77, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %78 = getelementptr inbounds i8*, i8** %75, i64 2
-  store i8* bitcast ({ i64, [12 x i8] }* @.str.10 to i8*), i8** %78, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [12 x i8] }* @.str.10 to i8*), i8** %78, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %79 = load i8*, i8** %out.addr, align 8
   %80 = load i8*, i8** %err.addr, align 8
   %81 = call i32 @nish_spawn_to(%struct.nish_array* %70, i8* %79, i8* %80)
@@ -227,3 +227,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

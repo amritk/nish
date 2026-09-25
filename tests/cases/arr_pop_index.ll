@@ -29,11 +29,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i8**
   %5 = getelementptr inbounds i8*, i8** %4, i64 0
-  store i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8** %5, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8** %5, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i8*, i8** %4, i64 1
-  store i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*), i8** %6, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*), i8** %6, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i8*, i8** %4, i64 2
-  store i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8** %7, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8** %7, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %names.addr, align 8
   %8 = load %struct.nish_array*, %struct.nish_array** %names.addr, align 8
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0
@@ -52,7 +52,7 @@ pop.ok:
   %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4
   %15 = bitcast i8* %14 to i8**
   %16 = getelementptr inbounds i8*, i8** %15, i64 %12
-  %17 = load i8*, i8** %16, align 8, !alias.scope !4, !noalias !3
+  %17 = load i8*, i8** %16, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   store i8* %17, i8** %last.addr, align 8
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   store i64 3, i64* %18, align 8, !alias.scope !3, !noalias !4
@@ -63,11 +63,11 @@ pop.ok:
   store i8* %20, i8** %21, align 8, !alias.scope !3, !noalias !4
   %22 = bitcast i8* %20 to i32*
   %23 = getelementptr inbounds i32, i32* %22, i64 0
-  store i32 4, i32* %23, align 4, !alias.scope !4, !noalias !3
+  store i32 4, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   %24 = getelementptr inbounds i32, i32* %22, i64 1
-  store i32 8, i32* %24, align 4, !alias.scope !4, !noalias !3
+  store i32 8, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   %25 = getelementptr inbounds i32, i32* %22, i64 2
-  store i32 15, i32* %25, align 4, !alias.scope !4, !noalias !3
+  store i32 15, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %nums.addr, align 8
   %26 = load %struct.nish_array*, %struct.nish_array** %names.addr, align 8
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0
@@ -90,7 +90,7 @@ idx.test:
   %37 = load i8*, i8** %36, align 8, !alias.scope !3, !noalias !4
   %38 = bitcast i8* %37 to i8**
   %39 = getelementptr inbounds i8*, i8** %38, i64 %34
-  %40 = load i8*, i8** %39, align 8, !alias.scope !4, !noalias !3
+  %40 = load i8*, i8** %39, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %41 = call zeroext i1 @nish_str_eq(i8* %40, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
   br i1 %41, label %idx.found, label %idx.next
 
@@ -136,7 +136,7 @@ idx.test.1:
   %57 = load i8*, i8** %56, align 8, !alias.scope !3, !noalias !4
   %58 = bitcast i8* %57 to i32*
   %59 = getelementptr inbounds i32, i32* %58, i64 %54
-  %60 = load i32, i32* %59, align 4, !alias.scope !4, !noalias !3
+  %60 = load i32, i32* %59, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   %61 = icmp eq i32 %60, 15
   br i1 %61, label %idx.found.1, label %idx.next.1
 
@@ -170,7 +170,7 @@ idx.test.2:
   %74 = load i8*, i8** %73, align 8, !alias.scope !3, !noalias !4
   %75 = bitcast i8* %74 to i32*
   %76 = getelementptr inbounds i32, i32* %75, i64 %71
-  %77 = load i32, i32* %76, align 4, !alias.scope !4, !noalias !3
+  %77 = load i32, i32* %76, align 4, !alias.scope !4, !noalias !3, !tbaa !10
   %78 = icmp eq i32 %77, 99
   br i1 %78, label %idx.found.2, label %idx.next.2
 
@@ -204,7 +204,7 @@ idx.test.3:
   %91 = load i8*, i8** %90, align 8, !alias.scope !3, !noalias !4
   %92 = bitcast i8* %91 to i8**
   %93 = getelementptr inbounds i8*, i8** %92, i64 %88
-  %94 = load i8*, i8** %93, align 8, !alias.scope !4, !noalias !3
+  %94 = load i8*, i8** %93, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %95 = call zeroext i1 @nish_str_eq(i8* %94, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
   br i1 %95, label %idx.found.3, label %idx.next.3
 
@@ -233,3 +233,9 @@ attributes #2 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}
+!9 = !{!"element i32", !6, i64 0}
+!10 = !{!9, !9, i64 0}

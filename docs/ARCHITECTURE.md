@@ -322,6 +322,7 @@ it.
 | `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `nish_arena_grow` | The fast path must inline; the slow path must not. |
 | `tail` (call marker, not an attribute) | a `return g(...)` whose arguments are every one a scalar, whose callee's parameter count matches the argument list, and which nothing follows (no packed-`Result` unpack, no WP9 reclaim, no scope release left behind) | The marker claims the callee cannot access the caller's stack frame. It holds because the callee is handed no pointer at all, and because no other path reaches a caller alloca either: the only allocas a function has are its locals' slots, whose addresses are never materialised as values, and the WP6 stack sites, which exist only for allocations whose flow is `local` and so are never stored, captured or returned. The proof is `marksTailCall` in `escape.ts` rather than `attributes.ts`, because it is a fact about one call site rather than about a function, and it is the one entry in this table `--plain` keeps: it decides whether a deep recursion runs at all rather than how fast it runs. |
 | `!alias.scope` / `!noalias` (array accesses) | every load and store of an `nish_array` header field, and every load and store of element data | The header's three fields and the `cap * sizeof(T)` of element storage never overlap, in any of the four shapes the compiler produces them: two arena bumps, two entry-block allocas (WP6), the `nish_alloc_array` host entry (two bumps again), and `nish_argv_init`'s single `malloc` block whose elements begin *after* the header. So an element store cannot reach a header field, nor the reverse. Strings are excluded — one block, length and bytes contiguous. Struct fields were excluded too, for want of a measurement; they have one now and carry `!tbaa` instead, above. WP15 §2b; the argument is written out in `self/emit_arrays.ts`. |
+| `!tbaa` (array element load/store) | every load and store of an element slot that holds a value; never an inline record's slot, which is an untagged `llvm.memcpy` | The tag is `element <type>`, a sibling of the field scalars under the root rather than a child of one, so an element access is NoAlias with every tagged class field access, pointer-typed fields and elements included: that is what lets LLVM keep `this.v` and its header live across `this.v[i] = x` (after `opt -O3` AWFY Permute's swap loads `this.v` once where it loaded it twice). Sound because element storage and a class object are distinct allocations that never share a byte while both are live — a data block is an arena bump, an entry-block alloca, a `nish_alloc_array` block or the tail of `nish_argv_init`'s `malloc`; a class object is a `nish_alloc_struct` bump, a WP6 stack alloca, or a WP17 unpacked `Result`, which is its own object too and whose accesses carry no tag. Arena reuse does not break it: the bytes change hands only across `nish_arena_release` / `Arena.reset`, calls with no memory attribute that LLVM orders every access to escaped memory against, and an object that never escaped is dead by then. The one object that does live in element storage is an **inline record** (WP15 §2a: an interface nothing implements), and neither side of that overlap is tagged: its fields are read and written with no `!tbaa` (interfaces never get one, above) and a slot is written whole by `llvm.memcpy`, so a record element store still aliases the record's field accesses (`tests/cases/arr_field_reload_records`). Two element types never share a slot either, since there is no cast and no view of one array's storage as another's; `--threads` changes where the arena state lives, not which allocation an access reaches. `self/tbaa.ts` (`elementTbaa`), guarded by `tests/run.js` on `arr_field_reload`. |
 
 `--plain` turns all of this off (and the alignment hints) and produces the
 bare Phase 1 IR, which is useful when comparing against hand-written IR. The
@@ -362,6 +363,44 @@ leaks an allocation (`allocLeaks` in `FunctionFacts`), and neither it nor a
 callee uses `Arena.reset` / `Arena.release` (`usesArenaControl`). Paths
 that end in `unreachable` need no release. Scopes nest LIFO with the call
 stack, so a mark is always released by the function that took it.
+
+A function that allocates nothing itself earns the same bracket when its
+**callees** leave memory behind and nothing can keep that memory: it is
+*contained*, its return type is a number, a `boolean`, an `enum` or `void`, it
+uses no `Arena.reset` / `Arena.release`, and some callee *net-allocates*
+(allocates and has no scope of its own, so the bracket would reclaim
+something). Contained (`FunctionFacts.contained`) means every allocation made
+during the call, by the function or anything it calls, is unreachable once it
+returns except through its return value, and it is proved one of two ways:
+
+- **`!allocEscapes`**, WP9's fixpoint fact. The escape analysis follows values,
+  not memory, so it counts *any* store of an allocation into memory as an
+  escape, including a store into another fresh object. That is what makes it
+  sound here: no pointer read back out of memory can then be one allocated
+  during the call.
+- **`rootsHoldNoPointer`** (`self/escape.ts`): every parameter, `this`
+  included, is a scalar, a string, or an object whose every field is a
+  number, a boolean or an enum. The language has no mutable global (module
+  constants are scalars or strings, there are no `static` members,
+  `process.argv` refuses stores), the runtime keeps no pointer it was handed,
+  and no Nish pointer crosses the C boundary. So memory older than the call is
+  reachable only through the parameters, and none of it has a slot a pointer
+  fits in. This needs nothing from the callees, which is why
+  `List.benchmark` (Are We Fast Yet) qualifies although `tail` returns an
+  argument and so counts as capturing it.
+
+Containment is deliberately not a fixpoint of its own that falls through the
+callees. A callee whose parameters hold no pointers is contained however it
+nests allocations inside what it returns, and a caller can read one back out
+(`o.x` is not an allocation site) and store it through its own parameter;
+`tests/cases/mem_callee_scope_nested` is that program. The release is sound for
+the same reason as the direct scope: the scalar result names no memory,
+containment covers every write, and without arena control the mark still names
+the entry position. Net-allocation is profit, not proof, and is settled callees
+first so that a scope does not nest around a callee that already reclaims
+(`settleCalleeScopes`, `self/attributes.ts`). `tests/cases/mem_callee_scope`,
+`mem_callee_scope_tree`, and the `_escape`, `_return`, `_control` and `_nested`
+negatives pin it.
 `--no-stack-alloc` disables the stack slots but keeps the scopes; the WP6
 block of `tests/run.js` checks both modes on `mem_stack_struct` and watches
 `Arena.used()` stay flat across 100000 scoped calls.

@@ -64,11 +64,11 @@ entry:
   store i8* %5, i8** %6, align 8, !alias.scope !3, !noalias !4
   %7 = bitcast i8* %5 to i8**
   %8 = getelementptr inbounds i8*, i8** %7, i64 0
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %8, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.4 to i8*), i8** %8, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = getelementptr inbounds i8*, i8** %7, i64 1
-  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %9, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.5 to i8*), i8** %9, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = getelementptr inbounds i8*, i8** %7, i64 2
-  store i8* bitcast ({ i64, [15 x i8] }* @.str.6 to i8*), i8** %10, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [15 x i8] }* @.str.6 to i8*), i8** %10, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = load i8*, i8** %err.addr, align 8
   %12 = call i32 @nish_spawn_to(%struct.nish_array* %2, i8* bitcast ({ i64, [1 x i8] }* @.str.7 to i8*), i8* %11)
   %13 = call i8* @nish_str_from_i32(i32 %12)
@@ -100,7 +100,7 @@ entry:
   store i8* %29, i8** %30, align 8, !alias.scope !3, !noalias !4
   %31 = bitcast i8* %29 to i8**
   %32 = getelementptr inbounds i8*, i8** %31, i64 0
-  store i8* bitcast ({ i64, [21 x i8] }* @.str.10 to i8*), i8** %32, align 8, !alias.scope !4, !noalias !3
+  store i8* bitcast ({ i64, [21 x i8] }* @.str.10 to i8*), i8** %32, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %33 = load i8*, i8** %err.addr, align 8
   %34 = call i32 @nish_spawn_to(%struct.nish_array* %26, i8* bitcast ({ i64, [1 x i8] }* @.str.7 to i8*), i8* %33)
   %35 = call i8* @nish_str_from_i32(i32 %34)
@@ -126,3 +126,7 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

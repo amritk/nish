@@ -120,7 +120,7 @@ join.sum.body:
   %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4
   %35 = bitcast i8* %34 to i8**
   %36 = getelementptr inbounds i8*, i8** %35, i64 %31
-  %37 = load i8*, i8** %36, align 8, !alias.scope !4, !noalias !3
+  %37 = load i8*, i8** %36, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %38 = load i64, i64* %join.total, align 8
   %39 = bitcast i8* %37 to i64*
   %40 = load i64, i64* %39, align 8
@@ -157,7 +157,7 @@ join.part:
   %56 = load i8*, i8** %55, align 8, !alias.scope !3, !noalias !4
   %57 = bitcast i8* %56 to i8**
   %58 = getelementptr inbounds i8*, i8** %57, i64 %48
-  %59 = load i8*, i8** %58, align 8, !alias.scope !4, !noalias !3
+  %59 = load i8*, i8** %58, align 8, !alias.scope !4, !noalias !3, !tbaa !8
   %60 = bitcast i8* %59 to i64*
   %61 = load i64, i64* %60, align 8
   %62 = getelementptr inbounds i8, i8* %59, i64 8
@@ -215,3 +215,7 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element ptr", !6, i64 0}
+!8 = !{!7, !7, i64 0}

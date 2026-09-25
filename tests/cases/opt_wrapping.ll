@@ -53,78 +53,62 @@ bounds.fail:
 bounds.ok:
   %11 = bitcast i8* %3 to i32*
   %12 = getelementptr inbounds i32, i32* %11, i64 %9
-  %13 = load i32, i32* %12, align 4, !alias.scope !9, !noalias !8
+  %13 = load i32, i32* %12, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %14 = add i32 %7, %13
   store i32 %14, i32* %s.addr, align 4
   %15 = load i32, i32* %i.addr, align 4
   %16 = sext i32 %15 to i64
-  %17 = icmp ult i64 %16, %1
-  br i1 %17, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 %16, i64 %1)
-  unreachable
-
-bounds.ok.1:
-  %18 = bitcast i8* %3 to i32*
-  %19 = getelementptr inbounds i32, i32* %18, i64 %16
-  %20 = load i32, i32* %19, align 4, !alias.scope !9, !noalias !8
-  %21 = mul i32 %20, 2
-  store i32 %21, i32* %19, align 4, !alias.scope !9, !noalias !8
-  %22 = getelementptr inbounds %struct.Acc, %struct.Acc* %acc, i32 0, i32 0
-  %23 = load i32, i32* %22, align 4
-  %24 = load i32, i32* %i.addr, align 4
-  %25 = sext i32 %24 to i64
-  %26 = icmp ult i64 %25, %1
-  br i1 %26, label %bounds.ok.2, label %bounds.fail.2
-
-bounds.fail.2:
-  call void @nish_panic_index(i64 %25, i64 %1)
-  unreachable
-
-bounds.ok.2:
-  %27 = bitcast i8* %3 to i32*
-  %28 = getelementptr inbounds i32, i32* %27, i64 %25
-  %29 = load i32, i32* %28, align 4, !alias.scope !9, !noalias !8
-  %30 = icmp eq i32 2, 0
-  %31 = icmp eq i32 %29, -2147483648
-  %32 = icmp eq i32 2, -1
-  %33 = and i1 %31, %32
-  %34 = or i1 %30, %33
-  br i1 %34, label %div.fail, label %div.ok
+  %17 = bitcast i8* %3 to i32*
+  %18 = getelementptr inbounds i32, i32* %17, i64 %16
+  %19 = load i32, i32* %18, align 4, !alias.scope !9, !noalias !8, !tbaa !11
+  %20 = mul i32 %19, 2
+  store i32 %20, i32* %18, align 4, !alias.scope !9, !noalias !8, !tbaa !11
+  %21 = getelementptr inbounds %struct.Acc, %struct.Acc* %acc, i32 0, i32 0
+  %22 = load i32, i32* %21, align 4
+  %23 = load i32, i32* %i.addr, align 4
+  %24 = sext i32 %23 to i64
+  %25 = bitcast i8* %3 to i32*
+  %26 = getelementptr inbounds i32, i32* %25, i64 %24
+  %27 = load i32, i32* %26, align 4, !alias.scope !9, !noalias !8, !tbaa !11
+  %28 = icmp eq i32 2, 0
+  %29 = icmp eq i32 %27, -2147483648
+  %30 = icmp eq i32 2, -1
+  %31 = and i1 %29, %30
+  %32 = or i1 %28, %31
+  br i1 %32, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %30)
+  call void @nish_panic_div(i1 zeroext %28)
   unreachable
 
 div.ok:
-  %35 = sdiv i32 %29, 2
-  %36 = sub i32 %23, %35
-  store i32 %36, i32* %22, align 4
+  %33 = sdiv i32 %27, 2
+  %34 = sub i32 %22, %33
+  store i32 %34, i32* %21, align 4
   br label %for.inc
 
 for.inc:
-  %37 = load i32, i32* %i.addr, align 4
-  %38 = add i32 %37, 1
-  store i32 %38, i32* %i.addr, align 4
+  %35 = load i32, i32* %i.addr, align 4
+  %36 = add i32 %35, 1
+  store i32 %36, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %39 = load i32, i32* %s.addr, align 4
-  %40 = icmp eq i32 1000, 0
-  %41 = icmp eq i32 %39, -2147483648
-  %42 = icmp eq i32 1000, -1
-  %43 = and i1 %41, %42
-  %44 = or i1 %40, %43
-  br i1 %44, label %div.fail.1, label %div.ok.1
+  %37 = load i32, i32* %s.addr, align 4
+  %38 = icmp eq i32 1000, 0
+  %39 = icmp eq i32 %37, -2147483648
+  %40 = icmp eq i32 1000, -1
+  %41 = and i1 %39, %40
+  %42 = or i1 %38, %41
+  br i1 %42, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @nish_panic_div(i1 zeroext %40)
+  call void @nish_panic_div(i1 zeroext %38)
   unreachable
 
 div.ok.1:
-  %45 = srem i32 %39, 1000
-  ret i32 %45
+  %43 = srem i32 %37, 1000
+  ret i32 %43
 }
 
 define internal noundef i32 @mix(i32 noundef %a, i32 noundef %b) #1 {
@@ -162,13 +146,13 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !8, !noalias !9
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 1, i32* %5, align 4, !alias.scope !9, !noalias !8
+  store i32 1, i32* %5, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 2, i32* %6, align 4, !alias.scope !9, !noalias !8
+  store i32 2, i32* %6, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 3, i32* %7, align 4, !alias.scope !9, !noalias !8
+  store i32 3, i32* %7, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds i32, i32* %4, i64 3
-  store i32 4, i32* %8, align 4, !alias.scope !9, !noalias !8
+  store i32 4, i32* %8, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %9 = call i32 @poly(i32 5, i32 2)
   store i32 %9, i32* %n.addr, align 4
@@ -207,3 +191,5 @@ attributes #3 = { nounwind noreturn cold }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}

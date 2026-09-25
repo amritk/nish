@@ -73,41 +73,31 @@ bounds.ok:
   %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4
   %17 = bitcast i8* %16 to %struct.Node**
   %18 = getelementptr inbounds %struct.Node*, %struct.Node** %17, i64 0
-  store %struct.Node* %11, %struct.Node** %18, align 8, !alias.scope !4, !noalias !3
+  store %struct.Node* %11, %struct.Node** %18, align 8, !alias.scope !4, !noalias !3, !tbaa !11
   %19 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 0
-  %21 = load i64, i64* %20, align 8, !alias.scope !3, !noalias !4
-  %22 = icmp ult i64 0, %21
-  br i1 %22, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 0, i64 %21)
-  unreachable
-
-bounds.ok.1:
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
-  %24 = load i8*, i8** %23, align 8, !alias.scope !3, !noalias !4
-  %25 = bitcast i8* %24 to %struct.Node**
-  %26 = getelementptr inbounds %struct.Node*, %struct.Node** %25, i64 0
-  %27 = load %struct.Node*, %struct.Node** %26, align 8, !alias.scope !4, !noalias !3
-  store %struct.Node* %27, %struct.Node** %found.addr, align 8
-  %28 = load %struct.Node*, %struct.Node** %found.addr, align 8
-  %29 = icmp eq %struct.Node* %28, null
-  br i1 %29, label %cond.true, label %cond.false
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
+  %22 = bitcast i8* %21 to %struct.Node**
+  %23 = getelementptr inbounds %struct.Node*, %struct.Node** %22, i64 0
+  %24 = load %struct.Node*, %struct.Node** %23, align 8, !alias.scope !4, !noalias !3, !tbaa !11
+  store %struct.Node* %24, %struct.Node** %found.addr, align 8
+  %25 = load %struct.Node*, %struct.Node** %found.addr, align 8
+  %26 = icmp eq %struct.Node* %25, null
+  br i1 %26, label %cond.true, label %cond.false
 
 cond.true:
-  %30 = sub nsw i32 0, 1
+  %27 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.false:
-  %31 = load %struct.Node*, %struct.Node** %found.addr, align 8
-  %32 = getelementptr inbounds %struct.Node, %struct.Node* %31, i32 0, i32 0
-  %33 = load i32, i32* %32, align 4, !tbaa !9
+  %28 = load %struct.Node*, %struct.Node** %found.addr, align 8
+  %29 = getelementptr inbounds %struct.Node, %struct.Node* %28, i32 0, i32 0
+  %30 = load i32, i32* %29, align 4, !tbaa !9
   br label %cond.end
 
 cond.end:
-  %34 = phi i32 [ %30, %cond.true ], [ %33, %cond.false ]
-  ret i32 %34
+  %31 = phi i32 [ %27, %cond.true ], [ %30, %cond.false ]
+  ret i32 %31
 }
 
 attributes #0 = { nounwind }
@@ -125,3 +115,5 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"i32", !6, i64 0}
 !8 = !{!"Node", !7, i64 0}
 !9 = !{!8, !7, i64 0}
+!10 = !{!"element ptr", !6, i64 0}
+!11 = !{!10, !10, i64 0}

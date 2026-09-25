@@ -35,7 +35,7 @@ bounds.ok:
   %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
   %11 = bitcast i8* %10 to i32*
   %12 = getelementptr inbounds i32, i32* %11, i64 %5
-  store i32 0, i32* %12, align 4, !alias.scope !4, !noalias !3
+  store i32 0, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   br label %if.end
 
 if.end:
@@ -57,11 +57,11 @@ entry:
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
-  store i32 1, i32* %5, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %5, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %6 = getelementptr inbounds i32, i32* %4, i64 1
-  store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %7 = getelementptr inbounds i32, i32* %4, i64 2
-  store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = call i32 @poke(%struct.nish_array* %arr.hdr, i32 1000000)
   %9 = call i8* @nish_str_from_i32(i32 %8)
   call void @nish_print(i8* %9)
@@ -85,3 +85,7 @@ attributes #2 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

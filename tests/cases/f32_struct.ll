@@ -113,26 +113,26 @@ entry:
   %43 = load i8*, i8** %42, align 8, !alias.scope !12, !noalias !13
   %44 = bitcast i8* %43 to float*
   %45 = getelementptr inbounds float, float* %44, i64 0
-  store float 0x3FB99999A0000000, float* %45, align 4, !alias.scope !13, !noalias !12
+  store float 0x3FB99999A0000000, float* %45, align 4, !alias.scope !13, !noalias !12, !tbaa !15
   %46 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %47 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
   %49 = load i8*, i8** %48, align 8, !alias.scope !12, !noalias !13
   %50 = bitcast i8* %49 to float*
   %51 = getelementptr inbounds float, float* %50, i64 0
-  %52 = load float, float* %51, align 4, !alias.scope !13, !noalias !12
+  %52 = load float, float* %51, align 4, !alias.scope !13, !noalias !12, !tbaa !15
   %53 = fmul float %52, 0x4008000000000000
   %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 2
   %55 = load i8*, i8** %54, align 8, !alias.scope !12, !noalias !13
   %56 = bitcast i8* %55 to float*
   %57 = getelementptr inbounds float, float* %56, i64 1
-  store float %53, float* %57, align 4, !alias.scope !13, !noalias !12
+  store float %53, float* %57, align 4, !alias.scope !13, !noalias !12, !tbaa !15
   %58 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %58, i64 0, i32 2
   %60 = load i8*, i8** %59, align 8, !alias.scope !12, !noalias !13
   %61 = bitcast i8* %60 to float*
   %62 = getelementptr inbounds float, float* %61, i64 0
-  %63 = load float, float* %62, align 4, !alias.scope !13, !noalias !12
+  %63 = load float, float* %62, align 4, !alias.scope !13, !noalias !12, !tbaa !15
   %64 = fpext float %63 to double
   %65 = call i8* @nish_str_from_f64(double %64)
   %66 = call i8* @nish_str_concat(i8* %65, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
@@ -141,7 +141,7 @@ entry:
   %69 = load i8*, i8** %68, align 8, !alias.scope !12, !noalias !13
   %70 = bitcast i8* %69 to float*
   %71 = getelementptr inbounds float, float* %70, i64 1
-  %72 = load float, float* %71, align 4, !alias.scope !13, !noalias !12
+  %72 = load float, float* %71, align 4, !alias.scope !13, !noalias !12, !tbaa !15
   %73 = fpext float %72 to double
   %74 = call i8* @nish_str_from_f64(double %73)
   %75 = call i8* @nish_str_concat(i8* %66, i8* %74)
@@ -174,3 +174,5 @@ attributes #1 = { nounwind willreturn }
 !11 = !{!"elements", !9}
 !12 = !{!10}
 !13 = !{!11}
+!14 = !{!"element float", !1, i64 0}
+!15 = !{!14, !14, i64 0}

@@ -43,7 +43,15 @@ import {
   isSpawnCall,
 } from "./emit_builtins";
 import { stringifyCallee, stringConstructCallees } from "./emit_strings";
-import { analyzeEscapes, EscapeResult, FLOW_LEAKS, FLOW_LOCAL, FLOW_RETURNED } from "./escape";
+import {
+  analyzeEscapes,
+  EscapeResult,
+  FLOW_LEAKS,
+  FLOW_LOCAL,
+  FLOW_RETURNED,
+  isScalarArgument,
+  rootsHoldNoPointer,
+} from "./escape";
 import {
   arrayMethodName,
   dottedName,
@@ -172,11 +180,14 @@ export class CallSite {
   flow: i32;
   /** WP9: the result is reachable after this function returns, other than through its return value. */
   escapes: boolean;
+  /** The call, which the arena-loop diagnostic reports at and names the line of. */
+  node: Node;
 
-  constructor(callee: string, flow: i32, escapes: boolean) {
+  constructor(callee: string, flow: i32, escapes: boolean, node: Node) {
     this.callee = callee;
     this.flow = flow;
     this.escapes = escapes;
+    this.node = node;
   }
 }
 
@@ -324,6 +335,44 @@ export class FunctionFacts {
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[];
   /**
+   * Every arena allocation made while this function runs, by itself or by
+   * anything it calls, is unreachable once it returns except through its
+   * return value. Decided after the fixpoint, from two proofs of it:
+   *
+   *  - `!allocEscapes`, WP9's fact, already propagated over every callee. The
+   *    escape analysis follows values, not memory, so it counts *any* store of
+   *    an allocation into memory as an escape, a store into another fresh
+   *    object included; that is what makes it sound here, because it means
+   *    no pointer read back out of memory can be one allocated during the call.
+   *  - `rootsHoldNoPointer` (escape.ts), which needs nothing from the callees:
+   *    nothing older than the call has a slot a pointer fits in.
+   *
+   * It is deliberately not a fixpoint of its own, falling from "contained" to
+   * "not" over the callees the way `allocEscapes` rises. That version is
+   * unsound: a callee whose parameters hold no pointers is contained however
+   * it nests allocations inside the object it returns, and its caller can
+   * read one back out of that object (`o.x`) and store it through its own
+   * parameter. The read is not an allocation site, so nothing sees it, and
+   * `tests/cases/mem_callee_scope_nested` is that program.
+   */
+  contained: boolean;
+  /** The first allocation of this function's own that escapes, or null; see `EscapeResult.escapeSite`. */
+  escapeSite: Node | null;
+  /** The return type is a number, a `boolean`, an `enum` or `void`: nothing a release could free. */
+  returnsScalar: boolean;
+  /** The function as a diagnostic names it: `Owner.method` for a member. */
+  sourceName: string;
+  /** Allocates from the arena in its own body, before any callee is counted. */
+  allocatesItself: boolean;
+  /** Calls `Arena.mark`, `Arena.release` or `Arena.reset` in its own body: the program is managing this memory. */
+  managesArena: boolean;
+  /**
+   * Leaves arena memory behind when it returns: it allocates, itself or
+   * through a callee that does, and has no scope to take it back. Settled with
+   * the scopes; what the callee rule and the arena-loop diagnostic ask.
+   */
+  netAllocates: boolean;
+  /**
    * WP15 section 2c: the array headers the enclosing loops lifted into their
    * preheaders, innermost scope last, with `hoistedScopeStarts` marking where
    * each open scope begins. Emission scratch rather than an analysis result:
@@ -366,6 +415,13 @@ export class FunctionFacts {
     this.usesArenaControl = false;
     this.readsArenaState = false;
     this.callSites = [];
+    this.contained = false;
+    this.escapeSite = null;
+    this.returnsScalar = false;
+    this.sourceName = "";
+    this.allocatesItself = false;
+    this.managesArena = false;
+    this.netAllocates = false;
   }
 
   /** The pointer facts of the parameter called `name`, or `null` when it is not one. */
@@ -442,6 +498,11 @@ export class FactsTable {
   get(name: string): FunctionFacts | null {
     const at = this.index.get(name, -1);
     return at < 0 ? null : this.list[at];
+  }
+
+  /** The position of `name`'s facts in `list`, or -1 for a symbol with none (a runtime function). */
+  indexOf(name: string): i32 {
+    return this.index.get(name, -1);
   }
 }
 
@@ -1309,11 +1370,17 @@ export const collectFacts = (
     facts.returnsAllocation = memory.returnsAllocation;
     facts.usesArenaControl = memory.usesArenaControl;
     facts.callSites = memory.callSites;
+    facts.escapeSite = memory.escapeSite;
+    // The half of `contained` that needs no fixpoint; the other is added after it.
+    facts.contained = rootsHoldNoPointer(program, table, sig);
   }
   // A `returned` or `leaked` allocation is still an allocation.
   if (facts.returnsAllocation || facts.allocLeaks) {
     facts.allocates = true;
   }
+  facts.allocatesItself = facts.allocates;
+  facts.sourceName = sig.sourceName;
+  facts.returnsScalar = sig.returnType === T_VOID || isScalarArgument(table, sig.returnType);
   let i = 0;
   while (i < sig.paramNames.length) {
     const type = sig.paramTypes[i];
@@ -1363,6 +1430,7 @@ export const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
+  facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark");
 
   if (facts.readsMemory) {
     facts.effect = maxEffect(facts.effect, EFFECT_READ);
@@ -1420,6 +1488,10 @@ export const analyzeFunctions = (
   propagate(facts, runtime);
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
+    f.contained = f.contained || !f.allocEscapes;
+  }
+  settleCalleeScopes(facts);
+  for (const f of facts.list) {
     if (f.arenaScope) {
       // Both are `willreturn` and the function already writes (it allocates), so nothing else moves.
       f.callees.add("nish_arena_mark");
@@ -1427,6 +1499,108 @@ export const analyzeFunctions = (
     }
   }
   return facts;
+};
+
+/**
+ * The automatic arena scope for a function whose callees are what allocate.
+ *
+ * The rule of WP6 (`arenaScope` above) asks for an allocation of the
+ * function's *own* that flows `local`, so a function that only calls
+ * allocating functions and throws their results away never reclaimed
+ * anything: `List.benchmark` in the Are We Fast Yet suite builds three lists
+ * through `makeList` and keeps one `i32`, and every list lived until the
+ * harness released its own mark. This adds a second way to earn the bracket:
+ *
+ *     contained && returnsScalar && !usesArenaControl && some callee net-allocates
+ *
+ * **Why it is sound.** The release rewinds the arena to where it stood on
+ * entry, freeing exactly what was allocated while the function ran, by it or
+ * by anything it called. After the `ret` the only things that leave the frame
+ * are the return value and whatever the body and its callees wrote into
+ * memory that existed before the call. The return value is a number, a
+ * `boolean`, an `enum` or nothing, so it names no memory. `contained` says no
+ * allocation made during the call is reachable any other way, which covers the
+ * writes. And `usesArenaControl` being false means nothing in the call reset or
+ * released the arena under the mark, so the mark still names the entry
+ * position when the release runs. Reading the position (`Arena.mark`,
+ * `Arena.used`) is allowed, exactly as the WP6 rule allows it: it answers a
+ * smaller number after a scope reclaimed memory, which is the point, and
+ * `readsArenaState` keeps a release from moving ahead of a tail call to one.
+ *
+ * **Why "net-allocates".** That clause is profit rather than proof. A callee
+ * with a scope of its own gives its memory back before it returns, so a scope
+ * around the caller would bracket nothing but two runtime calls. Whether a
+ * function net-allocates depends on whether it got a scope, which depends on
+ * whether its callees net-allocate, so the functions are settled callees
+ * first, depth-first over the call graph. A recursion back to a function still
+ * being settled reads the answer computed with the WP6 scopes alone, which can
+ * only say "allocates" where the settled one would not: the cost of that is a
+ * scope nobody needed, never a missing one.
+ */
+const settleCalleeScopes = (facts: FactsTable): void => {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const f of facts.list) {
+      if (!f.netAllocates && !f.arenaScope && (f.allocatesItself || someCalleeNetAllocates(facts, f))) {
+        f.netAllocates = true;
+        changed = true;
+      }
+    }
+  }
+  const before: boolean[] = [];
+  const state: i32[] = [];
+  for (const f of facts.list) {
+    before.push(f.netAllocates);
+    state.push(0);
+  }
+  let i = 0;
+  while (i < state.length) {
+    if (state[i] === 0) {
+      settleScope(facts, i, state, before);
+    }
+    i = i + 1;
+  }
+};
+
+const someCalleeNetAllocates = (facts: FactsTable, f: FunctionFacts): boolean => {
+  let c = 0;
+  while (c < f.callees.size()) {
+    const g = facts.get(f.callees.at(c));
+    if (g !== null && g.netAllocates) {
+      return true;
+    }
+    c = c + 1;
+  }
+  return false;
+};
+
+/** `state`: 0 not yet visited, 1 being settled (on the walk), 2 settled. */
+const settleScope = (facts: FactsTable, i: i32, state: i32[], before: boolean[]): void => {
+  state[i] = 1;
+  const f = facts.list[i];
+  let calleeAllocates = false;
+  let c = 0;
+  while (c < f.callees.size()) {
+    const j = facts.indexOf(f.callees.at(c));
+    // `state` and `before` hold one entry per function, so a symbol with facts
+    // is always inside both; the tests are what let the bounds prover see it,
+    // and the second is repeated because the recursive call drops the first.
+    if (j >= 0 && j < state.length && state[j] === 0) {
+      settleScope(facts, j, state, before);
+    }
+    if (j >= 0 && j < state.length && j < before.length) {
+      if (state[j] === 2 ? facts.list[j].netAllocates : before[j]) {
+        calleeAllocates = true;
+      }
+    }
+    c = c + 1;
+  }
+  if (!f.arenaScope && calleeAllocates && f.contained && f.returnsScalar && !f.usesArenaControl) {
+    f.arenaScope = true;
+  }
+  f.netAllocates = !f.arenaScope && (f.allocatesItself || calleeAllocates);
+  state[i] = 2;
 };
 
 /** Escape results by symbol, the second round's input. */

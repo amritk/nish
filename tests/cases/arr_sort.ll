@@ -32,7 +32,7 @@ for.body:
   %8 = sext i32 %7 to i64
   %9 = bitcast i8* %3 to i32*
   %10 = getelementptr inbounds i32, i32* %9, i64 %8
-  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %11, i32* %key.addr, align 4
   %12 = load i32, i32* %i.addr, align 4
   %13 = sub nsw i32 %12, 1
@@ -61,7 +61,7 @@ bounds.fail:
 bounds.ok:
   %23 = bitcast i8* %17 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 %21
-  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3
+  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %26 = load i32, i32* %key.addr, align 4
   %27 = icmp sgt i32 %25, %26
   br label %land.end
@@ -86,7 +86,7 @@ bounds.fail.1:
 bounds.ok.1:
   %35 = bitcast i8* %17 to i32*
   %36 = getelementptr inbounds i32, i32* %35, i64 %33
-  %37 = load i32, i32* %36, align 4, !alias.scope !4, !noalias !3
+  %37 = load i32, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %38 = icmp ult i64 %31, %15
   br i1 %38, label %bounds.ok.2, label %bounds.fail.2
 
@@ -97,7 +97,7 @@ bounds.fail.2:
 bounds.ok.2:
   %39 = bitcast i8* %17 to i32*
   %40 = getelementptr inbounds i32, i32* %39, i64 %31
-  store i32 %37, i32* %40, align 4, !alias.scope !4, !noalias !3
+  store i32 %37, i32* %40, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %41 = load i32, i32* %j.addr, align 4
   %42 = sub nsw i32 %41, 1
   store i32 %42, i32* %j.addr, align 4
@@ -118,7 +118,7 @@ bounds.fail.3:
 bounds.ok.3:
   %48 = bitcast i8* %3 to i32*
   %49 = getelementptr inbounds i32, i32* %48, i64 %45
-  store i32 %46, i32* %49, align 4, !alias.scope !4, !noalias !3
+  store i32 %46, i32* %49, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   br label %for.inc
 
 for.inc:
@@ -150,45 +150,45 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 17, i32* %7, align 4, !alias.scope !4, !noalias !3
+  store i32 17, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 3, i32* %8, align 4, !alias.scope !4, !noalias !3
+  store i32 3, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 99, i32* %9, align 4, !alias.scope !4, !noalias !3
+  store i32 99, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %10 = getelementptr inbounds i32, i32* %6, i64 3
-  store i32 %0, i32* %10, align 4, !alias.scope !4, !noalias !3
+  store i32 %0, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %11 = getelementptr inbounds i32, i32* %6, i64 4
-  store i32 42, i32* %11, align 4, !alias.scope !4, !noalias !3
+  store i32 42, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %12 = getelementptr inbounds i32, i32* %6, i64 5
-  store i32 8, i32* %12, align 4, !alias.scope !4, !noalias !3
+  store i32 8, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %13 = getelementptr inbounds i32, i32* %6, i64 6
-  store i32 0, i32* %13, align 4, !alias.scope !4, !noalias !3
+  store i32 0, i32* %13, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %14 = getelementptr inbounds i32, i32* %6, i64 7
-  store i32 23, i32* %14, align 4, !alias.scope !4, !noalias !3
+  store i32 23, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %15 = getelementptr inbounds i32, i32* %6, i64 8
-  store i32 15, i32* %15, align 4, !alias.scope !4, !noalias !3
+  store i32 15, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %16 = getelementptr inbounds i32, i32* %6, i64 9
-  store i32 61, i32* %16, align 4, !alias.scope !4, !noalias !3
+  store i32 61, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %17 = getelementptr inbounds i32, i32* %6, i64 10
-  store i32 7, i32* %17, align 4, !alias.scope !4, !noalias !3
+  store i32 7, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %18 = getelementptr inbounds i32, i32* %6, i64 11
-  store i32 88, i32* %18, align 4, !alias.scope !4, !noalias !3
+  store i32 88, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %19 = getelementptr inbounds i32, i32* %6, i64 12
-  store i32 %1, i32* %19, align 4, !alias.scope !4, !noalias !3
+  store i32 %1, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %20 = getelementptr inbounds i32, i32* %6, i64 13
-  store i32 5, i32* %20, align 4, !alias.scope !4, !noalias !3
+  store i32 5, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %21 = getelementptr inbounds i32, i32* %6, i64 14
-  store i32 30, i32* %21, align 4, !alias.scope !4, !noalias !3
+  store i32 30, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %22 = getelementptr inbounds i32, i32* %6, i64 15
-  store i32 2, i32* %22, align 4, !alias.scope !4, !noalias !3
+  store i32 2, i32* %22, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %23 = getelementptr inbounds i32, i32* %6, i64 16
-  store i32 71, i32* %23, align 4, !alias.scope !4, !noalias !3
+  store i32 71, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %24 = getelementptr inbounds i32, i32* %6, i64 17
-  store i32 19, i32* %24, align 4, !alias.scope !4, !noalias !3
+  store i32 19, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %25 = getelementptr inbounds i32, i32* %6, i64 18
-  store i32 44, i32* %25, align 4, !alias.scope !4, !noalias !3
+  store i32 44, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   %26 = getelementptr inbounds i32, i32* %6, i64 19
-  store i32 1, i32* %26, align 4, !alias.scope !4, !noalias !3
+  store i32 1, i32* %26, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %27 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   call void @insertionSort(%struct.nish_array* %27)
@@ -209,7 +209,7 @@ forof.body:
   %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4
   %35 = bitcast i8* %34 to i32*
   %36 = getelementptr inbounds i32, i32* %35, i64 %29
-  %37 = load i32, i32* %36, align 4, !alias.scope !4, !noalias !3
+  %37 = load i32, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !8
   store i32 %37, i32* %x.addr, align 4
   %38 = load i8*, i8** %line.addr, align 8
   %39 = load i32, i32* %x.addr, align 4
@@ -247,3 +247,7 @@ attributes #2 = { nounwind noreturn cold }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"element i32", !6, i64 0}
+!8 = !{!7, !7, i64 0}

@@ -13,6 +13,7 @@ declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
@@ -192,6 +193,7 @@ entry:
   %arr.data = alloca [2 x %struct.Node*], align 8
   %x0.addr = alloca %struct.Node*, align 8
   %x1.addr = alloca %struct.Node*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Node*
   call void @Node.constructor(%struct.Node* %1, i32 1)
@@ -283,13 +285,13 @@ if.end:
   %58 = load i8*, i8** %57, align 8, !alias.scope !10, !noalias !11
   %59 = bitcast i8* %58 to %struct.Node**
   %60 = getelementptr inbounds %struct.Node*, %struct.Node** %59, i64 1
-  store %struct.Node* %56, %struct.Node** %60, align 8, !alias.scope !11, !noalias !10
+  store %struct.Node* %56, %struct.Node** %60, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   %61 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %61, i64 0, i32 2
   %63 = load i8*, i8** %62, align 8, !alias.scope !10, !noalias !11
   %64 = bitcast i8* %63 to %struct.Node**
   %65 = getelementptr inbounds %struct.Node*, %struct.Node** %64, i64 0
-  %66 = load %struct.Node*, %struct.Node** %65, align 8, !alias.scope !11, !noalias !10
+  %66 = load %struct.Node*, %struct.Node** %65, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   store %struct.Node* %66, %struct.Node** %x0.addr, align 8
   %67 = load %struct.Node*, %struct.Node** %x0.addr, align 8
   %68 = icmp eq %struct.Node* %67, null
@@ -310,7 +312,7 @@ bounds.ok:
   %75 = load i8*, i8** %74, align 8, !alias.scope !10, !noalias !11
   %76 = bitcast i8* %75 to %struct.Node**
   %77 = getelementptr inbounds %struct.Node*, %struct.Node** %76, i64 1
-  %78 = load %struct.Node*, %struct.Node** %77, align 8, !alias.scope !11, !noalias !10
+  %78 = load %struct.Node*, %struct.Node** %77, align 8, !alias.scope !11, !noalias !10, !tbaa !13
   store %struct.Node* %78, %struct.Node** %x1.addr, align 8
   %79 = load %struct.Node*, %struct.Node** %x1.addr, align 8
   %80 = icmp ne %struct.Node* %79, null
@@ -325,6 +327,7 @@ if.then.1:
   br label %if.end.1
 
 if.end.1:
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
@@ -355,3 +358,5 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !9 = !{!"elements", !7}
 !10 = !{!8}
 !11 = !{!9}
+!12 = !{!"element ptr", !1, i64 0}
+!13 = !{!12, !12, i64 0}

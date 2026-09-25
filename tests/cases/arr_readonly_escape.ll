@@ -46,7 +46,7 @@ bounds.ok:
   %4 = load i8*, i8** %3, align 8, !alias.scope !8, !noalias !9
   %5 = bitcast i8* %4 to %struct.nish_array**
   %6 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %5, i64 0
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !alias.scope !9, !noalias !8
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !8, !noalias !9
   %10 = icmp ult i64 0, %9
@@ -61,7 +61,7 @@ bounds.ok.1:
   %12 = load i8*, i8** %11, align 8, !alias.scope !8, !noalias !9
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 0
-  store i32 %v, i32* %14, align 4, !alias.scope !9, !noalias !8
+  store i32 %v, i32* %14, align 4, !alias.scope !9, !noalias !8, !tbaa !13
   %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %rows, i64 0, i32 0
   %16 = load i64, i64* %15, align 8, !alias.scope !8, !noalias !9
   %17 = trunc i64 %16 to i32
@@ -83,3 +83,7 @@ attributes #3 = { nounwind noreturn cold }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element ptr", !1, i64 0}
+!11 = !{!10, !10, i64 0}
+!12 = !{!"element i32", !1, i64 0}
+!13 = !{!12, !12, i64 0}

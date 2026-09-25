@@ -7,6 +7,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
@@ -97,7 +99,7 @@ push.store:
   %8 = load i8*, i8** %7, align 8, !alias.scope !12, !noalias !13
   %9 = bitcast i8* %8 to %struct.Point**
   %10 = getelementptr inbounds %struct.Point*, %struct.Point** %9, i64 %3
-  store %struct.Point* %1, %struct.Point** %10, align 8, !alias.scope !13, !noalias !12
+  store %struct.Point* %1, %struct.Point** %10, align 8, !alias.scope !13, !noalias !12, !tbaa !15
   %11 = add i64 %3, 1
   store i64 %11, i64* %2, align 8, !alias.scope !12, !noalias !13
   %12 = trunc i64 %11 to i32
@@ -174,6 +176,7 @@ entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %b.addr = alloca %struct.Box*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 0, i64* %0, align 8, !alias.scope !12, !noalias !13
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -205,7 +208,7 @@ bounds.ok:
   %14 = load i8*, i8** %13, align 8, !alias.scope !12, !noalias !13
   %15 = bitcast i8* %14 to %struct.Point**
   %16 = getelementptr inbounds %struct.Point*, %struct.Point** %15, i64 0
-  %17 = load %struct.Point*, %struct.Point** %16, align 8, !alias.scope !13, !noalias !12
+  %17 = load %struct.Point*, %struct.Point** %16, align 8, !alias.scope !13, !noalias !12, !tbaa !15
   %18 = getelementptr inbounds %struct.Point, %struct.Point* %17, i32 0, i32 1
   %19 = load i32, i32* %18, align 4, !tbaa !5
   %20 = add nsw i32 %8, %19
@@ -223,6 +226,7 @@ bounds.ok:
   %32 = add nsw i32 %30, %31
   %33 = call i8* @nish_str_from_i32(i32 %32)
   call void @nish_print(i8* %33)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
@@ -254,3 +258,5 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !11 = !{!"elements", !9}
 !12 = !{!10}
 !13 = !{!11}
+!14 = !{!"element ptr", !1, i64 0}
+!15 = !{!14, !14, i64 0}

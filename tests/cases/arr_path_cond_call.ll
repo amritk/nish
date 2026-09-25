@@ -73,7 +73,7 @@ pop.ok:
   %13 = load i8*, i8** %12, align 8, !alias.scope !8, !noalias !9
   %14 = bitcast i8* %13 to i32*
   %15 = getelementptr inbounds i32, i32* %14, i64 %11
-  %16 = load i32, i32* %15, align 4, !alias.scope !9, !noalias !8
+  %16 = load i32, i32* %15, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   br label %while.cond
 
 while.end:
@@ -124,7 +124,7 @@ bounds.ok:
   %17 = load i8*, i8** %16, align 8, !alias.scope !8, !noalias !9
   %18 = bitcast i8* %17 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 %12
-  %20 = load i32, i32* %19, align 4, !alias.scope !9, !noalias !8
+  %20 = load i32, i32* %19, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   ret i32 %20
 
 if.end:
@@ -147,17 +147,17 @@ entry:
   store i8* %4, i8** %5, align 8, !alias.scope !8, !noalias !9
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 10, i32* %7, align 4, !alias.scope !9, !noalias !8
+  store i32 10, i32* %7, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 20, i32* %8, align 4, !alias.scope !9, !noalias !8
+  store i32 20, i32* %8, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %9 = getelementptr inbounds i32, i32* %6, i64 2
-  store i32 30, i32* %9, align 4, !alias.scope !9, !noalias !8
+  store i32 30, i32* %9, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %10 = getelementptr inbounds i32, i32* %6, i64 3
-  store i32 40, i32* %10, align 4, !alias.scope !9, !noalias !8
+  store i32 40, i32* %10, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %11 = getelementptr inbounds i32, i32* %6, i64 4
-  store i32 50, i32* %11, align 4, !alias.scope !9, !noalias !8
+  store i32 50, i32* %11, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   %12 = getelementptr inbounds i32, i32* %6, i64 5
-  store i32 60, i32* %12, align 4, !alias.scope !9, !noalias !8
+  store i32 60, i32* %12, align 4, !alias.scope !9, !noalias !8, !tbaa !11
   call void @Queue.constructor(%struct.Queue* %Queue.obj, %struct.nish_array* %1)
   store %struct.Queue* %Queue.obj, %struct.Queue** %q.addr, align 8
   %13 = load %struct.Queue*, %struct.Queue** %q.addr, align 8
@@ -190,3 +190,5 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!"elements", !5}
 !8 = !{!6}
 !9 = !{!7}
+!10 = !{!"element i32", !1, i64 0}
+!11 = !{!10, !10, i64 0}
