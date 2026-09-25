@@ -111,14 +111,14 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join) `` | a `for` loop; there are no function values to pass |
+| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | forbidden | `if (a !== null)` first |
 | `x as T`, `<T>x`, `x!` | `Unsupported expression in Phase 1: AsExpression` | there are no casts; `implements` is the only widening |
 | `any`, `unknown` | forbidden | name the real type |
 | `undefined` | forbidden | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
-| a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
+| a callback stored or returned: `const cb = (n: i32) => n`, a field `cb: (n: i32) => i32` | `An arrow may only be written as the argument for a function-typed parameter` / `` … is a function type, which may only annotate a parameter of a top-level function `` | there are **no function values**; a callback the call names is a [function parameter](#function-parameters) |
 | `type Pair<T>` (a generic alias) | `` expected `=`, found `<` `` (a syntax error) | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
@@ -373,11 +373,14 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
 
 - A function is a **module-level `const` bound to an arrow**. `let` is
   rejected; annotating the `const` is rejected (the annotation would be a
-  function type, and those are forbidden). The `function` keyword is accepted
-  as the legacy spelling and compiles to identical IR.
+  function type, which only a parameter may have). The `function` keyword is
+  accepted as the legacy spelling and compiles to identical IR.
 - **Every parameter and the return type must be annotated.**
 - **A function is not a value.** `const alias = double` is
-  `` Unknown identifier `double` ``. No callbacks, no function types, ever.
+  `` Unknown identifier `double` ``. A function may be *passed* only for a
+  function-typed parameter, where it is resolved at compile time — see
+  [Function parameters](#function-parameters) — and never stored, returned or
+  held in a field, a local or an array.
 - **Parameters are immutable**: `p = 1`, `p++`, `p += 1` are all rejected. Copy
   into a `let` first.
 - A non-`void` function must return on every path.
@@ -603,6 +606,63 @@ class Box<T> {
 }
 
 export const main = (): i32 => new Box<i32>(1).value;
+```
+
+### Function parameters
+
+A parameter of a top-level function may have a **function type**. Its argument
+is a top-level function named at the call, or an arrow written right there, and
+each one is compiled into its **own copy** of the function, with a direct call
+where the parameter is called — there is no function pointer at run time.
+
+```ts nish:ok
+const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
+  const out: U[] = [];
+  for (const x of xs) {
+    out.push(f(x));
+  }
+  return out;
+};
+
+const fold = <T>(xs: T[], f: (acc: T, x: T) => T, identity: T): T => {
+  let acc = identity;
+  for (const x of xs) {
+    acc = f(acc, x);
+  }
+  return acc;
+};
+
+const add = (a: i32, b: i32): i32 => a + b;
+
+export const main = (): i32 => {
+  const doubled = map([1, 2, 3], (n) => n * 2);   // U is bound from the body
+  return fold(doubled, add, 0) - 12;              // 0
+};
+```
+
+- **Call it, or pass it on to another function parameter. Nothing else**:
+  `const g = f`, `return f` and `[f]` are
+  `` `f` is a function parameter and can only be called or passed on as a function argument ``.
+- **An arrow captures nothing.** It sees its own parameters and top-level
+  names; reading a local of the function around it is
+  `` The arrow reads `k`, which belongs to the function it is written in ``.
+  Pass the value in as another argument of the template instead.
+- **The argument's type must match exactly**: `(x: i32) => i64` for a
+  `(x: i32) => i32` parameter is refused. A generic function cannot be passed
+  by name — write `(x) => identity(x)`.
+- **Annotate what cannot be inferred**: an arrow parameter whose type no value
+  argument binds, and the return type of a block-bodied arrow whose result is a
+  type parameter.
+- **Only a top-level function** may have one: not a method, a constructor, a
+  field, a local, a return type or an alias.
+
+```ts nish:err NL2335
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  const k = 3;
+  return apply((x) => x + k, 1);   // captures `k`: pass it to `apply` instead
+};
 ```
 
 ### Calling C
@@ -1065,7 +1125,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined`, `?.`, `??`, a cast, a
-   callback, a generic *alias*, or `extends`?
+   stored or returned callback, a generic *alias*, or `extends`?
 9. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a

@@ -5,7 +5,8 @@ additions that a review of the corpus found wanting and that no existing work
 package owns. Three of them (§2 non-generic `type` aliases, §3 numeric `enum`,
 §5 `Pair<A, B>` in `std/`) **landed**; §7 to §9 are the items the same review
 looked at and **declined**; and §4 and §6, which stood as proposals while they
-were reviewed, are decided now — §4 **no**, §6 **not scheduled**. Each of
+were reviewed, are decided now — §4 **no**, and §6, first **not scheduled**,
+has **landed** for a callee the checker can name (WP29 P1). Each of
 §4 to §6 keeps the section that argued it and gains a decision paragraph under
 its heading saying what was decided and what would turn it; the argument is not
 restated, because the argument is what the section already is. Where the answer
@@ -624,9 +625,25 @@ doing now is not adding a type constructor to the grammar in the meantime.
 
 ---
 
-## 6. Compile-time function parameters — **decided: not scheduled**
+## 6. Compile-time function parameters — **landed, for a callee the checker can name**
 
-**Decided: not scheduled.** §6.4 is the argument, and the reason to keep the
+**Landed.** WP29's P1 scheduled it, as its §6 said it would, and it is built in
+the shape §6.1 draws and in no other: a parameter of a top-level function with a
+function type takes a top-level function named at the call or an arrow written
+there, the pair (template, type arguments, *function arguments*) is the
+instantiation key, the symbol gains a `$fn.<length>.<symbol>` segment per
+function argument, and the IR has a direct call and no function pointer. A name
+bound to such a parameter may be called or passed on to another one and is
+refused anywhere else; an arrow captures nothing and is refused anywhere but
+as such an argument; a function type anywhere but on such a parameter is
+refused by name. [LANGUAGE.md](LANGUAGE.md#function-parameters) states the
+rules and cites the cases (`tests/cases/fnarg_*`, `reject_fnarg_*`,
+`tests/link/fnarg_private`), and nothing below is relaxed by it: `Function`
+stays a Phase 0 error with its reason, and a function value the checker cannot
+name — stored, returned, held in a field — still does not exist. The rest of
+this section is the argument as it stood before the decision.
+
+**Decided then: not scheduled.** §6.4 is the argument, and the reason to keep the
 section is negative rather than positive — so that the next person who wants
 `xs.map(f)` finds the shape that is compatible with this compiler written out
 beside the reasons the general version never will be.
@@ -960,7 +977,8 @@ reviewed before more code is written.
 - ~~**Whether any of §4 to §6 lands before the M4 freeze.**~~ **Answered, and
   the answer is none of them** — which is what takes all three off M4's
   critical path. M4 freezes the language reference (MASTER_PLAN §9), and none
-  of the three adds a rule to it: §4 is decided no, §6 is not scheduled, and §5
+  of the three adds a rule to it: §4 is decided no, §6 was not scheduled then
+  (it has since landed, with WP29 P1, and added its rule), and §5
   adds a *library type* rather than a rule, so `std/` gaining a `Pair` moves
   `std/README.md` and not LANGUAGE.md. The honest default is still the one
   [wp20-threads.md](wp20-threads.md) §7 takes — after the WP15 list, and now

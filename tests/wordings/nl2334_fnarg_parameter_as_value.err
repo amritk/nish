@@ -1,0 +1,1 @@
+`f` is a function parameter and can only be called or passed on as a function argument: a function is never a value in Nish, so it cannot be stored, returned, compared or put in an array

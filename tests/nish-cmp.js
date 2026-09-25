@@ -871,6 +871,18 @@ const DECLARED = [
     changelog: "Compile-time function parameters, monomorphised per callee",
     why: "a new program: a private function and arrows passed to another module's templates, which the reference compiler refuses to parse",
   },
+  {
+    program: "docs/cookbook/fnarg_named.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "the cookbook snippet for a function parameter given two named callees, which the reference compiler refuses to parse",
+  },
+  {
+    program: "docs/cookbook/fnarg_arrow.ts",
+    file: "exit",
+    changelog: "Compile-time function parameters, monomorphised per callee",
+    why: "the cookbook snippet for a lifted arrow argument, which the reference compiler refuses to parse",
+  },
 ];
 
 /** Differing files printed in full before the rest are only counted. */

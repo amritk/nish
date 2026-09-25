@@ -117,6 +117,7 @@ same `i32`).
 | `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
+| `(x: T) => U`, only on a parameter of a top-level function | none: no LLVM parameter, no value | — | (not representable) | Names a callee chosen at each call and compiled into the instantiation's body as a direct call: [Function parameters](#function-parameters). |
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
@@ -667,10 +668,11 @@ spelling; the two compile to identical IR, instruction for instruction
 - **The arrow form** is a `const` — `let` is
   `` Function `f` must be declared `const`, not `let` ``
   (`tests/cases/reject_arrow_let`) — binding one name, with the signature on
-  the arrow itself. Annotating the `const` is
-  `` Function `f` takes its signature from the arrow ``
-  (`reject_arrow_annotated`), because the annotation would be a function type
-  and those are forbidden. A function returning `void` uses a block.
+  the arrow itself. Annotating the `const` is refused
+  (`reject_arrow_annotated`), because the annotation would be a function type,
+  and a function type annotates a parameter of a top-level function and
+  nothing else ([Function parameters](#function-parameters)). A function
+  returning `void` uses a block.
 - A **concise body** (`=> n * 2`) means exactly what a block with one `return`
   means, everywhere the difference could show. It takes the return type as its
   contextual type, so an object literal gets its struct, a class value converts
@@ -680,9 +682,11 @@ spelling; the two compile to identical IR, instruction for instruction
   ([Memory model](#memory-model)). `tests/cases/fn_arrow_concise` pins all five,
   each of which the block form has always had.
 - **A function is not a value** in either spelling: a name bound to one may
-  only be called, so `const alias = double` is `` Unknown identifier `double` ``
-  (`tests/cases/reject_arrow_as_value`). Function types, and therefore
-  callbacks, stay forbidden.
+  only be called, or passed for a function-typed parameter, so
+  `const alias = double` is `` Unknown identifier `double` ``
+  (`tests/cases/reject_arrow_as_value`). A callback the checker can name at
+  the call is a [function parameter](#function-parameters), resolved at compile
+  time; a function held in a field, a local or an array does not exist.
 - Every parameter and the return type must be annotated
   (`` Parameter `x` needs a type annotation ``; `explicit return type`,
   `tests/cases/reject_missing_return_type`).
@@ -720,8 +724,8 @@ spelling; the two compile to identical IR, instruction for instruction
   `Optional/default parameters are not supported`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`),
   `declare function`,
-  function expressions and arrow functions
-  (`Unsupported expression in Phase 1: ArrowFunction` *(CLI only)*),
+  function expressions, an arrow anywhere but as a function argument
+  (`reject_fnarg_arrow_value`),
   and nested function declarations (`Unsupported statement in Phase 1:
   FunctionDeclaration`).
 - A non-`void` function must return on every path
@@ -1737,6 +1741,99 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
   `…_generic_class`), and in a plain method's name when the part before the `$`
   is a generic sibling's — `pick$i32` beside a generic `pick` would be
   `pick<i32>`'s symbol (`reject_generic_method_dollar`).
+
+### Function parameters
+
+A parameter of a top-level function may have a **function type**, and its
+argument is then a function the checker can name at the call: a top-level
+function written by name, or an arrow written right there. Such a function is
+a template, with or without type parameters, and **each callee it is given is
+an instantiation of its own**, exactly as each type-argument tuple is: one
+`define` per (template, type arguments, function arguments), whose body calls
+its callee directly (`tests/cases/fnarg_named`). There is no function pointer,
+no indirect call and no function value anywhere; the parameter has no LLVM
+parameter at all, and the whole-program fixpoint sees an ordinary direct call
+it can prove things through ([wp23-language-surface.md](wp23-language-surface.md)
+§6, and [wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 for what
+the other kind of callee would cost).
+
+```typescript
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x) + 1;
+const square = (x: i32): i32 => x * x;
+
+export const main = (): i32 => {
+  const a = apply(square, 3);        // @apply$fn.6.square, calling @square
+  const b = apply((x) => x - 1, 3);  // @apply$fn.16.nish_main$arrow0
+  return a + b;
+};
+```
+
+- **The callee is part of the symbol.** An instantiation's name is the
+  template's, then its type arguments, then `$fn.<length>.<symbol>` for each
+  function argument, which is self-delimiting however many `$` the callee's
+  own symbol holds; a person reads it as `apply<square>` or
+  `map<i32, str, (x) => ...>` in every diagnostic, the `--emit-checked` dump
+  and the `-g` DWARF `name`. Two callees are two `define`s; the same callee
+  twice is one (`tests/cases/fnarg_named`).
+- **An arrow argument is lifted into a function of its own**, named after the
+  function it is written in (`nish_main$arrow0`) — a symbol no declaration can
+  spell, because a declared name may not hold a `$`. It may be written
+  `x => ...`, `(x) => ...` or with annotations, with a concise or a block body
+  (`tests/cases/fnarg_arrow`), and under `-g` it has a `DISubprogram` of its
+  own, placed where the arrow starts (`tests/cases/dbg_fnarg_arrow`).
+- **Inference runs in two phases.** The value arguments bind what they can
+  first; then each function argument is resolved against its parameter's
+  function type. An arrow's unannotated parameters take the types the value
+  arguments bound, a named function's signature binds any type parameter it
+  mentions, and an arrow with a concise body binds the result type from its
+  body, so `map(xs, (n) => n > 1)` over an `i32[]` is
+  `map<i32, boolean, (n) => ...>`. A numeric
+  literal argument is checked after the others, against what they bound, so a
+  fold's identity `0.0` over an `f64[]` is an `f64` in either number mode
+  (`tests/cases/fnarg_generic`).
+- **A function parameter may be called and passed on, and nothing else.**
+  Passing it to another function-typed parameter forwards the callee as part
+  of the key, so the innermost call is still direct
+  (`tests/cases/fnarg_forward`). Storing, returning, comparing or putting it
+  in an array is
+  `` `f` is a function parameter and can only be called or passed on as a function argument: a function is never a value in Nish, so it cannot be stored, returned, compared or put in an array ``
+  (`tests/cases/reject_fnarg_store`, `reject_fnarg_return`).
+- **An arrow captures nothing.** It sees its own parameters and the module's
+  top-level names; a local, a parameter, `this` or a function parameter of the
+  function it is written in is
+  `` The arrow reads `step`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the module's top-level names, so it can capture nothing ``
+  (`tests/cases/reject_fnarg_capture`). An arrow anywhere but as such an
+  argument is
+  `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in Nish, so it cannot be stored, returned or called where it stands ``
+  (`tests/cases/reject_fnarg_arrow_value`).
+- **A function argument has exactly its parameter's type**, once the type
+  parameters are bound, because the body calls it with those types and reads
+  that result:
+  `` Argument 1 of `apply`: `widen` is `(x: i32) => i64`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type ``
+  (`tests/cases/reject_fnarg_mismatch`). The argument must be the name of a
+  top-level function or an arrow — a local, a member or any other expression is
+  refused (`reject_fnarg_not_name`), a generic function names no one function
+  and is refused with the arrow to write instead (`reject_fnarg_generic_name`),
+  and an arrow takes exactly its type's parameters (`reject_fnarg_arity`). An
+  unannotated arrow parameter whose type no value argument binds
+  (`reject_fnarg_infer`) and a block-bodied arrow whose result only it could
+  bind (`reject_fnarg_block_return`) must be annotated.
+- **A function type annotates a parameter of a top-level function and nothing
+  else.** A field, a local, an array element, a return type or an alias of one
+  is
+  `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in Nish, so it cannot be the type of a field, a local, an element, a return value or an alias ``
+  (`tests/cases/reject_fnarg_field`, `reject_fnarg_local`,
+  `reject_fnarg_return_type`, `reject_fnarg_alias`), and a parameter of a
+  method, a constructor, a `declare function`, an arrow or another function
+  type is `` `f` cannot have a function type here: ... `` naming which
+  (`reject_fnarg_method`, `reject_fnarg_nested`).
+- **Across modules**, an instantiation is made in the template's module
+  (WP18 G7), so it may call a private function, or an arrow, of the module that
+  asked. That callee is `hidden` rather than `internal` — in the final link,
+  exported from nothing — and the template's module `declare`s it with the
+  attributes of its `define` (`tests/link/fnarg_private`). The interop sidecars
+  describe no instantiation that was given a function, and no lifted arrow:
+  neither has a name a host could call.
 
 ### Interfaces and object literals
 
@@ -3470,6 +3567,12 @@ messages are exact for the cases cited; other rows quote the checker
 | a constraint that is not a class or interface | `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's `` | `reject_generic_constraint` |
 | a constraint that mentions a type parameter | `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out `` | `reject_generic_constraint` |
 | a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
+| a function parameter used as a value | `` `f` is a function parameter and can only be called or passed on as a function argument: ... `` | `reject_fnarg_store`, `reject_fnarg_return` |
+| an arrow argument that captures | `` The arrow reads `step`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture` |
+| an arrow anywhere but as a function argument | `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... `` | `reject_fnarg_arrow_value` |
+| a function type anywhere but on a parameter of a top-level function | `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... `` / `` `f` cannot have a function type here: ... `` | `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_method`, `reject_fnarg_nested` |
+| a function argument that is not a function's name or an arrow, or does not match | `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... `` / `` ...; a function argument must have exactly its parameter's type `` | `reject_fnarg_not_name`, `reject_fnarg_generic_name`, `reject_fnarg_mismatch`, `reject_fnarg_arity` |
+| an arrow argument whose types cannot be inferred | `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` / `` The arrow passed to `map` needs a return type annotation: ... `` | `reject_fnarg_infer`, `reject_fnarg_block_return` |
 | a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
 | type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |

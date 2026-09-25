@@ -1,0 +1,1 @@
+The arrow reads `base`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the module's top-level names, so it can capture nothing

@@ -726,6 +726,220 @@ attributes #2 = { nounwind }
 ```
 <!-- cookbook:end gen_method -->
 
+### A function parameter
+
+A parameter annotated with a function type takes a callee the checker can
+name at the call — a top-level function, or an arrow written there — and the
+callee is part of the instantiation's key, after the type arguments. So
+`apply(square, x)` and `apply(cube, x)` are two `define`s,
+`@apply$fn.6.square` and `@apply$fn.4.cube`, each with a direct call to its
+callee and no parameter for `f` at all: there is no function pointer and no
+indirect call, and each gets the attributes of its own callee
+(docs/wp23-language-surface.md §6).
+
+<!-- cookbook:begin fnarg_named -->
+```ts
+// A function-typed parameter makes `apply` a template over its callee: one
+// `define` per function argument, each calling its callee directly.
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x) + 1;
+
+const square = (x: i32): i32 => x * x;
+const cube = (x: i32): i32 => x * x * x;
+
+export const both = (x: i32): i32 => apply(square, x) + apply(cube, x);
+```
+
+```llvm
+define internal noundef i32 @square(i32 noundef %x) #0 {
+entry:
+  %0 = mul nsw i32 %x, %x
+  ret i32 %0
+}
+
+define internal noundef i32 @cube(i32 noundef %x) #0 {
+entry:
+  %0 = mul nsw i32 %x, %x
+  %1 = mul nsw i32 %0, %x
+  ret i32 %1
+}
+
+define noundef i32 @both(i32 noundef %x) #0 {
+entry:
+  %0 = call i32 @apply$fn.6.square(i32 %x)
+  %1 = call i32 @apply$fn.4.cube(i32 %x)
+  %2 = add nsw i32 %0, %1
+  ret i32 %2
+}
+
+define internal noundef i32 @apply$fn.6.square(i32 noundef %x) #0 {
+entry:
+  %0 = call i32 @square(i32 %x)
+  %1 = add nsw i32 %0, 1
+  ret i32 %1
+}
+
+define internal noundef i32 @apply$fn.4.cube(i32 noundef %x) #0 {
+entry:
+  %0 = call i32 @cube(i32 %x)
+  %1 = add nsw i32 %0, 1
+  ret i32 %1
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end fnarg_named -->
+
+### An arrow argument, lifted
+
+An arrow written as the argument becomes a function of its own, named after
+the one it is written in with a `$` no declaration can spell
+(`@halves$arrow0`), and it can see only its parameters and the module's
+top-level names. Its parameter takes `T` from the array, and its concise body
+binds `U`, so the instantiation is `map<i32, f64, (n) => ...>`,
+`@map$i32$f64$fn.13.halves$arrow0`.
+
+<!-- cookbook:begin fnarg_arrow -->
+```ts
+// An arrow argument is lifted into a function of its own, and `U` is bound
+// from its body: `map<i32, f64, (n) => ...>`.
+const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
+  const out: U[] = [];
+  for (const x of xs) {
+    out.push(f(x));
+  }
+  return out;
+};
+
+export const halves = (xs: i32[]): f64[] => map(xs, (n) => toF64(n) / 2.0);
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @halves(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %0 = call %struct.nish_array* @map$i32$f64$fn.13.halves$arrow0(%struct.nish_array* %xs)
+  ret %struct.nish_array* %0
+}
+
+define internal noundef double @halves$arrow0(i32 noundef %n) #1 {
+entry:
+  %0 = sitofp i32 %n to double
+  %1 = fdiv double %0, 0x4000000000000000
+  ret double %1
+}
+
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @map$i32$f64$fn.13.halves$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %out.addr = alloca %struct.nish_array*, align 8
+  %x.addr = alloca i32, align 4
+  %forof.idx = alloca i64, align 8
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 0, i64* %2, align 8, !alias.scope !3, !noalias !4
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 0, i64* %3, align 8, !alias.scope !3, !noalias !4
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* null, i8** %4, align 8, !alias.scope !3, !noalias !4
+  store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %5 = load i64, i64* %forof.idx, align 8
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4
+  %8 = icmp ult i64 %5, %7
+  br i1 %8, label %forof.body, label %forof.end
+
+forof.body:
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
+  %11 = bitcast i8* %10 to i32*
+  %12 = getelementptr inbounds i32, i32* %11, i64 %5
+  %13 = load i32, i32* %12, align 4, !alias.scope !4, !noalias !3
+  store i32 %13, i32* %x.addr, align 4
+  %14 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %15 = load i32, i32* %x.addr, align 4
+  %16 = call double @halves$arrow0(i32 %15)
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0
+  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 1
+  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4
+  %21 = icmp eq i64 %18, %20
+  br i1 %21, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %14, i64 8)
+  br label %push.store
+
+push.store:
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4
+  %24 = bitcast i8* %23 to double*
+  %25 = getelementptr inbounds double, double* %24, i64 %18
+  store double %16, double* %25, align 8, !alias.scope !4, !noalias !3
+  %26 = add i64 %18, 1
+  store i64 %26, i64* %17, align 8, !alias.scope !3, !noalias !4
+  %27 = trunc i64 %26 to i32
+  br label %forof.inc
+
+forof.inc:
+  %28 = load i64, i64* %forof.idx, align 8
+  %29 = add i64 %28, 1
+  store i64 %29, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %30 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  ret %struct.nish_array* %30
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind willreturn }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end fnarg_arrow -->
+
 ## Types
 
 ### `i64` and the explicit conversions
