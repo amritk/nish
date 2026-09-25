@@ -3052,6 +3052,29 @@ where its memory lives and when it is reused.
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
    Scopes are per function, not per loop iteration.
 
+   **A function whose callees are what allocate gets a scope too.** One that
+   allocates nothing of its own, returns a number, a `boolean`, an `enum` or
+   nothing, never calls `Arena.reset` / `Arena.release` itself or through a
+   callee, and calls a function that leaves arena memory behind, brackets
+   itself the same way when nothing it or its callees allocate can outlive
+   the call except through the return value. That holds when no allocation
+   is stored into memory anywhere in the call (the escape analysis above), or
+   when nothing the function was handed can hold a pointer at all: every
+   parameter, `this` included, is a number, a `boolean`, an `enum`, a
+   `string`, or an object whose fields are all numbers, booleans and enums.
+   The language has no mutable global, so memory older than the call is
+   reachable only through those parameters, and none of it has a slot a
+   pointer fits in (`tests/cases/mem_callee_scope`, the Are We Fast Yet
+   `List` benchmark; `mem_callee_scope_tree`, its `Storage` benchmark, where
+   10000 runs leave `Arena.used()` where one left it). A callee that stores
+   what it allocates into `this` or a parameter, a function that returns a
+   pointer, and one that manages the arena itself get none
+   (`mem_callee_scope_escape`, `mem_callee_scope_return`,
+   `mem_callee_scope_control`), and neither does a function that reads an
+   allocation back out of what a callee returned and stores it
+   (`mem_callee_scope_nested`). A callee that already has a scope of its own
+   leaves nothing behind, so it earns its caller no second one.
+
    **A tail call is marked `tail`, and the release moves ahead of it.** A
    `return g(...)` whose arguments are every one a scalar — a number, a
    `boolean` or an `enum` — is the last thing its function does, and is
@@ -3164,9 +3187,9 @@ by the caller.
   `--json` stream and is a contract rather than a presentation detail. Within a
   file it is **not** the order the analysis finds them in: a generic's body is
   checked when one of its instantiations is finished, and the padding rule below
-  is decided a whole pass earlier than the other nine
+  is decided a whole pass earlier than the other ten
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  Ten warnings exist today, and each names the rewrite:
+  Eleven warnings exist today, and each names the rewrite:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -3196,8 +3219,9 @@ by the caller.
     declared holding a literal and is then given its one value in a branch
     (`let what = "unbound"; if (...) what = \`long ${s}\`;`), which drops
     nothing and has no rewrite — that function still loses its arena scope and
-    still retains its memory, silently, which is a known gap rather than a
-    guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
+    still retains its memory, silently, unless it earns the scope through its
+    callees ([Memory model](#memory-model), item 2), which is a known gap
+    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; when the value being dropped may already be reachable from
@@ -3206,6 +3230,26 @@ by the caller.
     the old value reachable and the `const` rewrite inapplicable; or when the
     quadratic-string rule is already reporting the same line
     (`tests/cases/perf_arena_quiet`).
+  - **a loop that leaves a callee's memory behind** — a call inside a loop to
+    a function that leaves arena memory behind (it allocates, lets none of it
+    escape, and has no scope of its own) whose result dies with the pass, in
+    a function that returns a number, a `boolean`, an `enum` or nothing and
+    still gets no automatic arena scope ([Memory model](#memory-model), item
+    2). Every pass adds memory that nothing releases before the function
+    returns, and the function does not release it then either. The warning
+    names what refused the scope — the line of an allocation stored into
+    memory, a callee that stores one, or a callee that releases or resets
+    the arena — and the hints are to move the loop into a function that lets
+    no allocation out, or to bracket the loop body with `Arena.mark()` /
+    `Arena.release(m)` (`tests/cases/perf_arena_loop`). It is found after the
+    whole-program analysis rather than by the checker, because both halves
+    of it are that analysis's facts. Not reported in a function that calls
+    `Arena.mark`, `Arena.release` or `Arena.reset` itself, whose author is
+    already managing the memory (`tests/cases/mem_callee_scope_control`);
+    when the callee stores what it allocates, because then the program is
+    keeping it; when the result is returned, stored, pushed or passed on; or
+    in a function that returns a pointer, whose caller owns what it
+    allocates, the line the dropped-allocation rule draws too.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. The
     default `nsw` makes that undefined behaviour rather than a wrap, so the

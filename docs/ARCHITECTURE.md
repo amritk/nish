@@ -362,6 +362,44 @@ leaks an allocation (`allocLeaks` in `FunctionFacts`), and neither it nor a
 callee uses `Arena.reset` / `Arena.release` (`usesArenaControl`). Paths
 that end in `unreachable` need no release. Scopes nest LIFO with the call
 stack, so a mark is always released by the function that took it.
+
+A function that allocates nothing itself earns the same bracket when its
+**callees** leave memory behind and nothing can keep that memory: it is
+*contained*, its return type is a number, a `boolean`, an `enum` or `void`, it
+uses no `Arena.reset` / `Arena.release`, and some callee *net-allocates*
+(allocates and has no scope of its own, so the bracket would reclaim
+something). Contained (`FunctionFacts.contained`) means every allocation made
+during the call, by the function or anything it calls, is unreachable once it
+returns except through its return value, and it is proved one of two ways:
+
+- **`!allocEscapes`**, WP9's fixpoint fact. The escape analysis follows values,
+  not memory, so it counts *any* store of an allocation into memory as an
+  escape, including a store into another fresh object. That is what makes it
+  sound here: no pointer read back out of memory can then be one allocated
+  during the call.
+- **`rootsHoldNoPointer`** (`self/escape.ts`): every parameter, `this`
+  included, is a scalar, a string, or an object whose every field is a
+  number, a boolean or an enum. The language has no mutable global (module
+  constants are scalars or strings, there are no `static` members,
+  `process.argv` refuses stores), the runtime keeps no pointer it was handed,
+  and no Nish pointer crosses the C boundary. So memory older than the call is
+  reachable only through the parameters, and none of it has a slot a pointer
+  fits in. This needs nothing from the callees, which is why
+  `List.benchmark` (Are We Fast Yet) qualifies although `tail` returns an
+  argument and so counts as capturing it.
+
+Containment is deliberately not a fixpoint of its own that falls through the
+callees. A callee whose parameters hold no pointers is contained however it
+nests allocations inside what it returns, and a caller can read one back out
+(`o.x` is not an allocation site) and store it through its own parameter;
+`tests/cases/mem_callee_scope_nested` is that program. The release is sound for
+the same reason as the direct scope: the scalar result names no memory,
+containment covers every write, and without arena control the mark still names
+the entry position. Net-allocation is profit, not proof, and is settled callees
+first so that a scope does not nest around a callee that already reclaims
+(`settleCalleeScopes`, `self/attributes.ts`). `tests/cases/mem_callee_scope`,
+`mem_callee_scope_tree`, and the `_escape`, `_return`, `_control` and `_nested`
+negatives pin it.
 `--no-stack-alloc` disables the stack slots but keeps the scopes; the WP6
 block of `tests/run.js` checks both modes on `mem_stack_struct` and watches
 `Arena.used()` stay flat across 100000 scoped calls.

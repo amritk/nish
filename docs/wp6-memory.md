@@ -526,6 +526,117 @@ still overflow around 170,000 levels without the marker.
 levels at `--profile debug`, which is a segfault the moment the marker comes
 off.
 
+## 2c. Scopes earned through callees
+
+The rule of §2 asks for a *direct* allocation that flows `local`. A function
+that only calls allocating functions and drops their results therefore never
+reclaimed anything, and the Are We Fast Yet ports showed what that costs.
+`List.benchmark` builds three lists through `makeList` and keeps one `i32`.
+`Storage.benchmark`, once its hand-written `Arena.mark()` / `Arena.release(m)`
+is taken out, builds a tree through a recursive `buildTreeDepth` and keeps a
+count, and its one allocation of its own, `new Random()`, is a stack slot. In
+both, every byte the callees allocated lived until the harness released its own
+mark.
+
+### Rule
+
+A function also gets the scope when
+
+- it is **contained**: everything allocated while it runs, by it or anything
+  it calls, is unreachable once it returns except through its return value;
+- its return type is a number, a `boolean`, an `enum` or `void`;
+- neither it nor a callee calls `Arena.reset` / `Arena.release`;
+- some callee **net-allocates**: it allocates, itself or through its own
+  callees, and has no scope of its own.
+
+Containment (`FunctionFacts.contained`) has two proofs, and either will do:
+
+- `!allocEscapes`, the fact §2a introduced, already propagated over every
+  callee. The escape analysis follows values rather than memory, so it counts
+  *any* store of an allocation into memory as an escape, a store into another
+  fresh object included. That conservatism is what makes it sound here: with
+  no allocation ever stored, no pointer read back out of memory can be one
+  allocated during the call.
+- `rootsHoldNoPointer`: every parameter, `this` included, is a scalar, a
+  string, or an object whose fields are all numbers, booleans and enums. The
+  language has no mutable global, the runtime keeps no pointer it was handed
+  beyond the call, and no Nish pointer crosses the C boundary, so memory older
+  than the call is reachable only through the parameters, and none of it has
+  a slot a pointer fits in. This needs nothing from the callees, which is how
+  `List.benchmark` qualifies: `tail` returns one of its arguments, and the
+  escape analysis has to count that as a capture.
+
+The first version of this rule made containment a fixpoint of its own, falling
+from "contained" over the callees and stopping at a function whose parameters
+hold no pointer. That is unsound. Such a callee is contained on its own terms
+however it nests allocations inside the object it returns, and its caller can
+read one back out and store it through its own parameter: `k.f = mk(n).x`.
+The read is not an allocation site, so nothing follows it.
+`tests/cases/mem_callee_scope_nested` is that program, and it is refused because
+`allocEscapes` keeps rising through `mk` (the `Holder` constructor keeps its
+argument).
+
+Net-allocation is profit, not proof: a callee with a scope of its own gives its
+memory back before it returns, and a second bracket around it would reclaim
+nothing. It depends on which functions got scopes, which depends on it, so
+`settleCalleeScopes` settles callees first, depth first over the call graph. A
+recursion back to a function still being settled reads the answer computed
+with the §2 scopes alone, which can only over-state it, so the cost of a cycle
+is a scope nobody needed rather than a missing one.
+
+### The warning
+
+`NL9011` reports a call inside a loop to a function that leaves memory behind
+and lets none of it escape, whose result dies with the pass, in a function that
+returns a scalar and still gets no scope. It names what refused the scope: the
+line of an allocation stored into memory, a callee that stores one, or a callee
+that releases or resets the arena. It is silent in a function that calls
+`Arena.mark`, `Arena.release` or `Arena.reset` itself, and in one that returns
+a pointer.
+
+Both halves are whole-program facts, so it is found after the attribute
+fixpoint (`arenaLoopFindings`, `self/escape.ts`) and reported by
+`Compilation.check` into the same sink as the checker's warnings, before the
+driver prints them. The emitter still reports nothing. As first written it
+also fired in pointer-returning functions and on callees that store what they
+allocate, and over `self/compile.ts` that was 514 warnings, most of them loops
+that were building a table on purpose, plus one in `std/json.ts`. Narrowed to
+the two conditions above it is 51 over `self/` and none in `std/` or
+`examples/`; the 51 are recorded in `tests/perf-baseline.json`.
+
+### Measured
+
+The Are We Fast Yet ports, `--profile speed`, median of the last 20 of 30
+iterations, 0.10.0 against this change, one 4-core container, back to back. The
+"removed" column is `Storage.benchmark` with its manual `Arena.mark()` /
+`Arena.release(m)` deleted.
+
+| | 0.10.0 | 0.10.0, removed | this change | this change, removed |
+| --- | ---: | ---: | ---: | ---: |
+| Permute 1000 | 36.2 ms | 36.2 | 36.7 | 36.4 |
+| Queens 1000 | 21.7 | 21.9 | 21.6 | 22.5 |
+| Towers 600 | 23.4 | 23.3 | 23.6 | 23.4 |
+| List 1500 | 28.0 | 25.4 | 26.0 | 26.4 |
+| Bounce 1500 | 25.5 | 25.1 | 25.2 | 30.4 |
+| Mandelbrot 500 | 58.3 | 57.6 | 57.9 | 57.8 |
+| Storage 1000 | 165.0 | **373.1** | 168.2 | **166.6** |
+
+Peak resident set (`getrusage`, `ru_maxrss`):
+
+| | 0.10.0 | this change |
+| --- | ---: | ---: |
+| `Storage 1 1000`, manual calls kept | 10,180 KB | 10,172 KB |
+| `Storage 1 1000`, manual calls removed | **390,064 KB** | **10,180 KB** |
+| `List 1 10` | 10,180 KB | 10,344 KB |
+| `List 1 100000` | **49,840 KB** | **10,168 KB** |
+
+Bounce in the last column is code placement, not the scope. With the manual
+calls gone nothing under the harness's `innerBenchmarkLoop` releases the arena,
+so it gets a scope too (Permute and Towers net-allocate beneath it). Bounce's
+functions are identical after `opt -O3` either way, and relinking the same
+modules with `-Wl,-mllvm,-align-loops=64` turns 25.6 ms without that scope
+into 22.0 ms with it.
+
 ## 3. Explicit control
 
 | Builtin | Lowering | Notes |
@@ -652,7 +763,9 @@ object, so the `nish_alloc_struct(i64 N)` the layout test reads is still there.
   released when the function returns, not per iteration (write the loop
   body as a function to get per-iteration release).
 - A function that loses its scope to a **branch-assigned local** retains its
-  memory and the compiler says nothing about it. `let what = "unbound"` and
+  memory and the compiler says nothing about it, unless it earns the §2c
+  scope instead (a scalar result, parameters that hold no pointer, and a
+  callee that leaves memory behind, as `perf_arena_quiet`'s `test` does). `let what = "unbound"` and
   three arms that each assign a template is one allocation, not a dropped one,
   so the WP15 §8 rule that reports a dropped allocation (`NL9003`) is silent
   by design — but `allocLeaks` is on all the same, the scope is not emitted,

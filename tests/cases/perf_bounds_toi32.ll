@@ -9,6 +9,8 @@
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #3
+declare noundef i64 @nish_arena_mark() #3
+declare void @nish_arena_release(i64 noundef) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #3
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
@@ -255,6 +257,7 @@ entry:
   %join.total = alloca i64, align 8
   %join.at = alloca i64, align 8
   %join.p = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @countCode(i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i32 97)
   %1 = call i8* @nish_str_from_i32(i32 %0)
   call void @nish_print(i8* %1)
@@ -381,6 +384,7 @@ join.end:
   %73 = load i8*, i8** %join.p, align 8
   store i8 0, i8* %73, align 1
   call void @nish_print(i8* %53)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
