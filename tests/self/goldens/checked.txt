@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 592 programs, 21748 dump lines.
+# 605 programs, 22176 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1985,29 +1985,29 @@ function main(): i32 -> @nish_main [exported entry]
   local 9:12 i: i32 (let)
 program tests/cases/arr_range_call.ts
 module tests/cases/arr_range_call.ts (entry)
-struct Permute (class) size=16 align=8
+struct Permute (class) size=56 align=8
   field count: i32 index=0 offset=0 initialized
-  field v: i32[] index=1 offset=8
+  field v: i32[] index=1 offset=8 inline=6
   constructor -> @Permute.constructor
   method benchmark -> @Permute.benchmark
   method permute -> @Permute.permute
   method swap -> @Permute.swap
 function Permute.constructor(this: Permute): void -> @Permute.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Permute.benchmark(this: Permute): i32 -> @Permute.benchmark [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 21:5
   calls: Permute.permute
-  pointer this: size=16 writesThrough=true captured=false passedTo=Permute.permute#0
+  pointer this: size=56 writesThrough=true captured=false passedTo=Permute.permute#0
   stackSites=0 stackLocals=0
   callee 23:5 Permute.permute -> @Permute.permute
 function Permute.permute(this: Permute, n: i32): void -> @Permute.permute [method]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 28:5
   calls: Permute.permute Permute.swap
-  pointer this: size=16 writesThrough=true captured=false passedTo=Permute.permute#0 Permute.swap#0 Permute.permute#0 Permute.swap#0
+  pointer this: size=56 writesThrough=true captured=false passedTo=Permute.permute#0 Permute.swap#0 Permute.permute#0 Permute.swap#0
   stackSites=0 stackLocals=0
   local 30:13 n1: i32 (const)
   callee 31:7 Permute.permute -> @Permute.permute
@@ -2019,7 +2019,7 @@ function Permute.swap(this: Permute, i: i32, j: i32): void -> @Permute.swap [met
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 42:5
   escaping: i j
-  pointer this: size=16 writesThrough=false captured=false
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local 41:11 tmp: i32 (const)
 function main(): i32 -> @nish_main [exported entry]
@@ -2324,32 +2324,32 @@ function main(): i32 -> @nish_main [exported entry]
   callee 11:18 beyond -> @beyond
 program tests/cases/arr_range_call_rebind.ts
 module tests/cases/arr_range_call_rebind.ts (entry)
-struct Box (class) size=8 align=8
-  field v: i32[] index=0 offset=0
+struct Box (class) size=48 align=8
+  field v: i32[] index=0 offset=0 inline=6
   constructor -> @Box.constructor
   method reset -> @Box.reset
   method get -> @Box.get
   method run -> @Box.run
 function Box.constructor(this: Box): void -> @Box.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=8 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Box.reset(this: Box): void -> @Box.reset [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 14:5
-  pointer this: size=8 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Box.get(this: Box, i: i32): i32 -> @Box.get [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: nish_panic_index
-  pointer this: size=8 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Box.run(this: Box): void -> @Box.run [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 22:5
   calls: Box.get Box.reset nish_print nish_str_from_i32
-  pointer this: size=8 writesThrough=true captured=false passedTo=Box.get#0 Box.reset#0 Box.get#0
+  pointer this: size=48 writesThrough=true captured=false passedTo=Box.get#0 Box.reset#0 Box.get#0
   stackSites=0 stackLocals=0
   callee 23:20 Box.get -> @Box.get
   callee 25:5 Box.reset -> @Box.reset
@@ -2363,20 +2363,20 @@ function main(): i32 -> @nish_main [exported entry]
   callee 31:3 new Box -> @Box.constructor
 program tests/cases/arr_range_call_rebind_callee.ts
 module tests/cases/arr_range_call_rebind_callee.ts (entry)
-struct Box (class) size=8 align=8
-  field v: i32[] index=0 offset=0
+struct Box (class) size=48 align=8
+  field v: i32[] index=0 offset=0 inline=6
   constructor -> @Box.constructor
   method take -> @Box.take
 function Box.constructor(this: Box): void -> @Box.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=8 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Box.take(this: Box, i: i32): i32 -> @Box.take [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 14:5
   escaping: i
   calls: nish_panic_index
-  pointer this: size=8 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
@@ -3724,6 +3724,414 @@ function main(): i32 -> @nish_main [exported entry]
   local 28:9 m: Mixed (const)
   callee 28:13 new Mixed -> @Mixed.constructor
   callee 32:15 new Mixed -> @Mixed.constructor
+program tests/cases/cls_inline_array.ts
+module tests/cases/cls_inline_array.ts (entry)
+struct Board (class) size=96 align=8
+  field cells: i32[] index=0 offset=0 inline=8
+  field marks: boolean[] index=1 offset=56 inline=3
+  field moves: i32 index=2 offset=88 initialized
+  constructor -> @Board.constructor
+  method reset -> @Board.reset
+  method mark -> @Board.mark
+  method sum -> @Board.sum
+function Board.constructor(this: Board): void -> @Board.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Board.reset(this: Board): void -> @Board.reset [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 21:5
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Board.mark(this: Board, i: i32, v: i32): void -> @Board.mark [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 26:5
+  escaping: i v
+  calls: nish_panic_div nish_panic_index
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Board.sum(this: Board): i32 -> @Board.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 32:9 total: i32 (let)
+  local 33:14 i: i32 (let)
+function bump(b: Board, i: i32): void -> @bump
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 41:3
+  escaping: i
+  calls: nish_panic_index
+  pointer b: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function marked(b: Board): i32 -> @marked
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer b: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 45:7 n: i32 (let)
+  local 46:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 66:3
+  calls: Board.constructor Board.mark Board.reset Board.sum bump marked nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 55:9 boards: Board[] (const)
+  callee 55:28 new Board -> @Board.constructor
+  callee 55:41 new Board -> @Board.constructor
+  callee 57:3 Board.reset -> @Board.reset
+  callee 58:3 Board.reset -> @Board.reset
+  callee 59:3 Board.mark -> @Board.mark
+  callee 60:3 Board.mark -> @Board.mark
+  callee 61:3 bump -> @bump
+  callee 62:3 Board.mark -> @Board.mark
+  callee 63:44 Board.sum -> @Board.sum
+  callee 63:63 Board.sum -> @Board.sum
+  callee 63:82 marked -> @marked
+  local 65:9 b: Board (const)
+  callee 69:3 Board.reset -> @Board.reset
+  callee 70:18 Board.sum -> @Board.sum
+  callee 70:37 Board.sum -> @Board.sum
+  local 72:9 local: Board (const)
+  callee 72:17 new Board -> @Board.constructor
+  callee 73:3 Board.reset -> @Board.reset
+  callee 74:3 Board.mark -> @Board.mark
+  callee 75:10 Board.sum -> @Board.sum
+program tests/cases/cls_inline_array_call.ts
+module tests/cases/cls_inline_array_call.ts (entry)
+struct Rows (class) size=40 align=8
+  field free: boolean[] index=0 offset=0 inline=16
+  constructor -> @Rows.constructor
+  method fill -> @Rows.fill
+  method count -> @Rows.count
+function Rows.constructor(this: Rows): void -> @Rows.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Rows.fill(this: Rows, n: i32): void -> @Rows.fill [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 15:7
+  calls: filled
+  pointer this: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 15:19 filled -> @filled
+  callee 17:19 filled -> @filled
+function Rows.count(this: Rows): i32 -> @Rows.count [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 22:9 n: i32 (let)
+  local 23:14 i: i32 (let)
+function filled(n: i32): boolean[] -> @filled
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 35:5
+  escaping: n
+  stackSites=0 stackLocals=0
+  local 33:9 arr: boolean[] (const)
+  local 34:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 44:3
+  calls: Rows.constructor Rows.count Rows.fill nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 41:9 r: Rows (const)
+  callee 41:13 new Rows -> @Rows.constructor
+  callee 42:18 Rows.count -> @Rows.count
+  callee 43:3 Rows.fill -> @Rows.fill
+  callee 45:18 Rows.count -> @Rows.count
+  callee 46:3 Rows.fill -> @Rows.fill
+  callee 47:18 Rows.count -> @Rows.count
+program tests/cases/cls_inline_array_dts.ts
+module tests/cases/cls_inline_array_dts.ts (entry)
+struct Tally (class) size=40 align=8
+  field counts: i32[] index=0 offset=0 inline=4
+  constructor -> @Tally.constructor
+function Tally.constructor(this: Tally): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makeTally(): Tally -> @makeTally [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: 14:3
+  calls: Tally.constructor nish_alloc_struct nish_panic_index
+  stackSites=0 stackLocals=0
+  local 13:9 t: Tally (const)
+  callee 13:13 new Tally -> @Tally.constructor
+function tallyAt(t: Tally, i: i32): i32 -> @tallyAt [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer t: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 22:3
+  calls: makeTally nish_arena_mark nish_arena_release nish_panic_index tallyAt
+  stackSites=0 stackLocals=0
+  local 21:9 t: Tally (const)
+  callee 21:13 makeTally -> @makeTally
+  callee 23:10 tallyAt -> @tallyAt
+  callee 23:26 tallyAt -> @tallyAt
+program tests/cases/cls_inline_array_dynamic.ts
+module tests/cases/cls_inline_array_dynamic.ts (entry)
+struct Grid (class) size=8 align=8
+  field cells: i32[] index=0 offset=0
+  constructor -> @Grid.constructor
+function Grid.constructor(this: Grid, n: i32): void -> @Grid.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: n
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 13:3
+  calls: Grid.constructor nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 12:9 g: Grid (const)
+  callee 12:13 new Grid -> @Grid.constructor
+program tests/cases/cls_inline_array_exported.ts
+module tests/cases/cls_inline_array_exported.ts (entry)
+struct Tally (class) size=8 align=8 exported
+  field counts: i32[] index=0 offset=0
+  constructor -> @Tally.constructor
+function Tally.constructor(this: Tally): void -> @Tally.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makeTally(): Tally -> @makeTally [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: 16:3
+  calls: Tally.constructor nish_alloc_struct nish_panic_index
+  stackSites=0 stackLocals=0
+  local 15:9 t: Tally (const)
+  callee 15:13 new Tally -> @Tally.constructor
+function tallyAt(t: Tally, i: i32): i32 -> @tallyAt [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer t: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 24:3
+  calls: makeTally nish_arena_mark nish_arena_release nish_panic_index tallyAt
+  stackSites=0 stackLocals=0
+  local 23:9 t: Tally (const)
+  callee 23:13 makeTally -> @makeTally
+  callee 25:10 tallyAt -> @tallyAt
+  callee 25:26 tallyAt -> @tallyAt
+program tests/cases/cls_inline_array_foreign.ts
+module tests/cases/cls_inline_array_foreign.ts (entry)
+struct Tally (class) size=8 align=8
+  field counts: i32[] index=0 offset=0
+  constructor -> @Tally.constructor
+function abs(n: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function Tally.constructor(this: Tally): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makeTally(): Tally -> @makeTally [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: 17:3
+  calls: Tally.constructor nish_alloc_struct nish_panic_index
+  stackSites=0 stackLocals=0
+  local 16:9 t: Tally (const)
+  callee 16:13 new Tally -> @Tally.constructor
+function tallyAt(t: Tally, i: i32): i32 -> @tallyAt [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer t: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 25:3
+  calls: abs makeTally nish_arena_mark nish_arena_release nish_panic_index tallyAt
+  stackSites=0 stackLocals=0
+  local 24:9 t: Tally (const)
+  callee 24:13 makeTally -> @makeTally
+  callee 26:10 abs -> @abs
+  callee 26:15 tallyAt -> @tallyAt
+  callee 26:32 tallyAt -> @tallyAt
+program tests/cases/cls_inline_array_header.ts
+module tests/cases/cls_inline_array_header.ts (entry)
+struct Tally (class) size=40 align=8
+  field counts: i32[] index=0 offset=0 inline=4
+  constructor -> @Tally.constructor
+function Tally.constructor(this: Tally): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makeTally(): Tally -> @makeTally [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: 17:3
+  calls: Tally.constructor nish_alloc_struct nish_panic_index
+  stackSites=0 stackLocals=0
+  local 16:9 t: Tally (const)
+  callee 16:13 new Tally -> @Tally.constructor
+function tallyAt(t: Tally, i: i32): i32 -> @tallyAt [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer t: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 25:3
+  calls: makeTally nish_arena_mark nish_arena_release nish_panic_index tallyAt
+  stackSites=0 stackLocals=0
+  local 24:9 t: Tally (const)
+  callee 24:13 makeTally -> @makeTally
+  callee 26:10 tallyAt -> @tallyAt
+  callee 26:26 tallyAt -> @tallyAt
+program tests/cases/cls_inline_array_local.ts
+module tests/cases/cls_inline_array_local.ts (entry)
+struct Holder (class) size=8 align=8
+  field cells: i32[] index=0 offset=0
+  constructor -> @Holder.constructor
+  method poke -> @Holder.poke
+function Holder.constructor(this: Holder): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.poke(this: Holder): void -> @Holder.poke [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 14:5
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 13:11 a: i32[] (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Holder.poke
+  calls: Holder.constructor Holder.poke nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 19:9 h: Holder (const)
+  callee 19:13 new Holder -> @Holder.constructor
+  callee 20:3 Holder.poke -> @Holder.poke
+program tests/cases/cls_inline_array_napi.ts
+module tests/cases/cls_inline_array_napi.ts (entry)
+struct Tally (class) size=40 align=8
+  field counts: i32[] index=0 offset=0 inline=4
+  constructor -> @Tally.constructor
+function Tally.constructor(this: Tally): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makeTally(): Tally -> @makeTally [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: 14:3
+  calls: Tally.constructor nish_alloc_struct nish_panic_index
+  stackSites=0 stackLocals=0
+  local 13:9 t: Tally (const)
+  callee 13:13 new Tally -> @Tally.constructor
+function tallyAt(t: Tally, i: i32): i32 -> @tallyAt [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer t: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 22:3
+  calls: makeTally nish_arena_mark nish_arena_release nish_panic_index tallyAt
+  stackSites=0 stackLocals=0
+  local 21:9 t: Tally (const)
+  callee 21:13 makeTally -> @makeTally
+  callee 23:10 tallyAt -> @tallyAt
+  callee 23:26 tallyAt -> @tallyAt
+program tests/cases/cls_inline_array_order.ts
+module tests/cases/cls_inline_array_order.ts (entry)
+struct Ring (class) size=8 align=8
+  field slots: i32[] index=0 offset=0
+  constructor -> @Ring.constructor
+  method swap -> @Ring.swap
+  method step -> @Ring.step
+  method readDuring -> @Ring.readDuring
+function Ring.constructor(this: Ring): void -> @Ring.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Ring.swap(this: Ring): i32 -> @Ring.swap [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:5
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Ring.step(this: Ring): i32 -> @Ring.step [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Ring.swap
+  calls: Ring.swap
+  pointer this: size=8 writesThrough=true captured=false passedTo=Ring.swap#0
+  stackSites=0 stackLocals=0
+  callee 21:12 Ring.swap -> @Ring.swap
+function Ring.readDuring(this: Ring): i32 -> @Ring.readDuring [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Ring.step
+  calls: Ring.step nish_panic_index
+  pointer this: size=8 writesThrough=true captured=false passedTo=Ring.step#0
+  stackSites=0 stackLocals=0
+  callee 25:23 Ring.step -> @Ring.step
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Ring.readDuring
+  calls: Ring.constructor Ring.readDuring nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 30:9 r: Ring (const)
+  callee 30:13 new Ring -> @Ring.constructor
+  local 31:9 during: i32 (const)
+  callee 31:18 Ring.readDuring -> @Ring.readDuring
+program tests/cases/cls_inline_array_passed.ts
+module tests/cases/cls_inline_array_passed.ts (entry)
+struct Counts (class) size=8 align=8
+  field hits: i32[] index=0 offset=0
+  constructor -> @Counts.constructor
+function Counts.constructor(this: Counts): void -> @Counts.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function hit(xs: i32[], i: i32): void -> @hit
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 13:3
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via hit
+  calls: Counts.constructor hit nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 17:9 c: Counts (const)
+  callee 17:13 new Counts -> @Counts.constructor
+  callee 18:3 hit -> @hit
+  callee 19:3 hit -> @hit
+program tests/cases/cls_inline_array_push.ts
+module tests/cases/cls_inline_array_push.ts (entry)
+struct Stack (class) size=8 align=8
+  field items: i32[] index=0 offset=0
+  constructor -> @Stack.constructor
+  method add -> @Stack.add
+function Stack.constructor(this: Stack): void -> @Stack.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Stack.add(this: Stack, v: i32): void -> @Stack.add [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 11:5
+  escaping: v
+  calls: nish_array_grow
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Stack.add
+  calls: Stack.add Stack.constructor nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 16:9 s: Stack (const)
+  callee 16:13 new Stack -> @Stack.constructor
+  callee 17:3 Stack.add -> @Stack.add
+  callee 18:3 Stack.add -> @Stack.add
 program tests/cases/cls_interface_literal.ts
 module tests/cases/cls_interface_literal.ts (entry)
 struct Pair (interface) size=8 align=4
@@ -4077,9 +4485,9 @@ function main(): i32 -> @nish_main [exported entry]
   callee 22:15 bitsOf -> @bitsOf
 program tests/cases/conv_f64_context.ts
 module tests/cases/conv_f64_context.ts (entry)
-struct Config (class) size=16 align=8
+struct Config (class) size=56 align=8
   field ratio: f64 index=0 offset=0
-  field weights: f64[] index=1 offset=8
+  field weights: f64[] index=1 offset=8 inline=3
   constructor -> @Config.constructor
 struct Point (class) size=16 align=8
   field x: f64 index=0 offset=0
@@ -4087,7 +4495,7 @@ struct Point (class) size=16 align=8
   constructor -> @Point.constructor
 function Config.constructor(this: Config): void -> @Config.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Point.constructor(this: Point, x: f64, y: f64): void -> @Point.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -16178,6 +16586,39 @@ function make(): Defaults -> @make
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
+program docs/cookbook/cls_inline_array.ts
+module docs/cookbook/cls_inline_array.ts (entry)
+struct Rows (class) size=32 align=8
+  field free: boolean[] index=0 offset=0 inline=8
+  constructor -> @Rows.constructor
+  method reset -> @Rows.reset
+  method take -> @Rows.take
+function Rows.constructor(this: Rows): void -> @Rows.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Rows.reset(this: Rows): void -> @Rows.reset [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:5
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Rows.take(this: Rows, r: i32): boolean -> @Rows.take [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 14:5
+  escaping: r
+  calls: nish_panic_index
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 13:11 was: boolean (const)
+function run(): boolean -> @run [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Rows.reset
+  calls: Rows.constructor Rows.reset Rows.take nish_arena_mark nish_arena_release
+  stackSites=1 stackLocals=1
+  local 20:9 rows: Rows (const)
+  callee 20:16 new Rows -> @Rows.constructor
+  callee 21:3 Rows.reset -> @Rows.reset
+  callee 22:10 Rows.take -> @Rows.take
 program docs/cookbook/cls_interface.ts
 module docs/cookbook/cls_interface.ts (entry)
 struct Pair (interface) size=8 align=4

@@ -750,7 +750,35 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
     }
     return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE);
   }
+  // An inline array field's slots are bytes of the object itself, so writing
+  // an element of `p.f` writes through `p` (`self/inline_arrays.ts`). The
+  // pointer layout's slots are an allocation of their own, and there the
+  // same store is only a read of `p`.
+  if (above !== null && above.kind === N_INDEX && above.children[0] === access && isInlineField(program, table, access)) {
+    const store = unit.parents.parentOf(above);
+    if (isAssignmentTarget(store, above) || (store !== null && store.kind === N_UNARY && (store.text === "++" || store.text === "--"))) {
+      return use(USE_WRITE);
+    }
+  }
   return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ);
+};
+
+/** Whether `access` reads an array field stored inside its object (`FieldInfo.inlineCapacity`). */
+const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
+  const receiver = program.nodeTypes[access.children[0].id];
+  if (receiver < 0) {
+    return false;
+  }
+  const t = table.stripNull(receiver);
+  if (!table.isStruct(t)) {
+    return false;
+  }
+  const info = program.struct(table.nameOf(t));
+  if (info === null) {
+    return false;
+  }
+  const field = info.field(access.text);
+  return field !== null && field.inline();
 };
 
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */

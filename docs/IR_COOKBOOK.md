@@ -4930,6 +4930,153 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end arr_header_field -->
 
+### An array field stored in its object
+
+When the whole program shows that a class field only ever holds a fresh array
+of a literal length and is only indexed or asked its `.length`, the header and
+its slots live inside the object ([LANGUAGE.md](LANGUAGE.md#fixed-length-array-fields-are-stored-inline)).
+`%struct.Rows` is then `{ %struct.nish_array, [8 x i1] }` rather than a
+pointer, `new Rows()` points the header's `data` at the slots before the
+constructor runs, and `this.free[r]` is the bounds check on `len` and a load
+at a constant offset from `this`: no field pointer, and no `data`, to load
+first. `reset` writes the slots in place, a `memset` where `new Array` would
+have allocated. `take` is not `readonly` on `this`, because an element store
+now writes the object's own bytes. `Rows` is not exported; an exported class
+keeps the pointer layout in every build but a closed-world `--link`.
+
+<!-- cookbook:begin cls_inline_array -->
+```ts
+class Rows {
+  free: boolean[];
+
+  constructor() {
+    this.free = [];
+  }
+
+  reset(): void {
+    this.free = new Array<boolean>(8);
+  }
+
+  take(r: i32): boolean {
+    const was = this.free[r];
+    this.free[r] = false;
+    return was;
+  }
+}
+
+export const run = (): boolean => {
+  const rows = new Rows();
+  rows.reset();
+  return rows.take(3);
+};
+```
+
+```llvm
+%struct.Rows = type { { %struct.nish_array, [8 x i1] } }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+
+define internal void @Rows.constructor(%struct.Rows* noundef nonnull noalias align 8 dereferenceable(32) nocapture %this) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 0
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
+  store i64 0, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  ret void
+}
+
+define internal void @Rows.reset(%struct.Rows* noundef nonnull align 8 dereferenceable(32) nocapture %this) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 0
+  %1 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 1, i64 0
+  %2 = bitcast i1* %1 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %2, i8 0, i64 8, i1 false), !alias.scope !4, !noalias !3
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
+  store i64 8, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  ret void
+}
+
+define internal noundef zeroext i1 @Rows.take(%struct.Rows* noundef nonnull align 8 dereferenceable(32) nocapture %this, i32 noundef %r) #1 {
+entry:
+  %was.addr = alloca i1, align 1
+  %0 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 0
+  %1 = sext i32 %r to i64
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = icmp ult i64 %1, %3
+  br i1 %4, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %1, i64 %3)
+  unreachable
+
+bounds.ok:
+  %5 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 1, i64 0
+  %6 = bitcast i1* %5 to i8*
+  %7 = bitcast i8* %6 to i1*
+  %8 = getelementptr inbounds i1, i1* %7, i64 %1
+  %9 = load i1, i1* %8, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  store i1 %9, i1* %was.addr, align 1
+  %10 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 0
+  %11 = sext i32 %r to i64
+  %12 = getelementptr inbounds %struct.Rows, %struct.Rows* %this, i32 0, i32 0, i32 1, i64 0
+  %13 = bitcast i1* %12 to i8*
+  %14 = bitcast i8* %13 to i1*
+  %15 = getelementptr inbounds i1, i1* %14, i64 %11
+  store i1 false, i1* %15, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %16 = load i1, i1* %was.addr, align 1
+  ret i1 %16
+}
+
+define noundef zeroext i1 @run() #1 {
+entry:
+  %rows.addr = alloca %struct.Rows*, align 8
+  %Rows.obj = alloca %struct.Rows, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.Rows, %struct.Rows* %Rows.obj, i32 0, i32 0, i32 0
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
+  store i64 0, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 1
+  store i64 8, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %3 = getelementptr inbounds %struct.Rows, %struct.Rows* %Rows.obj, i32 0, i32 0, i32 1, i64 0
+  %4 = bitcast i1* %3 to i8*
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 2
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  call void @Rows.constructor(%struct.Rows* %Rows.obj)
+  store %struct.Rows* %Rows.obj, %struct.Rows** %rows.addr, align 8
+  %6 = load %struct.Rows*, %struct.Rows** %rows.addr, align 8
+  call void @Rows.reset(%struct.Rows* %6)
+  %7 = load %struct.Rows*, %struct.Rows** %rows.addr, align 8
+  %8 = call i1 @Rows.take(%struct.Rows* %7, i32 3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i1 %8
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!"element i1", !6, i64 0}
+!12 = !{!11, !11, i64 0}
+!13 = !{!9, !7, i64 8}
+!14 = !{!9, !8, i64 16}
+```
+<!-- cookbook:end cls_inline_array -->
+
 ### `--unchecked-indexing`
 
 The compare, the branch and the panic block disappear; `get` regains

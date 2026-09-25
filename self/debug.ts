@@ -360,8 +360,15 @@ export class DebugInfo {
     const file = this.fileOf(info.origin);
     const members: string[] = [];
     for (const f of info.fields) {
-      const base = this.typeRef(f.type);
       const line = this.lineOf(info.origin, f.decl);
+      if (f.inline()) {
+        // An array stored in the object (`self/inline_arrays.ts`): the member
+        // is the header itself, whose `data` points at the slots after it.
+        const header = this.arrayHeader(this.table.refOf(f.type), this.table.typeName(f.type));
+        members.push(this.member(f.name, ref, header, 192, f.offset * 8, file, line));
+        continue;
+      }
+      const base = this.typeRef(f.type);
       members.push(this.member(f.name, ref, base, bitsOfIn(this.table, f.type), f.offset * 8, file, line));
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);

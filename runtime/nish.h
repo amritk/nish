@@ -179,7 +179,15 @@ void nish_append_file(const nish_str *path, const nish_str *data);
  * `push` that grows it copies the elements into the arena and leaves your
  * buffer behind; the callee must not retain the pointer beyond the call.
  * A returned array lives in the arena (valid until the next reset/release):
- * copy `len` elements out of `data` before recycling. */
+ * copy `len` elements out of `data` before recycling.
+ *
+ * An array field stored inside its object (`self/inline_arrays.ts`) is this
+ * header followed by its `K` slots, `struct { nish_array h; T slots[K]; }`
+ * with `h.data == (char *)slots` and `h.cap == K`; `self/runtime.ts`'s
+ * `ARRAY_TYPE` and `self/structs.ts`'s `INLINE_HEADER_BYTES` are the same 24
+ * bytes, and `tests/layout/inline_array.c` holds the three to it. It only
+ * happens where no header, `.d.ts` or N-API shim describes the class, so a
+ * host that includes a generated header never meets one. */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
 /* A fresh arena array of `len` uninitialised elements (`len == cap`), for a
  * host that wants the runtime to own the storage (the wasm loader does).
