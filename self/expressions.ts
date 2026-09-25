@@ -16,7 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding";
-import { resolveType } from "./annotations";
+import { nullableOfChecked, resolveType } from "./annotations";
 import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
@@ -68,16 +68,15 @@ import {
   N_THIS,
   N_TRUE,
   N_TYPE_NULL,
-  N_TYPE_REF,
-  N_TYPE_UNION,
   N_UNARY,
   N_VAR_DECL,
   Node,
 } from "./nodes";
 import { ParentTable } from "./parents";
+import { unwrapParens } from "./emit_util";
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program";
 import { coercesTo } from "./structs";
-import { undefinedForbidden } from "./validator";
+import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
   intBits,
@@ -948,8 +947,11 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   const right = cond.children[1];
   const rightAbsent = right.kind === N_NULL || isUndefinedValue(right, scope);
   const leftAbsent = left.kind === N_NULL || isUndefinedValue(left, scope);
-  const variable = rightAbsent ? left : leftAbsent ? right : left;
-  if (variable.kind !== N_IDENT || (!rightAbsent && !leftAbsent)) {
+  if (!rightAbsent && !leftAbsent) {
+    return;
+  }
+  const variable = rightAbsent ? left : right;
+  if (variable.kind !== N_IDENT) {
     return;
   }
   const local = scope.lookup(variable.text);
@@ -997,7 +999,7 @@ export const WANT_MAYBE: i32 = -2;
  * it, as a parameter called `undefined` does under `tsc`.
  */
 export const isUndefinedValue = (node: Node, scope: Scope): boolean =>
-  node.kind === N_IDENT && node.text === "undefined" && scope.lookup("undefined") === null;
+  isUndefined(node) && scope.lookup("undefined") === null;
 
 /** `a === undefined` / `a !== undefined`: a test of a maybe's found bit, and nothing else. */
 const checkUndefinedTest = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
@@ -1027,10 +1029,7 @@ const checkUndefinedTest = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
  */
 const maybeOperand = (ctx: CheckContext, operand: Node, scope: Scope): i32 => {
   const type = checkExpression(ctx, operand, scope, WANT_MAYBE);
-  let bare = operand;
-  while (bare.kind === N_PAREN) {
-    bare = bare.children[0];
-  }
+  const bare = unwrapParens(operand);
   const local: Local | null = bare.kind === N_IDENT ? scope.lookup(bare.text) : null;
   if (type !== T_ERROR && local !== null && ctx.table.isMaybe(local.type)) {
     return local.type;
@@ -1066,90 +1065,18 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   return value;
 };
 
-// Where a refused maybe stands, which decides the rewrite its message names.
-const PLACE_OTHER: i32 = 0;
-const PLACE_LET: i32 = 1;
-const PLACE_ARGUMENT: i32 = 2;
-const PLACE_RETURN: i32 = 3;
-const PLACE_FIELD: i32 = 4;
-const PLACE_ELEMENT: i32 = 5;
-const PLACE_TEMPLATE: i32 = 6;
-const PLACE_OPERAND: i32 = 7;
-const PLACE_ANNOTATED: i32 = 8;
-const PLACE_DEFAULT: i32 = 9;
-
 /**
  * Refuse the maybe `expr` in a place that does not admit one, naming the
- * place. The checker threads the contextual type down and keeps no parent
- * links, so the place is found by building them (`self/parents.ts`) — only
- * here, on a program that is already refused, so a program that compiles
- * never pays for the walk.
+ * place, because the rewrite differs by place. The checker threads the
+ * contextual type down and keeps no parent links, so the place is found by
+ * building them (`self/parents.ts`) — only here, on a program that is already
+ * refused, so a program that compiles never pays for the walk.
  */
-const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 => {
-  const shown = `\`${ctx.textOf(expr)}\` is \`${ctx.table.typeName(type)}\``;
-  const place = maybePlace(ctx, expr);
-  if (place === PLACE_LET) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be held in a \`let\`: only a \`const\` is narrowed, because a \`let\` can be assigned; bind it with \`const\` and test it with \`!== undefined\`, or give it a default with \`??\``
-    );
-  }
-  if (place === PLACE_ARGUMENT) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be passed as an argument: a value that may be missing does not cross a call; give it a default with \`??\`, or bind it to a \`const\` and pass it where \`!== undefined\` has narrowed it`
-    );
-  }
-  if (place === PLACE_RETURN) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be returned: a value that may be missing does not cross a call; return a default with \`??\`, or bind it to a \`const\` and return it where \`!== undefined\` has narrowed it`
-    );
-  }
-  if (place === PLACE_FIELD) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be stored in a field: a value that may be missing is never in memory; store a default with \`??\`, or bind it to a \`const\` and store it where \`!== undefined\` has narrowed it`
-    );
-  }
-  if (place === PLACE_ELEMENT) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be stored in an array element: a value that may be missing is never in memory; store a default with \`??\`, or bind it to a \`const\` and store it where \`!== undefined\` has narrowed it`
-    );
-  }
-  if (place === PLACE_TEMPLATE) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be a template literal hole: there is no \`undefined\` to print; give it a default with \`??\`, or bind it to a \`const\` and print it where \`!== undefined\` has narrowed it`
-    );
-  }
-  if (place === PLACE_OPERAND) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be the operand of an operator other than \`??\`, \`=== undefined\` and \`!== undefined\`: give it a default with \`??\` first, or bind it to a \`const\` and use it where \`!== undefined\` has narrowed it`
-    );
-  }
-  if (place === PLACE_DEFAULT) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot be the default of another \`??\`: the default stands in for a missing value, so it is a value; give this one a default of its own first, \`a ?? (b ?? d)\``
-    );
-  }
-  if (place === PLACE_ANNOTATED) {
-    return ctx.errorType(
-      expr,
-      `${shown} and cannot initialise a \`const\` annotated with its value type: annotate the \`const\` with the whole type, or with none, and test it with \`!== undefined\`, or give it a default with \`??\``
-    );
-  }
-  return ctx.errorType(
-    expr,
-    `${shown}, which can only initialise a \`const\`, be the left operand of \`??\`, or be compared with \`undefined\` by \`===\` or \`!==\``
-  );
-};
+const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 =>
+  ctx.errorType(expr, `\`${ctx.textOf(expr)}\` is \`${ctx.table.typeName(type)}\`${maybePlaceReason(ctx, expr)}`);
 
-/** One of the `PLACE_*` values: where `expr`, parentheses aside, is used. */
-const maybePlace = (ctx: CheckContext, expr: Node): i32 => {
+/** What `refuseMaybe` says after the type: where `expr`, parentheses aside, stands, and the rewrite. */
+const maybePlaceReason = (ctx: CheckContext, expr: Node): string => {
   const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length);
   let node = expr;
   let parent = linkedParent(parents, node);
@@ -1158,61 +1085,83 @@ const maybePlace = (ctx: CheckContext, expr: Node): i32 => {
     parent = linkedParent(parents, node);
   }
   if (parent === null) {
-    return PLACE_OTHER;
+    return ELSEWHERE;
   }
   switch (parent.kind) {
     case N_VAR_DECL: {
       const list = linkedParent(parents, parent);
       const statement: Node | null = list === null ? null : linkedParent(parents, list);
-      return statement !== null && (statement.flags & FLAG_CONST) !== 0 ? PLACE_ANNOTATED : PLACE_LET;
+      return statement !== null && (statement.flags & FLAG_CONST) !== 0 ? ANNOTATED : IN_LET;
     }
     case N_BINARY:
-      return operatorPlace(parent, node);
+      return operatorPlaceReason(parent, node);
     case N_UNARY:
-      return PLACE_OPERAND;
+      return AS_OPERAND;
     case N_LIST: {
       const owner = linkedParent(parents, parent);
       const isArguments =
         owner !== null &&
         ((owner.kind === N_CALL && owner.children[1] === parent) || (owner.kind === N_NEW && owner.children[2] === parent));
-      return isArguments ? PLACE_ARGUMENT : PLACE_OTHER;
+      return isArguments ? AS_ARGUMENT : ELSEWHERE;
     }
     case N_RETURN:
-      return PLACE_RETURN;
+      return RETURNED;
     case N_FUNCTION:
-      return parent.children[3] === node ? PLACE_RETURN : PLACE_OTHER; // a concise body is its `return`
+      return parent.children[3] === node ? RETURNED : ELSEWHERE; // a concise body is its `return`
     case N_ARROW:
-      return parent.children[3] === node ? PLACE_RETURN : PLACE_OTHER;
+      return parent.children[3] === node ? RETURNED : ELSEWHERE;
     case N_TEMPLATE:
-      return PLACE_TEMPLATE;
+      return IN_TEMPLATE;
     case N_PROPERTY:
-      return PLACE_FIELD;
+      return IN_FIELD;
     case N_ARRAY:
-      return PLACE_ELEMENT;
+      return IN_ELEMENT;
     default:
-      return PLACE_OTHER;
+      return ELSEWHERE;
   }
 };
 
-/** The place of `node`, an operand of the binary `parent`. */
-const operatorPlace = (parent: Node, node: Node): i32 => {
+/** The reason for `node`, an operand of the binary `parent`. */
+const operatorPlaceReason = (parent: Node, node: Node): string => {
   if (parent.text !== "=") {
     // A compound assignment reads its target first, so its value is an
     // operand; `??`'s right operand is `V` and admits no maybe either.
-    return parent.text === "??" ? PLACE_DEFAULT : PLACE_OPERAND;
+    return parent.text === "??" ? AS_DEFAULT : AS_OPERAND;
   }
   if (parent.children[1] !== node) {
-    return PLACE_OTHER;
+    return ELSEWHERE;
   }
   const target = parent.children[0];
   if (target.kind === N_IDENT) {
-    return PLACE_LET; // only a `let` can be assigned
+    return IN_LET; // only a `let` can be assigned
   }
   if (target.kind === N_MEMBER) {
-    return PLACE_FIELD;
+    return IN_FIELD;
   }
-  return target.kind === N_INDEX ? PLACE_ELEMENT : PLACE_OTHER;
+  return target.kind === N_INDEX ? IN_ELEMENT : ELSEWHERE;
 };
+
+// The reasons, one per place and one diagnostic code each (NL2361-NL2369, NL2371).
+const IN_LET: string =
+  " and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`";
+const AS_ARGUMENT: string =
+  " and cannot be passed as an argument: a value that may be missing does not cross a call; give it a default with `??`, or bind it to a `const` and pass it where `!== undefined` has narrowed it";
+const RETURNED: string =
+  " and cannot be returned: a value that may be missing does not cross a call; return a default with `??`, or bind it to a `const` and return it where `!== undefined` has narrowed it";
+const IN_FIELD: string =
+  " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it";
+const IN_ELEMENT: string =
+  " and cannot be stored in an array element: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it";
+const IN_TEMPLATE: string =
+  " and cannot be a template literal hole: there is no `undefined` to print; give it a default with `??`, or bind it to a `const` and print it where `!== undefined` has narrowed it";
+const AS_OPERAND: string =
+  " and cannot be the operand of an operator other than `??`, `=== undefined` and `!== undefined`: give it a default with `??` first, or bind it to a `const` and use it where `!== undefined` has narrowed it";
+const AS_DEFAULT: string =
+  " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`";
+const ANNOTATED: string =
+  " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`";
+const ELSEWHERE: string =
+  ", which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` by `===` or `!==`";
 
 /**
  * `node`'s parent when the table really holds it, or `null`. A body checked
@@ -1247,22 +1196,15 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
   for (const member of annotation.children) {
     if (member.kind === N_TYPE_NULL) {
       nullable = true;
-    } else if (!(member.kind === N_TYPE_REF && member.text === "undefined")) {
+    } else if (!isUndefinedType(member)) {
       value = resolveType(member, ctx);
     }
   }
   if (value < 0 || value === T_ERROR) {
     return T_ERROR;
   }
-  if (nullable && !ctx.table.isPointer(value)) {
-    // The rule `T | null` has everywhere else, which this spelling skips past.
-    const spelled = ctx.table.typeName(value);
-    return ctx.errorType(
-      annotation,
-      `\`${spelled} | null\` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)`
-    );
-  }
-  return ctx.table.maybeOf(nullable ? ctx.table.nullableOf(value) : value);
+  const present = nullable ? nullableOfChecked(ctx, annotation, value) : value;
+  return present === T_ERROR ? T_ERROR : ctx.table.maybeOf(present);
 };
 
 // ---- Assignment ---------------------------------------------------------------------

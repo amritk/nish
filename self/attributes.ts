@@ -137,6 +137,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types";
+import { valueReaderOf } from "./emit_map";
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
@@ -1178,11 +1179,10 @@ class FactCollector {
       if (callee !== null) {
         this.facts.callees.add(callee.name);
       }
-      // WP32: `m.get(k)` is a `probe` and, when it finds the key, a `valueAt`,
-      // which the checker records on the callee member (`checkMapGet`); its
-      // type, a maybe, is what says the call is one.
-      const reads = program.nodeCallees[node.children[0].id];
-      if (reads !== null && this.table.isMaybe(program.nodeTypes[node.id])) {
+      // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
+      // finds the key, that table's `valueAt` (`checkMapGet`).
+      const reads: FunctionSig | null = callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null;
+      if (reads !== null) {
         this.facts.callees.add(reads.name);
       }
     }

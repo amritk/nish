@@ -36,11 +36,12 @@
 import { Emitter } from "./emit";
 import { FactsTable } from "./attributes";
 import { internalErrorFor } from "./ice";
-import { intrinsicType } from "./emit_util";
+import { intrinsicType, unwrapParens } from "./emit_util";
 import { StringSet } from "./map";
-import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_PAREN, N_STRING, N_TRUE, Node } from "./nodes";
+import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_STRING, N_TRUE, Node } from "./nodes";
 import { CheckedProgram, FunctionSig, MAP_HASH_KEY, MAP_NONE } from "./program";
 import { Local } from "./symbols";
+import { isUndefined } from "./validator";
 import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types";
 
 /** The `MAP_*` role of `sig`, or `MAP_NONE` when it is not an instantiation of one of the two intrinsics. */
@@ -288,63 +289,61 @@ export const emitLibraryCopies = (emitter: Emitter, library: CheckedProgram, sig
 // ---- `m.get(k)`: a maybe, as two SSA values --------------------------------------
 
 /**
- * A maybe (`V | undefined`, docs/wp32-map.md §3.2) as the emitter holds it: the
- * probe's found bit, and the value once it is loaded. It is two SSA values and
- * nothing else: there is no struct type for it, because it never crosses a
- * call and never reaches memory.
- *
- * A `get` answers the found bit alone, with `value` empty: the value is read
- * only where the found bit says there is one (`loadMaybeValue`), because
- * `valueAt` of an absent probe's index is not an entry. A `const` bound to a
- * `get` has already done that read, under its own found test, so its `value`
- * is there.
+ * A maybe as the emitter holds it: two SSA values, the probe's found bit and
+ * the value. A `get` is its probe alone until the value is asked for
+ * (`loadMaybeValue`), which is emitted only where the found bit is set, since
+ * `valueAt` of an absent probe's index is not an entry; it keeps the map, the
+ * packed answer and `valueAt` for that. A `const` bound to a `get` has read
+ * its value already, under its own found test, and has no `read`.
  */
 export class MaybeParts {
   found: string;
   value: string;
-  /** The map and the probe's packed answer, which `valueAt` is called with; empty for a `const`. */
   receiver: string;
   packed: string;
   read: FunctionSig | null;
 
-  constructor(found: string, value: string) {
+  constructor(found: string, value: string, receiver: string, packed: string, read: FunctionSig | null) {
     this.found = found;
     this.value = value;
-    this.receiver = "";
-    this.packed = "";
-    this.read = null;
+    this.receiver = receiver;
+    this.packed = packed;
+    this.read = read;
   }
 }
+
+/**
+ * The `valueAt` of the table whose `probe` a `get` was checked as a call of:
+ * what reads the value the probe found. It is the one other function a `get`
+ * calls, and the whole-program facts count it as a callee there
+ * (`self/attributes.ts`), so it is copied into the module with `probe`.
+ */
+export const valueReaderOf = (probe: FunctionSig): FunctionSig | null => {
+  const owner = probe.owner;
+  return owner === null ? null : owner.method("valueAt");
+};
 
 /**
  * Lower a maybe: `m.get(k)`, or a `const` bound to one, in parentheses or
  * not. A `get` is one call of the instance's `probe`, whose packed answer is
  * `>= 0` exactly when the key is there.
  */
-export const emitMaybe = (emitter: Emitter, expr: Node): MaybeParts => {
-  if (expr.kind === N_PAREN) {
-    return emitMaybe(emitter, expr.children[0]);
-  }
+export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
+  const expr = unwrapParens(maybe);
   const local = emitter.program.nodeLocals[expr.id];
   if (expr.kind === N_IDENT && local !== null) {
-    const at = maybeLocalIndex(emitter, local);
-    return new MaybeParts(emitter.maybeFound[at], emitter.maybeValues[at]);
+    return emitter.maybeParts[maybeLocalIndex(emitter, local)];
   }
   const probe = emitter.program.nodeCallees[expr.id];
   if (expr.kind !== N_CALL || probe === null) {
     process.exit(internalErrorFor(`emitter: a maybe that is neither \`get\` nor a \`const\``, emitter.opts.json));
   }
-  const access = expr.children[0];
   const fn = emitter.fn;
-  const receiver = emitter.emitExpression(access.children[0]);
+  const receiver = emitter.emitExpression(expr.children[0].children[0]);
   const key = emitter.emitExpression(expr.children[1].children[0]);
   const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
   const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
-  const parts = new MaybeParts(fn.emitValue(`icmp sge i64 ${packed}, 0`), "");
-  parts.receiver = receiver;
-  parts.packed = packed;
-  parts.read = emitter.program.nodeCallees[access.id];
-  return parts;
+  return new MaybeParts(fn.emitValue(`icmp sge i64 ${packed}, 0`), "", receiver, packed, valueReaderOf(probe));
 };
 
 /**
@@ -354,7 +353,7 @@ export const emitMaybe = (emitter: Emitter, expr: Node): MaybeParts => {
  */
 export const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
   const read = parts.read;
-  if (parts.value.length > 0 || read === null) {
+  if (read === null) {
     return parts.value;
   }
   const fn = emitter.fn;
@@ -371,9 +370,8 @@ export const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
  * so each use sees the SSA values its declaration defined.
  */
 export const emitMaybeLocal = (emitter: Emitter, local: Local, init: Node): void => {
-  const parts = emitMaybe(emitter, init);
-  let value = parts.value;
-  if (value.length === 0) {
+  let parts = emitMaybe(emitter, init);
+  if (parts.read !== null) {
     const fn = emitter.fn;
     const entry = fn.currentBlock().label;
     const found = fn.newBlock("get.found");
@@ -385,11 +383,11 @@ export const emitMaybeLocal = (emitter: Emitter, local: Local, init: Node): void
     fn.emit(`br label %${done.label}`);
     fn.placeBlock(done);
     const type = emitter.table.refOf(local.type);
-    value = fn.emitValue(`phi ${emitter.llvm(type)} [ ${loaded}, %${foundEdge} ], [ ${zeroOf(emitter, type)}, %${entry} ]`);
+    const value = fn.emitValue(`phi ${emitter.llvm(type)} [ ${loaded}, %${foundEdge} ], [ ${zeroOf(emitter, type)}, %${entry} ]`);
+    parts = new MaybeParts(parts.found, value, "", "", null);
   }
   emitter.maybeLocals.push(local);
-  emitter.maybeFound.push(parts.found);
-  emitter.maybeValues.push(value);
+  emitter.maybeParts.push(parts);
 };
 
 /** Where `local`'s pair is in the emitter's list; a narrowed read of a maybe `const` is its value. */
@@ -431,8 +429,7 @@ export const isUndefinedTest = (emitter: Emitter, expr: Node): boolean =>
 
 /** The `undefined` side of a test, on which the checker records the maybe it is compared with. */
 const testsUndefined = (emitter: Emitter, operand: Node): boolean =>
-  operand.kind === N_IDENT &&
-  operand.text === "undefined" &&
+  isUndefined(operand) &&
   emitter.program.nodeLocals[operand.id] === null &&
   emitter.table.isMaybe(emitter.program.nodeTypes[operand.id]);
 
@@ -449,13 +446,9 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   const ty = emitter.llvm(type);
   const nullable = emitter.table.isNullable(type);
   const parts = emitMaybe(emitter, expr.children[0]);
-  if (parts.value.length > 0 && isPlainOperand(emitter, expr.children[1])) {
+  if (parts.read === null && isPlainOperand(emitter, expr.children[1])) {
     const fallback = emitter.emitExpression(expr.children[1]);
-    let present = parts.found;
-    if (nullable) {
-      const set = fn.emitValue(`icmp ne ${ty} ${parts.value}, null`);
-      present = fn.emitValue(`and i1 ${parts.found}, ${set}`);
-    }
+    const present = nullable ? fn.emitValue(`and i1 ${parts.found}, ${isSet(emitter, ty, parts.value)}`) : parts.found;
     return fn.emitValue(`select i1 ${present}, ${ty} ${parts.value}, ${ty} ${fallback}`);
   }
   const found = fn.newBlock("nullish.value");
@@ -466,8 +459,7 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   const value = loadMaybeValue(emitter, parts);
   const foundEdge = fn.currentBlock().label;
   if (nullable) {
-    const set = fn.emitValue(`icmp ne ${ty} ${value}, null`);
-    fn.emit(`br i1 ${set}, label %${done.label}, label %${missing.label}`);
+    fn.emit(`br i1 ${isSet(emitter, ty, value)}, label %${done.label}, label %${missing.label}`);
   } else {
     fn.emit(`br label %${done.label}`);
   }
@@ -478,6 +470,9 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   fn.placeBlock(done);
   return fn.emitValue(`phi ${ty} [ ${value}, %${foundEdge} ], [ ${fallback}, %${missingEdge} ]`);
 };
+
+/** Whether `value`, a found value of the nullable LLVM type `ty`, is not the stored `null` that `??` replaces too. */
+const isSet = (emitter: Emitter, ty: string, value: string): string => emitter.fn.emitValue(`icmp ne ${ty} ${value}, null`);
 
 /** A literal, a local or a module constant: evaluating it has no effect, so it may be evaluated whether or not it is used. */
 const isPlainOperand = (emitter: Emitter, expr: Node): boolean => {

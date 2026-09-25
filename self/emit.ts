@@ -82,6 +82,7 @@ import {
   libraryReach,
   mapIntrinsicOf,
   maybeLocalIndex,
+  MaybeParts,
 } from "./emit_map";
 import { emitParallelRegion, isParallelRegionCall } from "./emit_parallel";
 import { addStringConstant, emitTemplate } from "./emit_strings";
@@ -206,8 +207,7 @@ export class Emitter {
    * and value, which are SSA values rather than a slot (`self/emit_map.ts`).
    */
   maybeLocals: Local[];
-  maybeFound: string[];
-  maybeValues: string[];
+  maybeParts: MaybeParts[];
   /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
   paramObjectNames: string[];
   paramObjectValues: string[];
@@ -249,8 +249,7 @@ export class Emitter {
     this.slotLocals = [];
     this.slotNames = [];
     this.maybeLocals = [];
-    this.maybeFound = [];
-    this.maybeValues = [];
+    this.maybeParts = [];
     this.paramObjectNames = [];
     this.paramObjectValues = [];
     this.usedRuntime = new StringSet();
@@ -386,8 +385,7 @@ export class Emitter {
     this.slotLocals = [];
     this.slotNames = [];
     this.maybeLocals = [];
-    this.maybeFound = [];
-    this.maybeValues = [];
+    this.maybeParts = [];
     this.loops = [];
     this.current = facts;
     this.currentSig = sig;
@@ -1104,7 +1102,7 @@ export class Emitter {
       }
       // WP32: a maybe `const` read by name is read where a test narrowed it to its value.
       if (this.table.isMaybe(local.type)) {
-        return this.maybeValues[maybeLocalIndex(this, local)];
+        return this.maybeParts[maybeLocalIndex(this, local)].value;
       }
       const ty = this.llvm(local.type);
       return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`);

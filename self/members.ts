@@ -222,9 +222,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
  * never crosses a call, so there is no `get` to call. It is one `probe`, whose
  * packed answer is its found bit, and a `valueAt` of the entry it found, run
  * only when it found one. The call is checked, and recorded, as a call of
- * `probe`; `valueAt` is recorded on the callee member `m.get`, a slot no member
- * uses otherwise, so that the whole-program facts see both calls and the
- * emitter copies both functions into the module (`self/emit_map.ts`).
+ * `probe`, and its maybe type is what tells the whole-program facts and the
+ * emitter that `probe`'s table's `valueAt` is called too (`valueReaderOf` in
+ * `self/emit_map.ts`), so both functions are copied into the module.
  */
 const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node, scope: Scope): i32 => {
   const probe = info.method("probe");
@@ -234,7 +234,6 @@ const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node
   }
   checkMethodArguments(ctx, expr, probe, args, `${ctx.table.typeName(info.type)}.get`, scope, false);
   ctx.program.nodeCallees[expr.id] = probe;
-  ctx.program.nodeCallees[expr.children[0].id] = read;
   return ctx.table.maybeOf(read.returnType);
 };
 

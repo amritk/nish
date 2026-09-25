@@ -2172,8 +2172,16 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   const left = expr.children[0];
   const right = expr.children[1];
 
-  if (op === "&&" || op === "||") {
+  // WP32: `a ?? d` runs `d` only where `a` is missing, the same join with no
+  // condition for the right operand to assume.
+  if (op === "&&" || op === "||" || op === "??") {
     walkExpression(walk, state, left);
+    if (op === "??") {
+      const maybeRan = cloneState(state);
+      walkExpression(walk, maybeRan, right);
+      copyInto(state, intersect(state, maybeRan));
+      return;
+    }
     const facts = conditionFacts(walk, state, left);
     const guarded = cloneState(state);
     addFacts(guarded, op === "&&" ? facts.whenTrue : facts.whenFalse);
@@ -2182,16 +2190,6 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     // survives — which also puts back whatever the guard added and the right
     // operand did not take away.
     copyInto(state, intersect(state, guarded));
-    return;
-  }
-
-  // WP32: `a ?? d` runs `d` only where `a` is missing, so, as for `&&`, only
-  // what holds whether or not it ran survives it.
-  if (op === "??") {
-    walkExpression(walk, state, left);
-    const maybeRan = cloneState(state);
-    walkExpression(walk, maybeRan, right);
-    copyInto(state, intersect(state, maybeRan));
     return;
   }
 

@@ -16,6 +16,7 @@
 
 import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
+import { unwrapParens } from "./emit_util";
 import {
   FLAG_CONST,
   N_BIGINT,
@@ -258,10 +259,10 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
 };
 
 /** The identifier `undefined`, as a value. */
-const isUndefined = (node: Node): boolean => node.kind === N_IDENT && node.text === "undefined";
+export const isUndefined = (node: Node): boolean => node.kind === N_IDENT && node.text === "undefined";
 
 /** The type `undefined`, as a union member. */
-const isUndefinedType = (node: Node): boolean =>
+export const isUndefinedType = (node: Node): boolean =>
   node.kind === N_TYPE_REF && node.text === "undefined" && node.children[0].children.length === 0;
 
 /**
@@ -294,10 +295,7 @@ export const isMaybeAnnotation = (annotation: Node): boolean => {
  * union it is.
  */
 const isMaybeDeclaration = (decl: Node): boolean => {
-  let init = decl.children[2];
-  while (init.kind === N_PAREN) {
-    init = init.children[0];
-  }
+  const init = unwrapParens(decl.children[2]);
   const callsGet = init.kind === N_CALL && init.children[0].kind === N_MEMBER && init.children[0].text === "get";
   return callsGet && isMaybeAnnotation(decl.children[1]);
 };
