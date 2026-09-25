@@ -230,6 +230,10 @@ function expected(caseText) {
   if (hashString(a) !== hashString(b)) throw new Error(`${a} and ${b} no longer collide`);
   out.push(`probe collision ${hashString(a)} ${hashString(b)} -1 1 2 2 ${JSON.stringify(b)}`);
   out.push("probe set 1 1 0 2");
+  // The slot packing at its extremes: fingerprint, index, and not the empty 0.
+  const slotOf = (h, index) => ((h & 0xff000000) | (index + 1)) >>> 0;
+  const unpack = (slot) => `${slot >>> 24} ${(slot & 0xffffff) - 1} ${slot !== 0 ? 1 : 0}`;
+  out.push(`probe pack ${unpack(slotOf(0xffffffff, 0xffffff - 1))} ${unpack(slotOf(0, 0))}`);
 
   return `${out.join("\n")}\n`;
 }

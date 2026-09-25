@@ -422,6 +422,59 @@ for the release only, needs `g` not to read the bump position
 `Arena.used()` answers what it always did). Design and measurements:
 [wp6-memory.md](wp6-memory.md).
 
+A loop's **pass** gets the same bracket when nothing the pass allocates can be
+reached once the pass is over except through a scalar (`decideLoopScopes`,
+`self/escape.ts`, decided after `settleCalleeScopes`). The ways out of a pass
+are memory older than it, a local declared outside the body, and a `return`,
+and each is closed separately:
+
+- **Memory.** No allocation site in the body `escapes`, and no callee called in
+  it has `allocEscapes`. This is `contained`'s first proof restricted to the
+  pass, with the same consequence: nothing allocated during the pass is stored
+  anywhere, so a pointer loaded out of memory during the pass predates it. The
+  one load that answers memory it did not read is an inline element (`xs[i]`
+  over an interface nothing implements is the slot's address), and
+  `classifyUse` and the escape flow follow such an element as the array itself
+  (`yieldsInteriorPointer`); a local holding one (`const p = xs[i]`, the
+  variable of a `for...of` over `xs`) is a use of `xs` too, and a harmless one
+  when every reference reads or writes one of the slot's fields
+  (`classifyElementHolder`), so `for (const p of ps) sum += p.x` still leaves
+  `ps` `nocapture`. That also closes a hole the function scope had:
+  storing `xs[i]` into a parameter's object used to count as a read of `xs`,
+  so the function was contained and released the block it pointed into
+  (`tests/cases/mem_loop_scope_interior`).
+- **Outer locals.** An assignment in the body to a local not declared in it,
+  of a type that can hold a pointer, stores only a value `isOld` proves
+  predates the pass (a literal, `this`, an outer local, a field or element
+  read — an inline element only when its array is old — the `const` variable
+  of a nested `for...of` over an old array, a call to a function that
+  allocates nothing, or a choice of two of those). A compound assignment
+  to such a local is refused, and `push` is allowed only onto a `const` the
+  body initialised with a fresh literal or `new Array`, because growth moves
+  the data block into the arena.
+- **Return.** A pointer a `return` in the body answers must be `isOld`; the
+  release runs after the value is computed and before the `ret`, and a
+  scalar tail call sinks it ahead of the call exactly as the function scope
+  does (with the same `readsArenaState` refusal).
+- **Arena control.** Neither the function nor a callee uses `Arena.reset` /
+  `Arena.release`, and the function does not call `Arena.mark` itself, so the
+  position read at the top of the pass is still where the pass started.
+
+The mark is the arena's `buf` and `off`, read inline, and the release rewinds
+`off` when `buf` is unchanged: `nish_arena_grow` only ever pushes a chunk in
+front of the others and moves `buf` to it, so an unchanged `buf` means no chunk
+of the pass survives; otherwise `nish_arena_release(buf + off)` frees the newer
+chunks, the runtime's own mark. The mark dominates every release (it is the
+first instruction of the body), a `break` and a `continue` release the pass of
+the loop they leave (a `switch` has none), and a `return` releases only the
+outermost open scope, which rewinds past every inner one. Inner scopes nest
+LIFO inside outer ones and inside the function's. A `for` condition and update
+run after the release and see only outer locals, which hold nothing it freed;
+a `for...of` iterable is evaluated once, before the first mark. The arena is
+per thread under `--threads`, and so is every mark and release.
+`tests/cases/mem_loop_scope*` pin it, and their negatives read every kept value
+back after the arena has been reused.
+
 ### `T | null`
 
 The checker owns the `null` literal (typed by its contextual

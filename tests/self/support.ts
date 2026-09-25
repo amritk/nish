@@ -21,7 +21,7 @@ import {
   splitByte,
   StringBuilder,
 } from "../../self/strings";
-import { fingerprint, hashString, home, StringMap, StringSet } from "../../self/map";
+import { entryOf, fingerprint, hashString, home, slotOf, StringMap, StringSet } from "../../self/map";
 import { nishExportTarget } from "../../self/manifest";
 import { parseBareSpecifier } from "../../self/packages";
 import {
@@ -221,6 +221,18 @@ function reportProbe(out: string[]): void {
   const second = set.add("czki6");
   const again = set.add("c2ya8");
   out.push(`probe set ${first ? 1 : 0} ${second ? 1 : 0} ${again ? 1 : 0} ${set.size()}`);
+
+  // The slot packing at both ends, without a 16M-entry map: the largest legal
+  // index (2^24 - 2, whose index + 1 fills the field) under a fingerprint of
+  // 0xFF, and index 0 under a fingerprint of 0. Both halves must survive, and
+  // neither word may be the empty bucket's 0.
+  const high: u32 = 4294967295;
+  const top = slotOf(high, 16777214);
+  const low: u32 = 0;
+  const bottom = slotOf(low, 0);
+  out.push(
+    `probe pack ${toI32(fingerprint(top))} ${entryOf(top)} ${top !== 0 ? 1 : 0} ${toI32(fingerprint(bottom))} ${entryOf(bottom)} ${bottom !== 0 ? 1 : 0}`
+  );
 }
 
 export function main(): number {

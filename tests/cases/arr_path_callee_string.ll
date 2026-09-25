@@ -1,7 +1,9 @@
 %struct.Text = type { i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"z\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"abc\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
@@ -55,35 +57,56 @@ while.cond:
   br i1 %7, label %while.body, label %while.end
 
 while.body:
-  %8 = load %struct.Text*, %struct.Text** %t.addr, align 8
-  %9 = load i32, i32* %i.addr, align 4
-  call void @shorten(%struct.Text* %8, i32 %9)
-  %10 = load %struct.Text*, %struct.Text** %t.addr, align 8
-  %11 = getelementptr inbounds %struct.Text, %struct.Text* %10, i32 0, i32 0
-  %12 = load i8*, i8** %11, align 8, !tbaa !4
+  %8 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %9 = load i8*, i8** %8, align 8
+  %10 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %11 = load i64, i64* %10, align 8
+  %12 = load %struct.Text*, %struct.Text** %t.addr, align 8
   %13 = load i32, i32* %i.addr, align 4
-  %14 = sext i32 %13 to i64
-  %15 = bitcast i8* %12 to i64*
-  %16 = load i64, i64* %15, align 8
-  %17 = icmp ult i64 %14, %16
-  br i1 %17, label %bounds.ok, label %bounds.fail
+  call void @shorten(%struct.Text* %12, i32 %13)
+  %14 = load %struct.Text*, %struct.Text** %t.addr, align 8
+  %15 = getelementptr inbounds %struct.Text, %struct.Text* %14, i32 0, i32 0
+  %16 = load i8*, i8** %15, align 8, !tbaa !4
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = sext i32 %17 to i64
+  %19 = bitcast i8* %16 to i64*
+  %20 = load i64, i64* %19, align 8
+  %21 = icmp ult i64 %18, %20
+  br i1 %21, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %14, i64 %16)
+  call void @nish_panic_index(i64 %18, i64 %20)
   unreachable
 
 bounds.ok:
-  %18 = getelementptr inbounds i8, i8* %12, i64 8
-  %19 = getelementptr inbounds i8, i8* %18, i64 %14
-  %20 = load i8, i8* %19, align 1
-  %21 = zext i8 %20 to i32
-  store i32 %21, i32* %c.addr, align 4
-  %22 = load i32, i32* %c.addr, align 4
-  %23 = call i8* @nish_str_from_i32(i32 %22)
-  call void @nish_print(i8* %23)
-  %24 = load i32, i32* %i.addr, align 4
-  %25 = add nsw i32 %24, 1
-  store i32 %25, i32* %i.addr, align 4
+  %22 = getelementptr inbounds i8, i8* %16, i64 8
+  %23 = getelementptr inbounds i8, i8* %22, i64 %18
+  %24 = load i8, i8* %23, align 1
+  %25 = zext i8 %24 to i32
+  store i32 %25, i32* %c.addr, align 4
+  %26 = load i32, i32* %c.addr, align 4
+  %27 = call i8* @nish_str_from_i32(i32 %26)
+  call void @nish_print(i8* %27)
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = add nsw i32 %28, 1
+  store i32 %29, i32* %i.addr, align 4
+  %30 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %31 = load i8*, i8** %30, align 8
+  %32 = icmp eq i8* %31, %9
+  br i1 %32, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %33 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %11, i64* %33, align 8
+  br label %pass.done
+
+pass.free:
+  %34 = ptrtoint i8* %9 to i64
+  %35 = add i64 %34, %11
+  call void @nish_arena_release(i64 %35)
+  br label %pass.done
+
+pass.done:
   br label %while.cond
 
 while.end:

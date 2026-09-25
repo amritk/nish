@@ -1320,6 +1320,10 @@ const DECLARED = [
     why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
   },
   {
+    changelog: "Reclaim a loop iteration's temporaries when nothing outlives the pass",
+    why: "a loop whose pass drops everything it allocates reads the arena's position at the top of the body and rewinds on every edge out of it, and an inline element kept past its array is followed as the array, so a module with such a loop, or such an element, moves its IR",
+  },
+  {
     changelog: "Give array header loads and stores their own TBAA subtree",
     why: "every load and store of an array header's length, capacity or data pointer now carries a `!tbaa` tag in an `array header` subtree of its own, so any module that builds, reads or resizes an array moves its metadata",
   },

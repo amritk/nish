@@ -3093,8 +3093,9 @@ have reported before ([Memory model](#memory-model), item 2). **Safety rule**:
 releasing or resetting while any object, array, or string allocated after
 the mark is still referenced is undefined behaviour (the memory is reused by
 the next allocation). A function that calls `Arena.release` or `Arena.reset`
-itself, or through a callee, never gets an automatic arena scope, so the
-compiler's own marks are never invalidated by user resets.
+itself, or through a callee, never gets an automatic arena scope, for the
+function or for a loop's pass, so the compiler's own marks are never
+invalidated by user resets.
 
 ## Semantics decisions
 
@@ -3288,7 +3289,48 @@ where its memory lives and when it is reused.
    `Arena.release`, calls `nish_arena_mark` on entry and `nish_arena_release`
    before every `ret` (`tests/cases/mem_scope_dynamic_array`,
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
-   Scopes are per function, not per loop iteration.
+
+   **A loop's pass gets a scope of its own.** A loop whose body allocates,
+   itself or through a callee that leaves memory behind, reads the bump
+   position at the top of every pass and rewinds to it on every edge that
+   leaves the pass: the back-edge, `continue`, `break`, and a `return`, which
+   releases the outermost scope open. A `switch`'s `break` stays in the pass.
+   It needs nothing allocated during the pass to be reachable afterwards
+   except through a number, a `boolean` or an `enum`, which holds when every
+   one of these does:
+
+   - no allocation of the pass is stored into memory — a field, an element,
+     an array or object literal, a capturing parameter — by the body or by
+     any callee (the escape analysis above);
+   - a local declared outside the body (a parameter, a `for` initialiser, the
+     variable of the `for...of` being scoped) of a type that can hold a
+     pointer is assigned only a value older than the pass: a literal, `this`,
+     another outer local, a field or element read, the `const` variable of a
+     nested `for...of` over such a value, a call to a function that allocates
+     nothing, or a choice between two of those. `s = s + x` and
+     every `+=` on a `string` are refused;
+   - `push` grows only an array the pass itself declared with a fresh literal
+     or `new Array`;
+   - a `return` in the body answers a scalar or a value older than the pass,
+     and `orReturn` is refused;
+   - the function neither calls `Arena.mark`, `Arena.release` or
+     `Arena.reset` itself nor reaches a callee that releases or resets.
+
+   An element of an array whose elements are inline is the address of a slot
+   in that array, so keeping one keeps the array: it is followed as the array
+   in every rule above, and in the function rule too
+   (`tests/cases/mem_loop_scope_interior`). A pointer-returning function gets
+   no function scope, so a pass scope is what reclaims its loop
+   (`tests/cases/mem_loop_scope`: `Arena.used()` moves as far after 4000
+   rounds as after one). `mem_loop_scope_control` covers every exit edge,
+   nested loops and a `switch`; `mem_loop_scope_forof` the `for...of` rules;
+   `mem_loop_scope_escape` a pass value kept in an outer local, pushed into
+   an outer array, stored into a field, stored by a callee, built up across
+   passes and returned, each read back after the arena is reused; and
+   `mem_loop_scope_threads` the same round trip under `--threads`, where the
+   arena, and so the scope, is per thread. A `for` loop's condition and
+   update run outside the bracket. Like the function scope it is invisible to
+   a program except through `Arena.used()`.
 
    **A function whose callees are what allocate gets a scope too.** One that
    allocates nothing of its own, returns a number, a `boolean`, an `enum` or
@@ -3470,24 +3512,29 @@ by the caller.
     (`tests/cases/perf_arena_quiet`).
   - **a loop that leaves a callee's memory behind** — a call inside a loop to
     a function that leaves arena memory behind (it allocates, lets none of it
-    escape, and has no scope of its own) whose result dies with the pass, in
-    a function that returns a number, a `boolean`, an `enum` or nothing and
-    still gets no automatic arena scope ([Memory model](#memory-model), item
-    2). Every pass adds memory that nothing releases before the function
-    returns, and the function does not release it then either. The warning
-    names what refused the scope — the line of an allocation stored into
-    memory, a callee that stores one, or a callee that releases or resets
-    the arena — and the hints are to move the loop into a function that lets
-    no allocation out, or to bracket the loop body with `Arena.mark()` /
-    `Arena.release(m)` (`tests/cases/perf_arena_loop`). It is found after the
-    whole-program analysis rather than by the checker, because both halves
-    of it are that analysis's facts. Not reported in a function that calls
-    `Arena.mark`, `Arena.release` or `Arena.reset` itself, whose author is
-    already managing the memory (`tests/cases/mem_callee_scope_control`);
-    when the callee stores what it allocates, because then the program is
-    keeping it; when the result is returned, stored, pushed or passed on; or
-    in a function that returns a pointer, whose caller owns what it
-    allocates, the line the dropped-allocation rule draws too.
+    escape, and has no scope of its own) whose result dies with the pass,
+    where neither a scope around the pass nor one around the function
+    reclaims it ([Memory model](#memory-model), item 2), in a function of any
+    return type. Every pass adds memory that nothing releases before the
+    function returns, and the function does not release it then either. The
+    warning names what refused the pass its scope — the line of an allocation
+    stored into memory, a callee that stores one, the line that keeps what
+    the pass allocated in a local declared outside the loop or grows an array
+    older than the pass, or a callee that releases or resets the arena — and
+    what refused the function its own, and the hints are to keep what a pass
+    allocates out of outer locals and older memory, or to bracket the loop
+    body with `Arena.mark()` / `Arena.release(m)`
+    (`tests/cases/perf_arena_loop`). A call in a `for` loop's condition or
+    update is outside the pass's bracket and is reported as such. It is found
+    after the whole-program analysis rather than by the checker, because
+    every half of it is that analysis's facts. Not reported in a function
+    that calls `Arena.mark`, `Arena.release` or `Arena.reset` itself, whose
+    author is already managing the memory, whatever it returns
+    (`tests/cases/perf_arena_control`, `mem_callee_scope_control`); when the
+    callee stores what it allocates, because then the program is keeping it;
+    when the result is returned, stored, pushed or passed on; or in a loop
+    whose pass can `return` what it allocated, which no bracket could
+    release, so there is no rewrite to name.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. The
     default `nsw` makes that undefined behaviour rather than a wrap, so the

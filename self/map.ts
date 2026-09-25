@@ -48,7 +48,11 @@ export const hashString = (key: string): i32 => toI32(fnv1a(key));
 /** The initial bucket count. Small: most scopes hold a handful of names. */
 const INITIAL_SLOTS: i32 = 16;
 
-/** The most entries a 24-bit index-plus-one field holds, 2^24 - 1: Node's own `Map` limit. */
+/**
+ * The most entries a 24-bit index-plus-one field holds, 2^24 - 1: Node's own
+ * `Map` limit. It is also that field's mask, so the cap and the unpacking are
+ * one number and cannot drift apart.
+ */
 const INDEX_CAP: i32 = 16777215;
 
 /** The first bucket for `hash`: its low bits folded with its high half. */
@@ -58,10 +62,10 @@ export const home = (hash: u32, mask: i32): i32 => toI32(hash ^ (hash >>> 16)) &
 export const fingerprint = (hash: u32): u32 => hash >>> 24;
 
 /** The bucket word for entry `index`: the fingerprint, then the index plus one. */
-const slotOf = (hash: u32, index: i32): u32 => (fingerprint(hash) << 24) | toU32(index + 1);
+export const slotOf = (hash: u32, index: i32): u32 => (fingerprint(hash) << 24) | toU32(index + 1);
 
 /** The entry index an occupied bucket word points at. */
-const entryOf = (slot: u32): i32 => toI32(slot & 16777215) - 1;
+export const entryOf = (slot: u32): i32 => toI32(slot & toU32(INDEX_CAP)) - 1;
 
 export class StringMap {
   /** Bucket -> fingerprint in the top 8 bits, entry index plus one in the low 24. 0 is empty. */
