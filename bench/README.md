@@ -106,6 +106,47 @@ about what these kernels exist to measure — how the work divides over the
 cores — and the partitioner's thread start-up would add a scheduling-dependent
 number to it.
 
+## Map layouts
+
+Four more programs are the WP32 layout prototypes
+([docs/wp32-map.md](../docs/wp32-map.md) §2). Each is a monomorphic
+`string → i32` and `i32 → i32` hash table written by hand in one candidate
+layout. None of them uses `Map`, which does not exist yet, so they compile on
+any compiler that builds this tree.
+
+| Name | Layout |
+| --- | --- |
+| `map_proto_ordered` | insertion-ordered, a bucket per entry index: `StringMap`'s shape (`self/map.ts`) |
+| `map_proto_ordered_fp` | insertion-ordered, an `i64` bucket holding the full hash above the entry index |
+| `map_proto_ordered_fp32` | insertion-ordered, a `u32` bucket holding eight fingerprint bits above a 24-bit entry index, the layout WP32 chose |
+| `map_proto_unordered` | unordered: hash, key and value in the bucket |
+
+Each runs five workloads over string keys and then over integer keys: insert,
+hit, miss, word count and delete churn. An LCG in the program drives them, with
+no I/O. Each prints one checksum line per workload. The twin is not C:
+`map_node.mjs` runs the same workloads on Node's global `Map`, and all five
+must print the same ten lines. Given `time` as its first argument, each program
+also prints every workload's elapsed nanoseconds to stderr. It measures around
+the workload alone, so the table is not process wall time.
+
+```bash
+node bench/run.mjs --only maps                      # build, check, time; the table goes to stdout
+node bench/run.mjs --only maps --n maps=1048576     # 2^20 keys: tables larger than the cache
+node bench/run.mjs --validate --only maps           # checksums only, against Node's Map
+```
+
+`maps` runs only when `--only` names it (or names one of the four). It writes
+nothing to `docs/BENCHMARKS.md`: the numbers and what they decided are in the
+design note. `--n maps=<n>` resizes all five at once. `n` is the key count and
+must be a power of two, because the workloads draw a key index by masking.
+`tests/run.js` validates the five at `n = 1024` in its `bench` check.
+
+**They are in the instruction-count gate**, at `n = 16384`. They are
+single-threaded, and they read the clock only when timing. `--instructions
+--runs 3` counted each three times with a spread of 0. They are the only
+hash-table code the gate holds, so a codegen regression in a probe loop moves
+their counts and no other program's.
+
 ## Rules
 
 - **Same algorithm, same order.** The twins are transliterations: the same
@@ -209,16 +250,16 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the fourteen programs, the
-seven above and the seven AWFY ports, and `npm test` fails when any of them runs
-more than 0.1% above its count.
+`bench/instructions.json` holds one count for each of the eighteen programs: the
+seven above, the four map layout prototypes and the seven AWFY ports. `npm test`
+fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all fourteen and print them against the baseline
+node bench/run.mjs --instructions            # count all eighteen and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
-node bench/run.mjs --instructions --only Queens,fib   # a subset (`awfy` names all seven ports)
+node bench/run.mjs --instructions --only Queens,fib   # a subset (`awfy` names the seven ports, `maps` the four prototypes)
 ```
 
 Each program is built as the timing mode builds it: `--profile speed`, the
