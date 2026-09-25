@@ -143,7 +143,7 @@ const compactEntries = <T>(items: T[], hashes: u32[]): void => {
 };
 
 /** The stored hashes compacted the same way, last, since the two above read them. */
-const compactHashes = (hashes: u32[]): i32 => {
+const compactHashes = (hashes: u32[]): void => {
   const used = toI32(hashes.length);
   let to: i32 = 0;
   for (let from: i32 = 0; from < used; from++) {
@@ -156,7 +156,6 @@ const compactHashes = (hashes: u32[]): i32 => {
   while (toI32(hashes.length) > to) {
     hashes.pop();
   }
-  return to;
 };
 
 /**
@@ -327,11 +326,13 @@ export class Map<K, V> {
     this.entryHashes.push(h);
     this.live = this.live + 1;
     this.size = this.size + 1;
+    // Every entry takes a bucket, live or dead, until a rebuild, which files
+    // the new entry with the rest; otherwise it takes the bucket the probe found.
     const used = toI32(this.entryKeys.length);
-    fileAppended(this.slots, this.mask, bucket, h, used);
-    // Every entry takes a bucket, live or dead, until a rebuild.
     if (used * 4 > toI32(this.slots.length) * 3) {
       this.rebuild();
+    } else {
+      fileAppended(this.slots, this.mask, bucket, h, used);
     }
   }
 
@@ -418,10 +419,13 @@ export class Set<T> {
     this.entryHashes.push(h);
     this.live = this.live + 1;
     this.size = this.size + 1;
+    // Every entry takes a bucket, live or dead, until a rebuild, which files
+    // the new entry with the rest; otherwise it takes the bucket the probe found.
     const used = toI32(this.entryKeys.length);
-    fileAppended(this.slots, this.mask, bucket, h, used);
     if (used * 4 > toI32(this.slots.length) * 3) {
       this.rebuild();
+    } else {
+      fileAppended(this.slots, this.mask, bucket, h, used);
     }
   }
 

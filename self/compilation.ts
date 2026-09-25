@@ -50,7 +50,6 @@ import { arenaLoopFindings } from "./escape";
 import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
-import { internalErrorFor } from "./ice";
 import { StringMap, StringSet } from "./map";
 import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
@@ -1342,17 +1341,13 @@ export class Compilation {
     }
     const out: EmittedModule[] = [];
     let i = 0;
-    let written = 0;
-    while (i < this.modules.length && i < units.length) {
+    while (i < this.modules.length && i < units.length && i < stems.length) {
+      // Read before the calls, which end the length facts.
       const unit = this.modules[i];
+      const analysed = units[i];
+      const stem = stems[i];
       if (this.writesOutput(unit)) {
-        // `outputStems` skips exactly the modules `writesOutput` does.
-        if (written >= stems.length) {
-          process.exit(internalErrorFor(`driver: no output stem for ${unit.name}`, this.opts.json));
-        }
-        const ir = emitProgram(units[i], this.table, this.opts, this.runtime, facts, copies);
-        out.push(new EmittedModule(stems[written], ir, unit.name));
-        written = written + 1;
+        out.push(new EmittedModule(stem, emitProgram(analysed, this.table, this.opts, this.runtime, facts, copies), unit.name));
       }
       i = i + 1;
     }
@@ -1390,7 +1385,9 @@ export class Compilation {
     const taken = new StringSet();
     const stems: string[] = [];
     for (const unit of this.modules) {
+      // One entry per module, `""` for one that writes no `.ll` (WP32).
       if (!this.writesOutput(unit)) {
+        stems.push("");
         continue;
       }
       const base = basenameWithout(unit.path, ".ts");

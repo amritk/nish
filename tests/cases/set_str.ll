@@ -222,7 +222,7 @@ while.end:
   ret void
 }
 
-define internal noundef i32 @nish.compactHashes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 {
+define internal void @nish.compactHashes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
@@ -327,8 +327,7 @@ pop.ok:
   br label %while.cond
 
 while.end:
-  %45 = load i32, i32* %to.addr, align 4
-  ret i32 %45
+  ret void
 }
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %slots, i32 noundef %live, i32 noundef %used) #0 {
@@ -790,27 +789,30 @@ push.store.1:
   %55 = load i64, i64* %54, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %56 = trunc i64 %55 to i32
   store i32 %56, i32* %used.addr, align 4
-  %57 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 1
-  %58 = load %struct.nish_array*, %struct.nish_array** %57, align 8, !tbaa !21
-  %59 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 2
-  %60 = load i32, i32* %59, align 4, !tbaa !19
-  %61 = load i32, i32* %bucket.addr, align 4
-  %62 = load i32, i32* %h.addr, align 4
-  %63 = load i32, i32* %used.addr, align 4
-  call void @nish.fileAppended(%struct.nish_array* %58, i32 %60, i32 %61, i32 %62, i32 %63)
-  %64 = load i32, i32* %used.addr, align 4
-  %65 = mul nsw i32 %64, 4
-  %66 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 1
-  %67 = load %struct.nish_array*, %struct.nish_array** %66, align 8, !tbaa !21
-  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %67, i64 0, i32 0
-  %69 = load i64, i64* %68, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %70 = trunc i64 %69 to i32
-  %71 = mul nsw i32 %70, 3
-  %72 = icmp sgt i32 %65, %71
-  br i1 %72, label %if.then.2, label %if.end.2
+  %57 = load i32, i32* %used.addr, align 4
+  %58 = mul nsw i32 %57, 4
+  %59 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 1
+  %60 = load %struct.nish_array*, %struct.nish_array** %59, align 8, !tbaa !21
+  %61 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %60, i64 0, i32 0
+  %62 = load i64, i64* %61, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %63 = trunc i64 %62 to i32
+  %64 = mul nsw i32 %63, 3
+  %65 = icmp sgt i32 %58, %64
+  br i1 %65, label %if.then.2, label %if.else
 
 if.then.2:
   call void @nish.Set$str.rebuild(%struct.Set$str* %this)
+  br label %if.end.2
+
+if.else:
+  %66 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 1
+  %67 = load %struct.nish_array*, %struct.nish_array** %66, align 8, !tbaa !21
+  %68 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 2
+  %69 = load i32, i32* %68, align 4, !tbaa !19
+  %70 = load i32, i32* %bucket.addr, align 4
+  %71 = load i32, i32* %h.addr, align 4
+  %72 = load i32, i32* %used.addr, align 4
+  call void @nish.fileAppended(%struct.nish_array* %67, i32 %69, i32 %70, i32 %71, i32 %72)
   br label %if.end.2
 
 if.end.2:
@@ -848,24 +850,24 @@ if.then:
   call void @nish.compactEntries$str(%struct.nish_array* %16, %struct.nish_array* %18)
   %19 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 5
   %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !23
-  %21 = call i32 @nish.compactHashes(%struct.nish_array* %20)
+  call void @nish.compactHashes(%struct.nish_array* %20)
   br label %if.end
 
 if.end:
-  %22 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
-  %23 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 1
-  store %struct.nish_array* %22, %struct.nish_array** %23, align 8, !tbaa !21
-  %24 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %24, i64 0, i32 0
-  %26 = load i64, i64* %25, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %27 = trunc i64 %26 to i32
-  %28 = sub nsw i32 %27, 1
-  %29 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 2
-  store i32 %28, i32* %29, align 4, !tbaa !19
-  %30 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
-  %31 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 5
-  %32 = load %struct.nish_array*, %struct.nish_array** %31, align 8, !tbaa !23
-  call void @nish.refile(%struct.nish_array* %30, %struct.nish_array* %32)
+  %21 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %22 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 1
+  store %struct.nish_array* %21, %struct.nish_array** %22, align 8, !tbaa !21
+  %23 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
+  %25 = load i64, i64* %24, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %26 = trunc i64 %25 to i32
+  %27 = sub nsw i32 %26, 1
+  %28 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 2
+  store i32 %27, i32* %28, align 4, !tbaa !19
+  %29 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %30 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 5
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !23
+  call void @nish.refile(%struct.nish_array* %29, %struct.nish_array* %31)
   ret void
 }
 

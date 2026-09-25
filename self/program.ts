@@ -1044,6 +1044,8 @@ export class CheckedProgram {
    */
   newTypeArgumentIds: StringMap;
   newTypeArguments: Node[];
+  /** `isCollections()`, decided once: the package and the path never change. */
+  collectionsLibrary: boolean;
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[];
@@ -1156,6 +1158,7 @@ export class CheckedProgram {
     this.parallelCalls = [];
     this.newTypeArgumentIds = new StringMap();
     this.newTypeArguments = [];
+    this.collectionsLibrary = isCollectionsModule(packageName, source.path);
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
     this.nodeLocals = new Array<Local | null>(nodeCount);
@@ -1191,7 +1194,7 @@ export class CheckedProgram {
 
   /** Whether this module is the standard library's `std/collections.ts` (WP32). */
   isCollections(): boolean {
-    return isCollectionsModule(this.packageName, this.source.path);
+    return this.collectionsLibrary;
   }
 
   /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */

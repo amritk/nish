@@ -254,7 +254,10 @@ export class Checker {
    * before this compiles to the same bytes.
    */
   importCollections(): void {
-    if (this.program.isCollections()) {
+    // Neither name in the text means neither can be in the tree: most modules
+    // stop here without the walk.
+    const text = this.program.source.text;
+    if (this.program.isCollections() || (text.indexOf("Map") < 0 && text.indexOf("Set") < 0)) {
       return;
     }
     const names = new CollectionNames();

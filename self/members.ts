@@ -270,9 +270,11 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     // WP32: `const m: Map<string, i32> = new Map()` takes them from the
     // annotation, as `tsc` does; anywhere else they are written out.
     let written = expr.children[1];
-    const fromAnnotation = ctx.program.newTypeArgumentsOf(expr);
-    if (written.children.length === 0 && fromAnnotation !== null && isCollectionTemplate(template)) {
-      written = fromAnnotation;
+    if (written.children.length === 0 && isCollectionTemplate(template)) {
+      const fromAnnotation = ctx.program.newTypeArgumentsOf(expr);
+      if (fromAnnotation !== null) {
+        written = fromAnnotation;
+      }
     }
     info = instantiateWritten(ctx, template, written, callee);
     if (info === null) {
@@ -457,16 +459,14 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   if (info === null) {
     return T_ERROR;
   }
-  if (isCollectionStruct(info) && !ctx.program.isCollections()) {
-    if (target.text === "size") {
-      return ctx.errorType(
-        target,
-        `\`size\` of \`${ctx.table.typeName(info.type)}\` is read-only: it counts the entries, and \`set\`, \`add\`, \`delete\` and \`clear\` are what change it`
-      );
-    }
-    if (refuseCollectionMember(ctx, info, target, false)) {
-      return T_ERROR;
-    }
+  if (target.text === "size" && isCollectionStruct(info) && !ctx.program.isCollections()) {
+    return ctx.errorType(
+      target,
+      `\`size\` of \`${ctx.table.typeName(info.type)}\` is read-only: it counts the entries, and \`set\`, \`add\`, \`delete\` and \`clear\` are what change it`
+    );
+  }
+  if (refuseCollectionMember(ctx, info, target, false)) {
+    return T_ERROR;
   }
   const field = info.field(target.text);
   if (field === null) {
@@ -500,13 +500,13 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
   const name = at.text;
   const instance = info.instance;
   const isMap = instance !== null && instance.template.sourceName === "Map";
-  const shown = ctx.table.typeName(info.type);
   if (name === "size" || name === "has" || name === "delete" || name === "clear") {
     return false;
   }
   if ((isMap && name === "set") || (!isMap && name === "add")) {
     return false;
   }
+  const shown = ctx.table.typeName(info.type);
   if (isMap && name === "get") {
     ctx.errorAtProperty(
       at,

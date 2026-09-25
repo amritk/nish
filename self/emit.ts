@@ -174,11 +174,6 @@ export class Emitter {
    * or `-1` for none. See `planTailCall`.
    */
   tailCallId: i32;
-  /**
-   * WP32: set while a copy of a `std/collections.ts` function is being emitted
-   * (`library` below): it is `internal` whatever its declaration says.
-   */
-  libraryCopy: boolean;
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[];
   /** Alloca slots of the locals of the function being emitted, by identity. */
@@ -231,7 +226,6 @@ export class Emitter {
     this.stringRefs = [];
     this.debug = null;
     this.library = library === null ? null : library.program;
-    this.libraryCopy = false;
     if (opts.debugInfo) {
       this.debug = new DebugInfo(this.module, this.program, table);
     }
@@ -342,7 +336,10 @@ export class Emitter {
     // ABI). Every other function is `internal` unless --no-strict-exports.
     // WP29: a function another module's instantiation calls is `hidden`
     // instead — in the final link, and exported from nothing.
-    if (this.libraryCopy) {
+    if (this.isLibraryCopy(sig)) {
+      // WP32: a copy of a `std/collections.ts` function is private to this
+      // module whatever its declaration says. Its `Result` ABI stays the one
+      // its declaration picks, and the library has no `Result` in it.
       this.fn.linkage = "internal";
     } else if (sig.hidden) {
       this.fn.linkage = "hidden";
@@ -590,12 +587,17 @@ export class Emitter {
     }
   }
 
-  declareAll(sigs: FunctionSig[], seen: StringSet): void {
+  /** WP32: whether `sig` is a function of `std/collections.ts`, which this module copies rather than links against. */
+  isLibraryCopy(sig: FunctionSig): boolean {
     const library = this.library;
+    return library !== null && sig.definedIn(library.source);
+  }
+
+  declareAll(sigs: FunctionSig[], seen: StringSet): void {
     for (const sig of sigs) {
-      // WP32: a function of `std/collections.ts` is never linked against. The
-      // ones this module reaches are defined in it, and the rest are not called.
-      if (library !== null && sig.definedIn(library.source)) {
+      // WP32: a library function is never linked against. The ones this module
+      // reaches are defined in it, and the rest are not called.
+      if (this.isLibraryCopy(sig)) {
         continue;
       }
       if (seen.add(sig.name)) {

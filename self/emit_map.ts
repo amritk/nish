@@ -36,9 +36,9 @@
 import { Emitter } from "./emit";
 import { FactsTable } from "./attributes";
 import { internalErrorFor } from "./ice";
-import { StringMap, StringSet } from "./map";
+import { StringSet } from "./map";
 import { CheckedProgram, FunctionSig, MAP_HASH_KEY, MAP_NONE } from "./program";
-import { intBits, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types";
+import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types";
 
 /** The `MAP_*` role of `sig`, or `MAP_NONE` when it is not an instantiation of one of the two intrinsics. */
 export const mapIntrinsicOf = (sig: FunctionSig): i32 => {
@@ -178,7 +178,7 @@ const sameKeyOf = (emitter: Emitter, key: i32, a: string, b: string): string => 
   if (key === T_STRING) {
     return fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_str_eq")}(i8* ${a}, i8* ${b})`);
   }
-  if (key === T_F64 || key === T_F32) {
+  if (isFloat(key)) {
     const ty = emitter.llvm(key);
     const equal = fn.emitValue(`fcmp oeq ${ty} ${a}, ${b}`);
     const aNaN = fn.emitValue(`fcmp uno ${ty} ${a}, ${a}`);
@@ -199,14 +199,11 @@ const sameKeyOf = (emitter: Emitter, key: i32, a: string, b: string): string => 
  */
 export const libraryReach = (emitter: Emitter, library: CheckedProgram): FunctionSig[] => {
   const facts: FactsTable = emitter.facts;
-  const bySymbol = new StringMap();
-  let i = 0;
-  while (i < library.functions.length) {
-    const sig = library.functions[i];
+  const bySymbol = new StringSet();
+  for (const sig of library.functions) {
     if (sig.definedIn(library.source)) {
-      bySymbol.set(sig.name, i);
+      bySymbol.add(sig.name);
     }
-    i = i + 1;
   }
   const reached = new StringSet();
   const pending: string[] = [];
@@ -223,7 +220,7 @@ export const libraryReach = (emitter: Emitter, library: CheckedProgram): Functio
   }
   const out: FunctionSig[] = [];
   for (const sig of library.functions) {
-    if (reached.has(sig.name) && sig.definedIn(library.source) && mapIntrinsicOf(sig) === MAP_NONE) {
+    if (reached.has(sig.name) && mapIntrinsicOf(sig) === MAP_NONE) {
       out.push(sig);
     }
   }
@@ -231,7 +228,7 @@ export const libraryReach = (emitter: Emitter, library: CheckedProgram): Functio
 };
 
 /** Queue each library function `caller` calls that has not been reached yet. */
-const noteCallees = (facts: FactsTable, caller: string, bySymbol: StringMap, reached: StringSet, pending: string[]): void => {
+const noteCallees = (facts: FactsTable, caller: string, bySymbol: StringSet, reached: StringSet, pending: string[]): void => {
   const callerFacts = facts.get(caller);
   if (callerFacts === null) {
     return;
@@ -259,7 +256,6 @@ export const emitLibraryCopies = (emitter: Emitter, library: CheckedProgram, sig
   }
   const own = emitter.program;
   emitter.program = library;
-  emitter.libraryCopy = true;
   const debug = emitter.debug;
   let savedFile = "";
   if (debug !== null) {
@@ -283,6 +279,5 @@ export const emitLibraryCopies = (emitter: Emitter, library: CheckedProgram, sig
     debug.source = own.source;
     debug.file = savedFile;
   }
-  emitter.libraryCopy = false;
   emitter.program = own;
 };
