@@ -56,7 +56,7 @@ import {
 import { elementLLVMType, elementStride, inlineElementStruct, StructInfo } from "./program";
 import { Local, STORAGE_PARAM } from "./symbols";
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime";
-import { elementTbaa } from "./tbaa";
+import { elementTbaa, headerTbaa } from "./tbaa";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
 
 const HEADER: string = ARRAY_STRUCT;
@@ -103,15 +103,18 @@ const aliasScopeList = (emitter: Emitter, wantHeader: boolean): string => {
 };
 
 /**
- * `, !alias.scope ..., !noalias ...` for a load or store of an array header
- * field. Both halves are needed: `alias.scope` alone says only where the
- * access is, and the `noalias` on the other side is what makes it NoAlias.
+ * `, !alias.scope ..., !noalias ..., !tbaa ...` for a load or store of array
+ * header field `index`. Both scope halves are needed: `alias.scope` alone says
+ * only where the access is, and the `noalias` on the other side is what makes
+ * it NoAlias with element data. The scopes say nothing about class fields,
+ * which is what the `!tbaa` tag is for (`headerTbaa`).
  */
-const headerAccess = (emitter: Emitter): string => {
+const headerAccess = (emitter: Emitter, index: i32): string => {
   if (!emitter.opts.optimizeAttributes) {
     return "";
   }
-  return `, !alias.scope ${aliasScopeList(emitter, true)}, !noalias ${aliasScopeList(emitter, false)}`;
+  const scopes = `, !alias.scope ${aliasScopeList(emitter, true)}, !noalias ${aliasScopeList(emitter, false)}`;
+  return `${scopes}${headerTbaa(emitter, index)}`;
 };
 
 /** The same, for a load or store of array element data. */
@@ -569,13 +572,13 @@ const headerFieldPointer = (emitter: Emitter, arr: string, index: i32): string =
 /** Load header field `index`, in the header alias domain. */
 const loadHeaderField = (emitter: Emitter, arr: string, index: i32, type: string): string => {
   const ptr = headerFieldPointer(emitter, arr, index);
-  return emitter.fn.emitValue(`load ${type}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter)}`);
+  return emitter.fn.emitValue(`load ${type}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter, index)}`);
 };
 
 /** Store `value` into header field `index`, in the header alias domain. */
 const storeHeaderField = (emitter: Emitter, arr: string, index: i32, value: string, type: string): void => {
   const ptr = headerFieldPointer(emitter, arr, index);
-  emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter)}`);
+  emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter, index)}`);
 };
 
 const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64");
@@ -909,7 +912,7 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   const fn = emitter.fn;
   const value = emitter.emitExpression(expr.children[1].children[0]);
   const lenPtr = headerFieldPointer(emitter, arr, 0);
-  const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
+  const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`);
   const cap = loadHeaderField(emitter, arr, 1, "i64");
   const full = fn.emitValue(`icmp eq i64 ${len}, ${cap}`);
   const growBlock = fn.newBlock("push.grow");
@@ -923,7 +926,7 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   fn.placeBlock(storeBlock);
   storeElement(emitter, elementPointer(emitter, new ArrayBase(arr, null), elem, len), elem, value);
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
-  fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
+  fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`);
   return emitNumberFromI64(emitter, newLen, expr);
 };
 
@@ -936,7 +939,7 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
 const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
   const fn = emitter.fn;
   const lenPtr = headerFieldPointer(emitter, arr, 0);
-  const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
+  const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`);
   if (!emitter.opts.uncheckedIndexing) {
     const empty = fn.emitValue(`icmp eq i64 ${len}, 0`);
     const failBlock = fn.newBlock("pop.empty");
@@ -948,7 +951,7 @@ const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
     fn.placeBlock(okBlock);
   }
   const last = fn.emitValue(`sub i64 ${len}, 1`);
-  fn.emit(`store i64 ${last}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
+  fn.emit(`store i64 ${last}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`);
   // An inline record comes back as the address of the slot that was just
   // dropped. The bytes are still there; the next `push` reuses them, which is
   // why the checker counts `pop` as a mutation.

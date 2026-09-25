@@ -4,10 +4,10 @@ define internal noundef i32 @get(%struct.nish_array* noundef nonnull align 8 der
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
+  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !12
   ret i32 %5
 }
 
@@ -15,10 +15,10 @@ define internal void @set(%struct.nish_array* noundef nonnull align 8 dereferenc
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
+  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  store i32 %v, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store i32 %v, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !12
   ret void
 }
 
@@ -32,5 +32,9 @@ attributes #1 = { nounwind willreturn }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"element i32", !6, i64 0}
-!8 = !{!7, !7, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !8, i64 16}
+!11 = !{!"element i32", !6, i64 0}
+!12 = !{!11, !11, i64 0}

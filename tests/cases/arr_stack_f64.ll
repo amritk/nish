@@ -14,43 +14,43 @@ entry:
   %arr.data = alloca [2 x float], align 8
   %0 = fptosi double 0x4000000000000000 to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 %0, i64* %1, align 8, !alias.scope !3, !noalias !4
+  store i64 %0, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 %0, i64* %2, align 8, !alias.scope !3, !noalias !4
+  store i64 %0, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %3 = mul i64 %0, 4
   %4 = bitcast [2 x float]* %arr.data to i8*
   call void @llvm.memset.p0i8.i64(i8* align 8 %4, i8 0, i64 %3, i1 false), !alias.scope !4, !noalias !3
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %6 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %7 = fptosi double 0x0000000000000000 to i64
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %10 = bitcast i8* %9 to float*
   %11 = getelementptr inbounds float, float* %10, i64 %7
-  store float 0x3FE0000000000000, float* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store float 0x3FE0000000000000, float* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %12 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %13 = fptosi double 0x3FF0000000000000 to i64
   %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
+  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %16 = bitcast i8* %15 to float*
   %17 = getelementptr inbounds float, float* %16, i64 %13
-  store float 0x3FF4000000000000, float* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  store float 0x3FF4000000000000, float* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %18 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %19 = fptosi double 0x0000000000000000 to i64
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %22 = bitcast i8* %21 to float*
   %23 = getelementptr inbounds float, float* %22, i64 %19
-  %24 = load float, float* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %24 = load float, float* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %25 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %26 = fptosi double 0x3FF0000000000000 to i64
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 2
-  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4
+  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %29 = bitcast i8* %28 to float*
   %30 = getelementptr inbounds float, float* %29, i64 %26
-  %31 = load float, float* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !8
+  %31 = load float, float* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %32 = fadd float %24, %31
   %33 = fmul float %32, %k
   ret float %33
@@ -84,5 +84,11 @@ attributes #1 = { nounwind }
 !4 = !{!2}
 !5 = !{!"nish TBAA"}
 !6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"element float", !6, i64 0}
-!8 = !{!7, !7, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element float", !6, i64 0}
+!14 = !{!13, !13, i64 0}

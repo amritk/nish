@@ -100,11 +100,11 @@ entry:
   %4 = load %struct.Box*, %struct.Box** %box.addr, align 8
   %5 = call i32 @outer(%struct.Box* %4, i32 42)
   %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 0, i64* %6, align 8, !alias.scope !13, !noalias !14
+  store i64 0, i64* %6, align 8, !alias.scope !13, !noalias !14, !tbaa !18
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 0, i64* %7, align 8, !alias.scope !13, !noalias !14
+  store i64 0, i64* %7, align 8, !alias.scope !13, !noalias !14, !tbaa !19
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* null, i8** %8, align 8, !alias.scope !13, !noalias !14
+  store i8* null, i8** %8, align 8, !alias.scope !13, !noalias !14, !tbaa !20
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %junk.addr, align 8
   store i32 0, i32* %i.addr, align 4
   br label %for.cond
@@ -121,9 +121,9 @@ for.body:
   %14 = sub nsw i32 0, 1
   call void @Cell.constructor(%struct.Cell* %13, i32 %14)
   %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8, !alias.scope !13, !noalias !14
+  %16 = load i64, i64* %15, align 8, !alias.scope !13, !noalias !14, !tbaa !18
   %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 1
-  %18 = load i64, i64* %17, align 8, !alias.scope !13, !noalias !14
+  %18 = load i64, i64* %17, align 8, !alias.scope !13, !noalias !14, !tbaa !19
   %19 = icmp eq i64 %16, %18
   br i1 %19, label %push.grow, label %push.store
 
@@ -133,12 +133,12 @@ push.grow:
 
 push.store:
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !13, !noalias !14
+  %21 = load i8*, i8** %20, align 8, !alias.scope !13, !noalias !14, !tbaa !20
   %22 = bitcast i8* %21 to %struct.Cell**
   %23 = getelementptr inbounds %struct.Cell*, %struct.Cell** %22, i64 %16
-  store %struct.Cell* %13, %struct.Cell** %23, align 8, !alias.scope !14, !noalias !13, !tbaa !16
+  store %struct.Cell* %13, %struct.Cell** %23, align 8, !alias.scope !14, !noalias !13, !tbaa !22
   %24 = add i64 %16, 1
-  store i64 %24, i64* %15, align 8, !alias.scope !13, !noalias !14
+  store i64 %24, i64* %15, align 8, !alias.scope !13, !noalias !14, !tbaa !18
   %25 = trunc i64 %24 to i32
   br label %for.inc
 
@@ -186,7 +186,7 @@ if.then:
 if.end:
   %47 = load %struct.nish_array*, %struct.nish_array** %junk.addr, align 8
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 0
-  %49 = load i64, i64* %48, align 8, !alias.scope !13, !noalias !14
+  %49 = load i64, i64* %48, align 8, !alias.scope !13, !noalias !14, !tbaa !18
   %50 = trunc i64 %49 to i32
   %51 = sub nsw i32 %50, 64
   call void @nish_arena_release(i64 %arena.mark)
@@ -220,5 +220,11 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!"elements", !10}
 !13 = !{!11}
 !14 = !{!12}
-!15 = !{!"element ptr", !1, i64 0}
-!16 = !{!15, !15, i64 0}
+!15 = !{!"header i64", !1, i64 0}
+!16 = !{!"header ptr", !1, i64 0}
+!17 = !{!"array header", !15, i64 0, !15, i64 8, !16, i64 16}
+!18 = !{!17, !15, i64 0}
+!19 = !{!17, !15, i64 8}
+!20 = !{!17, !16, i64 16}
+!21 = !{!"element ptr", !1, i64 0}
+!22 = !{!21, !21, i64 0}
