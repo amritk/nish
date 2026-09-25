@@ -830,6 +830,201 @@ appears where the proof does not reach.
   than treated as "reclaim everything but the result". It happens at most once
   per program in practice, and the extra arm is not worth the runtime bytes.
 
+## Are We Fast Yet
+
+The seven [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) ports
+in `bench/awfy/` ([bench/README.md](../bench/README.md#are-we-fast-yet)) are
+the benchmarks the arena-scope, repeated-check and element-TBAA changes were
+made for (#210, #209, #208). This section is their before and after, measured
+once those three had merged, and the profile of what still separates Queens
+and Towers from C++.
+
+### How it was measured
+
+Both columns build the **same sources**, `bench/awfy/` as committed here, so
+Storage has no `Arena` calls of its own in either. **0.10.0** is the seed
+(`build/seed/bin/nish`, fetched by `scripts/fetch-seed.sh`); **main** is
+`build/nish` built from `ce0fe99`, the merge of #208 (this branch changes
+nothing in the compiler). Each is `nish bench/awfy/main.ts --link <exe>
+--profile speed`, checks on. `--unchecked-indexing` is the same main build
+with that flag, as the reference for what the remaining checks cost, and C++
+is the AWFY repository's own port (`benchmarks/C++`, `clang++ -O3 -flto
+-march=native -ffp-contract=off -std=c++17`, as its `build.sh` does).
+
+Every run is `taskset -c 3 <harness> <Name> 30 <inner>` at the suite's inner
+counts, and a run's figure is the median of its last 20 iterations. Five
+rounds, each running every build of every benchmark once, with the order of
+the builds reversed on alternate rounds; the table gives the median of the
+five round medians and, in brackets, the lowest and highest of them.
+
+Machine: x86-64, 4-core Intel Xeon @ 2.80 GHz (a cloud virtual machine,
+otherwise idle), Linux 6.18, Ubuntu clang 18.1.3 (LLVM 18), 2026-09-25.
+
+### Wall time (ms)
+
+| Benchmark | inner | 0.10.0 | main | main vs 0.10.0 | main `--unchecked-indexing` | C++ `-O3 -flto` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Permute | 1000 | 36.6 (36.2–37.9) | 31.2 (31.1–31.8) | **−14.7%** | 20.7 (20.5–21.0) | 18.7 (18.6–18.8) |
+| Queens | 1000 | 21.5 (21.4–22.0) | 22.6 (22.5–23.6) | **+5.2%** | 15.0 (14.9–17.0) | 8.0 (8.0–8.0) |
+| Towers | 600 | 23.3 (23.3–23.7) | 24.1 (24.0–24.6) | **+3.3%** | 20.1 (19.8–20.9) | 24.9 (24.7–25.0) |
+| List | 1500 | 25.5 (25.3–25.7) | 26.0 (25.9–26.3) | +2.1% | 24.4 (24.4–25.5) | 25.5 (24.9–27.3) |
+| Bounce | 1500 | 26.1 (25.4–26.7) | 31.1 (30.2–31.7) | **+19.2%** | 22.4 (21.6–22.9) | 28.8 (28.6–29.4) |
+| Mandelbrot | 500 | 58.0 (57.6–58.4) | 57.6 (57.6–58.4) | −0.6% | 57.7 (57.6–58.2) | 57.8 (57.4–58.0) |
+| Storage | 1000 | 381.4 (371.5–384.3) | 166.2 (163.7–168.9) | **−56.4%** | 167.4 (164.7–173.9) | 305.9 (302.0–309.6) |
+
+Against the targets set for this work: **Permute is 14.7% faster, short of
+the 20% asked for**, and **Bounce (+19.2%) and Queens (+5.2%) are more than
+5% slower**. Towers is 3.3% slower and List 2.1%, inside the 5%.
+
+### Instructions executed (cachegrind)
+
+`valgrind --tool=cachegrind --cache-sim=no <harness> <Name> 1 <inner>`, one
+outer iteration, whole process:
+
+| Benchmark | 0.10.0 | main | main vs 0.10.0 | 0.10.0 unchecked | main unchecked |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Permute | 339,745,920 | 286,517,941 | −15.7% | 187,783,123 | 164,789,130 |
+| Queens | 264,233,634 | 229,774,658 | −13.0% | 172,822,823 | 163,873,861 |
+| Towers | 268,070,332 | 263,155,749 | −1.8% | 193,087,535 | 186,944,152 |
+| List | 298,324,615 | 298,359,891 | +0.0% | 298,323,832 | 298,359,108 |
+| Bounce | 183,699,744 | 183,621,782 | −0.0% | 183,698,933 | 183,620,985 |
+| Mandelbrot | 152,598,837 | 152,598,854 | 0.0% | 152,598,040 | 152,598,057 |
+| Storage | 409,788,430 | 410,235,968 | +0.1% | 396,137,633 | 396,585,157 |
+
+### The slower rows
+
+**Bounce, Queens and Towers execute the same number of instructions or fewer
+on main, so none of the three regressions is more work.** Bounce's count is
+identical to five significant figures, and its IR differs from 0.10.0's only
+by the arena mark and release #210 put around `innerBenchmarkLoop` (once per
+call, not per ball) and the element TBAA tags of #208; the loop body is the
+same instructions. What moved is where the code sits. As a diagnostic, and
+**not** as a number this document claims, both builds were relinked with
+`-Wl,-mllvm,-align-loops=64` (three rounds, same protocol): Bounce becomes
+26.0 → 22.4 ms (**main 13.9% faster**), Queens 21.7 → 21.2 (2.1% faster),
+Permute 36.8 → 31.9 (13.4% faster), and the rest move by less than their
+spread. #210's author saw the same Bounce effect (25.5 → 30.4 ms, and 22.0
+with the same flag). So Bounce and Queens are code placement: a loop that
+happens to straddle an alignment boundary in one binary and not the other,
+which this machine punishes. The shipped build does not align loops and this
+change does not add the flag; a benchmark-specific setting is not a fix.
+
+**Towers is not explained.** Its hot function, the inlined
+`Towers.moveTopDisk`, is instruction for instruction 0.10.0's minus one load
+(#208 stopped `this.piles` being reloaded after the `top.next = null` store),
+and cachegrind counts 1.8% fewer instructions, yet it is 3.3% slower, and 5.9%
+slower with loops aligned. Placement of something other than a loop head is
+the likeliest cause, and nothing here proves it.
+
+**Permute** gained 14.7% from #209 (four checks in `swap` become two) and
+#208 (one field load instead of three). The rest of its gap to unchecked is
+the two checks that remain, which only an interprocedural range fact could
+remove (`swap(n1, i)` is called with `i < n1 <= 6` on a six-element array);
+that was out of scope for this work.
+
+### Peak resident memory (KB)
+
+`ru_maxrss` of one run through `bench/rss.c`:
+
+| Run | 0.10.0 | main | main `--unchecked-indexing` | C++ |
+| --- | ---: | ---: | ---: | ---: |
+| `Storage 1 1000` | 390,064 | 1,708 | 1,716 | 4,316 |
+| `List 1 100000` | 49,840 | 1,460 | 1,460 | 3,840 |
+| `List 1 10` | 1,456 | 1,460 | 1,460 | 3,936 |
+
+The harness releases the arena after each outer iteration, so these are one
+iteration of 1000 Storage trees, or 100000 List runs, with nothing given back
+in between except by the compiler. On 0.10.0 Storage keeps every tree
+(390 MB) and List grows with its inner count (49.8 MB against 1.5 MB); on
+main both stay at the process's floor, `List 1 100000` identical to
+`List 1 10`, which is #210's callee scope doing what `delete` and the GC do
+in the other ports. It is also Storage's 56% in the time table: cachegrind
+counts the same instructions on both, so the difference is the same memory
+reused from the arena on main against 390 MB of fresh pages on 0.10.0.
+
+### The indirection hypothesis
+
+The question was whether, with the checks gone, `this → array header → data`
+loads remain in Queens and Towers after #208, and whether they are the gap to
+C++. Profiled with `--unchecked-indexing`, the harness's releases on, by
+reading the `-O3 -flto` code of the hot methods (`perf` is not available in
+this container; cachegrind gives the counts above). The Nish binary was
+linked with `-g` so the methods have names, which does not change the
+instructions.
+
+**Queens: yes, one extra dependent load per array access.** Nish lays
+`freeRows: boolean[]` out as a pointer in `Queens` to a 24-byte header whose
+`data` field points at the elements. `placeQueen` (with `getRowColumn` and
+`setRowColumn` inlined) reads, for each of the three arrays at each row:
+
+```
+mov  rdx, QWORD PTR [rbx+0x8]      ; this.freeMaxs       (header)
+mov  rdx, QWORD PTR [rdx+0x10]     ;   header.data
+cmp  BYTE PTR [rbp+rdx*1], 0x1     ;   element
+```
+
+and does it again after the recursive `placeQueen(c + 1)`, which may store to
+any of them. The C++ port does **not** keep its arrays inline, whatever the
+plan assumed: `bool* free_rows` is a pointer to `new bool[8]`, so C++ reads
+`this->free_maxs` and then the element, one load fewer than Nish on every
+access and the same reload after the call. C++ also unrolls the 8-row loop
+fully, which the Nish build does only for the `c == 7` tail. Unchecked Queens runs
+15.0 ms against C++'s 8.0.
+
+**Towers: yes, and the data pointer is reloaded after every disk store.**
+`piles` is a pointer to a three-slot array; C++ has `std::array<TowersDisk*,
+3>` inline in the object, so an access is `[rdi+rsi*8+0x8]` with no load at
+all to find the slot (and a compare against the constant 3 for `.at()`).
+Nish's inlined `moveTopDisk` loads `this.piles` once, then reads
+`header.data` **three times**:
+
+```
+mov  rsi, QWORD PTR [rax+0x10]     ; data, for popDiskFrom's read
+mov  QWORD PTR [rcx+0x8], 0x0      ; top.next = null
+mov  rdx, QWORD PTR [rax+0x10]     ; data again, for pushDisk's read
+mov  QWORD PTR [rcx+0x8], rdx      ; disk.next = top
+mov  rax, QWORD PTR [rax+0x10]     ; data again, for the store
+```
+
+The IR says why. The header's `data` load carries `!alias.scope`/`!noalias`
+for the header and data domains (`arr_alias_domains`) and **no `!tbaa`**,
+while `disk.next = …` is a class-field store with a struct-path `!tbaa` tag
+and no scope. Neither form of metadata separates the two, so LLVM must assume
+the field store may have written the header. #208 gave *element* accesses a
+TBAA subtree, which is why the field `this.piles` is no longer reloaded, but
+the header's own loads were left untagged. In checked mode the header's
+`length` is reloaded after each store for the same reason. Unchecked Towers
+is already faster than C++ (20.1 against 24.9 ms), so for Towers this is
+cost left on the table rather than a gap.
+
+### Proposed fix, not implemented
+
+Two steps, in the order they pay:
+
+1. **Tag the header's `length` and `data` loads and stores with TBAA in a
+   subtree of their own**, next to #208's element subtree and disjoint from
+   every class-field struct path. That removes Towers' two data reloads (and
+   the checked build's two length reloads) with no layout change. The
+   soundness argument is the one #208 made for elements: a header is written
+   only by the array's own lowering (`push`, `pop`, a length store) and by
+   the runtime, whose accesses carry C's own TBAA root, and accesses under
+   different roots are never proven disjoint. It must hold for arrays of
+   inline records, for `--threads` builds, and for the stack arrays of the
+   memory model (`docs/LANGUAGE.md`, item 1), whose header is an `alloca`. `self/tbaa.ts` and `self/emit_arrays.ts` own it, and the
+   `arr_field_reload` guard in `tests/run.js` is where a structural check
+   for it belongs.
+2. **Fixed-length array fields inline in the object**, for a field that is
+   only ever assigned an array of one length the checker can see (all four of
+   Queens' and Towers' `piles`). The field then holds the header and the
+   elements, the data pointer points into the object, and `this.freeMaxs[i]`
+   is `this + offset + i`, the same zero-hop address C++'s `std::array` gets
+   and one hop fewer than C++'s Queens. This changes a class's layout, so it
+   is the two-sided change `self/runtime.ts` and the C header describe and
+   needs its own design (what `this.freeRows = filledBooleans(8)` compiles to
+   when the callee allocates the array, and what a `push` on such a field
+   means). It is the fix the plan names, and it is the only one that closes
+   Queens' distance to C++.
+
 ## Left out, and why
 
 - `noalias` on struct parameters under an aliasing rule, and `dso_local` /
@@ -955,3 +1150,6 @@ untouched.
   --n fib=25,sieve=100000` builds every variant (speed, `--nsw`, size
   profile, C, Rust, Rust native) and requires identical checksums; Rust is
   skipped when `rustc` is missing.
+- The same check runs `bench/run.mjs --validate --only awfy` beside them: the
+  seven Are We Fast Yet ports in `bench/awfy/` are built and each is run
+  once, and it fails if any port's own `verifyResult` rejects its result.

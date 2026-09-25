@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 512 programs, 10409 dump lines.
+# 513 programs, 10915 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -8851,6 +8851,513 @@ function low(x: i64): i32 -> @low
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_div
   stackSites=0 stackLocals=0
+program bench/awfy/main.ts
+module bench/awfy/main.ts (entry)
+import Bounce from "./bounce" -> struct Bounce
+import List from "./list" -> struct List
+import Mandelbrot from "./mandelbrot" -> struct Mandelbrot
+import Permute from "./permute" -> struct Permute
+import Queens from "./queens" -> struct Queens
+import Storage from "./storage" -> struct Storage
+import Towers from "./towers" -> struct Towers
+function isKnownBenchmark(name: string): boolean -> @isKnownBenchmark
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function innerBenchmarkLoop(name: string, innerIterations: i32): boolean -> @innerBenchmarkLoop
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  escaping: innerIterations
+  calls: Bounce.innerBenchmarkLoop List.innerBenchmarkLoop Mandelbrot.innerBenchmarkLoop Permute.constructor Permute.innerBenchmarkLoop Queens.constructor Queens.innerBenchmarkLoop Storage.innerBenchmarkLoop Towers.constructor Towers.innerBenchmarkLoop nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_eq nish_write
+  stackSites=7 stackLocals=0
+  callee 25:12 Bounce.innerBenchmarkLoop -> @Bounce.innerBenchmarkLoop
+  callee 28:12 List.innerBenchmarkLoop -> @List.innerBenchmarkLoop
+  callee 31:12 Mandelbrot.innerBenchmarkLoop -> @Mandelbrot.innerBenchmarkLoop
+  callee 34:12 Permute.innerBenchmarkLoop -> @Permute.innerBenchmarkLoop
+  callee 34:12 new Permute -> @Permute.constructor
+  callee 37:12 Queens.innerBenchmarkLoop -> @Queens.innerBenchmarkLoop
+  callee 37:12 new Queens -> @Queens.constructor
+  callee 40:12 Storage.innerBenchmarkLoop -> @Storage.innerBenchmarkLoop
+  callee 43:12 Towers.innerBenchmarkLoop -> @Towers.innerBenchmarkLoop
+  callee 43:12 new Towers -> @Towers.constructor
+function printUsage(): void -> @printUsage
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: nish_print
+  stackSites=0 stackLocals=0
+function doRuns(name: string, numIterations: i32, innerIterations: i32): i64 -> @doRuns
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  escaping: innerIterations name
+  calls: innerBenchmarkLoop nish_arena_mark nish_arena_release nish_exit nish_monotonic_nanos nish_panic_div nish_print nish_str_concat nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+  local 59:7 total: i64 (let)
+  local 60:12 i: i32 (let)
+  local 61:11 startTime: i64 (const)
+  local 64:11 mark: i64 (const)
+  callee 65:10 innerBenchmarkLoop -> @innerBenchmarkLoop
+  local 69:11 runTime: i64 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: doRuns isKnownBenchmark llvm.fptosi.sat.i32.f64 nish_panic_div nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 printUsage
+  stackSites=0 stackLocals=0
+  local 79:9 args: string[] (const)
+  callee 81:5 printUsage -> @printUsage
+  local 85:9 name: string (const)
+  callee 86:8 isKnownBenchmark -> @isKnownBenchmark
+  local 91:7 numIterations: i32 (let)
+  local 92:7 innerIterations: i32 (let)
+  local 101:9 total: i64 (const)
+  callee 101:17 doRuns -> @doRuns
+  local 103:9 average: i64 (const)
+module bench/awfy/bounce.ts
+import Random from "./som" -> struct Random
+struct Ball (class) size=16 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  field xVel: i32 index=2 offset=8
+  field yVel: i32 index=3 offset=12
+  constructor -> @Ball.constructor
+  method bounce -> @Ball.bounce
+struct Bounce (class) size=0 align=1 exported
+  method innerBenchmarkLoop -> @Bounce.innerBenchmarkLoop
+  method benchmark -> @Bounce.benchmark
+  method verifyResult -> @Bounce.verifyResult
+function Ball.constructor(this: Ball, random: Random): void -> @Ball.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true
+  calls: Random.next nish_panic_div
+  pointer this: size=16 writesThrough=true captured=false
+  pointer random: size=4 writesThrough=true captured=false passedTo=Random.next#0 Random.next#0 Random.next#0 Random.next#0
+  stackSites=0 stackLocals=0
+  callee 13:14 Random.next -> @Random.next
+  callee 14:14 Random.next -> @Random.next
+  callee 15:18 Random.next -> @Random.next
+  callee 16:18 Random.next -> @Random.next
+function Ball.bounce(this: Ball): boolean -> @Ball.bounce [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: llvm.abs.i32
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 20:11 xLimit: i32 (const)
+  local 21:11 yLimit: i32 (const)
+  local 22:9 bounced: boolean (let)
+function Bounce.innerBenchmarkLoop(this: Bounce, innerIterations: i32): boolean -> @Bounce.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: Bounce.benchmark Bounce.verifyResult nish_arena_mark nish_arena_release
+  pointer this: size=0 writesThrough=false captured=false passedTo=Bounce.verifyResult#0 Bounce.benchmark#0
+  stackSites=0 stackLocals=0
+  local 57:14 i: i32 (let)
+  callee 58:12 Bounce.verifyResult -> @Bounce.verifyResult
+  callee 58:30 Bounce.benchmark -> @Bounce.benchmark
+function Bounce.benchmark(this: Bounce): i32 -> @Bounce.benchmark [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Ball.bounce Ball.constructor nish_alloc_struct nish_array_grow
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=2 stackLocals=2
+  local 66:11 random: Random (const)
+  local 67:11 ballCount: i32 (const)
+  local 68:9 bounces: i32 (let)
+  local 69:11 balls: Ball[] (const)
+  local 71:14 i: i32 (let)
+  callee 72:18 new Ball -> @Ball.constructor
+  local 75:14 i: i32 (let)
+  local 76:18 ball: Ball (const)
+  callee 77:13 Ball.bounce -> @Ball.bounce
+function Bounce.verifyResult(this: Bounce, result: i32): boolean -> @Bounce.verifyResult [exported method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+module bench/awfy/som.ts
+struct Random (class) size=4 align=4 exported
+  field seed: i32 index=0 offset=0 initialized
+  method next -> @Random.next
+function Random.next(this: Random): i32 -> @Random.next [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+module bench/awfy/list.ts
+struct Element (class) size=16 align=8
+  field val: i32 index=0 offset=0
+  field next: Element | null index=1 offset=8 initialized
+  constructor -> @Element.constructor
+  method length -> @Element.length
+struct List (class) size=0 align=1 exported
+  method innerBenchmarkLoop -> @List.innerBenchmarkLoop
+  method benchmark -> @List.benchmark
+  method makeList -> @List.makeList
+  method isShorterThan -> @List.isShorterThan
+  method tail -> @List.tail
+  method verifyResult -> @List.verifyResult
+function Element.constructor(this: Element, v: i32): void -> @Element.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Element.length(this: Element): i32 -> @Element.length [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Element.length
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 13:11 next: Element | null (const)
+  callee 17:16 Element.length -> @Element.length
+function List.innerBenchmarkLoop(this: List, innerIterations: i32): boolean -> @List.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: List.benchmark List.verifyResult
+  pointer this: size=0 writesThrough=false captured=false passedTo=List.verifyResult#0 List.benchmark#0
+  stackSites=0 stackLocals=0
+  local 23:14 i: i32 (let)
+  callee 24:12 List.verifyResult -> @List.verifyResult
+  callee 24:30 List.benchmark -> @List.benchmark
+function List.benchmark(this: List): i32 -> @List.benchmark [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: Element.length List.makeList List.tail nish_arena_mark nish_arena_release nish_exit nish_write
+  pointer this: size=0 writesThrough=false captured=false passedTo=List.tail#0 List.makeList#0 List.makeList#0 List.makeList#0
+  stackSites=0 stackLocals=0
+  local 32:11 result: Element | null (const)
+  callee 32:20 List.tail -> @List.tail
+  callee 32:30 List.makeList -> @List.makeList
+  callee 32:49 List.makeList -> @List.makeList
+  callee 32:68 List.makeList -> @List.makeList
+  callee 36:12 Element.length -> @Element.length
+function List.makeList(this: List, length: i32): Element | null -> @List.makeList [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: length
+  calls: Element.constructor List.makeList nish_alloc_struct
+  pointer this: size=0 writesThrough=false captured=false passedTo=List.makeList#0
+  stackSites=0 stackLocals=0
+  local 43:11 e: Element (const)
+  callee 43:15 new Element -> @Element.constructor
+  callee 44:14 List.makeList -> @List.makeList
+function List.isShorterThan(this: List, x: Element | null, y: Element | null): boolean -> @List.isShorterThan [exported method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: x y
+  pointer this: size=0 writesThrough=false captured=false
+  pointer x: size=16 writesThrough=true captured=true
+  pointer y: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 49:9 xTail: Element | null (let)
+  local 50:9 yTail: Element | null (let)
+function List.tail(this: List, x: Element | null, y: Element | null, z: Element | null): Element | null -> @List.tail [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: z
+  calls: List.isShorterThan List.tail nish_exit nish_write
+  pointer this: size=0 writesThrough=false captured=false passedTo=List.isShorterThan#0 List.tail#0 List.tail#0 List.tail#0 List.tail#0
+  pointer x: size=16 writesThrough=true captured=true passedTo=List.isShorterThan#2 List.tail#3 List.tail#2
+  pointer y: size=16 writesThrough=true captured=true passedTo=List.isShorterThan#1 List.tail#2 List.tail#3
+  pointer z: size=16 writesThrough=true captured=true passedTo=List.tail#3 List.tail#2
+  stackSites=0 stackLocals=0
+  callee 63:9 List.isShorterThan -> @List.isShorterThan
+  callee 69:14 List.tail -> @List.tail
+  callee 69:24 List.tail -> @List.tail
+  callee 69:49 List.tail -> @List.tail
+  callee 69:74 List.tail -> @List.tail
+function List.verifyResult(this: List, result: i32): boolean -> @List.verifyResult [exported method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+module bench/awfy/mandelbrot.ts
+struct Mandelbrot (class) size=0 align=1 exported
+  method innerBenchmarkLoop -> @Mandelbrot.innerBenchmarkLoop
+  method verifyResult -> @Mandelbrot.verifyResult
+  method mandelbrot -> @Mandelbrot.mandelbrot
+function Mandelbrot.innerBenchmarkLoop(this: Mandelbrot, innerIterations: i32): boolean -> @Mandelbrot.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: innerIterations
+  calls: Mandelbrot.mandelbrot Mandelbrot.verifyResult
+  pointer this: size=0 writesThrough=false captured=false passedTo=Mandelbrot.verifyResult#0 Mandelbrot.mandelbrot#0
+  stackSites=0 stackLocals=0
+  callee 8:12 Mandelbrot.verifyResult -> @Mandelbrot.verifyResult
+  callee 8:30 Mandelbrot.mandelbrot -> @Mandelbrot.mandelbrot
+function Mandelbrot.verifyResult(this: Mandelbrot, result: i32, innerIterations: i32): boolean -> @Mandelbrot.verifyResult [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Mandelbrot.mandelbrot(this: Mandelbrot, size: i32): i32 -> @Mandelbrot.mandelbrot [exported method]
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 28:9 sum: i32 (let)
+  local 29:9 byteAcc: i32 (let)
+  local 30:9 bitNum: i32 (let)
+  local 32:9 y: i32 (let)
+  local 33:11 sizeF: f64 (const)
+  local 36:13 ci: f64 (const)
+  local 37:11 x: i32 (let)
+  local 40:13 zrzr: f64 (let)
+  local 41:13 zi: f64 (let)
+  local 42:13 zizi: f64 (let)
+  local 43:15 cr: f64 (const)
+  local 45:13 z: i32 (let)
+  local 46:13 notDone: boolean (let)
+  local 47:13 escaped: i32 (let)
+  local 49:17 zr: f64 (const)
+module bench/awfy/permute.ts
+struct Permute (class) size=16 align=8 exported
+  field count: i32 index=0 offset=0 initialized
+  field v: i32[] index=1 offset=8
+  constructor -> @Permute.constructor
+  method innerBenchmarkLoop -> @Permute.innerBenchmarkLoop
+  method benchmark -> @Permute.benchmark
+  method verifyResult -> @Permute.verifyResult
+  method permute -> @Permute.permute
+  method swap -> @Permute.swap
+function Permute.constructor(this: Permute): void -> @Permute.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Permute.innerBenchmarkLoop(this: Permute, innerIterations: i32): boolean -> @Permute.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Permute.benchmark Permute.verifyResult
+  pointer this: size=16 writesThrough=true captured=false passedTo=Permute.verifyResult#0 Permute.benchmark#0
+  stackSites=0 stackLocals=0
+  local 13:14 i: i32 (let)
+  callee 14:12 Permute.verifyResult -> @Permute.verifyResult
+  callee 14:30 Permute.benchmark -> @Permute.benchmark
+function Permute.benchmark(this: Permute): i32 -> @Permute.benchmark [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Permute.permute
+  pointer this: size=16 writesThrough=true captured=false passedTo=Permute.permute#0
+  stackSites=0 stackLocals=0
+  callee 24:5 Permute.permute -> @Permute.permute
+function Permute.verifyResult(this: Permute, result: i32): boolean -> @Permute.verifyResult [exported method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Permute.permute(this: Permute, n: i32): void -> @Permute.permute [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: Permute.permute Permute.swap
+  pointer this: size=16 writesThrough=true captured=false passedTo=Permute.permute#0 Permute.swap#0 Permute.permute#0 Permute.swap#0
+  stackSites=0 stackLocals=0
+  local 35:13 n1: i32 (const)
+  callee 36:7 Permute.permute -> @Permute.permute
+  local 37:16 i: i32 (let)
+  callee 38:9 Permute.swap -> @Permute.swap
+  callee 39:9 Permute.permute -> @Permute.permute
+  callee 40:9 Permute.swap -> @Permute.swap
+function Permute.swap(this: Permute, i: i32, j: i32): void -> @Permute.swap [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: i j
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 46:11 tmp: i32 (const)
+module bench/awfy/queens.ts
+struct Queens (class) size=32 align=8 exported
+  field freeRows: boolean[] index=0 offset=0
+  field freeMaxs: boolean[] index=1 offset=8
+  field freeMins: boolean[] index=2 offset=16
+  field queenRows: i32[] index=3 offset=24
+  constructor -> @Queens.constructor
+  method innerBenchmarkLoop -> @Queens.innerBenchmarkLoop
+  method benchmark -> @Queens.benchmark
+  method verifyResult -> @Queens.verifyResult
+  method queens -> @Queens.queens
+  method placeQueen -> @Queens.placeQueen
+  method getRowColumn -> @Queens.getRowColumn
+  method setRowColumn -> @Queens.setRowColumn
+function Queens.constructor(this: Queens): void -> @Queens.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Queens.innerBenchmarkLoop(this: Queens, innerIterations: i32): boolean -> @Queens.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Queens.benchmark Queens.verifyResult
+  pointer this: size=32 writesThrough=true captured=false passedTo=Queens.verifyResult#0 Queens.benchmark#0
+  stackSites=0 stackLocals=0
+  local 18:14 i: i32 (let)
+  callee 19:12 Queens.verifyResult -> @Queens.verifyResult
+  callee 19:30 Queens.benchmark -> @Queens.benchmark
+function Queens.benchmark(this: Queens): boolean -> @Queens.benchmark [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Queens.queens
+  pointer this: size=32 writesThrough=true captured=false passedTo=Queens.queens#0
+  stackSites=0 stackLocals=0
+  local 27:9 result: boolean (let)
+  local 28:14 i: i32 (let)
+  callee 29:26 Queens.queens -> @Queens.queens
+function Queens.verifyResult(this: Queens, result: boolean): boolean -> @Queens.verifyResult [exported method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: result
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Queens.queens(this: Queens): boolean -> @Queens.queens [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Queens.placeQueen filledBooleans filledMinusOne
+  pointer this: size=32 writesThrough=true captured=false passedTo=Queens.placeQueen#0
+  stackSites=0 stackLocals=0
+  callee 39:21 filledBooleans -> @filledBooleans
+  callee 40:21 filledBooleans -> @filledBooleans
+  callee 41:21 filledBooleans -> @filledBooleans
+  callee 42:22 filledMinusOne -> @filledMinusOne
+  callee 44:12 Queens.placeQueen -> @Queens.placeQueen
+function Queens.placeQueen(this: Queens, c: i32): boolean -> @Queens.placeQueen [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: c
+  calls: Queens.getRowColumn Queens.placeQueen Queens.setRowColumn nish_panic_index
+  pointer this: size=32 writesThrough=false captured=false passedTo=Queens.getRowColumn#0 Queens.setRowColumn#0 Queens.placeQueen#0 Queens.setRowColumn#0
+  stackSites=0 stackLocals=0
+  local 48:14 r: i32 (let)
+  callee 49:11 Queens.getRowColumn -> @Queens.getRowColumn
+  callee 51:9 Queens.setRowColumn -> @Queens.setRowColumn
+  callee 57:13 Queens.placeQueen -> @Queens.placeQueen
+  callee 60:9 Queens.setRowColumn -> @Queens.setRowColumn
+function Queens.getRowColumn(this: Queens, r: i32, c: i32): boolean -> @Queens.getRowColumn [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: r
+  calls: nish_panic_index
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Queens.setRowColumn(this: Queens, r: i32, c: i32, v: boolean): void -> @Queens.setRowColumn [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: r v
+  calls: nish_panic_index
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function filledBooleans(n: i32): boolean[] -> @filledBooleans
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: n
+  stackSites=0 stackLocals=0
+  local 80:9 arr: boolean[] (const)
+  local 81:12 i: i32 (let)
+function filledMinusOne(n: i32): i32[] -> @filledMinusOne
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: n
+  stackSites=0 stackLocals=0
+  local 88:9 arr: i32[] (const)
+  local 89:12 i: i32 (let)
+module bench/awfy/storage.ts
+import Random from "./som" -> struct Random
+struct ArrayTree (class) size=8 align=8
+  field children: ArrayTree | null[] index=0 offset=0
+  constructor -> @ArrayTree.constructor
+struct Storage (class) size=4 align=4 exported
+  field count: i32 index=0 offset=0 initialized
+  method innerBenchmarkLoop -> @Storage.innerBenchmarkLoop
+  method benchmark -> @Storage.benchmark
+  method verifyResult -> @Storage.verifyResult
+  method buildTreeDepth -> @Storage.buildTreeDepth
+function ArrayTree.constructor(this: ArrayTree, children: ArrayTree | null[]): void -> @ArrayTree.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: children
+  pointer this: size=8 writesThrough=true captured=false
+  pointer children: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Storage.innerBenchmarkLoop(this: Storage, innerIterations: i32): boolean -> @Storage.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Storage.benchmark Storage.verifyResult
+  pointer this: size=4 writesThrough=true captured=false passedTo=Storage.verifyResult#0 Storage.benchmark#0
+  stackSites=0 stackLocals=0
+  local 21:14 i: i32 (let)
+  callee 22:12 Storage.verifyResult -> @Storage.verifyResult
+  callee 22:30 Storage.benchmark -> @Storage.benchmark
+function Storage.benchmark(this: Storage): i32 -> @Storage.benchmark [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: Storage.buildTreeDepth nish_arena_mark nish_arena_release
+  pointer this: size=4 writesThrough=true captured=false passedTo=Storage.buildTreeDepth#0
+  stackSites=1 stackLocals=1
+  local 30:11 random: Random (const)
+  callee 36:5 Storage.buildTreeDepth -> @Storage.buildTreeDepth
+function Storage.verifyResult(this: Storage, result: i32): boolean -> @Storage.verifyResult [exported method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Storage.buildTreeDepth(this: Storage, depth: i32, random: Random): ArrayTree | null[] -> @Storage.buildTreeDepth [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: ArrayTree.constructor Random.next Storage.buildTreeDepth nish_alloc_struct nish_panic_div nish_panic_index
+  pointer this: size=4 writesThrough=true captured=false passedTo=Storage.buildTreeDepth#0
+  pointer random: size=4 writesThrough=true captured=false passedTo=Random.next#0 Storage.buildTreeDepth#2
+  stackSites=0 stackLocals=0
+  callee 47:43 Random.next -> @Random.next
+  local 49:11 arr: ArrayTree | null[] (const)
+  local 50:14 i: i32 (let)
+  callee 51:16 new ArrayTree -> @ArrayTree.constructor
+  callee 51:30 Storage.buildTreeDepth -> @Storage.buildTreeDepth
+module bench/awfy/towers.ts
+struct TowersDisk (class) size=16 align=8
+  field size: i32 index=0 offset=0
+  field next: TowersDisk | null index=1 offset=8 initialized
+  constructor -> @TowersDisk.constructor
+struct Towers (class) size=16 align=8 exported
+  field piles: TowersDisk | null[] index=0 offset=0
+  field movesDone: i32 index=1 offset=8 initialized
+  constructor -> @Towers.constructor
+  method innerBenchmarkLoop -> @Towers.innerBenchmarkLoop
+  method benchmark -> @Towers.benchmark
+  method verifyResult -> @Towers.verifyResult
+  method pushDisk -> @Towers.pushDisk
+  method popDiskFrom -> @Towers.popDiskFrom
+  method moveTopDisk -> @Towers.moveTopDisk
+  method buildTowerAt -> @Towers.buildTowerAt
+  method moveDisks -> @Towers.moveDisks
+function TowersDisk.constructor(this: TowersDisk, size: i32): void -> @TowersDisk.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: size
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Towers.constructor(this: Towers): void -> @Towers.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Towers.innerBenchmarkLoop(this: Towers, innerIterations: i32): boolean -> @Towers.innerBenchmarkLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Towers.benchmark Towers.verifyResult
+  pointer this: size=16 writesThrough=true captured=false passedTo=Towers.verifyResult#0 Towers.benchmark#0
+  stackSites=0 stackLocals=0
+  local 22:14 i: i32 (let)
+  callee 23:12 Towers.verifyResult -> @Towers.verifyResult
+  callee 23:30 Towers.benchmark -> @Towers.benchmark
+function Towers.benchmark(this: Towers): i32 -> @Towers.benchmark [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Towers.buildTowerAt Towers.moveDisks
+  pointer this: size=16 writesThrough=true captured=false passedTo=Towers.buildTowerAt#0 Towers.moveDisks#0
+  stackSites=0 stackLocals=0
+  callee 32:5 Towers.buildTowerAt -> @Towers.buildTowerAt
+  callee 34:5 Towers.moveDisks -> @Towers.moveDisks
+function Towers.verifyResult(this: Towers, result: i32): boolean -> @Towers.verifyResult [exported method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Towers.pushDisk(this: Towers, disk: TowersDisk, pile: i32): void -> @Towers.pushDisk [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: disk pile
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=16 writesThrough=false captured=false
+  pointer disk: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 43:11 top: TowersDisk | null (const)
+function Towers.popDiskFrom(this: Towers, pile: i32): TowersDisk -> @Towers.popDiskFrom [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=16
+  escaping: pile
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 53:11 top: TowersDisk | null (const)
+function Towers.moveTopDisk(this: Towers, fromPile: i32, toPile: i32): void -> @Towers.moveTopDisk [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: fromPile toPile
+  calls: Towers.popDiskFrom Towers.pushDisk
+  pointer this: size=16 writesThrough=true captured=false passedTo=Towers.pushDisk#0 Towers.popDiskFrom#0
+  stackSites=0 stackLocals=0
+  callee 64:5 Towers.pushDisk -> @Towers.pushDisk
+  callee 64:19 Towers.popDiskFrom -> @Towers.popDiskFrom
+function Towers.buildTowerAt(this: Towers, pile: i32, disks: i32): void -> @Towers.buildTowerAt [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  escaping: disks pile
+  calls: Towers.pushDisk TowersDisk.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=false captured=false passedTo=Towers.pushDisk#0
+  stackSites=0 stackLocals=0
+  local 69:14 i: i32 (let)
+  callee 70:7 Towers.pushDisk -> @Towers.pushDisk
+  callee 70:21 new TowersDisk -> @TowersDisk.constructor
+function Towers.moveDisks(this: Towers, disks: i32, fromPile: i32, toPile: i32): void -> @Towers.moveDisks [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  escaping: fromPile toPile
+  calls: Towers.moveDisks Towers.moveTopDisk
+  pointer this: size=16 writesThrough=true captured=false passedTo=Towers.moveTopDisk#0 Towers.moveDisks#0 Towers.moveTopDisk#0 Towers.moveDisks#0
+  stackSites=0 stackLocals=0
+  callee 76:7 Towers.moveTopDisk -> @Towers.moveTopDisk
+  local 78:13 otherPile: i32 (const)
+  callee 79:7 Towers.moveDisks -> @Towers.moveDisks
+  callee 80:7 Towers.moveTopDisk -> @Towers.moveTopDisk
+  callee 81:7 Towers.moveDisks -> @Towers.moveDisks
 program bench/fib.ts
 module bench/fib.ts (entry)
 function fib(n: i32): i32 -> @fib
