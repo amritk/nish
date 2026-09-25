@@ -66,6 +66,28 @@ export const roundUpTo = (value: i32, align: i32): i32 => {
   return remainder === 0 ? value : value + align - remainder;
 };
 
+/** Bytes of the `struct nish_array` header an inline array field starts with (`len`, `cap`, `data`). */
+export const INLINE_HEADER_BYTES: i32 = 24;
+
+/**
+ * Bytes one field occupies in its object: its value's size, or for an inline
+ * array field (`FieldInfo.inlineCapacity`) the header and `K` slots, rounded
+ * up to the header's alignment as the LLVM literal struct
+ * `{ %struct.nish_array, [K x T] }` is. The slots are values, never records:
+ * `self/inline_arrays.ts` refuses a record element type.
+ */
+export const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
+  if (!field.inline()) {
+    return table.alignOf(field.type);
+  }
+  const stride = table.alignOf(table.refOf(field.type));
+  return roundUpTo(INLINE_HEADER_BYTES + field.inlineCapacity * stride, 8);
+};
+
+/** The alignment one field needs: its value's, or the header's 8 for an inline array. */
+export const fieldAlign = (table: TypeTable, field: FieldInfo): i32 =>
+  field.inline() ? 8 : table.alignOf(field.type);
+
 /**
  * Offsets in declaration order, and the size and alignment clang would
  * compute. Answers the struct's *floor*: the smallest size any order of these
@@ -82,14 +104,14 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
   let align = 1;
   let used = 0;
   for (const field of info.fields) {
-    const fieldAlign = ctx.table.alignOf(field.type);
-    const width = sizeOfField(ctx, field.type);
-    offset = roundUpTo(offset, fieldAlign);
+    const need = fieldAlign(ctx.table, field);
+    const width = fieldWidth(ctx.table, field);
+    offset = roundUpTo(offset, need);
     field.offset = offset;
     offset = offset + width;
     used = used + width;
-    if (fieldAlign > align) {
-      align = fieldAlign;
+    if (need > align) {
+      align = need;
     }
   }
   info.size = roundUpTo(offset, align);

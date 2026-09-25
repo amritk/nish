@@ -525,6 +525,14 @@ export class FieldInfo {
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null;
   decl: Node;
+  /**
+   * The number of element slots an array field holds inside its object, or -1
+   * for a field laid out as it always was. Decided once the whole program is
+   * checked (`self/inline_arrays.ts`): an inline field is the array header and
+   * `inlineCapacity` slots, one LLVM member `{ %struct.nish_array, [K x T] }`,
+   * so `index` does not move and `offset` is recomputed.
+   */
+  inlineCapacity: i32;
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name;
@@ -534,6 +542,12 @@ export class FieldInfo {
     this.readonly = false;
     this.initializer = null;
     this.decl = decl;
+    this.inlineCapacity = -1;
+  }
+
+  /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
+  inline(): boolean {
+    return this.inlineCapacity >= 0;
   }
 }
 
@@ -1023,6 +1037,14 @@ export class CheckedProgram {
   usesArgv: boolean;
   /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
   parallelCalls: ParallelCall[];
+  /**
+   * Every `x.f = e;` in this module's bodies whose field is stored inline, with
+   * the length `e` is known to have (`self/inline_arrays.ts`). Parallel lists
+   * rather than a table by node id: there are a handful per program, and a
+   * per-node array would cost every module a slot per node for them.
+   */
+  inlineAssignNodes: Node[];
+  inlineAssignLengths: i32[];
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[];
@@ -1133,6 +1155,8 @@ export class CheckedProgram {
     this.enumList = [];
     this.entryMain = null;
     this.parallelCalls = [];
+    this.inlineAssignNodes = [];
+    this.inlineAssignLengths = [];
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
     this.nodeLocals = new Array<Local | null>(nodeCount);
@@ -1168,6 +1192,18 @@ export class CheckedProgram {
     this.methodConstraints.set(key, this.methodConstraintLists.length);
     this.methodConstraintLists.push(list);
     return list;
+  }
+
+  /** The length the fresh array `assignment` stores into an inline field has, or -1 when it is not one. */
+  inlineAssignLength(assignment: Node): i32 {
+    let i = 0;
+    while (i < this.inlineAssignNodes.length) {
+      if (this.inlineAssignNodes[i] === assignment) {
+        return this.inlineAssignLengths[i];
+      }
+      i = i + 1;
+    }
+    return -1;
   }
 
   /** The struct called `name` in this module, or `null`. */

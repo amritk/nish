@@ -148,6 +148,7 @@ What the rest forces:
 | `bounds.ts` | the WP15 §2 bounds-check proof, whose verdicts the emitter reads out of `nodeProvenIndex` |
 | `ir.ts` `runtime.ts` `target.ts` `options.ts` | the IR builder, the runtime ABI table, the target triples, the options |
 | `tbaa.ts` | the type-based alias metadata on class field accesses (WP9) |
+| `inline_arrays.ts` | which array fields are stored inside their objects, decided once every body is checked (docs/LANGUAGE.md, "Fixed-length array fields are stored inline") |
 | `escape.ts` `attributes.ts` | escape analysis and the whole-program attribute fixpoint |
 | `debug.ts` | the DWARF metadata `-g` emits |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` `emit_result.ts` | the emitter |

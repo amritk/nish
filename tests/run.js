@@ -3370,6 +3370,107 @@ if (!only || "layout".includes(only)) {
       );
     }
   }
+  // Inline array fields: tests/layout/inline_array.ts, compiled without a
+  // sidecar so `Rows` holds its arrays inside the object, against its C twin.
+  // The twin mirrors each field as `struct { nish_array h; T slots[K]; }` from
+  // nish.h, so the three places that state the header -- `ARRAY_TYPE` in
+  // self/runtime.ts, `INLINE_HEADER_BYTES` in self/structs.ts and nish.h's
+  // `nish_array` -- are read here and held to one 24-byte layout, and the
+  // object's size is the `nish_alloc_struct` the IR asks for.
+  {
+    const inlineTs = path.join(root, "tests", "layout", "inline_array.ts");
+    const inlineC = path.join(root, "tests", "layout", "inline_array.c");
+    const inlineLl = path.join(buildDir, "layout_inline_array.ll");
+    const ic = spawnSync(NISH, [inlineTs, "-o", inlineLl], { cwd: root });
+    check("layout: tests/layout/inline_array.ts compiles", ic.status === 0, String(ic.stderr));
+    const runtimeTs = fs.readFileSync(path.join(root, "self", "runtime.ts"), "utf8");
+    const structsTs = fs.readFileSync(path.join(root, "self", "structs.ts"), "utf8");
+    const nishH = fs.readFileSync(path.join(root, "runtime", "nish.h"), "utf8");
+    const arrayType = runtimeTs.match(/ARRAY_TYPE: string = "%struct\.nish_array = type \{ ([^}]*) \}"/);
+    const headerBytes = structsTs.match(/INLINE_HEADER_BYTES: i32 = (\d+);/);
+    const cHeader = nishH.match(/typedef struct nish_array \{ ([^}]*) \} nish_array;/);
+    check(
+      "layout: self/runtime.ts, self/structs.ts and nish.h state one array header (i64 len, i64 cap, i8* data; 24 bytes)",
+      arrayType !== null &&
+        arrayType[1] === "i64, i64, i8*" &&
+        headerBytes !== null &&
+        headerBytes[1] === "24" &&
+        cHeader !== null &&
+        cHeader[1] === "uint64_t len; uint64_t cap; char *data;",
+      `ARRAY_TYPE ${arrayType && arrayType[1]}, INLINE_HEADER_BYTES ${headerBytes && headerBytes[1]}, nish.h ${cHeader && cHeader[1]}`
+    );
+    if (ic.status === 0) {
+      const ir = fs.readFileSync(inlineLl, "utf8");
+      const alloc = ir.match(/@nish_alloc_struct\(i64 (\d+)\)/);
+      const cSize = fs.readFileSync(inlineC, "utf8").match(/_Static_assert\(sizeof\(struct Rows\) == (\d+)/);
+      check(
+        "layout: an inline array field is `{ %struct.nish_array, [K x T] }`, and the object is the size inline_array.c asserts",
+        ir.includes("%struct.Rows = type { { %struct.nish_array, [3 x i1] }, i32,") &&
+          alloc !== null &&
+          cSize !== null &&
+          alloc[1] === cSize[1],
+        `IR allocates ${alloc && alloc[1]}, inline_array.c asserts ${cSize && cSize[1]}`
+      );
+      const exe = path.join(buildDir, "layout_inline_array");
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-O2", "-Iruntime", inlineC, inlineLl, ...RUNTIME_C, "-o", exe],
+        { cwd: root }
+      );
+      check("layout: inline_array.c compiles with -std=c11 -Wall -Wextra -Werror (offsets agree with clang)", cc.status === 0, String(cc.stderr));
+      if (cc.status === 0) {
+        const run = spawnSync(exe);
+        check(
+          "layout: every inline header and slot agrees with clang at run time (data points at the slots)",
+          run.status === 0 && String(run.stdout).trim() === "inline layout ok",
+          `${run.stdout}${run.stderr}`
+        );
+      }
+    }
+    // --emit-header describes every class, so a build that writes one keeps
+    // the pointer layout, and the C struct it writes must be the IR's: a C host
+    // reads the field through the header and the size matches the allocation.
+    const hostTs = path.join(root, "tests", "cases", "cls_inline_array_header.ts");
+    const hostLl = path.join(buildDir, "layout_inline_header.ll");
+    const hostH = path.join(buildDir, "layout_inline_header.h");
+    const hr = spawnSync(NISH, [hostTs, "-o", hostLl, "--emit-header", hostH], { cwd: root });
+    if (hr.status === 0) {
+      const ir = fs.readFileSync(hostLl, "utf8");
+      const alloc = ir.match(/define [^\n]*@makeTally\([^\n]*\{\n[\s\S]*?@nish_alloc_struct\(i64 (\d+)\)/);
+      const hostC = path.join(buildDir, "layout_inline_header.c");
+      fs.writeFileSync(
+        hostC,
+        [
+          '#include <stdio.h>',
+          '#include "layout_inline_header.h"',
+          `_Static_assert(sizeof(struct Tally) == ${alloc ? alloc[1] : 0}, "struct Tally is the object the IR allocates");`,
+          "int main(void) {",
+          "  struct Tally *t = makeTally();",
+          "  printf(\"%d %d\\n\", (int)t->counts->len, ((int32_t *)t->counts->data)[2]);",
+          "  return 0;",
+          "}",
+          "",
+        ].join("\n")
+      );
+      const exe = path.join(buildDir, "layout_inline_header");
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", `-I${buildDir}`, "-Iruntime", hostC, hostLl, ...RUNTIME_C, "-o", exe],
+        { cwd: root }
+      );
+      const run = cc.status === 0 ? spawnSync(exe) : null;
+      check(
+        "layout: under --emit-header an array field keeps `nish_array *`, and a C host reads it through the header's struct",
+        ir.includes("%struct.Tally = type { %struct.nish_array* }") &&
+          alloc !== null &&
+          run !== null &&
+          String(run.stdout).trim() === "4 5",
+        `${cc.stderr}${run === null ? "" : `${run.stdout}${run.stderr}`}`
+      );
+    } else {
+      check("layout: cls_inline_array_header.ts compiles with --emit-header", false, String(hr.stderr));
+    }
+  }
   if (HAS_OPT) {
     for (const name of cases.filter((c) => c.startsWith("cls_") && (!only || c.includes(only)))) {
       const ll = path.join(buildDir, `${name}.ll`);

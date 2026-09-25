@@ -2760,6 +2760,76 @@ mutate every mutable array it is handed, because whether the callee pushes is a
 whole-program question the checker does not answer. `readonly T[]` is how a
 signature promises it does not.
 
+### Fixed-length array fields are stored inline
+
+A class field `f: T[]` is normally one pointer to an array header that lives
+somewhere else in the arena, so `this.f[i]` loads the pointer, then the
+header's `data`, then the element. When the whole program shows that the field
+can only ever hold an array nobody else can reach, of a length known at every
+assignment, the compiler stores the header and its elements **inside the
+object** instead, and `this.f[i]` becomes a load at a constant offset from
+`this` (`tests/cases/cls_inline_array`). This is a layout decision, not a
+language rule: no program can tell the two layouts apart, which is the whole of
+what the conditions below guarantee.
+
+A field qualifies only when all of these hold, over every module of the
+program:
+
+- **Every assignment is a fresh array of a constant length**, as a statement of
+  its own (`x.f = e;`, never `y = x.f = e`): an array literal of `n` elements
+  (`[]` is one, with `n = 0`), `new Array<T>(n)` or a typed-array `new` with an
+  integer literal `n`, or a call to a top-level function that is proven to
+  return a fresh array whose length is a constant or one of its parameters,
+  passed a literal there. That function returns only `new Array<T>(p)`, a
+  literal, or a `const` local initialised with one, which it only indexes and
+  reads `.length` of (`filledBooleans(8)` in AWFY Queens,
+  `tests/cases/cls_inline_array_call`). The slot is sized for the largest
+  length `K` any assignment gives; the header still records the current length,
+  so `.length` answers what it always did.
+- **Nothing takes the field as a value.** `x.f[i]` (read, write, compound) and
+  `x.f.length` are the only uses. Reading it into a local, passing it to a
+  function, returning it, iterating it with `for ... of`, capturing it, or
+  calling any method on it — `push` and `pop` included — keeps today's layout
+  (`cls_inline_array_local`, `cls_inline_array_push`, `cls_inline_array_passed`).
+- **Every assignment's length is a literal.** A length the compiler does not
+  know keeps today's layout (`cls_inline_array_dynamic`).
+- **No element access can reassign the field under itself.** `x.f[i]`
+  evaluates `x.f` before `i`, and `x.f[i] = v` before `v`; when the index or
+  the value calls something that can assign `f` (directly or through its own
+  calls), the access uses the array `f` held *before*, which a single set of
+  slots cannot be. Such a field keeps today's layout
+  (`tests/cases/arr_repeat_check_call`, `cls_inline_array_order`).
+- **No host can see the class's layout.** The class is not host-visible as
+  [`export`](#export-and-import) decides it for a call (`hostVisible` in
+  `self/visibility.ts`): an exported class keeps today's layout in every build
+  that is not a closed-world `--link`. And no build that describes or shares
+  layouts with code this compiler did not write inlines anything at all —
+  `--emit-header` (whose C structs list every class), `--emit-dts`,
+  `--emit-napi`, a wasm target, `--profile wasi`, or a module that declares a C
+  function (`cls_inline_array_header`, `tests/link/cls_inline_array_*`).
+- **It is a plain class**: not generic, not one that `implements` an interface,
+  and its element type is not a record (an [inline
+  record](#arrays-of-records-are-contiguous) would hand out interior pointers
+  into the object).
+- **`K` elements fit in 256 bytes** and `K` is at least 1. The cap bounds how
+  much an object grows, since every object of the class carries the slots
+  whether it uses them or not. It does not bound the cost of reassigning: a
+  literal or `new Array` writes the slots in place and allocates nothing, which
+  is faster than the pointer layout at every `K` measured, while an assignment
+  from a call still makes its array and then copies it, a cost that is about
+  the same at 8 slots as at 64. A field reassigned from a call and read fewer
+  than a few dozen times per assignment is therefore slower inline; the
+  measurement is in the header of `self/inline_arrays.ts`.
+
+Why reference semantics are unchanged: the object is still a pointer, so a
+class holding an inline field can be stored in arrays and passed around as
+before. Assigning the field copies the fresh array's elements into the slot
+(an array literal and `new Array` write the slot directly and allocate
+nothing). That copy is observable only through another reference to the fresh
+array or to the field's array, and neither exists — the first because it is
+fresh, the second because the field is never taken as a value. An inline array
+lives and dies with its object, on the stack when the object does.
+
 ### Template literals
 
 `` `text ${e} text` `` accepts holes of type `string`, `number`, `i64`,

@@ -1,0 +1,1 @@
+--emit-dts build/test/interop/cls_inline_array_dts.d.ts
