@@ -292,9 +292,15 @@ export class Emitter {
     const params: IRParam[] = [];
     // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
-    const privateAbi = privateResultAbi(this, sig.exported);
+    const privateAbi = privateResultAbi(this, sig.visibleOutside());
     let i = 0;
     while (i < sig.paramNames.length) {
+      // WP29: a compile-time function parameter is a position in the call and
+      // no LLVM parameter; the body calls what it was bound to directly.
+      if (sig.isCompileTime(i)) {
+        i = i + 1;
+        continue;
+      }
       const name = sig.paramNames[i];
       const type = sig.paramTypes[i];
       let attrs: string[] = [];
@@ -307,7 +313,11 @@ export class Emitter {
     this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, privateAbi));
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
-    if (this.opts.strictExports && !sig.exported) {
+    // WP29: a function another module's instantiation calls is `hidden`
+    // instead — in the final link, and exported from nothing.
+    if (sig.hidden) {
+      this.fn.linkage = "hidden";
+    } else if (this.opts.strictExports && !sig.exported) {
       this.fn.linkage = "internal";
     }
     if (optimize) {
@@ -592,6 +602,10 @@ export class Emitter {
     const params: string[] = [];
     let i = 0;
     while (i < sig.paramNames.length) {
+      if (sig.isCompileTime(i)) {
+        i = i + 1;
+        continue;
+      }
       const parts: string[] = [this.llvmAbi(sig.paramTypes[i], false)];
       if (optimize) {
         for (const attr of paramAttributes(this.table, sig.paramNames[i], sig.paramTypes[i], facts, false)) {
@@ -984,9 +998,15 @@ export class Emitter {
     const args = expr.children[1];
     const operands: string[] = [];
     // A non-exported callee takes and answers one slot per arm (WP15).
-    const calleePrivate = privateResultAbi(this, sig.exported);
+    const calleePrivate = privateResultAbi(this, sig.visibleOutside());
     let i = 0;
     while (i < args.children.length) {
+      // WP29: a function argument chose which function this call reaches, and
+      // that is the whole of it: there is no value to pass.
+      if (sig.isCompileTime(i)) {
+        i = i + 1;
+        continue;
+      }
       // WP17: an argument feeding a `Result` parameter the ABI packs is passed
       // as the word, exactly as a `return` of one is — or as the arms when the
       // callee uses the private ABI.

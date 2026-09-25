@@ -21,6 +21,7 @@ import { deferInstantiation, instantiateWritten } from "./generics";
 import {
   N_LIST,
   N_TYPE_ARRAY,
+  N_TYPE_FUNCTION,
   N_TYPE_NULL,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
@@ -183,6 +184,18 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
       return resolveNullableUnion(node, ctx);
     case N_TYPE_REF:
       return resolveReference(node, ctx);
+    case N_TYPE_FUNCTION:
+      // WP29: a parameter of a top-level function takes a function type
+      // without coming here (`collectParams`), because it names a callee the
+      // checker resolves at each call rather than a type. Anywhere a type is
+      // actually wanted, a function type would be a function *value*, and the
+      // language has none (docs/wp23-language-surface.md §6).
+      return ctx.errorType(
+        node,
+        `\`${ctx.textOf(node)}\` is a function type, which may only annotate a parameter of a top-level function: ` +
+          `a function is never a value in ${LANGUAGE}, so it cannot be the type of a field, a local, an element, ` +
+          "a return value or an alias"
+      );
     default:
       return ctx.errorType(node, `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`);
   }

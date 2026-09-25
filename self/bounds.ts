@@ -96,6 +96,7 @@
 import { CheckContext } from "./context";
 import {
   N_ARRAY,
+  N_ARROW,
   N_BINARY,
   N_BLOCK,
   N_BREAK,
@@ -1430,6 +1431,12 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
 const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
   const ctx = walk.ctx;
   const e = unwrapBoundsParens(expr);
+
+  // WP29: an arrow argument is a function of its own, proved when it was
+  // lifted; it runs in the callee, not here, and reads nothing of this body's.
+  if (e.kind === N_ARROW) {
+    return;
+  }
 
   if (e.kind === N_INDEX) {
     walkExpression(walk, state, e.children[0]);

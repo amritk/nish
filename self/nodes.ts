@@ -97,8 +97,21 @@ export const N_TYPE_ALIAS: i32 = 58; // `type X = T;`; children: name, the alias
 export const N_ENUM: i32 = 59;
 // One member; children: name, initializer (N_EMPTY when it is auto-numbered).
 export const N_ENUM_MEMBER: i32 = 60;
+// `(x: T, y: U) => R` as a type (WP29, wp23 §6): children: LIST of PARAM, the
+// return type. Legal only as the annotation of a parameter of a top-level
+// function, where it makes that function a template over its callee; the
+// checker refuses it everywhere else by name.
+export const N_TYPE_FUNCTION: i32 = 61;
+// An arrow written in an expression, `(x) => x * 2` or `x => x * 2` (WP29,
+// wp23 §6). Shaped exactly like N_FUNCTION so a signature collector and every
+// body walker read it by the same positions: children: name (always EMPTY),
+// LIST of PARAM (whose type is EMPTY when it was omitted), return type (EMPTY
+// when omitted), BLOCK or the concise body's expression, LIST of type
+// parameters (always empty). Legal only as the argument for a function-typed
+// parameter; it is never a value.
+export const N_ARROW: i32 = 62;
 
-export const N_COUNT: i32 = 61;
+export const N_COUNT: i32 = 63;
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0;
@@ -299,6 +312,10 @@ export const nodeName = (kind: i32): string => {
       return "ENUM";
     case N_ENUM_MEMBER:
       return "ENUM_MEMBER";
+    case N_TYPE_FUNCTION:
+      return "TYPE_FUNCTION";
+    case N_ARROW:
+      return "ARROW";
     default:
       return "?";
   }

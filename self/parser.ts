@@ -36,6 +36,7 @@ import {
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
   N_ARRAY,
+  N_ARROW,
   N_BIGINT,
   N_BINARY,
   N_BLOCK,
@@ -88,6 +89,7 @@ import {
   N_ENUM_MEMBER,
   N_TYPE_ALIAS,
   N_TYPE_ARRAY,
+  N_TYPE_FUNCTION,
   N_TYPE_NULL,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
@@ -1135,6 +1137,9 @@ export class Parser {
 
   parsePrimaryType(): Node {
     const start = this.start;
+    if (this.at(TOK_LPAREN) && this.startsFunctionType()) {
+      return this.parseFunctionType(start);
+    }
     if (this.at(TOK_LPAREN)) {
       // `(T | null)[]`: the parentheses are not decoration, because `T | null[]`
       // is `T | (null[])`. The node is kept rather than unwrapped so the tree
@@ -1170,6 +1175,45 @@ export class Parser {
       this.expectTypeArgumentEnd();
     }
     node.children.push(this.closeList(args));
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /**
+   * Whether the `(` about to be read opens a function type's parameter list,
+   * `(x: i32) => i32`, rather than a parenthesised type, `(T | null)[]`. The
+   * two share their first token, so a scratch lexer runs to the parenthesis
+   * that closes this one and looks at what follows, exactly as
+   * `startsArrowDeclaration` does: only a function type puts `=>` there.
+   */
+  startsFunctionType(): boolean {
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // `(`
+    let depth = 1;
+    while (depth > 0) {
+      scan.next();
+      if (scan.kind === TOK_END) return false;
+      if (scan.kind === TOK_LPAREN) depth = depth + 1;
+      else if (scan.kind === TOK_RPAREN) depth = depth - 1;
+    }
+    scan.next();
+    return scan.kind === TOK_ARROW;
+  }
+
+  /**
+   * `(x: T, y: U) => R` (WP29, wp23 §6). Parsed wherever a type may be
+   * written, because where one is *legal* — only on a parameter of a top-level
+   * function — is the checker's rule, and a refusal that names the position
+   * reads better than a syntax error about a colon. Every parameter keeps its
+   * name, as TypeScript requires, and its annotation, which the checker needs
+   * to know the callee's signature.
+   */
+  parseFunctionType(start: i32): Node {
+    const node = this.node(N_TYPE_FUNCTION, start, this.end);
+    node.children.push(this.parseParameters());
+    this.expect(TOK_ARROW);
+    node.children.push(this.parseType());
     node.end = this.previousEnd;
     return node;
   }
@@ -1554,6 +1598,10 @@ export class Parser {
     const start = this.start;
     switch (this.kind) {
       case TOK_IDENT: {
+        // `x => x * 2`: one token of lookahead is enough for the bare form.
+        if (this.peek() === TOK_ARROW) {
+          return this.parseArrowExpression(start);
+        }
         const node = this.node(N_IDENT, start, this.end);
         node.text = this.value;
         this.advance();
@@ -1600,6 +1648,9 @@ export class Parser {
       case TOK_LBRACE:
         return this.parseObjectLiteral(start);
       case TOK_LPAREN: {
+        if (this.startsArrowExpression()) {
+          return this.parseArrowExpression(start);
+        }
         this.advance();
         const node = this.node(N_PAREN, start, this.end);
         node.children.push(this.parseExpression());
@@ -1612,6 +1663,94 @@ export class Parser {
       default:
         return this.fail(`expected an expression, found \`${tokenName(this.kind)}\``);
     }
+  }
+
+  /**
+   * Whether the `(` about to be read opens an arrow's parameter list rather
+   * than a parenthesised expression (WP29). The scratch lexer of
+   * `startsArrowDeclaration` again, with one difference that expression
+   * position forces: after the closing parenthesis a `:` is not enough,
+   * because `c ? (a) : b` puts one there too. So a `:` has to be followed by
+   * tokens that can spell a type and then `=>` at the same depth; anything
+   * else makes it a parenthesised expression.
+   */
+  startsArrowExpression(): boolean {
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // `(`
+    let depth = 1;
+    while (depth > 0) {
+      scan.next();
+      if (scan.kind === TOK_END) return false;
+      if (scan.kind === TOK_LPAREN) depth = depth + 1;
+      else if (scan.kind === TOK_RPAREN) depth = depth - 1;
+    }
+    scan.next();
+    if (scan.kind === TOK_ARROW) return true;
+    if (scan.kind !== TOK_COLON) return false;
+    let nesting = 0;
+    while (true) {
+      scan.next();
+      const kind = scan.kind;
+      if (kind === TOK_ARROW && nesting === 0) return true;
+      if (kind === TOK_LPAREN || kind === TOK_LBRACKET || kind === TOK_LT) {
+        nesting = nesting + 1;
+      } else if (kind === TOK_RPAREN || kind === TOK_RBRACKET || kind === TOK_GT) {
+        nesting = nesting - 1;
+      } else if (kind === TOK_SHR) {
+        nesting = nesting - 2;
+      } else if (kind === TOK_USHR) {
+        nesting = nesting - 3;
+      } else if (kind === TOK_ARROW || kind === TOK_COLON || kind === TOK_COMMA) {
+        // Inside a nested function type's parameter list, where these belong.
+        if (nesting === 0) return false;
+      } else if (kind !== TOK_IDENT && kind !== TOK_NULL && kind !== TOK_PIPE) {
+        return false;
+      }
+      if (nesting < 0) return false;
+    }
+  }
+
+  /**
+   * An arrow in expression position, `(x) => x * 2`, `(x: i32): i32 => { ... }`
+   * or `x => x * 2` (WP29, wp23 §6), as the `N_ARROW` that `nodes.ts` shapes
+   * like an `N_FUNCTION`. A parameter's annotation and the return type may be
+   * omitted: the checker takes both from the function type of the parameter
+   * the arrow is the argument for, which is the only place an arrow is legal.
+   */
+  parseArrowExpression(start: i32): Node {
+    const node = this.node(N_ARROW, start, this.end);
+    node.children.push(this.empty());
+    const params = this.list();
+    if (this.at(TOK_IDENT)) {
+      const param = this.node(N_PARAM, this.start, this.end);
+      param.children.push(this.parseIdentifier());
+      param.children.push(this.empty());
+      param.end = this.previousEnd;
+      params.children.push(param);
+    } else {
+      this.expect(TOK_LPAREN);
+      while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
+        const param = this.node(N_PARAM, this.start, this.end);
+        param.children.push(this.parseIdentifier());
+        if (this.at(TOK_QUESTION)) {
+          this.report("optional parameters are not supported", this.start, this.end);
+          this.advance();
+        }
+        param.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty());
+        param.end = this.previousEnd;
+        params.children.push(param);
+        if (!this.eat(TOK_COMMA)) break;
+      }
+      this.expect(TOK_RPAREN);
+    }
+    node.children.push(this.closeList(params));
+    node.children.push(this.eat(TOK_COLON) ? this.parseType() : this.empty());
+    this.expect(TOK_ARROW);
+    node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression());
+    node.children.push(this.list());
+    node.end = this.previousEnd;
+    return node;
   }
 
   /**
