@@ -1,0 +1,23 @@
+{
+  "about": "Instructions each benchmark executes, whole process, under `valgrind --tool=cachegrind --cache-sim=no`, built with `--profile speed` and checks on. Sizes (`n` for bench/<name>.ts, `inner` for an AWFY port) are edited by hand; counts are written only by `node bench/run.mjs --instructions --update`, and a pull request that raises one says why (bench/README.md).",
+  "tolerance": 0.001,
+  "platform": "linux-x64",
+  "valgrind": "valgrind-3.22.0",
+  "commit": "4fed2b7",
+  "programs": {
+    "fib": { "n": 35, "instructions": 328600033 },
+    "nbody": { "n": 600000, "instructions": 340936265 },
+    "spectral": { "n": 800, "instructions": 320645332 },
+    "sieve": { "n": 1000000, "instructions": 272697167 },
+    "strbuild": { "n": 131072, "instructions": 53423544 },
+    "vec3": { "n": 6000000, "instructions": 300137071 },
+    "result": { "n": 40000000, "instructions": 340132277 },
+    "Permute": { "inner": 1000, "instructions": 286429789 },
+    "Queens": { "inner": 1000, "instructions": 229686492 },
+    "Towers": { "inner": 600, "instructions": 263067587 },
+    "List": { "inner": 1500, "instructions": 298271729 },
+    "Bounce": { "inner": 1500, "instructions": 183683616 },
+    "Mandelbrot": { "inner": 500, "instructions": 152510719 },
+    "Storage": { "inner": 1000, "instructions": 427258816 }
+  }
+}
