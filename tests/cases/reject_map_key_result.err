@@ -1,0 +1,1 @@
+cannot be the key type of `Map<Result<i32, string>, i32>`

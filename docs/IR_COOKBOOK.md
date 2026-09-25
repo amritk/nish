@@ -1108,6 +1108,273 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end par_alloc -->
 
+### `Map` and `Set`: one probe, copied into the module
+
+`Map` and `Set` are generic classes in `std/collections.ts`, loaded because the
+module names one, and that module writes no `.ll` of its own: every function
+of it this module reaches is defined here, `internal`, after the module's own
+code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
+`probeTable$i32` for the packed probe result. The key's hash is lowered in
+place — here `fmix32`, then 0 moved to 1 — and the loop reads `entryHashes`
+and `entryKeys` only after the bucket word's top eight bits match the hash's,
+comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
+never called: they are the two intrinsics `self/emit_map.ts` lowers per key
+type.
+
+<!-- cookbook:begin map_has -->
+```ts
+export const seen = (s: Set<i32>, x: i32): boolean => s.has(x);
+```
+
+```llvm
+%struct.Set$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [32 x i8] } { i64 31, [32 x i8] c"Map: a probe ran out of buckets\00" }, align 8
+
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
+declare void @nish_exit(i32 noundef) #3
+
+define noundef zeroext i1 @seen(%struct.Set$i32* noundef nonnull readonly align 8 dereferenceable(40) nocapture %s, i32 noundef %x) #0 {
+entry:
+  %0 = call i1 @nish.Set$i32.has(%struct.Set$i32* %s, i32 %x)
+  ret i1 %0
+}
+
+define internal noundef i32 @nish.homeBucket(i32 noundef %h, i32 noundef %mask) #1 {
+entry:
+  %0 = lshr i32 %h, 16
+  %1 = xor i32 %h, %0
+  %2 = and i32 %1, %mask
+  ret i32 %2
+}
+
+define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #1 {
+entry:
+  %0 = sext i32 %bucket to i64
+  %1 = shl i64 %0, 32
+  %2 = sext i32 %index to i64
+  %3 = or i64 %1, %2
+  ret i64 %3
+}
+
+define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #1 {
+entry:
+  %0 = sub nsw i32 0, 1
+  %1 = sext i32 %0 to i64
+  %2 = sext i32 %bucket to i64
+  %3 = shl i64 %2, 32
+  %4 = zext i32 %h to i64
+  %5 = or i64 %3, %4
+  %6 = sub nsw i64 %1, %5
+  ret i64 %6
+}
+
+define internal noundef i64 @nish.Set$i32.probe(%struct.Set$i32* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i32 noundef %key) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Set$i32, %struct.Set$i32* %this, i32 0, i32 1
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !5
+  %2 = getelementptr inbounds %struct.Set$i32, %struct.Set$i32* %this, i32 0, i32 2
+  %3 = load i32, i32* %2, align 4, !tbaa !6
+  %4 = getelementptr inbounds %struct.Set$i32, %struct.Set$i32* %this, i32 0, i32 5
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !7
+  %6 = getelementptr inbounds %struct.Set$i32, %struct.Set$i32* %this, i32 0, i32 4
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !8
+  %8 = call i64 @nish.probeTable$i32(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i32 %key)
+  ret i64 %8
+}
+
+define internal noundef zeroext i1 @nish.Set$i32.has(%struct.Set$i32* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i32 noundef %key) #0 {
+entry:
+  %0 = call i64 @nish.Set$i32.probe(%struct.Set$i32* %this, i32 %key)
+  %1 = icmp sge i64 %0, 0
+  ret i1 %1
+}
+
+define internal noundef i64 @nish.probeTable$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots, i32 noundef %mask, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %keys, i32 noundef %key) #0 {
+entry:
+  %h.addr = alloca i32, align 4
+  %fingerprint.addr = alloca i32, align 4
+  %bucket.addr = alloca i32, align 4
+  %word.addr = alloca i32, align 4
+  %at.addr = alloca i32, align 4
+  %0 = lshr i32 %key, 16
+  %1 = xor i32 %key, %0
+  %2 = mul i32 %1, -2048144789
+  %3 = lshr i32 %2, 13
+  %4 = xor i32 %2, %3
+  %5 = mul i32 %4, -1028477387
+  %6 = lshr i32 %5, 16
+  %7 = xor i32 %5, %6
+  %8 = icmp eq i32 %7, 0
+  %9 = select i1 %8, i32 1, i32 %7
+  store i32 %9, i32* %h.addr, align 4
+  %10 = load i32, i32* %h.addr, align 4
+  %11 = lshr i32 %10, 24
+  store i32 %11, i32* %fingerprint.addr, align 4
+  %12 = load i32, i32* %h.addr, align 4
+  %13 = call i32 @nish.homeBucket(i32 %12, i32 %mask)
+  store i32 %13, i32* %bucket.addr, align 4
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !12, !noalias !13, !tbaa !18
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
+  %19 = load i64, i64* %18, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !12, !noalias !13, !tbaa !18
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0
+  %23 = load i64, i64* %22, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2
+  %25 = load i8*, i8** %24, align 8, !alias.scope !12, !noalias !13, !tbaa !18
+  br label %while.cond
+
+while.cond:
+  %26 = load i32, i32* %bucket.addr, align 4
+  %27 = icmp sge i32 %26, 0
+  br i1 %27, label %land.rhs, label %land.end
+
+land.rhs:
+  %28 = load i32, i32* %bucket.addr, align 4
+  %29 = trunc i64 %15 to i32
+  %30 = icmp slt i32 %28, %29
+  br label %land.end
+
+land.end:
+  %31 = phi i1 [ false, %while.cond ], [ %30, %land.rhs ]
+  br i1 %31, label %while.body, label %while.end
+
+while.body:
+  %32 = load i32, i32* %bucket.addr, align 4
+  %33 = sext i32 %32 to i64
+  %34 = bitcast i8* %17 to i32*
+  %35 = getelementptr inbounds i32, i32* %34, i64 %33
+  %36 = load i32, i32* %35, align 4, !alias.scope !13, !noalias !12, !tbaa !20
+  store i32 %36, i32* %word.addr, align 4
+  %37 = load i32, i32* %word.addr, align 4
+  %38 = icmp eq i32 %37, 0
+  br i1 %38, label %if.then, label %if.end
+
+if.then:
+  %39 = load i32, i32* %bucket.addr, align 4
+  %40 = load i32, i32* %h.addr, align 4
+  %41 = tail call i64 @nish.absentAt(i32 %39, i32 %40)
+  ret i64 %41
+
+if.end:
+  %42 = load i32, i32* %word.addr, align 4
+  %43 = lshr i32 %42, 24
+  %44 = load i32, i32* %fingerprint.addr, align 4
+  %45 = icmp eq i32 %43, %44
+  br i1 %45, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %46 = load i32, i32* %word.addr, align 4
+  %47 = and i32 %46, 16777215
+  %48 = sub nsw i32 %47, 1
+  store i32 %48, i32* %at.addr, align 4
+  %49 = load i32, i32* %at.addr, align 4
+  %50 = icmp sge i32 %49, 0
+  br i1 %50, label %land.rhs.4, label %land.end.4
+
+land.rhs.4:
+  %51 = load i32, i32* %at.addr, align 4
+  %52 = trunc i64 %19 to i32
+  %53 = icmp slt i32 %51, %52
+  br label %land.end.4
+
+land.end.4:
+  %54 = phi i1 [ false, %if.then.1 ], [ %53, %land.rhs.4 ]
+  br i1 %54, label %land.rhs.3, label %land.end.3
+
+land.rhs.3:
+  %55 = load i32, i32* %at.addr, align 4
+  %56 = sext i32 %55 to i64
+  %57 = bitcast i8* %21 to i32*
+  %58 = getelementptr inbounds i32, i32* %57, i64 %56
+  %59 = load i32, i32* %58, align 4, !alias.scope !13, !noalias !12, !tbaa !20
+  %60 = load i32, i32* %h.addr, align 4
+  %61 = icmp eq i32 %59, %60
+  br label %land.end.3
+
+land.end.3:
+  %62 = phi i1 [ false, %land.end.4 ], [ %61, %land.rhs.3 ]
+  br i1 %62, label %land.rhs.2, label %land.end.2
+
+land.rhs.2:
+  %63 = load i32, i32* %at.addr, align 4
+  %64 = trunc i64 %23 to i32
+  %65 = icmp slt i32 %63, %64
+  br label %land.end.2
+
+land.end.2:
+  %66 = phi i1 [ false, %land.end.3 ], [ %65, %land.rhs.2 ]
+  br i1 %66, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %67 = load i32, i32* %at.addr, align 4
+  %68 = sext i32 %67 to i64
+  %69 = bitcast i8* %25 to i32*
+  %70 = getelementptr inbounds i32, i32* %69, i64 %68
+  %71 = load i32, i32* %70, align 4, !alias.scope !13, !noalias !12, !tbaa !20
+  %72 = icmp eq i32 %71, %key
+  br label %land.end.1
+
+land.end.1:
+  %73 = phi i1 [ false, %land.end.2 ], [ %72, %land.rhs.1 ]
+  br i1 %73, label %if.then.2, label %if.end.2
+
+if.then.2:
+  %74 = load i32, i32* %bucket.addr, align 4
+  %75 = load i32, i32* %at.addr, align 4
+  %76 = tail call i64 @nish.foundAt(i32 %74, i32 %75)
+  ret i64 %76
+
+if.end.2:
+  br label %if.end.1
+
+if.end.1:
+  %77 = load i32, i32* %bucket.addr, align 4
+  %78 = add nsw i32 %77, 1
+  %79 = and i32 %78, %mask
+  store i32 %79, i32* %bucket.addr, align 4
+  br label %while.cond
+
+while.end:
+  call void @nish_write(i8* bitcast ({ i64, [32 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { noreturn nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"Set$i32", !2, i64 0, !3, i64 8, !2, i64 16, !2, i64 20, !3, i64 24, !3, i64 32}
+!5 = !{!4, !3, i64 8}
+!6 = !{!4, !2, i64 16}
+!7 = !{!4, !3, i64 32}
+!8 = !{!4, !3, i64 24}
+!9 = !{!"nish array"}
+!10 = !{!"header", !9}
+!11 = !{!"elements", !9}
+!12 = !{!10}
+!13 = !{!11}
+!14 = !{!"header i64", !1, i64 0}
+!15 = !{!"header ptr", !1, i64 0}
+!16 = !{!"array header", !14, i64 0, !14, i64 8, !15, i64 16}
+!17 = !{!16, !14, i64 0}
+!18 = !{!16, !15, i64 16}
+!19 = !{!"element i32", !1, i64 0}
+!20 = !{!19, !19, i64 0}
+```
+<!-- cookbook:end map_has -->
+
 ## Types
 
 ### `i64` and the explicit conversions

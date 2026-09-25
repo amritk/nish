@@ -13,7 +13,13 @@ import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
-import { checkGenericCall, instantiateWritten, refuseParameterMember } from "./generics";
+import {
+  checkGenericCall,
+  instantiateWritten,
+  isCollectionStruct,
+  isCollectionTemplate,
+  refuseParameterMember,
+} from "./generics";
 import { assignInto, checkExpression } from "./expressions";
 import {
   N_ARRAY,
@@ -131,6 +137,9 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   if (info === null) {
     return T_ERROR;
   }
+  if (refuseCollectionMember(ctx, info, expr, false)) {
+    return T_ERROR; // WP32: only the JavaScript members of a `Map` or `Set`
+  }
   const field = info.field(expr.text);
   if (field === null) {
     const isMethod = info.method(expr.text) !== null || info.methodTemplate(expr.text) !== null;
@@ -181,6 +190,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   const info = structOf(ctx, receiver);
   if (info === null) {
     return T_ERROR;
+  }
+  if (refuseCollectionMember(ctx, info, access, true)) {
+    return T_ERROR; // WP32: only the JavaScript members of a `Map` or `Set`
   }
   const method = info.method(access.text); // own first, then the base chain: static dispatch
   if (method === null) {
@@ -255,7 +267,14 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const template = ctx.program.structTemplate(name);
   let info: StructInfo | null = null;
   if (template !== null) {
-    info = instantiateWritten(ctx, template, expr.children[1], callee);
+    // WP32: `const m: Map<string, i32> = new Map()` takes them from the
+    // annotation, as `tsc` does; anywhere else they are written out.
+    let written = expr.children[1];
+    const fromAnnotation = ctx.program.newTypeArgumentsOf(expr);
+    if (written.children.length === 0 && fromAnnotation !== null && isCollectionTemplate(template)) {
+      written = fromAnnotation;
+    }
+    info = instantiateWritten(ctx, template, written, callee);
     if (info === null) {
       return T_ERROR;
     }
@@ -279,6 +298,15 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   // An instantiation is named the way it was written, `new Box<i32>`, as its
   // methods are (`Box<i32>.set`); a plain class's display name is its own.
   const label = `new ${template !== null ? ctx.table.typeName(info.type) : name}`;
+  // WP32: a `Map` or `Set` starts empty; `tsc` takes an iterable of entries
+  // here, and a class of this language has one constructor and no optional
+  // parameter to spell that with.
+  if (template !== null && isCollectionTemplate(template) && args.children.length > 0) {
+    return ctx.errorType(
+      expr,
+      `\`${label}\` takes no arguments in this version: a \`Map\` or \`Set\` starts empty, so create it with \`${label}()\` and \`set\` or \`add\` each entry in a loop`
+    );
+  }
   const ctor = info.ctor;
   if (ctor !== null) {
     checkMethodArguments(ctx, expr, ctor, args, label, scope, true);
@@ -429,6 +457,17 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   if (info === null) {
     return T_ERROR;
   }
+  if (isCollectionStruct(info) && !ctx.program.isCollections()) {
+    if (target.text === "size") {
+      return ctx.errorType(
+        target,
+        `\`size\` of \`${ctx.table.typeName(info.type)}\` is read-only: it counts the entries, and \`set\`, \`add\`, \`delete\` and \`clear\` are what change it`
+      );
+    }
+    if (refuseCollectionMember(ctx, info, target, false)) {
+      return T_ERROR;
+    }
+  }
   const field = info.field(target.text);
   if (field === null) {
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
@@ -443,6 +482,58 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
     );
   }
   return assignInto(ctx, expr, scope, null, field.type, field.name, "field");
+};
+
+/**
+ * WP32: a member of the global `Map` or `Set` that a program may not name, in
+ * a module other than `std/collections.ts` (docs/wp32-map.md §4.2, §7).
+ * Answers true when it reported one. What a program sees is JavaScript's
+ * surface less what this version defers: `get` waits for its `V | undefined`,
+ * `keys()` and `values()` for `for...of`, and `entries` and `forEach` for
+ * destructuring and function values. Every other member is the table's own and
+ * is refused as if it did not exist, which under `tsc` it does not.
+ */
+const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, call: boolean): boolean => {
+  if (!isCollectionStruct(info) || ctx.program.isCollections()) {
+    return false;
+  }
+  const name = at.text;
+  const instance = info.instance;
+  const isMap = instance !== null && instance.template.sourceName === "Map";
+  const shown = ctx.table.typeName(info.type);
+  if (name === "size" || name === "has" || name === "delete" || name === "clear") {
+    return false;
+  }
+  if ((isMap && name === "set") || (!isMap && name === "add")) {
+    return false;
+  }
+  if (isMap && name === "get") {
+    ctx.errorAtProperty(
+      at,
+      `\`get\` on \`${shown}\` is not supported yet: its result is \`V | undefined\`, and this version cannot narrow one`
+    );
+    return true;
+  }
+  if (name === "keys" || name === "values") {
+    const spelled = call ? `${name}()` : name;
+    ctx.errorAtProperty(
+      at,
+      `\`${spelled}\` of \`${shown}\` can only be the iterable of a \`for...of\`: an iterator is not a value in this version, and iterating a \`Map\` or \`Set\` is not lowered yet`
+    );
+    return true;
+  }
+  if (name === "entries" || name === "forEach") {
+    ctx.errorAtProperty(
+      at,
+      `\`${name}\` is not available on \`${shown}\`: a \`Map\` or \`Set\` in this version has no \`entries\` or \`forEach\`, because there is no destructuring and a method cannot take a function`
+    );
+    return true;
+  }
+  ctx.errorAtProperty(
+    at,
+    `Unknown member \`${name}\` on \`${shown}\`: a \`Map\` has size, set, has, delete and clear, and a \`Set\` has size, add, has, delete and clear`
+  );
+  return true;
 };
 
 /**

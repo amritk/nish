@@ -75,6 +75,7 @@ import {
   privateResultAbi,
   unpackReturnedResult,
 } from "./emit_result";
+import { emitLibraryCopies, emitMapIntrinsic, libraryReach, mapIntrinsicOf } from "./emit_map";
 import { emitParallelRegion, isParallelRegionCall } from "./emit_parallel";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
@@ -121,7 +122,7 @@ import {
 } from "./nodes";
 import { Options } from "./options";
 
-import { CheckedProgram, FunctionSig, ROLE_CONSTRUCTOR, StructInfo } from "./program";
+import { CheckedProgram, FunctionSig, MAP_NONE, ROLE_CONSTRUCTOR, StructInfo } from "./program";
 import {
   ARENA_GLOBAL,
   ARENA_GLOBAL_TLS,
@@ -173,6 +174,11 @@ export class Emitter {
    * or `-1` for none. See `planTailCall`.
    */
   tailCallId: i32;
+  /**
+   * WP32: set while a copy of a `std/collections.ts` function is being emitted
+   * (`library` below): it is `internal` whatever its declaration says.
+   */
+  libraryCopy: boolean;
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[];
   /** Alloca slots of the locals of the function being emitted, by identity. */
@@ -188,8 +194,21 @@ export class Emitter {
   stringRefs: string[];
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null;
+  /**
+   * WP32: `std/collections.ts`, whose functions this module's code reaches are
+   * emitted into this module as `internal` copies (`self/emit_map.ts`), or
+   * `null` when the program never named `Map` or `Set`.
+   */
+  library: CheckedProgram | null;
 
-  constructor(unit: AnalysisUnit, table: TypeTable, opts: Options, runtime: RuntimeTable, facts: FactsTable) {
+  constructor(
+    unit: AnalysisUnit,
+    table: TypeTable,
+    opts: Options,
+    runtime: RuntimeTable,
+    facts: FactsTable,
+    library: AnalysisUnit | null
+  ) {
     this.program = unit.program;
     this.table = table;
     this.opts = opts;
@@ -211,6 +230,8 @@ export class Emitter {
     this.strings = new StringMap();
     this.stringRefs = [];
     this.debug = null;
+    this.library = library === null ? null : library.program;
+    this.libraryCopy = false;
     if (opts.debugInfo) {
       this.debug = new DebugInfo(this.module, this.program, table);
     }
@@ -256,6 +277,11 @@ export class Emitter {
     const entry = this.program.entryMain;
     if (entry !== null) {
       this.module.addFunction(this.emitEntryWrapper(entry));
+    }
+    // WP32: what this module's code reaches of `std/collections.ts`.
+    const library = this.library;
+    if (library !== null) {
+      emitLibraryCopies(this, library, libraryReach(this, library));
     }
     this.emitImportDeclarations();
     this.emitRuntimePrelude();
@@ -316,7 +342,9 @@ export class Emitter {
     // ABI). Every other function is `internal` unless --no-strict-exports.
     // WP29: a function another module's instantiation calls is `hidden`
     // instead — in the final link, and exported from nothing.
-    if (sig.hidden) {
+    if (this.libraryCopy) {
+      this.fn.linkage = "internal";
+    } else if (sig.hidden) {
       this.fn.linkage = "hidden";
     } else if (this.opts.strictExports && !sig.exported) {
       this.fn.linkage = "internal";
@@ -563,7 +591,13 @@ export class Emitter {
   }
 
   declareAll(sigs: FunctionSig[], seen: StringSet): void {
+    const library = this.library;
     for (const sig of sigs) {
+      // WP32: a function of `std/collections.ts` is never linked against. The
+      // ones this module reaches are defined in it, and the rest are not called.
+      if (library !== null && sig.definedIn(library.source)) {
+        continue;
+      }
       if (seen.add(sig.name)) {
         // WP29: a C function passed to another module's template is declared
         // there as C's, with no attribute this compiler cannot prove.
@@ -1024,6 +1058,10 @@ export class Emitter {
       operandValues.push(value);
       i = i + 1;
     }
+    // WP32: `hashKey` and `sameKey` are lowered in place, per key type.
+    if (mapIntrinsicOf(sig) !== MAP_NONE) {
+      return emitMapIntrinsic(this, sig, operandValues);
+    }
     // WP29 P1: inside a `parallelMapInto` or `parallelReduce` instance, the
     // call to the chunk loop is the one that runs on several threads.
     if (isParallelRegionCall(this.currentSig, sig)) {
@@ -1129,8 +1167,9 @@ export const emitProgram = (
   table: TypeTable,
   opts: Options,
   runtime: RuntimeTable,
-  facts: FactsTable
+  facts: FactsTable,
+  library: AnalysisUnit | null
 ): string => {
-  const emitter = new Emitter(unit, table, opts, runtime, facts);
+  const emitter = new Emitter(unit, table, opts, runtime, facts, library);
   return emitter.emitModule();
 };

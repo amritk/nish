@@ -34,7 +34,8 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 [Result and error handling](#result-and-error-handling) ·
 [Declarations](#declarations) ·
 [Statements](#statements) · [Expressions](#expressions) ·
-[Builtins](#builtins) · [Semantics decisions](#semantics-decisions) ·
+[Builtins](#builtins) · [`Map` and `Set`](#map-and-set) ·
+[Semantics decisions](#semantics-decisions) ·
 [Memory model](#memory-model) ·
 [Forbidden constructs](#forbidden-constructs-phase-0-validator) ·
 [Rejected by the checker](#rejected-by-the-checker) ·
@@ -3095,6 +3096,106 @@ the mark is still referenced is undefined behaviour (the memory is reused by
 the next allocation). A function that calls `Arena.release` or `Arena.reset`
 itself, or through a callee, never gets an automatic arena scope, so the
 compiler's own marks are never invalidated by user resets.
+
+### `Map` and `Set`
+
+The global `Map<K, V>` and `Set<T>` are JavaScript's: insertion-ordered, with
+keys compared by SameValueZero, so `-0` is `+0` and `NaN` is `NaN`. They need
+no import. They are generic classes written in Nish in
+[`std/collections.ts`](../std/collections.ts), which a module loads by naming
+`Map` or `Set` in a type or after `new`, and the layout and every decision
+below are [wp32-map.md](wp32-map.md)'s.
+
+```typescript
+export const main = (): i32 => {
+  const seen = new Set<string>();
+  const counts: Map<string, i32> = new Map();
+  seen.add("a").add("b").add("a");
+  counts.set("a", 1).set("b", 2);
+  counts.delete("b");
+  return seen.size + counts.size;   // 3
+};
+```
+
+- **The members are JavaScript's, less what this version defers.** A `Map` has
+  `size`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
+  `has`, `delete` and `clear`. `set` and `add` answer the receiver, so they
+  chain, and `delete` answers whether the key was there
+  (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
+  `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
+  `get` answers `V | undefined`, which lands in a later stage, and is refused
+  by name until then: `` `get` on `Map<string, i32>` is not supported yet ``
+  (`reject_map_get`). `keys()` and `values()` are only ever a `for...of`
+  iterable, and iterating is not lowered yet:
+  `` `keys()` of `Map<string, i32>` can only be the iterable of a `for...of` ``
+  (`reject_map_keys`, `reject_map_values_for_of`). There is no `entries` or
+  `forEach`, because there is no destructuring and a method cannot take a
+  function (`reject_map_entries`, `reject_map_foreach`). Everything else in the
+  class is the table's own and is refused as if it did not exist:
+  `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
+  `reject_map_internal_method`, `reject_set_set`).
+- **`new` takes no arguments**, because a class of this language has one
+  constructor and no optional parameter:
+  `` `new Map<string, i32>` takes no arguments in this version `` (`reject_map_new_args`,
+  `reject_set_new_args`). The type arguments are written out, except that a
+  declaration annotated with the type takes them from the annotation, as `tsc`
+  infers them there — `const m: Map<string, i32> = new Map()` and the same with
+  `let` (`tests/cases/map_annotated_new`); a bare `new Map()` is
+  `` `Map` is generic: it must be written with its type arguments `` (`reject_map_new_no_type_args`).
+- **A key is a string, a number of any width in either mode, `f32`, `f64`, a
+  `boolean`, an enum or a class instance**, the last by identity
+  (`tests/cases/map_key_str`, `map_key_i32`, `map_key_i64`, `map_key_u8`,
+  `map_key_u16`, `map_key_u32`, `map_key_u64`, `map_key_f64`, `map_key_f32`,
+  `map_key_bool`, `map_key_enum`, `map_key_class`). An interface, an array, a
+  nullable type and a `Result` are not keys:
+  `` `Point` cannot be the key type of `Map<Point, i32>`: a key is hashed and compared by value, or by identity for a class instance ``
+  (`reject_map_key_interface`, `reject_map_key_array`, `reject_map_key_nullable`,
+  `reject_map_key_result`, and for a `Set` element, `reject_set_key_interface`).
+  A float key is SameValueZero, and so is its hash: `-0` and `+0` are one key
+  and every `NaN` is one key, and `map_key_f64` prints under Node's own `Map`
+  what it prints compiled (`tests/differential/unmodified.js`).
+- **A value is anything but `void` and an interface**, whose record would be
+  copied into the table rather than shared:
+  `` `Point` cannot be the value type of `Map<string, Point>` ``
+  (`reject_map_value_interface`, `reject_map_value_void`).
+- **Every `set`, `add`, `has` and `delete` is one probe.** A bucket holds eight
+  bits of the key's hash beside the entry's index, and each entry keeps its
+  full hash, so a probe reads a key only when both match: 10000 lookups of
+  absent string keys make no key compare at all, and 10000 hits make exactly
+  10000 (`tests/cases/map_fingerprint_miss`, counted by `tests/run.js` through
+  `-Wl,--wrap=nish_str_eq`). A table grows by doubling at three quarters full
+  and never hashes a key again (`map_growth`); a deleted key leaves a
+  tombstone that later probes walk past, and setting it again appends a new
+  entry (`map_delete_reinsert`); and a table whose entries are mostly dead
+  compacts in place instead of growing (`map_compaction`). A table holds at
+  most 2^24 - 1 entries, Node's own limit: an insert at the cap first compacts
+  away dead entries, and when there are none it panics with
+  `Map maximum size exceeded` (or `Set …`) *(CLI only: the case takes 16 million
+  inserts)*.
+- **`std/collections.ts` writes no `.ll` of its own.** What a module uses of it
+  is emitted into that module, `internal`, after the module's own functions,
+  so a one-file program that names `Map` is still one module for
+  `-o <file.ll>` and every instance is inlined, specialised or dropped with
+  the rest of the module. Two modules that share one `Map<string, i32>` each
+  call their own copy of its methods (`tests/link/map_two_modules`). Under
+  `-g` each copy's subprogram names `std/collections.ts`
+  (`tests/cases/map_dbg`). The symbols are the package's
+  (`@nish.Map$str$i32.set`), and a map is filled and grown through a callee
+  and across loop arena scopes like any other object
+  (`tests/cases/map_arena_callee`).
+- **A module's own `Map` or `Set` wins in that module.** A module that
+  declares or imports a class, interface, alias or enum of either name gets no
+  implicit import, as the declaration shadows the global under `tsc`
+  (`tests/link/map_own_class`). A class name is program-wide, though, so a
+  program in which one module declares `Map` and another names the global is
+  refused at the declaration:
+  `` `Map` is declared here and main.ts uses the global `Map`; a class or interface name is program-wide, so one program cannot have both ``
+  (`tests/link/map_clash`, NL3030).
+- **Interop**: `--emit-header` declares an instance as an opaque struct,
+  `typedef struct nish_gen_Map_str_i32 nish_gen_Map_str_i32;`, so a C host can
+  hold one it was given and pass it back; `--emit-dts` and `--emit-napi` leave
+  a function that takes or returns one unbridged, with the comment they write
+  for a class.
 
 ## Semantics decisions
 

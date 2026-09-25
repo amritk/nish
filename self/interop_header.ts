@@ -37,6 +37,7 @@ import {
   tsSignature,
 } from "./interop_abi";
 import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program";
+import { isCollectionStruct } from "./generics";
 import { K_ARRAY, TypeTable } from "./types";
 
 /**
@@ -122,6 +123,16 @@ const structDefinitions = (compilation: Compilation): string[] => {
     const ifaces = info.implementsNames.length > 0 ? ` implements ${info.implementsNames.join(", ")}` : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
     lines.push("");
+    // WP32 (docs/wp32-map.md §8): a `Map` or `Set` is opaque. A C host may hold
+    // one it was given and hand it back, and nothing more: its fields are the
+    // library's private layout, which is free to change.
+    if (isCollectionStruct(info)) {
+      const opaque = cStructName(info.name);
+      lines.push(`/* ${table.typeName(info.type)}: opaque; hold it and pass it back, its layout is not part of the ABI */`);
+      lines.push(`typedef struct ${opaque} ${opaque};`);
+      i = i + 1;
+      continue;
+    }
     lines.push(`/* ${files[i]}: ${kind} ${info.name}${ifaces} */`);
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cStructName(info.name)} has no fields; it stays incomplete (pointers only). */`);
@@ -150,6 +161,10 @@ const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = [];
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
+      // An opaque `Map` or `Set` (WP32) contributes no field to describe.
+      if (isCollectionStruct(info)) {
+        continue;
+      }
       for (const f of info.fields) {
         out.push(f.type);
       }

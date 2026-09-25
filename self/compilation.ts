@@ -87,7 +87,7 @@ import {
   manifestVersion,
   nishExportEntry,
 } from "./manifest";
-import { isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
+import { COLLECTIONS_SPECIFIER, isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
 import {
   allocationWarning,
   arenaMessage,
@@ -225,14 +225,17 @@ export class ModuleUnit {
   }
 }
 
-/** One module's IR, with the stem its `.ll` file should be named after. */
+/** One module's IR, with the stem its `.ll` file should be named after and the module's name. */
 export class EmittedModule {
   stem: string;
   ir: string;
+  /** `ModuleUnit.name`: what `-o <file.ll>` lists when there is more than one. */
+  name: string;
 
-  constructor(stem: string, ir: string) {
+  constructor(stem: string, ir: string, name: string) {
     this.stem = stem;
     this.ir = ir;
+    this.name = name;
   }
 }
 
@@ -789,6 +792,10 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false; // pass 1 and module resolution ran during load
     }
+    this.rejectCollectionsClash();
+    if (this.sink.hasErrors()) {
+      return false;
+    }
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = [];
       for (const imp of unit.checker.program.imports) {
@@ -862,6 +869,52 @@ export class Compilation {
     this.reportArenaLoops();
     this.checkParallel();
     return !this.sink.hasErrors();
+  }
+
+  /**
+   * WP32 (docs/wp32-map.md §4.2): one module declares a `Map` or `Set` of its
+   * own and another names the global one. Each module's own is legal by itself
+   * — it shadows the global, as it does under `tsc` — but a class name is
+   * program-wide (NL3028), so the two classes would be one struct type and one
+   * set of method symbols. Refused at the declaration, naming the module that
+   * uses the global, once per declaring module and name.
+   */
+  rejectCollectionsClash(): void {
+    for (const user of this.modules) {
+      const at = user.checker.program.namesCollections;
+      if (at === null) {
+        continue;
+      }
+      for (const unit of this.modules) {
+        const program = unit.checker.program;
+        if (unit === user || program.isCollections()) {
+          continue;
+        }
+        this.reportCollectionClash(unit, "Map", user);
+        this.reportCollectionClash(unit, "Set", user);
+      }
+      return;
+    }
+  }
+
+  /** The refusal for one name, when `unit` declares it and `user` was given the global. */
+  reportCollectionClash(unit: ModuleUnit, name: string, user: ModuleUnit): void {
+    let imported = false;
+    for (const imp of user.checker.program.imports) {
+      if (imp.localName === name && imp.specifier === COLLECTIONS_SPECIFIER) {
+        imported = true;
+      }
+    }
+    const at = declarationNameOf(unit.checker.program, name);
+    if (!imported || at === null) {
+      return;
+    }
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `\`${name}\` is declared here and ${user.name} uses the global \`${name}\`; a class or interface name is program-wide, so one program cannot have both (rename this one)`
+    );
   }
 
   /**
@@ -1259,15 +1312,47 @@ export class Compilation {
     return facts;
   }
 
+  /**
+   * WP32: the index of `std/collections.ts` in `modules`, or -1 when no module
+   * named `Map` or `Set`. It is checked like any module and writes no `.ll`:
+   * what a module uses of it is emitted into that module (docs/wp32-map.md §4.1).
+   */
+  libraryIndex(): i32 {
+    let i = 0;
+    while (i < this.modules.length) {
+      if (this.modules[i].checker.program.isCollections()) {
+        return i;
+      }
+      i = i + 1;
+    }
+    return -1;
+  }
+
+  /** Whether `unit` writes a `.ll` of its own: every module but the collections library. */
+  writesOutput(unit: ModuleUnit): boolean {
+    return !unit.checker.program.isCollections();
+  }
+
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
     const facts = this.analyze();
     const units = this.analysisUnits;
     const stems = this.outputStems();
+    const library = this.libraryIndex();
     const out: EmittedModule[] = [];
     let i = 0;
-    while (i < this.modules.length) {
-      out.push(new EmittedModule(stems[i], emitProgram(units[i], this.table, this.opts, this.runtime, facts)));
+    let written = 0;
+    while (i < this.modules.length && i < units.length) {
+      const unit = this.modules[i];
+      if (this.writesOutput(unit)) {
+        let copies: AnalysisUnit | null = null;
+        if (library >= 0 && library < units.length) {
+          copies = units[library];
+        }
+        const ir = emitProgram(units[i], this.table, this.opts, this.runtime, facts, copies);
+        out.push(new EmittedModule(written < stems.length ? stems[written] : unit.name, ir, unit.name));
+        written = written + 1;
+      }
       i = i + 1;
     }
     return out;
@@ -1294,6 +1379,9 @@ export class Compilation {
   outputStems(): string[] {
     const counts = new StringMap();
     for (const unit of this.modules) {
+      if (!this.writesOutput(unit)) {
+        continue;
+      }
       const base = basenameWithout(unit.path, ".ts");
       counts.set(base, counts.get(base, 0) + 1);
     }
@@ -1301,6 +1389,9 @@ export class Compilation {
     const taken = new StringSet();
     const stems: string[] = [];
     for (const unit of this.modules) {
+      if (!this.writesOutput(unit)) {
+        continue;
+      }
       const base = basenameWithout(unit.path, ".ts");
       const stem = counts.get(base, 0) === 1 ? base : pathStem(root, unit.path);
       let free = stem;
@@ -1315,6 +1406,24 @@ export class Compilation {
     return stems;
   }
 }
+
+/** The name node of `program`'s own declaration of the type `name`, or `null` (WP32). */
+const declarationNameOf = (program: CheckedProgram, name: string): Node | null => {
+  const struct = program.struct(name);
+  if (struct !== null && struct.origin === program.source) {
+    return struct.decl.children[0];
+  }
+  const template = program.structTemplate(name);
+  if (template !== null && template.origin === program.source) {
+    return template.decl.children[0];
+  }
+  const alias = program.alias(name);
+  if (alias !== null) {
+    return alias.decl.children[0];
+  }
+  const declared = program.enumNamed(name);
+  return declared === null ? null : declared.decl.children[0];
+};
 
 /**
  * `path` relative to `root`, with every `.` and `..` segment dropped and the

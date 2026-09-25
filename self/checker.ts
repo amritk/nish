@@ -66,12 +66,14 @@ import {
   N_TEMPLATE_TEXT,
   N_ENUM,
   N_TYPE_ALIAS,
+  N_TYPE_REF,
   N_UNARY,
   N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes";
 import { StringSet } from "./map";
+import { COLLECTIONS_SPECIFIER } from "./std_modules";
 import {
   AliasInfo,
   CheckedProgram,
@@ -79,6 +81,7 @@ import {
   DeferredInstance,
   EnumInfo,
   FunctionSig,
+  ImportBinding,
   Instantiation,
   TemplateInfo,
   STRUCT_CLASS,
@@ -179,6 +182,8 @@ export class Checker {
         this.declareEnum(stmt);
       }
     }
+    // WP32: the global `Map` and `Set`, bound before any annotation is resolved.
+    this.importCollections();
 
     for (const stmt of this.program.file.children) {
       // Per declaration: stage0 wraps each of these in `sink.recover`, so one
@@ -234,6 +239,44 @@ export class Checker {
     }
     this.ctx.errored = false;
     this.qualifySymbols();
+  }
+
+  /**
+   * WP32: the implicit `import { Map, Set } from "nish/collections"`
+   * (docs/wp32-map.md §4.2).
+   *
+   * A module that names the global `Map` or `Set` — in a type or after `new` —
+   * is given a binding for it, synthesised here exactly as `collectImports`
+   * would have written it, so everything after this is the ordinary imported
+   * generic class (`bindStructTemplateImport`). A module that declares or
+   * imports a `Map` or `Set` of its own keeps its own, as it would under `tsc`,
+   * and one that names neither loads nothing, so every program that compiled
+   * before this compiles to the same bytes.
+   */
+  importCollections(): void {
+    if (this.program.isCollections()) {
+      return;
+    }
+    const names = new CollectionNames();
+    scanCollectionNames(this.program.file, names, this.program);
+    this.importCollection("Map", names.map);
+    this.importCollection("Set", names.set);
+  }
+
+  importCollection(name: string, at: Node | null): void {
+    if (at === null || this.nameTaken(name)) {
+      return;
+    }
+    for (const imp of this.program.imports) {
+      if (imp.localName === name) {
+        return;
+      }
+    }
+    this.program.imports.push(new ImportBinding(COLLECTIONS_SPECIFIER, name, name, at, at));
+    this.program.typeNames.add(name);
+    if (this.program.namesCollections === null) {
+      this.program.namesCollections = at;
+    }
   }
 
   /**
@@ -2175,4 +2218,57 @@ const checkShiftCount = (walk: PerfWalk, expr: Node): void => {
       `${count.value % width} and this shifts by that instead: mask the count yourself if that is intended, or ` +
       `shift a wider value — \`${expr.text}\` never shifts a value out of existence here`
   );
+};
+
+/** The first place a module names `Map` and `Set`, in a type or after `new` (WP32). */
+class CollectionNames {
+  map: Node | null;
+  set: Node | null;
+
+  constructor() {
+    this.map = null;
+    this.set = null;
+  }
+
+  note(name: string, at: Node): void {
+    if (name === "Map" && this.map === null) {
+      this.map = at;
+    } else if (name === "Set" && this.set === null) {
+      this.set = at;
+    }
+  }
+}
+
+/**
+ * Walk `node` for the names of the global collections, and record every
+ * `const m: Map<K, V> = new Map()` whose `new` takes its type arguments from
+ * the annotation (docs/wp32-map.md §7). One walk, because both are syntax: the
+ * import has to exist before pass 1 resolves the first annotation.
+ */
+const scanCollectionNames = (node: Node, names: CollectionNames, program: CheckedProgram): void => {
+  if (node.kind === N_TYPE_REF) {
+    names.note(node.text, node);
+  } else if (node.kind === N_NEW && node.children[0].kind === N_IDENT) {
+    names.note(node.children[0].text, node.children[0]);
+  } else if (node.kind === N_VAR_DECL) {
+    noteAnnotatedNew(node, program);
+  }
+  for (const child of node.children) {
+    scanCollectionNames(child, names, program);
+  }
+};
+
+/** `const m: Map<K, V> = new Map()`: the `new` names the annotation's class and writes no type arguments. */
+const noteAnnotatedNew = (decl: Node, program: CheckedProgram): void => {
+  const annotation = decl.children[1];
+  const init = decl.children[2];
+  if (annotation.kind !== N_TYPE_REF || init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
+    return;
+  }
+  const name = init.children[0].text;
+  if ((name !== "Map" && name !== "Set") || annotation.text !== name || init.children[1].children.length > 0) {
+    return;
+  }
+  program.newTypeArgumentIds.set(`${init.id}`, program.newTypeArguments.length);
+  program.newTypeArguments.push(annotation.children[0]);
 };
