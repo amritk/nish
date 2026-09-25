@@ -47,7 +47,7 @@
     },
     "self/generics.ts": {
       "NL9002": 1,
-      "NL9007": 13
+      "NL9007": 10
     },
     "self/ice.ts": {
       "NL9009": 1
@@ -66,7 +66,7 @@
       "NL9007": 4
     },
     "self/manifest.ts": {
-      "NL9007": 7,
+      "NL9007": 6,
       "NL9009": 2
     },
     "self/options.ts": {

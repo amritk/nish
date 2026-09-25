@@ -48,6 +48,16 @@
 //   maxIndex(i, n)   `i < n`, `n` a literal
 //   minLength(w, n)  `w.length >= n`, `n` a literal
 //
+// Guards and initialisers are not the only source. A checked access that
+// *ran* is one too: `a[i]` and `s.charCodeAt(i)` either branch to
+// `nish_panic_index`, which does not return, or continue with
+// `0 <= i < a.length`, so the walk records `nonNegative(i)` and `below(i, a)`
+// (or `minLength(a, n + 1)` for a literal `a[n]`) at the point the emitter
+// runs the check, and a repeat of the same index on the same holder is
+// proven. They are ordinary facts in the families above, so every rule below
+// takes them away exactly as it takes away a guard's; `recordPassedCheck`
+// holds the one argument that is theirs alone, about `a[i] = v`.
+//
 // `atMost` is what makes the *hoisted* length work, and it is there because
 // the advice everybody gives about bounds checks is to hoist one:
 // `const n = xs.length` records `n <= xs.length`, and a later `i < n` then
@@ -1236,19 +1246,63 @@ const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
 const callsNothing = (ctx: CheckContext, call: Node): boolean => isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call);
 
 /**
+ * What an access leaves behind on the path that continues past it: its check
+ * either passed or panicked, and `nish_panic_index` is `noreturn`, so from here
+ * on `0 <= i < holder.length` — or `holder.length > n` for a literal index. The
+ * facts go into the ordinary families, keyed on the ordinary holder, so every
+ * invalidation in the header takes them away exactly as it takes away the ones
+ * a guard wrote; nothing about them needs a rule of its own.
+ *
+ * A proven access has no check, and adds only what the state already entails.
+ * Under `--unchecked-indexing` there is no check to have passed at all, so
+ * nothing is recorded: an out-of-range access there proves nothing, and a
+ * fact drawn from one would fold a later `substring` clamp, which that flag
+ * leaves alone.
+ *
+ * `passes` is the caller's word that the check reads the array the holder
+ * still names once the access is over. Only `a[i] = v` can break that, and the
+ * caller says how.
+ */
+const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index: Node): void => {
+  if (walk.uncheckedIndexing) {
+    return;
+  }
+  const constant = literalValue(index);
+  if (constant >= 0) {
+    addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, constant + 1));
+    return;
+  }
+  const i = indexLocal(walk.ctx.program, index);
+  if (i === null) {
+    return;
+  }
+  addFact(state, new Fact(FACT_NON_NEGATIVE, i, null, 0));
+  addFact(state, new Fact(FACT_BELOW, i, holder, 0));
+};
+
+/**
  * Record the verdict for one access. A proof goes into the side table the
  * emitter reads; the absence of one inside a loop goes on the list the WP15 §8
  * walk reports from, but only for the shape the analysis could have proved —
  * a field receiver or a computed index was never a candidate, and the §8 bar
  * is that a warning names a rewrite rather than a limitation.
+ *
+ * It is called where the emitter runs the check, so the state it leaves is
+ * the one past the check, and `passes` says whether what the check passed on
+ * may be recorded there (`recordPassedCheck`). The proof is taken first, from
+ * the state before the check, because a check may not prove itself.
  */
-const judge = (walk: BoundsWalk, state: State, node: Node, receiver: Node, index: Node): void => {
+const judge = (walk: BoundsWalk, state: State, node: Node, receiver: Node, index: Node, passes: boolean): void => {
   const ctx = walk.ctx;
   const holder = holderOf(walk, receiver);
   if (holder === null) {
     return;
   }
-  if (proves(ctx, state, holder, index)) {
+  const proven = proves(ctx, state, holder, index);
+  if (passes) {
+    recordPassedCheck(walk, state, holder, index);
+  }
+  if (proven) {
     ctx.program.nodeProvenIndex[node.id] = true;
     return;
   }
@@ -1434,7 +1488,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
   if (e.kind === N_INDEX) {
     walkExpression(walk, state, e.children[0]);
     walkExpression(walk, state, e.children[1]);
-    judge(walk, state, e, e.children[0], e.children[1]);
+    judge(walk, state, e, e.children[0], e.children[1], true);
     return;
   }
 
@@ -1479,7 +1533,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
       }
     }
     if (isCharCodeAt(ctx, e)) {
-      judge(walk, state, e, callee.children[0], e.children[1].children[0]);
+      judge(walk, state, e, callee.children[0], e.children[1].children[0], true);
     }
     if (callsNothing(ctx, e)) {
       return;
@@ -1672,6 +1726,25 @@ const rebindsAccess = (walk: BoundsWalk, value: Node, target: Node): boolean => 
   return false;
 };
 
+/**
+ * Whether the check of `a[i] = value` reads the array `a` still names once
+ * the store is done, so that what the check passed on is a fact about `a`.
+ * The array is read before `value` and its length after it. For a local that
+ * is one array either way: `rebindsAccess` has already refused a `value` that
+ * reassigns it, and a callee cannot reach a caller's local. A path is
+ * different: a call in `value` can store `this.v = shorter` and leave the
+ * check passing on the array the path no longer names, so a path holder
+ * learns nothing from a store whose value calls anything.
+ */
+const storeReadsHolder = (walk: BoundsWalk, value: Node, target: Node): boolean => {
+  if (lengthHolder(walk.ctx, target.children[0]) !== null) {
+    return true;
+  }
+  const effects = new Effects();
+  collectEffects(walk.ctx, value, effects);
+  return !effects.calls;
+};
+
 /** Assignments and the short-circuit operators; every other binary is left then right. */
 const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   const ctx = walk.ctx;
@@ -1705,7 +1778,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (op !== "=") {
       // `a[i] op= v` checks, loads and only then evaluates `v`
       // (`emitElementAssignment`), so the check is judged before `v` runs.
-      judge(walk, state, target, target.children[0], target.children[1]);
+      judge(walk, state, target, target.children[0], target.children[1], true);
       walkExpression(walk, state, right);
     } else {
       // `a[i] = v` reads the array and the index, evaluates `v`, and only then
@@ -1717,7 +1790,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
       // stored through the old one.
       walkExpression(walk, state, right);
       if (!rebindsAccess(walk, right, target)) {
-        judge(walk, state, target, target.children[0], target.children[1]);
+        judge(walk, state, target, target.children[0], target.children[1], storeReadsHolder(walk, right, target));
       }
     }
     const stored = recordStoreType(ctx.program, ctx.table, target);

@@ -3548,6 +3548,168 @@ attributes #1 = { nounwind readonly }
 ```
 <!-- cookbook:end arr_bounds_path -->
 
+### A passed check proves the repeat
+
+A bounds check either panics or leaves `0 <= i < v.length` behind, because
+`nish_panic_index` never returns, so the checker records that fact on the path
+past the check and a second access with the same index on the same holder
+carries no check. `swap` has four accesses and two checks: the emitter checks
+`this.v[j]` (the value) before `this.v[i]` (the store), so the store is proven
+by the `tmp` read above it, and `this.v[j] = tmp` by the read of `this.v[j]`.
+The fact ends where a guard's would — at a call, a `push` or `pop`, a store to
+a field the path names, or a reassignment of the index or the root — and a
+store whose value calls anything teaches a path nothing, because its check
+passed on the array the path named before the call.
+
+<!-- cookbook:begin arr_repeat_check -->
+```ts
+class Perm {
+  v: i32[];
+  constructor(n: i32) {
+    this.v = new Array<i32>(n);
+  }
+
+  swap(i: i32, j: i32): void {
+    const tmp = this.v[i];
+    this.v[i] = this.v[j];
+    this.v[j] = tmp;
+  }
+}
+```
+
+```llvm
+%struct.Perm = type { %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %n) #0 {
+entry:
+  %0 = sext i32 %n to i64
+  %1 = call i8* @nish_alloc_struct(i64 24)
+  %2 = bitcast i8* %1 to %struct.nish_array*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
+  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4
+  %5 = mul i64 %0, 4
+  %6 = call i8* @nish_alloc_struct(i64 %5)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
+  %8 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  store %struct.nish_array* %2, %struct.nish_array** %8, align 8, !tbaa !9
+  ret void
+}
+
+define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, i32 noundef %j) #1 {
+entry:
+  %tmp.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !9
+  %2 = sext i32 %i to i64
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4
+  %5 = icmp ult i64 %2, %4
+  br i1 %5, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %2, i64 %4)
+  unreachable
+
+bounds.ok:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 %2
+  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3
+  store i32 %10, i32* %tmp.addr, align 4
+  %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !9
+  %13 = sext i32 %i to i64
+  %14 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %15 = load %struct.nish_array*, %struct.nish_array** %14, align 8, !tbaa !9
+  %16 = sext i32 %j to i64
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
+  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4
+  %19 = icmp ult i64 %16, %18
+  br i1 %19, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 %16, i64 %18)
+  unreachable
+
+bounds.ok.1:
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4
+  %22 = bitcast i8* %21 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 %16
+  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
+  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4
+  %27 = bitcast i8* %26 to i32*
+  %28 = getelementptr inbounds i32, i32* %27, i64 %13
+  store i32 %24, i32* %28, align 4, !alias.scope !4, !noalias !3
+  %29 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %30 = load %struct.nish_array*, %struct.nish_array** %29, align 8, !tbaa !9
+  %31 = sext i32 %j to i64
+  %32 = load i32, i32* %tmp.addr, align 4
+  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
+  %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4
+  %35 = bitcast i8* %34 to i32*
+  %36 = getelementptr inbounds i32, i32* %35, i64 %31
+  store i32 %32, i32* %36, align 4, !alias.scope !4, !noalias !3
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"ptr", !6, i64 0}
+!8 = !{!"Perm", !7, i64 0}
+!9 = !{!8, !7, i64 0}
+```
+<!-- cookbook:end arr_repeat_check -->
+
 ### A hoisted `toI32(s.length)`: the proof in both number modes
 
 Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can
