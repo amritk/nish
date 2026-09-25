@@ -32,10 +32,10 @@
  * `insertAt` are the pieces a fused lookup writes through, and they write
  * nothing but what their names say: `probe` writes no memory at all.
  *
- * A program sees only the JavaScript members (§7): `size`, `set`, `has`,
- * `delete` and `clear` on a `Map`, and `size`, `add`, `has`, `delete` and
- * `clear` on a `Set`. Everything else in this file is refused by name outside
- * it, as if it did not exist — which under `tsc` it does not.
+ * A program sees only the JavaScript members (§7), `size`, `get`, `set`/`add`,
+ * `has`, `delete` and `clear`, and `get` has no method here: its `V | undefined`
+ * never crosses a call, so the compiler lowers it to `probe` and, where found,
+ * `valueAt` (§3.2). The rest of this file is refused by name outside it.
  */
 
 /**

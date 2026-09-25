@@ -137,6 +137,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types";
+import { valueReaderOf } from "./emit_map";
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
@@ -672,6 +673,11 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       return use(USE_ESCAPE); // the constructed name, not an argument
     }
     if (parent.kind === N_BINARY) {
+      // WP32: `a ?? d` hands on whichever operand it answers, as a ternary does.
+      if (parent.text === "??") {
+        node = parent;
+        continue;
+      }
       // Assignment retains the right-hand side; every other operator consumes both operands.
       if (isAssignmentOperator(parent.text)) {
         if (parent.children[1] !== node) {
@@ -932,7 +938,11 @@ const classifyElementUse = (unit: AnalysisUnit, table: TypeTable, access: Node):
     if (parent === null) {
       return use(USE_READ);
     }
-    if (parent.kind === N_PAREN || (parent.kind === N_INDEX && parent.children[0] === node)) {
+    if (
+      parent.kind === N_PAREN ||
+      (parent.kind === N_INDEX && parent.children[0] === node) ||
+      (parent.kind === N_BINARY && parent.text === "??") // WP32: as a ternary's arm
+    ) {
       node = parent;
       continue;
     }
@@ -1196,6 +1206,12 @@ class FactCollector {
       const callee = program.nodeCallees[node.id];
       if (callee !== null) {
         this.facts.callees.add(callee.name);
+      }
+      // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
+      // finds the key, that table's `valueAt` (`checkMapGet`).
+      const reads: FunctionSig | null = callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null;
+      if (reads !== null) {
+        this.facts.callees.add(reads.name);
       }
     }
     const param = this.paramRef(node);

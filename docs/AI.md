@@ -113,10 +113,10 @@ rejects. This table is the highest-value part of the page.
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
 | `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
-| `a?.b`, `a ?? b` | forbidden | `if (a !== null)` first |
+| `a?.b`, `a ?? b` | forbidden, except `m.get(k) ?? d` | `if (a !== null)` first |
 | `x as T`, `<T>x`, `x!` | `Unsupported expression in Phase 1: AsExpression` | there are no casts; `implements` is the only widening |
 | `any`, `unknown` | forbidden | name the real type |
-| `undefined` | forbidden | `null`, with a `T \| null` type |
+| `undefined` | forbidden, except `x === undefined` on a `Map.get` result | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback stored or returned: `const cb = (n: i32) => n`, a field `cb: (n: i32) => i32` | `An arrow may only be written as the argument for a function-typed parameter` / `` … is a function type, which may only annotate a parameter of a top-level function `` | there are **no function values**; a callback the call names is a [function parameter](#function-parameters) |
 | `type Pair<T>` (a generic alias) | `` expected `=`, found `<` `` (a syntax error) | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
@@ -137,7 +137,8 @@ rejects. This table is the highest-value part of the page.
 | `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
-| `m.get(k)`, `for (const k of m.keys())`, `m.forEach(...)`, `new Map(entries)` | `` `get` on `Map<string, i32>` is not supported yet ``, and the other three refused by name | `Map` and `Set` exist, with `size`, `set` / `add`, `has`, `delete` and `clear` only — see [Map and Set](#map-and-set) |
+| `for (const k of m.keys())`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete` and `clear` only — see [Map and Set](#map-and-set) |
+| `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
 
 A worked pair. This is the single most common rejection:
@@ -352,7 +353,8 @@ export const main = (): i32 => {
 ```
 
 - Reading anything off an un-narrowed nullable is an error: narrow with
-  `!== null` first. `?.` and `??` are forbidden outright.
+  `!== null` first. `?.` is forbidden outright, and so is `??`, except after
+  `Map.get` (see [Map and Set](#map-and-set)).
 - Narrowing applies to a **local or parameter**, never a property path. `if
   (n.next !== null) n.next.v` is rejected — copy into a local first.
 - A narrowing ends at any assignment to the variable, and is dropped before a
@@ -1002,8 +1004,8 @@ export const main = (): i32 => {
 - `++` / `--` work on **numeric mutable locals only**, not fields or elements.
 - Compound assignment `+= -= *= /= %=` requires a numeric target (so `+=` never
   concatenates strings); the bitwise forms need an integer target.
-- **Forbidden**: `,` `??` `?.` `in` `instanceof` `typeof` `delete` `void expr`
-  `==` `!=` `**` unary `+`.
+- **Forbidden**: `,` `?.` `in` `instanceof` `typeof` `delete` `void expr`
+  `==` `!=` `**` unary `+`, and `??` on anything but a `Map.get` result.
 - Element access `a[i]` needs an array and a numeric index, and is
   bounds-checked (negative indices fail too). String-keyed access is forbidden.
   The check comes off where the compiler proves the index in range — a loop
@@ -1073,11 +1075,11 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 
 `Map<K, V>` and `Set<T>` are global, as in JavaScript: no import, insertion
 order, SameValueZero keys (`-0` is `+0`, `NaN` finds `NaN`). What they have is
-exactly `size` (a read-only `number`), `set(k, v)` / `add(x)` (both answer the
-receiver, so they chain), `has(k)`, `delete(k)` (answers whether it was there)
-and `clear()`. **There is no `get` yet, and no iteration**: `get`, `keys()`,
-`values()`, `entries` and `forEach` are refused by name, so keep a value you
-will need beside the key, or test membership with `has`.
+exactly `size` (a read-only `number`), `get(k)`, `set(k, v)` / `add(x)` (both
+answer the receiver, so they chain), `has(k)`, `delete(k)` (answers whether it
+was there) and `clear()`. **There is no iteration yet**: `keys()`, `values()`,
+`entries` and `forEach` are refused by name, so keep the keys you will walk in
+an array beside the map.
 
 ```ts nish:ok-body
 const seen = new Set<string>();
@@ -1096,6 +1098,35 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
   key; a value is anything but `void` or an interface.
 - A module that declares its own `Map` or `Set` keeps it, but then no other
   module of the program may name the global one.
+
+`m.get(k)` is `V | undefined`, as under `tsc`, and it is read in exactly one of
+three ways: a default with `??`, a `const` tested with `!== undefined` (or
+`=== undefined` and an early `return`), or a bare test. Each is one probe.
+
+```ts nish:ok-body
+const counts = new Map<string, i32>();
+for (const w of ["a", "b", "a"]) {
+  counts.set(w, (counts.get(w) ?? 0) + 1);
+}
+const a = counts.get("a");
+if (a !== undefined) {
+  console.log(`${a} ${counts.get("z") === undefined}`);   // 2 true
+}
+```
+
+- Anywhere else — a `let`, an argument, a `return`, a field or element, a
+  template hole, an arithmetic operand, the default of another `??`, a `const`
+  annotated `i32` — the maybe is refused with a message naming the place.
+  Default it with `??` first: `m.get(a) ?? (m.get(b) ?? 0)`.
+- The only spelling of the type is `const a: i32 | undefined = m.get(k)`.
+- `??` does not mix with `||` or `&&` without parentheses, and its default must
+  be the value type. For a `Map<K, Node | null>` it replaces a stored `null`
+  too, but the result is still `Node | null`.
+
+```ts nish:err-body NL2361
+const m = new Map<string, i32>();
+let v = m.get("a");
+```
 
 ## Memory
 
@@ -1158,8 +1189,9 @@ and return `Pair<A, B>`: an object literal `{ first, second }` at the return,
 exactly as above. It is for returning two values, not storing them — a struct
 kept in an array or a field wants named fields.
 
-**A map or a set** — neither exists. Use parallel arrays with a linear scan, or
-an array indexed by a small integer key, and write the lookup out.
+**A map or a set** — the global `Map` and `Set` ([Map and Set](#map-and-set)).
+Read a value with `m.get(k) ?? d`, and keep the keys in an array beside it when
+you need to walk them, since there is no iteration yet.
 
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,
@@ -1205,7 +1237,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    in an object-literal property or a method argument expecting a width?
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
-8. Did you use `throw`, `try`, `any`, `undefined`, `?.`, `??`, a cast, a
+8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside `Map.get`), `?.`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
 9. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round

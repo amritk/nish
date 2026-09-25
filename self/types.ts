@@ -115,6 +115,16 @@ export const K_RESULT: i32 = 16;
  * a discriminant is refused where arithmetic on an `i32` is not.
  */
 export const K_ENUM: i32 = 17;
+/**
+ * `V | undefined` (WP32, docs/wp32-map.md §3.2): what `Map.get` answers, a
+ * *maybe*. It is not `T | null`: a maybe covers every `V`, scalars included,
+ * so it is a found bit beside a payload rather than a pointer compared with
+ * `null`, and the pair is two SSA values that never reach memory. `refs[type]`
+ * is `V`. It exists only where a `get` result is bound, defaulted or tested,
+ * so nothing asks for its layout: `llvmType` answers `V`'s, which is the type
+ * of the payload half.
+ */
+export const K_MAYBE: i32 = 18;
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -334,6 +344,16 @@ export class TypeTable {
     return this.kinds[type] === K_NULLABLE ? this.refs[type] : type;
   }
 
+  /** WP32: `V | undefined`, the type of `m.get(k)`. */
+  maybeOf(value: i32): i32 {
+    return this.intern(K_MAYBE, value, "");
+  }
+
+  /** Whether `type` is a maybe; -1, a node with no recorded type, is not. */
+  isMaybe(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_MAYBE;
+  }
+
   // ---- `Result<T, E>` (WP16) ----------------------------------------------
 
   resultOf(ok: i32, err: i32, state: i32): i32 {
@@ -532,6 +552,8 @@ export class TypeTable {
         return "i32";
       case K_NULLABLE:
         return this.llvmType(this.refs[type]);
+      case K_MAYBE:
+        return this.llvmType(this.refs[type]); // the payload; the found bit is an `i1` beside it
       case K_RESULT:
         return `%struct.${this.resultStructName(type)}*`;
       default:
@@ -580,6 +602,8 @@ export class TypeTable {
         return this.names[type];
       case K_NULLABLE:
         return `${this.typeName(this.refs[type])} | null`;
+      case K_MAYBE:
+        return `${this.typeName(this.refs[type])} | undefined`;
       case K_RESULT:
         // The proof is not part of the name: a narrowed `Result` reads the
         // same in a diagnostic as the value it was narrowed from.

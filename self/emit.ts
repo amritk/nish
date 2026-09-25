@@ -75,7 +75,15 @@ import {
   privateResultAbi,
   unpackReturnedResult,
 } from "./emit_result";
-import { emitLibraryCopies, emitMapIntrinsic, libraryReach, mapIntrinsicOf } from "./emit_map";
+import {
+  emitLibraryCopies,
+  emitMapIntrinsic,
+  emitMaybeLocal,
+  libraryReach,
+  mapIntrinsicOf,
+  maybeLocalIndex,
+  MaybeParts,
+} from "./emit_map";
 import { emitParallelRegion, isParallelRegionCall } from "./emit_parallel";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
@@ -194,6 +202,12 @@ export class Emitter {
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[];
   slotNames: string[];
+  /**
+   * WP32: each maybe `const` of the function being emitted, and its found bit
+   * and value, which are SSA values rather than a slot (`self/emit_map.ts`).
+   */
+  maybeLocals: Local[];
+  maybeParts: MaybeParts[];
   /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
   paramObjectNames: string[];
   paramObjectValues: string[];
@@ -234,6 +248,8 @@ export class Emitter {
     this.loops = [];
     this.slotLocals = [];
     this.slotNames = [];
+    this.maybeLocals = [];
+    this.maybeParts = [];
     this.paramObjectNames = [];
     this.paramObjectValues = [];
     this.usedRuntime = new StringSet();
@@ -368,6 +384,8 @@ export class Emitter {
     }
     this.slotLocals = [];
     this.slotNames = [];
+    this.maybeLocals = [];
+    this.maybeParts = [];
     this.loops = [];
     this.current = facts;
     this.currentSig = sig;
@@ -968,6 +986,8 @@ export class Emitter {
       const local = this.program.nodeLocals[decl.id];
       if (local === null) {
         process.exit(internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json));
+      } else if (this.table.isMaybe(local.type)) {
+        emitMaybeLocal(this, local, decl); // WP32: two SSA values, no slot
       } else {
         const ty = this.llvm(local.type);
         const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type));
@@ -1079,6 +1099,10 @@ export class Emitter {
         // prologue unpacked it into, so the name lowers to that value.
         const object = this.paramObject(local.name);
         return object.length > 0 ? object : `%${local.name}`;
+      }
+      // WP32: a maybe `const` read by name is read where a test narrowed it to its value.
+      if (this.table.isMaybe(local.type)) {
+        return this.maybeParts[maybeLocalIndex(this, local)].value;
       }
       const ty = this.llvm(local.type);
       return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`);

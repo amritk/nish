@@ -13,7 +13,15 @@
 // can fail has to decide what to do next rather than being unwound past.
 
 import { LANGUAGE } from "./branding";
-import { checkCondition, checkExpression, clearNarrowingsAssignedIn, narrow } from "./expressions";
+import {
+  checkCondition,
+  checkExpression,
+  clearNarrowingsAssignedIn,
+  narrow,
+  resolveMaybeAnnotation,
+  WANT_MAYBE,
+} from "./expressions";
+import { isMaybeAnnotation } from "./validator";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { declaredOrigin, elementOrigin } from "./generics";
@@ -195,7 +203,13 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
     // The annotation is resolved first so that, when the initializer is
     // rejected, the variable is still declared with its declared type and
     // later statements do not report it as unknown.
-    const declared = annotation.kind === N_EMPTY ? -1 : resolveType(annotation, ctx);
+    // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
+    const declared =
+      annotation.kind === N_EMPTY
+        ? -1
+        : isMaybeAnnotation(annotation)
+          ? resolveMaybeAnnotation(ctx, annotation)
+          : resolveType(annotation, ctx);
     const initializer = decl.children[2];
     if (initializer.kind === N_EMPTY) {
       ctx.error(decl, `Variable \`${name}\` must be initialized`);
@@ -203,7 +217,15 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
       declareLocal(ctx, scope, decl, name, declared < 0 ? T_ERROR : declared, mutable, origin);
       continue;
     }
-    const initType = checkExpression(ctx, initializer, scope, declared);
+    // WP32: a `const` is one of the places a maybe may go, and a `let` is not,
+    // however it is annotated, so its initialiser is refused as NL2361.
+    let want = declared;
+    if (!mutable && declared < 0) {
+      want = WANT_MAYBE;
+    } else if (mutable && ctx.table.isMaybe(declared)) {
+      want = -1;
+    }
+    const initType = checkExpression(ctx, initializer, scope, want);
     let type = declared < 0 ? initType : declared;
     if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
       ctx.error(

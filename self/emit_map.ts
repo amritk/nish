@@ -36,8 +36,12 @@
 import { Emitter } from "./emit";
 import { FactsTable } from "./attributes";
 import { internalErrorFor } from "./ice";
+import { intrinsicType, unwrapParens } from "./emit_util";
 import { StringSet } from "./map";
+import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_STRING, N_TRUE, Node } from "./nodes";
 import { CheckedProgram, FunctionSig, MAP_HASH_KEY, MAP_NONE } from "./program";
+import { Local } from "./symbols";
+import { isUndefined } from "./validator";
 import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types";
 
 /** The `MAP_*` role of `sig`, or `MAP_NONE` when it is not an instantiation of one of the two intrinsics. */
@@ -283,4 +287,212 @@ export const emitLibraryCopies = (emitter: Emitter, library: CheckedProgram, sig
     debug.file = savedFile;
   }
   emitter.program = own;
+};
+
+// ---- `m.get(k)`: a maybe, as two SSA values --------------------------------------
+
+/**
+ * A maybe as the emitter holds it: two SSA values, the probe's found bit and
+ * the value. A `get` is its probe alone until the value is asked for
+ * (`loadMaybeValue`), which is emitted only where the found bit is set, since
+ * `valueAt` of an absent probe's index is not an entry; it keeps the map, the
+ * packed answer and `valueAt` for that. A `const` bound to a `get` has read
+ * its value already, under its own found test, and has no `read`.
+ */
+export class MaybeParts {
+  found: string;
+  value: string;
+  receiver: string;
+  packed: string;
+  read: FunctionSig | null;
+
+  constructor(found: string, value: string, receiver: string, packed: string, read: FunctionSig | null) {
+    this.found = found;
+    this.value = value;
+    this.receiver = receiver;
+    this.packed = packed;
+    this.read = read;
+  }
+}
+
+/**
+ * The `valueAt` of the table whose `probe` a `get` was checked as a call of:
+ * what reads the value the probe found. It is the one other function a `get`
+ * calls, and the whole-program facts count it as a callee there
+ * (`self/attributes.ts`), so it is copied into the module with `probe`.
+ */
+export const valueReaderOf = (probe: FunctionSig): FunctionSig | null => {
+  const owner = probe.owner;
+  return owner === null ? null : owner.method("valueAt");
+};
+
+/**
+ * Lower a maybe: `m.get(k)`, or a `const` bound to one, in parentheses or
+ * not. A `get` is one call of the instance's `probe`, whose packed answer is
+ * `>= 0` exactly when the key is there.
+ */
+export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
+  const expr = unwrapParens(maybe);
+  const local = emitter.program.nodeLocals[expr.id];
+  if (expr.kind === N_IDENT && local !== null) {
+    return emitter.maybeParts[maybeLocalIndex(emitter, local)];
+  }
+  const probe = emitter.program.nodeCallees[expr.id];
+  if (expr.kind !== N_CALL || probe === null) {
+    process.exit(internalErrorFor(`emitter: a maybe that is neither \`get\` nor a \`const\``, emitter.opts.json));
+  }
+  const fn = emitter.fn;
+  const receiver = emitter.emitExpression(expr.children[0].children[0]);
+  const key = emitter.emitExpression(expr.children[1].children[0]);
+  const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
+  const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
+  return new MaybeParts(fn.emitValue(`icmp sge i64 ${packed}, 0`), "", receiver, packed, valueReaderOf(probe));
+};
+
+/**
+ * The value of a maybe, emitted where its found bit is known to be set: a
+ * `const`'s is already loaded, and a `get`'s is `valueAt` of the entry the
+ * probe found, the index in the low half of its packed answer.
+ */
+export const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
+  const read = parts.read;
+  if (read === null) {
+    return parts.value;
+  }
+  const fn = emitter.fn;
+  const index = fn.emitValue(`trunc i64 ${parts.packed} to i32`);
+  const operands = `${emitter.llvm(read.paramTypes[0])} ${parts.receiver}, i32 ${index}`;
+  return fn.emitValue(`call ${emitter.llvm(read.returnType)} @${read.name}(${operands})`);
+};
+
+/**
+ * `const a = m.get(k)`: the probe, then `valueAt` on the found edge alone, and
+ * a `phi` that is `V`'s zero where there was nothing to read. Nothing reads the
+ * zero: the checker lets `a` be read as `V` only where a test proved it found.
+ * The pair is remembered for `a`'s uses and is never stored: `a` is a `const`,
+ * so each use sees the SSA values its declaration defined.
+ */
+export const emitMaybeLocal = (emitter: Emitter, local: Local, decl: Node): void => {
+  let parts = emitMaybe(emitter, decl.children[2]);
+  if (parts.read !== null) {
+    const fn = emitter.fn;
+    const entry = fn.currentBlock().label;
+    const found = fn.newBlock("get.found");
+    const done = fn.newBlock("get.end");
+    fn.emit(`br i1 ${parts.found}, label %${found.label}, label %${done.label}`);
+    fn.placeBlock(found);
+    const loaded = loadMaybeValue(emitter, parts);
+    const foundEdge = fn.currentBlock().label;
+    fn.emit(`br label %${done.label}`);
+    fn.placeBlock(done);
+    const type = emitter.table.refOf(local.type);
+    const value = fn.emitValue(`phi ${emitter.llvm(type)} [ ${loaded}, %${foundEdge} ], [ ${zeroOf(emitter, type)}, %${entry} ]`);
+    parts = new MaybeParts(parts.found, value, "", "", null);
+  }
+  emitter.maybeLocals.push(local);
+  emitter.maybeParts.push(parts);
+  const debug = emitter.debug;
+  if (debug !== null) {
+    // `-g`: the payload, which is what the variable reads as wherever a test
+    // lets it be read; where it was not found, a debugger shows `V`'s zero.
+    debug.describeValue(emitter.fn, local, emitter.table.refOf(local.type), parts.value, decl);
+  }
+};
+
+/** Where `local`'s pair is in the emitter's list; a narrowed read of a maybe `const` is its value. */
+export const maybeLocalIndex = (emitter: Emitter, local: Local): i32 => {
+  let i = emitter.maybeLocals.length - 1;
+  while (i >= 0) {
+    if (emitter.maybeLocals[i] === local) {
+      return i;
+    }
+    i = i - 1;
+  }
+  process.exit(internalErrorFor(`emitter: no value for the maybe \`${local.name}\``, emitter.opts.json));
+};
+
+/** The constant zero of `type`, for the value of a maybe that was not found. */
+const zeroOf = (emitter: Emitter, type: i32): string => {
+  if (isFloat(type)) {
+    return "0.000000e+00";
+  }
+  if (type === T_BOOL) {
+    return "false";
+  }
+  return emitter.table.isPointer(emitter.table.stripNull(type)) ? "null" : "0";
+};
+
+/**
+ * `a === undefined` / `a !== undefined`: the found bit, or its negation. A
+ * `get` tested this way is its probe alone; the value is never read.
+ */
+export const emitUndefinedTest = (emitter: Emitter, expr: Node): string => {
+  const operand = testsUndefined(emitter, expr.children[0]) ? expr.children[1] : expr.children[0];
+  const parts = emitMaybe(emitter, operand);
+  return expr.text === "!==" ? parts.found : emitter.fn.emitValue(`xor i1 ${parts.found}, true`);
+};
+
+/** Whether the `===` or `!==` `expr` tests a maybe against `undefined`. */
+export const isUndefinedTest = (emitter: Emitter, expr: Node): boolean =>
+  testsUndefined(emitter, expr.children[0]) || testsUndefined(emitter, expr.children[1]);
+
+/** The `undefined` side of a test, on which the checker records the maybe it is compared with. */
+const testsUndefined = (emitter: Emitter, operand: Node): boolean =>
+  isUndefined(operand) &&
+  emitter.program.nodeLocals[operand.id] === null &&
+  emitter.table.isMaybe(emitter.program.nodeTypes[operand.id]);
+
+/**
+ * `a ?? d`. The default runs only where the value is missing, as JavaScript's
+ * does, and for a nullable `V` where the value found is `null` as well. A
+ * `get` reads its value only on the found edge, so it is a branch; a `const`'s
+ * value is already loaded, so with a default that cannot have an effect it is
+ * one `select`.
+ */
+export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
+  const fn = emitter.fn;
+  const type = intrinsicType(emitter.program, expr); // before an interface coercion, which `emitExpression` adds
+  const ty = emitter.llvm(type);
+  const nullable = emitter.table.isNullable(type);
+  const parts = emitMaybe(emitter, expr.children[0]);
+  if (parts.read === null && isPlainOperand(emitter, expr.children[1])) {
+    const fallback = emitter.emitExpression(expr.children[1]);
+    const present = nullable ? fn.emitValue(`and i1 ${parts.found}, ${isSet(emitter, ty, parts.value)}`) : parts.found;
+    return fn.emitValue(`select i1 ${present}, ${ty} ${parts.value}, ${ty} ${fallback}`);
+  }
+  const found = fn.newBlock("nullish.value");
+  const missing = fn.newBlock("nullish.default");
+  const done = fn.newBlock("nullish.end");
+  fn.emit(`br i1 ${parts.found}, label %${found.label}, label %${missing.label}`);
+  fn.placeBlock(found);
+  const value = loadMaybeValue(emitter, parts);
+  const foundEdge = fn.currentBlock().label;
+  if (nullable) {
+    fn.emit(`br i1 ${isSet(emitter, ty, value)}, label %${done.label}, label %${missing.label}`);
+  } else {
+    fn.emit(`br label %${done.label}`);
+  }
+  fn.placeBlock(missing);
+  const fallback = emitter.emitExpression(expr.children[1]);
+  const missingEdge = fn.currentBlock().label;
+  fn.emit(`br label %${done.label}`);
+  fn.placeBlock(done);
+  return fn.emitValue(`phi ${ty} [ ${value}, %${foundEdge} ], [ ${fallback}, %${missingEdge} ]`);
+};
+
+/** Whether `value`, a found value of the nullable LLVM type `ty`, is not the stored `null` that `??` replaces too. */
+const isSet = (emitter: Emitter, ty: string, value: string): string => emitter.fn.emitValue(`icmp ne ${ty} ${value}, null`);
+
+/** A literal, a local or a module constant: evaluating it has no effect, so it may be evaluated whether or not it is used. */
+const isPlainOperand = (emitter: Emitter, expr: Node): boolean => {
+  if (expr.kind === N_IDENT) {
+    return emitter.program.nodeLocals[expr.id] !== null || emitter.program.nodeConstants[expr.id] !== null;
+  }
+  return (
+    expr.kind === N_NUMBER ||
+    expr.kind === N_STRING ||
+    expr.kind === N_TRUE ||
+    expr.kind === N_FALSE ||
+    expr.kind === N_NULL
+  );
 };

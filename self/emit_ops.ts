@@ -24,6 +24,7 @@ import { Emitter } from "./emit";
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit_control";
 import { emitElementAssignment } from "./emit_arrays";
 import { emitFieldAssignment } from "./emit_classes";
+import { emitCoalesce, emitUndefinedTest, isUndefinedTest } from "./emit_map";
 import { emitConcat, emitStrictEquality } from "./emit_strings";
 import { N_INDEX, N_MEMBER, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes";
 import { ConstInfo } from "./program";
@@ -335,7 +336,11 @@ export const emitBinary = (emitter: Emitter, expr: Node): string => {
     return emitLogical(emitter, expr);
   }
   if (op === "===" || op === "!==") {
-    return emitStrictEquality(emitter, expr);
+    // WP32: `a !== undefined` is a maybe's found bit.
+    return isUndefinedTest(emitter, expr) ? emitUndefinedTest(emitter, expr) : emitStrictEquality(emitter, expr);
+  }
+  if (op === "??") {
+    return emitCoalesce(emitter, expr); // WP32
   }
   const type = emitter.typeOf(expr.children[0]);
   if (op === "+" && type === T_STRING) {

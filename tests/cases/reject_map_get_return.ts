@@ -1,4 +1,4 @@
-// WP32: `get` answers `V | undefined`, which lands in the next stage; until then it is refused by name.
+// WP32: `get` answers `V | undefined`, which does not cross a call, so it cannot be returned.
 export const main = (): i32 => {
   const m = new Map<string, i32>();
   m.set("a", 1);

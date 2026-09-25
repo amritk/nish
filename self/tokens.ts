@@ -116,9 +116,10 @@ export const TOK_SHR_ASSIGN: i32 = 83;
 export const TOK_USHR_ASSIGN: i32 = 84;
 
 // Tokens the subset has no use for, lexed anyway. The lexer's job is to say
-// what is written, not what is allowed: `a ?? b` is one `??`, and the parser
-// refuses it by name ("`??` is forbidden; narrow with `!== null`") instead of
-// complaining about a stray `?`. It is also what lets the lexer be diffed
+// what is written, not what is allowed: `a ?? b` is one `??`, which the parser
+// builds as an operator and the checker refuses by name wherever its left
+// operand is not a `Map.get` result (WP32), instead of the parser complaining
+// about a stray `?`. It is also what lets the lexer be diffed
 // against the `typescript` scanner token for token (tests/lexer_oracle.js).
 export const TOK_EQ_LOOSE: i32 = 85; // ==
 export const TOK_NE_LOOSE: i32 = 86; // !=

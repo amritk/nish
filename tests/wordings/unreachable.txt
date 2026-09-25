@@ -19,6 +19,7 @@ NL2001  retired: the overload/override rule the inheritance work removed
 NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
 NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal WP18 G7 replaced; a template is imported and instantiated now (tests/link/generic_import)
 NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by WP18 G7 (tests/link/generic_import, tests/link/package_generic_import)
+NL2357  retired: `get` refused as "not supported yet" until its `V | undefined` landed (WP32 S3); each place that refuses a maybe has its own code now, NL2361-NL2369
 NL2294  retired: `a constrained type parameter is not supported yet`, the refusal WP18 G6 replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
@@ -77,7 +78,6 @@ NL1040  retired at R6: stage1's parser refuses reject_comma_expression before th
 NL1044  retired at R6: stage1's parser refuses reject_generator before the rule is stated
 NL1046  retired at R6: stage1's parser refuses reject_labeled_statement before the rule is stated
 NL1047  retired at R6: stage1's parser refuses reject_loose_equality, reject_loose_inequality before the rule is stated
-NL1048  retired at R6: stage1's parser refuses reject_nullish before the rule is stated
 NL1049  retired at R6: stage1's parser refuses reject_optional_chain before the rule is stated
 NL1050  retired at R6: stage1's parser refuses reject_regex before the rule is stated
 NL1051  retired at R6: stage1's parser refuses reject_as_any before the rule is stated
