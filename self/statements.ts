@@ -207,7 +207,7 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
     const declared =
       annotation.kind === N_EMPTY
         ? -1
-        : !mutable && isMaybeAnnotation(annotation)
+        : isMaybeAnnotation(annotation)
           ? resolveMaybeAnnotation(ctx, annotation)
           : resolveType(annotation, ctx);
     const initializer = decl.children[2];
@@ -217,8 +217,15 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
       declareLocal(ctx, scope, decl, name, declared < 0 ? T_ERROR : declared, mutable, origin);
       continue;
     }
-    // WP32: an unannotated `const` is one of the places a maybe may go.
-    const initType = checkExpression(ctx, initializer, scope, declared < 0 && !mutable ? WANT_MAYBE : declared);
+    // WP32: a `const` is one of the places a maybe may go, and a `let` is not,
+    // however it is annotated, so its initialiser is refused as NL2361.
+    let want = declared;
+    if (!mutable && declared < 0) {
+      want = WANT_MAYBE;
+    } else if (mutable && ctx.table.isMaybe(declared)) {
+      want = -1;
+    }
+    const initType = checkExpression(ctx, initializer, scope, want);
     let type = declared < 0 ? initType : declared;
     if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
       ctx.error(

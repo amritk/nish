@@ -1,1 +1,1 @@
-Union types other than `T | null` are forbidden in Nish (values have one fixed layout)
+`m.get("a")` is `i32 | undefined` and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`

@@ -594,6 +594,19 @@ export class DebugInfo {
     return this.module.addMetadata(`!DILocation(line: ${line}, column: ${column}, scope: ${this.subprogram})`);
   }
 
+  /**
+   * `llvm.dbg.value` for a local that is an SSA value rather than a slot: a
+   * `const` bound to `Map.get` (WP32), described by its payload `value` of
+   * type `type`, which is what a narrowed read of it is.
+   */
+  describeValue(fn: IRFunction, local: Local, type: i32, value: string, node: Node): void {
+    this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)");
+    const variable = this.module.addMetadata(
+      `!DILocalVariable(name: ${quote(local.name)}, scope: ${this.subprogram}, file: ${this.file}, line: ${this.lineOf(this.source, node)}, type: ${this.typeRef(type)})`
+    );
+    fn.emit(`call void @llvm.dbg.value(metadata ${this.table.llvmType(type)} ${value}, metadata ${variable}, metadata !DIExpression())`);
+  }
+
   /** `llvm.dbg.declare` for a `let`/`const` slot, at the current location. */
   declareLocal(fn: IRFunction, local: Local, slot: string, node: Node): void {
     this.module.addDeclaration("declare void @llvm.dbg.declare(metadata, metadata, metadata)");

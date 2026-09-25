@@ -369,8 +369,8 @@ export const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
  * The pair is remembered for `a`'s uses and is never stored: `a` is a `const`,
  * so each use sees the SSA values its declaration defined.
  */
-export const emitMaybeLocal = (emitter: Emitter, local: Local, init: Node): void => {
-  let parts = emitMaybe(emitter, init);
+export const emitMaybeLocal = (emitter: Emitter, local: Local, decl: Node): void => {
+  let parts = emitMaybe(emitter, decl.children[2]);
   if (parts.read !== null) {
     const fn = emitter.fn;
     const entry = fn.currentBlock().label;
@@ -388,6 +388,12 @@ export const emitMaybeLocal = (emitter: Emitter, local: Local, init: Node): void
   }
   emitter.maybeLocals.push(local);
   emitter.maybeParts.push(parts);
+  const debug = emitter.debug;
+  if (debug !== null) {
+    // `-g`: the payload, which is what the variable reads as wherever a test
+    // lets it be read; where it was not found, a debugger shows `V`'s zero.
+    debug.describeValue(emitter.fn, local, emitter.table.refOf(local.type), parts.value, decl);
+  }
 };
 
 /** Where `local`'s pair is in the emitter's list; a narrowed read of a maybe `const` is its value. */

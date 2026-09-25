@@ -987,7 +987,7 @@ export class Emitter {
       if (local === null) {
         process.exit(internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json));
       } else if (this.table.isMaybe(local.type)) {
-        emitMaybeLocal(this, local, decl.children[2]); // WP32: two SSA values, no slot
+        emitMaybeLocal(this, local, decl); // WP32: two SSA values, no slot
       } else {
         const ty = this.llvm(local.type);
         const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type));

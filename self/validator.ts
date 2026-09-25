@@ -18,7 +18,6 @@ import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
 import { unwrapParens } from "./emit_util";
 import {
-  FLAG_CONST,
   N_BIGINT,
   N_BINARY,
   N_CALL,
@@ -229,14 +228,12 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       break;
     case N_VAR:
       // WP32: `const a: V | undefined = m.get(k)` is the one place the maybe
-      // type is spelled. `V` itself is still swept.
-      if ((node.flags & FLAG_CONST) !== 0) {
-        for (const decl of node.children[0].children) {
-          visitDeclaration(ctx, decl, inTypePosition);
-        }
-        return;
+      // type is spelled, and `V` itself is still swept. On a `let` the
+      // checker refuses it, with the rewrite the unannotated `let` gets.
+      for (const decl of node.children[0].children) {
+        visitDeclaration(ctx, decl, inTypePosition);
       }
-      break;
+      return;
     case N_MODULE_CONST:
       refuseUndefinedIn(ctx, node);
       break;
@@ -287,12 +284,12 @@ export const isMaybeAnnotation = (annotation: Node): boolean => {
 };
 
 /**
- * A `const` declaration annotated with the maybe type whose initialiser is a
- * call of a member named `get` (docs/wp32-map.md §3.2: the maybe type is
- * spelled only as the annotation of a `const` initialised directly from
- * `get`). Whether the receiver is a `Map`, and the annotation its value type,
- * is the checker's to say. Every other `T | undefined` is refused below as the
- * union it is.
+ * A declaration annotated with the maybe type whose initialiser is a call of
+ * a member named `get` (docs/wp32-map.md §3.2: the maybe type is spelled only
+ * as the annotation of a `const` initialised directly from `get`). Whether the
+ * receiver is a `Map`, the annotation its value type and the declaration a
+ * `const` is the checker's to say. Every other `T | undefined` is refused
+ * below as the union it is.
  */
 const isMaybeDeclaration = (decl: Node): boolean => {
   const init = unwrapParens(decl.children[2]);

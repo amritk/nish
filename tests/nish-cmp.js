@@ -175,6 +175,16 @@ const DECLARED = [
     why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
   },
   {
+    program: "tests/cases/dbg_map_get.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_get_value_widths.ts",
+    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
+    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
+  },
+  {
     program: "docs/cookbook/map_get.ts",
     changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
     why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",

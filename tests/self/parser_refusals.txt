@@ -140,6 +140,8 @@ reject_multi_forbidden	expected `;`, found `IDENT`
 reject_namespace	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_namespace_import	expected `{`, found `*`
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
+reject_nullish_mixed_chain_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
+reject_nullish_mixed_chain_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_object_spread	an object literal key must be a plain identifier
 reject_op_exponent	expected `;`, found `**`

@@ -3360,8 +3360,9 @@ export const main = (): i32 => {
     `V | undefined` or `undefined | V`, and `Node | null | undefined` for a
     nullable `V` (a scalar is no more nullable here than anywhere,
     `reject_map_get_nullable_scalar`), and only as the annotation of a `const`
-    initialised from a call of `get`; anywhere else it is the union it looks like
-    (`reject_map_get_let_annotated`, `reject_union_undefined`), and
+    initialised from a call of `get`. On a `let` initialised from `get` it is
+    refused as the unannotated `let` is (NL2361, `reject_map_get_let_annotated`),
+    and anywhere else it is the union it looks like (`reject_union_undefined`), and
     `undefined` as a value is refused as it always was
     (`reject_undefined_value`, and in a module constant, which never holds a
     `get` result, `reject_map_get_undefined_module_const`).
@@ -3381,7 +3382,9 @@ export const main = (): i32 => {
     that bind as tightly as `|`, left associative (`tests/parser/nullish`). It
     does not mix with `||` or `&&` without parentheses, as `tsc` reports
     TS5076: `` `||` and `??` cannot be mixed without parentheses `` is a
-    syntax error (`reject_nullish_mixed_or`, `reject_nullish_mixed_and`). `d`
+    syntax error (`reject_nullish_mixed_or`, `reject_nullish_mixed_and`),
+    reported once however often an expression mixes them
+    (`reject_nullish_mixed_chain_or`, `reject_nullish_mixed_chain_and`). `d`
     runs only when the value is missing, and it has type `V`, as does the
     whole expression:
     `` The right operand of `??` stands in for a missing value, so it must be `i32` ``
@@ -3400,7 +3403,7 @@ export const main = (): i32 => {
 
     | Place | Message after `` `m.get("a")` is `i32 \| undefined` `` | Case |
     | --- | --- | --- |
-    | a `let`, or an assignment to one | `` and cannot be held in a `let` `` | `reject_map_get_let`, `reject_map_get_assign_let` (NL2361) |
+    | a `let`, or an assignment to one | `` and cannot be held in a `let` `` | `reject_map_get_let`, `reject_map_get_assign_let`, `reject_map_get_let_annotated` (NL2361) |
     | an argument of a function, method, constructor or builtin | `and cannot be passed as an argument` | `reject_map_get_argument`, `_argument_method`, `_argument_constructor`, `_argument_builtin` (NL2362) |
     | a `return`, or a concise arrow body | `and cannot be returned` | `reject_map_get_return`, `reject_map_get_const_read` (NL2363) |
     | a field, or an object literal's | `and cannot be stored in a field` | `reject_map_get_field`, `reject_map_get_object_field` (NL2364) |
@@ -3429,8 +3432,10 @@ export const main = (): i32 => {
     wherever the `??` goes, as a ternary's arm does, so an object made there
     and stored in the map is allocated in the arena (`map_get_default_escapes`).
     Each value width is a golden: `map_get_value_i32`, `map_get_value_f64`,
-    `map_get_value_bool`, `map_get_value_string`, and a class in
-    `map_get_pointer_value`. The `number`-mode cases print under Node's own
+    `map_get_value_bool`, `map_get_value_string`, an enum, `i64`, `u64` and
+    `f32` in `map_get_value_widths`, and a class in `map_get_pointer_value`.
+    Under `-g` a `const` bound to `get` is described by `llvm.dbg.value` of
+    its payload, since it has no slot (`dbg_map_get`). The `number`-mode cases print under Node's own
     `Map` what they print compiled (`tests/differential/unmodified.js`).
 - **A module's own `Map` or `Set` wins in that module.** A module that
   declares or imports a class, interface, alias or enum of either name gets no

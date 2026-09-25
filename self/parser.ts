@@ -1510,21 +1510,18 @@ export class Parser {
     const start = this.start;
     let left = this.parseBinary(1);
     if (!this.at(TOK_QUESTION_QUESTION)) return left;
-    if (left.kind === N_BINARY && (left.text === "||" || left.text === "&&")) {
+    // One report per expression, however many times it mixes, and every
+    // operand read on, whichever of the three operators joins it.
+    let mixed = left.kind === N_BINARY && (left.text === "||" || left.text === "&&");
+    if (mixed) {
       this.reportMixedCoalesce(left.text);
     }
-    while (this.at(TOK_QUESTION_QUESTION)) {
-      this.advance();
-      const right = this.parseBinary(binaryPrecedence(TOK_PIPE));
-      const node = this.node(N_BINARY, start, right.end);
-      node.text = "??";
-      node.children.push(left);
-      node.children.push(right);
-      left = node;
-    }
-    while (this.at(TOK_OR_OR) || this.at(TOK_AND_AND)) {
+    while (this.at(TOK_QUESTION_QUESTION) || this.at(TOK_OR_OR) || this.at(TOK_AND_AND)) {
       const operator = tokenName(this.kind);
-      this.reportMixedCoalesce(operator);
+      if (operator !== "??" && !mixed) {
+        this.reportMixedCoalesce(operator);
+        mixed = true;
+      }
       this.advance();
       const right = this.parseBinary(binaryPrecedence(TOK_PIPE));
       const node = this.node(N_BINARY, start, right.end);
