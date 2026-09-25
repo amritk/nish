@@ -2351,7 +2351,9 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   // Without it `opt -O3` reloaded `this.v` and its length after `this.v[i] = ...`
   // in AWFY Permute's swap and checked `j` a second time: three checks, two field
   // loads, two length loads. With it the swap keeps one of each load, and the
-  // repeat of `j`'s check folds into the first against the same length. The field
+  // repeat of `j`'s check folds into the first against the same length, leaving
+  // exactly two: `i`'s and `j`'s, which must stay on (a swap with none passes
+  // nothing it should). The field
   // load is the one `load ptr` that carries `!tbaa` and no alias scope (elements
   // carry both, header fields only the scope); the length is the header's `load i64`.
   const reloadLl = path.join(buildDir, "arr_field_reload.ll");
@@ -2362,12 +2364,12 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     const lengthLoads = body.match(/= load i64, ptr %\w+, align 8, !alias\.scope/g) ?? [];
     const checks = body.match(/call void @nish_panic_index\(/g) ?? [];
     check(
-      "arr_field_reload: opt -O3 loads the field and its length once in the swap, and checks at most twice",
+      "arr_field_reload: opt -O3 loads the field and its length once in the swap, and keeps exactly two checks",
       o.status === 0 &&
         body !== "" &&
         fieldLoads.length === 1 &&
         lengthLoads.length === 1 &&
-        checks.length <= 2,
+        checks.length === 2,
       o.status === 0
         ? `field loads ${fieldLoads.length}, length loads ${lengthLoads.length}, checks ${checks.length}\n${body}`
         : String(o.stderr)
