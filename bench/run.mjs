@@ -315,6 +315,28 @@ function peakRssKb(exe, args = []) {
   return r.status === 0 && /^\d+$/.test(m) ? Number(m) : null;
 }
 
+/**
+ * `exe args` run `--warmup` times and then `--runs` times (once under
+ * `--validate`): { min, median } of the timed runs in ms, the peak RSS of one
+ * more run (null under `--validate`), and the last run's stdout.
+ */
+const timeRuns = (exe, args = []) => {
+  const times = [];
+  let stdout = "";
+  const total = opts.validate ? 1 : opts.warmup + opts.runs;
+  for (let i = 0; i < total; i++) {
+    const r = timeOnce(exe, args);
+    stdout = r.stdout;
+    if (i >= opts.warmup || opts.validate) times.push(r.ms);
+  }
+  return {
+    min: Math.min(...times),
+    median: median(times),
+    rss: opts.validate ? null : peakRssKb(exe, args),
+    stdout,
+  };
+};
+
 /** Token-wise comparison; numbers agree when within 1e-9 relative (or 1e-12 absolute). */
 function sameOutput(a, b) {
   const ta = a.trim().split(/\s+/);
@@ -607,25 +629,8 @@ const runParallel = () => {
     const args = [path.relative(root, ts), "--link", path.relative(root, exe), "--profile", "speed"];
     run(nishc.cmd, [...nishc.prefix, ...args], bench.name);
     process.stderr.write(" ok; running");
-    const modes = {};
-    for (const mode of ["seq", "par"]) {
-      const times = [];
-      let stdout = "";
-      const total = opts.validate ? 1 : opts.warmup + opts.runs;
-      for (let i = 0; i < total; i++) {
-        const r = timeOnce(exe, [mode]);
-        stdout = r.stdout;
-        if (i >= opts.warmup || opts.validate) times.push(r.ms);
-        process.stderr.write(".");
-      }
-      modes[mode] = {
-        min: Math.min(...times),
-        median: median(times),
-        rss: opts.validate ? null : peakRssKb(exe, [mode]),
-        stdout,
-      };
-    }
-    if (modes.seq.stdout !== modes.par.stdout) {
+    const modes = { seq: timeRuns(exe, ["seq"]), par: timeRuns(exe, ["par"]) };
+    if (!sameOutput(modes.seq.stdout, modes.par.stdout)) {
       disagree++;
       console.error(`\nCHECKSUM MISMATCH ${bench.name}:\n--- seq\n${modes.seq.stdout}--- par\n${modes.par.stdout}`);
     }
@@ -648,27 +653,13 @@ for (const bench of selected) {
   process.stderr.write(` ok; running`);
   const reference = timeOnce(variants.find((v) => v.id === "c").exe).stdout;
   for (const v of variants) {
-    const times = [];
-    let stdout = "";
-    const total = opts.validate ? 1 : opts.warmup + opts.runs;
-    for (let i = 0; i < total; i++) {
-      const r = timeOnce(v.exe);
-      stdout = r.stdout;
-      if (i >= opts.warmup || opts.validate) times.push(r.ms);
-    }
-    const agrees = sameOutput(stdout, reference);
+    const timed = timeRuns(v.exe);
+    const agrees = sameOutput(timed.stdout, reference);
     if (!agrees) {
       mismatches++;
-      console.error(`\nCHECKSUM MISMATCH ${bench.name}/${v.id}:\n--- C\n${reference}--- ${v.id}\n${stdout}`);
+      console.error(`\nCHECKSUM MISMATCH ${bench.name}/${v.id}:\n--- C\n${reference}--- ${v.id}\n${timed.stdout}`);
     }
-    Object.assign(v, {
-      min: Math.min(...times),
-      median: median(times),
-      bytes: fs.statSync(v.exe).size,
-      rss: opts.validate ? null : peakRssKb(v.exe),
-      stdout,
-      agrees,
-    });
+    Object.assign(v, { ...timed, bytes: fs.statSync(v.exe).size, agrees });
     process.stderr.write(".");
   }
   results.push({ bench, variants, reference });

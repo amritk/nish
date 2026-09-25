@@ -1777,8 +1777,8 @@ if (!only || "par_dst_short".includes(only)) {
 }
 
 // WP29: an allocating parallel body compiles with NL9012 at the call, which
-// the link loop above cannot see, because it keeps no stderr of a compile that
-// succeeds. Asked of `--json`, whose `code` is the contract, and again under
+// the link loop above does not assert: it reads a successful compile's stderr
+// for nothing but a failure report. Asked of `--json`, whose `code` is the contract, and again under
 // `--no-warn-performance`, which must silence it and change nothing else. The
 // fixture's existence is part of the assertion, as for `par_dst_short`.
 if (!only || "par_alloc".includes(only)) {
@@ -1788,26 +1788,21 @@ if (!only || "par_alloc".includes(only)) {
     const out = path.join(buildDir, "link", `par_alloc-json${extra.length}`) + path.sep;
     fs.rmSync(out, { recursive: true, force: true });
     const r = spawnSync(NISH, [entry, "--json", "-o", out, ...extra], { cwd: root, encoding: "utf8" });
-    const objects = r.stdout
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l));
-    return { status: r.status, objects, stderr: r.stderr };
+    return { status: r.status, objects: diagnosticsOf(r.stdout), stderr: r.stderr };
   };
   const warned = fixture ? compileJson([]) : null;
   const quiet = fixture ? compileJson(["--no-warn-performance"]) : null;
-  const nl9012 = warned === null ? [] : warned.objects.filter((o) => o.code === "NL9012");
+  const w = warned === null || warned.objects.length !== 1 ? null : warned.objects[0];
   check(
     "link/par_alloc: an allocating parallel body compiles with one NL9012 at the call, and --no-warn-performance silences it",
-    warned !== null &&
+    w !== null &&
       quiet !== null &&
       warned.status === 0 &&
-      warned.objects.length === 1 &&
-      nl9012.length === 1 &&
-      nl9012[0].severity === "performance" &&
-      nl9012[0].line === 23 &&
-      nl9012[0].column === 3 &&
-      nl9012[0].message.startsWith(
+      w.code === "NL9012" &&
+      w.severity === "performance" &&
+      w.line === 23 &&
+      w.column === 3 &&
+      w.message.startsWith(
         "the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call"
       ) &&
       quiet.status === 0 &&

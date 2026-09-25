@@ -92,6 +92,7 @@ import {
   allocationWarning,
   arenaMessage,
   escapeMessage,
+  parallelBodyOf,
   reachesDstMessage,
   reduceMessage,
   resultMessage,
@@ -878,10 +879,10 @@ export class Compilation {
       for (const call of program.parallelCalls) {
         const sig = call.sig;
         const instance = sig.instance;
-        if (instance === null || instance.functionArgs.length !== 1) {
+        const fn = parallelBodyOf(sig);
+        if (instance === null || fn === null) {
           continue;
         }
-        const fn = instance.functionArgs[0];
         // `U` for a map, `T` for a reduce: the last type argument either way.
         const result = instance.typeArgs[instance.typeArgs.length - 1];
         const args = call.node.children[1].children;
@@ -903,8 +904,8 @@ export class Compilation {
         // A body the rules admit may still allocate, recycled per element
         // (`scopeParallelBodies`); that costs every element, and it is said once
         // the call is known to compile.
-        const warning = refused ? "" : allocationWarning(this.table, sig, fn, result, facts);
-        if (warning.length > 0) {
+        const warning = allocationWarning(this.table, sig, fn, result, facts);
+        if (!refused && warning.length > 0) {
           this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning);
         }
       }

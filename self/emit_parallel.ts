@@ -33,7 +33,7 @@
 import { Emitter } from "./emit";
 import { internalErrorFor } from "./ice";
 import { IRFunction, IRParam } from "./ir";
-import { isParallelEntry, mapGrain, parallelRoleOf } from "./parallel";
+import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf } from "./parallel";
 import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
 
 /**
@@ -49,11 +49,8 @@ import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
  * it never changes a result.
  */
 const regionGrain = (caller: FunctionSig): i32 => {
-  const instance = caller.instance;
-  if (instance === null || instance.parallel !== PAR_MAP || instance.functionArgs.length !== 1) {
-    return 1;
-  }
-  return mapGrain(instance.functionArgs[0]);
+  const body = parallelBodyOf(caller);
+  return body === null || parallelRoleOf(caller) !== PAR_MAP ? 1 : mapGrain(body);
 };
 
 /** Whether the call from `caller` to `callee` is the one that becomes a region. */

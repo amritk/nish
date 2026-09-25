@@ -45,7 +45,7 @@
 import { FactsTable, FunctionFacts, stepOf } from "./attributes";
 import { CLI, STD_PREFIX } from "./branding";
 import { isScalarArgument } from "./escape";
-import { isTemplateExpression } from "./emit_util";
+import { isTemplateExpression, unwrapParens } from "./emit_util";
 import {
   N_ARRAY,
   N_ARROW,
@@ -59,7 +59,6 @@ import {
   N_NEW,
   N_NUMBER,
   N_OBJECT,
-  N_PAREN,
   N_RETURN,
   N_TRUE,
   N_UNARY,
@@ -115,6 +114,12 @@ export const parallelRole = (template: TemplateInfo): i32 => {
 export const parallelRoleOf = (sig: FunctionSig): i32 => {
   const instance = sig.instance;
   return instance === null ? PAR_NONE : instance.parallel;
+};
+
+/** The body a `parallelMapInto` or `parallelReduce` instance runs per element: its one function argument. */
+export const parallelBodyOf = (sig: FunctionSig): FunctionSig | null => {
+  const instance = sig.instance;
+  return instance === null || instance.functionArgs.length !== 1 ? null : instance.functionArgs[0];
 };
 
 /** Whether `sig` is an instance of `parallelMapInto` or `parallelReduce`: one whose region the emitter builds. */
@@ -356,9 +361,6 @@ export const reachesDstMessage = (
   );
 };
 
-/** `(expr)` as the expression inside every pair of parentheses. */
-const unparen = (node: Node): Node => (node.kind === N_PAREN ? unparen(node.children[0]) : node);
-
 /**
  * The operator an arrow's whole body applies to its two parameters, in either
  * order, or "" when the body is anything else: a named function, a block with
@@ -375,12 +377,12 @@ const combiningOperator = (fn: FunctionSig): string => {
     }
     body = body.children[0].children[0];
   }
-  body = unparen(body);
+  body = unwrapParens(body);
   if (body.kind !== N_BINARY) {
     return "";
   }
-  const left = unparen(body.children[0]);
-  const right = unparen(body.children[1]);
+  const left = unwrapParens(body.children[0]);
+  const right = unwrapParens(body.children[1]);
   if (left.kind !== N_IDENT || right.kind !== N_IDENT) {
     return "";
   }
@@ -420,7 +422,7 @@ const identityOf = (op: string): string => {
  * checker cannot see is one it cannot hold to the rule.
  */
 const isLiteral = (node: Node, want: string): boolean => {
-  const e = unparen(node);
+  const e = unwrapParens(node);
   if (want === "true") {
     return e.kind === N_TRUE;
   }
@@ -428,7 +430,7 @@ const isLiteral = (node: Node, want: string): boolean => {
     return e.kind === N_FALSE;
   }
   if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
-    const operand = unparen(e.children[0]);
+    const operand = unwrapParens(e.children[0]);
     return operand.kind === N_NUMBER && want === "0" && Number(operand.text) === 0;
   }
   return e.kind === N_NUMBER && Number(e.text) === Number(want);
@@ -477,7 +479,7 @@ export const reduceMessage = (
 // under a tenth of the chunk. How many elements make a millisecond depends on
 // the body, so the grain is that target over an estimate of one element:
 //
-//     grain = clamp(REGION_COST / elementCost(f), 1, REGION_COST)
+//     grain = REGION_COST / cost(f), which is in [1, REGION_COST]
 //
 // The estimate is read off the body's syntax, in units of roughly one simple
 // operation, and `REGION_COST` was set by measurement rather than by what a
@@ -495,7 +497,7 @@ export const reduceMessage = (
  * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
  * loop it replaces (2^20 lost to it by 12%; 2^22 wins by 1.54x).
  */
-export const REGION_COST: i32 = 4194304;
+const REGION_COST: i32 = 4194304;
 
 /** One call: the jump, the frame and the return, beyond the arguments. */
 const CALL_COST: i32 = 4;
@@ -532,14 +534,14 @@ const tripsOf = (node: Node): i32 => {
     return DEFAULT_TRIPS;
   }
   const name = decls.children[0].children[0].text;
-  const first = unparen(decls.children[0].children[2]);
-  const cond = unparen(node.children[1]);
+  const first = unwrapParens(decls.children[0].children[2]);
+  const cond = unwrapParens(node.children[1]);
   if (first.kind !== N_NUMBER || cond.kind !== N_BINARY || cond.children.length < 2) {
     return DEFAULT_TRIPS;
   }
-  const iv = unparen(cond.children[0]);
-  const bound = unparen(cond.children[1]);
-  const step = stepOf(unparen(node.children[2]), name);
+  const iv = unwrapParens(cond.children[0]);
+  const bound = unwrapParens(cond.children[1]);
+  const step = stepOf(unwrapParens(node.children[2]), name);
   if (iv.kind !== N_IDENT || iv.text !== name || bound.kind !== N_NUMBER || step <= 0) {
     return DEFAULT_TRIPS;
   }
@@ -576,18 +578,12 @@ const costOf = (node: Node): i32 => {
   return summed(own, inner);
 };
 
-/** What one call of `fn` is estimated to cost, at least 1. */
-export const elementCost = (fn: FunctionSig): i32 => {
-  const body = fn.body();
-  if (body === null) {
-    return 1;
-  }
-  const cost = costOf(body);
-  return cost < 1 ? 1 : cost;
-};
-
-/** The grain of a map whose body is `fn`: `REGION_COST` over its estimate, in `[1, REGION_COST]`. */
+/**
+ * The grain of a map whose body is `fn`: `REGION_COST` over its estimate. The
+ * estimate is at least 1 and saturates at `REGION_COST`, so the grain is in
+ * `[1, REGION_COST]` without a clamp of its own.
+ */
 export const mapGrain = (fn: FunctionSig): i32 => {
-  const grain = REGION_COST / elementCost(fn);
-  return grain < 1 ? 1 : grain;
+  const body = fn.body();
+  return body === null ? REGION_COST : REGION_COST / costOf(body);
 };

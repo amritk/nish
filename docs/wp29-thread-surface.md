@@ -227,7 +227,7 @@ decided, beyond what is written above:
   otherwise (NL2352, NL2351). The arena is thread-local, so each element marks
   and releases the arena of the thread it runs on. It compiles with §8a's
   warning, NL9012 — not NL9011, which the arena-loop rule had taken by then.
-- **The grain is sized from the body.** `2^22 / elementCost(f)`, clamped to
+- **The grain is sized from the body.** `2^22` over the estimated cost of `f`, in
   `[1, 2^22]` (`mapGrain` in `self/parallel.ts`): a static estimate of one
   element, so a cheap body is divided only past about a million elements and
   one with a loop far sooner. Up to the grain the map calls its chunk loop

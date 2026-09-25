@@ -101,7 +101,7 @@ import {
   Node,
 } from "./nodes";
 import { Options } from "./options";
-import { isParallelEntry, recyclesPerElement } from "./parallel";
+import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel";
 import { ParentTable } from "./parents";
 import {
   CheckedProgram,
@@ -1572,11 +1572,8 @@ export const analyzeFunctions = (
 const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => {
   for (const unit of units) {
     for (const call of unit.program.parallelCalls) {
-      const instance = call.sig.instance;
-      if (instance === null || instance.functionArgs.length !== 1) {
-        continue;
-      }
-      const f = facts.get(instance.functionArgs[0].name);
+      const body = parallelBodyOf(call.sig);
+      const f: FunctionFacts | null = body === null ? null : facts.get(body.name);
       if (f !== null && f.allocates && !f.arenaScope && recyclesPerElement(f)) {
         f.arenaScope = true;
       }
