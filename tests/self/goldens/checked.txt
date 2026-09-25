@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 539 programs, 12691 dump lines.
+# 543 programs, 14334 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -10756,6 +10756,1653 @@ function main(): i32 -> @nish_main [exported entry]
   local 163:11 param: i64 (const)
   local 164:11 field: i64 (const)
   local 165:11 hoisted: i64 (const)
+program bench/map_proto_ordered.ts
+module bench/map_proto_ordered.ts (entry)
+const EMPTY: i32 = 0
+const TOMB: i32 = -1
+const INITIAL_SLOTS: i32 = 8
+struct StrMap (class) size=48 align=8
+  field slots: i32[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: string[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field alive: boolean[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @StrMap.constructor
+  method probe -> @StrMap.probe
+  method get -> @StrMap.get
+  method add -> @StrMap.add
+  method set -> @StrMap.set
+  method insertAt -> @StrMap.insertAt
+  method delete -> @StrMap.delete
+  method rebuild -> @StrMap.rebuild
+  method sum -> @StrMap.sum
+struct IntMap (class) size=48 align=8
+  field slots: i32[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: i32[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field alive: boolean[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @IntMap.constructor
+  method probe -> @IntMap.probe
+  method get -> @IntMap.get
+  method add -> @IntMap.add
+  method set -> @IntMap.set
+  method insertAt -> @IntMap.insertAt
+  method delete -> @IntMap.delete
+  method rebuild -> @IntMap.rebuild
+  method sum -> @IntMap.sum
+struct Rng (class) size=4 align=4
+  field state: u32 index=0 offset=0 initialized
+  method next -> @Rng.next
+function hashStr(key: string): u32 -> @hashStr
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 23:7 h: u32 (let)
+  local 24:12 i: i32 (let)
+function hashInt(key: i32): u32 -> @hashInt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 32:7 h: u32 (let)
+function home(h: u32, mask: i32): i32 -> @home
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function StrMap.probe(this: StrMap, key: string): i32 -> @StrMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 76:9
+  escaping: key
+  calls: hashStr home nish_exit nish_panic_index nish_str_eq nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 67:11 n: i32 (const)
+  local 68:9 b: i32 (let)
+  callee 68:13 home -> @home
+  callee 68:18 hashStr -> @hashStr
+  local 70:13 s: i32 (const)
+  local 74:13 at: i32 (const)
+function StrMap.get(this: StrMap, key: string, missing: i32): i32 -> @StrMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StrMap.probe
+  escaping: key missing
+  calls: StrMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 85:11 at: i32 (const)
+  callee 85:16 StrMap.probe -> @StrMap.probe
+function StrMap.add(this: StrMap, key: string, delta: i32): void -> @StrMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 94:9
+  escaping: delta key
+  calls: StrMap.insertAt StrMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 91:11 at: i32 (const)
+  callee 91:16 StrMap.probe -> @StrMap.probe
+  callee 98:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.set(this: StrMap, key: string, value: i32): void -> @StrMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 105:9
+  escaping: key value
+  calls: StrMap.insertAt StrMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 102:11 at: i32 (const)
+  callee 102:16 StrMap.probe -> @StrMap.probe
+  callee 109:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.insertAt(this: StrMap, b: i32, key: string, value: i32): void -> @StrMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 114:5
+  escaping: b key value
+  calls: StrMap.rebuild nish_array_grow
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 118:11 used: i32 (const)
+  callee 124:7 StrMap.rebuild -> @StrMap.rebuild
+function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 134:7
+  escaping: key
+  calls: StrMap.probe nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 129:11 at: i32 (const)
+  callee 129:16 StrMap.probe -> @StrMap.probe
+function StrMap.rebuild(this: StrMap): void -> @StrMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 152:9
+  calls: hashStr home nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 147:11 used: i32 (const)
+  local 148:11 size: i32 (const)
+  local 149:9 to: i32 (let)
+  local 150:14 from: i32 (let)
+  local 167:13 slots: i32[] (const)
+  local 168:16 i: i32 (let)
+  local 175:14 i: i32 (let)
+  local 176:11 b: i32 (let)
+  callee 176:15 home -> @home
+  callee 176:20 hashStr -> @hashStr
+function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 188:9 total: u32 (let)
+  local 189:14 i: i32 (let)
+function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function IntMap.probe(this: IntMap, key: i32): i32 -> @IntMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 232:9
+  escaping: key
+  calls: hashInt home nish_exit nish_panic_index nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 223:11 n: i32 (const)
+  local 224:9 b: i32 (let)
+  callee 224:13 home -> @home
+  callee 224:18 hashInt -> @hashInt
+  local 226:13 s: i32 (const)
+  local 230:13 at: i32 (const)
+function IntMap.get(this: IntMap, key: i32, missing: i32): i32 -> @IntMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IntMap.probe
+  escaping: key missing
+  calls: IntMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 241:11 at: i32 (const)
+  callee 241:16 IntMap.probe -> @IntMap.probe
+function IntMap.add(this: IntMap, key: i32, delta: i32): void -> @IntMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 250:9
+  escaping: delta key
+  calls: IntMap.insertAt IntMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 247:11 at: i32 (const)
+  callee 247:16 IntMap.probe -> @IntMap.probe
+  callee 254:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.set(this: IntMap, key: i32, value: i32): void -> @IntMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 261:9
+  escaping: key value
+  calls: IntMap.insertAt IntMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 258:11 at: i32 (const)
+  callee 258:16 IntMap.probe -> @IntMap.probe
+  callee 265:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.insertAt(this: IntMap, b: i32, key: i32, value: i32): void -> @IntMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 270:5
+  escaping: b key value
+  calls: IntMap.rebuild nish_array_grow
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 274:11 used: i32 (const)
+  callee 280:7 IntMap.rebuild -> @IntMap.rebuild
+function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 290:7
+  escaping: key
+  calls: IntMap.probe nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 285:11 at: i32 (const)
+  callee 285:16 IntMap.probe -> @IntMap.probe
+function IntMap.rebuild(this: IntMap): void -> @IntMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 308:9
+  calls: hashInt home nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 303:11 used: i32 (const)
+  local 304:11 size: i32 (const)
+  local 305:9 to: i32 (let)
+  local 306:14 from: i32 (let)
+  local 323:13 slots: i32[] (const)
+  local 324:16 i: i32 (let)
+  local 331:14 i: i32 (let)
+  local 332:11 b: i32 (let)
+  callee 332:15 home -> @home
+  callee 332:20 hashInt -> @hashInt
+function IntMap.sum(this: IntMap): u32 -> @IntMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 344:9 total: u32 (let)
+  local 345:14 i: i32 (let)
+function Rng.next(this: Rng): i32 -> @Rng.next [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 361:5
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function intKeys(n: i32): i32[] -> @intKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 374:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 372:9 keys: i32[] (const)
+  local 373:12 i: i32 (let)
+function strKeys(ints: i32[]): string[] -> @strKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 382:5
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer ints: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 380:9 keys: string[] (const)
+  local 381:14 k: i32 (const)
+function clock(timing: boolean): i64 -> @clock
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos
+  stackSites=0 stackLocals=0
+function report(timing: boolean, name: string, started: i64, checksum: string): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via StrMap.set
+  calls: StrMap.constructor StrMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 399:9 m: StrMap (const)
+  callee 399:13 new StrMap -> @StrMap.constructor
+  local 400:12 i: i32 (let)
+  callee 401:5 StrMap.set -> @StrMap.set
+function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via IntMap.set
+  calls: IntMap.constructor IntMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 407:9 m: IntMap (const)
+  callee 407:13 new IntMap -> @IntMap.constructor
+  local 408:12 i: i32 (let)
+  callee 409:5 IntMap.set -> @IntMap.set
+function runStr(keys: string[], n: i32, timing: boolean): void -> @runStr
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: Rng.next StrMap.add StrMap.constructor StrMap.delete StrMap.get StrMap.set StrMap.sum clock fillStrMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillStrMap#0 fillStrMap#0
+  stackSites=3 stackLocals=3
+  local 415:9 mask: i32 (const)
+  local 416:9 rng: Rng (const)
+  local 417:7 t: i64 (let)
+  callee 417:11 clock -> @clock
+  local 418:7 built: i32 (let)
+  local 419:12 round: i32 (let)
+  callee 420:21 fillStrMap -> @fillStrMap
+  local 422:9 m: StrMap (const)
+  callee 422:13 fillStrMap -> @fillStrMap
+  callee 423:3 report -> @report
+  callee 423:56 StrMap.sum -> @StrMap.sum
+  callee 425:7 clock -> @clock
+  local 426:7 hits: u32 (let)
+  local 427:12 j: i32 (let)
+  local 428:11 at: i32 (const)
+  callee 428:16 Rng.next -> @Rng.next
+  callee 430:27 StrMap.get -> @StrMap.get
+  callee 433:3 report -> @report
+  callee 435:7 clock -> @clock
+  local 436:7 misses: u32 (let)
+  local 437:12 j: i32 (let)
+  local 438:11 at: i32 (const)
+  callee 438:21 Rng.next -> @Rng.next
+  callee 440:31 StrMap.get -> @StrMap.get
+  callee 443:3 report -> @report
+  callee 445:7 clock -> @clock
+  local 446:9 vocab: i32 (const)
+  local 447:9 counts: StrMap (const)
+  callee 447:18 new StrMap -> @StrMap.constructor
+  local 448:12 j: i32 (let)
+  local 449:11 at: i32 (const)
+  callee 449:16 Rng.next -> @Rng.next
+  callee 449:29 Rng.next -> @Rng.next
+  callee 451:7 StrMap.add -> @StrMap.add
+  local 454:7 weighted: u32 (let)
+  local 455:12 i: i32 (let)
+  callee 456:33 StrMap.get -> @StrMap.get
+  callee 458:3 report -> @report
+  callee 460:7 clock -> @clock
+  local 461:9 window: i32 (const)
+  local 462:9 pool: i32 (const)
+  local 463:9 churn: StrMap (const)
+  callee 463:17 new StrMap -> @StrMap.constructor
+  local 464:12 i: i32 (let)
+  local 465:11 add: i32 (const)
+  callee 467:7 StrMap.set -> @StrMap.set
+  local 469:11 drop: i32 (const)
+  callee 471:7 StrMap.delete -> @StrMap.delete
+  callee 474:3 report -> @report
+  callee 474:51 StrMap.sum -> @StrMap.sum
+function runInt(keys: i32[], n: i32, timing: boolean): void -> @runInt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: IntMap.add IntMap.constructor IntMap.delete IntMap.get IntMap.set IntMap.sum Rng.next clock fillIntMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillIntMap#0 fillIntMap#0
+  stackSites=3 stackLocals=3
+  local 478:9 mask: i32 (const)
+  local 479:9 rng: Rng (const)
+  local 480:7 t: i64 (let)
+  callee 480:11 clock -> @clock
+  local 481:7 built: i32 (let)
+  local 482:12 round: i32 (let)
+  callee 483:21 fillIntMap -> @fillIntMap
+  local 485:9 m: IntMap (const)
+  callee 485:13 fillIntMap -> @fillIntMap
+  callee 486:3 report -> @report
+  callee 486:56 IntMap.sum -> @IntMap.sum
+  callee 488:7 clock -> @clock
+  local 489:7 hits: u32 (let)
+  local 490:12 j: i32 (let)
+  local 491:11 at: i32 (const)
+  callee 491:16 Rng.next -> @Rng.next
+  callee 493:27 IntMap.get -> @IntMap.get
+  callee 496:3 report -> @report
+  callee 498:7 clock -> @clock
+  local 499:7 misses: u32 (let)
+  local 500:12 j: i32 (let)
+  local 501:11 at: i32 (const)
+  callee 501:21 Rng.next -> @Rng.next
+  callee 503:31 IntMap.get -> @IntMap.get
+  callee 506:3 report -> @report
+  callee 508:7 clock -> @clock
+  local 509:9 vocab: i32 (const)
+  local 510:9 counts: IntMap (const)
+  callee 510:18 new IntMap -> @IntMap.constructor
+  local 511:12 j: i32 (let)
+  local 512:11 at: i32 (const)
+  callee 512:16 Rng.next -> @Rng.next
+  callee 512:29 Rng.next -> @Rng.next
+  callee 514:7 IntMap.add -> @IntMap.add
+  local 517:7 weighted: u32 (let)
+  local 518:12 i: i32 (let)
+  callee 519:33 IntMap.get -> @IntMap.get
+  callee 521:3 report -> @report
+  callee 523:7 clock -> @clock
+  local 524:9 window: i32 (const)
+  local 525:9 pool: i32 (const)
+  local 526:9 churn: IntMap (const)
+  callee 526:17 new IntMap -> @IntMap.constructor
+  local 527:12 i: i32 (let)
+  local 528:11 add: i32 (const)
+  callee 530:7 IntMap.set -> @IntMap.set
+  local 532:11 drop: i32 (const)
+  callee 534:7 IntMap.delete -> @IntMap.delete
+  callee 537:3 report -> @report
+  callee 537:51 IntMap.sum -> @IntMap.sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via intKeys
+  calls: intKeys nish_arena_mark nish_arena_release nish_panic_index nish_str_eq runInt runStr strKeys
+  stackSites=0 stackLocals=0
+  local 542:9 n: i32 (const)
+  local 543:9 timing: boolean (const)
+  local 544:9 ints: i32[] (const)
+  callee 544:16 intKeys -> @intKeys
+  callee 545:3 runStr -> @runStr
+  callee 545:10 strKeys -> @strKeys
+  callee 546:3 runInt -> @runInt
+program bench/map_proto_ordered_fp.ts
+module bench/map_proto_ordered_fp.ts (entry)
+const TOMB: i64 = 4294967295
+const INITIAL_SLOTS: i32 = 8
+struct StrMap (class) size=48 align=8
+  field slots: i64[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: string[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field hashes: u32[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @StrMap.constructor
+  method probe -> @StrMap.probe
+  method get -> @StrMap.get
+  method add -> @StrMap.add
+  method set -> @StrMap.set
+  method insertAt -> @StrMap.insertAt
+  method delete -> @StrMap.delete
+  method rebuild -> @StrMap.rebuild
+  method sum -> @StrMap.sum
+struct IntMap (class) size=48 align=8
+  field slots: i64[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: i32[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field hashes: u32[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @IntMap.constructor
+  method probe -> @IntMap.probe
+  method get -> @IntMap.get
+  method add -> @IntMap.add
+  method set -> @IntMap.set
+  method insertAt -> @IntMap.insertAt
+  method delete -> @IntMap.delete
+  method rebuild -> @IntMap.rebuild
+  method sum -> @IntMap.sum
+struct Rng (class) size=4 align=4
+  field state: u32 index=0 offset=0 initialized
+  method next -> @Rng.next
+function hashStr(key: string): u32 -> @hashStr
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 22:7 h: u32 (let)
+  local 23:12 i: i32 (let)
+function hashInt(key: i32): u32 -> @hashInt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 31:7 h: u32 (let)
+function home(h: u32, mask: i32): i32 -> @home
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function slotOf(h: u32, index: i32): i64 -> @slotOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function StrMap.probe(this: StrMap, key: string, h: u32): i32 -> @StrMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 79:11
+  escaping: h
+  calls: home nish_exit nish_panic_index nish_str_eq nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 68:11 n: i32 (const)
+  local 69:9 b: i32 (let)
+  callee 69:13 home -> @home
+  local 71:13 s: i64 (const)
+  local 77:15 at: i32 (const)
+function StrMap.get(this: StrMap, key: string, missing: i32): i32 -> @StrMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StrMap.probe
+  escaping: key missing
+  calls: StrMap.probe hashStr
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 89:11 at: i32 (const)
+  callee 89:16 StrMap.probe -> @StrMap.probe
+  callee 89:32 hashStr -> @hashStr
+function StrMap.add(this: StrMap, key: string, delta: i32): void -> @StrMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 99:9
+  escaping: delta key
+  calls: StrMap.insertAt StrMap.probe hashStr
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 95:11 h: u32 (const)
+  callee 95:15 hashStr -> @hashStr
+  local 96:11 at: i32 (const)
+  callee 96:16 StrMap.probe -> @StrMap.probe
+  callee 103:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.set(this: StrMap, key: string, value: i32): void -> @StrMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 111:9
+  escaping: key value
+  calls: StrMap.insertAt StrMap.probe hashStr
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 107:11 h: u32 (const)
+  callee 107:15 hashStr -> @hashStr
+  local 108:11 at: i32 (const)
+  callee 108:16 StrMap.probe -> @StrMap.probe
+  callee 115:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.insertAt(this: StrMap, b: i32, key: string, h: u32, value: i32): void -> @StrMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 120:5
+  escaping: b h key value
+  calls: StrMap.rebuild nish_array_grow nish_panic_index slotOf
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 124:11 used: i32 (const)
+  callee 126:23 slotOf -> @slotOf
+  callee 130:7 StrMap.rebuild -> @StrMap.rebuild
+function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 140:7
+  escaping: key
+  calls: StrMap.probe hashStr nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 135:11 at: i32 (const)
+  callee 135:16 StrMap.probe -> @StrMap.probe
+  callee 135:32 hashStr -> @hashStr
+function StrMap.rebuild(this: StrMap): void -> @StrMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 159:9
+  calls: home nish_panic_index slotOf
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 153:11 used: i32 (const)
+  local 154:11 size: i32 (const)
+  local 155:9 to: i32 (let)
+  local 156:14 from: i32 (let)
+  local 157:13 h: u32 (const)
+  local 174:13 slots: i64[] (const)
+  local 175:16 i: i32 (let)
+  local 182:14 i: i32 (let)
+  local 183:11 b: i32 (let)
+  callee 183:15 home -> @home
+  callee 188:25 slotOf -> @slotOf
+function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 195:9 total: u32 (let)
+  local 196:14 i: i32 (let)
+function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function IntMap.probe(this: IntMap, key: i32, h: u32): i32 -> @IntMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 241:11
+  escaping: h
+  calls: home nish_exit nish_panic_index nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 230:11 n: i32 (const)
+  local 231:9 b: i32 (let)
+  callee 231:13 home -> @home
+  local 233:13 s: i64 (const)
+  local 239:15 at: i32 (const)
+function IntMap.get(this: IntMap, key: i32, missing: i32): i32 -> @IntMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IntMap.probe
+  escaping: key missing
+  calls: IntMap.probe hashInt
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 251:11 at: i32 (const)
+  callee 251:16 IntMap.probe -> @IntMap.probe
+  callee 251:32 hashInt -> @hashInt
+function IntMap.add(this: IntMap, key: i32, delta: i32): void -> @IntMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 261:9
+  escaping: delta key
+  calls: IntMap.insertAt IntMap.probe hashInt
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 257:11 h: u32 (const)
+  callee 257:15 hashInt -> @hashInt
+  local 258:11 at: i32 (const)
+  callee 258:16 IntMap.probe -> @IntMap.probe
+  callee 265:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.set(this: IntMap, key: i32, value: i32): void -> @IntMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 273:9
+  escaping: key value
+  calls: IntMap.insertAt IntMap.probe hashInt
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 269:11 h: u32 (const)
+  callee 269:15 hashInt -> @hashInt
+  local 270:11 at: i32 (const)
+  callee 270:16 IntMap.probe -> @IntMap.probe
+  callee 277:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.insertAt(this: IntMap, b: i32, key: i32, h: u32, value: i32): void -> @IntMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 282:5
+  escaping: b h key value
+  calls: IntMap.rebuild nish_array_grow nish_panic_index slotOf
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 286:11 used: i32 (const)
+  callee 288:23 slotOf -> @slotOf
+  callee 292:7 IntMap.rebuild -> @IntMap.rebuild
+function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 302:7
+  escaping: key
+  calls: IntMap.probe hashInt nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 297:11 at: i32 (const)
+  callee 297:16 IntMap.probe -> @IntMap.probe
+  callee 297:32 hashInt -> @hashInt
+function IntMap.rebuild(this: IntMap): void -> @IntMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 321:9
+  calls: home nish_panic_index slotOf
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 315:11 used: i32 (const)
+  local 316:11 size: i32 (const)
+  local 317:9 to: i32 (let)
+  local 318:14 from: i32 (let)
+  local 319:13 h: u32 (const)
+  local 336:13 slots: i64[] (const)
+  local 337:16 i: i32 (let)
+  local 344:14 i: i32 (let)
+  local 345:11 b: i32 (let)
+  callee 345:15 home -> @home
+  callee 350:25 slotOf -> @slotOf
+function IntMap.sum(this: IntMap): u32 -> @IntMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 357:9 total: u32 (let)
+  local 358:14 i: i32 (let)
+function Rng.next(this: Rng): i32 -> @Rng.next [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 374:5
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function intKeys(n: i32): i32[] -> @intKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 387:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 385:9 keys: i32[] (const)
+  local 386:12 i: i32 (let)
+function strKeys(ints: i32[]): string[] -> @strKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 395:5
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer ints: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 393:9 keys: string[] (const)
+  local 394:14 k: i32 (const)
+function clock(timing: boolean): i64 -> @clock
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos
+  stackSites=0 stackLocals=0
+function report(timing: boolean, name: string, started: i64, checksum: string): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via StrMap.set
+  calls: StrMap.constructor StrMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 412:9 m: StrMap (const)
+  callee 412:13 new StrMap -> @StrMap.constructor
+  local 413:12 i: i32 (let)
+  callee 414:5 StrMap.set -> @StrMap.set
+function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via IntMap.set
+  calls: IntMap.constructor IntMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 420:9 m: IntMap (const)
+  callee 420:13 new IntMap -> @IntMap.constructor
+  local 421:12 i: i32 (let)
+  callee 422:5 IntMap.set -> @IntMap.set
+function runStr(keys: string[], n: i32, timing: boolean): void -> @runStr
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: Rng.next StrMap.add StrMap.constructor StrMap.delete StrMap.get StrMap.set StrMap.sum clock fillStrMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillStrMap#0 fillStrMap#0
+  stackSites=3 stackLocals=3
+  local 428:9 mask: i32 (const)
+  local 429:9 rng: Rng (const)
+  local 430:7 t: i64 (let)
+  callee 430:11 clock -> @clock
+  local 431:7 built: i32 (let)
+  local 432:12 round: i32 (let)
+  callee 433:21 fillStrMap -> @fillStrMap
+  local 435:9 m: StrMap (const)
+  callee 435:13 fillStrMap -> @fillStrMap
+  callee 436:3 report -> @report
+  callee 436:56 StrMap.sum -> @StrMap.sum
+  callee 438:7 clock -> @clock
+  local 439:7 hits: u32 (let)
+  local 440:12 j: i32 (let)
+  local 441:11 at: i32 (const)
+  callee 441:16 Rng.next -> @Rng.next
+  callee 443:27 StrMap.get -> @StrMap.get
+  callee 446:3 report -> @report
+  callee 448:7 clock -> @clock
+  local 449:7 misses: u32 (let)
+  local 450:12 j: i32 (let)
+  local 451:11 at: i32 (const)
+  callee 451:21 Rng.next -> @Rng.next
+  callee 453:31 StrMap.get -> @StrMap.get
+  callee 456:3 report -> @report
+  callee 458:7 clock -> @clock
+  local 459:9 vocab: i32 (const)
+  local 460:9 counts: StrMap (const)
+  callee 460:18 new StrMap -> @StrMap.constructor
+  local 461:12 j: i32 (let)
+  local 462:11 at: i32 (const)
+  callee 462:16 Rng.next -> @Rng.next
+  callee 462:29 Rng.next -> @Rng.next
+  callee 464:7 StrMap.add -> @StrMap.add
+  local 467:7 weighted: u32 (let)
+  local 468:12 i: i32 (let)
+  callee 469:33 StrMap.get -> @StrMap.get
+  callee 471:3 report -> @report
+  callee 473:7 clock -> @clock
+  local 474:9 window: i32 (const)
+  local 475:9 pool: i32 (const)
+  local 476:9 churn: StrMap (const)
+  callee 476:17 new StrMap -> @StrMap.constructor
+  local 477:12 i: i32 (let)
+  local 478:11 add: i32 (const)
+  callee 480:7 StrMap.set -> @StrMap.set
+  local 482:11 drop: i32 (const)
+  callee 484:7 StrMap.delete -> @StrMap.delete
+  callee 487:3 report -> @report
+  callee 487:51 StrMap.sum -> @StrMap.sum
+function runInt(keys: i32[], n: i32, timing: boolean): void -> @runInt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: IntMap.add IntMap.constructor IntMap.delete IntMap.get IntMap.set IntMap.sum Rng.next clock fillIntMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillIntMap#0 fillIntMap#0
+  stackSites=3 stackLocals=3
+  local 491:9 mask: i32 (const)
+  local 492:9 rng: Rng (const)
+  local 493:7 t: i64 (let)
+  callee 493:11 clock -> @clock
+  local 494:7 built: i32 (let)
+  local 495:12 round: i32 (let)
+  callee 496:21 fillIntMap -> @fillIntMap
+  local 498:9 m: IntMap (const)
+  callee 498:13 fillIntMap -> @fillIntMap
+  callee 499:3 report -> @report
+  callee 499:56 IntMap.sum -> @IntMap.sum
+  callee 501:7 clock -> @clock
+  local 502:7 hits: u32 (let)
+  local 503:12 j: i32 (let)
+  local 504:11 at: i32 (const)
+  callee 504:16 Rng.next -> @Rng.next
+  callee 506:27 IntMap.get -> @IntMap.get
+  callee 509:3 report -> @report
+  callee 511:7 clock -> @clock
+  local 512:7 misses: u32 (let)
+  local 513:12 j: i32 (let)
+  local 514:11 at: i32 (const)
+  callee 514:21 Rng.next -> @Rng.next
+  callee 516:31 IntMap.get -> @IntMap.get
+  callee 519:3 report -> @report
+  callee 521:7 clock -> @clock
+  local 522:9 vocab: i32 (const)
+  local 523:9 counts: IntMap (const)
+  callee 523:18 new IntMap -> @IntMap.constructor
+  local 524:12 j: i32 (let)
+  local 525:11 at: i32 (const)
+  callee 525:16 Rng.next -> @Rng.next
+  callee 525:29 Rng.next -> @Rng.next
+  callee 527:7 IntMap.add -> @IntMap.add
+  local 530:7 weighted: u32 (let)
+  local 531:12 i: i32 (let)
+  callee 532:33 IntMap.get -> @IntMap.get
+  callee 534:3 report -> @report
+  callee 536:7 clock -> @clock
+  local 537:9 window: i32 (const)
+  local 538:9 pool: i32 (const)
+  local 539:9 churn: IntMap (const)
+  callee 539:17 new IntMap -> @IntMap.constructor
+  local 540:12 i: i32 (let)
+  local 541:11 add: i32 (const)
+  callee 543:7 IntMap.set -> @IntMap.set
+  local 545:11 drop: i32 (const)
+  callee 547:7 IntMap.delete -> @IntMap.delete
+  callee 550:3 report -> @report
+  callee 550:51 IntMap.sum -> @IntMap.sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via intKeys
+  calls: intKeys nish_arena_mark nish_arena_release nish_panic_index nish_str_eq runInt runStr strKeys
+  stackSites=0 stackLocals=0
+  local 555:9 n: i32 (const)
+  local 556:9 timing: boolean (const)
+  local 557:9 ints: i32[] (const)
+  callee 557:16 intKeys -> @intKeys
+  callee 558:3 runStr -> @runStr
+  callee 558:10 strKeys -> @strKeys
+  callee 559:3 runInt -> @runInt
+program bench/map_proto_ordered_fp32.ts
+module bench/map_proto_ordered_fp32.ts (entry)
+const INDEX_CAP: i32 = 16777215
+const INITIAL_SLOTS: i32 = 8
+struct StrMap (class) size=48 align=8
+  field slots: u32[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: string[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field hashes: u32[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @StrMap.constructor
+  method probe -> @StrMap.probe
+  method get -> @StrMap.get
+  method add -> @StrMap.add
+  method set -> @StrMap.set
+  method insertAt -> @StrMap.insertAt
+  method delete -> @StrMap.delete
+  method rebuild -> @StrMap.rebuild
+  method sum -> @StrMap.sum
+struct IntMap (class) size=48 align=8
+  field slots: u32[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: i32[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field hashes: u32[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @IntMap.constructor
+  method probe -> @IntMap.probe
+  method get -> @IntMap.get
+  method add -> @IntMap.add
+  method set -> @IntMap.set
+  method insertAt -> @IntMap.insertAt
+  method delete -> @IntMap.delete
+  method rebuild -> @IntMap.rebuild
+  method sum -> @IntMap.sum
+struct Rng (class) size=4 align=4
+  field state: u32 index=0 offset=0 initialized
+  method next -> @Rng.next
+function hashStr(key: string): u32 -> @hashStr
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 27:7 h: u32 (let)
+  local 28:12 i: i32 (let)
+function hashInt(key: i32): u32 -> @hashInt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 36:7 h: u32 (let)
+function home(h: u32, mask: i32): i32 -> @home
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function slotOf(h: u32, index: i32): u32 -> @slotOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function StrMap.probe(this: StrMap, key: string, h: u32): i32 -> @StrMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 86:11
+  escaping: h
+  calls: home nish_exit nish_panic_index nish_str_eq nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 74:11 n: i32 (const)
+  local 75:11 fp: u32 (const)
+  local 76:9 b: i32 (let)
+  callee 76:13 home -> @home
+  local 78:13 s: u32 (const)
+  local 84:15 at: i32 (const)
+function StrMap.get(this: StrMap, key: string, missing: i32): i32 -> @StrMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StrMap.probe
+  escaping: key missing
+  calls: StrMap.probe hashStr
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 96:11 at: i32 (const)
+  callee 96:16 StrMap.probe -> @StrMap.probe
+  callee 96:32 hashStr -> @hashStr
+function StrMap.add(this: StrMap, key: string, delta: i32): void -> @StrMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 106:9
+  escaping: delta key
+  calls: StrMap.insertAt StrMap.probe hashStr
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 102:11 h: u32 (const)
+  callee 102:15 hashStr -> @hashStr
+  local 103:11 at: i32 (const)
+  callee 103:16 StrMap.probe -> @StrMap.probe
+  callee 110:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.set(this: StrMap, key: string, value: i32): void -> @StrMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 118:9
+  escaping: key value
+  calls: StrMap.insertAt StrMap.probe hashStr
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 114:11 h: u32 (const)
+  callee 114:15 hashStr -> @hashStr
+  local 115:11 at: i32 (const)
+  callee 115:16 StrMap.probe -> @StrMap.probe
+  callee 122:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.insertAt(this: StrMap, b: i32, key: string, h: u32, value: i32): void -> @StrMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 132:5
+  escaping: b h key value
+  calls: StrMap.rebuild nish_array_grow nish_exit nish_panic_index nish_write slotOf
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 136:11 used: i32 (const)
+  callee 138:23 slotOf -> @slotOf
+  callee 142:7 StrMap.rebuild -> @StrMap.rebuild
+function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 152:7
+  escaping: key
+  calls: StrMap.probe hashStr nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 147:11 at: i32 (const)
+  callee 147:16 StrMap.probe -> @StrMap.probe
+  callee 147:32 hashStr -> @hashStr
+function StrMap.rebuild(this: StrMap): void -> @StrMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 171:9
+  calls: home nish_panic_index slotOf
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 165:11 used: i32 (const)
+  local 166:11 size: i32 (const)
+  local 167:9 to: i32 (let)
+  local 168:14 from: i32 (let)
+  local 169:13 h: u32 (const)
+  local 186:13 slots: u32[] (const)
+  local 187:16 i: i32 (let)
+  local 194:14 i: i32 (let)
+  local 195:11 b: i32 (let)
+  callee 195:15 home -> @home
+  callee 200:25 slotOf -> @slotOf
+function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 207:9 total: u32 (let)
+  local 208:14 i: i32 (let)
+function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function IntMap.probe(this: IntMap, key: i32, h: u32): i32 -> @IntMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 255:11
+  escaping: h
+  calls: home nish_exit nish_panic_index nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 243:11 n: i32 (const)
+  local 244:11 fp: u32 (const)
+  local 245:9 b: i32 (let)
+  callee 245:13 home -> @home
+  local 247:13 s: u32 (const)
+  local 253:15 at: i32 (const)
+function IntMap.get(this: IntMap, key: i32, missing: i32): i32 -> @IntMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IntMap.probe
+  escaping: key missing
+  calls: IntMap.probe hashInt
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 265:11 at: i32 (const)
+  callee 265:16 IntMap.probe -> @IntMap.probe
+  callee 265:32 hashInt -> @hashInt
+function IntMap.add(this: IntMap, key: i32, delta: i32): void -> @IntMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 275:9
+  escaping: delta key
+  calls: IntMap.insertAt IntMap.probe hashInt
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 271:11 h: u32 (const)
+  callee 271:15 hashInt -> @hashInt
+  local 272:11 at: i32 (const)
+  callee 272:16 IntMap.probe -> @IntMap.probe
+  callee 279:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.set(this: IntMap, key: i32, value: i32): void -> @IntMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 287:9
+  escaping: key value
+  calls: IntMap.insertAt IntMap.probe hashInt
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 283:11 h: u32 (const)
+  callee 283:15 hashInt -> @hashInt
+  local 284:11 at: i32 (const)
+  callee 284:16 IntMap.probe -> @IntMap.probe
+  callee 291:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.insertAt(this: IntMap, b: i32, key: i32, h: u32, value: i32): void -> @IntMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 301:5
+  escaping: b h key value
+  calls: IntMap.rebuild nish_array_grow nish_exit nish_panic_index nish_write slotOf
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 305:11 used: i32 (const)
+  callee 307:23 slotOf -> @slotOf
+  callee 311:7 IntMap.rebuild -> @IntMap.rebuild
+function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 321:7
+  escaping: key
+  calls: IntMap.probe hashInt nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 316:11 at: i32 (const)
+  callee 316:16 IntMap.probe -> @IntMap.probe
+  callee 316:32 hashInt -> @hashInt
+function IntMap.rebuild(this: IntMap): void -> @IntMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 340:9
+  calls: home nish_panic_index slotOf
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 334:11 used: i32 (const)
+  local 335:11 size: i32 (const)
+  local 336:9 to: i32 (let)
+  local 337:14 from: i32 (let)
+  local 338:13 h: u32 (const)
+  local 355:13 slots: u32[] (const)
+  local 356:16 i: i32 (let)
+  local 363:14 i: i32 (let)
+  local 364:11 b: i32 (let)
+  callee 364:15 home -> @home
+  callee 369:25 slotOf -> @slotOf
+function IntMap.sum(this: IntMap): u32 -> @IntMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 376:9 total: u32 (let)
+  local 377:14 i: i32 (let)
+function Rng.next(this: Rng): i32 -> @Rng.next [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 393:5
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function intKeys(n: i32): i32[] -> @intKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 406:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 404:9 keys: i32[] (const)
+  local 405:12 i: i32 (let)
+function strKeys(ints: i32[]): string[] -> @strKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 414:5
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer ints: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 412:9 keys: string[] (const)
+  local 413:14 k: i32 (const)
+function clock(timing: boolean): i64 -> @clock
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos
+  stackSites=0 stackLocals=0
+function report(timing: boolean, name: string, started: i64, checksum: string): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via StrMap.set
+  calls: StrMap.constructor StrMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 431:9 m: StrMap (const)
+  callee 431:13 new StrMap -> @StrMap.constructor
+  local 432:12 i: i32 (let)
+  callee 433:5 StrMap.set -> @StrMap.set
+function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via IntMap.set
+  calls: IntMap.constructor IntMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 439:9 m: IntMap (const)
+  callee 439:13 new IntMap -> @IntMap.constructor
+  local 440:12 i: i32 (let)
+  callee 441:5 IntMap.set -> @IntMap.set
+function runStr(keys: string[], n: i32, timing: boolean): void -> @runStr
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: Rng.next StrMap.add StrMap.constructor StrMap.delete StrMap.get StrMap.set StrMap.sum clock fillStrMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillStrMap#0 fillStrMap#0
+  stackSites=3 stackLocals=3
+  local 447:9 mask: i32 (const)
+  local 448:9 rng: Rng (const)
+  local 449:7 t: i64 (let)
+  callee 449:11 clock -> @clock
+  local 450:7 built: i32 (let)
+  local 451:12 round: i32 (let)
+  callee 452:21 fillStrMap -> @fillStrMap
+  local 454:9 m: StrMap (const)
+  callee 454:13 fillStrMap -> @fillStrMap
+  callee 455:3 report -> @report
+  callee 455:56 StrMap.sum -> @StrMap.sum
+  callee 457:7 clock -> @clock
+  local 458:7 hits: u32 (let)
+  local 459:12 j: i32 (let)
+  local 460:11 at: i32 (const)
+  callee 460:16 Rng.next -> @Rng.next
+  callee 462:27 StrMap.get -> @StrMap.get
+  callee 465:3 report -> @report
+  callee 467:7 clock -> @clock
+  local 468:7 misses: u32 (let)
+  local 469:12 j: i32 (let)
+  local 470:11 at: i32 (const)
+  callee 470:21 Rng.next -> @Rng.next
+  callee 472:31 StrMap.get -> @StrMap.get
+  callee 475:3 report -> @report
+  callee 477:7 clock -> @clock
+  local 478:9 vocab: i32 (const)
+  local 479:9 counts: StrMap (const)
+  callee 479:18 new StrMap -> @StrMap.constructor
+  local 480:12 j: i32 (let)
+  local 481:11 at: i32 (const)
+  callee 481:16 Rng.next -> @Rng.next
+  callee 481:29 Rng.next -> @Rng.next
+  callee 483:7 StrMap.add -> @StrMap.add
+  local 486:7 weighted: u32 (let)
+  local 487:12 i: i32 (let)
+  callee 488:33 StrMap.get -> @StrMap.get
+  callee 490:3 report -> @report
+  callee 492:7 clock -> @clock
+  local 493:9 window: i32 (const)
+  local 494:9 pool: i32 (const)
+  local 495:9 churn: StrMap (const)
+  callee 495:17 new StrMap -> @StrMap.constructor
+  local 496:12 i: i32 (let)
+  local 497:11 add: i32 (const)
+  callee 499:7 StrMap.set -> @StrMap.set
+  local 501:11 drop: i32 (const)
+  callee 503:7 StrMap.delete -> @StrMap.delete
+  callee 506:3 report -> @report
+  callee 506:51 StrMap.sum -> @StrMap.sum
+function runInt(keys: i32[], n: i32, timing: boolean): void -> @runInt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: IntMap.add IntMap.constructor IntMap.delete IntMap.get IntMap.set IntMap.sum Rng.next clock fillIntMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillIntMap#0 fillIntMap#0
+  stackSites=3 stackLocals=3
+  local 510:9 mask: i32 (const)
+  local 511:9 rng: Rng (const)
+  local 512:7 t: i64 (let)
+  callee 512:11 clock -> @clock
+  local 513:7 built: i32 (let)
+  local 514:12 round: i32 (let)
+  callee 515:21 fillIntMap -> @fillIntMap
+  local 517:9 m: IntMap (const)
+  callee 517:13 fillIntMap -> @fillIntMap
+  callee 518:3 report -> @report
+  callee 518:56 IntMap.sum -> @IntMap.sum
+  callee 520:7 clock -> @clock
+  local 521:7 hits: u32 (let)
+  local 522:12 j: i32 (let)
+  local 523:11 at: i32 (const)
+  callee 523:16 Rng.next -> @Rng.next
+  callee 525:27 IntMap.get -> @IntMap.get
+  callee 528:3 report -> @report
+  callee 530:7 clock -> @clock
+  local 531:7 misses: u32 (let)
+  local 532:12 j: i32 (let)
+  local 533:11 at: i32 (const)
+  callee 533:21 Rng.next -> @Rng.next
+  callee 535:31 IntMap.get -> @IntMap.get
+  callee 538:3 report -> @report
+  callee 540:7 clock -> @clock
+  local 541:9 vocab: i32 (const)
+  local 542:9 counts: IntMap (const)
+  callee 542:18 new IntMap -> @IntMap.constructor
+  local 543:12 j: i32 (let)
+  local 544:11 at: i32 (const)
+  callee 544:16 Rng.next -> @Rng.next
+  callee 544:29 Rng.next -> @Rng.next
+  callee 546:7 IntMap.add -> @IntMap.add
+  local 549:7 weighted: u32 (let)
+  local 550:12 i: i32 (let)
+  callee 551:33 IntMap.get -> @IntMap.get
+  callee 553:3 report -> @report
+  callee 555:7 clock -> @clock
+  local 556:9 window: i32 (const)
+  local 557:9 pool: i32 (const)
+  local 558:9 churn: IntMap (const)
+  callee 558:17 new IntMap -> @IntMap.constructor
+  local 559:12 i: i32 (let)
+  local 560:11 add: i32 (const)
+  callee 562:7 IntMap.set -> @IntMap.set
+  local 564:11 drop: i32 (const)
+  callee 566:7 IntMap.delete -> @IntMap.delete
+  callee 569:3 report -> @report
+  callee 569:51 IntMap.sum -> @IntMap.sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via intKeys
+  calls: intKeys nish_arena_mark nish_arena_release nish_panic_index nish_str_eq runInt runStr strKeys
+  stackSites=0 stackLocals=0
+  local 574:9 n: i32 (const)
+  local 575:9 timing: boolean (const)
+  local 576:9 ints: i32[] (const)
+  callee 576:16 intKeys -> @intKeys
+  callee 577:3 runStr -> @runStr
+  callee 577:10 strKeys -> @strKeys
+  callee 578:3 runInt -> @runInt
+program bench/map_proto_unordered.ts
+module bench/map_proto_unordered.ts (entry)
+const INITIAL_SLOTS: i32 = 8
+struct StrMap (class) size=32 align=8
+  field hashes: u32[] index=0 offset=0
+  field keys: string | null[] index=1 offset=8
+  field values: i32[] index=2 offset=16
+  field mask: i32 index=3 offset=24 initialized
+  field live: i32 index=4 offset=28 initialized
+  constructor -> @StrMap.constructor
+  method probe -> @StrMap.probe
+  method get -> @StrMap.get
+  method add -> @StrMap.add
+  method set -> @StrMap.set
+  method insertAt -> @StrMap.insertAt
+  method delete -> @StrMap.delete
+  method grow -> @StrMap.grow
+  method sum -> @StrMap.sum
+struct IntMap (class) size=32 align=8
+  field hashes: u32[] index=0 offset=0
+  field keys: i32[] index=1 offset=8
+  field values: i32[] index=2 offset=16
+  field mask: i32 index=3 offset=24 initialized
+  field live: i32 index=4 offset=28 initialized
+  constructor -> @IntMap.constructor
+  method probe -> @IntMap.probe
+  method get -> @IntMap.get
+  method add -> @IntMap.add
+  method set -> @IntMap.set
+  method insertAt -> @IntMap.insertAt
+  method delete -> @IntMap.delete
+  method grow -> @IntMap.grow
+  method sum -> @IntMap.sum
+struct Rng (class) size=4 align=4
+  field state: u32 index=0 offset=0 initialized
+  method next -> @Rng.next
+function hashStr(key: string): u32 -> @hashStr
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 20:7 h: u32 (let)
+  local 21:12 i: i32 (let)
+function hashInt(key: i32): u32 -> @hashInt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 29:7 h: u32 (let)
+function home(h: u32, mask: i32): i32 -> @home
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function StrMap.probe(this: StrMap, key: string, h: u32): i32 -> @StrMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: h
+  calls: home nish_exit nish_panic_index nish_str_eq nish_write
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 60:11 n: i32 (const)
+  local 61:9 b: i32 (let)
+  callee 61:13 home -> @home
+  local 63:13 s: u32 (const)
+  local 68:15 k: string | null (const)
+function StrMap.get(this: StrMap, key: string, missing: i32): i32 -> @StrMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StrMap.probe
+  escaping: key missing
+  calls: StrMap.probe hashStr
+  pointer this: size=32 writesThrough=false captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 79:11 b: i32 (const)
+  callee 79:15 StrMap.probe -> @StrMap.probe
+  callee 79:31 hashStr -> @hashStr
+function StrMap.add(this: StrMap, key: string, delta: i32): void -> @StrMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 89:9
+  escaping: delta key
+  calls: StrMap.insertAt StrMap.probe hashStr
+  pointer this: size=32 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 85:11 h: u32 (const)
+  callee 85:15 hashStr -> @hashStr
+  local 86:11 b: i32 (const)
+  callee 86:15 StrMap.probe -> @StrMap.probe
+  callee 93:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.set(this: StrMap, key: string, value: i32): void -> @StrMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 101:9
+  escaping: key value
+  calls: StrMap.insertAt StrMap.probe hashStr
+  pointer this: size=32 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 97:11 h: u32 (const)
+  callee 97:15 hashStr -> @hashStr
+  local 98:11 b: i32 (const)
+  callee 98:15 StrMap.probe -> @StrMap.probe
+  callee 105:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.insertAt(this: StrMap, b: i32, key: string, h: u32, value: i32): void -> @StrMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 110:7
+  escaping: b h key value
+  calls: StrMap.grow
+  pointer this: size=32 writesThrough=true captured=false passedTo=StrMap.grow#0
+  stackSites=0 stackLocals=0
+  callee 116:7 StrMap.grow -> @StrMap.grow
+function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 137:11
+  escaping: key
+  calls: StrMap.probe hashStr home nish_panic_index
+  pointer this: size=32 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 126:9 hole: i32 (let)
+  callee 126:16 StrMap.probe -> @StrMap.probe
+  callee 126:32 hashStr -> @hashStr
+  local 130:11 n: i32 (const)
+  local 131:9 b: i32 (let)
+  local 133:13 want: i32 (const)
+  callee 133:20 home -> @home
+function StrMap.grow(this: StrMap): void -> @StrMap.grow [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 159:5
+  calls: home nish_panic_index
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 155:11 oldHashes: u32[] (const)
+  local 156:11 oldKeys: string | null[] (const)
+  local 157:11 oldValues: i32[] (const)
+  local 158:11 size: i32 (const)
+  local 163:14 i: i32 (let)
+  local 164:13 h: u32 (const)
+  local 166:13 b: i32 (let)
+  callee 166:17 home -> @home
+function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 181:9 total: u32 (let)
+  local 182:14 i: i32 (let)
+function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function IntMap.probe(this: IntMap, key: i32, h: u32): i32 -> @IntMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: h
+  calls: home nish_exit nish_panic_index nish_write
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 211:11 n: i32 (const)
+  local 212:9 b: i32 (let)
+  callee 212:13 home -> @home
+  local 214:13 s: u32 (const)
+function IntMap.get(this: IntMap, key: i32, missing: i32): i32 -> @IntMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IntMap.probe
+  escaping: key missing
+  calls: IntMap.probe hashInt
+  pointer this: size=32 writesThrough=false captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 229:11 b: i32 (const)
+  callee 229:15 IntMap.probe -> @IntMap.probe
+  callee 229:31 hashInt -> @hashInt
+function IntMap.add(this: IntMap, key: i32, delta: i32): void -> @IntMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 239:9
+  escaping: delta key
+  calls: IntMap.insertAt IntMap.probe hashInt
+  pointer this: size=32 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 235:11 h: u32 (const)
+  callee 235:15 hashInt -> @hashInt
+  local 236:11 b: i32 (const)
+  callee 236:15 IntMap.probe -> @IntMap.probe
+  callee 243:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.set(this: IntMap, key: i32, value: i32): void -> @IntMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 251:9
+  escaping: key value
+  calls: IntMap.insertAt IntMap.probe hashInt
+  pointer this: size=32 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 247:11 h: u32 (const)
+  callee 247:15 hashInt -> @hashInt
+  local 248:11 b: i32 (const)
+  callee 248:15 IntMap.probe -> @IntMap.probe
+  callee 255:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.insertAt(this: IntMap, b: i32, key: i32, h: u32, value: i32): void -> @IntMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 260:7
+  escaping: b h key value
+  calls: IntMap.grow
+  pointer this: size=32 writesThrough=true captured=false passedTo=IntMap.grow#0
+  stackSites=0 stackLocals=0
+  callee 266:7 IntMap.grow -> @IntMap.grow
+function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 287:11
+  escaping: key
+  calls: IntMap.probe hashInt home nish_panic_index
+  pointer this: size=32 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 276:9 hole: i32 (let)
+  callee 276:16 IntMap.probe -> @IntMap.probe
+  callee 276:32 hashInt -> @hashInt
+  local 280:11 n: i32 (const)
+  local 281:9 b: i32 (let)
+  local 283:13 want: i32 (const)
+  callee 283:20 home -> @home
+function IntMap.grow(this: IntMap): void -> @IntMap.grow [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 308:5
+  calls: home nish_panic_index
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 304:11 oldHashes: u32[] (const)
+  local 305:11 oldKeys: i32[] (const)
+  local 306:11 oldValues: i32[] (const)
+  local 307:11 size: i32 (const)
+  local 312:14 i: i32 (let)
+  local 313:13 h: u32 (const)
+  local 315:13 b: i32 (let)
+  callee 315:17 home -> @home
+function IntMap.sum(this: IntMap): u32 -> @IntMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 330:9 total: u32 (let)
+  local 331:14 i: i32 (let)
+function Rng.next(this: Rng): i32 -> @Rng.next [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 347:5
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function intKeys(n: i32): i32[] -> @intKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 360:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 358:9 keys: i32[] (const)
+  local 359:12 i: i32 (let)
+function strKeys(ints: i32[]): string[] -> @strKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 368:5
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer ints: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 366:9 keys: string[] (const)
+  local 367:14 k: i32 (const)
+function clock(timing: boolean): i64 -> @clock
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos
+  stackSites=0 stackLocals=0
+function report(timing: boolean, name: string, started: i64, checksum: string): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  sharedWrite: via StrMap.set
+  calls: StrMap.constructor StrMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 385:9 m: StrMap (const)
+  callee 385:13 new StrMap -> @StrMap.constructor
+  local 386:12 i: i32 (let)
+  callee 387:5 StrMap.set -> @StrMap.set
+function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  sharedWrite: via IntMap.set
+  calls: IntMap.constructor IntMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 393:9 m: IntMap (const)
+  callee 393:13 new IntMap -> @IntMap.constructor
+  local 394:12 i: i32 (let)
+  callee 395:5 IntMap.set -> @IntMap.set
+function runStr(keys: string[], n: i32, timing: boolean): void -> @runStr
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: Rng.next StrMap.add StrMap.constructor StrMap.delete StrMap.get StrMap.set StrMap.sum clock fillStrMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillStrMap#0 fillStrMap#0
+  stackSites=3 stackLocals=3
+  local 401:9 mask: i32 (const)
+  local 402:9 rng: Rng (const)
+  local 403:7 t: i64 (let)
+  callee 403:11 clock -> @clock
+  local 404:7 built: i32 (let)
+  local 405:12 round: i32 (let)
+  callee 406:21 fillStrMap -> @fillStrMap
+  local 408:9 m: StrMap (const)
+  callee 408:13 fillStrMap -> @fillStrMap
+  callee 409:3 report -> @report
+  callee 409:56 StrMap.sum -> @StrMap.sum
+  callee 411:7 clock -> @clock
+  local 412:7 hits: u32 (let)
+  local 413:12 j: i32 (let)
+  local 414:11 at: i32 (const)
+  callee 414:16 Rng.next -> @Rng.next
+  callee 416:27 StrMap.get -> @StrMap.get
+  callee 419:3 report -> @report
+  callee 421:7 clock -> @clock
+  local 422:7 misses: u32 (let)
+  local 423:12 j: i32 (let)
+  local 424:11 at: i32 (const)
+  callee 424:21 Rng.next -> @Rng.next
+  callee 426:31 StrMap.get -> @StrMap.get
+  callee 429:3 report -> @report
+  callee 431:7 clock -> @clock
+  local 432:9 vocab: i32 (const)
+  local 433:9 counts: StrMap (const)
+  callee 433:18 new StrMap -> @StrMap.constructor
+  local 434:12 j: i32 (let)
+  local 435:11 at: i32 (const)
+  callee 435:16 Rng.next -> @Rng.next
+  callee 435:29 Rng.next -> @Rng.next
+  callee 437:7 StrMap.add -> @StrMap.add
+  local 440:7 weighted: u32 (let)
+  local 441:12 i: i32 (let)
+  callee 442:33 StrMap.get -> @StrMap.get
+  callee 444:3 report -> @report
+  callee 446:7 clock -> @clock
+  local 447:9 window: i32 (const)
+  local 448:9 pool: i32 (const)
+  local 449:9 churn: StrMap (const)
+  callee 449:17 new StrMap -> @StrMap.constructor
+  local 450:12 i: i32 (let)
+  local 451:11 add: i32 (const)
+  callee 453:7 StrMap.set -> @StrMap.set
+  local 455:11 drop: i32 (const)
+  callee 457:7 StrMap.delete -> @StrMap.delete
+  callee 460:3 report -> @report
+  callee 460:51 StrMap.sum -> @StrMap.sum
+function runInt(keys: i32[], n: i32, timing: boolean): void -> @runInt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: IntMap.add IntMap.constructor IntMap.delete IntMap.get IntMap.set IntMap.sum Rng.next clock fillIntMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillIntMap#0 fillIntMap#0
+  stackSites=3 stackLocals=3
+  local 464:9 mask: i32 (const)
+  local 465:9 rng: Rng (const)
+  local 466:7 t: i64 (let)
+  callee 466:11 clock -> @clock
+  local 467:7 built: i32 (let)
+  local 468:12 round: i32 (let)
+  callee 469:21 fillIntMap -> @fillIntMap
+  local 471:9 m: IntMap (const)
+  callee 471:13 fillIntMap -> @fillIntMap
+  callee 472:3 report -> @report
+  callee 472:56 IntMap.sum -> @IntMap.sum
+  callee 474:7 clock -> @clock
+  local 475:7 hits: u32 (let)
+  local 476:12 j: i32 (let)
+  local 477:11 at: i32 (const)
+  callee 477:16 Rng.next -> @Rng.next
+  callee 479:27 IntMap.get -> @IntMap.get
+  callee 482:3 report -> @report
+  callee 484:7 clock -> @clock
+  local 485:7 misses: u32 (let)
+  local 486:12 j: i32 (let)
+  local 487:11 at: i32 (const)
+  callee 487:21 Rng.next -> @Rng.next
+  callee 489:31 IntMap.get -> @IntMap.get
+  callee 492:3 report -> @report
+  callee 494:7 clock -> @clock
+  local 495:9 vocab: i32 (const)
+  local 496:9 counts: IntMap (const)
+  callee 496:18 new IntMap -> @IntMap.constructor
+  local 497:12 j: i32 (let)
+  local 498:11 at: i32 (const)
+  callee 498:16 Rng.next -> @Rng.next
+  callee 498:29 Rng.next -> @Rng.next
+  callee 500:7 IntMap.add -> @IntMap.add
+  local 503:7 weighted: u32 (let)
+  local 504:12 i: i32 (let)
+  callee 505:33 IntMap.get -> @IntMap.get
+  callee 507:3 report -> @report
+  callee 509:7 clock -> @clock
+  local 510:9 window: i32 (const)
+  local 511:9 pool: i32 (const)
+  local 512:9 churn: IntMap (const)
+  callee 512:17 new IntMap -> @IntMap.constructor
+  local 513:12 i: i32 (let)
+  local 514:11 add: i32 (const)
+  callee 516:7 IntMap.set -> @IntMap.set
+  local 518:11 drop: i32 (const)
+  callee 520:7 IntMap.delete -> @IntMap.delete
+  callee 523:3 report -> @report
+  callee 523:51 IntMap.sum -> @IntMap.sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via intKeys
+  calls: intKeys nish_arena_mark nish_arena_release nish_panic_index nish_str_eq runInt runStr strKeys
+  stackSites=0 stackLocals=0
+  local 528:9 n: i32 (const)
+  local 529:9 timing: boolean (const)
+  local 530:9 ints: i32[] (const)
+  callee 530:16 intKeys -> @intKeys
+  callee 531:3 runStr -> @runStr
+  callee 531:10 strKeys -> @strKeys
+  callee 532:3 runInt -> @runInt
 program bench/nbody.ts --number-mode f64
 module bench/nbody.ts (entry)
 struct Body (class) size=56 align=8

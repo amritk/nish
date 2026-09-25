@@ -6728,7 +6728,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // every variant (speed, --nsw, size profile, C, Rust, Rust native) at a small size and
 // compares the outputs; nothing is timed. The Are We Fast Yet ports in bench/awfy/
 // have no twins, so `awfy` builds their harness and runs each one once, which panics
-// when a port's own `verifyResult` fails. Also: `--target host` pins a module to a
+// when a port's own `verifyResult` fails. `maps` builds the four WP32 map layout
+// prototypes and requires each to print what bench/map_node.mjs prints from
+// Node's `Map`. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
 // every user-level integer add/sub/mul but nothing else.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
@@ -6742,16 +6744,17 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       path.relative(root, NISH),
       "--validate",
       "--only",
-      "fib,sieve,awfy",
+      "fib,sieve,awfy,maps",
       "--n",
-      "fib=25,sieve=100000",
+      "fib=25,sieve=100000,maps=1024",
     ],
     { cwd: root, encoding: "utf8" }
   );
   check(
-    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc), and the seven AWFY ports verify",
+    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc), the seven AWFY ports verify, and the four map prototypes agree with Node's Map",
     v.status === 0 &&
       v.stdout.includes("awfy: 7 benchmarks verified") &&
+      v.stdout.includes("maps: 4 prototype(s) agree with Node's Map over 10 workloads") &&
       v.stdout.includes("checksums agree") &&
       v.stdout.includes("fib: 75025") &&
       v.stdout.includes("sieve: 191840"),
@@ -6881,8 +6884,9 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
-// noise is bigger than that. An instruction count is exact, so the fourteen
-// benchmark programs (bench/*.ts and the seven AWFY ports) are built as the timing
+// noise is bigger than that. An instruction count is exact, so the eighteen
+// benchmark programs (bench/*.ts, the four WP32 map layout prototypes and the
+// seven AWFY ports) are built as the timing
 // mode builds them and run once each under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
@@ -6905,7 +6909,7 @@ if (!only || "instructions".includes(only)) {
     });
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 14 within /m.test(counted.stdout),
+      counted.status === 0 && /^instructions: all 18 within /m.test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     );
   }
