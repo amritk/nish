@@ -75,6 +75,7 @@ import {
   privateResultAbi,
   unpackReturnedResult,
 } from "./emit_result";
+import { emitParallelRegion, isParallelRegionCall } from "./emit_parallel";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
 import { internalErrorFor } from "./ice";
@@ -1105,6 +1106,8 @@ export class Emitter {
     }
     const args = expr.children[1];
     const operands: string[] = [];
+    const operandTypes: string[] = [];
+    const operandValues: string[] = [];
     // A non-exported callee takes and answers one slot per arm (WP15).
     const calleePrivate = privateResultAbi(this, sig.visibleOutside());
     let i = 0;
@@ -1123,7 +1126,15 @@ export class Emitter {
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
         : this.emitExpression(args.children[i]);
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`);
+      operandTypes.push(this.llvmAbi(want, calleePrivate));
+      operandValues.push(value);
       i = i + 1;
+    }
+    // WP29 P1: inside a `parallelMapInto` or `parallelReduce` instance, the
+    // call to the chunk loop is the one that runs on several threads.
+    if (isParallelRegionCall(this.currentSig, sig)) {
+      emitParallelRegion(this, sig, operandTypes, operandValues);
+      return "void";
     }
     // WP6: this call is the whole of a `return` and the proof in escape.ts
     // (`marksTailCall`) clears, so it is the last thing the function does. Two

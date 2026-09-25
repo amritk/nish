@@ -1816,6 +1816,29 @@ for (const name of linkTests) {
   );
 }
 
+// WP29 P1: `dst` shorter than `src` panics before any element is written, with
+// `std/threads.ts`'s own message. The link loop above compares stdout and the
+// exit code only, so the wording is pinned here, on stderr, the way
+// `arr_bounds_panic` pins `index out of range`.
+// The binary's existence is part of the assertion rather than a guard around it,
+// so a renamed or deleted fixture fails here instead of dropping the check.
+if (!only || "par_dst_short".includes(only)) {
+  // The fixture is asked for too: the link loop empties its output directory
+  // only when it runs the case, so a binary left by an earlier run would
+  // otherwise answer for a fixture that is gone.
+  const fixture = linkTests.includes("par_dst_short");
+  const exe = path.join(buildDir, "link", "par_dst_short", "app");
+  const run = fixture && fs.existsSync(exe) ? spawnSync(exe) : null;
+  check(
+    "link/par_dst_short: exits 1 with `parallelMapInto: dst has 2 elements and src has 3` on stderr",
+    run !== null &&
+      run.status === 1 &&
+      String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
+      String(run.stdout).trim() === "before",
+    run === null ? (fixture ? `no such binary: ${exe}` : "no such fixture: tests/link/par_dst_short") : `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+  );
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the
@@ -6813,6 +6836,38 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
         `wrapping has panic_index: ${wrapIr.includes("nish_panic_index")}, default has: ${stripHeader(ir).includes("nish_panic_index")}`
       );
     }
+  }
+}
+
+// ---- Instruction counts ------------------------------------------------------------
+// Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
+// noise is bigger than that. An instruction count is exact, so the fourteen
+// benchmark programs (bench/*.ts and the seven AWFY ports) are built as the timing
+// mode builds them and run once each under cachegrind, and a count above
+// bench/instructions.json by more than its tolerance fails. The counts are x86-64
+// Linux's, so anywhere else, or without valgrind, the check is a counted skip.
+// bench/README.md ("Instruction counts") has the determinism measurements and
+// the procedure for raising a baseline.
+if (!only || "instructions".includes(only)) {
+  const counts = JSON.parse(fs.readFileSync(path.join(root, "bench", "instructions.json"), "utf8"));
+  const host = `${process.platform}-${process.arch}`;
+  if (host !== counts.platform) {
+    skip(`instructions: the baseline is counted on ${counts.platform}, not ${host}`);
+  } else if (!has("valgrind")) {
+    skip("instructions: valgrind is not on PATH, so no benchmark's instruction count is checked");
+  } else if (!HAS_CLANG) {
+    skip("instructions: clang is not on PATH, so the benchmarks cannot be linked");
+  } else {
+    const bench = path.join(root, "bench", "run.mjs");
+    const counted = spawnSync("node", [bench, "--compiler", path.relative(root, NISH), "--instructions", "--check"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      "instructions: no benchmark executes more instructions than bench/instructions.json allows",
+      counted.status === 0 && /^instructions: all 14 within /m.test(counted.stdout),
+      `${counted.stdout}${counted.stderr}`
+    );
   }
 }
 

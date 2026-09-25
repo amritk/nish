@@ -1,0 +1,1 @@
+`viaBump` writes memory its caller can see through `bump`, and `parallelMapInto`

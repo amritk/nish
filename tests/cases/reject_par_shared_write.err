@@ -1,0 +1,3 @@
+`bump` writes memory its caller can see at 
+reject_par_shared_write.ts:10:3, and `parallelMapInto`
+` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result

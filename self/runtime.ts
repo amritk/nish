@@ -523,6 +523,24 @@ export class RuntimeTable {
     );
     panicDiv.noreturn = true;
     this.addWrites(WRITES_PANIC, panicDiv);
+    // WP29 P1, runtime/runtime_parallel.c: how a `parallelMapInto` or a
+    // `parallelReduce` becomes several threads (`self/emit_parallel.ts`). It
+    // calls `body(lo, hi, ctx)` once per chunk, so it does whatever the body
+    // does: a shared write, which is the chunk loop's own `dst[i]`, and not
+    // `willreturn`, because neither `pthread_join` nor an arbitrary body is
+    // known to return. `nounwind` holds: nothing in the language unwinds.
+    this.add(
+      new RuntimeFunction(
+        "nish_parallel_range",
+        "declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    );
+    // The partitioner's own question, declared because it is part of the ABI
+    // nish.h publishes. It caches the answer in a word of its own, which no
+    // program can observe.
+    this.addWrites(WRITES_NOTHING, plain("nish_cpu_count", "declare noundef i64 @nish_cpu_count()", EFFECT_WRITE));
     this.buildIntrinsics();
   }
 

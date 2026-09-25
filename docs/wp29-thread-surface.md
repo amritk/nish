@@ -1,6 +1,9 @@
 # WP29: The thread surface, and what is legal TypeScript
 
-**Proposed. Nothing here is built.** [wp20-threads.md](wp20-threads.md) is the
+**P1 is built; P2 and P3 are proposed.** §4.1's two forms are in
+`std/threads.ts` and [LANGUAGE.md](LANGUAGE.md#data-parallelism-nishthreads)
+states their rules; the status note under §4.1 says what was decided on the way
+and §11 what closed. [wp20-threads.md](wp20-threads.md) is the
 plan of record for *whether* and *why* — 1:1 OS threads, data races rejected at
 compile time, T0 and the partitioner built, and the payoff measured at 3.96x on
 four cores (wp20 §8). It deliberately left the surface open: "the stage that decides how much
@@ -9,8 +12,8 @@ before committing to the surface". This note is that commitment, and the
 question it answers is the narrower one: **given that a Nish program must be
 legal TypeScript, what is the best surface we can actually spell?**
 
-Read wp20 §1 to §4 first. [LANGUAGE.md](LANGUAGE.md) stays normative and this
-note adds no rule to it yet; where they disagree, LANGUAGE.md wins.
+Read wp20 §1 to §4 first. [LANGUAGE.md](LANGUAGE.md) stays normative; where
+they disagree, LANGUAGE.md wins.
 
 ---
 
@@ -193,6 +196,40 @@ Why this is the right first stage, and it is not only the measurement:
   whole call graph. A body it cannot clear is a compile error naming the write.
   That is the entire race-freedom argument for this stage: no `Send`, no
   `Sync`, no detector, and no annotation.
+
+**Status: built.** `import { parallelMapInto, parallelReduce } from "nish/threads"`
+compiles, over the function parameter wp23 §6 now provides. What the build
+decided, beyond what is written above:
+
+- **The module is ordinary Nish.** `std/threads.ts` writes both functions as
+  the sequential loop — which is what runs under Node and what `npm run check`
+  types — and the compiler recognises the two templates by module and name.
+  It replaces one call in each instance, the chunk loop over the whole range,
+  with a context block and a call to `nish_parallel_range`
+  (`self/emit_parallel.ts`), so the length check and its message, the reduce's
+  blocking and its combine are the module's code, and the chunk loop keeps its
+  bounds proofs and TBAA. There is no `declare global`, no `Disposable` and no
+  `using` in P1.
+- **"Pure" is a fact of its own.** `readnone`/`readonly` is the wrong
+  question: a bounds check, an integer division and an arena allocation are
+  all writes to LLVM. The fixpoint records a *shared write*
+  (`FunctionFacts.sharedWrite`) that leaves out panics, traps and allocation,
+  and names the node or callee that makes one; the rule judges the function
+  passed as `f`, never the instance, whose own loop writes `dst[i]`.
+- **Purity is not enough, so there is a reachability rule.** A body that only
+  reads can still read `dst` through its argument (`T = Row { cells: f64[] }`
+  with a `f64[]` `dst`). An array of `dst`'s element type reachable from `T` is
+  refused, naming the path.
+- **Allocation is refused outright** in this stage, and the result is a
+  scalar, per §7. Stage P1's follow-up admits a body whose allocations are
+  recycled per element, with §8a's warning.
+- **The grain is a constant**, 2^20 elements, from wp20 §8e's millisecond per
+  region, so a map over at most that many elements is one chunk on the calling
+  thread.
+- **`--threads` is implied** by importing the module (wp20 §8c.3). It is a
+  soundness requirement rather than a default: allocation is left out of a
+  shared write only because the arena is thread-local. A program that does not
+  import it is byte-identical.
 
 ### 4.2 Stage P2 — the scope, for heterogeneous work
 
@@ -573,11 +610,16 @@ language Nish is a subset of.
 
 ## 11. Open
 
-- **Whether `parallelReduce` needs an identity argument or an initial value.**
-  The signature in §10 takes an identity and assumes associativity, which the
-  partitioner needs and the checker cannot verify. Naming that in the
-  diagnostic is easy; deciding whether to reject a plainly non-associative body
-  (subtraction) is not, and it wants a rule.
+- ~~**Whether `parallelReduce` needs an identity argument or an initial value.**~~
+  **Closed by P1: an identity, and a deterministic blocking.** `src` is split
+  into `min(64, ceil(n / 2^20))` blocks, each folded from the identity, and the
+  block results combined left to right; `std/threads.ts` does the same blocking
+  on one thread, so the answer is the same bits on any core count, compiled or
+  under Node. The rule for a plainly non-associative body is to refuse it when
+  it can be read: an arrow whose whole body is `-`, `/`, `%`, `**` or a shift
+  on its two parameters, and a recognised operator given a literal that is not
+  its identity. A named function is opaque, and LANGUAGE.md says the obligation
+  is its author's.
 - **Whether `scope()` should take the thread count.** It reads like a knob and
   §9 declines knobs before measurements, but a scope with three spawns and four
   cores is a different shape from `parallelFor`.
