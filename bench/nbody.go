@@ -1,3 +1,8 @@
+// Adapted from the Computer Language Benchmarks Game n-body program (Node.js #6,
+// contributed by Isaac Gouy, modified by Andrey Filatkin),
+// https://benchmarksgame-team.pages.debian.net/benchmarksgame/.
+// Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+// Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 // Go twin of nbody.ts: the same struct, the same expression order, the bodies
 // in a heap-allocated []*Body as they are in nbody.c and in the Nish
 // arena. math.Sqrt is an intrinsic, so it is the same sqrtsd instruction.

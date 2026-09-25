@@ -17,6 +17,7 @@ For Claude Code the same rules live in
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines
+- [`.claude/licensing.md`](./.claude/licensing.md) — third-party code: what counts as a copy, the notice it keeps, the licences allowed
 
 ## What this is
 
@@ -229,6 +230,14 @@ what is blocking and what you need — and keep watching.
   with a budget each — `runtime.c` for the core and `runtime_os.c` for whatever
   wraps a system call — so keep both inside theirs (`node tests/run.js budget`)
   and report the size of whichever you changed in the PR.
+- **Third-party code keeps its licence.** A file ported, translated or
+  adapted from elsewhere carries the upstream copyright and licence notice, its
+  licence text is in the repository (and in the package if the file ships), it
+  is listed in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md), and the PR
+  body names its origin. Only MIT-compatible licences; never GPL-family,
+  Rosetta Code, Stack Overflow, Project Euler or unlicensed code.
+  [`.claude/licensing.md`](./.claude/licensing.md) has the rule and
+  `node tests/run.js third-party-licence` checks it.
 - **Do not widen scope into another work package's files**; leave a
   `TODO(WP<n>)` instead.
 - **Never** put Claude/session links, tracking IDs, model names or platform

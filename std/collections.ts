@@ -52,7 +52,8 @@ const INITIAL_SLOTS: i32 = 8;
  * The key's hash, never 0: FNV-1a over a string's bytes, murmur3's `fmix32`
  * for an integer of 32 bits or fewer, `fmix64` folded to 32 bits for a 64-bit
  * integer, a float (normalised first, so that -0 and +0, and every NaN, hash
- * alike) and a class instance's address (§5.2).
+ * alike) and a class instance's address (§5.2). FNV, MurmurHash3 and their
+ * constants are public domain.
  *
  * The body is never emitted. Every call is lowered in place, per key type, by
  * `self/emit_map.ts`; the constant is what the checker and the whole-program

@@ -168,6 +168,12 @@ their counts and no other program's.
   variables, or one ULP in `SOLAR_MASS` would move the last digits of a
   chaotic system's final energy. Go does not fuse multiply-add on amd64, so no
   version needs to suppress FMA.
+- **A program adapted from elsewhere keeps its notice.** `nbody` and
+  `spectral` are adapted from the Computer Language Benchmarks Game, so each of
+  their four versions starts with the upstream program's name, contributors and
+  copyright, and names [`LICENSE-benchmarksgame.md`](LICENSE-benchmarksgame.md);
+  [`awfy/`](awfy/) carries its own licence. A new benchmark ported from
+  somewhere follows [`.claude/licensing.md`](../.claude/licensing.md).
 - **One checksum per program.** Outputs are compared token by token; numeric
   tokens must agree to 1e-9 relative, which lets `%.17g`, Rust's `{}`, Go's
   `%v` and Nish's JavaScript-style shortest round-trip formatting print
