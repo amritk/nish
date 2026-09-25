@@ -6820,6 +6820,38 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   }
 }
 
+// ---- Instruction counts ------------------------------------------------------------
+// Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
+// noise is bigger than that. An instruction count is exact, so the fourteen
+// benchmark programs (bench/*.ts and the seven AWFY ports) are built as the timing
+// mode builds them and run once each under cachegrind, and a count above
+// bench/instructions.json by more than its tolerance fails. The counts are x86-64
+// Linux's, so anywhere else, or without valgrind, the check is a counted skip.
+// bench/README.md ("Instruction counts") has the determinism measurements and
+// the procedure for raising a baseline.
+if (!only || "instructions".includes(only)) {
+  const counts = JSON.parse(fs.readFileSync(path.join(root, "bench", "instructions.json"), "utf8"));
+  const host = `${process.platform}-${process.arch}`;
+  if (host !== counts.platform) {
+    skip(`instructions: the baseline is counted on ${counts.platform}, not ${host}`);
+  } else if (!has("valgrind")) {
+    skip("instructions: valgrind is not on PATH, so no benchmark's instruction count is checked");
+  } else if (!HAS_CLANG) {
+    skip("instructions: clang is not on PATH, so the benchmarks cannot be linked");
+  } else {
+    const bench = path.join(root, "bench", "run.mjs");
+    const counted = spawnSync("node", [bench, "--compiler", path.relative(root, NISH), "--instructions", "--check"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    check(
+      "instructions: no benchmark executes more instructions than bench/instructions.json allows",
+      counted.status === 0 && /^instructions: all 14 within /m.test(counted.stdout),
+      `${counted.stdout}${counted.stderr}`
+    );
+  }
+}
+
 // ---- WP12: exit codes --------------------------------------------------------------
 // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
 // 70 internal compiler error. Each failure mode is driven from outside the compiler:
