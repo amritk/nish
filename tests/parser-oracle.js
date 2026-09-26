@@ -40,9 +40,9 @@ function byteOffsets(source) {
   for (let i = 0; i < source.length; i++) {
     offsets[i] = bytes;
     const code = source.codePointAt(i);
-    if (code < 0x80) bytes += 1;
-    else if (code < 0x800) bytes += 2;
-    else if (code < 0x10000) bytes += 3;
+    if (code < 0x80) { bytes += 1; }
+    else if (code < 0x800) { bytes += 2; }
+    else if (code < 0x10000) { bytes += 3; }
     else {
       bytes += 4;
       offsets[i + 1] = bytes;
@@ -83,7 +83,7 @@ function printTypeScriptTree(source, sf) {
       return;
     }
     emit(depth, "LIST", at(items[0].getStart(sf)), at(items[items.length - 1].end));
-    for (const item of items) print(item, depth + 1);
+    for (const item of items) { print(item, depth + 1); }
   };
   const empty = (depth) => emit(depth, "EMPTY", 0, 0);
   const optional = (depth, node, print) => (node === undefined ? empty(depth) : print(node, depth));
@@ -128,7 +128,7 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.TypeReference: {
-        if (!ts.isIdentifier(node.typeName)) unsupported(node);
+        if (!ts.isIdentifier(node.typeName)) { unsupported(node); }
         emit(depth, "TYPE_REF", s, e, node.typeName.text);
         list(depth + 1, node.typeArguments ?? [], type);
         return;
@@ -145,23 +145,23 @@ function printTypeScriptTree(source, sf) {
       // modifier on nothing else (TS1354), so any other operator here — `keyof`,
       // `unique` — is a type stage1 does not have a node for either.
       case ts.SyntaxKind.TypeOperator:
-        if (node.operator !== ts.SyntaxKind.ReadonlyKeyword) unsupported(node);
+        if (node.operator !== ts.SyntaxKind.ReadonlyKeyword) { unsupported(node); }
         emit(depth, "TYPE_READONLY", s, e);
         type(node.type, depth + 1);
         return;
       case ts.SyntaxKind.UnionType:
         emit(depth, "TYPE_UNION", s, e);
-        for (const member of node.types) type(member, depth + 1);
+        for (const member of node.types) { type(member, depth + 1); }
         return;
       case ts.SyntaxKind.LiteralType:
-        if (node.literal.kind !== ts.SyntaxKind.NullKeyword) unsupported(node);
+        if (node.literal.kind !== ts.SyntaxKind.NullKeyword) { unsupported(node); }
         emit(depth, "TYPE_NULL", s, e);
         return;
       // WP29: `(x: T) => U`, the type of a compile-time function parameter.
       // `parameterOf` rather than `parameter`, because `parameter` is declared
       // below this printer and a `const` is not hoisted.
       case ts.SyntaxKind.FunctionType:
-        if (node.typeParameters !== undefined) unsupported(node);
+        if (node.typeParameters !== undefined) { unsupported(node); }
         emit(depth, "TYPE_FUNCTION", s, e);
         list(depth + 1, node.parameters, parameterOf());
         type(node.type, depth + 1);
@@ -230,14 +230,14 @@ function printTypeScriptTree(source, sf) {
       }
       case ts.SyntaxKind.ArrayLiteralExpression:
         emit(depth, "ARRAY", s, e);
-        for (const element of node.elements) expression(element, depth + 1);
+        for (const element of node.elements) { expression(element, depth + 1); }
         return;
       case ts.SyntaxKind.ObjectLiteralExpression:
         emit(depth, "OBJECT", s, e);
         for (const property of node.properties) {
           const [ps, pe] = span(property);
           if (ts.isPropertyAssignment(property)) {
-            if (!ts.isIdentifier(property.name)) unsupported(property);
+            if (!ts.isIdentifier(property.name)) { unsupported(property); }
             emit(depth + 1, "PROPERTY", ps, pe, property.name.text);
             expression(property.initializer, depth + 2);
           } else if (ts.isShorthandPropertyAssignment(property)) {
@@ -268,25 +268,25 @@ function printTypeScriptTree(source, sf) {
         expression(node.whenFalse, depth + 1);
         return;
       case ts.SyntaxKind.CallExpression:
-        if (node.typeArguments !== undefined || node.questionDotToken !== undefined) unsupported(node);
+        if (node.typeArguments !== undefined || node.questionDotToken !== undefined) { unsupported(node); }
         emit(depth, "CALL", s, e);
         expression(node.expression, depth + 1);
         list(depth + 1, node.arguments, expression);
         return;
       case ts.SyntaxKind.NewExpression:
-        if (!ts.isIdentifier(node.expression)) unsupported(node);
+        if (!ts.isIdentifier(node.expression)) { unsupported(node); }
         emit(depth, "NEW", s, e);
         identifier(node.expression, depth + 1);
         list(depth + 1, node.typeArguments ?? [], type);
         list(depth + 1, node.arguments ?? [], expression);
         return;
       case ts.SyntaxKind.PropertyAccessExpression:
-        if (node.questionDotToken !== undefined || !ts.isIdentifier(node.name)) unsupported(node);
+        if (node.questionDotToken !== undefined || !ts.isIdentifier(node.name)) { unsupported(node); }
         emit(depth, "MEMBER", s, e, node.name.text);
         expression(node.expression, depth + 1);
         return;
       case ts.SyntaxKind.ElementAccessExpression:
-        if (node.questionDotToken !== undefined) unsupported(node);
+        if (node.questionDotToken !== undefined) { unsupported(node); }
         emit(depth, "INDEX", s, e);
         expression(node.expression, depth + 1);
         expression(node.argumentExpression, depth + 1);
@@ -299,13 +299,13 @@ function printTypeScriptTree(source, sf) {
       // `N_FUNCTION` — an absent name first, the type parameters last — and a
       // parameter's type and the return type may both be left out.
       case ts.SyntaxKind.ArrowFunction:
-        if (node.typeParameters !== undefined || node.modifiers !== undefined) unsupported(node);
+        if (node.typeParameters !== undefined || node.modifiers !== undefined) { unsupported(node); }
         emit(depth, "ARROW", s, e);
         empty(depth + 1);
         list(depth + 1, node.parameters, arrowParameterOf());
         optional(depth + 1, node.type, type);
-        if (ts.isBlock(node.body)) blockOf()(node.body, depth + 1);
-        else expression(node.body, depth + 1);
+        if (ts.isBlock(node.body)) { blockOf()(node.body, depth + 1); }
+        else { expression(node.body, depth + 1); }
         list(depth + 1, [], identifier);
         return;
       default:
@@ -314,7 +314,7 @@ function printTypeScriptTree(source, sf) {
   };
 
   const variableDeclaration = (node, depth) => {
-    if (!ts.isIdentifier(node.name)) unsupported(node);
+    if (!ts.isIdentifier(node.name)) { unsupported(node); }
     const [s, e] = span(node);
     emit(depth, "VAR_DECL", s, e);
     identifier(node.name, depth + 1);
@@ -330,24 +330,24 @@ function printTypeScriptTree(source, sf) {
    */
   const typeParameters = (params, depth) => {
     for (const p of params ?? []) {
-      if (p.constraint !== undefined || p.default !== undefined) unsupported(p);
+      if (p.constraint !== undefined || p.default !== undefined) { unsupported(p); }
     }
     list(depth, (params ?? []).map((p) => p.name), identifier);
   };
 
   const parameter = (node, depth) => {
-    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) unsupported(node);
-    if (node.questionToken !== undefined || node.initializer !== undefined) unsupported(node);
+    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) { unsupported(node); }
+    if (node.questionToken !== undefined || node.initializer !== undefined) { unsupported(node); }
     const [s, e] = span(node);
     emit(depth, "PARAM", s, e);
     identifier(node.name, depth + 1);
-    if (node.type === undefined) unsupported(node);
+    if (node.type === undefined) { unsupported(node); }
     type(node.type, depth + 1);
   };
   // An arrow argument's parameter may leave its type out (WP29).
   const arrowParameter = (node, depth) => {
-    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) unsupported(node);
-    if (node.questionToken !== undefined || node.initializer !== undefined) unsupported(node);
+    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) { unsupported(node); }
+    if (node.questionToken !== undefined || node.initializer !== undefined) { unsupported(node); }
     const [s, e] = span(node);
     emit(depth, "PARAM", s, e);
     identifier(node.name, depth + 1);
@@ -357,7 +357,7 @@ function printTypeScriptTree(source, sf) {
   const block = (node, depth) => {
     const [s, e] = span(node);
     emit(depth, "BLOCK", s, e);
-    for (const statement of node.statements) statementOf(node)(statement, depth + 1);
+    for (const statement of node.statements) { statementOf(node)(statement, depth + 1); }
   };
   // `statementOf` exists only so `block` can be defined before `statement`.
   const statementOf = () => statement;
@@ -399,22 +399,22 @@ function printTypeScriptTree(source, sf) {
         return;
       case ts.SyntaxKind.ForStatement: {
         emit(depth, "FOR", s, e);
-        if (node.initializer === undefined) empty(depth + 1);
+        if (node.initializer === undefined) { empty(depth + 1); }
         else if (ts.isVariableDeclarationList(node.initializer)) {
           const [ds, de] = [at(node.initializer.getStart(sf)), at(node.initializer.end)];
           emit(depth + 1, isConst(node.initializer) ? "VAR+const" : "VAR", ds, de);
           list(depth + 2, node.initializer.declarations, variableDeclaration);
-        } else expression(node.initializer, depth + 1);
+        } else { expression(node.initializer, depth + 1); }
         optional(depth + 1, node.condition, expression);
         optional(depth + 1, node.incrementor, expression);
         statement(node.statement, depth + 1);
         return;
       }
       case ts.SyntaxKind.ForOfStatement: {
-        if (node.awaitModifier !== undefined) unsupported(node);
+        if (node.awaitModifier !== undefined) { unsupported(node); }
         emit(depth, "FOR_OF", s, e);
         const initializer = node.initializer;
-        if (!ts.isVariableDeclarationList(initializer)) unsupported(node);
+        if (!ts.isVariableDeclarationList(initializer)) { unsupported(node); }
         emit(
           depth + 1,
           isConst(initializer) ? "VAR+const" : "VAR",
@@ -427,11 +427,11 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.BreakStatement:
-        if (node.label !== undefined) unsupported(node);
+        if (node.label !== undefined) { unsupported(node); }
         emit(depth, "BREAK", s, e);
         return;
       case ts.SyntaxKind.ContinueStatement:
-        if (node.label !== undefined) unsupported(node);
+        if (node.label !== undefined) { unsupported(node); }
         emit(depth, "CONTINUE", s, e);
         return;
       case ts.SyntaxKind.ReturnStatement:
@@ -470,8 +470,8 @@ function printTypeScriptTree(source, sf) {
     switch (node.kind) {
       case ts.SyntaxKind.ImportDeclaration: {
         const clause = node.importClause;
-        if (clause === undefined || clause.namedBindings === undefined) unsupported(node);
-        if (!ts.isNamedImports(clause.namedBindings)) unsupported(node);
+        if (clause === undefined || clause.namedBindings === undefined) { unsupported(node); }
+        if (!ts.isNamedImports(clause.namedBindings)) { unsupported(node); }
         emit(depth, "IMPORT", s, e, node.moduleSpecifier.text);
         list(depth + 1, clause.namedBindings.elements, (element, elementDepth) => {
           const [es, ee] = span(element);
@@ -481,8 +481,8 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.FunctionDeclaration: {
-        if (node.asteriskToken !== undefined) unsupported(node);
-        if (node.name === undefined || node.body === undefined || node.type === undefined) unsupported(node);
+        if (node.asteriskToken !== undefined) { unsupported(node); }
+        if (node.name === undefined || node.body === undefined || node.type === undefined) { unsupported(node); }
         emit(depth, `FUNCTION${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.parameters, parameter);
@@ -494,16 +494,16 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.ClassDeclaration: {
-        if (node.name === undefined) unsupported(node);
+        if (node.name === undefined) { unsupported(node); }
         emit(depth, `CLASS${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         const heritage = node.heritageClauses ?? [];
         const extendsClause = heritage.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword);
         const implementsClause = heritage.find((h) => h.token === ts.SyntaxKind.ImplementsKeyword);
-        if (extendsClause === undefined) empty(depth + 1);
+        if (extendsClause === undefined) { empty(depth + 1); }
         else {
           const base = extendsClause.types[0].expression;
-          if (!ts.isIdentifier(base)) unsupported(node);
+          if (!ts.isIdentifier(base)) { unsupported(node); }
           identifier(base, depth + 1);
         }
         // WP18 G5: an implemented interface may be an instantiation, so stage1
@@ -511,7 +511,7 @@ function printTypeScriptTree(source, sf) {
         // child is the type-argument list — empty for the ungeneric spelling.
         const implemented = implementsClause?.types ?? [];
         list(depth + 1, implemented, (t, d) => {
-          if (!ts.isIdentifier(t.expression)) unsupported(node);
+          if (!ts.isIdentifier(t.expression)) { unsupported(node); }
           const [ts_, te] = span(t);
           emit(d, "TYPE_REF", ts_, te, t.expression.text);
           list(d + 1, t.typeArguments ?? [], type);
@@ -523,11 +523,11 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.InterfaceDeclaration: {
-        if (node.heritageClauses !== undefined) unsupported(node);
+        if (node.heritageClauses !== undefined) { unsupported(node); }
         emit(depth, `INTERFACE${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.members, (m, d) => {
-          if (!ts.isPropertySignature(m) || !ts.isIdentifier(m.name) || m.type === undefined) unsupported(m);
+          if (!ts.isPropertySignature(m) || !ts.isIdentifier(m.name) || m.type === undefined) { unsupported(m); }
           // An interface field takes the same modifiers and the same `?` a
           // class field does, and stage1's parser reads them with the same two
           // functions, so the same two suffixes are compared here. `!` is not a
@@ -544,7 +544,7 @@ function printTypeScriptTree(source, sf) {
       // `type X = T;` (WP23). An alias is a declaration in stage1's tree and a
       // type in its right-hand child, which is exactly TypeScript's shape.
       case ts.SyntaxKind.TypeAliasDeclaration: {
-        if (node.typeParameters !== undefined) unsupported(node);
+        if (node.typeParameters !== undefined) { unsupported(node); }
         emit(depth, `TYPE_ALIAS${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         type(node.type, depth + 1);
@@ -558,22 +558,22 @@ function printTypeScriptTree(source, sf) {
       // constant; `declare enum` is the parser's to refuse and is skipped.
       case ts.SyntaxKind.EnumDeclaration: {
         const modifiers = node.modifiers ?? [];
-        if (modifiers.some((m) => !isEnumModifier(m))) unsupported(node);
+        if (modifiers.some((m) => !isEnumModifier(m))) { unsupported(node); }
         const constEnum = modifiers.some((m) => m.kind === ts.SyntaxKind.ConstKeyword) ? "+const" : "";
         emit(depth, `ENUM${exported(node)}${constEnum}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.members, (m, d) => {
-          if (!ts.isIdentifier(m.name)) unsupported(m);
+          if (!ts.isIdentifier(m.name)) { unsupported(m); }
           const [ms, me] = span(m);
           emit(d, "ENUM_MEMBER", ms, me);
           identifier(m.name, d + 1);
-          if (m.initializer !== undefined) expression(m.initializer, d + 1);
-          else empty(d + 1);
+          if (m.initializer !== undefined) { expression(m.initializer, d + 1); }
+          else { empty(d + 1); }
         });
         return;
       }
       case ts.SyntaxKind.VariableStatement: {
-        if (!isConst(node.declarationList)) unsupported(node);
+        if (!isConst(node.declarationList)) { unsupported(node); }
         // A module-level `const` bound to an arrow declares a *function*
         // (docs/wp22-arrow-functions.md), and stage1's parser builds the same
         // `N_FUNCTION` it builds for the `function` spelling -- so this side
@@ -586,16 +586,16 @@ function printTypeScriptTree(source, sf) {
             ? single[0].initializer
             : undefined;
         if (arrow !== undefined) {
-          if (arrow.type === undefined) unsupported(node);
-          if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) unsupported(node);
+          if (arrow.type === undefined) { unsupported(node); }
+          if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) { unsupported(node); }
           emit(depth, `FUNCTION${exported(node)}`, s, e);
           identifier(single[0].name, depth + 1);
           list(depth + 1, arrow.parameters, parameter);
           type(arrow.type, depth + 1);
           // The body child is the block, or the expression a concise body
           // returns -- exactly what stage1 puts there.
-          if (ts.isBlock(arrow.body)) block(arrow.body, depth + 1);
-          else expression(arrow.body, depth + 1);
+          if (ts.isBlock(arrow.body)) { block(arrow.body, depth + 1); }
+          else { expression(arrow.body, depth + 1); }
           typeParameters(arrow.typeParameters, depth + 1);
           return;
         }
@@ -627,8 +627,8 @@ function printTypeScriptTree(source, sf) {
     let readonly = false;
     let isStatic = false;
     for (const modifier of node.modifiers ?? []) {
-      if (modifier.kind === ts.SyntaxKind.ReadonlyKeyword) readonly = true;
-      else if (modifier.kind === ts.SyntaxKind.StaticKeyword) isStatic = true;
+      if (modifier.kind === ts.SyntaxKind.ReadonlyKeyword) { readonly = true; }
+      else if (modifier.kind === ts.SyntaxKind.StaticKeyword) { isStatic = true; }
       else if (
         modifier.kind !== ts.SyntaxKind.PublicKeyword &&
         modifier.kind !== ts.SyntaxKind.PrivateKeyword &&
@@ -649,7 +649,7 @@ function printTypeScriptTree(source, sf) {
   const member = (node, depth) => {
     const [s, e] = span(node);
     if (ts.isPropertyDeclaration(node)) {
-      if (!ts.isIdentifier(node.name) || node.type === undefined) unsupported(node);
+      if (!ts.isIdentifier(node.name) || node.type === undefined) { unsupported(node); }
       // `x?: T` and `x!: T` are parsed on both sides and refused by the
       // checker, so the marker changes no node and no span — but it does change
       // a flag, and the flag is compared.
@@ -660,9 +660,10 @@ function printTypeScriptTree(source, sf) {
       return;
     }
     if (ts.isMethodDeclaration(node)) {
-      if (!ts.isIdentifier(node.name) || node.body === undefined || node.type === undefined)
+      if (!ts.isIdentifier(node.name) || node.body === undefined || node.type === undefined) {
         unsupported(node);
-      if (node.typeParameters !== undefined) unsupported(node);
+      }
+      if (node.typeParameters !== undefined) { unsupported(node); }
       emit(depth, `METHOD${memberFlags(node)}${memberMarker(node)}`, s, e);
       identifier(node.name, depth + 1);
       list(depth + 1, node.parameters, parameter);
@@ -671,7 +672,7 @@ function printTypeScriptTree(source, sf) {
       return;
     }
     if (ts.isConstructorDeclaration(node)) {
-      if (node.body === undefined) unsupported(node);
+      if (node.body === undefined) { unsupported(node); }
       emit(depth, `CONSTRUCTOR${memberFlags(node)}`, s, e);
       list(depth + 1, node.parameters, parameter);
       block(node.body, depth + 1);
@@ -681,7 +682,7 @@ function printTypeScriptTree(source, sf) {
   };
 
   emit(0, "SOURCE_FILE", 0, Buffer.byteLength(source, "utf8"));
-  for (const node of sf.statements) declaration(node, 1);
+  for (const node of sf.statements) { declaration(node, 1); }
   return lines;
 }
 
@@ -689,13 +690,13 @@ function compare(binary, file) {
   const source = fs.readFileSync(file, "utf8");
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
   if (sf.parseDiagnostics !== undefined && sf.parseDiagnostics.length > 0) {
-    return { skipped: `typescript reports a syntax error` };
+    return { skipped: "typescript reports a syntax error" };
   }
   let want;
   try {
     want = printTypeScriptTree(source, sf);
   } catch (err) {
-    if (err.unsupported === undefined) throw err;
+    if (err.unsupported === undefined) { throw err; }
     return { skipped: `needs ${err.unsupported}` };
   }
   const run = spawnSync(binary, [file], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -726,12 +727,12 @@ function corpus() {
     path.join(root, "tests", "parser"),
   ];
   for (const dir of dirs) {
-    if (!fs.existsSync(dir)) continue;
+    if (!fs.existsSync(dir)) { continue; }
     for (const name of fs.readdirSync(dir).sort()) {
       // `recovery.ts` is the one fixture the oracle cannot judge: the
       // `typescript` parser recovers from a syntax error and this one reports
       // and moves on, so it has a golden of its own in `tests/run.js`.
-      if (name.endsWith(".ts") && name !== "recovery.ts") files.push(path.join(dir, name));
+      if (name.endsWith(".ts") && name !== "recovery.ts") { files.push(path.join(dir, name)); }
     }
   }
   return files;
@@ -755,7 +756,7 @@ function main(argv) {
     return 1;
   }
   const binary = build(seed);
-  if (binary === null) return 1;
+  if (binary === null) { return 1; }
   const inputs = files.length > 0 ? files.map((f) => path.resolve(f)) : corpus();
   let agreed = 0;
   let nodes = 0;
@@ -768,17 +769,17 @@ function main(argv) {
     if (result.skipped !== undefined) {
       skipped.push(`${name}: ${result.skipped}`);
       reasons.set(result.skipped, (reasons.get(result.skipped) ?? 0) + 1);
-    } else if (result.failed !== undefined) failed.push(`${name}: ${result.failed}`);
+    } else if (result.failed !== undefined) { failed.push(`${name}: ${result.failed}`); }
     else {
       agreed++;
       nodes += result.nodes;
     }
   }
-  for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
+  for (const f of failed) { process.stdout.write(`  FAIL ${f}\n`); }
   if (verbose) {
-    for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
+    for (const s of skipped) { process.stdout.write(`  skip ${s}\n`); }
     const ranked = [...reasons.entries()].sort((a, b) => b[1] - a[1]);
-    for (const [reason, count] of ranked) process.stdout.write(`  ${String(count).padStart(4)}  ${reason}\n`);
+    for (const [reason, count] of ranked) { process.stdout.write(`  ${String(count).padStart(4)}  ${reason}\n`); }
   }
   process.stdout.write(
     `${agreed}/${inputs.length - skipped.length} files agree (${nodes} nodes), ` +
@@ -787,5 +788,5 @@ function main(argv) {
   return failed.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { printTypeScriptTree, compare, corpus, build };

@@ -103,7 +103,7 @@ const status = await new Promise((resolve) => {
   });
 });
 clearInterval(heartbeat);
-if (buffered.length > 0) takeLine(buffered);
+if (buffered.length > 0) { takeLine(buffered); }
 
 /**
  * A check's name up to its first colon, which is how this suite names a family:
@@ -167,15 +167,15 @@ console.log(`exit ${status} — ${secs(total).trim()} of wall clock over ${rows.
 const verdict = rows.filter((r) => r.text.trim().length > 0).slice(-3);
 if (verdict.length > 0) {
   console.log("=== what the run itself reported ===");
-  for (const row of verdict) console.log(`  ${row.text}`);
+  for (const row of verdict) { console.log(`  ${row.text}`); }
   console.log("");
 }
 
 console.log(`=== the ${byCost.length} most expensive checks (cost = the gap before the line was printed) ===`);
-for (const row of byCost) console.log(`${secs(row.dt)}  at ${secs(row.t)}  ${row.text.slice(0, 104)}`);
+for (const row of byCost) { console.log(`${secs(row.dt)}  at ${secs(row.t)}  ${row.text.slice(0, 104)}`); }
 
 console.log(`\n=== the ${byFamily.length} most expensive families (cumulative) ===`);
-for (const [name, f] of byFamily) console.log(`${secs(f.ms)}  ${String(f.lines).padStart(5)} line(s)  ${name.slice(0, 84)}`);
+for (const [name, f] of byFamily) { console.log(`${secs(f.ms)}  ${String(f.lines).padStart(5)} line(s)  ${name.slice(0, 84)}`); }
 
 /**
  * The share the expensive tail accounts for, because "the top ten are 70% of

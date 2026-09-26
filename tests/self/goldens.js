@@ -88,7 +88,7 @@ function link(seed, source, stem) {
   const out = path.join(BUILD, stem);
   fs.mkdirSync(BUILD, { recursive: true });
   const built = spawnSeed(seed, [path.join(root, source), "--link", out]);
-  if (built.status !== 0) return { error: `${seed.label} could not build ${source}:\n${built.stderr}` };
+  if (built.status !== 0) { return { error: `${seed.label} could not build ${source}:\n${built.stderr}` }; }
   return {
     run: (args) => spawnSync(out, args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }),
   };
@@ -140,7 +140,7 @@ function header(what) {
  */
 function produceChecked(seed) {
   const dumper = link(seed, path.join("self", "dump-checked.ts"), "dump_checked");
-  if (dumper.error !== undefined) return { error: dumper.error };
+  if (dumper.error !== undefined) { return { error: dumper.error }; }
 
   const outside = [];
   const entries = [];
@@ -161,8 +161,8 @@ function produceChecked(seed) {
       // a diagnostic wording nothing else here would pin. It belongs in the
       // record for the same reason the dump does.
       const record = `reject ${programLabel(named, flags)}: ${firstLine(result.stderr)}`;
-      if (isSelf) entries.push(record);
-      else outside.push(record);
+      if (isSelf) { entries.push(record); }
+      else { outside.push(record); }
       continue;
     }
     const lines = dumpLines(result.stdout);
@@ -178,7 +178,7 @@ function produceChecked(seed) {
     let module = null;
     let body = [];
     const close = () => {
-      if (module === null) return;
+      if (module === null) { return; }
       order.push(module);
       const text = body.join("\n");
       const seen = bodies.get(module);
@@ -207,7 +207,7 @@ function produceChecked(seed) {
       }
     }
     conflict = close() ?? conflict;
-    if (conflict !== undefined) return { error: conflict };
+    if (conflict !== undefined) { return { error: conflict }; }
     entries.push(`entry ${programLabel(named, flags)}: ${order.join(" ")}`);
   }
 
@@ -224,7 +224,7 @@ function produceChecked(seed) {
   ];
   for (const [module, text] of bodies) {
     selfText.push(`module ${module}`);
-    if (text.length > 0) selfText.push(text);
+    if (text.length > 0) { selfText.push(text); }
   }
 
   const outsideText = [
@@ -256,9 +256,9 @@ function produceChecked(seed) {
 function produceDriver(name, source, args, what) {
   return (seed) => {
     const driver = link(seed, source, name);
-    if (driver.error !== undefined) return { error: driver.error };
+    if (driver.error !== undefined) { return { error: driver.error }; }
     const run = driver.run(args);
-    if (run.status !== 0) return { error: `${name} exited ${run.status}\n${run.stderr}` };
+    if (run.status !== 0) { return { error: `${name} exited ${run.status}\n${run.stderr}` }; }
     const lines = run.stdout.split("\n");
     return {
       files: new Map([[`${name}.txt`, `${header(what).join("\n")}\n${run.stdout}`]]),
@@ -323,7 +323,7 @@ function diff(want, got, limit) {
   let total = 0;
   let shown = 0;
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if (a[i] === b[i]) continue;
+    if (a[i] === b[i]) { continue; }
     total++;
     if (shown < limit) {
       out.push(`  line ${i + 1}:`, `    golden: ${cut(a[i])}`, `    stage1: ${cut(b[i])}`);
@@ -360,11 +360,11 @@ function parse(argv) {
   const options = { update: false, verbose: false, lines: 10, seed: undefined, names: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--update") options.update = true;
-    else if (arg === "--verbose") options.verbose = true;
-    else if (arg === "--seed") options.seed = argv[++i];
-    else if (arg === "--lines") options.lines = Number(argv[++i]);
-    else options.names.push(arg);
+    if (arg === "--update") { options.update = true; }
+    else if (arg === "--verbose") { options.verbose = true; }
+    else if (arg === "--seed") { options.seed = argv[++i]; }
+    else if (arg === "--lines") { options.lines = Number(argv[++i]); }
+    else { options.names.push(arg); }
   }
   return options;
 }
@@ -420,7 +420,7 @@ function main(argv) {
       process.stdout.write(
         `  FAIL ${file}: ${d.total} lines differ from what stage1 prints (${golden.oracle}'s coverage)\n`
       );
-      for (const line of d.out) process.stdout.write(`${line}\n`);
+      for (const line of d.out) { process.stdout.write(`${line}\n`); }
       if (d.shown < d.total) {
         process.stdout.write(`  ... and ${d.total - d.shown} more differing lines (--verbose for all)\n`);
       }
@@ -432,7 +432,7 @@ function main(argv) {
   }
   // Under `--update` these are the only evidence that a regeneration did or
   // did not move anything, which is the question the person running it has.
-  if (verbose) for (const line of summary) process.stdout.write(`  ${line}\n`);
+  if (verbose) { for (const line of summary) { process.stdout.write(`  ${line}\n`); } }
 
   process.stdout.write(
     `${summary.length} goldens ${update ? "written" : "agree"}, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB of goldens (seed ${seed.label})\n`
@@ -440,5 +440,5 @@ function main(argv) {
   return failed === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { GOLDEN_SET, defaultSeedSpec, resolveSeed, seedWithoutStage0 };

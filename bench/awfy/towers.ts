@@ -36,7 +36,7 @@ export class Towers {
   }
 
   verifyResult(result: i32): boolean {
-    return 8191 === result;
+    return result === 8191 ;
   }
 
   pushDisk(disk: TowersDisk, pile: i32): void {

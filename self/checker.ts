@@ -1395,9 +1395,9 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   walk.ctx.performance(
     index,
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
-      `compares against the length on every iteration: guard it with a test that reaches the access — ` +
+      "compares against the length on every iteration: guard it with a test that reaches the access — " +
       `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
-      `the upper one`
+      "the upper one"
   );
 };
 
@@ -1465,9 +1465,9 @@ const checkNotInlinable = (walk: PerfWalk, call: Node): void => {
   ctx.performance(
     call.children[0],
     `\`${callee.sourceName}\` is called here inside a loop and \`--no-strict-exports\` keeps it an external ` +
-      `symbol, so the whole-program passes must assume there are callers they cannot see: the function is not ` +
-      `specialised to these arguments and its out-of-line copy survives even where every call was inlined — ` +
-      `drop \`--no-strict-exports\`, and a function this module does not export is \`internal\` instead`
+      "symbol, so the whole-program passes must assume there are callers they cannot see: the function is not " +
+      "specialised to these arguments and its out-of-line copy survives even where every call was inlined — " +
+      "drop `--no-strict-exports`, and a function this module does not export is `internal` instead"
   );
 };
 
@@ -1545,11 +1545,11 @@ const checkUnfoldedClamp = (walk: PerfWalk, call: Node): void => {
     ctx.performance(
       bound,
       `\`${name}\` is not provably within \`${holder}\`, so this \`substring\` bound keeps the clamp ` +
-        `JavaScript specifies — an \`llvm.smin\` and an \`llvm.smax\` on every pass, which the optimiser folds ` +
+        "JavaScript specifies — an `llvm.smin` and an `llvm.smax` on every pass, which the optimiser folds " +
         `away only where it can hoist the receiver's length, and never where the receiver is a parameter, ` +
-        `because the guard compares i32 and the clamp runs on its sext: prove it with a test that reaches the ` +
+        "because the guard compares i32 and the clamp runs on its sext: prove it with a test that reaches the " +
         `call, as \`if (${name} >= 0 && ${name} <= ${holder}.length)\`, or use \`slice\`, which has no clamp ` +
-        `at all and panics where this would have clamped`
+        "at all and panics where this would have clamped"
     );
   }
 };
@@ -1680,7 +1680,7 @@ const checkStringAccumulation = (walk: PerfWalk, expr: Node): void => {
   walk.ctx.performance(
     left,
     `\`${target.name}\` is rebuilt from its own value on every iteration of this loop, so every pass copies all ` +
-      `of it (quadratic in time and in arena bytes): collect the pieces in a \`string[]\` and \`join\` them after the loop`
+      "of it (quadratic in time and in arena bytes): collect the pieces in a `string[]` and `join` them after the loop"
   );
 };
 
@@ -1704,8 +1704,8 @@ const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
   walk.ctx.performance(
     name,
     `\`${local.name}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
-      `past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, ` +
-      `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
+      "past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, " +
+      "or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
   );
 };
 
@@ -1995,9 +1995,9 @@ const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
   ctx.performance(
     left,
     `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
-      `here and nothing frees it, and assigning a local is also what stops this function from releasing its arena ` +
-      `memory at all, so both allocations live until the program exits. Give each value its own \`const\`, or ` +
-      `bracket the body with \`Arena.mark()\` and \`Arena.release(m)\``
+      "here and nothing frees it, and assigning a local is also what stops this function from releasing its arena " +
+      "memory at all, so both allocations live until the program exits. Give each value its own `const`, or " +
+      "bracket the body with `Arena.mark()` and `Arena.release(m)`"
   );
 };
 
@@ -2189,7 +2189,7 @@ const checkWideningConversion = (walk: PerfWalk, call: Node): void => {
   ctx.performance(
     arg,
     `this \`${arg.text}\` is computed in i32 and wraps before \`${callee.text}\` widens the result, so the ` +
-      `conversion cannot recover an overflow that has already happened: convert the operands first, as ` +
+      "conversion cannot recover an overflow that has already happened: convert the operands first, as " +
       `\`${callee.text}(a) ${arg.text} ${callee.text}(b)\``
   );
 };

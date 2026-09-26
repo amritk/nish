@@ -514,7 +514,7 @@ export const main = (): number => {
   // definition links without complaint in the `-shared -fPIC` napi build. So
   // it is refused where both facts are known, rather than turned on silently.
   if (opts.emitNapiAsync.length > 0 && !opts.threads) {
-    console.error(`compile: --emit-napi-async requires --threads (its exports allocate on a worker thread)`);
+    console.error("compile: --emit-napi-async requires --threads (its exports allocate on a worker thread)");
     return 2;
   }
 

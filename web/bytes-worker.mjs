@@ -41,8 +41,8 @@ let instance = null;
 
 /** `WebAssembly.compile` the module once; every later batch reuses it. */
 const load = async (source) => {
-  if (source instanceof WebAssembly.Module) return source;
-  if (typeof source === "string") return WebAssembly.compileStreaming(fetch(source));
+  if (source instanceof WebAssembly.Module) { return source; }
+  if (typeof source === "string") { return WebAssembly.compileStreaming(fetch(source)); }
   return WebAssembly.compile(source);
 };
 
@@ -94,15 +94,15 @@ const views = (exports) => {
 export const scanBatch = (exports, docs, mode = "validate") => {
   const results = new Int32Array(docs.length);
   if (mode === "echo") {
-    for (let i = 0; i < docs.length; i++) results[i] = docs[i].length;
+    for (let i = 0; i < docs.length; i++) { results[i] = docs[i].length; }
     return results;
   }
   const entry = mode === "guard" ? exports.isJsonShaped : exports.scanJson;
-  if (docs.length === 0) return results;
+  if (docs.length === 0) { return results; }
 
   let widest = 0;
   for (let i = 0; i < docs.length; i++) {
-    if (docs[i].length > widest) widest = docs[i].length;
+    if (docs[i].length > widest) { widest = docs[i].length; }
   }
 
   const mark = exports.nish_arena_mark();
@@ -139,7 +139,7 @@ export const handle = async (message) => {
     instance = await WebAssembly.instantiate(compiled, {});
     return { reply: { id: message.id, ready: true }, transfer: [] };
   }
-  if (instance === null) throw new Error("bytes-worker: send { wasm } before the first batch");
+  if (instance === null) { throw new Error("bytes-worker: send { wasm } before the first batch"); }
   const results = scanBatch(instance.exports, message.docs, message.mode);
   // Transfer the results back rather than cloning them: the caller is the only
   // reader and the buffer is ours to give away.

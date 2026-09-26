@@ -23,25 +23,25 @@ const makeRng = () => {
 
 const intKeys = (n) => {
   const keys = [];
-  for (let i = 0; i < 2 * n; i++) keys.push(Math.imul(i, 2654435761 | 0));
+  for (let i = 0; i < 2 * n; i++) { keys.push(Math.imul(i, 2654435761 | 0)); }
   return keys;
 };
 
 const report = (name, started, checksum) => {
   const elapsed = process.hrtime.bigint() - started;
   console.log(`${name} ${checksum}`);
-  if (timing) process.stderr.write(`time ${name} ${elapsed}\n`);
+  if (timing) { process.stderr.write(`time ${name} ${elapsed}\n`); }
 };
 
 const sum = (m) => {
   let total = 0;
-  for (const v of m.values()) total = (total + (v >>> 0)) >>> 0;
+  for (const v of m.values()) { total = (total + (v >>> 0)) >>> 0; }
   return total;
 };
 
 const fill = (keys, n) => {
   const m = new Map();
-  for (let i = 0; i < n; i++) m.set(keys[i], i);
+  for (let i = 0; i < n; i++) { m.set(keys[i], i); }
   return m;
 };
 
@@ -51,18 +51,18 @@ const run = (keys, n, kind) => {
   const next = makeRng();
   let t = process.hrtime.bigint();
   let built = 0;
-  for (let round = 0; round < 3; round++) built += fill(keys, n).size;
+  for (let round = 0; round < 3; round++) { built += fill(keys, n).size; }
   const m = fill(keys, n);
   report(`insert ${kind}`, t, `${built + m.size} ${sum(m)}`);
 
   t = process.hrtime.bigint();
   let hits = 0;
-  for (let j = 0; j < 8 * n; j++) hits = (hits + ((m.get(keys[next() & mask]) ?? -1) >>> 0)) >>> 0;
+  for (let j = 0; j < 8 * n; j++) { hits = (hits + ((m.get(keys[next() & mask]) ?? -1) >>> 0)) >>> 0; }
   report(`hit ${kind}`, t, `${hits}`);
 
   t = process.hrtime.bigint();
   let misses = 0;
-  for (let j = 0; j < 8 * n; j++) misses = (misses + ((m.get(keys[n + (next() & mask)]) ?? j & 7) >>> 0)) >>> 0;
+  for (let j = 0; j < 8 * n; j++) { misses = (misses + ((m.get(keys[n + (next() & mask)]) ?? j & 7) >>> 0)) >>> 0; }
   report(`miss ${kind}`, t, `${misses}`);
 
   t = process.hrtime.bigint();
@@ -73,7 +73,7 @@ const run = (keys, n, kind) => {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   let weighted = 0;
-  for (let i = 0; i < vocab; i++) weighted = (weighted + (Math.imul(counts.get(keys[i]) ?? 0, i) >>> 0)) >>> 0;
+  for (let i = 0; i < vocab; i++) { weighted = (weighted + (Math.imul(counts.get(keys[i]) ?? 0, i) >>> 0)) >>> 0; }
   report(`count ${kind}`, t, `${counts.size} ${weighted}`);
 
   t = process.hrtime.bigint();
@@ -82,7 +82,7 @@ const run = (keys, n, kind) => {
   const churn = new Map();
   for (let i = 0; i < 8 * n; i++) {
     churn.set(keys[i & pool], i);
-    if (i >= window) churn.delete(keys[(i - window) & pool]);
+    if (i >= window) { churn.delete(keys[(i - window) & pool]); }
   }
   report(`churn ${kind}`, t, `${churn.size} ${sum(churn)}`);
 };

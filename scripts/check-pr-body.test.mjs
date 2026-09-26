@@ -60,14 +60,14 @@ const cases = [
 
 let failed = 0;
 const check = (label, ok, detail) => {
-  if (!ok) failed++;
+  if (!ok) { failed++; }
   console.log(`${ok ? "pass" : "FAIL"}  ${label}${ok ? "" : `\n${detail.replace(/^/gm, "        ")}`}`);
 };
 
 const run = (body) => {
   const env = { ...process.env };
   delete env.BODY;
-  if (body !== null) env.BODY = body;
+  if (body !== null) { env.BODY = body; }
   return spawnSync(process.execPath, [SCRIPT], { env, encoding: "utf8" });
 };
 

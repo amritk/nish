@@ -105,7 +105,7 @@ const writeAndExit = (stream, text, status) => {
  */
 const nativeCompiler = (asset) => {
   const name = packageName();
-  if (name === null) return null;
+  if (name === null) { return null; }
   try {
     const manifest = createRequire(import.meta.url).resolve(`${platformPackageName(name, asset)}/package.json`);
     const binary = path.join(path.dirname(manifest), "bin", "nish");

@@ -545,7 +545,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   // helper: the two sentences differ, and so does the order — stage0 reads a
   // method's modifiers before its `?` (`rejectMethodModifiers`), so
   // `readonly m?()` is about the modifier and not about the marker.
-  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${shown}\``)) return;
+  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${shown}\``)) { return; }
   if ((decl.flags & FLAG_OPTIONAL) !== 0) {
     ctx.error(decl, `${what} of class \`${shown}\` cannot be optional`);
     return;

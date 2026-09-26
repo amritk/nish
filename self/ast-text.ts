@@ -64,13 +64,13 @@ const indent = (depth: i32): string => {
  */
 const kindWithFlags = (node: Node): string => {
   let name = nodeName(node.kind);
-  if (node.kind === N_UNARY) return node.flags === FLAG_POSTFIX ? `${name}+postfix` : `${name}+prefix`;
-  if ((node.flags & FLAG_EXPORTED) !== 0) name = `${name}+export`;
-  if ((node.flags & FLAG_CONST) !== 0) name = `${name}+const`;
-  if ((node.flags & FLAG_STATIC) !== 0) name = `${name}+static`;
-  if ((node.flags & FLAG_READONLY) !== 0) name = `${name}+readonly`;
-  if ((node.flags & FLAG_OPTIONAL) !== 0) name = `${name}+optional`;
-  if ((node.flags & FLAG_DEFINITE) !== 0) name = `${name}+definite`;
+  if (node.kind === N_UNARY) { return node.flags === FLAG_POSTFIX ? `${name}+postfix` : `${name}+prefix`; }
+  if ((node.flags & FLAG_EXPORTED) !== 0) { name = `${name}+export`; }
+  if ((node.flags & FLAG_CONST) !== 0) { name = `${name}+const`; }
+  if ((node.flags & FLAG_STATIC) !== 0) { name = `${name}+static`; }
+  if ((node.flags & FLAG_READONLY) !== 0) { name = `${name}+readonly`; }
+  if ((node.flags & FLAG_OPTIONAL) !== 0) { name = `${name}+optional`; }
+  if ((node.flags & FLAG_DEFINITE) !== 0) { name = `${name}+definite`; }
   return name;
 };
 

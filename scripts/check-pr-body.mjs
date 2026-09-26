@@ -25,12 +25,12 @@ import { bannedIn } from "../.claude/hooks/attribution-patterns.mjs";
 const found = bannedIn([process.env.BODY ?? ""]);
 if (found.length > 0) {
   process.stderr.write(
-    `The pull request body carries tool attribution:\n\n` +
+    "The pull request body carries tool attribution:\n\n" +
       found.map((name) => `  - ${name}\n`).join("") +
-      `\nCLAUDE.md forbids session links, tracking IDs, model names and platform\n` +
-      `attributions in PR text. Edit the body to remove them; the check runs again\n` +
-      `on the edit. A footer the platform appended after the pull request was\n` +
-      `opened fails this too, and the fix is the same.\n`,
+      "\nCLAUDE.md forbids session links, tracking IDs, model names and platform\n" +
+      "attributions in PR text. Edit the body to remove them; the check runs again\n" +
+      "on the edit. A footer the platform appended after the pull request was\n" +
+      "opened fails this too, and the fix is the same.\n",
   );
 }
 process.exit(found.length > 0 ? 1 : 0);

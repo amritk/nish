@@ -1822,7 +1822,7 @@ function packageRootOf(file) {
     // refused; there is simply no second candidate for it.
   }
   for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) return path.resolve(candidate);
+    if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) { return path.resolve(candidate); }
   }
   return path.resolve(root);
 }
@@ -1837,7 +1837,7 @@ function packageRootOf(file) {
  * left alone. Nothing else is rewritten.
  */
 function withoutOwnRoot(text, ownRoot) {
-  if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) return text;
+  if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) { return text; }
   const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`;
   return text.split(prefix).join("");
 }
@@ -1886,7 +1886,7 @@ function selfCheckRoots() {
  * left alone. Nothing else is rewritten.
  */
 function withoutOwnVersion(text, ownVersion) {
-  if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) return text;
+  if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) { return text; }
   return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"');
 }
 
@@ -1947,8 +1947,8 @@ const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxB
 const pendingNotes = () => {
   const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"]);
   const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true";
-  if (shallow()) git(["fetch", "--quiet", "--unshallow", "--tags", "origin"]);
-  else if (describe().status !== 0) git(["fetch", "--quiet", "--tags", "origin"]);
+  if (shallow()) { git(["fetch", "--quiet", "--unshallow", "--tags", "origin"]); }
+  else if (describe().status !== 0) { git(["fetch", "--quiet", "--tags", "origin"]); }
   if (shallow()) {
     return { error: "the checkout is shallow and `git fetch --unshallow` did not deepen it, so the commits since the last release cannot be read" };
   }
@@ -2027,8 +2027,8 @@ const selfCheckNotes = () => {
 function resolveCompiler(spec, role) {
   const file = path.resolve(root, spec);
   const refuse = (why) => ({ error: `${role} ${spec} ${why}` });
-  if (!fs.existsSync(file)) return refuse("does not exist");
-  if (!fs.statSync(file).isFile()) return refuse("is not a file");
+  if (!fs.existsSync(file)) { return refuse("does not exist"); }
+  if (!fs.statSync(file).isFile()) { return refuse("is not a file"); }
   const compiler = NODE_ENTRY.test(file)
     ? { label: spec, cmd: process.execPath, prefix: [file], packageRoot: packageRootOf(file) }
     : { label: spec, cmd: file, prefix: [], packageRoot: packageRootOf(file) };
@@ -2040,7 +2040,7 @@ function resolveCompiler(spec, role) {
     }
   }
   const version = compile(compiler, ["--version"]);
-  if (version.status !== 0) return refuse("is not runnable (`--version` failed)");
+  if (version.status !== 0) { return refuse("is not runnable (`--version` failed)"); }
   return { ...compiler, version: (version.stdout ?? "").trim() };
 }
 
@@ -2057,9 +2057,9 @@ function seedFromEnvironment() {
 /** Both compilers, or the first error. */
 function resolvePair(referenceSpec, candidateSpec) {
   const reference = resolveCompiler(referenceSpec, "reference");
-  if (reference.error !== undefined) return { error: reference.error };
+  if (reference.error !== undefined) { return { error: reference.error }; }
   const candidate = resolveCompiler(candidateSpec, "candidate");
-  if (candidate.error !== undefined) return { error: candidate.error };
+  if (candidate.error !== undefined) { return { error: candidate.error }; }
   return { reference, candidate };
 }
 
@@ -2096,11 +2096,11 @@ function tree(dir) {
     for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const full = path.join(at, entry.name);
       const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(full, rel);
-      else out.set(rel, fs.readFileSync(full));
+      if (entry.isDirectory()) { walk(full, rel); }
+      else { out.set(rel, fs.readFileSync(full)); }
     }
   };
-  if (fs.existsSync(dir)) walk(dir, "");
+  if (fs.existsSync(dir)) { walk(dir, ""); }
   return out;
 }
 
@@ -2123,7 +2123,7 @@ function excerpt(want, got, limit) {
   const shown = [];
   let differing = 0;
   for (let i = 0; i < total; i++) {
-    if (wantLines[i] === gotLines[i]) continue;
+    if (wantLines[i] === gotLines[i]) { continue; }
     differing++;
     if (shown.length < limit) {
       shown.push(
@@ -2132,7 +2132,7 @@ function excerpt(want, got, limit) {
       );
     }
   }
-  if (differing === 0) return { differing, total, text: "the bytes differ but no line does" };
+  if (differing === 0) { return { differing, total, text: "the bytes differ but no line does" }; }
   const more = differing > shown.length ? `\n... ${differing - shown.length} more differing line(s)` : "";
   return { differing, total, text: `${shown.join("\n")}${more}` };
 }
@@ -2158,7 +2158,7 @@ function compare(pair, work, file, options = {}) {
   const limit = options.lines ?? 3;
   const flags = extraArgs(file);
   const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
-  if (dump !== undefined) return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` };
+  if (dump !== undefined) { return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` }; }
 
   // Both compilers name each module by the path they resolved it to and write
   // that path into the module header, so the entry has to be spelled the same
@@ -2191,7 +2191,7 @@ function compare(pair, work, file, options = {}) {
         {
           surface: "exit",
           detail:
-            `the candidate compiles it and the reference refuses it ` +
+            "the candidate compiles it and the reference refuses it " +
             `(reference: ${firstLine(reference.stderr) || `exit ${reference.status}`})`,
         },
       ],
@@ -2210,7 +2210,7 @@ function compare(pair, work, file, options = {}) {
 
   const want = tree(referenceDir);
   const got = tree(candidateDir);
-  if (want.size === 0) return { refused: "the reference wrote no files" };
+  if (want.size === 0) { return { refused: "the reference wrote no files" }; }
   const differences = [];
   let lines = 0;
   let rooted = 0;
@@ -2227,7 +2227,7 @@ function compare(pair, work, file, options = {}) {
       continue;
     }
     if (a.equals(b)) {
-      if (name.endsWith(".ll")) lines += a.toString("utf8").split("\n").length;
+      if (name.endsWith(".ll")) { lines += a.toString("utf8").split("\n").length; }
       continue;
     }
     // The two compilers are installed in different directories — they have to
@@ -2243,7 +2243,7 @@ function compare(pair, work, file, options = {}) {
     const gotRooted = withoutOwnRoot(gotText, pair.candidate.packageRoot);
     if (wantRooted === gotRooted) {
       rooted++;
-      if (name.endsWith(".ll")) lines += wantText.split("\n").length;
+      if (name.endsWith(".ll")) { lines += wantText.split("\n").length; }
       continue;
     }
     // The reference is the last release and the candidate is HEAD, which
@@ -2254,7 +2254,7 @@ function compare(pair, work, file, options = {}) {
       withoutOwnVersion(wantRooted, pair.reference.version) === withoutOwnVersion(gotRooted, pair.candidate.version)
     ) {
       versioned++;
-      if (name.endsWith(".ll")) lines += wantText.split("\n").length;
+      if (name.endsWith(".ll")) { lines += wantText.split("\n").length; }
       continue;
     }
     const where = excerpt(wantText, gotText, limit);
@@ -2263,7 +2263,7 @@ function compare(pair, work, file, options = {}) {
       detail: `differs (${where.differing} of ${where.total} lines)\n${where.text}`,
     });
   }
-  if (differences.length > 0) return { differences };
+  if (differences.length > 0) { return { differences }; }
   return { files: want.size, lines, rooted, versioned };
 }
 
@@ -2274,8 +2274,8 @@ function compare(pair, work, file, options = {}) {
  */
 function declaredFor(program, surface) {
   for (const entry of DECLARED) {
-    if (entry.program !== undefined && entry.program !== program) continue;
-    if (entry.file !== undefined && entry.file !== surface) continue;
+    if (entry.program !== undefined && entry.program !== program) { continue; }
+    if (entry.file !== undefined && entry.file !== surface) { continue; }
     return entry;
   }
   return null;
@@ -2305,10 +2305,10 @@ function corpus() {
 function buildCandidate(seedSpec) {
   const out = path.join(root, "build", "self", "compile");
   const builder = resolveCompiler(seedSpec, "candidate builder");
-  if (builder.error !== undefined) return { error: builder.error };
+  if (builder.error !== undefined) { return { error: builder.error }; }
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const built = compile(builder, [path.join("self", "compile.ts"), "--link", out]);
-  if (built.status !== 0) return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` };
+  if (built.status !== 0) { return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` }; }
   return { path: path.relative(root, out) };
 }
 
@@ -2350,16 +2350,16 @@ function main(argv) {
     if (arg === "-h" || arg === "--help") {
       process.stdout.write(`${HELP}\n`);
       return 0;
-    } else if (arg === "-r" || arg === "--reference") referenceSpec = argv[++i];
-    else if (arg === "-c" || arg === "--candidate") candidateSpec = argv[++i];
-    else if (arg === "--changelog") changelog = argv[++i];
-    else if (arg === "--no-sidecars") options.sidecars = false;
-    else if (arg === "--lines") options.lines = Number(argv[++i]);
-    else if (arg === "--verbose") verbose = true;
+    }if (arg === "-r" || arg === "--reference") { referenceSpec = argv[++i]; }
+    else if (arg === "-c" || arg === "--candidate") { candidateSpec = argv[++i]; }
+    else if (arg === "--changelog") { changelog = argv[++i]; }
+    else if (arg === "--no-sidecars") { options.sidecars = false; }
+    else if (arg === "--lines") { options.lines = Number(argv[++i]); }
+    else if (arg === "--verbose") { verbose = true; }
     else if (arg.startsWith("-")) {
       process.stderr.write(`nish-cmp: unknown option: ${arg}\n${HELP}\n`);
       return 2;
-    } else named.push(arg);
+    } else { named.push(arg); }
   }
   if (referenceSpec === undefined || candidateSpec === undefined || Number.isNaN(options.lines)) {
     process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`);
@@ -2455,7 +2455,7 @@ function main(argv) {
       lines += result.lines;
       rooted += result.rooted ?? 0;
       versioned += result.versioned ?? 0;
-      if (verbose) process.stdout.write(`  ok   ${program} (${result.files} files)\n`);
+      if (verbose) { process.stdout.write(`  ok   ${program} (${result.files} files)\n`); }
     }
   }
   fs.rmSync(work, { recursive: true, force: true });
@@ -2482,7 +2482,7 @@ function main(argv) {
     ? fs.readFileSync(path.resolve(root, changelog), "utf8")
     : "";
   const byReason = new Map();
-  for (const row of declared) byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1);
+  for (const row of declared) { byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1); }
   const reasons = [...byReason.keys()];
   const pending = reasons.some((r) => !changelogText.includes(r.changelog)) ? pendingNotes() : null;
   const unnamed = reasons.filter((r) => !isNamed(r.changelog, changelogText, pending));
@@ -2512,8 +2512,8 @@ function main(argv) {
     }
   }
   if (verbose) {
-    for (const row of refused) process.stdout.write(`  refused ${row}\n`);
-    for (const row of dumps) process.stdout.write(`  dump ${row}\n`);
+    for (const row of refused) { process.stdout.write(`  refused ${row}\n`); }
+    for (const row of dumps) { process.stdout.write(`  dump ${row}\n`); }
   }
 
   // Said on its own line rather than only inside the summary, because it is the
@@ -2524,7 +2524,7 @@ function main(argv) {
       `note: ${rooted} file(s) agree once each compiler's own package root is removed ` +
         `(reference ${pair.reference.packageRoot}, candidate ${pair.candidate.packageRoot}): a module reached ` +
         `as \`nish/<name>\` is named by where that compiler's own \`std/\` is, which two installs cannot agree ` +
-        `about. Every other byte of those files is compared as it stands.\n`
+        "about. Every other byte of those files is compared as it stands.\n"
     );
   }
 
@@ -2532,7 +2532,7 @@ function main(argv) {
     process.stdout.write(
       `note: ${versioned} file(s) agree once each compiler's own version is removed from the DWARF ` +
         `producer (reference "${pair.reference.version}", candidate "${pair.candidate.version}"): a \`-g\` build ` +
-        `records the version of the compiler that wrote it. Every other byte of those files is compared as it stands.\n`
+        "records the version of the compiler that wrote it. Every other byte of those files is compared as it stands.\n"
     );
   }
 
@@ -2554,7 +2554,7 @@ function main(argv) {
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export {
   buildCandidate,
   compare,

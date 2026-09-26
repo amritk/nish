@@ -144,10 +144,10 @@ const readStore = () => {
     if (line.startsWith("#")) {
       // Only the lines before the first record: a `#` inside a body is
       // JavaScript, and a body's lines are consumed by count below.
-      if (programs.size === 0) heading.push(line);
+      if (programs.size === 0) { heading.push(line); }
       continue;
     }
-    if (line.length === 0) continue;
+    if (line.length === 0) { continue; }
     if (line.startsWith("program ")) {
       current = { name: line.slice("program ".length), flags: [], modules: [], entry: null };
       programs.set(current.name, current);
@@ -211,14 +211,14 @@ const staleness = (record, prog, bodies) => {
   }
   for (const module of record.modules) {
     const file = path.join(root, module.source);
-    if (!fs.existsSync(file)) return `${module.source} is gone`;
+    if (!fs.existsSync(file)) { return `${module.source} is gone`; }
     const now = digest(fs.readFileSync(file));
     if (now !== module.srcHash) {
       return `${module.source} changed since the rewrite was frozen (${module.srcHash} -> ${now})`;
     }
-    if (!bodies.has(module.id)) return `the stored body ${module.id} of ${module.out} is missing`;
+    if (!bodies.has(module.id)) { return `the stored body ${module.id} of ${module.out} is missing`; }
   }
-  if (record.entry === null || !bodies.has(record.entry.id)) return "its generated entry module is missing";
+  if (record.entry === null || !bodies.has(record.entry.id)) { return "its generated entry module is missing"; }
   return null;
 };
 
@@ -245,7 +245,7 @@ const materialize = (record, bodies, outDir) => {
  */
 const recordLines = (record) => {
   const lines = [`program ${record.name}`];
-  if (record.flags.length > 0) lines.push(`  flags ${record.flags.join(" ")}`);
+  if (record.flags.length > 0) { lines.push(`  flags ${record.flags.join(" ")}`); }
   for (const module of record.modules) {
     lines.push(`  module ${module.srcHash} ${module.source} ${module.id} ${module.out}`);
   }
@@ -263,12 +263,12 @@ const storeNote = (records, bodies) => {
   let live = 0;
   let moduleCount = 0;
   for (const record of records) {
-    for (const module of record.modules) live += Buffer.byteLength(bodies.get(module.id) ?? "");
+    for (const module of record.modules) { live += Buffer.byteLength(bodies.get(module.id) ?? ""); }
     live += Buffer.byteLength(bodies.get(record.entry.id) ?? "");
     moduleCount += record.modules.length + 1;
   }
   let stored = 0;
-  for (const text of bodies.values()) stored += Buffer.byteLength(text);
+  for (const text of bodies.values()) { stored += Buffer.byteLength(text); }
   return (
     `${records.length} programs, ${moduleCount} modules, ${bodies.size} distinct ` +
     `(${(live / 1024).toFixed(1)} KiB live, ${(stored / 1024).toFixed(1)} KiB stored)`
@@ -285,7 +285,7 @@ const storeText = (records, bodies) => {
   const kept = new Map([...bodies].filter(([id]) => used.has(id)));
   const note = storeNote(records, kept);
   const lines = [...header(note)];
-  for (const record of records) lines.push(...recordLines(record));
+  for (const record of records) { lines.push(...recordLines(record)); }
   for (const [id, text] of kept) {
     lines.push(`body ${id} ${text.split("\n").length} ${Buffer.byteLength(text)}`, text);
   }
@@ -304,13 +304,13 @@ const REGISTER_HEADER = [
 /** The register: program name to the reason it has no frozen rewrite. */
 const readRegister = () => {
   const rows = new Map();
-  if (!fs.existsSync(REGISTER)) return rows;
+  if (!fs.existsSync(REGISTER)) { return rows; }
   for (const line of fs.readFileSync(REGISTER, "utf8").split("\n")) {
     const text = line.replace(/^\s*#.*$/, "").trim();
-    if (text.length === 0) continue;
+    if (text.length === 0) { continue; }
     const at = text.search(/\s/);
-    if (at < 0) rows.set(text, "");
-    else rows.set(text.slice(0, at), text.slice(at).trim());
+    if (at < 0) { rows.set(text, ""); }
+    else { rows.set(text.slice(0, at), text.slice(at).trim()); }
   }
   return rows;
 };
@@ -322,14 +322,14 @@ const parse = (argv) => {
   const options = { update: false, verbose: false, only: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--update") options.update = true;
+    if (arg === "--update") { options.update = true; }
     // Freshness is the only check left, so `--fresh` asks for what every run
     // does; it stays a flag because `tests/run.js` passes it.
-    else if (arg === "--fresh") continue;
-    else if (arg === "--verbose") options.verbose = true;
-    else if (arg === "--only") options.only = argv[++i];
-    else if (!arg.startsWith("-") && options.only === undefined) options.only = arg;
-    else return { error: `unknown option: ${arg}` };
+    else if (arg === "--fresh") { continue; }
+    else if (arg === "--verbose") { options.verbose = true; }
+    else if (arg === "--only") { options.only = argv[++i]; }
+    else if (!arg.startsWith("-") && options.only === undefined) { options.only = arg; }
+    else { return { error: `unknown option: ${arg}` }; }
   }
   return options;
 };
@@ -358,12 +358,12 @@ const update = (programs, store, register) => {
   }
   const frozen = new Set(records.map((r) => r.name));
   for (const prog of programs) {
-    if (frozen.has(prog.name) || register.has(prog.name)) continue;
+    if (frozen.has(prog.name) || register.has(prog.name)) { continue; }
     register.set(prog.name, "added after R6: no rewriter to freeze it with");
     moves.push(`registered ${prog.name}: it has no frozen rewrite`);
   }
   for (const name of [...register.keys()]) {
-    if (byName.has(name) && !frozen.has(name)) continue;
+    if (byName.has(name) && !frozen.has(name)) { continue; }
     register.delete(name);
     moves.push(
       byName.has(name)
@@ -373,12 +373,12 @@ const update = (programs, store, register) => {
   }
   const { text, note } = storeText(records, store.bodies);
   const before = fs.readFileSync(STORE, "utf8");
-  if (text !== before) fs.writeFileSync(STORE, text);
+  if (text !== before) { fs.writeFileSync(STORE, text); }
   const rows = new Map([...register].sort(([a], [b]) => a.localeCompare(b)));
   const registered = registerText(rows);
   const was = fs.existsSync(REGISTER) ? fs.readFileSync(REGISTER, "utf8") : null;
-  if (registered !== was) fs.writeFileSync(REGISTER, registered);
-  for (const move of moves) process.stdout.write(`  ${move}\n`);
+  if (registered !== was) { fs.writeFileSync(REGISTER, registered); }
+  for (const move of moves) { process.stdout.write(`  ${move}\n`); }
   process.stdout.write(
     `rewrites: ${note}, ${relative(STORE)} ${text === before ? "unchanged" : "updated"}; ` +
       `${rows.size} registered, ${relative(REGISTER)} ${registered === was ? "unchanged" : "updated"}\n`
@@ -404,7 +404,7 @@ const main = async (argv) => {
   // the other's uninitialised bindings.
   const { discoverPrograms } = await import("./lib.js");
   let programs = discoverPrograms({});
-  if (only !== undefined) programs = programs.filter((p) => p.name.includes(only));
+  if (only !== undefined) { programs = programs.filter((p) => p.name.includes(only)); }
   if (programs.length === 0) {
     process.stderr.write(`no programs selected${only === undefined ? "" : ` by \`${only}\``}\n`);
     return 2;
@@ -416,7 +416,7 @@ const main = async (argv) => {
     return 1;
   }
   const register = readRegister();
-  if (options.update) return update(programs, store, register);
+  if (options.update) { return update(programs, store, register); }
 
   let failed = 0;
   let stale = 0;
@@ -436,7 +436,7 @@ const main = async (argv) => {
     if (record === undefined) {
       if (listed) {
         registered++;
-        if (verbose) process.stdout.write(`  unfrozen ${prog.name}: ${register.get(prog.name)}\n`);
+        if (verbose) { process.stdout.write(`  unfrozen ${prog.name}: ${register.get(prog.name)}\n`); }
       } else {
         fail(
           `${prog.name} has no frozen rewrite and is not in ${relative(REGISTER)} ` +
@@ -461,7 +461,7 @@ const main = async (argv) => {
     }
     checked++;
     modules += record.modules.length + 1;
-    if (verbose) process.stdout.write(`  fresh ${prog.name} (${record.modules.length + 1} modules)\n`);
+    if (verbose) { process.stdout.write(`  fresh ${prog.name} (${record.modules.length + 1} modules)\n`); }
   }
 
   // A record or a register line with no program is the other direction of the
@@ -470,10 +470,10 @@ const main = async (argv) => {
   if (only === undefined) {
     const live = new Set(programs.map((p) => p.name));
     for (const name of store.programs.keys()) {
-      if (!live.has(name)) fail(`the store holds ${name}, which is not a program any more`);
+      if (!live.has(name)) { fail(`the store holds ${name}, which is not a program any more`); }
     }
     for (const name of register.keys()) {
-      if (!live.has(name)) fail(`${relative(REGISTER)} names ${name}, which is not a program any more`);
+      if (!live.has(name)) { fail(`${relative(REGISTER)} names ${name}, which is not a program any more`); }
     }
   }
 

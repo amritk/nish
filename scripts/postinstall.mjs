@@ -60,16 +60,16 @@ const swap = async () => {
   // landmark is `self/compile.ts`, which is the check `scripts/bootstrap.sh`
   // makes and is not in `files`; it used to be stage0's `src/launcher.ts`, which stopped
   // being a landmark when the launcher moved into `bin/` and ships.
-  if (fs.existsSync(path.join(root, "self", "compile.ts"))) return "a checkout, so the shim stays";
+  if (fs.existsSync(path.join(root, "self", "compile.ts"))) { return "a checkout, so the shim stays"; }
 
   const shim = path.join(root, "bin", "nish");
-  if (!fs.existsSync(shim)) return "no bin/nish to replace";
+  if (!fs.existsSync(shim)) { return "no bin/nish to replace"; }
 
   const packaging = path.join(root, "bin", "packaging.js");
-  if (!fs.existsSync(packaging)) return "bin/packaging.js is missing";
+  if (!fs.existsSync(packaging)) { return "bin/packaging.js is missing"; }
   const { assetFor, platformPackageName } = await import(pathToFileURL(packaging).href);
   const asset = assetFor(process.platform, process.arch);
-  if (asset === null) return `no prebuilt binary for ${process.platform}/${process.arch}`;
+  if (asset === null) { return `no prebuilt binary for ${process.platform}/${process.arch}`; }
 
   const name = platformPackageName(
     JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name,
@@ -82,7 +82,7 @@ const swap = async () => {
   } catch {
     return `${name} is not installed`;
   }
-  if (!fs.existsSync(binary)) return `${name} carries no bin/nish`;
+  if (!fs.existsSync(binary)) { return `${name} carries no bin/nish`; }
 
   // The absolute path is baked in at install time, which is the one thing this
   // gives up: a `node_modules` copied to a different path without a reinstall

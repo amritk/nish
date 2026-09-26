@@ -28,10 +28,10 @@ let failed = 0;
 let passed = 0;
 const check = (name, ok, detail) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
-  if (ok) passed++;
+  if (ok) { passed++; }
   else {
     failed++;
-    if (detail) console.log(String(detail).replace(/^/gm, "      "));
+    if (detail) { console.log(String(detail).replace(/^/gm, "      ")); }
   }
 };
 
@@ -201,6 +201,6 @@ for (const [name, args, words] of [
   );
 }
 
-for (const dir of sandboxes) fs.rmSync(dir, { recursive: true, force: true });
+for (const dir of sandboxes) { fs.rmSync(dir, { recursive: true, force: true }); }
 console.log(`fetch-seed: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

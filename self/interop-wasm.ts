@@ -150,7 +150,7 @@ export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
   if (sig.name === "main") {
     return "`main` is reserved for a process entry";
   }
-  const tail = ` runtime the freestanding wasm profile does not include`;
+  const tail = " runtime the freestanding wasm profile does not include";
   let i = 0;
   while (i < sig.paramTypes.length) {
     if (!wasmCrosses(table, sig.paramTypes[i], POS_PARAM)) {

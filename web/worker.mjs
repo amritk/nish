@@ -29,8 +29,8 @@ let compiled = null;
 
 /** `WebAssembly.compile` the module once; every later compile reuses it. */
 const load = async (source) => {
-  if (source instanceof WebAssembly.Module) return source;
-  if (typeof source === "string") return WebAssembly.compileStreaming(fetch(source));
+  if (source instanceof WebAssembly.Module) { return source; }
+  if (typeof source === "string") { return WebAssembly.compileStreaming(fetch(source)); }
   return WebAssembly.compile(source);
 };
 
@@ -55,7 +55,7 @@ const compile = async (request) => {
     };
   }
   const written = fs.toText();
-  for (const name of Object.keys(files)) delete written[name];
+  for (const name of Object.keys(files)) { delete written[name]; }
   return { id, status, stdout: host.stdoutText, stderr: host.stderrText, files: written };
 };
 
@@ -65,7 +65,7 @@ export const handle = async (message) => {
     compiled = await load(message.wasm);
     return { id: message.id, ready: true };
   }
-  if (compiled === null) throw new Error("worker: send { wasm } before the first compile request");
+  if (compiled === null) { throw new Error("worker: send { wasm } before the first compile request"); }
   return await compile(message);
 };
 

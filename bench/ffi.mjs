@@ -52,13 +52,13 @@ if (spawnSync("clang", ["-print-prog-name=wasm-ld"]).status === 0) {
 
 /** Best of REPEAT runs, in milliseconds, plus the value the last run produced. */
 function time(label, fn) {
-  let best = Infinity;
+  let best = Number.POSITIVE_INFINITY;
   let value;
   for (let r = 0; r < REPEAT; r++) {
     const t0 = process.hrtime.bigint();
     value = fn();
     const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-    if (ms < best) best = ms;
+    if (ms < best) { best = ms; }
   }
   const perElement = ((best * 1e6) / N).toFixed(2);
   console.log(`${label.padEnd(40)} ${best.toFixed(4).padStart(10)} ms   ${perElement.padStart(8)} ns/element   result ${value}`);
@@ -70,11 +70,11 @@ console.log(`sum of 1..${N.toLocaleString("en-US")}, best of ${REPEAT} runs (exp
 
 // The batch buffer is built once, outside the timed region: a real host would already hold its data.
 const xs = new Float64Array(N);
-for (let i = 0; i < N; i++) xs[i] = i + 1;
+for (let i = 0; i < N; i++) { xs[i] = i + 1; }
 
 const perCall = time("N-API: N calls to add(acc, i)", () => {
   let acc = 0;
-  for (let i = 1; i <= N; i++) acc = addon.add(acc, i);
+  for (let i = 1; i <= N; i++) { acc = addon.add(acc, i); }
   return acc;
 });
 const batched = time("N-API: one call to sumTo(N)", () => addon.sumTo(N));
@@ -84,7 +84,7 @@ let wasmArray = null;
 if (wasm) {
   wasmPerCall = time("wasm: N calls to add(acc, i)", () => {
     let acc = 0;
-    for (let i = 1; i <= N; i++) acc = wasm.add(acc, i);
+    for (let i = 1; i <= N; i++) { acc = wasm.add(acc, i); }
     return acc;
   });
   time("wasm: one call to sumTo(N)", () => wasm.sumTo(N));
@@ -92,12 +92,12 @@ if (wasm) {
 }
 const js = time("JS loop (no boundary)", () => {
   let acc = 0;
-  for (let i = 1; i <= N; i++) acc += i;
+  for (let i = 1; i <= N; i++) { acc += i; }
   return acc;
 });
 const jsArray = time("JS loop over the Float64Array", () => {
   let acc = 0;
-  for (let i = 0; i < N; i++) acc += xs[i];
+  for (let i = 0; i < N; i++) { acc += xs[i]; }
   return acc;
 });
 

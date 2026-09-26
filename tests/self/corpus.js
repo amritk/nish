@@ -52,7 +52,7 @@ const CORPUS_DIRS = [
  */
 function extraArgs(file) {
   const sidecar = file.replace(/\.ts$/, ".args");
-  if (fs.existsSync(sidecar)) return split(fs.readFileSync(sidecar, "utf8"));
+  if (fs.existsSync(sidecar)) { return split(fs.readFileSync(sidecar, "utf8")); }
   const dirArgs = path.join(path.dirname(file), "args");
   if (path.basename(file) === "main.ts" && fs.existsSync(dirArgs)) {
     return split(fs.readFileSync(dirArgs, "utf8"));
@@ -78,8 +78,8 @@ function checkerArgs(file) {
   const flags = extraArgs(file);
   const out = [];
   const at = flags.indexOf("--number-mode");
-  if (at >= 0) out.push("--number-mode", flags[at + 1]);
-  if (flags.includes("--wrapping")) out.push("--wrapping");
+  if (at >= 0) { out.push("--number-mode", flags[at + 1]); }
+  if (flags.includes("--wrapping")) { out.push("--wrapping"); }
   return out;
 }
 
@@ -102,7 +102,7 @@ function programs() {
   const files = [];
   for (const dir of CORPUS_DIRS) {
     const full = path.join(root, dir);
-    if (!fs.existsSync(full)) continue;
+    if (!fs.existsSync(full)) { continue; }
     for (const name of fs.readdirSync(full).sort()) {
       const file = path.join(full, name);
       if (!name.endsWith(".ts")) {
@@ -111,10 +111,10 @@ function programs() {
         // `stat` an entry — which would throw on a dangling symlink the tree
         // is entitled to hold (`tests/link/package_symlink` is one).
         const main = path.join(file, "main.ts");
-        if (fs.existsSync(main)) files.push(main);
+        if (fs.existsSync(main)) { files.push(main); }
         continue;
       }
-      if (fs.existsSync(file.replace(/\.ts$/, ".err"))) continue;
+      if (fs.existsSync(file.replace(/\.ts$/, ".err"))) { continue; }
       files.push(file);
     }
   }
@@ -130,11 +130,11 @@ function programs() {
  */
 function linkPrograms() {
   const dir = path.join(root, "tests", "link");
-  if (!fs.existsSync(dir)) return [];
+  if (!fs.existsSync(dir)) { return []; }
   const out = [];
   for (const name of fs.readdirSync(dir).sort()) {
     const main = path.join(dir, name, "main.ts");
-    if (!fs.existsSync(main)) continue;
+    if (!fs.existsSync(main)) { continue; }
     const err = path.join(dir, name, "expected.err");
     out.push({
       name,

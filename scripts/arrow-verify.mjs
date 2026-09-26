@@ -108,7 +108,7 @@ const takeLock = () => {
   try {
     fs.mkdirSync(lock);
   } catch (error) {
-    if (error.code !== "EEXIST") throw error;
+    if (error.code !== "EEXIST") { throw error; }
     return false;
   }
   const release = () => fs.rmSync(lock, { recursive: true, force: true });
@@ -154,7 +154,7 @@ export const copyInto = (from, to, root) => {
   const inside = path.relative(root, landing);
   const escapes =
     path.isAbsolute(target) || path.isAbsolute(inside) || inside === ".." || inside.startsWith(`..${path.sep}`);
-  if (escapes) return "escapes";
+  if (escapes) { return "escapes"; }
   fs.symlinkSync(target, to);
   return "link";
 };
@@ -191,7 +191,7 @@ const copyTree = () => {
     }
     const to = path.join(tree, rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    if (copyInto(from, to, tree) === "escapes") escaping.push(rel);
+    if (copyInto(from, to, tree) === "escapes") { escaping.push(rel); }
   }
   return { files, missing, escaping };
 };
@@ -211,7 +211,7 @@ const copyTree = () => {
 const sweepPrograms = () => {
   const out = programs().map((file) => path.relative(root, file));
   for (const program of linkPrograms()) {
-    if (program.expectedErr === null) out.push(path.relative(root, program.main));
+    if (program.expectedErr === null) { out.push(path.relative(root, program.main)); }
   }
   return [...new Set(out)].sort();
 };
@@ -227,17 +227,17 @@ const sweepRejections = () => {
   const out = [];
   for (const dir of [...CORPUS_DIRS, "tests/wordings"]) {
     const full = path.join(root, dir);
-    if (!fs.existsSync(full)) continue;
+    if (!fs.existsSync(full)) { continue; }
     for (const name of fs.readdirSync(full).sort()) {
-      if (!name.endsWith(".ts")) continue;
+      if (!name.endsWith(".ts")) { continue; }
       const rel = path.join(dir, name);
       const isWording = dir === "tests/wordings";
-      if (!isWording && !fs.existsSync(path.join(root, rel.replace(/\.ts$/, ".err")))) continue;
+      if (!isWording && !fs.existsSync(path.join(root, rel.replace(/\.ts$/, ".err")))) { continue; }
       out.push(rel);
     }
   }
   for (const program of linkPrograms()) {
-    if (program.expectedErr !== null) out.push(path.relative(root, program.main));
+    if (program.expectedErr !== null) { out.push(path.relative(root, program.main)); }
   }
   return [...new Set(out)].sort();
 };
@@ -250,7 +250,7 @@ const sweepRejections = () => {
 const importCache = new Map();
 const importsOf = (rel) => {
   const cached = importCache.get(rel);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) { return cached; }
   const found = readImports(rel);
   importCache.set(rel, found);
   return found;
@@ -268,19 +268,19 @@ const importsOf = (rel) => {
  */
 const readImports = (rel) => {
   const file = path.join(root, rel);
-  if (!fs.existsSync(file)) return [];
+  if (!fs.existsSync(file)) { return []; }
   const sf = ts.createSourceFile(rel, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
   const out = [];
   for (const stmt of sf.statements) {
     const specifier = ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt) ? stmt.moduleSpecifier : undefined;
-    if (specifier === undefined || !ts.isStringLiteral(specifier)) continue;
+    if (specifier === undefined || !ts.isStringLiteral(specifier)) { continue; }
     const text = specifier.text;
     let target;
-    if (text.startsWith(".")) target = path.resolve(path.dirname(file), text.replace(/\.js$/, ""));
-    else if (text.startsWith("nish/")) target = path.join(root, "std", text.slice("nish/".length));
-    else continue;
+    if (text.startsWith(".")) { target = path.resolve(path.dirname(file), text.replace(/\.js$/, "")); }
+    else if (text.startsWith("nish/")) { target = path.join(root, "std", text.slice("nish/".length)); }
+    else { continue; }
     const candidate = target.endsWith(".ts") ? target : `${target}.ts`;
-    if (fs.existsSync(candidate)) out.push(path.relative(root, candidate));
+    if (fs.existsSync(candidate)) { out.push(path.relative(root, candidate)); }
   }
   return out;
 };
@@ -296,9 +296,9 @@ const closure = (roots) => {
   const queue = [...roots];
   while (queue.length > 0) {
     const rel = queue.pop();
-    if (seen.has(rel)) continue;
+    if (seen.has(rel)) { continue; }
     seen.add(rel);
-    for (const next of importsOf(rel)) if (!seen.has(next)) queue.push(next);
+    for (const next of importsOf(rel)) { if (!seen.has(next)) { queue.push(next); } }
   }
   return [...seen].sort();
 };
@@ -394,7 +394,7 @@ const compileAll = (relPrograms, out, debug) => {
     // working tree made `--applied` hand the before side the after side's flags,
     // and a changed `.args` then verified as clean.
     args.push(...intoDir(extraArgs(path.join(tree, rel)), dir));
-    if (debug) args.push("-g");
+    if (debug) { args.push("-g"); }
     const run = spawnSync(compiler.cmd, args, { encoding: "utf8" });
     results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir });
   }
@@ -451,11 +451,11 @@ const emittedFiles = (dir) => {
   const walk = (at, prefix) => {
     for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const full = path.join(at, entry.name);
-      if (entry.isDirectory()) walk(full, `${prefix}${entry.name}/`);
-      else out.set(`${prefix}${entry.name}`, fs.readFileSync(full));
+      if (entry.isDirectory()) { walk(full, `${prefix}${entry.name}/`); }
+      else { out.set(`${prefix}${entry.name}`, fs.readFileSync(full)); }
     }
   };
-  if (fs.existsSync(dir)) walk(dir, "");
+  if (fs.existsSync(dir)) { walk(dir, ""); }
   return out;
 };
 
@@ -471,9 +471,9 @@ export const diffEmitted = (before, after) => {
   for (const name of [...new Set([...before.keys(), ...after.keys()])].sort()) {
     const one = before.get(name);
     const two = after.get(name);
-    if (one === undefined) out.push({ name, why: "emitted only after the rewrite" });
-    else if (two === undefined) out.push({ name, why: "is missing after the rewrite" });
-    else if (!one.equals(two)) out.push({ name, why: `differs (${one.length} vs ${two.length} bytes)` });
+    if (one === undefined) { out.push({ name, why: "emitted only after the rewrite" }); }
+    else if (two === undefined) { out.push({ name, why: "is missing after the rewrite" }); }
+    else if (!one.equals(two)) { out.push({ name, why: `differs (${one.length} vs ${two.length} bytes)` }); }
   }
   return out;
 };
@@ -540,7 +540,7 @@ export const verdict = (a, b) => {
       why: a.absent === true ? "did not exist before the change" : "exists only before the change",
     };
   }
-  if (a.status !== b.status) return { kind: "status" };
+  if (a.status !== b.status) { return { kind: "status" }; }
   if (a.status !== 0) {
     // A refusal with nothing in it is the same empty comparison in its last
     // hiding place: `"" === ""` is true and says nothing. Every failure is a
@@ -550,7 +550,7 @@ export const verdict = (a, b) => {
     if (a.said.length === 0 && b.said.length === 0) {
       return { kind: "blind", why: "was refused and printed no diagnostics to compare" };
     }
-    if (diagnosticWords(a.said) !== diagnosticWords(b.said)) return { kind: "reworded" };
+    if (diagnosticWords(a.said) !== diagnosticWords(b.said)) { return { kind: "reworded" }; }
     return { kind: "refusal", moved: a.said !== b.said };
   }
   // A compile that succeeded still has a diagnostic surface — the performance
@@ -635,8 +635,8 @@ const changedSince = (rev, scope) => {
  * same sidecar spelled per directory (`tests/self/corpus.js`).
  */
 const owns = (rel) => {
-  if (rel.endsWith(".args")) return rel.replace(/\.args$/, ".ts");
-  if (path.basename(rel) === "args") return path.posix.join(path.posix.dirname(rel), "main.ts");
+  if (rel.endsWith(".args")) { return rel.replace(/\.args$/, ".ts"); }
+  if (path.basename(rel) === "args") { return path.posix.join(path.posix.dirname(rel), "main.ts"); }
   return rel;
 };
 
@@ -679,7 +679,7 @@ const flagName = (word) => VALUED.find((name) => word.startsWith(`${name}=`)) ??
 /** The value a valued flag was given, or undefined when it is absent or last. */
 const flagValue = (argv, name) => {
   const inline = argv.find((a) => a.startsWith(`${name}=`));
-  if (inline !== undefined) return inline.slice(name.length + 1);
+  if (inline !== undefined) { return inline.slice(name.length + 1); }
   const at = argv.indexOf(name);
   return at >= 0 ? argv[at + 1] : undefined;
 };
@@ -764,14 +764,14 @@ const main = (argv) => {
       `arrow-verify: ${copied.escaping.length} tracked symlink(s) point outside the tree, so a compile ` +
         "would read through them into the working tree instead of the copy and prove nothing:\n"
     );
-    for (const rel of copied.escaping) process.stderr.write(`escapes  ${rel}\n`);
+    for (const rel of copied.escaping) { process.stderr.write(`escapes  ${rel}\n`); }
     return 2;
   }
   if (copied.missing.length > 0) {
     process.stdout.write(
       `arrow-verify: ${copied.missing.length} tracked file(s) are not in the working tree and were not copied\n`
     );
-    if (flags.has("--verbose")) for (const rel of copied.missing) process.stdout.write(`gone     ${rel}\n`);
+    if (flags.has("--verbose")) { for (const rel of copied.missing) { process.stdout.write(`gone     ${rel}\n`); } }
   }
 
   // In `--applied` the copy starts as the working tree, so the *before* side is
@@ -783,7 +783,7 @@ const main = (argv) => {
       process.stdout.write(
         `arrow-verify: ${outside.length} changed file(s) are outside this sweep's scope and are not verified here\n`
       );
-      if (flags.has("--verbose")) for (const rel of outside) process.stdout.write(`outside  ${rel}\n`);
+      if (flags.has("--verbose")) { for (const rel of outside) { process.stdout.write(`outside  ${rel}\n`); } }
     }
     if (changes.length === 0) {
       process.stderr.write(
@@ -792,7 +792,7 @@ const main = (argv) => {
       return 1;
     }
     process.stdout.write(`arrow-verify: ${changes.length} file(s) changed since ${rev}\n`);
-    for (const change of changes) put(change.rel, change.before);
+    for (const change of changes) { put(change.rel, change.before); }
   }
 
   const before = compileAll(subjects, path.join(work, "before"), debug);
@@ -812,11 +812,11 @@ const main = (argv) => {
   } else {
     for (const rel of scope) {
       const file = path.join(tree, rel);
-      if (!fs.existsSync(file)) continue;
+      if (!fs.existsSync(file)) { continue; }
       const text = fs.readFileSync(file, "utf8");
       const result = rewrite(text, rel, { concise });
-      for (const skip of result.skipped) skipped.push(`${rel}:${skip.line} ${skip.name} — ${skip.reason}`);
-      if (result.changed === 0) continue;
+      for (const skip of result.skipped) { skipped.push(`${rel}:${skip.line} ${skip.name} — ${skip.reason}`); }
+      if (result.changed === 0) { continue; }
       fs.writeFileSync(file, result.text);
       rewritten += result.changed;
       touched.add(rel);
@@ -838,7 +838,7 @@ const main = (argv) => {
   process.stdout.write(
     `arrow-verify: ${coveredPrograms.length} of ${relPrograms.length} program(s) and ` +
       `${coveredNegatives.length} of ${negatives.length} rejection(s) sit on changed source; ` +
-      `the rest are identical on both sides and prove nothing\n`
+      "the rest are identical on both sides and prove nothing\n"
   );
   if (coveredPrograms.length === 0 && coveredNegatives.length === 0) {
     process.stderr.write(
@@ -891,7 +891,7 @@ const main = (argv) => {
       differed += 1;
       process.stdout.write(`DIFF  ${rel}: exit ${a.status} before, ${b.status} after\n`);
       const said = (b.status === 0 ? a.stderr : b.stderr).trim().split("\n")[0];
-      if (said) process.stdout.write(`      ${said}\n`);
+      if (said) { process.stdout.write(`      ${said}\n`); }
       continue;
     }
     if (answer.kind === "reworded") {
@@ -919,8 +919,8 @@ const main = (argv) => {
       blind.push({ rel, why: answer.why });
       continue;
     }
-    if (answer.kind === "dump") dumps += 1;
-    else compared += answer.compared;
+    if (answer.kind === "dump") { dumps += 1; }
+    else { compared += answer.compared; }
     if (answer.spoke) {
       spoke += 1;
       if (answer.moved) {
@@ -951,7 +951,7 @@ const main = (argv) => {
   }
 
   if (skipped.length > 0 && flags.has("--verbose")) {
-    for (const line of skipped) process.stdout.write(`skip  ${line}\n`);
+    for (const line of skipped) { process.stdout.write(`skip  ${line}\n`); }
   }
   process.stdout.write(
     `arrow-verify: ${subjects.length} subject(s) — ${compared} emitted file(s), ${dumps} dump(s) and ` +
@@ -967,4 +967,4 @@ const main = (argv) => {
   return differed > 0 || blind.length > 0 ? 1 : 0;
 };
 
-if (process.argv[1] === import.meta.filename) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === import.meta.filename) { process.exit(main(process.argv.slice(2))); }

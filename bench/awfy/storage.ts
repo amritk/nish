@@ -38,7 +38,7 @@ export class Storage {
   }
 
   verifyResult(result: i32): boolean {
-    return 5461 === result;
+    return result === 5461 ;
   }
 
   buildTreeDepth(depth: i32, random: Random): (ArrayTree | null)[] {

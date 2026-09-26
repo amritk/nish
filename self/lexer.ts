@@ -199,8 +199,8 @@ export const isDigit = (c: i32): boolean => c >= CH_0 && c <= CH_9;
  * checker is where a name is judged, not here.
  */
 export const isIdentStart = (c: i32): boolean => {
-  if (c >= CH_A_LOWER && c <= CH_Z_LOWER) return true;
-  if (c >= CH_A_UPPER && c <= CH_Z_UPPER) return true;
+  if (c >= CH_A_LOWER && c <= CH_Z_LOWER) { return true; }
+  if (c >= CH_A_UPPER && c <= CH_Z_UPPER) { return true; }
   return c === CH_UNDERSCORE || c === CH_DOLLAR || c > 127;
 };
 
@@ -208,9 +208,9 @@ export const isIdentPart = (c: i32): boolean => isIdentStart(c) || isDigit(c);
 
 /** The value of a hex digit, or -1. */
 export const hexValue = (c: i32): i32 => {
-  if (isDigit(c)) return c - CH_0;
-  if (c >= CH_A_LOWER && c <= CH_F_LOWER) return c - CH_A_LOWER + 10;
-  if (c >= CH_A_UPPER && c <= CH_F_UPPER) return c - CH_A_UPPER + 10;
+  if (isDigit(c)) { return c - CH_0; }
+  if (c >= CH_A_LOWER && c <= CH_F_LOWER) { return c - CH_A_LOWER + 10; }
+  if (c >= CH_A_UPPER && c <= CH_F_UPPER) { return c - CH_A_UPPER + 10; }
   return -1;
 };
 
@@ -228,39 +228,39 @@ export const hexValue = (c: i32): i32 => {
  * are ordinary names anywhere else.
  */
 export const keywordKind = (word: string): i32 => {
-  if (word === "function") return TOK_FUNCTION;
-  if (word === "return") return TOK_RETURN;
-  if (word === "if") return TOK_IF;
-  if (word === "else") return TOK_ELSE;
-  if (word === "while") return TOK_WHILE;
-  if (word === "do") return TOK_DO;
-  if (word === "for") return TOK_FOR;
-  if (word === "break") return TOK_BREAK;
-  if (word === "continue") return TOK_CONTINUE;
-  if (word === "let") return TOK_LET;
-  if (word === "const") return TOK_CONST;
-  if (word === "class") return TOK_CLASS;
-  if (word === "interface") return TOK_INTERFACE;
-  if (word === "new") return TOK_NEW;
-  if (word === "this") return TOK_THIS;
-  if (word === "import") return TOK_IMPORT;
-  if (word === "export") return TOK_EXPORT;
-  if (word === "true") return TOK_TRUE;
-  if (word === "false") return TOK_FALSE;
-  if (word === "null") return TOK_NULL;
-  if (word === "throw") return TOK_THROW;
-  if (word === "switch") return TOK_SWITCH;
-  if (word === "case") return TOK_CASE;
-  if (word === "default") return TOK_DEFAULT;
-  if (word === "implements") return TOK_IMPLEMENTS;
-  if (word === "extends") return TOK_EXTENDS;
-  if (word === "super") return TOK_SUPER;
+  if (word === "function") { return TOK_FUNCTION; }
+  if (word === "return") { return TOK_RETURN; }
+  if (word === "if") { return TOK_IF; }
+  if (word === "else") { return TOK_ELSE; }
+  if (word === "while") { return TOK_WHILE; }
+  if (word === "do") { return TOK_DO; }
+  if (word === "for") { return TOK_FOR; }
+  if (word === "break") { return TOK_BREAK; }
+  if (word === "continue") { return TOK_CONTINUE; }
+  if (word === "let") { return TOK_LET; }
+  if (word === "const") { return TOK_CONST; }
+  if (word === "class") { return TOK_CLASS; }
+  if (word === "interface") { return TOK_INTERFACE; }
+  if (word === "new") { return TOK_NEW; }
+  if (word === "this") { return TOK_THIS; }
+  if (word === "import") { return TOK_IMPORT; }
+  if (word === "export") { return TOK_EXPORT; }
+  if (word === "true") { return TOK_TRUE; }
+  if (word === "false") { return TOK_FALSE; }
+  if (word === "null") { return TOK_NULL; }
+  if (word === "throw") { return TOK_THROW; }
+  if (word === "switch") { return TOK_SWITCH; }
+  if (word === "case") { return TOK_CASE; }
+  if (word === "default") { return TOK_DEFAULT; }
+  if (word === "implements") { return TOK_IMPLEMENTS; }
+  if (word === "extends") { return TOK_EXTENDS; }
+  if (word === "super") { return TOK_SUPER; }
   return TOK_IDENT;
 };
 
 /** The UTF-8 bytes of one code point, as a string. */
 export const utf8Encode = (cp: i32): string => {
-  if (cp < 0x80) return String.fromCharCode(cp);
+  if (cp < 0x80) { return String.fromCharCode(cp); }
   if (cp < 0x800) {
     return String.fromCharCode(0xc0 | (cp >> 6)) + String.fromCharCode(0x80 | (cp & 0x3f));
   }
@@ -349,7 +349,7 @@ export class Lexer {
 
   /** The byte at `i`, or -1 past the end. Every read goes through here. */
   at(i: i32): i32 {
-    if (i < 0 || i >= this.source.length) return CH_EOF;
+    if (i < 0 || i >= this.source.length) { return CH_EOF; }
     return this.source.charCodeAt(i);
   }
 
@@ -361,7 +361,7 @@ export class Lexer {
         this.pos = this.pos + 1;
       } else if (c === CH_SLASH && this.at(this.pos + 1) === CH_SLASH) {
         this.pos = this.pos + 2;
-        while (this.pos < this.source.length && this.at(this.pos) !== CH_LF) this.pos = this.pos + 1;
+        while (this.pos < this.source.length && this.at(this.pos) !== CH_LF) { this.pos = this.pos + 1; }
       } else if (c === CH_SLASH && this.at(this.pos + 1) === CH_STAR) {
         this.pos = this.pos + 2;
         while (this.pos < this.source.length) {
@@ -429,13 +429,13 @@ export class Lexer {
   /** `#name`, a private class member: one token, which the parser then refuses. */
   scanPrivateName(): void {
     let end = this.pos + 1;
-    while (end < this.source.length && isIdentPart(this.at(end))) end = end + 1;
+    while (end < this.source.length && isIdentPart(this.at(end))) { end = end + 1; }
     this.emit(TOK_PRIVATE_IDENT, end, this.source.substring(this.start, end));
   }
 
   scanName(): void {
     let end = this.pos + 1;
-    while (end < this.source.length && isIdentPart(this.at(end))) end = end + 1;
+    while (end < this.source.length && isIdentPart(this.at(end))) { end = end + 1; }
     const word = this.source.substring(this.start, end);
     const keyword = keywordKind(word);
     this.emit(keyword, end, keyword === TOK_IDENT ? word : "");
@@ -482,10 +482,10 @@ export class Lexer {
     const exponent = this.at(end);
     if (exponent === CH_E_LOWER || exponent === CH_E_UPPER) {
       let after = end + 1;
-      if (this.at(after) === CH_PLUS || this.at(after) === CH_MINUS) after = after + 1;
+      if (this.at(after) === CH_PLUS || this.at(after) === CH_MINUS) { after = after + 1; }
       if (isDigit(this.at(after))) {
         end = after;
-        while (end < this.source.length && isDigit(this.at(end))) end = end + 1;
+        while (end < this.source.length && isDigit(this.at(end))) { end = end + 1; }
       }
     }
     // `123n` is one BigInt token, as it is in TypeScript; the language has no
@@ -529,7 +529,7 @@ export class Lexer {
       }
       if (c === CH_BACKSLASH) {
         at = this.takeEscape(chunk, at);
-        if (at < 0) return;
+        if (at < 0) { return; }
         chunk = at;
       } else {
         at = at + 1;
@@ -549,7 +549,7 @@ export class Lexer {
       this.error("invalid escape sequence", at + 2);
       return -1;
     }
-    if (at > chunk) this.literal.add(this.source.substring(chunk, at));
+    if (at > chunk) { this.literal.add(this.source.substring(chunk, at)); }
     this.literal.add(decoded);
     return this.escapeEnd;
   }
@@ -568,21 +568,21 @@ export class Lexer {
    * compiles, so it is the one place in `self/` where that shape cost the most.
    */
   literalText(chunk: i32, at: i32): string {
-    if (this.literal.isEmpty()) return this.source.substring(chunk, at);
-    if (at > chunk) this.literal.add(this.source.substring(chunk, at));
+    if (this.literal.isEmpty()) { return this.source.substring(chunk, at); }
+    if (at > chunk) { this.literal.add(this.source.substring(chunk, at)); }
     return this.literal.toText();
   }
 
   scanEscape(at: i32): string {
     this.escapeEnd = at + 1;
     const c = this.at(at);
-    if (c === CH_N_LOWER) return "\n";
-    if (c === CH_T_LOWER) return "\t";
-    if (c === CH_R_LOWER) return "\r";
-    if (c === CH_0) return String.fromCharCode(0);
-    if (c === CH_B_LOWER) return String.fromCharCode(8);
-    if (c === CH_F_LOWER) return String.fromCharCode(CH_FF);
-    if (c === CH_V_LOWER) return String.fromCharCode(CH_VT);
+    if (c === CH_N_LOWER) { return "\n"; }
+    if (c === CH_T_LOWER) { return "\t"; }
+    if (c === CH_R_LOWER) { return "\r"; }
+    if (c === CH_0) { return String.fromCharCode(0); }
+    if (c === CH_B_LOWER) { return String.fromCharCode(8); }
+    if (c === CH_F_LOWER) { return String.fromCharCode(CH_FF); }
+    if (c === CH_V_LOWER) { return String.fromCharCode(CH_VT); }
     if (c === CH_X_LOWER) {
       const value = this.scanHex(at + 1, 2);
       if (value < 0) {
@@ -615,7 +615,8 @@ export class Lexer {
       this.escapeEnd = at + 5;
       return utf8Encode(value);
     }
-    if (c === CH_LF) return ""; // a line continuation contributes nothing
+    if (c === CH_LF) { return ""; // a line continuation contributes nothing
+}
     if (c === CH_EOF) {
       this.escapeEnd = -1;
       return "";
@@ -630,7 +631,7 @@ export class Lexer {
     let i = 0;
     while (i < count) {
       const digit = hexValue(this.at(at + i));
-      if (digit < 0) return -1;
+      if (digit < 0) { return -1; }
       value = value * 16 + digit;
       i = i + 1;
     }
@@ -664,7 +665,7 @@ export class Lexer {
       }
       if (c === CH_BACKSLASH) {
         i = this.takeEscape(chunk, i);
-        if (i < 0) return;
+        if (i < 0) { return; }
         chunk = i;
       } else {
         i = i + 1;
@@ -676,7 +677,7 @@ export class Lexer {
   scanBrace(c: i32): void {
     const open = this.braceDepth.length;
     if (c === CH_LBRACE) {
-      if (open > 0) this.braceDepth[open - 1] = this.braceDepth[open - 1] + 1;
+      if (open > 0) { this.braceDepth[open - 1] = this.braceDepth[open - 1] + 1; }
       this.emitPlain(TOK_LBRACE, 1);
       return;
     }
@@ -731,29 +732,29 @@ export class Lexer {
         break;
     }
     if (c === CH_PLUS) {
-      if (next1 === CH_PLUS) this.emitPlain(TOK_PLUS_PLUS, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_PLUS_ASSIGN, 2);
-      else this.emitPlain(TOK_PLUS, 1);
+      if (next1 === CH_PLUS) { this.emitPlain(TOK_PLUS_PLUS, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_PLUS_ASSIGN, 2); }
+      else { this.emitPlain(TOK_PLUS, 1); }
       return;
     }
     if (c === CH_MINUS) {
-      if (next1 === CH_MINUS) this.emitPlain(TOK_MINUS_MINUS, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_MINUS_ASSIGN, 2);
-      else this.emitPlain(TOK_MINUS, 1);
+      if (next1 === CH_MINUS) { this.emitPlain(TOK_MINUS_MINUS, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_MINUS_ASSIGN, 2); }
+      else { this.emitPlain(TOK_MINUS, 1); }
       return;
     }
     if (c === CH_DOT) {
-      if (next1 === CH_DOT && next2 === CH_DOT) this.emitPlain(TOK_DOT_DOT_DOT, 3);
-      else this.emitPlain(TOK_DOT, 1);
+      if (next1 === CH_DOT && next2 === CH_DOT) { this.emitPlain(TOK_DOT_DOT_DOT, 3); }
+      else { this.emitPlain(TOK_DOT, 1); }
       return;
     }
     if (c === CH_QUESTION) {
       // `?.` only when a digit does not follow: `a ? .5 : b` is a conditional,
       // which is the rule the TypeScript scanner uses too.
-      if (next1 === CH_DOT && !isDigit(next2)) this.emitPlain(TOK_QUESTION_DOT, 2);
-      else if (next1 === CH_QUESTION && next2 === CH_ASSIGN) this.emitPlain(TOK_QUESTION_QUESTION_ASSIGN, 3);
-      else if (next1 === CH_QUESTION) this.emitPlain(TOK_QUESTION_QUESTION, 2);
-      else this.emitPlain(TOK_QUESTION, 1);
+      if (next1 === CH_DOT && !isDigit(next2)) { this.emitPlain(TOK_QUESTION_DOT, 2); }
+      else if (next1 === CH_QUESTION && next2 === CH_ASSIGN) { this.emitPlain(TOK_QUESTION_QUESTION_ASSIGN, 3); }
+      else if (next1 === CH_QUESTION) { this.emitPlain(TOK_QUESTION_QUESTION, 2); }
+      else { this.emitPlain(TOK_QUESTION, 1); }
       return;
     }
     if (c === CH_AT) {
@@ -776,70 +777,70 @@ export class Lexer {
       return;
     }
     if (c === CH_STAR) {
-      if (next1 === CH_STAR && next2 === CH_ASSIGN) this.emitPlain(TOK_STAR_STAR_ASSIGN, 3);
-      else if (next1 === CH_STAR) this.emitPlain(TOK_STAR_STAR, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_STAR_ASSIGN, 2);
-      else this.emitPlain(TOK_STAR, 1);
+      if (next1 === CH_STAR && next2 === CH_ASSIGN) { this.emitPlain(TOK_STAR_STAR_ASSIGN, 3); }
+      else if (next1 === CH_STAR) { this.emitPlain(TOK_STAR_STAR, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_STAR_ASSIGN, 2); }
+      else { this.emitPlain(TOK_STAR, 1); }
       return;
     }
     if (c === CH_SLASH) {
-      if (next1 === CH_ASSIGN) this.emitPlain(TOK_SLASH_ASSIGN, 2);
-      else this.emitPlain(TOK_SLASH, 1);
+      if (next1 === CH_ASSIGN) { this.emitPlain(TOK_SLASH_ASSIGN, 2); }
+      else { this.emitPlain(TOK_SLASH, 1); }
       return;
     }
     if (c === CH_PERCENT) {
-      if (next1 === CH_ASSIGN) this.emitPlain(TOK_PERCENT_ASSIGN, 2);
-      else this.emitPlain(TOK_PERCENT, 1);
+      if (next1 === CH_ASSIGN) { this.emitPlain(TOK_PERCENT_ASSIGN, 2); }
+      else { this.emitPlain(TOK_PERCENT, 1); }
       return;
     }
     if (c === CH_ASSIGN) {
-      if (next1 === CH_ASSIGN && next2 === CH_ASSIGN) this.emitPlain(TOK_EQ, 3);
-      else if (next1 === CH_GT) this.emitPlain(TOK_ARROW, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_EQ_LOOSE, 2);
-      else this.emitPlain(TOK_ASSIGN, 1);
+      if (next1 === CH_ASSIGN && next2 === CH_ASSIGN) { this.emitPlain(TOK_EQ, 3); }
+      else if (next1 === CH_GT) { this.emitPlain(TOK_ARROW, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_EQ_LOOSE, 2); }
+      else { this.emitPlain(TOK_ASSIGN, 1); }
       return;
     }
     if (c === CH_BANG) {
-      if (next1 === CH_ASSIGN && next2 === CH_ASSIGN) this.emitPlain(TOK_NE, 3);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_NE_LOOSE, 2);
-      else this.emitPlain(TOK_BANG, 1);
+      if (next1 === CH_ASSIGN && next2 === CH_ASSIGN) { this.emitPlain(TOK_NE, 3); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_NE_LOOSE, 2); }
+      else { this.emitPlain(TOK_BANG, 1); }
       return;
     }
     if (c === CH_LT) {
-      if (next1 === CH_LT && next2 === CH_ASSIGN) this.emitPlain(TOK_SHL_ASSIGN, 3);
-      else if (next1 === CH_LT) this.emitPlain(TOK_SHL, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_LE, 2);
-      else this.emitPlain(TOK_LT, 1);
+      if (next1 === CH_LT && next2 === CH_ASSIGN) { this.emitPlain(TOK_SHL_ASSIGN, 3); }
+      else if (next1 === CH_LT) { this.emitPlain(TOK_SHL, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_LE, 2); }
+      else { this.emitPlain(TOK_LT, 1); }
       return;
     }
     if (c === CH_GT) {
       // `>>` and `>>>` are one token: the language has no generic type argument
       // list, so nothing ever needs them split back apart.
-      if (next1 === CH_GT && next2 === CH_GT && next3 === CH_ASSIGN) this.emitPlain(TOK_USHR_ASSIGN, 4);
-      else if (next1 === CH_GT && next2 === CH_GT) this.emitPlain(TOK_USHR, 3);
-      else if (next1 === CH_GT && next2 === CH_ASSIGN) this.emitPlain(TOK_SHR_ASSIGN, 3);
-      else if (next1 === CH_GT) this.emitPlain(TOK_SHR, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_GE, 2);
-      else this.emitPlain(TOK_GT, 1);
+      if (next1 === CH_GT && next2 === CH_GT && next3 === CH_ASSIGN) { this.emitPlain(TOK_USHR_ASSIGN, 4); }
+      else if (next1 === CH_GT && next2 === CH_GT) { this.emitPlain(TOK_USHR, 3); }
+      else if (next1 === CH_GT && next2 === CH_ASSIGN) { this.emitPlain(TOK_SHR_ASSIGN, 3); }
+      else if (next1 === CH_GT) { this.emitPlain(TOK_SHR, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_GE, 2); }
+      else { this.emitPlain(TOK_GT, 1); }
       return;
     }
     if (c === CH_AMP) {
-      if (next1 === CH_AMP && next2 === CH_ASSIGN) this.emitPlain(TOK_AND_AND_ASSIGN, 3);
-      else if (next1 === CH_AMP) this.emitPlain(TOK_AND_AND, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_AMP_ASSIGN, 2);
-      else this.emitPlain(TOK_AMP, 1);
+      if (next1 === CH_AMP && next2 === CH_ASSIGN) { this.emitPlain(TOK_AND_AND_ASSIGN, 3); }
+      else if (next1 === CH_AMP) { this.emitPlain(TOK_AND_AND, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_AMP_ASSIGN, 2); }
+      else { this.emitPlain(TOK_AMP, 1); }
       return;
     }
     if (c === CH_PIPE) {
-      if (next1 === CH_PIPE && next2 === CH_ASSIGN) this.emitPlain(TOK_OR_OR_ASSIGN, 3);
-      else if (next1 === CH_PIPE) this.emitPlain(TOK_OR_OR, 2);
-      else if (next1 === CH_ASSIGN) this.emitPlain(TOK_PIPE_ASSIGN, 2);
-      else this.emitPlain(TOK_PIPE, 1);
+      if (next1 === CH_PIPE && next2 === CH_ASSIGN) { this.emitPlain(TOK_OR_OR_ASSIGN, 3); }
+      else if (next1 === CH_PIPE) { this.emitPlain(TOK_OR_OR, 2); }
+      else if (next1 === CH_ASSIGN) { this.emitPlain(TOK_PIPE_ASSIGN, 2); }
+      else { this.emitPlain(TOK_PIPE, 1); }
       return;
     }
     if (c === CH_CARET) {
-      if (next1 === CH_ASSIGN) this.emitPlain(TOK_CARET_ASSIGN, 2);
-      else this.emitPlain(TOK_CARET, 1);
+      if (next1 === CH_ASSIGN) { this.emitPlain(TOK_CARET_ASSIGN, 2); }
+      else { this.emitPlain(TOK_CARET, 1); }
       return;
     }
     this.error(`unexpected character \`${this.source.substring(this.pos, this.pos + 1)}\``, this.pos + 1);
@@ -851,7 +852,7 @@ export const lineOf = (source: string, offset: i32): i32 => {
   let line = 1;
   let i = 0;
   while (i < offset && i < source.length) {
-    if (source.charCodeAt(i) === CH_LF) line = line + 1;
+    if (source.charCodeAt(i) === CH_LF) { line = line + 1; }
     i = i + 1;
   }
   return line;
@@ -861,7 +862,7 @@ export const columnOf = (source: string, offset: i32): i32 => {
   let start = 0;
   let i = 0;
   while (i < offset && i < source.length) {
-    if (source.charCodeAt(i) === CH_LF) start = i + 1;
+    if (source.charCodeAt(i) === CH_LF) { start = i + 1; }
     i = i + 1;
   }
   return offset - start + 1;

@@ -99,7 +99,7 @@ function compareIR(a, b, labelA, labelB, verbose) {
       return { error: `${name}: the bytes differ but no line does` };
     }
     bytes += want.length;
-    if (verbose) process.stdout.write(`  ok ${name} (${want.length} bytes)\n`);
+    if (verbose) { process.stdout.write(`  ok ${name} (${want.length} bytes)\n`); }
   }
   return { modules: namesA.length, bytes };
 }
@@ -123,29 +123,29 @@ function main(argv) {
   // rolling freeze broken -- `self/` using something the last release does
   // not have -- and `linkWith` has already printed the seed's report.
   const seed = seedForOracle(argv);
-  if (seed.error !== undefined) return fail(seed.error);
-  if (linkWith(seed, ENTRY, stage1) === null) return fail(`the seed (${seed.label}) could not build stage1`);
+  if (seed.error !== undefined) { return fail(seed.error); }
+  if (linkWith(seed, ENTRY, stage1) === null) { return fail(`the seed (${seed.label}) could not build stage1`); }
 
   const e1 = compileWithStage(stage1, stage1Dir);
-  if (e1 !== null) return fail(e1);
+  if (e1 !== null) { return fail(e1); }
   const l2 = link(stage1Dir, stage2);
-  if (l2 !== null) return fail(l2);
+  if (l2 !== null) { return fail(l2); }
   const e2 = compileWithStage(stage2, stage2Dir);
-  if (e2 !== null) return fail(e2);
+  if (e2 !== null) { return fail(e2); }
 
   // The self-hosting proof.
   const agree12 = compareIR(stage1Dir, stage2Dir, "stage1", "stage2", verbose);
-  if (agree12.error !== undefined) return fail(`IR(stage1) != IR(stage2): ${agree12.error}`);
+  if (agree12.error !== undefined) { return fail(`IR(stage1) != IR(stage2): ${agree12.error}`); }
 
   const l3 = link(stage2Dir, stage3);
-  if (l3 !== null) return fail(l3);
+  if (l3 !== null) { return fail(l3); }
   const binary2 = fs.readFileSync(stage2);
   const binary3 = fs.readFileSync(stage3);
   if (!binary2.equals(binary3)) {
     return fail(`stage3 is not byte-identical to stage2 (${binary2.length} vs ${binary3.length} bytes)`);
   }
 
-  if (!keep) fs.rmSync(work, { recursive: true, force: true });
+  if (!keep) { fs.rmSync(work, { recursive: true, force: true }); }
   process.stdout.write(
     `${agree12.modules} modules, ${agree12.bytes} bytes of IR: ` +
       `IR(stage1)==IR(stage2), stage3 == stage2 (${binary2.length} bytes), seed ${seed.label}\n`
@@ -153,5 +153,5 @@ function main(argv) {
   return 0;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { main };

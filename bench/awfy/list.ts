@@ -72,6 +72,6 @@ export class List {
   }
 
   verifyResult(result: i32): boolean {
-    return 10 === result;
+    return result === 10 ;
   }
 }
