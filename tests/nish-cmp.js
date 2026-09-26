@@ -125,6 +125,16 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/entry_shebang.ts",
+    changelog: "shebang line",
+    why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
+  },
+  {
+    program: "docs/cookbook/decl-shebang.ts",
+    changelog: "shebang line",
+    why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
+  },
+  {
     program: "tests/cases/asi_statements.ts",
     changelog: "Make semicolons optional, by TypeScript's insertion rule",
     why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",

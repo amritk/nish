@@ -6440,6 +6440,47 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end decl_main -->
 
+### A shebang line, and `nish run`
+
+A `#!` line at the very start of a file is skipped by the lexer, so the IR is
+the entry wrapper above and nothing else. The line is for the kernel: with it,
+`chmod +x tool.ts && ./tool.ts a b` runs the program through `nish run`, which
+compiles it and links it into a cache the first time. A later run of the same
+program starts the cached binary.
+
+<!-- cookbook:begin decl-shebang -->
+```ts
+#!/usr/bin/env -S nish run
+export const main = (): number => {
+  console.log("hello from a script");
+  return 0;
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"hello from a script\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  call void @nish_print(i8* bitcast ({ i64, [20 x i8] }* @.str.0 to i8*))
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end decl-shebang -->
+
 ### Linkage: `export`, and `--no-strict-exports`
 
 A function without `export` gets `internal` linkage, so LLVM may inline it,
