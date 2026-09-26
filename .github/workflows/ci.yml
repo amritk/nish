@@ -22,7 +22,8 @@
 #       a release carries a seed it can use and there is no row otherwise; the
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
-# lint: `npm run lint` when package.json defines it (no-op otherwise), then
+# lint: package-lock.json against package.json with no registry involved,
+#       `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
 #
 # Also reusable via `workflow_call`: release.yml runs it before packing a tag.
@@ -668,6 +669,25 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # package-lock.json agrees with package.json, read from the two files
+      # alone. `npm ci` above is not this check, and 0.11.0 is why: it asks
+      # the registry, and an optional dependency whose pinned version is not
+      # published yet is dropped rather than refused. The release commit pins
+      # the platform packages at a version release.yml publishes only after
+      # the tag is built, so `npm ci` passed on that commit, went red on main
+      # once the publish landed, and nothing re-ran to say so until the next
+      # pull request merged main. `npm ls --package-lock-only` never asks the
+      # registry, so the release commit is red here on its own push and stays
+      # red until release.yml's `lockfile` job's pull request merges.
+      #
+      # Skipped exactly where that disagreement is the release working: on
+      # the Release PR, which carries the bump but cannot carry the entries,
+      # and on a tag, where release.yml runs this workflow before publishing
+      # and a red here would stop the publish that fixes it.
+      - name: Lockfile agrees with package.json
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.head_ref != 'release/next' }}
+        run: npm ls --package-lock-only --all > /dev/null
 
       - name: Lint (only when package.json defines a lint script)
         run: npm run lint --if-present
