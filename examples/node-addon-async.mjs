@@ -35,7 +35,7 @@ const watchLoop = () => {
   const timer = setInterval(() => {
     const now = process.hrtime.bigint();
     const late = Number(now - last) / 1e6 - 5;
-    if (late > worst) worst = late;
+    if (late > worst) { worst = late; }
     ticks += 1;
     last = now;
   }, 5);
@@ -82,7 +82,7 @@ console.log(`same answer from both: ${syncAnswer === asyncAnswer} (${syncAnswer}
 // arena, and the JS thread's is left untouched.
 if (typeof addon.digestAsync === "function") {
   const expected = [];
-  for (let i = 0; i < 32; i++) expected.push(addon.digest(i, 64));
+  for (let i = 0; i < 32; i++) { expected.push(addon.digest(i, 64)); }
   const got = await Promise.all(expected.map((_, i) => addon.digestAsync(i, 64)));
   const same = got.every((v, i) => v === expected[i]);
   console.log(`32 concurrent digestAsync calls agree with digest: ${same}`);

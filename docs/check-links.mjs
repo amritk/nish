@@ -22,9 +22,9 @@ function listMarkdown(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) { continue; }
       out.push(...listMarkdown(full));
-    } else if (entry.name.endsWith(".md")) out.push(full);
+    } else if (entry.name.endsWith(".md")) { out.push(full); }
   }
   return out;
 }
@@ -73,7 +73,7 @@ function headingSlugs(text) {
   const slugs = new Set();
   for (const line of proseLines(text)) {
     const m = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
-    if (!m) continue;
+    if (!m) { continue; }
     let slug = m[1]
       .replace(/`([^`]*)`/g, "$1") // inline code keeps its text
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links keep their text
@@ -82,7 +82,7 @@ function headingSlugs(text) {
       .replace(/ /g, "-"); // one hyphen per space, runs included
     const n = seen.get(slug) ?? 0;
     seen.set(slug, n + 1);
-    if (n > 0) slug = `${slug}-${n}`;
+    if (n > 0) { slug = `${slug}-${n}`; }
     slugs.add(slug);
   }
   return slugs;
@@ -90,7 +90,7 @@ function headingSlugs(text) {
 
 const slugCache = new Map();
 function slugsOf(file) {
-  if (!slugCache.has(file)) slugCache.set(file, headingSlugs(fs.readFileSync(file, "utf8")));
+  if (!slugCache.has(file)) { slugCache.set(file, headingSlugs(fs.readFileSync(file, "utf8"))); }
   return slugCache.get(file);
 }
 
@@ -104,12 +104,12 @@ for (const file of files) {
   const text = fs.readFileSync(file, "utf8");
   proseLines(text).forEach((line, index) => {
     const targets = [];
-    for (const m of line.matchAll(INLINE)) targets.push(m[1]);
+    for (const m of line.matchAll(INLINE)) { targets.push(m[1]); }
     const ref = REFDEF.exec(line);
-    if (ref) targets.push(ref[1]);
+    if (ref) { targets.push(ref[1]); }
     for (let target of targets) {
       target = target.replace(/^<|>$/g, "");
-      if (/^(https?:|mailto:|tel:)/i.test(target)) continue;
+      if (/^(https?:|mailto:|tel:)/i.test(target)) { continue; }
       checked++;
       const [pathPart, fragment] = target.split("#");
       const where = `${path.relative(root, file)}:${index + 1}`;
@@ -122,7 +122,7 @@ for (const file of files) {
         }
       }
       if (fragment !== undefined && fragment !== "") {
-        if (!resolved.endsWith(".md") || fs.statSync(resolved).isDirectory()) continue;
+        if (!resolved.endsWith(".md") || fs.statSync(resolved).isDirectory()) { continue; }
         if (!slugsOf(resolved).has(fragment.toLowerCase())) {
           problems.push(`${where}: broken anchor \`${target}\` (no heading #${fragment} in ${path.relative(root, resolved)})`);
         }

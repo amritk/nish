@@ -135,13 +135,13 @@ function buildProgram(seed, label, opts = {}) {
         return `(${boolExpr(d - 1, env, mutable)} ? ${sub()} : ${sub()})`;
       case 10:
         // Helpers may only call lower-numbered helpers, so there is no recursion.
-        if (callable > 0) return `h${r.int(0, callable - 1)}(${sub()}, ${sub()})`;
+        if (callable > 0) { return `h${r.int(0, callable - 1)}(${sub()}, ${sub()})`; }
         return sub();
       case 11:
-        if (mutable.length > 0) return `${r.pick(mutable)}${r.pick(["++", "--"])}`;
+        if (mutable.length > 0) { return `${r.pick(mutable)}${r.pick(["++", "--"])}`; }
         return sub();
       case 12:
-        if (mutable.length > 0) return `${r.pick(["++", "--"])}${r.pick(mutable)}`;
+        if (mutable.length > 0) { return `${r.pick(["++", "--"])}${r.pick(mutable)}`; }
         return sub();
       default:
         return `(${sub()} - ${literal()})`;
@@ -151,7 +151,7 @@ function buildProgram(seed, label, opts = {}) {
   function boolExpr(d, env, mutable) {
     const sub = () => intExpr(d, env, mutable);
     if (d <= 0 || r.chance(0.15)) {
-      if (boolEnv.length > 0 && r.chance(0.5)) return r.pick(boolEnv);
+      if (boolEnv.length > 0 && r.chance(0.5)) { return r.pick(boolEnv); }
       return r.pick(["true", "false"]);
     }
     switch (r.int(0, 8)) {
@@ -200,7 +200,7 @@ function buildProgram(seed, label, opts = {}) {
 
   // Which generics this program has, and the types each is instantiated at.
   const generics = withStream(gen, () => {
-    if (!r.chance(0.75)) return null;
+    if (!r.chance(0.75)) { return null; }
     const typesOf = () => {
       const shuffled = [...GENERIC_TYPES];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -239,12 +239,12 @@ function buildProgram(seed, label, opts = {}) {
     lines.push("}");
     lines.push("");
     lines.push("const pick = <T>(c: boolean, a: T, b: T): T => (c ? a : b);");
-    if (generics.trade) lines.push("const trade = <T>(cell: Cell<T>, w: T): T => cell.swap(w);");
+    if (generics.trade) { lines.push("const trade = <T>(cell: Cell<T>, w: T): T => cell.swap(w);"); }
   }
   lines.push("");
   lines.push("export function main(): number {");
   callable = helpers;
-  for (const v of locals) lines.push(`  let ${v} = ${literal()};`);
+  for (const v of locals) { lines.push(`  let ${v} = ${literal()};`); }
   for (const b of bools) {
     lines.push(`  let ${b} = ${boolExpr(2, locals, [])};`);
     boolEnv = [...boolEnv, b];
@@ -258,8 +258,8 @@ function buildProgram(seed, label, opts = {}) {
       case "boolean":
         return boolExpr(maxDepth - 1, env, mutable);
       case "string":
-        if (r.chance(0.4)) return "s0";
-        if (r.chance(0.5)) return JSON.stringify(r.pick(STRINGS));
+        if (r.chance(0.4)) { return "s0"; }
+        if (r.chance(0.5)) { return JSON.stringify(r.pick(STRINGS)); }
         return `\`${r.pick(STRINGS)}\${${intExpr(1, env, mutable)}}\``;
       default:
         return r.chance(0.4) ? "p0" : `new Pt(${intExpr(maxDepth - 1, env, mutable)})`;
@@ -286,8 +286,8 @@ function buildProgram(seed, label, opts = {}) {
   if (generics !== null) {
     withStream(gen, () => {
       const used = [...generics.pick, ...generics.cell];
-      if (used.includes("string")) lines.push(`  let s0 = ${JSON.stringify(r.pick(STRINGS))};`);
-      if (used.includes("Pt")) lines.push(`  let p0 = new Pt(${literal()});`);
+      if (used.includes("string")) { lines.push(`  let s0 = ${JSON.stringify(r.pick(STRINGS))};`); }
+      if (used.includes("Pt")) { lines.push(`  let p0 = new Pt(${literal()});`); }
       for (const t of cellTypes) {
         lines.push(`  const ${cellOf(t)} = new Cell<${t}>(${valueAt(t, locals, [])});`);
       }
@@ -299,8 +299,8 @@ function buildProgram(seed, label, opts = {}) {
     if (r.chance(0.4)) {
       const t = r.pick(generics.pick);
       const call = `pick(${boolExpr(maxDepth - 1, env, mutable)}, ${valueAt(t, env, mutable)}, ${valueAt(t, env, mutable)})`;
-      if (r.chance(0.5)) lines.push(`  ${targetOf(t)} = ${call};`);
-      else lines.push(`  console.log(${shown(t, call)});`);
+      if (r.chance(0.5)) { lines.push(`  ${targetOf(t)} = ${call};`); }
+      else { lines.push(`  console.log(${shown(t, call)});`); }
       return;
     }
     const t = r.pick(cellTypes);
@@ -316,8 +316,8 @@ function buildProgram(seed, label, opts = {}) {
         lines.push(`  console.log(${shown(t, `${cell}.swap(${valueAt(t, env, mutable)})`)});`);
         break;
       default:
-        if (generics.trade) lines.push(`  ${targetOf(t)} = trade(${cell}, ${valueAt(t, env, mutable)});`);
-        else lines.push(`  console.log(${shown(t, `${cell}.get()`)});`);
+        if (generics.trade) { lines.push(`  ${targetOf(t)} = trade(${cell}, ${valueAt(t, env, mutable)});`); }
+        else { lines.push(`  console.log(${shown(t, `${cell}.get()`)});`); }
         break;
     }
   };
@@ -359,16 +359,16 @@ function buildProgram(seed, label, opts = {}) {
           lines.push(`${pad}} else {`);
           statement(indent + 2, env, mutable, depth - 1);
           lines.push(`${pad}}`);
-        } else lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`);
+        } else { lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`); }
         break;
       case 10:
         if (depth > 0) {
           const i = `i${loopId++}`;
           lines.push(`${pad}for (let ${i} = 0; ${i} < ${r.int(1, 8)}; ${i}++) {`);
           statement(indent + 2, [...env, i], mutable, depth - 1);
-          if (r.chance(0.5)) statement(indent + 2, [...env, i], mutable, depth - 1);
+          if (r.chance(0.5)) { statement(indent + 2, [...env, i], mutable, depth - 1); }
           lines.push(`${pad}}`);
-        } else lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`);
+        } else { lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`); }
         break;
       default:
         if (depth > 0) {
@@ -384,13 +384,13 @@ function buildProgram(seed, label, opts = {}) {
           }
           lines.push(`${pad}  ${c}--;`);
           lines.push(`${pad}}`);
-        } else lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`);
+        } else { lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`); }
         break;
     }
   }
   const nStatements = r.int(8, 16);
   for (let s = 0; s < nStatements; s++) {
-    if (generics !== null && gen.chance(0.35)) withStream(gen, () => genericStatement(locals, locals));
+    if (generics !== null && gen.chance(0.35)) { withStream(gen, () => genericStatement(locals, locals)); }
     statement(2, locals, locals, 2);
   }
   if (generics !== null) {
@@ -408,8 +408,8 @@ function buildProgram(seed, label, opts = {}) {
       }
     });
   }
-  for (const v of locals) lines.push(`  console.log(${v});`);
-  for (const b of bools) lines.push(`  console.log(${b});`);
+  for (const v of locals) { lines.push(`  console.log(${v});`); }
+  for (const b of bools) { lines.push(`  console.log(${b});`); }
   lines.push("  return 0;");
   lines.push("}");
   return `${lines.join("\n")}\n`;
@@ -429,7 +429,7 @@ function generateProgram(seed, opts = {}) {
     text = buildProgram((seed + salt * 0x9e3779b1) >>> 0, seed, opts);
     const sourceFile = ts.createSourceFile("fuzz.ts", text, ts.ScriptTarget.ES2020, true);
     const diagnostics = (sourceFile).parseDiagnostics;
-    if (!diagnostics || diagnostics.length === 0) return text;
+    if (!diagnostics || diagnostics.length === 0) { return text; }
   }
   return text; // give up after 32 re-rolls and let the harness report it
 }
@@ -451,7 +451,7 @@ function stage1Pair({ reference = null, candidate = null } = {}) {
   let candidateSpec = candidate;
   if (candidateSpec === null) {
     const built = cmp.buildCandidate(referenceSpec);
-    if (built.error !== undefined) return { error: built.error };
+    if (built.error !== undefined) { return { error: built.error }; }
     candidateSpec = built.path;
   }
   return cmp.resolvePair(referenceSpec, candidateSpec);
@@ -533,13 +533,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let reference = null;
   let candidate = null;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--count") count = Number(argv[++i]);
-    else if (argv[i] === "--seed") seed = Number(argv[++i]) >>> 0;
-    else if (argv[i] === "--depth") depth = Number(argv[++i]);
-    else if (argv[i] === "--print") printOnly = true;
-    else if (argv[i] === "--stage1") continue;
-    else if (argv[i] === "--reference") reference = argv[++i];
-    else if (argv[i] === "--candidate") candidate = argv[++i];
+    if (argv[i] === "--count") { count = Number(argv[++i]); }
+    else if (argv[i] === "--seed") { seed = Number(argv[++i]) >>> 0; }
+    else if (argv[i] === "--depth") { depth = Number(argv[++i]); }
+    else if (argv[i] === "--print") { printOnly = true; }
+    else if (argv[i] === "--stage1") { continue; }
+    else if (argv[i] === "--reference") { reference = argv[++i]; }
+    else if (argv[i] === "--candidate") { candidate = argv[++i]; }
     else {
       console.error(`unknown option: ${argv[i]}`);
       process.exit(2);

@@ -28,7 +28,7 @@ const messageFile = path.join(tmp, "msg.txt");
 fs.writeFileSync(messageFile, `chore: something\n\n${coauth}\n`);
 
 const bash = (command) => ({ tool_name: "Bash", cwd: CWD, tool_input: { command } });
-const mcp = (tool_name, tool_input) => ({ tool_name, cwd: CWD, tool_input });
+const mcp = (toolName, toolInput) => ({ tool_name: toolName, cwd: CWD, tool_input: toolInput });
 
 const cases = [
   ["BLOCK  agent co-author in -m", 2, bash(`git commit -m "fix: x\n\n${coauth}"`)],
@@ -68,9 +68,9 @@ for (const [label, expected, event] of cases) {
   const input = typeof event === "string" ? event : JSON.stringify(event);
   const run = spawnSync("node", [HOOK], { input, encoding: "utf8" });
   const ok = run.status === expected;
-  if (!ok) failed++;
+  if (!ok) { failed++; }
   console.log(`${ok ? "pass" : "FAIL"}  ${label}  (exit ${run.status}, wanted ${expected})`);
-  if (!ok && run.stderr) console.log(run.stderr.replace(/^/gm, "        "));
+  if (!ok && run.stderr) { console.log(run.stderr.replace(/^/gm, "        ")); }
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

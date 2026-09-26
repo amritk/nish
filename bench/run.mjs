@@ -140,7 +140,7 @@ const MAP_SIZES = ["65536", "1048576"];
 /** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
 function sourceArgs(name) {
   const file = path.join(benchDir, `${name}.args`);
-  if (!fs.existsSync(file)) return [];
+  if (!fs.existsSync(file)) { return []; }
   return fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean);
 }
 
@@ -165,27 +165,27 @@ for (let i = 2; i < argv.length; i++) {
   const a = argv[i];
   const next = () => {
     const v = argv[++i];
-    if (v === undefined) fail(`${a} needs a value`);
+    if (v === undefined) { fail(`${a} needs a value`); }
     return v;
   };
   if (a === "--runs") {
     opts.runs = Number(next());
     opts.runsGiven = true;
-  } else if (a === "--warmup") opts.warmup = Number(next());
-  else if (a === "--only") opts.only = new Set(next().split(",").filter(Boolean));
+  } else if (a === "--warmup") { opts.warmup = Number(next()); }
+  else if (a === "--only") { opts.only = new Set(next().split(",").filter(Boolean)); }
   else if (a === "--n") {
     for (const pair of next().split(",")) {
       const [name, value] = pair.split("=");
-      if (!name || !/^\d+$/.test(value ?? "")) fail(`--n expects name=integer, got \`${pair}\``);
+      if (!name || !/^\d+$/.test(value ?? "")) { fail(`--n expects name=integer, got \`${pair}\``); }
       opts.sizes.set(name, value);
     }
-  } else if (a === "--validate") opts.validate = true;
-  else if (a === "--instructions") opts.instructions = true;
-  else if (a === "--check") opts.check = true;
-  else if (a === "--update") opts.update = true;
-  else if (a === "--no-rust") opts.rust = false;
-  else if (a === "--no-go") opts.go = false;
-  else if (a === "--out") opts.out = path.resolve(next());
+  } else if (a === "--validate") { opts.validate = true; }
+  else if (a === "--instructions") { opts.instructions = true; }
+  else if (a === "--check") { opts.check = true; }
+  else if (a === "--update") { opts.update = true; }
+  else if (a === "--no-rust") { opts.rust = false; }
+  else if (a === "--no-go") { opts.go = false; }
+  else if (a === "--out") { opts.out = path.resolve(next()); }
   else if (a === "-h" || a === "--help") {
     // The banner is this file's leading comment block, minus the shebang: it
     // ends at the first line that is not a comment, so adding an option above
@@ -194,11 +194,11 @@ for (let i = 2; i < argv.length; i++) {
     const end = banner.findIndex((l) => !l.startsWith("//"));
     console.log(banner.slice(0, end).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
     process.exit(0);
-  } else fail(`unknown option ${a}`);
+  } else { fail(`unknown option ${a}`); }
 }
 
-if ((opts.check || opts.update) && !opts.instructions) fail("--check and --update belong to --instructions");
-if (opts.check && opts.update) fail("--check and --update are exclusive: update the baseline or check it");
+if ((opts.check || opts.update) && !opts.instructions) { fail("--check and --update belong to --instructions"); }
+if (opts.check && opts.update) { fail("--check and --update are exclusive: update the baseline or check it"); }
 // Counting runs only the Nish builds, so the other languages are not looked up.
 if (opts.instructions) {
   opts.rust = false;
@@ -237,11 +237,11 @@ const RSS_HELPER = (() => {
   const exe = path.join(outDir, "rss");
   fs.mkdirSync(outDir, { recursive: true });
   const r = spawnSync(CC, ["-O2", path.join(benchDir, "rss.c"), "-o", exe], { encoding: "utf8" });
-  if (r.status !== 0) console.error(`note: bench/rss.c did not build; the memory table is skipped\n${r.stderr}`);
+  if (r.status !== 0) { console.error(`note: bench/rss.c did not build; the memory table is skipped\n${r.stderr}`); }
   return r.status === 0 ? exe : null;
 })();
-if (!RUSTC && opts.rust) console.error("note: rustc not found; Rust columns are skipped (set RUSTC=<path> or install rustup)");
-if (!GO && opts.go) console.error("note: the go tool was not found; Go columns are skipped (set GO=<path> or install Go)");
+if (!RUSTC && opts.rust) { console.error("note: rustc not found; Rust columns are skipped (set RUSTC=<path> or install rustup)"); }
+if (!GO && opts.go) { console.error("note: the go tool was not found; Go columns are skipped (set GO=<path> or install Go)"); }
 
 // ---- Build ----------------------------------------------------------------------------
 
@@ -256,7 +256,7 @@ const prepare = (file, size, dir = srcDir) => {
   if (size !== undefined) {
     const lines = text.split("\n");
     const at = lines.findIndex((l) => l.includes("bench:n"));
-    if (at < 0) fail(`${file} has no \`bench:n\` line to override`);
+    if (at < 0) { fail(`${file} has no \`bench:n\` line to override`); }
     lines[at] = lines[at].replace(/\b\d+\b/, size);
     text = lines.join("\n");
   }
@@ -296,7 +296,7 @@ function build(bench) {
     variants.push({ id, label, exe, timed, cmd: `nish ${args.join(" ")}` });
   };
   nish("nish", "Nish", [], "speed", true);
-  if (bench.integer) nish("nish-nsw", "Nish --nsw", ["--nsw"], "speed", true);
+  if (bench.integer) { nish("nish-nsw", "Nish --nsw", ["--nsw"], "speed", true); }
   nish("nish-size", "Nish (size profile)", [], "size", false);
 
   const cc = (id, label, source) => {
@@ -306,7 +306,7 @@ function build(bench) {
     variants.push({ id, label, exe, timed: true, cmd: `${path.basename(CC)} ${args.join(" ")}` });
   };
   cc("c", "C -O3", c);
-  for (const extra of bench.extraC ?? []) cc(`c-${extra.replace(`${bench.name}_`, "")}`, `C -O3 (${extra.replace(`${bench.name}_`, "")})`, prepare(`${extra}.c`, size));
+  for (const extra of bench.extraC ?? []) { cc(`c-${extra.replace(`${bench.name}_`, "")}`, `C -O3 (${extra.replace(`${bench.name}_`, "")})`, prepare(`${extra}.c`, size)); }
 
   if (RUSTC && rs) {
     const rustc = (id, label, extra) => {
@@ -347,7 +347,7 @@ function timeOnce(exe, args = []) {
 
 /** Peak resident set in KB (see bench/rss.c), or null when the helper is unavailable. */
 function peakRssKb(exe, args = []) {
-  if (!RSS_HELPER) return null;
+  if (!RSS_HELPER) { return null; }
   const r = spawnSync(RSS_HELPER, [exe, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const m = r.stdout.trim();
   return r.status === 0 && /^\d+$/.test(m) ? Number(m) : null;
@@ -365,7 +365,7 @@ const timeRuns = (exe, args = []) => {
   for (let i = 0; i < total; i++) {
     const r = timeOnce(exe, args);
     stdout = r.stdout;
-    if (i >= opts.warmup || opts.validate) times.push(r.ms);
+    if (i >= opts.warmup || opts.validate) { times.push(r.ms); }
   }
   return {
     min: Math.min(...times),
@@ -379,7 +379,7 @@ const timeRuns = (exe, args = []) => {
 function sameOutput(a, b) {
   const ta = a.trim().split(/\s+/);
   const tb = b.trim().split(/\s+/);
-  if (ta.length !== tb.length) return false;
+  if (ta.length !== tb.length) { return false; }
   return ta.every((x, i) => {
     const y = tb[i];
     const nx = Number(x);
@@ -477,7 +477,7 @@ const countInstructions = (valgrind, exe, args, name) => {
     process.exit(1);
   }
   const m = fs.readFileSync(out, "utf8").match(/^summary: (\d+)$/m);
-  if (!m) fail(`${name}: no summary line in ${path.relative(root, out)}`);
+  if (!m) { fail(`${name}: no summary line in ${path.relative(root, out)}`); }
   return Number(m[1]);
 };
 
@@ -489,7 +489,7 @@ const countInstructions = (valgrind, exe, args, name) => {
  */
 const runInstructions = () => {
   const valgrind = which("valgrind");
-  if (!valgrind) fail("--instructions needs valgrind on PATH (Linux only; see bench/README.md)");
+  if (!valgrind) { fail("--instructions needs valgrind on PATH (Linux only; see bench/README.md)"); }
   const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, "utf8"));
   const host = `${process.platform}-${process.arch}`;
   if ((opts.check || opts.update) && host !== baseline.platform) {
@@ -508,7 +508,7 @@ const runInstructions = () => {
   // `awfy` and `maps` name their whole group, as they do outside --instructions.
   const wanted = (name, group) => !opts.only || opts.only.has(name) || (group !== "" && opts.only.has(group));
   for (const name of opts.only ?? []) {
-    if (name !== "awfy" && name !== "maps" && !names.includes(name)) fail(`unknown benchmark \`${name}\``);
+    if (name !== "awfy" && name !== "maps" && !names.includes(name)) { fail(`unknown benchmark \`${name}\``); }
   }
 
   const dir = path.join(outDir, "instructions");
@@ -547,7 +547,7 @@ const runInstructions = () => {
   const rows = [];
   for (const job of jobs) {
     const counts = [];
-    for (let i = 0; i < runs; i++) counts.push(countInstructions(valgrind, job.exe, job.args, job.name));
+    for (let i = 0; i < runs; i++) { counts.push(countInstructions(valgrind, job.exe, job.args, job.name)); }
     const count = median(counts);
     const base = baseline.programs[job.name].instructions;
     const spread = Math.max(...counts) - Math.min(...counts);
@@ -643,7 +643,7 @@ const runInstructions = () => {
     );
   }
   const regressed = rows.filter((r) => status(r) === above);
-  if (!opts.check) return 0;
+  if (!opts.check) { return 0; }
   if (regressed.length > 0) {
     console.log(
       `instructions: ${regressed.length} of ${rows.length} above ${rel(BASELINE_FILE)} by more than ${pct(tolerance)}: ${regressed.map((r) => r.name).join(", ")}`
@@ -656,7 +656,7 @@ const runInstructions = () => {
 
 // ---- Main --------------------------------------------------------------------------------
 
-if (opts.instructions) process.exit(runInstructions());
+if (opts.instructions) { process.exit(runInstructions()); }
 
 fs.mkdirSync(srcDir, { recursive: true });
 const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name));
@@ -669,7 +669,7 @@ const known = (name) =>
   PARALLEL.some((b) => b.name === name) ||
   MAPS.some((b) => b.name === name) ||
   MAP_MEASURES.some((b) => b.name === name);
-if (opts.only) for (const name of opts.only) if (!known(name)) fail(`unknown benchmark \`${name}\``);
+if (opts.only) { for (const name of opts.only) { if (!known(name)) { fail(`unknown benchmark \`${name}\``); } } }
 
 /** Whether `--only` asks for a map program: `maps` names all seven, and no `--only` runs them with the rest. */
 const mapWanted = (name) => !opts.only || opts.only.has("maps") || opts.only.has(name);
@@ -690,8 +690,8 @@ const runAwfy = () => {
     const [iterations, inner] = opts.validate ? [1, 1] : [AWFY_ITERATIONS, b.inner];
     const r = run(exe, [b.name, String(iterations), String(inner)], `awfy ${b.name}`);
     const times = [...r.stdout.matchAll(/^\S+: iterations=1 runtime: (\d+)us$/gm)].map((m) => Number(m[1]) / 1000);
-    if (times.length !== iterations) fail(`awfy ${b.name}: ${times.length} of ${iterations} iterations timed\n${r.stdout}`);
-    if (opts.validate) continue;
+    if (times.length !== iterations) { fail(`awfy ${b.name}: ${times.length} of ${iterations} iterations timed\n${r.stdout}`); }
+    if (opts.validate) { continue; }
     const kept = times.slice(-AWFY_KEPT);
     rows.push({ ...b, median: median(kept), min: Math.min(...kept), max: Math.max(...kept) });
   }
@@ -702,11 +702,11 @@ const runAwfy = () => {
   const ms = (x) => x.toFixed(1).padStart(10);
   console.log(`\nAre We Fast Yet: median, min and max of the last ${AWFY_KEPT} of ${AWFY_ITERATIONS} iterations (ms)`);
   console.log(`${"benchmark".padEnd(12)}${"inner".padStart(7)}${"median".padStart(10)}${"min".padStart(10)}${"max".padStart(10)}`);
-  for (const r of rows) console.log(`${r.name.padEnd(12)}${String(r.inner).padStart(7)}${ms(r.median)}${ms(r.min)}${ms(r.max)}`);
+  for (const r of rows) { console.log(`${r.name.padEnd(12)}${String(r.inner).padStart(7)}${ms(r.median)}${ms(r.min)}${ms(r.max)}`); }
 };
 if (opts.only?.has("awfy")) {
   runAwfy();
-  if (selected.length === 0 && selectedParallel.length === 0 && !mapsSelected) process.exit(0);
+  if (selected.length === 0 && selectedParallel.length === 0 && !mapsSelected) { process.exit(0); }
 }
 
 /** A time in ms as the report prints it. */
@@ -754,20 +754,21 @@ const mapsAtSize = (size) => {
   };
   for (const p of protos) {
     const out = run(p.exe, [], p.name).stdout;
-    if (out !== reference) mismatch(p.name, reference, MAPS_NODE, out);
+    if (out !== reference) { mismatch(p.name, reference, MAPS_NODE, out); }
   }
   for (const m of measures) {
     const out = run(m.exe, [], m.name).stdout;
     const twin = run(process.execPath, [m.twinFile], m.twin).stdout;
-    if (out !== twin) mismatch(m.name, twin, `${m.twin}.mjs`, out);
+    if (out !== twin) { mismatch(m.name, twin, `${m.twin}.mjs`, out); }
     else if (
       out === "" ||
       !out
         .trim()
         .split("\n")
         .every((l) => known.has(l))
-    )
+    ) {
       mismatch(m.name, reference, MAPS_NODE, out);
+    }
   }
   if (disagree > 0) {
     console.error(`${disagree} map program(s) disagree with Node's Map`);
@@ -781,7 +782,7 @@ const mapsAtSize = (size) => {
     console.log(
       `maps: ${protos.length} prototype(s) and ${measures.length} measurement(s) agree with Node's Map over ${workloads.length} workloads`
     );
-    for (const line of reference.trim().split("\n")) console.log(`  ${line}`);
+    for (const line of reference.trim().split("\n")) { console.log(`  ${line}`); }
     return [];
   }
 
@@ -792,19 +793,20 @@ const mapsAtSize = (size) => {
   for (const m of measures) {
     for (const v of m.variants) {
       columns.push({ key: `${m.name}:${v}`, cmd: m.exe, args: ["time", v] });
-      if (m.twin !== MAPS_NODE)
+      if (m.twin !== MAPS_NODE) {
         columns.push({ key: `${m.twin}.mjs:${v}`, cmd: process.execPath, args: [m.twinFile, "time", v] });
+      }
     }
   }
-  for (const c of columns) c.samples = new Map();
+  for (const c of columns) { c.samples = new Map(); }
   process.stderr.write(`maps: timing ${columns.length} columns at n = ${size ?? "default"}`);
   for (let i = 0; i < opts.warmup + opts.runs; i++) {
     for (const c of columns) {
       const r = spawnSync(c.cmd, c.args, { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] });
-      if (r.status !== 0) fail(`${c.key} ${c.args.join(" ")} exited with ${r.status}\n${r.stderr}`);
-      if (i < opts.warmup) continue;
+      if (r.status !== 0) { fail(`${c.key} ${c.args.join(" ")} exited with ${r.status}\n${r.stderr}`); }
+      if (i < opts.warmup) { continue; }
       for (const [, workload, ns] of r.stderr.matchAll(/^time (\S+ \S+)(?: \S+)? (\d+)$/gm)) {
-        if (!c.samples.has(workload)) c.samples.set(workload, []);
+        if (!c.samples.has(workload)) { c.samples.set(workload, []); }
         c.samples.get(workload).push(Number(ns) / 1e6);
       }
     }
@@ -828,8 +830,8 @@ const mapsAtSize = (size) => {
     for (const w of rows) {
       const cells = cols.map(([key]) => {
         const c = cell(key, w);
-        if (c === null) return "";
-        if (c.median > c.min * 1.05) noisy.add(`${key} on ${w}`);
+        if (c === null) { return ""; }
+        if (c.median > c.min * 1.05) { noisy.add(`${key} on ${w}`); }
         return `${fmt(c.min)} / ${fmt(c.median)}`;
       });
       const quotients = ratios.map(([, num, den]) => {
@@ -926,11 +928,11 @@ const runMaps = () => {
   }
   const sizes = given !== undefined ? [given] : opts.validate ? [undefined] : MAP_SIZES;
   const lines = sizes.flatMap(mapsAtSize);
-  if (lines.length > 0) console.log(`\n${lines.join("\n")}`);
+  if (lines.length > 0) { console.log(`\n${lines.join("\n")}`); }
   return lines;
 };
 const mapLines = mapsSelected ? runMaps() : [];
-if (opts.only && mapsSelected && selected.length === 0 && selectedParallel.length === 0) process.exit(0);
+if (opts.only && mapsSelected && selected.length === 0 && selectedParallel.length === 0) { process.exit(0); }
 
 /**
  * The data-parallel kernels: build each once, run it as the loop and as the
@@ -969,7 +971,7 @@ let mismatches = 0;
 for (const bench of selected) {
   process.stderr.write(`${bench.name}: building`);
   const variants = build(bench);
-  process.stderr.write(` ok; running`);
+  process.stderr.write(" ok; running");
   const reference = timeOnce(variants.find((v) => v.id === "c").exe).stdout;
   for (const v of variants) {
     const timed = timeRuns(v.exe);
@@ -992,8 +994,8 @@ if (opts.validate) {
     process.exit(1);
   }
   console.log(`checksums agree: ${n} binaries over ${results.length} benchmark(s)${RUSTC ? "" : " (Rust skipped)"}${GO ? "" : " (Go skipped)"}`);
-  for (const r of results) console.log(`  ${r.bench.name}: ${r.reference.trim().split("\n").join(" ")}  [${r.variants.map((v) => v.id).join(", ")}]`);
-  for (const r of parallelRows) console.log(`  ${r.bench.name}: ${r.seq.stdout.trim().split("\n").join(" ")}  [seq, par]`);
+  for (const r of results) { console.log(`  ${r.bench.name}: ${r.reference.trim().split("\n").join(" ")}  [${r.variants.map((v) => v.id).join(", ")}]`); }
+  for (const r of parallelRows) { console.log(`  ${r.bench.name}: ${r.seq.stdout.trim().split("\n").join(" ")}  [seq, par]`); }
   process.exit(0);
 }
 
@@ -1114,15 +1116,15 @@ if (mapLines.length > 0) {
 
 lines.push("## Checksums", "");
 lines.push("Every binary of a benchmark printed the same output (numeric tokens compared to 1e-9 relative):", "");
-for (const r of results) lines.push(`- **${r.bench.name}** (${r.bench.what}): \`${r.reference.trim().split("\n").join(" ")}\``);
-for (const r of parallelRows) lines.push(`- **${r.bench.name}** (loop and map): \`${r.seq.stdout.trim().split("\n").join(" ")}\``);
+for (const r of results) { lines.push(`- **${r.bench.name}** (${r.bench.what}): \`${r.reference.trim().split("\n").join(" ")}\``); }
+for (const r of parallelRows) { lines.push(`- **${r.bench.name}** (loop and map): \`${r.seq.stdout.trim().split("\n").join(" ")}\``); }
 lines.push("");
 
 lines.push("## Commands", "");
 lines.push("Sources are copied to `build/bench/src/` (with the size substituted when `--n` is given) and built from the repository root:", "");
 for (const r of results) {
   lines.push(`### ${r.bench.name}`, "", "```");
-  for (const v of r.variants) lines.push(v.cmd);
+  for (const v of r.variants) { lines.push(v.cmd); }
   lines.push("```", "");
 }
 for (const r of parallelRows) {

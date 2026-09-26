@@ -45,17 +45,17 @@ const words = (file) =>
  * runner can set one.
  */
 function envFile(file) {
-  if (!fs.existsSync(file)) return process.env;
+  if (!fs.existsSync(file)) { return process.env; }
   const env = { ...process.env };
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     const text = line.trim();
-    if (text.length === 0 || text.startsWith("#")) continue;
+    if (text.length === 0 || text.startsWith("#")) { continue; }
     const eq = text.indexOf("=");
     // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
     // empty value is a set variable, and `getenv`'s third answer — unset — is
     // otherwise only as reliable as the developer's own environment.
-    if (eq < 0) delete env[text];
-    else if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+    if (eq < 0) { delete env[text]; }
+    else if (eq > 0) { env[text.slice(0, eq)] = text.slice(eq + 1); }
   }
   return env;
 }
@@ -86,11 +86,11 @@ function discoverPrograms({ cases = true, corpus = true } = {}) {
   const out = [];
   if (cases) {
     for (const file of fs.readdirSync(casesDir).sort()) {
-      if (!file.endsWith(".ts")) continue;
+      if (!file.endsWith(".ts")) { continue; }
       const name = file.slice(0, -3);
       const src = path.join(casesDir, file);
-      if (fs.existsSync(path.join(casesDir, `${name}.err`))) continue;
-      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))) continue;
+      if (fs.existsSync(path.join(casesDir, `${name}.err`))) { continue; }
+      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))) { continue; }
       out.push(program(`cases/${name}`, src, path.join(casesDir, `${name}.args`), "case"));
     }
   }
@@ -155,7 +155,7 @@ const compilerFor = (spec) => {
  */
 const rewriterFor = () => {
   const store = readStore();
-  if (store.error !== undefined) return { error: store.error };
+  if (store.error !== undefined) { return { error: store.error }; }
   const register = readRegister();
   return {
     label: "frozen rewrite",
@@ -171,7 +171,7 @@ const rewriterFor = () => {
         );
       }
       const why = staleness(record, prog, store.bodies);
-      if (why !== null) throw stale(`${prog.name}'s frozen rewrite is stale: ${why}`);
+      if (why !== null) { throw stale(`${prog.name}'s frozen rewrite is stale: ${why}`); }
       return materialize(record, store.bodies, dir);
     },
   };
@@ -220,7 +220,7 @@ const scratchRoot = (prog, side) => {
   const dir = cwdFor(prog.name, side);
   fs.mkdirSync(path.join(dir, "build", "test", "differential"), { recursive: true });
   for (const entry of fs.readdirSync(root)) {
-    if (entry !== "build") fs.symlinkSync(path.join(root, entry), path.join(dir, entry));
+    if (entry !== "build") { fs.symlinkSync(path.join(root, entry), path.join(dir, entry)); }
   }
   return dir;
 };
@@ -234,11 +234,11 @@ const scratchRoot = (prog, side) => {
 async function runProgram(prog, context) {
   const t0 = Date.now();
   const refused = context.compiler.error ?? context.rewriter.error;
-  if (refused !== undefined) return { prog, verdict: "compile-error", detail: refused, ms: Date.now() - t0 };
+  if (refused !== undefined) { return { prog, verdict: "compile-error", detail: refused, ms: Date.now() - t0 }; }
   // Asked before anything is built: a registered program is compared against
   // nothing, so building it would only spend the time.
   const why = context.rewriter.unfrozen(prog);
-  if (why !== null) return { prog, verdict: "unfrozen", detail: why, ms: Date.now() - t0 };
+  if (why !== null) { return { prog, verdict: "unfrozen", detail: why, ms: Date.now() - t0 }; }
 
   const work = workFor(prog.name);
   fs.rmSync(work, { recursive: true, force: true });
@@ -268,8 +268,9 @@ async function runProgram(prog, context) {
     // the opposite of one: the comparison *could* have run, against a reference
     // that is no longer this program's. `run.js` fails on it whatever
     // `known-failures.txt` says.
-    if (e.stale === true)
+    if (e.stale === true) {
       return { prog, verdict: "stale-golden", detail: e.message, native, ms: Date.now() - t0 };
+    }
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }
   const node = await run("node", [js.entry, ...prog.argv], { cwd: scratchRoot(prog, "node"), env: prog.env });
@@ -280,7 +281,7 @@ async function runProgram(prog, context) {
 }
 
 function readKnownFailures() {
-  if (!fs.existsSync(knownFile)) return new Set();
+  if (!fs.existsSync(knownFile)) { return new Set(); }
   return new Set(
     fs
       .readFileSync(knownFile, "utf8")
@@ -291,7 +292,7 @@ function readKnownFailures() {
 }
 
 function summarize(side) {
-  if (!side) return "-";
+  if (!side) { return "-"; }
   const exit = side.signal ? side.signal : `exit ${side.status}`;
   return `${exit}, ${side.stdout.length} B`;
 }
@@ -315,10 +316,12 @@ function describeMismatch(r) {
       }
     }
   }
-  if (b.stderr.length > 0 && b.status !== 1)
+  if (b.stderr.length > 0 && b.status !== 1) {
     lines.push(`node stderr: ${String(b.stderr).trim().split("\n")[0]}`);
-  if (a.stderr.length > 0 && a.status !== 1)
+  }
+  if (a.stderr.length > 0 && a.status !== 1) {
     lines.push(`native stderr: ${String(a.stderr).trim().split("\n")[0]}`);
+  }
   return lines.join("\n");
 }
 

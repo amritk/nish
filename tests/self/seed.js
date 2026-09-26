@@ -47,8 +47,8 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
 function resolveSeed(spec) {
   const file = path.resolve(root, spec);
   const refuse = (why) => ({ error: `seed ${spec} ${why}` });
-  if (!fs.existsSync(file)) return refuse("does not exist");
-  if (!fs.statSync(file).isFile()) return refuse("is not a file");
+  if (!fs.existsSync(file)) { return refuse("does not exist"); }
+  if (!fs.statSync(file).isFile()) { return refuse("is not a file"); }
   const seed = NODE_ENTRY.test(file)
     ? { label: spec, cmd: process.execPath, prefix: [file] }
     : { label: spec, cmd: file, prefix: [] };
@@ -59,7 +59,7 @@ function resolveSeed(spec) {
       return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
     }
   }
-  if (spawnSeed(seed, ["--version"]).status !== 0) return refuse("is not runnable (`--version` failed)");
+  if (spawnSeed(seed, ["--version"]).status !== 0) { return refuse("is not runnable (`--version` failed)"); }
   return seed;
 }
 
@@ -74,9 +74,9 @@ const FETCHED = path.join("build", "seed", "bin", "nish");
  */
 function defaultSeedSpec() {
   const fromEnvironment = process.env.NISH_BOOTSTRAP;
-  if (fromEnvironment !== undefined && fromEnvironment !== "") return fromEnvironment;
+  if (fromEnvironment !== undefined && fromEnvironment !== "") { return fromEnvironment; }
   for (const inTree of [path.join("build", "nish"), FETCHED]) {
-    if (fs.existsSync(path.join(root, inTree))) return inTree;
+    if (fs.existsSync(path.join(root, inTree))) { return inTree; }
   }
   return null;
 }
@@ -105,7 +105,7 @@ function withoutSeed(argv) {
 function seedForOracle(argv) {
   const named = namedSeedSpec(argv);
   const spec = named ?? defaultSeedSpec();
-  if (spec !== null) return resolveSeed(spec);
+  if (spec !== null) { return resolveSeed(spec); }
   process.stderr.write("note: no seed in the tree, so scripts/fetch-seed.sh is fetching the last release\n");
   const fetched = spawnSync("sh", [path.join(root, "scripts", "fetch-seed.sh")], {
     cwd: root,

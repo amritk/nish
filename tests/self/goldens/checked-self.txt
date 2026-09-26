@@ -24344,7 +24344,7 @@ function Parser.parseSourceFile(this: Parser): Node -> @Parser.parseSourceFile [
   local 433:13 before: i32 (const)
   callee 434:26 Parser.parseDeclaration -> @Parser.parseDeclaration
   callee 437:37 Parser.at -> @Parser.at
-  callee 437:55 Parser.advance -> @Parser.advance
+  callee 437:57 Parser.advance -> @Parser.advance
 function Parser.parseDeclaration(this: Parser): Node -> @Parser.parseDeclaration [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: 465:7
@@ -24356,17 +24356,17 @@ function Parser.parseDeclaration(this: Parser): Node -> @Parser.parseDeclaration
   callee 445:9 Parser.at -> @Parser.at
   callee 447:7 Parser.advance -> @Parser.advance
   callee 449:9 Parser.at -> @Parser.at
-  callee 450:28 Parser.fail -> @Parser.fail
+  callee 450:30 Parser.fail -> @Parser.fail
   callee 451:14 Parser.parseImport -> @Parser.parseImport
   callee 453:9 Parser.at -> @Parser.at
-  callee 453:39 Parser.exportable -> @Parser.exportable
-  callee 453:55 Parser.parseFunction -> @Parser.parseFunction
+  callee 453:41 Parser.exportable -> @Parser.exportable
+  callee 453:57 Parser.parseFunction -> @Parser.parseFunction
   callee 454:9 Parser.at -> @Parser.at
-  callee 454:36 Parser.exportable -> @Parser.exportable
-  callee 454:52 Parser.parseClass -> @Parser.parseClass
+  callee 454:38 Parser.exportable -> @Parser.exportable
+  callee 454:54 Parser.parseClass -> @Parser.parseClass
   callee 455:9 Parser.at -> @Parser.at
-  callee 455:40 Parser.exportable -> @Parser.exportable
-  callee 455:56 Parser.parseInterface -> @Parser.parseInterface
+  callee 455:42 Parser.exportable -> @Parser.exportable
+  callee 455:58 Parser.parseInterface -> @Parser.parseInterface
   callee 456:9 Parser.at -> @Parser.at
   callee 456:31 Parser.startsArrowDeclaration -> @Parser.startsArrowDeclaration
   callee 457:14 Parser.exportable -> @Parser.exportable
@@ -24397,7 +24397,7 @@ function Parser.parseDeclaration(this: Parser): Node -> @Parser.parseDeclaration
   callee 491:124 tokenName -> @tokenName
 function Parser.exportable(this: Parser, declaration: Node, exported: boolean): Node -> @Parser.exportable [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 497:19
+  sharedWrite: 497:21
   escaping: declaration
   pointer this: size=80 writesThrough=false captured=false
   pointer declaration: size=40 writesThrough=true captured=true
@@ -24415,8 +24415,8 @@ function Parser.parseImport(this: Parser, start: i32): Node -> @Parser.parseImpo
   local 505:11 list: Node (const)
   callee 505:18 Parser.list -> @Parser.list
   callee 506:10 Parser.expect -> @Parser.expect
-  callee 506:42 Parser.finish -> @Parser.finish
-  callee 506:60 Parser.closeList -> @Parser.closeList
+  callee 506:44 Parser.finish -> @Parser.finish
+  callee 506:62 Parser.closeList -> @Parser.closeList
   callee 507:13 Parser.at -> @Parser.at
   callee 507:37 Parser.at -> @Parser.at
   local 508:13 specStart: i32 (const)
@@ -24431,9 +24431,9 @@ function Parser.parseImport(this: Parser, start: i32): Node -> @Parser.parseImpo
   callee 521:12 Parser.eat -> @Parser.eat
   callee 523:5 Parser.expect -> @Parser.expect
   callee 524:9 Parser.at -> @Parser.at
-  callee 524:54 Parser.advance -> @Parser.advance
-  callee 525:10 Parser.report -> @Parser.report
-  callee 525:52 tokenName -> @tokenName
+  callee 524:56 Parser.advance -> @Parser.advance
+  callee 525:12 Parser.report -> @Parser.report
+  callee 525:54 tokenName -> @tokenName
   callee 526:9 Parser.at -> @Parser.at
   callee 528:7 Parser.advance -> @Parser.advance
   callee 530:7 Parser.report -> @Parser.report
@@ -24576,7 +24576,7 @@ function Parser.parseReturnType(this: Parser): Node -> @Parser.parseReturnType [
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.eat#0 Parser.parseType#0 Parser.report#0 Parser.empty#0
   stackSites=0 stackLocals=0
   callee 740:9 Parser.eat -> @Parser.eat
-  callee 740:37 Parser.parseType -> @Parser.parseType
+  callee 740:39 Parser.parseType -> @Parser.parseType
   callee 741:5 Parser.report -> @Parser.report
   callee 742:12 Parser.empty -> @Parser.empty
 function Parser.parseTypeAnnotation(this: Parser): Node -> @Parser.parseTypeAnnotation [exported method]
@@ -24586,7 +24586,7 @@ function Parser.parseTypeAnnotation(this: Parser): Node -> @Parser.parseTypeAnno
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.eat#0 Parser.parseType#0 Parser.report#0 Parser.empty#0
   stackSites=0 stackLocals=0
   callee 747:9 Parser.eat -> @Parser.eat
-  callee 747:37 Parser.parseType -> @Parser.parseType
+  callee 747:39 Parser.parseType -> @Parser.parseType
   callee 748:5 Parser.report -> @Parser.report
   callee 749:12 Parser.empty -> @Parser.empty
 function Parser.parseClass(this: Parser, start: i32): Node -> @Parser.parseClass [exported method]
@@ -24636,7 +24636,7 @@ function Parser.parseClassBody(this: Parser): Node -> @Parser.parseClassBody [ex
   callee 789:29 Parser.parseMember -> @Parser.parseMember
   callee 790:37 Parser.at -> @Parser.at
   callee 790:61 Parser.at -> @Parser.at
-  callee 790:79 Parser.advance -> @Parser.advance
+  callee 790:81 Parser.advance -> @Parser.advance
   callee 792:5 Parser.expect -> @Parser.expect
   callee 793:12 Parser.closeList -> @Parser.closeList
 function Parser.parseMemberModifiers(this: Parser): i32 -> @Parser.parseMemberModifiers [exported method]
@@ -24754,10 +24754,10 @@ function Parser.parseInterface(this: Parser, start: i32): Node -> @Parser.parseI
   callee 1022:31 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
   callee 1023:31 Parser.empty -> @Parser.empty
   callee 1024:16 Parser.eat -> @Parser.eat
-  callee 1024:41 Parser.eat -> @Parser.eat
+  callee 1024:43 Parser.eat -> @Parser.eat
   callee 1028:39 Parser.at -> @Parser.at
   callee 1028:63 Parser.at -> @Parser.at
-  callee 1028:81 Parser.advance -> @Parser.advance
+  callee 1028:83 Parser.advance -> @Parser.advance
   callee 1030:7 Parser.expect -> @Parser.expect
   callee 1032:24 Parser.closeList -> @Parser.closeList
 function Parser.parseTypeAlias(this: Parser, start: i32): Node -> @Parser.parseTypeAlias [exported method]
@@ -24805,7 +24805,7 @@ function Parser.parseEnum(this: Parser, start: i32): Node -> @Parser.parseEnum [
   callee 1083:14 Parser.eat -> @Parser.eat
   callee 1084:39 Parser.at -> @Parser.at
   callee 1084:63 Parser.at -> @Parser.at
-  callee 1084:81 Parser.advance -> @Parser.advance
+  callee 1084:83 Parser.advance -> @Parser.advance
   callee 1086:7 Parser.expect -> @Parser.expect
   callee 1088:24 Parser.closeList -> @Parser.closeList
 function Parser.parseEnumMember(this: Parser): Node -> @Parser.parseEnumMember [exported method]
@@ -24823,7 +24823,7 @@ function Parser.parseEnumMember(this: Parser): Node -> @Parser.parseEnumMember [
   callee 1098:74 Parser.empty -> @Parser.empty
 function Parser.parseModuleConst(this: Parser, start: i32): Node -> @Parser.parseModuleConst [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 1105:29
+  sharedWrite: 1105:31
   escaping: start
   calls: Parser.advance Parser.at Parser.expectSemicolon Parser.node Parser.parseVariableDeclarations Parser.report nish_array_grow
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.node#0 Parser.at#0 Parser.report#0 Parser.advance#0 Parser.parseVariableDeclarations#0 Parser.expectSemicolon#0
@@ -24831,7 +24831,7 @@ function Parser.parseModuleConst(this: Parser, start: i32): Node -> @Parser.pars
   local 1104:11 node: Node (const)
   callee 1104:18 Parser.node -> @Parser.node
   callee 1105:9 Parser.at -> @Parser.at
-  callee 1106:10 Parser.report -> @Parser.report
+  callee 1106:12 Parser.report -> @Parser.report
   callee 1107:5 Parser.advance -> @Parser.advance
   callee 1108:24 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
   callee 1109:5 Parser.expectSemicolon -> @Parser.expectSemicolon
@@ -24862,8 +24862,8 @@ function Parser.parseType(this: Parser): Node -> @Parser.parseType [exported met
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.parsePostfixType#0 Parser.at#0 Parser.node#0 Parser.eat#0 Parser.parsePostfixType#0
   stackSites=0 stackLocals=0
   local 1134:11 start: i32 (const)
-  local 1135:9 type: Node (let)
-  callee 1135:16 Parser.parsePostfixType -> @Parser.parsePostfixType
+  local 1135:11 type: Node (const)
+  callee 1135:18 Parser.parsePostfixType -> @Parser.parsePostfixType
   callee 1136:10 Parser.at -> @Parser.at
   local 1137:11 union: Node (const)
   callee 1137:19 Parser.node -> @Parser.node
@@ -24974,7 +24974,7 @@ function Parser.parseBlock(this: Parser): Node -> @Parser.parseBlock [exported m
   callee 1292:27 Parser.parseStatement -> @Parser.parseStatement
   callee 1293:37 Parser.at -> @Parser.at
   callee 1293:61 Parser.at -> @Parser.at
-  callee 1293:79 Parser.advance -> @Parser.advance
+  callee 1293:81 Parser.advance -> @Parser.advance
   callee 1295:5 Parser.expect -> @Parser.expect
 function Parser.parseStatement(this: Parser): Node -> @Parser.parseStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
@@ -24999,7 +24999,7 @@ function Parser.parseStatement(this: Parser): Node -> @Parser.parseStatement [ex
   callee 1330:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
 function Parser.parseVariableStatement(this: Parser, start: i32): Node -> @Parser.parseVariableStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 1336:29
+  sharedWrite: 1336:31
   escaping: start
   calls: Parser.advance Parser.at Parser.expectSemicolon Parser.node Parser.parseVariableDeclarations nish_array_grow
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.node#0 Parser.at#0 Parser.advance#0 Parser.parseVariableDeclarations#0 Parser.expectSemicolon#0
@@ -25059,7 +25059,7 @@ function Parser.parseDo(this: Parser, start: i32): Node -> @Parser.parseDo [expo
   callee 1375:5 Parser.eat -> @Parser.eat
 function Parser.parseFor(this: Parser, start: i32): Node -> @Parser.parseFor [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 1390:31
+  sharedWrite: 1390:33
   escaping: start
   calls: Parser.advance Parser.at Parser.empty Parser.expect Parser.node Parser.parseExpression Parser.parseForRest Parser.parseStatement Parser.parseVariableDeclarations Parser.peek nish_array_grow nish_str_eq
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.expect#0 Parser.at#0 Parser.at#0 Parser.peek#0 Parser.node#0 Parser.at#0 Parser.advance#0 Parser.parseVariableDeclarations#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseExpression#0 Parser.expect#0 Parser.parseStatement#0 Parser.parseForRest#0 Parser.at#0 Parser.empty#0 Parser.parseExpression#0 Parser.parseForRest#0
@@ -25130,12 +25130,12 @@ function Parser.parseSwitch(this: Parser, start: i32): Node -> @Parser.parseSwit
   callee 1434:31 Parser.parseClause -> @Parser.parseClause
   callee 1435:39 Parser.at -> @Parser.at
   callee 1435:63 Parser.at -> @Parser.at
-  callee 1435:81 Parser.advance -> @Parser.advance
+  callee 1435:83 Parser.advance -> @Parser.advance
   callee 1437:7 Parser.expect -> @Parser.expect
   callee 1439:24 Parser.closeList -> @Parser.closeList
 function Parser.parseClause(this: Parser): Node -> @Parser.parseClause [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 1452:17
+  sharedWrite: 1452:19
   calls: Parser.advance Parser.at Parser.closeList Parser.expect Parser.fail Parser.list Parser.node Parser.parseExpression Parser.parseStatement nish_array_grow
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.fail#0 Parser.advance#0 Parser.node#0 Parser.parseExpression#0 Parser.expect#0 Parser.list#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.parseStatement#0 Parser.advance#0 Parser.closeList#0
   stackSites=0 stackLocals=0
@@ -25147,7 +25147,7 @@ function Parser.parseClause(this: Parser): Node -> @Parser.parseClause [exported
   callee 1450:5 Parser.advance -> @Parser.advance
   local 1451:11 clause: Node (const)
   callee 1451:20 Parser.node -> @Parser.node
-  callee 1452:38 Parser.parseExpression -> @Parser.parseExpression
+  callee 1452:40 Parser.parseExpression -> @Parser.parseExpression
   callee 1453:5 Parser.expect -> @Parser.expect
   local 1454:11 body: Node (const)
   callee 1454:18 Parser.list -> @Parser.list
@@ -25157,7 +25157,7 @@ function Parser.parseClause(this: Parser): Node -> @Parser.parseClause [exported
   callee 1455:84 Parser.at -> @Parser.at
   local 1456:13 before: i32 (const)
   callee 1457:26 Parser.parseStatement -> @Parser.parseStatement
-  callee 1458:34 Parser.advance -> @Parser.advance
+  callee 1458:36 Parser.advance -> @Parser.advance
   callee 1460:26 Parser.closeList -> @Parser.closeList
 function Parser.parseReturn(this: Parser, start: i32): Node -> @Parser.parseReturn [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
@@ -25540,7 +25540,7 @@ function Parser.parseObjectLiteral(this: Parser, start: i32): Node -> @Parser.pa
   callee 1902:9 Parser.report -> @Parser.report
   callee 1903:9 Parser.advance -> @Parser.advance
   callee 1905:11 Parser.eat -> @Parser.eat
-  callee 1905:55 Parser.parseExpression -> @Parser.parseExpression
+  callee 1905:57 Parser.parseExpression -> @Parser.parseExpression
   local 1908:15 shorthand: Node (const)
   callee 1908:27 Parser.node -> @Parser.node
   callee 1914:12 Parser.eat -> @Parser.eat
@@ -25961,7 +25961,7 @@ function Lexer.takeEscape(this: Lexer, chunk: i32, at: i32): i32 -> @Lexer.takeE
   local 547:11 decoded: string (const)
   callee 547:21 Lexer.scanEscape -> @Lexer.scanEscape
   callee 549:7 Lexer.error -> @Lexer.error
-  callee 552:21 StringBuilder.add -> @StringBuilder.add
+  callee 552:23 StringBuilder.add -> @StringBuilder.add
   callee 553:5 StringBuilder.add -> @StringBuilder.add
 function Lexer.literalText(this: Lexer, chunk: i32, at: i32): string -> @Lexer.literalText [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -25970,7 +25970,7 @@ function Lexer.literalText(this: Lexer, chunk: i32, at: i32): string -> @Lexer.l
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 571:9 StringBuilder.isEmpty -> @StringBuilder.isEmpty
-  callee 572:21 StringBuilder.add -> @StringBuilder.add
+  callee 572:23 StringBuilder.add -> @StringBuilder.add
   callee 573:12 StringBuilder.toText -> @StringBuilder.toText
 function Lexer.scanEscape(this: Lexer, at: i32): string -> @Lexer.scanEscape [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -26001,41 +26001,41 @@ function Lexer.scanHex(this: Lexer, at: i32, count: i32): i32 -> @Lexer.scanHex 
   calls: Lexer.at hexValue
   pointer this: size=56 writesThrough=false captured=false passedTo=Lexer.at#0
   stackSites=0 stackLocals=0
-  local 629:9 value: i32 (let)
-  local 630:9 i: i32 (let)
-  local 632:13 digit: i32 (const)
-  callee 632:21 hexValue -> @hexValue
-  callee 632:30 Lexer.at -> @Lexer.at
+  local 630:9 value: i32 (let)
+  local 631:9 i: i32 (let)
+  local 633:13 digit: i32 (const)
+  callee 633:21 hexValue -> @hexValue
+  callee 633:30 Lexer.at -> @Lexer.at
 function Lexer.scanTemplate(this: Lexer, at: i32, whole: i32, opening: i32): void -> @Lexer.scanTemplate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 661:9
+  sharedWrite: 662:9
   escaping: at opening whole
   calls: Lexer.at Lexer.emit Lexer.error Lexer.literalText Lexer.takeEscape StringBuilder.reset nish_array_grow
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.takeEscape#0
   stackSites=0 stackLocals=0
-  local 647:9 i: i32 (let)
-  local 648:9 chunk: i32 (let)
-  callee 649:5 StringBuilder.reset -> @StringBuilder.reset
-  callee 652:9 Lexer.error -> @Lexer.error
-  local 655:13 c: i32 (const)
-  callee 655:17 Lexer.at -> @Lexer.at
-  callee 657:9 Lexer.emit -> @Lexer.emit
-  callee 657:33 Lexer.literalText -> @Lexer.literalText
-  callee 660:30 Lexer.at -> @Lexer.at
-  callee 662:9 Lexer.emit -> @Lexer.emit
-  callee 662:35 Lexer.literalText -> @Lexer.literalText
-  callee 666:13 Lexer.takeEscape -> @Lexer.takeEscape
+  local 648:9 i: i32 (let)
+  local 649:9 chunk: i32 (let)
+  callee 650:5 StringBuilder.reset -> @StringBuilder.reset
+  callee 653:9 Lexer.error -> @Lexer.error
+  local 656:13 c: i32 (const)
+  callee 656:17 Lexer.at -> @Lexer.at
+  callee 658:9 Lexer.emit -> @Lexer.emit
+  callee 658:33 Lexer.literalText -> @Lexer.literalText
+  callee 661:30 Lexer.at -> @Lexer.at
+  callee 663:9 Lexer.emit -> @Lexer.emit
+  callee 663:35 Lexer.literalText -> @Lexer.literalText
+  callee 667:13 Lexer.takeEscape -> @Lexer.takeEscape
 function Lexer.scanBrace(this: Lexer, c: i32): void -> @Lexer.scanBrace [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 679:21
+  sharedWrite: 680:23
   calls: Lexer.emitPlain Lexer.scanTemplate nish_panic_index
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emitPlain#0 Lexer.scanTemplate#0 Lexer.emitPlain#0
   stackSites=0 stackLocals=0
-  local 677:11 open: i32 (const)
-  callee 680:7 Lexer.emitPlain -> @Lexer.emitPlain
-  local 684:13 depth: i32 (const)
-  callee 687:9 Lexer.scanTemplate -> @Lexer.scanTemplate
-  callee 692:5 Lexer.emitPlain -> @Lexer.emitPlain
+  local 678:11 open: i32 (const)
+  callee 681:7 Lexer.emitPlain -> @Lexer.emitPlain
+  local 685:13 depth: i32 (const)
+  callee 688:9 Lexer.scanTemplate -> @Lexer.scanTemplate
+  callee 693:5 Lexer.emitPlain -> @Lexer.emitPlain
 function Lexer.scanPunctuation(this: Lexer, c: i32): void -> @Lexer.scanPunctuation [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.scanBrace
@@ -26043,85 +26043,85 @@ function Lexer.scanPunctuation(this: Lexer, c: i32): void -> @Lexer.scanPunctuat
   calls: Lexer.at Lexer.emitPlain Lexer.error Lexer.scanBrace Lexer.scanPrivateName isDigit nish_str_concat nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanBrace#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.at#0 Lexer.error#0 Lexer.scanPrivateName#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.error#0
   stackSites=0 stackLocals=0
-  local 696:11 next1: i32 (const)
-  callee 696:19 Lexer.at -> @Lexer.at
-  local 697:11 next2: i32 (const)
+  local 697:11 next1: i32 (const)
   callee 697:19 Lexer.at -> @Lexer.at
-  local 698:11 next3: i32 (const)
+  local 698:11 next2: i32 (const)
   callee 698:19 Lexer.at -> @Lexer.at
-  callee 700:7 Lexer.scanBrace -> @Lexer.scanBrace
-  callee 705:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 708:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 711:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 714:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 717:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 720:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 723:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 727:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 734:30 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 735:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 736:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 740:31 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 741:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 742:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 746:49 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 747:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 753:32 isDigit -> @isDigit
-  callee 753:48 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 754:62 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 755:39 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 756:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 760:7 Lexer.emitPlain -> @Lexer.emitPlain
-  local 768:13 end: i32 (let)
-  callee 769:44 Lexer.at -> @Lexer.at
-  callee 772:9 Lexer.error -> @Lexer.error
-  callee 775:7 Lexer.scanPrivateName -> @Lexer.scanPrivateName
-  callee 779:53 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 780:35 Lexer.emitPlain -> @Lexer.emitPlain
+  local 699:11 next3: i32 (const)
+  callee 699:19 Lexer.at -> @Lexer.at
+  callee 701:7 Lexer.scanBrace -> @Lexer.scanBrace
+  callee 706:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 709:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 712:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 715:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 718:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 721:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 724:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 728:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 735:32 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 736:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 737:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 741:33 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 742:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 743:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 747:51 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 748:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 754:32 isDigit -> @isDigit
+  callee 754:50 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 755:64 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 756:41 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 757:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 761:7 Lexer.emitPlain -> @Lexer.emitPlain
+  local 769:13 end: i32 (let)
+  callee 770:44 Lexer.at -> @Lexer.at
+  callee 773:9 Lexer.error -> @Lexer.error
+  callee 776:7 Lexer.scanPrivateName -> @Lexer.scanPrivateName
+  callee 780:55 Lexer.emitPlain -> @Lexer.emitPlain
   callee 781:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 782:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 786:32 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 787:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 791:32 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 792:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 796:55 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 797:33 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 798:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 799:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 803:55 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 804:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 805:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 809:51 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 810:33 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 811:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 812:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 818:70 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 819:52 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 820:56 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 821:33 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 822:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 823:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 827:52 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 828:34 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 829:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 830:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 834:53 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 835:35 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 782:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 783:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 787:34 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 788:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 792:34 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 793:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 797:57 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 798:35 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 799:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 800:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 804:57 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 805:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 806:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 810:53 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 811:35 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 812:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 813:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 819:72 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 820:54 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 821:58 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 822:35 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 823:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 824:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 828:54 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 829:36 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 830:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 831:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 835:55 Lexer.emitPlain -> @Lexer.emitPlain
   callee 836:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 837:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 841:32 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 842:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 845:5 Lexer.error -> @Lexer.error
+  callee 837:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 838:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 842:34 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 843:14 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 846:5 Lexer.error -> @Lexer.error
 function lineOf(source: string, offset: i32): i32 -> @lineOf [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 851:7 line: i32 (let)
-  local 852:7 i: i32 (let)
+  local 852:7 line: i32 (let)
+  local 853:7 i: i32 (let)
 function columnOf(source: string, offset: i32): i32 -> @columnOf [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 861:7 start: i32 (let)
-  local 862:7 i: i32 (let)
+  local 862:7 start: i32 (let)
+  local 863:7 i: i32 (let)
 module self/tokens.ts
 const TOK_END: i32 = 0 [exported]
 const TOK_ERROR: i32 = 1 [exported]

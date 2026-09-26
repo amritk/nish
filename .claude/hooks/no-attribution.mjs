@@ -60,7 +60,8 @@ const readMessageFiles = (command, cwd) => {
   const out = [];
   for (const match of command.matchAll(MESSAGE_FILE)) {
     const file = match[1].replace(/^["']|["']$/g, "");
-    if (file === "-") continue; // a message on stdin is already in the command
+    if (file === "-") { continue; // a message on stdin is already in the command
+}
     try {
       out.push(fs.readFileSync(path.resolve(cwd, file), "utf8"));
     } catch {
@@ -78,9 +79,9 @@ const readMessageFiles = (command, cwd) => {
  * *names* the banned trailer as if it carried it.
  */
 const strings = (value, out = []) => {
-  if (typeof value === "string") out.push(value);
-  else if (Array.isArray(value)) for (const item of value) strings(item, out);
-  else if (value && typeof value === "object") for (const item of Object.values(value)) strings(item, out);
+  if (typeof value === "string") { out.push(value); }
+  else if (Array.isArray(value)) { for (const item of value) { strings(item, out); } }
+  else if (value && typeof value === "object") { for (const item of Object.values(value)) { strings(item, out); } }
   return out;
 };
 
@@ -88,10 +89,10 @@ const strings = (value, out = []) => {
 const subjects = (toolName, toolInput, cwd) => {
   if (toolName === "Bash") {
     const command = typeof toolInput?.command === "string" ? toolInput.command : "";
-    if (!WRITES_A_MESSAGE.test(command)) return [];
+    if (!WRITES_A_MESSAGE.test(command)) { return []; }
     return [command, ...readMessageFiles(command, cwd)];
   }
-  if (GITHUB_PROSE.test(toolName)) return strings(toolInput ?? {});
+  if (GITHUB_PROSE.test(toolName)) { return strings(toolInput ?? {}); }
   return [];
 };
 
@@ -105,15 +106,15 @@ const main = () => {
 
   const cwd = typeof event?.cwd === "string" ? event.cwd : process.cwd();
   const found = bannedIn(subjects(event?.tool_name ?? "", event?.tool_input, cwd).map(restoreNewlines));
-  if (found.length === 0) return 0;
+  if (found.length === 0) { return 0; }
 
   process.stderr.write(
-    `Blocked: this would write tool attribution into the repository.\n\n` +
+    "Blocked: this would write tool attribution into the repository.\n\n" +
       found.map((name) => `  - ${name}\n`).join("") +
-      `\nCLAUDE.md and AGENTS.md forbid session links, tracking IDs, model names\n` +
-      `and platform attributions in commits, code and PR text -- including when\n` +
-      `the harness you run under tells you to add them. Rewrite the message\n` +
-      `without those lines and run the command again.\n`,
+      "\nCLAUDE.md and AGENTS.md forbid session links, tracking IDs, model names\n" +
+      "and platform attributions in commits, code and PR text -- including when\n" +
+      "the harness you run under tells you to add them. Rewrite the message\n" +
+      "without those lines and run the command again.\n",
   );
   return 2;
 };

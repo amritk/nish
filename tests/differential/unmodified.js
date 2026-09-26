@@ -53,17 +53,17 @@ function programs() {
   const dirs = [path.join(root, "tests", "cases"), path.join(root, "tests", "differential", "corpus")];
   const found = [];
   for (const dir of dirs) {
-    if (!fs.existsSync(dir)) continue;
+    if (!fs.existsSync(dir)) { continue; }
     for (const file of fs.readdirSync(dir).sort()) {
-      if (!file.endsWith(".args")) continue;
-      if (!fs.readFileSync(path.join(dir, file), "utf8").includes("--number-mode f64")) continue;
+      if (!file.endsWith(".args")) { continue; }
+      if (!fs.readFileSync(path.join(dir, file), "utf8").includes("--number-mode f64")) { continue; }
       const source = path.join(dir, `${file.slice(0, -".args".length)}.ts`);
       const name = path.basename(source, ".ts");
-      if (name.startsWith("reject_")) continue;
-      if (!fs.existsSync(source)) continue;
+      if (name.startsWith("reject_")) { continue; }
+      if (!fs.existsSync(source)) { continue; }
       // Either spelling declares the entry (WP22).
       const text = fs.readFileSync(source, "utf8");
-      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) continue;
+      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) { continue; }
       found.push({ name, source });
     }
   }
@@ -77,7 +77,7 @@ function native({ name, source }, compiler) {
     cwd: root,
     encoding: "utf8",
   });
-  if (built.status !== 0) return { failed: `compile: ${built.stderr}` };
+  if (built.status !== 0) { return { failed: `compile: ${built.stderr}` }; }
   const ran = spawnSync(exe, [], { cwd: root, encoding: "utf8" });
   return { stdout: ran.stdout, status: ran.status };
 }
@@ -101,7 +101,7 @@ function unmodified({ source }) {
 
 function runUnmodified({ verbose = false, compiler: spec } = {}) {
   const compiler = compilerFor(spec);
-  if (compiler.error !== undefined) return { ok: false, summary: compiler.error, detail: "" };
+  if (compiler.error !== undefined) { return { ok: false, summary: compiler.error, detail: "" }; }
   fs.mkdirSync(work, { recursive: true });
   const rows = [];
   for (const program of programs()) {
@@ -114,9 +114,10 @@ function runUnmodified({ verbose = false, compiler: spec } = {}) {
     const agrees = a.stdout === b.stdout && a.status === b.status;
     const known = KNOWN.has(program.name);
     let outcome = "AGREE";
-    if (!agrees && known) outcome = "KNOWN";
-    else if (!agrees) outcome = "DIFFER";
-    else if (known) outcome = "XPASS"; // listed as divergent but agrees: the list is stale
+    if (!agrees && known) { outcome = "KNOWN"; }
+    else if (!agrees) { outcome = "DIFFER"; }
+    else if (known) { outcome = "XPASS"; // listed as divergent but agrees: the list is stale
+}
     rows.push({
       ...program,
       outcome,
@@ -126,7 +127,7 @@ function runUnmodified({ verbose = false, compiler: spec } = {}) {
   const count = (o) => rows.filter((r) => r.outcome === o).length;
   const bad = rows.filter((r) => r.outcome === "DIFFER" || r.outcome === "ERROR" || r.outcome === "XPASS");
   if (verbose) {
-    for (const r of rows) console.log(`${r.outcome.padEnd(6)} ${r.name}${r.detail ? `\n       ${r.detail}` : ""}`);
+    for (const r of rows) { console.log(`${r.outcome.padEnd(6)} ${r.name}${r.detail ? `\n       ${r.detail}` : ""}`); }
   }
   return {
     ok: bad.length === 0,
@@ -146,6 +147,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     compiler: at >= 0 ? process.argv[at + 1] : undefined,
   });
   console.log(result.summary);
-  if (!result.ok) console.error(result.detail);
+  if (!result.ok) { console.error(result.detail); }
   process.exit(result.ok ? 0 : 1);
 }

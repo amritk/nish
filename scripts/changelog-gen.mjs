@@ -163,17 +163,17 @@ function splitTrailers(body) {
 function parseTrailers(lines) {
   const out = { metrics: [], refs: [], tests: [], releaseNote: undefined, releaseAs: [], breaking: undefined };
   for (const line of lines) {
-    if (DROPPED_TRAILERS.test(line)) continue;
+    if (DROPPED_TRAILERS.test(line)) { continue; }
     const m = line.match(KNOWN_TRAILERS);
-    if (!m) continue;
+    if (!m) { continue; }
     const key = m[1].toLowerCase().replace(/[ -]/g, "");
     const value = m[2].trim();
-    if (key === "measured") out.metrics.push(value);
-    else if (key === "refs") out.refs.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
-    else if (key === "tests") out.tests.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
-    else if (key === "releasenote") out.releaseNote = value;
-    else if (key === "releaseas") out.releaseAs.push(value);
-    else if (key === "breakingchange") out.breaking = value;
+    if (key === "measured") { out.metrics.push(value); }
+    else if (key === "refs") { out.refs.push(...value.split(",").map((s) => s.trim()).filter(Boolean)); }
+    else if (key === "tests") { out.tests.push(...value.split(",").map((s) => s.trim()).filter(Boolean)); }
+    else if (key === "releasenote") { out.releaseNote = value; }
+    else if (key === "releaseas") { out.releaseAs.push(value); }
+    else if (key === "breakingchange") { out.breaking = value; }
   }
   return out;
 }
@@ -181,7 +181,7 @@ function parseTrailers(lines) {
 /** `type(scope)!: subject`, or undefined when the subject is not conventional. */
 function parseSubject(subject) {
   const m = subject.match(/^([a-z]+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
-  if (!m) return undefined;
+  if (!m) { return undefined; }
   return { type: m[1], scope: m[2], bang: Boolean(m[3]), title: m[4].trim() };
 }
 
@@ -197,7 +197,7 @@ function slug(title, taken) {
       .slice(0, 8)
       .join("-") || "entry";
   let id = base;
-  for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
+  for (let n = 2; taken.has(id); n += 1) { id = `${base}-${n}`; }
   taken.add(id);
   return id;
 }
@@ -223,7 +223,7 @@ function collect(from, to, includeUnconventional = false) {
   // \x00 between fields and \x1e between records: a commit body contains
   // newlines and may contain anything else, so the separators must be bytes
   // that cannot appear in one.
-  const raw = git(["log", "--no-merges", "--reverse", `--format=%H%x00%an%x00%aI%x00%s%x00%b%x1e`, range]);
+  const raw = git(["log", "--no-merges", "--reverse", "--format=%H%x00%an%x00%aI%x00%s%x00%b%x1e", range]);
   const taken = new Set();
   const entries = [];
   const skipped = [];
@@ -231,17 +231,17 @@ function collect(from, to, includeUnconventional = false) {
 
   for (const record of raw.split("\x1e")) {
     const text = record.replace(/^\n/, "");
-    if (!text.trim()) continue;
+    if (!text.trim()) { continue; }
     const [sha, author, date, subject, body = ""] = text.split("\x00");
     const { prose: rawProse, trailers } = splitTrailers(body);
     const t = parseTrailers(trailers);
-    for (const version of t.releaseAs) releaseAs.push({ version, commit: `${sha.slice(0, 7)} ${subject}` });
+    for (const version of t.releaseAs) { releaseAs.push({ version, commit: `${sha.slice(0, 7)} ${subject}` }); }
 
     const parsed = parseSubject(subject);
     const classified = parsed !== undefined && CONVENTIONAL_TYPES.includes(parsed.type);
     if (!classified) {
       skipped.push(`${sha.slice(0, 7)} ${subject}`);
-      if (!includeUnconventional) continue;
+      if (!includeUnconventional) { continue; }
     }
 
     const prose = rawProse.replace(SQUASH_RULE, "");
@@ -270,16 +270,16 @@ function collect(from, to, includeUnconventional = false) {
 
 function renderMarkdown(release) {
   const out = [];
-  if (release.intro) out.push(release.intro.trim(), "");
+  if (release.intro) { out.push(release.intro.trim(), ""); }
 
   const group = (predicate) => release.entries.filter(predicate).map(renderEntry);
 
   const breaking = group((e) => e.breaking);
-  if (breaking.length > 0) out.push("### Breaking changes", "", ...breaking, "");
+  if (breaking.length > 0) { out.push("### Breaking changes", "", ...breaking, ""); }
 
   for (const [type, heading] of TYPES) {
     const lines = group((e) => e.type === type && !e.breaking);
-    if (lines.length === 0) continue;
+    if (lines.length === 0) { continue; }
     out.push(`### ${heading}`, "", ...lines, "");
   }
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
@@ -291,9 +291,9 @@ function renderMarkdown(release) {
  * always leads somewhere.
  */
 function entryLink(e) {
-  if (e.pr) return REPO_URL ? `[#${e.pr}](${REPO_URL}/pull/${e.pr})` : `#${e.pr}`;
+  if (e.pr) { return REPO_URL ? `[#${e.pr}](${REPO_URL}/pull/${e.pr})` : `#${e.pr}`; }
   const sha = e.commits[0];
-  if (!sha) return undefined;
+  if (!sha) { return undefined; }
   return REPO_URL ? `[\`${sha}\`](${REPO_URL}/commit/${sha})` : `\`${sha}\``;
 }
 
@@ -325,10 +325,10 @@ function impliedVersion(current, entries, previousTag) {
   // the entire history as a patch and ship 0.0.1 — a number that would claim
   // the compiler is a bug-fix on nothing. 0.1.0 is also what the seed policy
   // already names as the base case (docs/wp12-release.md, "The bootstrap seed").
-  if (!previousTag) return [0, 1, 0];
+  if (!previousTag) { return [0, 1, 0]; }
   const [major, minor, patch] = current.split(".").map(Number);
-  if (entries.some((e) => e.breaking)) return major === 0 ? [0, minor + 1, 0] : [major + 1, 0, 0];
-  if (entries.some((e) => e.type === "feat")) return [major, minor + 1, 0];
+  if (entries.some((e) => e.breaking)) { return major === 0 ? [0, minor + 1, 0] : [major + 1, 0, 0]; }
+  if (entries.some((e) => e.type === "feat")) { return [major, minor + 1, 0]; }
   return [major, minor, patch + 1];
 }
 
@@ -375,9 +375,9 @@ function nextVersion(current, entries, previousTag, releaseAs = []) {
       };
     }
     byCommit.set(request.commit, request.version);
-    if (!chosen || compareVersions(parsed, chosen.parsed) > 0) chosen = { ...request, parsed };
+    if (!chosen || compareVersions(parsed, chosen.parsed) > 0) { chosen = { ...request, parsed }; }
   }
-  if (!chosen) return { version: implied.join(".") };
+  if (!chosen) { return { version: implied.join(".") }; }
   if (compareVersions(chosen.parsed, implied) < 0) {
     return {
       error:
@@ -407,10 +407,10 @@ if (checkSubject !== undefined) {
   if (!parsed) {
     console.error(`not a conventional commit subject:\n\n    ${checkSubject}\n`);
     console.error(`Expected \`type(scope): subject\`, where type is one of: ${CONVENTIONAL_TYPES.join(", ")}.`);
-    console.error(`A \`!\` after the type or scope marks a breaking change.\n`);
-    console.error(`Examples:\n    feat(checker): accept non-generic type aliases`);
-    console.error(`    perf(codegen)!: hoist the array header out of element loops`);
-    console.error(`\nThe subject becomes the heading in the release notes, so write it for a reader.`);
+    console.error("A `!` after the type or scope marks a breaking change.\n");
+    console.error("Examples:\n    feat(checker): accept non-generic type aliases");
+    console.error("    perf(codegen)!: hoist the array header out of element loops");
+    console.error("\nThe subject becomes the heading in the release notes, so write it for a reader.");
     process.exit(1);
   }
   if (!CONVENTIONAL_TYPES.includes(parsed.type)) {
@@ -468,8 +468,8 @@ if (skipped.length > 0 && !includeUnconventional) {
   console.error(
     `changelog-gen: skipped ${skipped.length} commit${skipped.length === 1 ? "" : "s"} whose subject is not a conventional commit:`
   );
-  for (const line of shown) console.error(`  ${line}`);
-  if (skipped.length > shown.length) console.error(`  ... and ${skipped.length - shown.length} more`);
+  for (const line of shown) { console.error(`  ${line}`); }
+  if (skipped.length > shown.length) { console.error(`  ... and ${skipped.length - shown.length} more`); }
   console.error("Pass --include-unconventional to file them under \"Uncategorised\" instead.");
 }
 
@@ -513,7 +513,7 @@ if (write) {
   const section = `${marker}\n\n## [${version}] - ${release.date}\n\n${markdown}`;
   let next = current.replace(marker, section);
   const link = `[${version}]: https://github.com/amritk/nish/releases/tag/v${version}`;
-  if (!next.includes(link)) next = `${next.trimEnd()}\n${link}\n`;
+  if (!next.includes(link)) { next = `${next.trimEnd()}\n${link}\n`; }
   fs.writeFileSync(changelogPath, next);
 
   console.error(`changelog-gen: wrote changelog/${version}.json and the CHANGELOG.md section`);

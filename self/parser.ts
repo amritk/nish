@@ -202,16 +202,16 @@ const CH_CR: i32 = 13;
  * shifts, additive, multiplicative.
  */
 export const binaryPrecedence = (kind: i32): i32 => {
-  if (kind === TOK_OR_OR) return 1;
-  if (kind === TOK_AND_AND) return 2;
-  if (kind === TOK_PIPE) return 3;
-  if (kind === TOK_CARET) return 4;
-  if (kind === TOK_AMP) return 5;
-  if (kind === TOK_EQ || kind === TOK_NE) return 6;
-  if (kind === TOK_LT || kind === TOK_LE || kind === TOK_GT || kind === TOK_GE) return 7;
-  if (kind === TOK_SHL || kind === TOK_SHR || kind === TOK_USHR) return 8;
-  if (kind === TOK_PLUS || kind === TOK_MINUS) return 9;
-  if (kind === TOK_STAR || kind === TOK_SLASH || kind === TOK_PERCENT) return 10;
+  if (kind === TOK_OR_OR) { return 1; }
+  if (kind === TOK_AND_AND) { return 2; }
+  if (kind === TOK_PIPE) { return 3; }
+  if (kind === TOK_CARET) { return 4; }
+  if (kind === TOK_AMP) { return 5; }
+  if (kind === TOK_EQ || kind === TOK_NE) { return 6; }
+  if (kind === TOK_LT || kind === TOK_LE || kind === TOK_GT || kind === TOK_GE) { return 7; }
+  if (kind === TOK_SHL || kind === TOK_SHR || kind === TOK_USHR) { return 8; }
+  if (kind === TOK_PLUS || kind === TOK_MINUS) { return 9; }
+  if (kind === TOK_STAR || kind === TOK_SLASH || kind === TOK_PERCENT) { return 10; }
   return 0;
 };
 
@@ -379,7 +379,7 @@ export class Parser {
 
   /** Consume the token when it is `kind`; answer whether it was. */
   eat(kind: i32): boolean {
-    if (this.kind !== kind) return false;
+    if (this.kind !== kind) { return false; }
     this.advance();
     return true;
   }
@@ -389,7 +389,7 @@ export class Parser {
    * is usually mid-construct and skipping would swallow the next one too.
    */
   expect(kind: i32): boolean {
-    if (this.eat(kind)) return true;
+    if (this.eat(kind)) { return true; }
     this.report(`expected \`${tokenName(kind)}\`, found \`${tokenName(this.kind)}\``, this.start, this.end);
     return false;
   }
@@ -404,7 +404,7 @@ export class Parser {
   newlineBefore(): boolean {
     for (let i: i32 = this.previousEnd; i < this.start; i++) {
       const c = this.lexer.at(i);
-      if (c === CH_LF || c === CH_CR) return true;
+      if (c === CH_LF || c === CH_CR) { return true; }
     }
     return false;
   }
@@ -418,10 +418,10 @@ export class Parser {
    * the same `expected ';'` it is on one line.
    */
   expectSemicolon(): void {
-    if (this.eat(TOK_SEMICOLON)) return;
-    if (this.at(TOK_RBRACE) || this.at(TOK_END)) return;
+    if (this.eat(TOK_SEMICOLON)) { return; }
+    if (this.at(TOK_RBRACE) || this.at(TOK_END)) { return; }
     const template = this.at(TOK_TEMPLATE) || this.at(TOK_TEMPLATE_HEAD);
-    if (!template && this.newlineBefore()) return;
+    if (!template && this.newlineBefore()) { return; }
     this.expect(TOK_SEMICOLON);
   }
 
@@ -434,7 +434,7 @@ export class Parser {
       file.children.push(this.parseDeclaration());
       // A declaration that consumed nothing would spin; skip a token so the
       // next error is a new one.
-      if (this.start === before && !this.at(TOK_END)) this.advance();
+      if (this.start === before && !this.at(TOK_END)) { this.advance(); }
     }
     return file;
   }
@@ -447,12 +447,12 @@ export class Parser {
       this.advance();
     }
     if (this.at(TOK_IMPORT)) {
-      if (exported) return this.fail("`export` cannot introduce an import");
+      if (exported) { return this.fail("`export` cannot introduce an import"); }
       return this.parseImport(start);
     }
-    if (this.at(TOK_FUNCTION)) return this.exportable(this.parseFunction(start), exported);
-    if (this.at(TOK_CLASS)) return this.exportable(this.parseClass(start), exported);
-    if (this.at(TOK_INTERFACE)) return this.exportable(this.parseInterface(start), exported);
+    if (this.at(TOK_FUNCTION)) { return this.exportable(this.parseFunction(start), exported); }
+    if (this.at(TOK_CLASS)) { return this.exportable(this.parseClass(start), exported); }
+    if (this.at(TOK_INTERFACE)) { return this.exportable(this.parseInterface(start), exported); }
     if (this.at(TOK_CONST) && this.startsArrowDeclaration()) {
       return this.exportable(this.parseArrowFunction(start), exported);
     }
@@ -494,7 +494,7 @@ export class Parser {
 
   /** Mark a declaration `export`ed, which is a modifier rather than a child. */
   exportable(declaration: Node, exported: boolean): Node {
-    if (exported) declaration.flags = declaration.flags | FLAG_EXPORTED;
+    if (exported) { declaration.flags = declaration.flags | FLAG_EXPORTED; }
     return declaration;
   }
 
@@ -503,7 +503,7 @@ export class Parser {
     this.advance(); // `import`
     const node = this.node(N_IMPORT, start, this.end);
     const list = this.list();
-    if (!this.expect(TOK_LBRACE)) return this.finish(node, this.closeList(list));
+    if (!this.expect(TOK_LBRACE)) { return this.finish(node, this.closeList(list)); }
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const specStart = this.start;
       const exported = this.parseIdentifier();
@@ -518,11 +518,11 @@ export class Parser {
         spec.end = local.end;
       }
       list.children.push(spec);
-      if (!this.eat(TOK_COMMA)) break;
+      if (!this.eat(TOK_COMMA)) { break; }
     }
     this.expect(TOK_RBRACE);
-    if (this.at(TOK_IDENT) && this.value === "from") this.advance();
-    else this.report(`expected \`from\`, found \`${tokenName(this.kind)}\``, this.start, this.end);
+    if (this.at(TOK_IDENT) && this.value === "from") { this.advance(); }
+    else { this.report(`expected \`from\`, found \`${tokenName(this.kind)}\``, this.start, this.end); }
     if (this.at(TOK_STRING)) {
       node.text = this.value;
       this.advance();
@@ -658,9 +658,9 @@ export class Parser {
     scan.pos = this.start;
     scan.next(); // `const`
     scan.next();
-    if (scan.kind !== TOK_IDENT) return false;
+    if (scan.kind !== TOK_IDENT) { return false; }
     scan.next();
-    if (scan.kind !== TOK_ASSIGN) return false;
+    if (scan.kind !== TOK_ASSIGN) { return false; }
     scan.next();
     // WP18: `const identity = <T>(x: T): T => x` puts a type parameter list
     // between the `=` and the parameters. It is skipped by matching `>` against
@@ -672,22 +672,22 @@ export class Parser {
       let angles = 1;
       while (angles > 0) {
         scan.next();
-        if (scan.kind === TOK_END) return false;
-        if (scan.kind === TOK_LT) angles = angles + 1;
-        else if (scan.kind === TOK_GT) angles = angles - 1;
-        else if (scan.kind === TOK_SHR) angles = angles - 2;
-        else if (scan.kind === TOK_USHR) angles = angles - 3;
+        if (scan.kind === TOK_END) { return false; }
+        if (scan.kind === TOK_LT) { angles = angles + 1; }
+        else if (scan.kind === TOK_GT) { angles = angles - 1; }
+        else if (scan.kind === TOK_SHR) { angles = angles - 2; }
+        else if (scan.kind === TOK_USHR) { angles = angles - 3; }
       }
-      if (angles < 0) return false;
+      if (angles < 0) { return false; }
       scan.next();
     }
-    if (scan.kind !== TOK_LPAREN) return false;
+    if (scan.kind !== TOK_LPAREN) { return false; }
     let depth = 1;
     while (depth > 0) {
       scan.next();
-      if (scan.kind === TOK_END) return false;
-      if (scan.kind === TOK_LPAREN) depth = depth + 1;
-      else if (scan.kind === TOK_RPAREN) depth = depth - 1;
+      if (scan.kind === TOK_END) { return false; }
+      if (scan.kind === TOK_LPAREN) { depth = depth + 1; }
+      else if (scan.kind === TOK_RPAREN) { depth = depth - 1; }
     }
     scan.next();
     return scan.kind === TOK_ARROW || scan.kind === TOK_COLON;
@@ -717,7 +717,7 @@ export class Parser {
 
   parseParameters(): Node {
     const list = this.list();
-    if (!this.expect(TOK_LPAREN)) return list;
+    if (!this.expect(TOK_LPAREN)) { return list; }
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
       const start = this.start;
       const param = this.node(N_PARAM, start, this.end);
@@ -729,7 +729,7 @@ export class Parser {
       param.children.push(this.parseTypeAnnotation());
       param.end = this.previousEnd;
       list.children.push(param);
-      if (!this.eat(TOK_COMMA)) break;
+      if (!this.eat(TOK_COMMA)) { break; }
     }
     this.expect(TOK_RPAREN);
     return this.closeList(list);
@@ -737,14 +737,14 @@ export class Parser {
 
   /** `: T` after a signature; a missing one is an error the checker also wants named. */
   parseReturnType(): Node {
-    if (this.eat(TOK_COLON)) return this.parseType();
+    if (this.eat(TOK_COLON)) { return this.parseType(); }
     this.report("a return type annotation is required", this.start, this.end);
     return this.empty();
   }
 
   /** `: T`, required on every parameter, field and annotated declaration. */
   parseTypeAnnotation(): Node {
-    if (this.eat(TOK_COLON)) return this.parseType();
+    if (this.eat(TOK_COLON)) { return this.parseType(); }
     this.report("a type annotation is required", this.start, this.end);
     return this.empty();
   }
@@ -766,7 +766,7 @@ export class Parser {
         // an implemented interface be an instantiation (`implements Container<T>`)
         // and `parseType` already reads exactly that shape.
         implemented.children.push(this.parseType());
-        if (!this.eat(TOK_COMMA)) break;
+        if (!this.eat(TOK_COMMA)) { break; }
       }
     }
     node.children.push(this.closeList(implemented));
@@ -783,11 +783,11 @@ export class Parser {
 
   parseClassBody(): Node {
     const members = this.list();
-    if (!this.expect(TOK_LBRACE)) return members;
+    if (!this.expect(TOK_LBRACE)) { return members; }
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const before = this.start;
       members.children.push(this.parseMember());
-      if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+      if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) { this.advance(); }
     }
     this.expect(TOK_RBRACE);
     return this.closeList(members);
@@ -843,13 +843,13 @@ export class Parser {
     let flags = 0;
     while (this.at(TOK_IDENT) && !this.startsMemberName()) {
       const word = this.value;
-      if (word === "readonly") flags = flags | FLAG_READONLY;
+      if (word === "readonly") { flags = flags | FLAG_READONLY; }
       else if (word === "static") {
         // `static` before `readonly` is the one ordering the checker needs; see
         // FLAG_STATIC_FIRST in `self/nodes.ts`.
-        if ((flags & FLAG_READONLY) === 0) flags = flags | FLAG_STATIC_FIRST;
+        if ((flags & FLAG_READONLY) === 0) { flags = flags | FLAG_STATIC_FIRST; }
         flags = flags | FLAG_STATIC;
-      } else if (word !== "public" && word !== "private" && word !== "protected") return flags;
+      } else if (word !== "public" && word !== "private" && word !== "protected") { return flags; }
       this.advance();
     }
     return flags;
@@ -884,8 +884,8 @@ export class Parser {
    * that name the member and its class.
    */
   parseMemberMarker(): i32 {
-    if (this.eat(TOK_QUESTION)) return FLAG_OPTIONAL;
-    if (this.eat(TOK_BANG)) return FLAG_DEFINITE;
+    if (this.eat(TOK_QUESTION)) { return FLAG_OPTIONAL; }
+    if (this.eat(TOK_BANG)) { return FLAG_DEFINITE; }
     return 0;
   }
 
@@ -897,7 +897,7 @@ export class Parser {
    * only `?` is looked for.
    */
   markedMethodAhead(): boolean {
-    if (this.peek() !== TOK_QUESTION) return false;
+    if (this.peek() !== TOK_QUESTION) { return false; }
     const scan = new Lexer(this.file.text);
     scan.pos = this.start;
     scan.next(); // the name
@@ -1018,14 +1018,14 @@ export class Parser {
           // there is no stage0 sentence to agree with and the syntax error
           // stays the right answer.
           field.flags = modifiers;
-          if (this.eat(TOK_QUESTION)) field.flags = field.flags | FLAG_OPTIONAL;
+          if (this.eat(TOK_QUESTION)) { field.flags = field.flags | FLAG_OPTIONAL; }
           field.children.push(this.parseTypeAnnotation());
           field.children.push(this.empty());
-          if (!this.eat(TOK_SEMICOLON)) this.eat(TOK_COMMA);
+          if (!this.eat(TOK_SEMICOLON)) { this.eat(TOK_COMMA); }
           field.end = this.previousEnd;
           fields.children.push(field);
         }
-        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) { this.advance(); }
       }
       this.expect(TOK_RBRACE);
     }
@@ -1080,8 +1080,8 @@ export class Parser {
       while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
         const before = this.start;
         members.children.push(this.parseEnumMember());
-        if (!this.eat(TOK_COMMA)) break;
-        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+        if (!this.eat(TOK_COMMA)) { break; }
+        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) { this.advance(); }
       }
       this.expect(TOK_RBRACE);
     }
@@ -1102,8 +1102,8 @@ export class Parser {
 
   parseModuleConst(start: i32): Node {
     const node = this.node(N_MODULE_CONST, start, this.end);
-    if (this.at(TOK_CONST)) node.flags = node.flags | FLAG_CONST;
-    else this.report("a module holds no top-level `let`; use `const`", this.start, this.end);
+    if (this.at(TOK_CONST)) { node.flags = node.flags | FLAG_CONST; }
+    else { this.report("a module holds no top-level `let`; use `const`", this.start, this.end); }
     this.advance();
     node.children.push(this.parseVariableDeclarations());
     this.expectSemicolon();
@@ -1122,7 +1122,7 @@ export class Parser {
       declaration.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty());
       declaration.end = this.previousEnd;
       list.children.push(declaration);
-      if (!this.eat(TOK_COMMA)) break;
+      if (!this.eat(TOK_COMMA)) { break; }
     }
     return this.closeList(list);
   }
@@ -1132,8 +1132,8 @@ export class Parser {
   /** `T`, `T[]`, `Array<T>`, `T | null`. Unions are flat: `A | B | C` is one node. */
   parseType(): Node {
     const start = this.start;
-    let type = this.parsePostfixType();
-    if (!this.at(TOK_PIPE)) return type;
+    const type = this.parsePostfixType();
+    if (!this.at(TOK_PIPE)) { return type; }
     const union = this.node(N_TYPE_UNION, start, type.end);
     union.children.push(type);
     while (this.eat(TOK_PIPE)) {
@@ -1201,7 +1201,7 @@ export class Parser {
       this.advance();
       while (!this.at(TOK_GT) && !this.at(TOK_END)) {
         args.children.push(this.parseType());
-        if (!this.eat(TOK_COMMA)) break;
+        if (!this.eat(TOK_COMMA)) { break; }
       }
       // `>>` closes two argument lists at once; the lexer merged them, so
       // split the token here rather than making the lexer guess (S1's one
@@ -1228,13 +1228,13 @@ export class Parser {
     scan.pos = this.start;
     scan.next(); // `(`
     scan.next();
-    if (scan.kind === TOK_RPAREN) return true;
-    if (scan.kind !== TOK_IDENT && scan.kind !== TOK_THIS) return false;
+    if (scan.kind === TOK_RPAREN) { return true; }
+    if (scan.kind !== TOK_IDENT && scan.kind !== TOK_THIS) { return false; }
     scan.next();
     if (scan.kind === TOK_COLON || scan.kind === TOK_COMMA || scan.kind === TOK_QUESTION || scan.kind === TOK_ASSIGN) {
       return true;
     }
-    if (scan.kind !== TOK_RPAREN) return false;
+    if (scan.kind !== TOK_RPAREN) { return false; }
     scan.next();
     return scan.kind === TOK_ARROW;
   }
@@ -1262,7 +1262,7 @@ export class Parser {
    * token in place.
    */
   expectTypeArgumentEnd(): void {
-    if (this.eat(TOK_GT)) return;
+    if (this.eat(TOK_GT)) { return; }
     if (this.at(TOK_SHR)) {
       this.kind = TOK_GT;
       this.start = this.start + 1;
@@ -1290,7 +1290,7 @@ export class Parser {
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const before = this.start;
       block.children.push(this.parseStatement());
-      if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+      if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) { this.advance(); }
     }
     this.expect(TOK_RBRACE);
     block.end = this.previousEnd;
@@ -1333,7 +1333,7 @@ export class Parser {
 
   parseVariableStatement(start: i32): Node {
     const node = this.node(N_VAR, start, this.end);
-    if (this.at(TOK_CONST)) node.flags = node.flags | FLAG_CONST;
+    if (this.at(TOK_CONST)) { node.flags = node.flags | FLAG_CONST; }
     this.advance();
     node.children.push(this.parseVariableDeclarations());
     this.expectSemicolon();
@@ -1387,7 +1387,7 @@ export class Parser {
     if ((this.at(TOK_CONST) || this.at(TOK_LET)) && this.peek() === TOK_IDENT) {
       const declStart = this.start;
       const declaration = this.node(N_VAR, declStart, this.end);
-      if (this.at(TOK_CONST)) declaration.flags = declaration.flags | FLAG_CONST;
+      if (this.at(TOK_CONST)) { declaration.flags = declaration.flags | FLAG_CONST; }
       this.advance();
       declaration.children.push(this.parseVariableDeclarations());
       declaration.end = this.previousEnd;
@@ -1432,7 +1432,7 @@ export class Parser {
       while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
         const before = this.start;
         clauses.children.push(this.parseClause());
-        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) { this.advance(); }
       }
       this.expect(TOK_RBRACE);
     }
@@ -1449,13 +1449,13 @@ export class Parser {
     }
     this.advance();
     const clause = this.node(isCase ? N_CASE : N_DEFAULT, start, this.end);
-    if (isCase) clause.children.push(this.parseExpression());
+    if (isCase) { clause.children.push(this.parseExpression()); }
     this.expect(TOK_COLON);
     const body = this.list();
     while (!this.at(TOK_CASE) && !this.at(TOK_DEFAULT) && !this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const before = this.start;
       body.children.push(this.parseStatement());
-      if (this.start === before) this.advance();
+      if (this.start === before) { this.advance(); }
     }
     clause.children.push(this.closeList(body));
     clause.end = this.previousEnd;
@@ -1507,7 +1507,7 @@ export class Parser {
   parseExpression(): Node {
     const start = this.start;
     const left = this.parseConditional();
-    if (!isAssignment(this.kind)) return left;
+    if (!isAssignment(this.kind)) { return left; }
     const operator = tokenName(this.kind);
     this.advance();
     const node = this.node(N_BINARY, start, this.end);
@@ -1521,7 +1521,7 @@ export class Parser {
   parseConditional(): Node {
     const start = this.start;
     const condition = this.parseCoalesce();
-    if (!this.at(TOK_QUESTION)) return condition;
+    if (!this.at(TOK_QUESTION)) { return condition; }
     this.advance();
     const node = this.node(N_CONDITIONAL, start, this.end);
     node.children.push(condition);
@@ -1543,7 +1543,7 @@ export class Parser {
   parseCoalesce(): Node {
     const start = this.start;
     let left = this.parseBinary(1);
-    if (!this.at(TOK_QUESTION_QUESTION)) return left;
+    if (!this.at(TOK_QUESTION_QUESTION)) { return left; }
     // One report per expression, however many times it mixes, and every
     // operand read on, whichever of the three operators joins it.
     let mixed = left.kind === N_BINARY && (left.text === "||" || left.text === "&&");
@@ -1581,7 +1581,7 @@ export class Parser {
     let left = this.parseUnary();
     while (true) {
       const precedence = binaryPrecedence(this.kind);
-      if (precedence === 0 || precedence < minimum) return left;
+      if (precedence === 0 || precedence < minimum) { return left; }
       const operator = tokenName(this.kind);
       this.advance();
       const right = this.parseBinary(precedence + 1);
@@ -1670,10 +1670,10 @@ export class Parser {
 
   parseArguments(): Node {
     const list = this.list();
-    if (!this.expect(TOK_LPAREN)) return list;
+    if (!this.expect(TOK_LPAREN)) { return list; }
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
       list.children.push(this.parseExpression());
-      if (!this.eat(TOK_COMMA)) break;
+      if (!this.eat(TOK_COMMA)) { break; }
     }
     this.expect(TOK_RPAREN);
     return this.closeList(list);
@@ -1764,25 +1764,25 @@ export class Parser {
     // the `(` is an expression, known without scanning to its end, which keeps
     // nested parentheses from being rescanned at every level.
     const next = this.peek();
-    if (next !== TOK_IDENT && next !== TOK_RPAREN) return false;
+    if (next !== TOK_IDENT && next !== TOK_RPAREN) { return false; }
     const scan = new Lexer(this.file.text);
     scan.pos = this.start;
     scan.next(); // `(`
     let depth = 1;
     while (depth > 0) {
       scan.next();
-      if (scan.kind === TOK_END) return false;
-      if (scan.kind === TOK_LPAREN) depth = depth + 1;
-      else if (scan.kind === TOK_RPAREN) depth = depth - 1;
+      if (scan.kind === TOK_END) { return false; }
+      if (scan.kind === TOK_LPAREN) { depth = depth + 1; }
+      else if (scan.kind === TOK_RPAREN) { depth = depth - 1; }
     }
     scan.next();
-    if (scan.kind === TOK_ARROW) return true;
-    if (scan.kind !== TOK_COLON) return false;
+    if (scan.kind === TOK_ARROW) { return true; }
+    if (scan.kind !== TOK_COLON) { return false; }
     let nesting = 0;
     while (true) {
       scan.next();
       const kind = scan.kind;
-      if (kind === TOK_ARROW && nesting === 0) return true;
+      if (kind === TOK_ARROW && nesting === 0) { return true; }
       if (kind === TOK_LPAREN || kind === TOK_LBRACKET || kind === TOK_LT) {
         nesting = nesting + 1;
       } else if (kind === TOK_RPAREN || kind === TOK_RBRACKET || kind === TOK_GT) {
@@ -1793,11 +1793,11 @@ export class Parser {
         nesting = nesting - 3;
       } else if (kind === TOK_ARROW || kind === TOK_COLON || kind === TOK_COMMA) {
         // Inside a nested function type's parameter list, where these belong.
-        if (nesting === 0) return false;
+        if (nesting === 0) { return false; }
       } else if (kind !== TOK_IDENT && kind !== TOK_NULL && kind !== TOK_PIPE) {
         return false;
       }
-      if (nesting < 0) return false;
+      if (nesting < 0) { return false; }
     }
   }
 
@@ -1830,7 +1830,7 @@ export class Parser {
         param.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty());
         param.end = this.previousEnd;
         params.children.push(param);
-        if (!this.eat(TOK_COMMA)) break;
+        if (!this.eat(TOK_COMMA)) { break; }
       }
       this.expect(TOK_RPAREN);
     }
@@ -1867,7 +1867,7 @@ export class Parser {
         node.children.push(part);
         const last = this.at(TOK_TEMPLATE_TAIL);
         this.advance();
-        if (last) break;
+        if (last) { break; }
       } else {
         node.children.push(this.fail("expected the rest of the template literal"));
         break;
@@ -1882,7 +1882,7 @@ export class Parser {
     const node = this.node(N_ARRAY, start, this.end);
     while (!this.at(TOK_RBRACKET) && !this.at(TOK_END)) {
       node.children.push(this.parseExpression());
-      if (!this.eat(TOK_COMMA)) break;
+      if (!this.eat(TOK_COMMA)) { break; }
     }
     this.expect(TOK_RBRACKET);
     node.end = this.previousEnd;
@@ -1902,7 +1902,7 @@ export class Parser {
         this.report("an object literal key must be a plain identifier", this.start, this.end);
         this.advance();
       }
-      if (this.eat(TOK_COLON)) property.children.push(this.parseExpression());
+      if (this.eat(TOK_COLON)) { property.children.push(this.parseExpression()); }
       else {
         // Shorthand `{ x }`: the value is the identifier the key names.
         const shorthand = this.node(N_IDENT, propertyStart, this.previousEnd);
@@ -1911,7 +1911,7 @@ export class Parser {
       }
       property.end = this.previousEnd;
       node.children.push(property);
-      if (!this.eat(TOK_COMMA)) break;
+      if (!this.eat(TOK_COMMA)) { break; }
     }
     this.expect(TOK_RBRACE);
     node.end = this.previousEnd;
@@ -1927,7 +1927,7 @@ export class Parser {
       this.advance();
       while (!this.at(TOK_GT) && !this.at(TOK_END)) {
         typeArguments.children.push(this.parseType());
-        if (!this.eat(TOK_COMMA)) break;
+        if (!this.eat(TOK_COMMA)) { break; }
       }
       this.expectTypeArgumentEnd();
     }

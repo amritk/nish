@@ -51,17 +51,17 @@ export function scanJson(bytes: u8[]): i32 {
       // A depth cap is a validator's obligation rather than a nicety: without
       // one, a document of nothing but `[` recurses as deep as the input is
       // long, which is the cheapest denial of service a parser can offer.
-      if (depth > MAX_DEPTH) return ERR_DEPTH;
+      if (depth > MAX_DEPTH) { return ERR_DEPTH; }
       tokens = tokens + 1;
     } else if (b === 125 || b === 93) {
       depth = depth - 1;
-      if (depth < 0) return ERR_DEPTH;
+      if (depth < 0) { return ERR_DEPTH; }
       tokens = tokens + 1;
     } else if (b === 44 || b === 58) {
       tokens = tokens + 1;
     }
   }
-  if (inString || depth !== 0) return ERR_UNTERMINATED;
+  if (inString || depth !== 0) { return ERR_UNTERMINATED; }
   return tokens;
 }
 

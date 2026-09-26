@@ -107,11 +107,11 @@ await ask({ wasm: wasmBytes });
 
 /** Median of `runs` timings of `body`, in nanoseconds per call. */
 const median = async (body, iters, runs = 5) => {
-  for (let i = 0; i < Math.min(iters, 200); i++) await body();
+  for (let i = 0; i < Math.min(iters, 200); i++) { await body(); }
   const samples = [];
   for (let r = 0; r < runs; r++) {
     const t0 = performance.now();
-    for (let i = 0; i < iters; i++) await body();
+    for (let i = 0; i < iters; i++) { await body(); }
     samples.push(((performance.now() - t0) * 1e6) / iters);
   }
   return samples.sort((a, b) => a - b)[runs >> 1];

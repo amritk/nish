@@ -31,7 +31,7 @@ export async function load(bytes) {
 const TYPED = { i32: Int32Array, f64: Float64Array, i64: BigInt64Array };
 function parseArg(text) {
   const m = /^(i32|f64|i64):(.*)$/.exec(text);
-  if (!m) return Number(text);
+  if (!m) { return Number(text); }
   const items = m[2] === "" ? [] : m[2].split(",");
   return TYPED[m[1]].from(m[1] === "i64" ? items.map(BigInt) : items.map(Number));
 }

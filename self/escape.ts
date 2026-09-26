@@ -1498,8 +1498,8 @@ const findArenaLoops = (
           node.children[0],
           `\`${callee.sourceName}\` leaves arena memory behind on every pass of this loop, which cannot release it ` +
             `after each pass because ${why}, ${fn}, so all of it lives as long as the caller's memory does. Keep ` +
-            `what a pass allocates out of locals declared outside the loop and out of memory older than the pass, ` +
-            `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
+            "what a pass allocates out of locals declared outside the loop and out of memory older than the pass, " +
+            "or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
         )
       );
     }

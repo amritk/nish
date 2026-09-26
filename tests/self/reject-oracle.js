@@ -85,10 +85,10 @@ const SUPPORTED_FLAGS = new Set(["--number-mode"]);
  */
 function register(file) {
   const rows = new Map();
-  if (!fs.existsSync(file)) return rows;
+  if (!fs.existsSync(file)) { return rows; }
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     const text = line.replace(/^\s*#.*$/, "").trim();
-    if (text.length === 0) continue;
+    if (text.length === 0) { continue; }
     const at = text.search(/\s/);
     rows.set(at < 0 ? text : text.slice(0, at), at < 0 ? "" : text.slice(at).trim());
   }
@@ -135,7 +135,7 @@ const auditRegister = ({ bucket, unproven, registered, present, whole }) => {
       );
     }
   }
-  if (!whole) return failed;
+  if (!whole) { return failed; }
   // The direction the register is *for*: its purpose is to shrink, so a line
   // the walk above did not match is a claim about nothing.
   for (const name of registered.keys()) {
@@ -226,7 +226,7 @@ const selfCheck = () => {
   const failed = [];
   for (const [what, got, wanted] of cases) {
     if (wanted.length === 0) {
-      if (got.length > 0) failed.push(`self-check: ${what} — reported ${JSON.stringify(got[0])}`);
+      if (got.length > 0) { failed.push(`self-check: ${what} — reported ${JSON.stringify(got[0])}`); }
     } else if (got.length !== 1) {
       failed.push(`self-check: ${what} — wanted one failure, got ${got.length}`);
     } else {
@@ -245,15 +245,15 @@ function argsFor(file) {
   const unsupported = [];
   const raw = extraArgs(file);
   for (let i = 0; i < raw.length; i++) {
-    if (SUPPORTED_FLAGS.has(raw[i])) flags.push(raw[i], raw[++i]);
-    else unsupported.push(raw[i]);
+    if (SUPPORTED_FLAGS.has(raw[i])) { flags.push(raw[i], raw[++i]); }
+    else { unsupported.push(raw[i]); }
   }
   return { flags, unsupported };
 }
 
 function compare(seed, binary, entry) {
   const { flags, unsupported } = argsFor(entry.file);
-  if (unsupported.length > 0) return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` };
+  if (unsupported.length > 0) { return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` }; }
   const named = path.relative(root, entry.file);
   // A `tests/link` case may be refused by the compiler or only by the linker,
   // and `expected.err` does not say which. A compile answers it: what compiles
@@ -267,7 +267,7 @@ function compare(seed, binary, entry) {
     maxBuffer: 64 * 1024 * 1024,
   });
   const output = `${run.stdout}${run.stderr}`;
-  if (run.status === 0) return { failed: "stage1 accepted it" };
+  if (run.status === 0) { return { failed: "stage1 accepted it" }; }
   const missing = entry.fragments.filter((fragment) => !output.includes(fragment));
   const failed =
     missing.length > 0 ? `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}` : null;
@@ -280,7 +280,7 @@ function compare(seed, binary, entry) {
   if (/syntax error:/.test(output)) {
     return { parser: firstLine(output).replace(/^syntax error: /, ""), failed, fragments: entry.fragments.length };
   }
-  if (failed !== null) return { failed };
+  if (failed !== null) { return { failed }; }
   return { fragments: entry.fragments.length };
 }
 
@@ -305,10 +305,10 @@ function firstLine(output) {
 function corpus() {
   const entries = [];
   for (const name of fs.readdirSync(CASES).sort()) {
-    if (!name.startsWith("reject_") || !name.endsWith(".ts")) continue;
+    if (!name.startsWith("reject_") || !name.endsWith(".ts")) { continue; }
     const file = path.join(CASES, name);
     const err = file.replace(/\.ts$/, ".err");
-    if (!fs.existsSync(err)) continue;
+    if (!fs.existsSync(err)) { continue; }
     entries.push({
       name: path.basename(name, ".ts"),
       file,
@@ -322,7 +322,7 @@ function corpus() {
     });
   }
   for (const program of linkPrograms()) {
-    if (program.expectedErr === null) continue;
+    if (program.expectedErr === null) { continue; }
     // `tests/link/<name>/expected.err` is one needle, newlines and all.
     entries.push({
       name: `link/${program.name}`,
@@ -354,7 +354,7 @@ function main(argv) {
   // to find rather than the two minutes the corpus takes.
   const selfChecked = selfCheck();
   if (selfChecked.failed.length > 0) {
-    for (const f of selfChecked.failed) process.stdout.write(`  FAIL ${f}\n`);
+    for (const f of selfChecked.failed) { process.stdout.write(`  FAIL ${f}\n`); }
     return 1;
   }
   const seed = seedForOracle(argv);
@@ -363,7 +363,7 @@ function main(argv) {
     return 1;
   }
   const binary = build(seed);
-  if (binary === null) return 1;
+  if (binary === null) { return 1; }
   const all = corpus();
   const inputs =
     named.length > 0
@@ -390,14 +390,14 @@ function main(argv) {
     if (result.parser !== undefined) {
       parser.push(`${where}: ${result.parser}`);
       bucket.push({ name: entry.name, where, sentence: result.parser });
-      if (result.failed !== null) failed.push(`${where}: ${result.failed}`);
-      else checked += result.fragments;
+      if (result.failed !== null) { failed.push(`${where}: ${result.failed}`); }
+      else { checked += result.fragments; }
     } else if (result.skipped !== undefined) {
       skipped.push(`${where}: ${result.skipped}`);
       unproven.add(entry.name);
     } else if (result.failed !== undefined) {
-      if (known.has(entry.name)) pending.push(`${where}: ${result.failed}`);
-      else failed.push(`${where}: ${result.failed}`);
+      if (known.has(entry.name)) { pending.push(`${where}: ${result.failed}`); }
+      else { failed.push(`${where}: ${result.failed}`); }
     } else if (known.has(entry.name)) {
       failed.push(`${where}: agrees now — remove it from tests/self/reject_backlog.txt`);
     } else {
@@ -414,11 +414,11 @@ function main(argv) {
       whole: named.length === 0,
     })
   );
-  for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
+  for (const f of failed) { process.stdout.write(`  FAIL ${f}\n`); }
   if (verbose) {
-    for (const p of pending) process.stdout.write(`  backlog ${p}\n`);
-    for (const p of parser) process.stdout.write(`  parser ${p}\n`);
-    for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
+    for (const p of pending) { process.stdout.write(`  backlog ${p}\n`); }
+    for (const p of parser) { process.stdout.write(`  parser ${p}\n`); }
+    for (const s of skipped) { process.stdout.write(`  skip ${s}\n`); }
   }
   const compared = inputs.length - parser.length - skipped.length - pending.length;
   const note = pending.length > 0 ? `, ${pending.length} in the backlog` : "";
@@ -431,5 +431,5 @@ function main(argv) {
   return failed.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { compare, corpus, build };

@@ -86,11 +86,11 @@ const SKIP_REASONS = {
  */
 const unspellable = (decl) => {
   const mods = decl.modifiers ?? [];
-  if (mods.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) return "ambient";
-  if (mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) return "default";
-  if (mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) return "async";
-  if (decl.asteriskToken !== undefined) return "generator";
-  if (decl.name === undefined) return "anonymous";
+  if (mods.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) { return "ambient"; }
+  if (mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) { return "default"; }
+  if (mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) { return "async"; }
+  if (decl.asteriskToken !== undefined) { return "generator"; }
+  if (decl.name === undefined) { return "anonymous"; }
   return undefined;
 };
 
@@ -128,7 +128,7 @@ const signatureStart = (sf, decl) => {
 
 /** Where it ends: after the return type, or after the `)` when there is none. */
 const signatureEnd = (sf, decl) => {
-  if (decl.type !== undefined) return decl.type.getEnd();
+  if (decl.type !== undefined) { return decl.type.getEnd(); }
   return childToken(sf, decl, ts.SyntaxKind.CloseParenToken).getEnd();
 };
 
@@ -141,12 +141,12 @@ const signatureEnd = (sf, decl) => {
  * collapse that is perfectly fine.
  */
 const singleReturn = (text, sf, block) => {
-  if (block.statements.length !== 1) return undefined;
+  if (block.statements.length !== 1) { return undefined; }
   const stmt = block.statements[0];
-  if (!ts.isReturnStatement(stmt) || stmt.expression === undefined) return undefined;
+  if (!ts.isReturnStatement(stmt) || stmt.expression === undefined) { return undefined; }
   const blank = /^\s*$/;
-  if (!blank.test(text.slice(block.getStart(sf) + 1, stmt.getStart(sf)))) return undefined;
-  if (!blank.test(text.slice(stmt.getEnd(), block.getEnd() - 1))) return undefined;
+  if (!blank.test(text.slice(block.getStart(sf) + 1, stmt.getStart(sf)))) { return undefined; }
+  if (!blank.test(text.slice(stmt.getEnd(), block.getEnd() - 1))) { return undefined; }
   return stmt.expression;
 };
 
@@ -172,7 +172,7 @@ const conciseBody = (expr) => (expr.startsWith("{") ? `(${expr})` : expr);
  */
 const replacement = (text, sf, decl, concise) => {
   const unspellableAs = unspellable(decl);
-  if (unspellableAs !== undefined) return { skip: unspellableAs };
+  if (unspellableAs !== undefined) { return { skip: unspellableAs }; }
   // Anything else without a body is an overload signature, which the language
   // does not have; leave it for the checker to refuse in its own words. It is
   // *not* the ambient case and may not be reported as one: `declare` is what
@@ -180,7 +180,7 @@ const replacement = (text, sf, decl, concise) => {
   // `function ambient(): void;` is "`declare function` staying legal" names a
   // rule the checker is about to refuse the line under
   // (`tests/wordings/nl2204_function_without_body.ts`).
-  if (decl.body === undefined) return { skip: "bodiless" };
+  if (decl.body === undefined) { return { skip: "bodiless" }; }
 
   const start = decl.getStart(sf);
   const keyword = childToken(sf, decl, ts.SyntaxKind.FunctionKeyword);
@@ -204,7 +204,7 @@ const replacement = (text, sf, decl, concise) => {
   // comment there would have to be rewritten rather than moved, so refuse it
   // instead of silently dropping it.
   const gap = text.slice(sigEnd, decl.body.getStart(sf));
-  if (!blank.test(gap)) return { skip: "trivia" };
+  if (!blank.test(gap)) { return { skip: "trivia" }; }
 
   const returned = concise ? singleReturn(text, sf, decl.body) : undefined;
   const body =
@@ -223,11 +223,11 @@ const replacement = (text, sf, decl, concise) => {
  */
 const conciseArrow = (text, sf, stmt) => {
   const decls = stmt.declarationList.declarations;
-  if (decls.length !== 1) return undefined;
+  if (decls.length !== 1) { return undefined; }
   const init = decls[0].initializer;
-  if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) return undefined;
+  if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) { return undefined; }
   const returned = singleReturn(text, sf, init.body);
-  if (returned === undefined) return undefined;
+  if (returned === undefined) { return undefined; }
   return {
     start: init.body.getStart(sf),
     end: init.body.getEnd(),
@@ -251,11 +251,11 @@ export const rewrite = (text, fileName, { concise = false } = {}) => {
     if (ts.isVariableStatement(stmt)) {
       if (concise) {
         const collapse = conciseArrow(text, sf, stmt);
-        if (collapse !== undefined) edits.push(collapse);
+        if (collapse !== undefined) { edits.push(collapse); }
       }
       continue;
     }
-    if (!ts.isFunctionDeclaration(stmt)) continue;
+    if (!ts.isFunctionDeclaration(stmt)) { continue; }
     const edit = replacement(text, sf, stmt, concise);
     if (edit.skip !== undefined) {
       const name = stmt.name?.text ?? "<anonymous>";
@@ -266,7 +266,7 @@ export const rewrite = (text, fileName, { concise = false } = {}) => {
     edits.push(edit);
   }
   let out = text;
-  for (const edit of edits.reverse()) out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  for (const edit of edits.reverse()) { out = out.slice(0, edit.start) + edit.text + out.slice(edit.end); }
   return { text: out, changed: edits.length, skipped };
 };
 
@@ -330,9 +330,9 @@ const main = (argv) => {
       process.stdout.write(result.text);
       continue;
     }
-    if (result.changed === 0) continue;
-    if (flags.has("--check")) pending += result.changed;
-    else fs.writeFileSync(file, result.text);
+    if (result.changed === 0) { continue; }
+    if (flags.has("--check")) { pending += result.changed; }
+    else { fs.writeFileSync(file, result.text); }
     changed += result.changed;
     process.stdout.write(`${flags.has("--check") ? "would rewrite" : "rewrote"} ${file}: ${result.changed}\n`);
   }
@@ -342,8 +342,8 @@ const main = (argv) => {
   }
   // `--stdout` answers with the file and nothing else, so a summary there would
   // land in whatever the caller redirected it into.
-  if (!flags.has("--stdout")) process.stdout.write(`${changed} declaration(s) rewritten\n`);
+  if (!flags.has("--stdout")) { process.stdout.write(`${changed} declaration(s) rewritten\n`); }
   return 0;
 };
 
-if (process.argv[1] === import.meta.filename) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === import.meta.filename) { process.exit(main(process.argv.slice(2))); }

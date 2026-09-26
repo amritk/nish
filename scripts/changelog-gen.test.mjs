@@ -28,7 +28,7 @@ const GIT_ENV = {
 
 function git(dir, args) {
   const r = spawnSync("git", args, { cwd: dir, env: GIT_ENV, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+  if (r.status !== 0) { throw new Error(`git ${args.join(" ")}: ${r.stderr}`); }
 }
 
 /**
@@ -44,7 +44,7 @@ function repo(tag, messages) {
   git(dir, ["add", "-A"]);
   git(dir, ["commit", "-q", "-m", `chore(release): ${tag}`]);
   git(dir, ["tag", `v${tag}`]);
-  for (const message of messages) git(dir, ["commit", "-q", "--allow-empty", "-m", message]);
+  for (const message of messages) { git(dir, ["commit", "-q", "--allow-empty", "-m", message]); }
   return dir;
 }
 
@@ -123,7 +123,7 @@ let failed = 0;
 let total = 0;
 const check = (label, ok, detail) => {
   total++;
-  if (!ok) failed++;
+  if (!ok) { failed++; }
   console.log(`${ok ? "pass" : "FAIL"}  ${label}${ok ? "" : `\n${detail.replace(/^/gm, "        ")}`}`);
 };
 
@@ -155,7 +155,7 @@ try {
     );
   }
 } finally {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs) { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 console.log(failed === 0 ? `\nall ${total} cases pass` : `\n${failed} case(s) failed`);

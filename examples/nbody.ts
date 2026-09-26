@@ -84,7 +84,7 @@ export const main = (): i32 => {
   bodies[0].vy = -py / SOLAR_MASS;
   bodies[0].vz = -pz / SOLAR_MASS;
   console.log(`${energy(bodies)}`);
-  for (let k = 0; k < 1000; k++) advance(bodies, 0.01);
+  for (let k = 0; k < 1000; k++) { advance(bodies, 0.01); }
   console.log(`${energy(bodies)}`);
   return 0;
 };

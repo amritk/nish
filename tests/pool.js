@@ -31,7 +31,7 @@ export const defaultJobs = () => Math.min(8, os.cpus().length || 2);
 /** Read `--jobs N` out of an argv, falling back to {@link defaultJobs}. */
 export const jobsFrom = (argv) => {
   const i = argv.indexOf("--jobs");
-  if (i < 0) return defaultJobs();
+  if (i < 0) { return defaultJobs(); }
   const n = Number(argv[i + 1]);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : defaultJobs();
 };

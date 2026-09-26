@@ -62,12 +62,12 @@ export const normalisePath = (path) => {
   const absolute = path.startsWith("/");
   const out = [];
   for (const part of path.split("/")) {
-    if (part === "" || part === ".") continue;
+    if (part === "" || part === ".") { continue; }
     if (part === ".." && out.length > 0 && out[out.length - 1] !== "..") {
       out.pop();
       continue;
     }
-    if (part === "..") continue;
+    if (part === "..") { continue; }
     out.push(part);
   }
   return (absolute ? "/" : "") + out.join("/");
@@ -110,7 +110,7 @@ export class MemoryFileSystem {
   /** Every file, decoded as UTF-8 — what a worker posts back after a compile. */
   toText() {
     const out = {};
-    for (const [path, bytes] of this.files) out[path] = decoder.decode(bytes);
+    for (const [path, bytes] of this.files) { out[path] = decoder.decode(bytes); }
     return out;
   }
 }
@@ -178,7 +178,7 @@ export class WasiHost {
     try {
       instance.exports._start();
     } catch (error) {
-      if (error instanceof ExitStatus) return error.code;
+      if (error instanceof ExitStatus) { return error.code; }
       throw error;
     }
     return 0;
@@ -199,7 +199,7 @@ export class WasiHost {
   /** Resolve a path argument against the preopen `dirFd` points at. */
   #resolve(dirFd, pointer, length) {
     const base = this.fds.get(dirFd);
-    if (!base || !base.directory) return null;
+    if (!base || !base.directory) { return null; }
     const path = this.#string(pointer, length);
     return normalisePath(base.path === "" ? path : `${base.path}/${path}`);
   }
@@ -223,8 +223,8 @@ export class WasiHost {
       // The subarray is a view on wasm memory, which `decode` may not keep.
       const text = this.streamDecoders[fd].decode(chunk.slice(), { stream: true });
       if (text !== "") {
-        if (fd === 1) this.onStdout(text);
-        else this.onStderr(text);
+        if (fd === 1) { this.onStdout(text); }
+        else { this.onStderr(text); }
       }
       written += chunk.length;
     }
@@ -235,10 +235,10 @@ export class WasiHost {
     const existing = this.fs.files.get(open.path) ?? new Uint8Array(0);
     const at = open.append ? existing.length : open.position;
     let total = 0;
-    for (const chunk of chunks) total += chunk.length;
+    for (const chunk of chunks) { total += chunk.length; }
     const end = at + total;
     const grown = end > existing.length ? new Uint8Array(end) : existing;
-    if (grown !== existing) grown.set(existing);
+    if (grown !== existing) { grown.set(existing); }
     let cursor = at;
     for (const chunk of chunks) {
       grown.set(chunk, cursor);
@@ -285,8 +285,8 @@ export class WasiHost {
           written = this.#writeStream(fd, chunks);
         } else {
           const open = this.fds.get(fd);
-          if (!open) return EBADF;
-          if (open.directory) return EISDIR;
+          if (!open) { return EBADF; }
+          if (open.directory) { return EISDIR; }
           written = this.#writeFile(open, chunks);
         }
         this.#view.setUint32(writtenPointer, written, true);
@@ -294,7 +294,7 @@ export class WasiHost {
       },
       fd_read: (fd, iovsPointer, iovsLength, readPointer) => {
         const open = this.fds.get(fd);
-        if (!open || open.directory) return fd === 0 ? this.#emptyRead(readPointer) : EBADF;
+        if (!open || open.directory) { return fd === 0 ? this.#emptyRead(readPointer) : EBADF; }
         const read = this.#readInto(open.path, open.position, this.#iovs(iovsPointer, iovsLength));
         open.position += read;
         this.#view.setUint32(readPointer, read, true);
@@ -302,19 +302,19 @@ export class WasiHost {
       },
       fd_pread: (fd, iovsPointer, iovsLength, offset, readPointer) => {
         const open = this.fds.get(fd);
-        if (!open || open.directory) return fd === 0 ? this.#emptyRead(readPointer) : EBADF;
+        if (!open || open.directory) { return fd === 0 ? this.#emptyRead(readPointer) : EBADF; }
         const read = this.#readInto(open.path, Number(offset), this.#iovs(iovsPointer, iovsLength));
         this.#view.setUint32(readPointer, read, true);
         return ESUCCESS;
       },
       fd_seek: (fd, offset, whence, resultPointer) => {
         const open = this.fds.get(fd);
-        if (!open) return EBADF;
+        if (!open) { return EBADF; }
         const size = (this.fs.files.get(open.path) ?? new Uint8Array(0)).length;
         // whence: 0 set, 1 cur, 2 end — the same order as `lseek`.
         const from = whence === 0 ? 0 : whence === 1 ? open.position : size;
         const next = from + Number(offset);
-        if (next < 0) return EINVAL;
+        if (next < 0) { return EINVAL; }
         open.position = next;
         this.#view.setBigUint64(resultPointer, BigInt(next), true);
         return ESUCCESS;
@@ -325,7 +325,7 @@ export class WasiHost {
         const open = this.fds.get(fd);
         const filetype =
           fd <= 2 ? FILETYPE_CHARACTER_DEVICE : open?.directory ? FILETYPE_DIRECTORY : FILETYPE_REGULAR;
-        if (fd > 2 && !open) return EBADF;
+        if (fd > 2 && !open) { return EBADF; }
         view.setUint8(resultPointer, filetype);
         view.setUint16(resultPointer + 2, open?.append ? FDFLAG_APPEND : 0, true);
         // Claim every right: the page owns the filesystem, so there is nothing
@@ -337,20 +337,20 @@ export class WasiHost {
       },
       fd_filestat_get: (fd, resultPointer) => {
         const open = this.fds.get(fd);
-        if (!open) return EBADF;
+        if (!open) { return EBADF; }
         return this.#filestat(open.path, open.directory, resultPointer);
       },
       fd_prestat_get: (fd, resultPointer) => {
-        if (fd !== PREOPEN_FD) return EBADF;
+        if (fd !== PREOPEN_FD) { return EBADF; }
         const view = this.#view;
         view.setUint8(resultPointer, 0); // preopentype: dir
         view.setUint32(resultPointer + 4, encoder.encode(PREOPEN_NAME).length, true);
         return ESUCCESS;
       },
       fd_prestat_dir_name: (fd, pointer, length) => {
-        if (fd !== PREOPEN_FD) return EBADF;
+        if (fd !== PREOPEN_FD) { return EBADF; }
         const name = encoder.encode(PREOPEN_NAME);
-        if (length < name.length) return EINVAL;
+        if (length < name.length) { return EINVAL; }
         this.#bytes.set(name, pointer);
         return ESUCCESS;
       },
@@ -367,17 +367,17 @@ export class WasiHost {
         resultPointer
       ) => {
         const path = this.#resolve(dirFd, pathPointer, pathLength);
-        if (path === null) return EBADF;
+        if (path === null) { return EBADF; }
         const isDirectory = this.fs.directories.has(path);
         const exists = this.fs.files.has(path);
-        if (openFlags & OFLAG_DIRECTORY && !isDirectory) return ENOTDIR;
+        if (openFlags & OFLAG_DIRECTORY && !isDirectory) { return ENOTDIR; }
         if (isDirectory && !(openFlags & OFLAG_CREAT)) {
           return this.#open(new OpenFile(path, { directory: true }), resultPointer);
         }
-        if (exists && openFlags & OFLAG_EXCL) return EEXIST;
+        if (exists && openFlags & OFLAG_EXCL) { return EEXIST; }
         if (!exists) {
-          if (!(openFlags & OFLAG_CREAT)) return ENOENT;
-          if (!this.fs.directories.has(parentOf(path))) return ENOENT;
+          if (!(openFlags & OFLAG_CREAT)) { return ENOENT; }
+          if (!this.fs.directories.has(parentOf(path))) { return ENOENT; }
           this.fs.files.set(path, new Uint8Array(0));
         } else if (openFlags & OFLAG_TRUNC) {
           this.fs.files.set(path, new Uint8Array(0));
@@ -386,17 +386,17 @@ export class WasiHost {
       },
       path_filestat_get: (dirFd, _flags, pathPointer, pathLength, resultPointer) => {
         const path = this.#resolve(dirFd, pathPointer, pathLength);
-        if (path === null) return EBADF;
+        if (path === null) { return EBADF; }
         const directory = this.fs.directories.has(path);
-        if (!directory && !this.fs.files.has(path)) return ENOENT;
+        if (!directory && !this.fs.files.has(path)) { return ENOENT; }
         return this.#filestat(path, directory, resultPointer);
       },
       path_create_directory: (dirFd, pathPointer, pathLength) => {
         const path = this.#resolve(dirFd, pathPointer, pathLength);
-        if (path === null) return EBADF;
-        if (this.fs.files.has(path)) return EEXIST;
-        if (this.fs.directories.has(path)) return EEXIST;
-        if (!this.fs.directories.has(parentOf(path))) return ENOENT;
+        if (path === null) { return EBADF; }
+        if (this.fs.files.has(path)) { return EEXIST; }
+        if (this.fs.directories.has(path)) { return EEXIST; }
+        if (!this.fs.directories.has(parentOf(path))) { return ENOENT; }
         this.fs.directories.add(path);
         return ESUCCESS;
       },
@@ -412,7 +412,7 @@ export class WasiHost {
       fd_datasync: () => ESUCCESS,
       fd_tell: (fd, resultPointer) => {
         const open = this.fds.get(fd);
-        if (!open) return EBADF;
+        if (!open) { return EBADF; }
         this.#view.setBigUint64(resultPointer, BigInt(open.position), true);
         return ESUCCESS;
       },
@@ -428,8 +428,8 @@ export class WasiHost {
       },
       random_get: (pointer, length) => {
         const bytes = this.#bytes.subarray(pointer, pointer + length);
-        if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
-        else for (let i = 0; i < bytes.length; i++) bytes[i] = (Math.random() * 256) | 0;
+        if (globalThis.crypto?.getRandomValues) { globalThis.crypto.getRandomValues(bytes); }
+        else { for (let i = 0; i < bytes.length; i++) { bytes[i] = (Math.random() * 256) | 0; } }
         return ESUCCESS;
       },
       proc_exit: (code) => {
@@ -478,7 +478,7 @@ export class WasiHost {
       chunk.set(slice);
       read += slice.length;
       cursor += slice.length;
-      if (slice.length < chunk.length) break;
+      if (slice.length < chunk.length) { break; }
     }
     return read;
   }
@@ -487,7 +487,7 @@ export class WasiHost {
   #filestat(path, directory, resultPointer) {
     const view = this.#view;
     const size = directory ? 0 : (this.fs.files.get(path) ?? new Uint8Array(0)).length;
-    for (let offset = 0; offset < 64; offset += 8) view.setBigUint64(resultPointer + offset, 0n, true);
+    for (let offset = 0; offset < 64; offset += 8) { view.setBigUint64(resultPointer + offset, 0n, true); }
     view.setUint8(resultPointer + 16, directory ? FILETYPE_DIRECTORY : FILETYPE_REGULAR);
     view.setBigUint64(resultPointer + 24, 1n, true); // nlink
     view.setBigUint64(resultPointer + 32, BigInt(size), true);

@@ -79,7 +79,7 @@ const MIN_FRAGMENT = 10;
  */
 const tableText = (text, name) => {
   const open = text.indexOf(`export const ${name} = (): string[] => [`);
-  if (open < 0) return null;
+  if (open < 0) { return null; }
   const close = text.indexOf("\n];", open);
   return close < 0 ? null : text.slice(open, close + 1);
 };
@@ -142,7 +142,7 @@ const problems = (text) => {
     for (let i = 0; i < pairs.length; i++) {
       const { fragment, code } = pairs[i];
       const band = code[2];
-      if (!BANDS.has(band)) found.push(`${code} is not in a table band (1, 2, 3, 4 or 9): ${JSON.stringify(fragment)}`);
+      if (!BANDS.has(band)) { found.push(`${code} is not in a table band (1, 2, 3, 4 or 9): ${JSON.stringify(fragment)}`); }
       if (perf !== (band === "9")) {
         found.push(`${code} is in \`${name}\`, which holds ${perf ? "only" : "no"} NL9xxx codes`);
       }
@@ -166,14 +166,14 @@ const problems = (text) => {
 
   const seen = (key) => {
     const counts = new Map();
-    for (const pair of all) counts.set(pair[key], (counts.get(pair[key]) ?? 0) + 1);
+    for (const pair of all) { counts.set(pair[key], (counts.get(pair[key]) ?? 0) + 1); }
     return [...counts].filter(([, n]) => n > 1).map(([value]) => value);
   };
-  for (const code of seen("code")) found.push(`${code} names two rules`);
-  for (const fragment of seen("fragment")) found.push(`${JSON.stringify(fragment)} has two entries`);
+  for (const code of seen("code")) { found.push(`${code} names two rules`); }
+  for (const fragment of seen("fragment")) { found.push(`${JSON.stringify(fragment)} has two entries`); }
 
   const count = /export const RULE_COUNT: i32 = (\d+);/.exec(text);
-  if (count === null) found.push("self/codes.ts has no `RULE_COUNT`");
+  if (count === null) { found.push("self/codes.ts has no `RULE_COUNT`"); }
   else if (Number(count[1]) !== all.length) {
     found.push(`RULE_COUNT is ${count[1]} and the tables hold ${all.length} rules`);
   }
@@ -192,7 +192,7 @@ const nextFree = (pairs) => {
 };
 
 const { found, all } = problems(fs.readFileSync(REGISTRY, "utf8"));
-for (const problem of found) console.error(`error: ${problem}`);
+for (const problem of found) { console.error(`error: ${problem}`); }
 if (found.length === 0 && !process.argv.includes("--check")) {
   console.log(`self/codes.ts: ${all.length} rules, well-formed; next free: ${nextFree(all).join(" ")}`);
 }

@@ -77,14 +77,14 @@ function normalizePath(p) {
 }
 
 function resolvePath(base, spec) {
-  if (spec.startsWith("/")) return normalizePath(spec);
-  if (base.length === 0) return normalizePath(spec);
+  if (spec.startsWith("/")) { return normalizePath(spec); }
+  if (base.length === 0) { return normalizePath(spec); }
   return normalizePath(path.posix.join(base, spec));
 }
 
 function resolveModule(base, spec) {
   const resolved = resolvePath(base, spec);
-  if (resolved.endsWith(".js")) return `${resolved.slice(0, -3)}.ts`;
+  if (resolved.endsWith(".js")) { return `${resolved.slice(0, -3)}.ts`; }
   return resolved.endsWith(".ts") ? resolved : `${resolved}.ts`;
 }
 
@@ -114,7 +114,7 @@ function compareStrings(a, b) {
 function slotsAfter(entries) {
   let slots = 16;
   for (let i = 1; i <= entries; i++) {
-    if (i * 4 > slots * 3) slots *= 2;
+    if (i * 4 > slots * 3) { slots *= 2; }
   }
   return slots;
 }
@@ -129,7 +129,7 @@ function expected(caseText) {
   const out = [];
   const texts = [];
   for (const line of caseText.split("\n")) {
-    if (line.length === 0 || line.startsWith("#")) continue;
+    if (line.length === 0 || line.startsWith("#")) { continue; }
     const fields = line.split("\t");
     const [section, first, second] = fields;
     if (section === "text") {
@@ -171,7 +171,7 @@ function expected(caseText) {
   for (let byte = 0; byte < 256; byte++) {
     // Only the ASCII half: above it a lone byte is not a JavaScript string,
     // and the multi-byte text cases above already pin the pass-through.
-    if (byte < 128) out.push(`byte json ${byte} ${JSON.stringify(String.fromCharCode(byte))}`);
+    if (byte < 128) { out.push(`byte json ${byte} ${JSON.stringify(String.fromCharCode(byte))}`); }
   }
 
   for (let bit = 0; bit < 64; bit++) {
@@ -185,15 +185,15 @@ function expected(caseText) {
 
   // The map, driven through the driver's script with a JavaScript `Map`.
   const map = new Map();
-  for (let i = 0; i < texts.length; i++) map.set(texts[i], i);
+  for (let i = 0; i < texts.length; i++) { map.set(texts[i], i); }
   out.push(`map size ${map.size}`);
   const order = [...map.keys()];
   for (let i = 0; i < order.length; i++) {
     out.push(`map entry ${i} ${JSON.stringify(order[i])} ${map.get(order[i])}`);
   }
-  for (const key of texts) out.push(`map get ${JSON.stringify(key)} ${map.get(key)}`);
+  for (const key of texts) { out.push(`map get ${JSON.stringify(key)} ${map.get(key)}`); }
   out.push(`map missing -1 ${map.has("no such key") ? 1 : 0}`);
-  for (const key of texts) map.set(key, 1000);
+  for (const key of texts) { map.set(key, 1000); }
   out.push(`map size after overwrite ${map.size}`);
   const first = [...map.keys()][0];
   out.push(`map first after overwrite ${JSON.stringify(first)} ${map.get(first)}`);
@@ -208,7 +208,7 @@ function expected(caseText) {
   out.push(`set size ${set.size} added ${added}`);
 
   let sum = 0;
-  for (let i = 0; i < 300; i++) sum += i * 7;
+  for (let i = 0; i < 300; i++) { sum += i * 7; }
   out.push(`grow size 300 sum ${sum} slots ${slotsAfter(300)}`);
   out.push(`grow order ${JSON.stringify("key0")} ${JSON.stringify("key299")}`);
   out.push(`grow size 100000 wrong 0 slots ${slotsAfter(100000)} strays 0`);
@@ -221,13 +221,13 @@ function expected(caseText) {
   const home = (h) => (h ^ (h >>> 16)) & 15;
   const isTwin = (h) => h >>> 24 === resident >>> 24 && home(h) === home(resident) && h !== resident;
   let twin = 1;
-  while (!isTwin(hashString(`k${twin}`))) twin++;
+  while (!isTwin(hashString(`k${twin}`))) { twin++; }
   out.push(`probe fingerprint ${JSON.stringify(`k${twin}`)} -1 1 2 2`);
   // A real FNV-1a collision: equal hashes, unequal keys. The line prints both
   // hashes, so a pair that stopped colliding would fail here, not pass.
   const a = "c2ya8";
   const b = "czki6";
-  if (hashString(a) !== hashString(b)) throw new Error(`${a} and ${b} no longer collide`);
+  if (hashString(a) !== hashString(b)) { throw new Error(`${a} and ${b} no longer collide`); }
   out.push(`probe collision ${hashString(a)} ${hashString(b)} -1 1 2 2 ${JSON.stringify(b)}`);
   out.push("probe set 1 1 0 2");
   // The slot packing at its extremes: fingerprint, index, and not the empty 0.
@@ -253,7 +253,7 @@ function build(seed) {
 const differences = (want, got) => {
   const differing = [];
   for (let i = 0; i < Math.max(want.length, got.length); i++) {
-    if (want[i] !== got[i]) differing.push(`  line ${i + 1}: want ${want[i]} / got ${got[i]}`);
+    if (want[i] !== got[i]) { differing.push(`  line ${i + 1}: want ${want[i]} / got ${got[i]}`); }
   }
   return differing;
 };
@@ -271,7 +271,7 @@ const staleLines = (golden, caseText) =>
   );
 
 const report = (differing, verbose) => {
-  for (const line of verbose ? differing : differing.slice(0, 10)) process.stdout.write(`${line}\n`);
+  for (const line of verbose ? differing : differing.slice(0, 10)) { process.stdout.write(`${line}\n`); }
 };
 
 async function main(argv) {
@@ -288,7 +288,7 @@ async function main(argv) {
   // reported without it.
   const driver = () => {
     const binary = build(seed);
-    if (binary === null) return null;
+    if (binary === null) { return null; }
     const run = spawnSync(binary, [CASES], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     if (run.status !== 0) {
       process.stderr.write(`support exited ${run.status}\n${run.stderr}`);
@@ -302,7 +302,7 @@ async function main(argv) {
     // in the ordinary sense — reviewed as a diff — and is only written when
     // every line Node can still answer agrees with it.
     const recorded = driver();
-    if (recorded === null) return 1;
+    if (recorded === null) { return 1; }
     const stale = staleLines(recorded, caseText);
     if (stale.length > 0) {
       report(stale, verbose);
@@ -329,7 +329,7 @@ async function main(argv) {
     return 1;
   }
   const got = driver();
-  if (got === null) return 1;
+  if (got === null) { return 1; }
   const want = golden.split("\n");
   const differing = differences(want, got.split("\n"));
   report(differing, verbose);
@@ -340,5 +340,5 @@ async function main(argv) {
   return differing.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(await main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(await main(process.argv.slice(2))); }
 export { expected, build };

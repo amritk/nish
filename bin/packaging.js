@@ -83,19 +83,19 @@ export const SUPPORTED_ASSETS = ["aarch64-darwin", "aarch64-linux", "x86_64-darw
 export const assetFor = (platform, arch) => {
   const os = OS_BY_PLATFORM[platform];
   const cpu = ARCH_BY_CPU[arch];
-  if (os === undefined || cpu === undefined) return null;
+  if (os === undefined || cpu === undefined) { return null; }
   return `${cpu}-${os}`;
 };
 
 /** The inverse, for the generator and the tests: an `asset` back to npm's pair. */
 export const targetForAsset = (asset) => {
   const dash = asset.indexOf("-");
-  if (dash < 0) return null;
+  if (dash < 0) { return null; }
   const arch = asset.slice(0, dash);
   const os = asset.slice(dash + 1);
   const cpu = Object.keys(ARCH_BY_CPU).find((key) => ARCH_BY_CPU[key] === arch);
   const platform = Object.keys(OS_BY_PLATFORM).find((key) => OS_BY_PLATFORM[key] === os);
-  if (cpu === undefined || platform === undefined) return null;
+  if (cpu === undefined || platform === undefined) { return null; }
   return { asset, os: platform, cpu };
 };
 

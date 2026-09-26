@@ -103,7 +103,7 @@ const runtimeObjectCache = new Map();
 const runtimeObjects = (defines) => {
   const key = defines.join(" ");
   const cached = runtimeObjectCache.get(key);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) { return cached; }
   const dir = path.join(buildDir, "runtime-obj", key.replace(/[^A-Za-z0-9]+/g, "_") || "default");
   fs.mkdirSync(dir, { recursive: true });
   const built = { objects: [], driver: null, error: null };
@@ -114,8 +114,8 @@ const runtimeObjects = (defines) => {
       built.error = `could not compile ${src}${key.length > 0 ? ` with ${key}` : ""}:\n${cc.stderr}`;
       break;
     }
-    if (src === DRIVER_C) built.driver = obj;
-    else built.objects.push(obj);
+    if (src === DRIVER_C) { built.driver = obj; }
+    else { built.objects.push(obj); }
   }
   runtimeObjectCache.set(key, built);
   return built;
@@ -141,7 +141,7 @@ const linkSpecimens = new Map();
  */
 const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {}) => {
   const rt = runtimeObjects(defines);
-  if (rt.error !== null) return { status: 1, stdout: "", stderr: rt.error };
+  if (rt.error !== null) { return { status: 1, stdout: "", stderr: rt.error }; }
   const tail = libm ? ["-lm"] : [];
   const driverObject = driver === DRIVER_C ? rt.driver : driver;
   const args = [
@@ -189,16 +189,17 @@ const skip = (reason) => {
 };
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
-  if (ok) passes++;
+  if (ok) { passes++; }
   else {
     failures++;
-    if (detail)
+    if (detail) {
       console.log(
         String(detail)
           .split("\n")
           .map((l) => "      " + l)
           .join("\n")
       );
+    }
   }
   return ok;
 }
@@ -248,7 +249,7 @@ const IS_MACHO = process.platform === "darwin";
  * names the `.ts` file it was compiled from, and it has at least one row.
  */
 const lineTableOf = (exe) => {
-  if (!IS_MACHO) return { file: exe, where: "the linked binary" };
+  if (!IS_MACHO) { return { file: exe, where: "the linked binary" }; }
   const bundle = `${exe}.dSYM`;
   const inside = path.join(bundle, "Contents", "Resources", "DWARF", path.basename(exe));
   return fs.existsSync(inside)
@@ -273,7 +274,7 @@ const lineTableOf = (exe) => {
  */
 const summarise = () => {
   const summary = [`${passes} passed`, `${failures} failed`];
-  if (skipped.length > 0) summary.push(`${skipped.length} skipped`);
+  if (skipped.length > 0) { summary.push(`${skipped.length} skipped`); }
   console.log(`\n${summary.join(", ")}.`);
 
   if (skipped.length > 0) {
@@ -343,7 +344,7 @@ const semver = (v) => v.split(".").map(Number);
 const notAfter = (a, b) => {
   const [x, y] = [semver(a), semver(b)];
   for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) { return (x[i] ?? 0) < (y[i] ?? 0); }
   }
   return true;
 };
@@ -381,8 +382,8 @@ const seed = HAS_CLANG
 /** The seed as the tools this suite drives are handed it (`--seed <spec>`). */
 const seedSpec = seed.label;
 if (seed.error !== undefined) {
-  if (HAS_CLANG) check("the compiler under test: a seed to build it with", false, seed.error);
-  else skip(`every check: ${seed.error}`);
+  if (HAS_CLANG) { check("the compiler under test: a seed to build it with", false, seed.error); }
+  else { skip(`every check: ${seed.error}`); }
   summarise();
 }
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true });
@@ -566,17 +567,17 @@ if (!only || "io_nish_import".includes(only) || "io_nish_import_global".includes
  * variable and not the same as leaving it out, and a bare `NAME` unsets it.
  */
 function caseEnv(file) {
-  if (!fs.existsSync(file)) return process.env;
+  if (!fs.existsSync(file)) { return process.env; }
   const env = { ...process.env };
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     const text = line.trim();
-    if (text.length === 0 || text.startsWith("#")) continue;
+    if (text.length === 0 || text.startsWith("#")) { continue; }
     const eq = text.indexOf("=");
     // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
     // empty value is a set variable, and `getenv`'s third answer — unset — is
     // otherwise only as reliable as the developer's own environment.
-    if (eq < 0) delete env[text];
-    else if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+    if (eq < 0) { delete env[text]; }
+    else if (eq > 0) { env[text.slice(0, eq)] = text.slice(eq + 1); }
   }
   return env;
 }
@@ -786,7 +787,7 @@ if (!only || "diagnostics".includes(only)) {
     "codes: a registry the reader cannot parse raises rather than reading as empty",
     flattened.error !== null,
     `it answered ${flattened.pairs.length} pairs for a table the pattern cannot match; an empty ` +
-      `registry must not be able to pass for a covered one`
+      "registry must not be able to pass for a covered one"
   );
 
   const jsCode = JSON.parse(js.stdout.split("\n")[0]);
@@ -855,7 +856,7 @@ if (!only || "diagnostics".includes(only)) {
     wordings.status === 0,
     `${wordings.stdout}${wordings.stderr}`
   );
-  const uncodedCount = Number(/uncoded=(\d+)/.exec(wordingsSummary)?.[1] ?? NaN);
+  const uncodedCount = Number(/uncoded=(\d+)/.exec(wordingsSummary)?.[1] ?? Number.NaN);
   check(
     `codes: the uncoded backlog is ${uncodedCount} message(s), and may not grow past ${UNCODED_BACKLOG}`,
     Number.isFinite(uncodedCount) && uncodedCount <= UNCODED_BACKLOG,
@@ -1048,7 +1049,7 @@ if (!only || "performance".includes(only)) {
   const padLines = summaries(pad.stderr);
   const padSentence = (name, order) =>
     `performance: \`${name}\` is 24 bytes and would be 16 with the same fields in a different order, so 8 bytes ` +
-    `of every value are padding the alignment rules insert and nothing reads: declare the fields widest first ` +
+    "of every value are padding the alignment rules insert and nothing reads: declare the fields widest first " +
     `\u2014 \`${order}\``;
   const implementersTail =
     " \u2014 here and in any class that `implements` it, since the interface's fields are its implementers' " +
@@ -1071,7 +1072,7 @@ if (!only || "performance".includes(only)) {
   const suffixLines = summaries(suffix.stderr);
   const suffixSentence = (name, iface, order) =>
     `performance: \`${name}\` is 40 bytes and would be 32 with the same fields in a different order, so 8 bytes ` +
-    `of every value are padding the alignment rules insert and nothing reads: keep the first 2 fields where ` +
+    "of every value are padding the alignment rules insert and nothing reads: keep the first 2 fields where " +
     `\`implements ${iface}\` puts them and declare the rest in this order \u2014 \`${order}\``;
   check(
     "performance: a class that implements an interface warns when reordering only the fields after the interface's shrinks it",
@@ -1695,7 +1696,7 @@ const HAS_OPT = has("opt");
 /** Parse `define`/`declare` headers into { name -> { kind, sig, attrs } } with attribute groups resolved. */
 function functionHeaders(ir) {
   const groups = new Map();
-  for (const m of ir.matchAll(/^attributes (#\d+) = \{ (.*) \}$/gm)) groups.set(m[1], m[2]);
+  for (const m of ir.matchAll(/^attributes (#\d+) = \{ (.*) \}$/gm)) { groups.set(m[1], m[2]); }
   const out = new Map();
   // `$` is part of a symbol name, not a word character: WP18 mangles an
   // instantiation as `identity$i32`, and a pattern without it silently found no
@@ -1714,7 +1715,7 @@ function functionHeaders(ir) {
 }
 
 for (const name of linkTests) {
-  if (only && !name.includes(only)) continue;
+  if (only && !name.includes(only)) { continue; }
   const dir = path.join(linkDir, name);
   const side = (f) => path.join(dir, f);
   const read = (f) => fs.readFileSync(side(f), "utf8");
@@ -1770,14 +1771,17 @@ for (const name of linkTests) {
 
   // Cross-module attribute agreement: importer `declare` == exporter `define`.
   const defines = new Map();
-  for (const m of modules)
-    for (const [sym, h] of functionHeaders(m.ir))
-      if (h.kind === "define") defines.set(sym, { ...h, file: m.file });
+  for (const m of modules) {
+    for (const [sym, h] of functionHeaders(m.ir)) {
+      if (h.kind === "define") { defines.set(sym, { ...h, file: m.file }); }
+    }
+  }
   let declares = 0;
   const mismatches = [];
   for (const m of modules) {
     for (const [sym, h] of functionHeaders(m.ir)) {
-      if (h.kind !== "declare" || !defines.has(sym)) continue; // runtime declares have no define here
+      if (h.kind !== "declare" || !defines.has(sym)) { continue; // runtime declares have no define here
+}
       declares++;
       const d = defines.get(sym);
       if (h.sig !== d.sig || h.attrs !== d.attrs) {
@@ -2096,7 +2100,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   // Control-flow modules must satisfy the IR verifier (dominance, terminators, phis), not just the assembler.
   for (const name of cases.filter((c) => c.startsWith("cf_") && (!only || c.includes(only)))) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
     check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
   }
@@ -2117,7 +2121,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
     fs.writeFileSync(file, source);
     const out = path.join(dir, `${name}.ll`);
     const r = spawnSync(NISH, [file, "-o", out], { cwd: root, encoding: "utf8" });
-    if (r.status !== 0) return { error: `${r.stdout}${r.stderr}` };
+    if (r.status !== 0) { return { error: `${r.stdout}${r.stderr}` }; }
     return { ir: fs.readFileSync(out, "utf8") };
   };
   /**
@@ -2132,8 +2136,8 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
    */
   const defineOf = (ir, symbol) => {
     const lines = ir.split("\n");
-    const at = lines.findIndex((line) => line.startsWith(`define `) && line.includes(`@${symbol}(`));
-    if (at < 0) return "";
+    const at = lines.findIndex((line) => line.startsWith("define ") && line.includes(`@${symbol}(`));
+    if (at < 0) { return ""; }
     const end = lines.indexOf("}", at);
     const block = lines.slice(at, end + 1);
     block[0] = block[0].replace(/#(\d+) \{$/, (_, n) => {
@@ -2194,7 +2198,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
 if (has("opt")) {
   for (const name of cases.filter((c) => c.startsWith("gen_") && (!only || c.includes(only)))) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
     check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
   }
@@ -2350,7 +2354,7 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
     ["arr_range_call_flow", "inCondition", 1],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const got = panicCount(fs.readFileSync(ll, "utf8"), fn.replace(".", "\\."));
     check(`${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`, got === count, `found ${got}`);
   }
@@ -2369,7 +2373,7 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
       ["arr_range_call_generic", "a call from a generic instantiation", "2", "9 >= 3"],
     ]) {
       const ll = path.join(buildDir, `${name}.ll`);
-      if (!fs.existsSync(ll)) continue;
+      if (!fs.existsSync(ll)) { continue; }
       const exe = path.join(buildDir, name);
       const host = path.join(casesDir, `${name}.c`);
       const cc = linkNative(exe, ll, { driver: fs.existsSync(host) ? host : null });
@@ -2406,7 +2410,7 @@ if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
     ["range_export_foreign", 2, "a `declare function`"],
   ]) {
     const ll = path.join(buildDir, "link", name, "permute.ll");
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const got = swapChecks(ll);
     check(
       `link/${name}: ${mode} leaves \`Permute.swap\` ${count} bounds check${count === 1 ? "" : "s"}`,
@@ -2587,7 +2591,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   if (has("opt")) {
     for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
       const ll = path.join(buildDir, `${name}.ll`);
-      if (!fs.existsSync(ll)) continue;
+      if (!fs.existsSync(ll)) { continue; }
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
       check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
     }
@@ -2641,7 +2645,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_path_nullable", "a rebind of a root declared `Holder | null`", "1"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const exe = path.join(buildDir, name);
     const cc = linkNative(exe, ll);
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -2706,7 +2710,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     ["arr_bounds_generic_instances_iface", "a record store through `Cell<Rec>`, beside `Cell<string>`", "15", "1 >= 1"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const exe = path.join(buildDir, name);
     // The f64 case exports `test`, so it is driven the way a `.out` case is.
     const hasMain = /\bexport\s+const\s+main\s*=/.test(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"));
@@ -2898,7 +2902,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       "arr_header_tbaa_threads",
     ]) {
       const ll = path.join(buildDir, `${name}.ll`);
-      if (!fs.existsSync(ll)) continue;
+      if (!fs.existsSync(ll)) { continue; }
       const threads = name.endsWith("_threads") ? ["-DNISH_THREADS=1", "-ftls-model=initial-exec", "-pthread"] : [];
       const exe = path.join(buildDir, `${name}_lto`);
       const link = spawnSync(
@@ -3097,7 +3101,7 @@ if (!only || "strings".includes(only) || only.startsWith("str")) {
   if (HAS_OPT) {
     for (const name of cases.filter((c) => c.startsWith("str_") && (!only || c.includes(only)))) {
       const ll = path.join(buildDir, `${name}.ll`);
-      if (!fs.existsSync(ll)) continue;
+      if (!fs.existsSync(ll)) { continue; }
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
       check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
     }
@@ -3145,7 +3149,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   if (HAS_OPT) {
     for (const name of cases.filter((c) => c.startsWith("mem_") && (!only || c.includes(only)))) {
       const ll = path.join(buildDir, `${name}.ll`);
-      if (!fs.existsSync(ll)) continue;
+      if (!fs.existsSync(ll)) { continue; }
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
       check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
     }
@@ -3237,7 +3241,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   /** The text of `export const <name> = ...` or `const <name> = ...`, up to the next top-level `};` or `);`. */
   const declarationOf = (text, name) => {
     const at = text.search(new RegExp(`^(?:export )?const ${name}\\b`, "m"));
-    if (at < 0) return null;
+    if (at < 0) { return null; }
     const end = text.slice(at).search(/^\)?\};?$|^ {2}\);$/m);
     return end < 0 ? null : text.slice(at, at + end);
   };
@@ -3257,7 +3261,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     const symbols = [...branch[2].matchAll(/out\.push\((?:"([^"]+)"|([A-Z][A-Z0-9_]*))\)/g)].map(
       (m) => m[1] ?? constants.get(m[2]) ?? `<unknown constant ${m[2]}>`
     );
-    for (const name of namesTestedIn(branch[1])) calleesOf.set(name, symbols);
+    for (const name of namesTestedIn(branch[1])) { calleesOf.set(name, symbols); }
   }
   // Every builtin is read as having a branch in the callee table, or is one of the
   // two that lower to a single bitcast and call nothing. A builtin with neither
@@ -3267,7 +3271,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64"]);
   const unread = builtins.filter((b) => !calleesOf.has(b) && !CALLS_NOTHING.has(b));
   check(
-    `self/builtins.ts and self/emit-builtins.ts still read as a builtin list and a callee table ` +
+    "self/builtins.ts and self/emit-builtins.ts still read as a builtin list and a callee table " +
       `(${builtins.length} builtins, ${calleesOf.size} with callees)`,
     builtins.length > 0 && calleesOf.size > 0 && unread.length === 0,
     unread.length > 0
@@ -3314,12 +3318,12 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   for (const builtin of builtins) {
     for (const symbol of calleesOf.get(builtin) ?? []) {
       // An LLVM intrinsic is an instruction, not a runtime call, and allocates nothing.
-      if (symbol.startsWith("llvm.")) continue;
+      if (symbol.startsWith("llvm.")) { continue; }
       const fn = runtimeByName.get(symbol);
       // A name the table does not know would read as "does not allocate", so the
       // signal is only as complete as this agreement.
-      if (!fn) unknownSymbols.push(`${builtin} -> ${symbol}`);
-      else if (allocatesFreshMemory(fn) && !allocating.has(builtin)) allocating.set(builtin, symbol);
+      if (!fn) { unknownSymbols.push(`${builtin} -> ${symbol}`); }
+      else if (allocatesFreshMemory(fn) && !allocating.has(builtin)) { allocating.set(builtin, symbol); }
     }
   }
   check(
@@ -3346,7 +3350,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
       ...missing.map(
         ([builtin, symbol]) =>
           `${builtin} allocates -- its lowering calls @${symbol}, whose declaration is a noalias pointer ` +
-          `return, which in the runtime table means a fresh allocation per call -- but it is not in ` +
+          "return, which in the runtime table means a fresh allocation per call -- but it is not in " +
           `isAllocatingBuiltin in self/escape.ts. Add it there, or a function returning ${builtin}(...) ` +
           "gets an arena scope that releases the result before the ret. Add a tests/cases/mem_*_scope case for it " +
           "beside the other three while you are there.",
@@ -3371,8 +3375,8 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     // The element type of an array is not in `%struct.nish_array*`; every
     // array-answering builtin answers `string[]` today, and a probe that does not
     // typecheck skips itself below rather than claiming anything.
-    if (/i8\*$/.test(ret)) return `string${orNull}`;
-    if (/%struct\.nish_array\*$/.test(ret)) return `string[]${orNull}`;
+    if (/i8\*$/.test(ret)) { return `string${orNull}`; }
+    if (/%struct\.nish_array\*$/.test(ret)) { return `string[]${orNull}`; }
     return undefined;
   };
   const stringArity = (fn) => {
@@ -3447,7 +3451,7 @@ if (!only || "layout".includes(only)) {
     const fromIr = new Map();
     for (const m of ir.matchAll(/^define [^\n]*@make(\w+)\([^\n]*\{\n([\s\S]*?)^\}/gm)) {
       const alloc = m[2].match(/@nish_alloc_struct\(i64 (\d+)\)/);
-      if (alloc) fromIr.set(m[1], Number(alloc[1]));
+      if (alloc) { fromIr.set(m[1], Number(alloc[1])); }
     }
     const fromC = new Map();
     for (const m of fs
@@ -3462,7 +3466,7 @@ if (!only || "layout".includes(only)) {
     // that `Q<i32>` cannot collide with a class called `Q_i32`.
     for (const [name, size] of fromC) {
       const inIr = fromIr.get(name.replace(/^nish_gen_/, ""));
-      if (inIr !== size) diffs.push(`${name}: C ${size}, IR ${inIr}`);
+      if (inIr !== size) { diffs.push(`${name}: C ${size}, IR ${inIr}`); }
     }
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
@@ -3642,7 +3646,7 @@ if (!only || "layout".includes(only)) {
   if (HAS_OPT) {
     for (const name of cases.filter((c) => c.startsWith("cls_") && (!only || c.includes(only)))) {
       const ll = path.join(buildDir, `${name}.ll`);
-      if (!fs.existsSync(ll)) continue;
+      if (!fs.existsSync(ll)) { continue; }
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
       check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
     }
@@ -3661,7 +3665,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     ["u_div_zero_panic", "attempt to divide by zero", "before"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
-    if (!fs.existsSync(ll)) continue;
+    if (!fs.existsSync(ll)) { continue; }
     const exe = path.join(buildDir, name);
     const cc = linkNative(exe, ll, { libm: true });
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -4143,17 +4147,19 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // that would fail for the wrong reason.
   const budgetSkip = () => {
     const host = `${process.platform}-${process.arch}`;
-    if (host !== "linux-x64")
+    if (host !== "linux-x64") {
       return (
         `runtime .text budgets: measured on linux-x64 and this host is ${host}; ` +
         "a byte-exact ceiling is a fact about one target and one compiler version"
       );
-    if (!has("size"))
+    }
+    if (!has("size")) {
       return "size (binutils or llvm) not installed: the runtime .text budgets are not measured";
+    }
     return null;
   };
   const reason = budgetSkip();
-  if (reason !== null) skip(reason);
+  if (reason !== null) { skip(reason); }
   else {
     for (const [src, budget, constant, flags] of [
       ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET", []],
@@ -4525,7 +4531,7 @@ if (!only || "interop".includes(only)) {
   );
 
   for (const stem of ["add", "strings", "export_fn", "export_strict", "export_loose", "multi"]) {
-    if (!fs.existsSync(sidecar(stem, "h"))) continue;
+    if (!fs.existsSync(sidecar(stem, "h"))) { continue; }
     const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar(stem, "h")]);
     check(`${stem}.h compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
   }
@@ -4587,7 +4593,7 @@ if (!only || "interop".includes(only)) {
     stringsDts
   );
   for (const stem of ["add", "strings"]) {
-    if (!fs.existsSync(sidecar(stem, "d.ts"))) continue;
+    if (!fs.existsSync(sidecar(stem, "d.ts"))) { continue; }
     const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar(stem, "d.ts")], { cwd: root });
     check(`${stem}.d.ts passes tsc --noEmit --strict`, r.status === 0, String(r.stdout) + String(r.stderr));
   }
@@ -5672,11 +5678,11 @@ if (!only || "interop".includes(only)) {
     ["res_wasm", 3],
     ["interop-unsigned", 10],
   ]) {
-    if (!fs.existsSync(sidecar(stem, "d.ts")) || !fs.existsSync(sidecar(stem, "mjs"))) continue;
+    if (!fs.existsSync(sidecar(stem, "d.ts")) || !fs.existsSync(sidecar(stem, "mjs"))) { continue; }
     const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8");
     const mjs = fs.readFileSync(sidecar(stem, "mjs"), "utf8");
-    const exports_ = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"));
-    const declared = [...exports_.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1]);
+    const exports = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"));
+    const declared = [...exports.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1]);
     const missing = declared.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs));
     check(
       `${stem}.mjs implements every function ${stem}.d.ts declares (${declares})`,
@@ -6105,7 +6111,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       [...names.map((m) => path.join(selfDir, m)), "-o", `${out}/`, ...(ratcheted ? ["--json"] : [])],
       { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
     );
-    if (ratcheted) ratchetedRun = r;
+    if (ratcheted) { ratchetedRun = r; }
     return r;
   };
   const declaresMain = (m) =>
@@ -6600,13 +6606,13 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   fs.mkdirSync(path.dirname(perturbedSeed), { recursive: true });
   fs.writeFileSync(
     perturbedSeed,
-    `// Generated by tests/run.js: the seed, emitting IR without bounds checks.\n` +
+    "// Generated by tests/run.js: the seed, emitting IR without bounds checks.\n" +
       `import { spawnSync } from "node:child_process";\n` +
-      `const args = process.argv.slice(2);\n` +
+      "const args = process.argv.slice(2);\n" +
       `const asking = args.includes("--version") || args.includes("--help");\n` +
       `const r = spawnSync(${JSON.stringify(seed.cmd)}, [...${JSON.stringify(seed.prefix)}, ...args,` +
       ` ...(asking ? [] : ["--unchecked-indexing"])], { stdio: "inherit" });\n` +
-      `process.exit(r.status === null ? 70 : r.status);\n`
+      "process.exit(r.status === null ? 70 : r.status);\n"
   );
   const released = runBootstrap("released", { NISH_BOOTSTRAP: perturbedSeed });
   const note = /note: IR\(seed\) vs IR\(stage1\): (\d+) of (\d+) modules differ/.exec(released.stdout);
@@ -8055,11 +8061,11 @@ if (!only || "docs".includes(only) || "ai".includes(only)) {
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const m = /^```ts\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i]);
-      if (!m) continue;
+      if (!m) { continue; }
       const rest = m[3].trim().split(/\s+/).filter(Boolean);
       const code = m[1] === "err" ? rest.shift() : null;
       let end = i + 1;
-      while (end < lines.length && lines[end] !== "```") end++;
+      while (end < lines.length && lines[end] !== "```") { end++; }
       found.push({
         kind: m[1],
         wrap: m[2] === "-body",
@@ -8227,12 +8233,12 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined
             ? node.moduleSpecifier
             : undefined;
-        if (fixed !== undefined && ts.isStringLiteral(fixed)) found.push(fixed.text);
+        if (fixed !== undefined && ts.isStringLiteral(fixed)) { found.push(fixed.text); }
         const dynamic =
           ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
             ? node.arguments[0]
             : undefined;
-        if (dynamic !== undefined && ts.isStringLiteral(dynamic)) found.push(dynamic.text);
+        if (dynamic !== undefined && ts.isStringLiteral(dynamic)) { found.push(dynamic.text); }
         ts.forEachChild(node, visit);
       };
       visit(sf);
@@ -8260,14 +8266,14 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     const unresolved = [];
     for (const rel of shippedScripts) {
       for (const spec of specifiersOf(fs.readFileSync(path.join(root, rel), "utf8"), rel)) {
-        if (spec.startsWith("node:")) continue;
+        if (spec.startsWith("node:")) { continue; }
         if (!spec.startsWith(".")) {
           const pkg = packageOf(spec);
-          if (!deps.has(pkg)) unresolved.push(`${rel} imports \`${spec}\`, and \`${pkg}\` is not a dependency`);
+          if (!deps.has(pkg)) { unresolved.push(`${rel} imports \`${spec}\`, and \`${pkg}\` is not a dependency`); }
           continue;
         }
         const target = path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
-        if (!files.includes(target)) unresolved.push(`${rel} imports \`${spec}\`, which the tarball does not carry`);
+        if (!files.includes(target)) { unresolved.push(`${rel} imports \`${spec}\`, which the tarball does not carry`); }
       }
     }
     check(
@@ -9064,7 +9070,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       // script reads, so the row is the input and the row is the expectation.
       const dash = row.host.indexOf("-");
       const answer = askScript(row.host.slice(0, dash), row.host.slice(dash + 1)).stdout.trim();
-      if (answer !== row.asset) wrong.push(`${row.host} -> ${JSON.stringify(answer)}, but the file says ${row.asset}`);
+      if (answer !== row.asset) { wrong.push(`${row.host} -> ${JSON.stringify(answer)}, but the file says ${row.asset}`); }
     }
     check(
       `install.sh: every row's host derives that row's asset (${rows.length}: ${rows.map((t) => t.host).join(", ")})`,
@@ -9180,13 +9186,13 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
           ["relative", path.join("..", "argv0-path-install", "bin", "nish"), undefined],
           ["bare, found on PATH", "nish", `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}`],
         ];
-        const headers = spellings.map(([label, cmd, PATH]) => {
+        const headers = spellings.map(([label, cmd, Path]) => {
           const out = path.join(work, `out-${label.split(",")[0]}`);
           fs.rmSync(out, { recursive: true, force: true });
           const r = spawnSync(cmd, ["prog.ts", "-o", `${out}${path.sep}`], {
             cwd: work,
             encoding: "utf8",
-            env: PATH === undefined ? process.env : { ...process.env, PATH },
+            env: Path === undefined ? process.env : { ...process.env, PATH: Path },
           });
           const ll = path.join(out, "text.ll");
           return {
@@ -9842,7 +9848,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       const want = rows.find((t) => t.asset === asset)?.attachedSince;
       for (const m of text.matchAll(new RegExp(re, "g"))) {
         proseClaims += 1;
-        if (m[1] !== want) staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`);
+        if (m[1] !== want) { staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`); }
       }
     }
   }
@@ -10033,7 +10039,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     const all = rows.map((t) => `nish-${late}-${t.asset}.tar.gz`).join(" ");
     const future = seedMatrix(`v${late}`, all);
     check(
-      `seed matrix: a seed for every target gives each a row on its own runner with no edit to ci.yml`,
+      "seed matrix: a seed for every target gives each a row on its own runner with no edit to ci.yml",
       future.status === 0 &&
         future.rows?.length === rows.length &&
         future.rows.every((r, i) => r.asset === rows[i].asset && r.runner === rows[i].runner),
@@ -10594,19 +10600,19 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
         }
         continue;
       }
-      if (line.startsWith("## ")) section = line;
+      if (line.startsWith("## ")) { section = line; }
       const heading = /^### `([^`]+)`$/.exec(line);
-      if (heading !== null) licenceText = heading[1];
-      if (line === "```notice" && licenceText !== null) fence = [];
+      if (heading !== null) { licenceText = heading[1]; }
+      if (line === "```notice" && licenceText !== null) { fence = []; }
       const row = section === "## Files" ? /^\| `([^`]+)` \|.*\| `([^`]+)` \|$/.exec(line) : null;
-      if (row !== null) rows.push({ file: row[1], licenceText: row[2] });
+      if (row !== null) { rows.push({ file: row[1], licenceText: row[2] }); }
     }
   }
 
   const rowProblems = rows.flatMap(({ file, licenceText }) => {
-    if (!fs.existsSync(path.join(root, file))) return [`${file}: listed, but there is no such file`];
+    if (!fs.existsSync(path.join(root, file))) { return [`${file}: listed, but there is no such file`]; }
     const notice = notices.get(licenceText) ?? null;
-    if (notice === null) return [`${file}: names ${licenceText}, which has no \`\`\`notice section`];
+    if (notice === null) { return [`${file}: names ${licenceText}, which has no \`\`\`notice section`]; }
     return flatten(readRel(file)).includes(notice) ? [] : [`${file}: does not carry the notice\n  ${notice}`];
   });
   check(
@@ -10638,7 +10644,7 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
     for (const entry of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
       const child = rel === "" ? entry.name : `${rel}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (!entry.name.startsWith(".") && !["node_modules", "build", "dist"].includes(entry.name)) walkSources(child);
+        if (!entry.name.startsWith(".") && !["node_modules", "build", "dist"].includes(entry.name)) { walkSources(child); }
       } else if (SOURCE.test(entry.name)) {
         sources.push(child);
       }
@@ -10706,15 +10712,15 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
   const copies = [];
   let inTable = false;
   for (const line of fs.readFileSync(licenceDoc, "utf8").split("\n")) {
-    if (line.startsWith("## ")) inTable = line === "## Copies outside this directory";
+    if (line.startsWith("## ")) { inTable = line === "## Copies outside this directory"; }
     const row = inTable ? /^\| `([^`]+)` \|.*\| (\w+) \|$/.exec(line) : null;
-    if (row !== null) copies.push({ file: row[1], licence: row[2] });
+    if (row !== null) { copies.push({ file: row[1], licence: row[2] }); }
   }
   const listed = new Set(copies.map((c) => c.file));
   const wrong = copies.flatMap((c) => {
     const header = AWFY_HEADERS.get(c.licence);
-    if (header === undefined) return [`${c.file}: no header for the licence "${c.licence}"`];
-    if (!fs.existsSync(path.join(root, c.file))) return [`${c.file}: listed, but there is no such file`];
+    if (header === undefined) { return [`${c.file}: no header for the licence "${c.licence}"`]; }
+    if (!fs.existsSync(path.join(root, c.file))) { return [`${c.file}: listed, but there is no such file`]; }
     return startsWithHeader(c.file, header) ? [] : [`${c.file}: does not start with\n${header.join("\n")}`];
   });
   check(
@@ -10728,13 +10734,13 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
     for (const entry of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
       const child = `${rel}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (child !== "bench/awfy" && entry.name !== "node_modules") walk(child);
+        if (child !== "bench/awfy" && entry.name !== "node_modules") { walk(child); }
       } else if (entry.name.endsWith(".ts")) {
         programs.push(child);
       }
     }
   };
-  for (const dir of AWFY_ROOTS) walk(dir);
+  for (const dir of AWFY_ROOTS) { walk(dir); }
   const headers = [...AWFY_HEADERS.values()];
   const headed = programs.filter((file) => headers.some((h) => firstLines(file, 1)[0] === h[0]));
   const unlisted = headed.filter((file) => !listed.has(file));

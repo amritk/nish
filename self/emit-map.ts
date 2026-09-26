@@ -390,7 +390,7 @@ export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
   }
   const probe = emitter.program.nodeCallees[expr.id];
   if (expr.kind !== N_CALL || probe === null) {
-    process.exit(internalErrorFor(`emitter: a maybe that is neither \`get\` nor a \`const\``, emitter.opts.json));
+    process.exit(internalErrorFor("emitter: a maybe that is neither `get` nor a `const`", emitter.opts.json));
   }
   const receiver = emitter.emitExpression(expr.children[0].children[0]);
   const key = emitter.emitExpression(expr.children[1].children[0]);

@@ -55,20 +55,20 @@ async function main(argv) {
   let compilerSpec;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--only") only = argv[++i];
-    else if (a === "--jobs") jobs = Number(argv[++i]);
-    else if (a === "--update-known") updateKnown = true;
-    else if (a === "--quick") quick = true;
-    else if (a === "--verbose") verbose = true;
-    else if (a === "--corpus-only") cases = false;
-    else if (a === "--cases-only") corpus = false;
-    else if (a === "--frozen") continue;
+    if (a === "--only") { only = argv[++i]; }
+    else if (a === "--jobs") { jobs = Number(argv[++i]); }
+    else if (a === "--update-known") { updateKnown = true; }
+    else if (a === "--quick") { quick = true; }
+    else if (a === "--verbose") { verbose = true; }
+    else if (a === "--corpus-only") { cases = false; }
+    else if (a === "--cases-only") { corpus = false; }
+    else if (a === "--frozen") { continue; }
     else if (a === "--live") {
       console.error("--live: the live rewriter drove stage0's checker and was deleted with it (R6)");
       return 2;
     }
-    else if (a === "--compiler") compilerSpec = argv[++i];
-    else if (!a.startsWith("-") && only === undefined) only = a;
+    else if (a === "--compiler") { compilerSpec = argv[++i]; }
+    else if (!a.startsWith("-") && only === undefined) { only = a; }
     else {
       console.error(`unknown option: ${a}`);
       return 2;
@@ -93,8 +93,8 @@ async function main(argv) {
   }
 
   let programs = lib.discoverPrograms({ cases, corpus });
-  if (only) programs = programs.filter((p) => p.name.includes(only));
-  if (quick) programs = programs.filter((p) => !p.name.startsWith("corpus/slow_"));
+  if (only) { programs = programs.filter((p) => p.name.includes(only)); }
+  if (quick) { programs = programs.filter((p) => !p.name.startsWith("corpus/slow_")); }
   if (programs.length === 0) {
     console.error("no programs selected");
     return 2;
@@ -129,8 +129,8 @@ async function main(argv) {
       result = "STALE";
       failures++;
       stale++;
-    } else if (r.verdict === "match") result = isKnown ? "XPASS (remove from known-failures.txt)" : "ok";
-    else if (isKnown) result = `KNOWN ${r.verdict}`;
+    } else if (r.verdict === "match") { result = isKnown ? "XPASS (remove from known-failures.txt)" : "ok"; }
+    else if (isKnown) { result = `KNOWN ${r.verdict}`; }
     else {
       result = r.verdict.toUpperCase();
       failures++;
@@ -145,11 +145,11 @@ async function main(argv) {
       `${pad(r.prog.name, width)}  ${pad(lib.summarize(r.native), 18)}  ${pad(lib.summarize(r.node), 18)}  ${pad(`${r.ms} ms`, 7)}  ${result}`
     );
     if (r.verdict === "mismatch") {
-      for (const line of lib.describeMismatch(r).split("\n")) console.log(`      ${line}`);
+      for (const line of lib.describeMismatch(r).split("\n")) { console.log(`      ${line}`); }
       if (verbose) {
         console.log(`      --- native stdout\n${indent(String(r.native.stdout))}`);
         console.log(`      --- node stdout\n${indent(String(r.node.stdout))}`);
-        if (r.node.stderr.length > 0) console.log(`      --- node stderr\n${indent(String(r.node.stderr))}`);
+        if (r.node.stderr.length > 0) { console.log(`      --- node stderr\n${indent(String(r.node.stderr))}`); }
       }
     } else if (r.verdict === "compile-error" || r.verdict === "rewrite-error") {
       console.log(indent(r.detail.trim().split("\n").slice(0, 8).join("\n")));

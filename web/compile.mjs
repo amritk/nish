@@ -39,11 +39,11 @@ const collectModules = (entryPath) => {
   while (queue.length > 0) {
     const file = queue.pop();
     const key = path.relative(root, file).split(path.sep).join("/");
-    if (files[key] !== undefined) continue;
+    if (files[key] !== undefined) { continue; }
     // A specifier naming a file that is not there is the compiler's diagnostic
     // to give (`readFileSyncOrNull`, WP14 B3), not a Node stack trace: leave it
     // out of the filesystem and let the message come from the right place.
-    if (!fs.existsSync(file)) continue;
+    if (!fs.existsSync(file)) { continue; }
     files[key] = fs.readFileSync(file, "utf8");
     for (const match of files[key].matchAll(/^\s*(?:import|export)\b[^;]*?from\s*"(\.[^"]*)"/gm)) {
       const specifier = match[1].endsWith(".js") ? `${match[1].slice(0, -3)}.ts` : match[1];
@@ -77,7 +77,7 @@ await worker.terminate();
 
 process.stderr.write(result.stderr);
 for (const [name, text] of Object.entries(result.files)) {
-  if (!single) process.stdout.write(`; ---- ${name} ----\n`);
+  if (!single) { process.stdout.write(`; ---- ${name} ----\n`); }
   process.stdout.write(text);
 }
 process.exitCode = result.status;

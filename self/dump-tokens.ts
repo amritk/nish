@@ -64,11 +64,11 @@ export const main = (): number => {
     lexer.next();
     const name = tokenName(lexer.kind);
     let line = `${name} ${lexer.start} ${lexer.end}`;
-    if (hasText(lexer.kind)) line = `${line} ${lexer.value}`;
-    else if (hasBytes(lexer.kind)) line = `${line} #${lexer.value.length}`;
-    else if (lexer.kind === TOK_ERROR) line = `${line} ${lexer.value}`;
+    if (hasText(lexer.kind)) { line = `${line} ${lexer.value}`; }
+    else if (hasBytes(lexer.kind)) { line = `${line} #${lexer.value.length}`; }
+    else if (lexer.kind === TOK_ERROR) { line = `${line} ${lexer.value}`; }
     lines.push(line);
-    if (lexer.kind === TOK_END) break;
+    if (lexer.kind === TOK_END) { break; }
     if (lexer.kind === TOK_ERROR) {
       // A lexical error stops the dump: the cursor has already moved past the
       // offending bytes, but everything after it is guesswork, and a dump that
