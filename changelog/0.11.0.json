@@ -1,0 +1,563 @@
+{
+  "version": "0.11.0",
+  "date": "2026-09-26",
+  "tag": "v0.11.0",
+  "range": {
+    "from": "v0.10.0",
+    "to": "1dd3644"
+  },
+  "entries": [
+    {
+      "id": "publish-to-npm-by-trusted-publishing-205",
+      "type": "build",
+      "scope": "release",
+      "breaking": false,
+      "title": "publish to npm by trusted publishing",
+      "body": "Every release now publishes its packages to npm from `release.yml`, so\n`npm install -g @amritk/nish` and `npx @amritk/nish` pick up a release\nwithout anyone publishing by hand. 0.10.0 was the first version on the\nregistry and was published by hand, because trust can only be set on a\npackage that already exists.\n\nA new `npm` job runs after `release`:\n\n- **No token.** Each of the five packages trusts `release.yml` in this\n  repository, and the job proves it is that workflow with a short-lived\n  OIDC token. There is no `NPM_TOKEN` secret, and every version carries a\n  provenance attestation. It is the only job that holds `id-token: write`,\n  and it runs no `npm ci`.\n- **The bytes the release carries.** It downloads the tarballs back from the\n  GitHub release rather than packing again.\n- **Platform packages first, the main package last**, so a publish that fails\n  half way leaves no version of the launcher on npm without its binaries.\n- **Re-runnable.** Every version already on the registry is skipped, so\n  \"Re-run failed jobs\" finishes what a failed run started.\n- **A new package fails before anything is uploaded**, naming the manual\n  publish and the `npm trust` command it needs first.\n\nPublishing 0.10.0 also broke `main` in two ways, both fixed here. The\nlockfile now carries the four platform packages at 0.10.0, with integrity\nhashes equal to the release tarballs, because `npm ci` refuses a lockfile\nthat omits a published optional dependency. And the wp12 pack-and-install\ntest installs with `--omit=optional`, in a directory outside the checkout,\nso the \"no platform package\" refusal it checks is not satisfied by the\nregistry or by the repository's own `node_modules`.",
+      "metrics": [],
+      "refs": [
+        "docs/wp12-release.md#release-procedure"
+      ],
+      "tests": [
+        "tests/run.js wp12"
+      ],
+      "commits": [
+        "b5c3531"
+      ],
+      "pr": 205,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "give-a-function-the-arena-scope-when-only",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "give a function the arena scope when only its callees allocate",
+      "body": "A function with a scalar result can now bracket itself with\n`nish_arena_mark` / `nish_arena_release` when the arena memory comes from\nits callees rather than from its own allocations. Until now the automatic\nscope needed an allocation of the function's own that flows `local`, so a\nfunction that only called allocating helpers and kept a number, such as\nAre We Fast Yet's `List.benchmark`, kept everything its callees built\nuntil something further out released it.\n\nThe scope needs the function to be *contained*: nothing allocated during\nthe call can outlive it except through the return value. Either of two\nproofs is enough:\n\n- WP9's `!allocEscapes`, already propagated over every callee, which\n  counts any store of an allocation into memory as an escape;\n- every parameter, `this` included, is a scalar, a string, or an object\n  whose fields are all scalars. Memory older than the call then has no\n  slot a pointer fits in.\n\nA new performance warning, NL9011, names a loop over such a call in a\nfunction that still gets no scope, and says what refused it.\n\nMeasured: Storage 1000 with its manual Arena calls removed, 373 ms and\n390 MB peak RSS on 0.10.0, now 167 ms and 10 MB. List 1 100000 peak RSS\ndrops from 50 MB to 10 MB.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (automatic arena scopes)",
+        "docs/wp6-memory.md §2c"
+      ],
+      "tests": [
+        "tests/cases/mem_callee_scope",
+        "mem_callee_scope_tree",
+        "mem_callee_scope_nested",
+        "perf_arena_loop"
+      ],
+      "commits": [
+        "4695067"
+      ],
+      "pr": 210,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "a-passed-bounds-check-proves-the-same-index",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a passed bounds check proves the same index on the same array",
+      "body": "A checked `a[i]` either panics or continues with `0 <= i < a.length`,\nbecause `nish_panic_index` never returns. The bounds proof in\n`self/bounds.ts` now records that fact on the path past every check it\nleaves in place, so a repeat of the same index on the same array or string\ncarries no second check.\n\nIn Are We Fast Yet's `Permute.swap`, four checks become two: the stores\n`this.v[i] = this.v[j]` and `this.v[j] = tmp` are proven by the reads\nbefore them.\n\nThe new facts go into the existing fact families, keyed on the existing\nlocal or property-path holders, so every existing invalidation drops them\nunchanged: any call, `push` or `pop`, a store to a field named on the\npath, and reassigning the index or the array. A check inside a branch\nthat does not dominate the repeat proves nothing past the join, and no\nfact rides a loop's back-edge.\n\nOne case needed a new rule. `this.v[i] = f()` loads `this.v` before the\ncall and checks after it, so a store whose value makes any call records\nnothing for a path holder.\n\nMeasured: Permute 1000 runs 8.9% fewer instructions (cachegrind,\n339.7M to 309.5M); after `opt -O3` its swap has 2 checks instead of 3.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (element access)",
+        "docs/wp15-performance.md §2′"
+      ],
+      "tests": [
+        "tests/cases/arr_repeat_check",
+        "arr_repeat_check_flow",
+        "arr_repeat_check_call",
+        "arr_repeat_check_panic"
+      ],
+      "commits": [
+        "a8666f7"
+      ],
+      "pr": 209,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "keep-a-field-array-s-header-live-across",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "keep a field array's header live across element stores",
+      "body": "Array element loads and stores now carry a TBAA tag of their own,\n`element <type>`, a sibling of the field tags under the same root. With\nit LLVM can prove that an element store leaves a class field alone. So a\nmethod that reads and writes `this.v[i]` keeps `this.v`, and the array's\nlength, live across its own stores instead of reloading both after\nevery one.\n\nThis is sound because an array's data block and a class object are\ndistinct allocations that never overlap. The places where an element store\nreally does write a field keep their old tags and stay untagged:\n\n- arrays of inline records, whose element slots *are* record fields;\n- `Result` payloads.\n\nPointer-typed elements share one `element ptr` node, the way pointer\nfields already share `ptr`.\n\nThe bounds-check fail path was measured as well. `nish_panic_index` is\nalready `cold noreturn`, so LLVM places the fail block out of line; an\nexplicit branch weight measured within noise and was not kept.\n\nMeasured: after `opt -O3`, AWFY Permute's swap loads `this.v` once and\nits length once (before: twice each), with exactly two bounds checks.",
+      "metrics": [],
+      "refs": [
+        "docs/ARCHITECTURE.md (attribute soundness rules)",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/arr_field_reload",
+        "arr_field_reload_alias",
+        "arr_field_reload_records; the arr_field_reload structural guard in tests/run.js"
+      ],
+      "commits": [
+        "ce0fe99"
+      ],
+      "pr": 208,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "record-the-shared-write-that-denies-a-function",
+      "type": "refactor",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "record the shared write that denies a function purity",
+      "body": "The whole-program attribute fixpoint now records, for every function, whether it writes memory a caller can observe (`sharedWrite`). It also names why: the first store in the body (`writeSite`), or the first callee that carries the write (`writeVia`). `--emit-checked` prints the verdict.\n\nThe data-parallel call needs a narrower question than `readnone`/`readonly` answer. A runtime panic, a trap and an arena allocation are all `EFFECT_WRITE` there, because nothing may be reordered across them. Used as the purity rule, that would refuse every parallel body that keeps a bounds check or divides integers. None of the three writes memory a caller can see:\n- a runtime panic prints to fd 2 and `_exit`s;\n- `throw` lowers to `llvm.trap`;\n- an arena block is unreachable until it is handed out, and its bump state is per thread under `--threads`.\n\nSo the new fact excludes all three, and stays conservative everywhere else:\n- foreign and unknown callees count as writes;\n- all I/O and process symbols count as writes;\n- the user-level `panic(msg)`, which `exit()`s, counts as a write.\n\nEvery runtime entry now carries a write class (`WRITES_NOTHING`, `WRITES_SHARED`, `WRITES_PANIC` or `WRITES_ALLOC`), set where the entry is built. There is no IR change: nothing reads the fact yet.",
+      "metrics": [],
+      "refs": [
+        "docs/wp29-thread-surface.md#41-stage-p1--data-parallelism-and-nothing-else"
+      ],
+      "tests": [
+        "tests/cases/dump_shared_write_field",
+        "tests/cases/dump_shared_write_callee",
+        "tests/cases/dump_shared_write_panic",
+        "tests/cases/dump_shared_write_alloc"
+      ],
+      "commits": [
+        "d7e99f8"
+      ],
+      "pr": 212,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "the-are-we-fast-yet-ports-as-benchmarks",
+      "type": "test",
+      "scope": "bench",
+      "breaking": false,
+      "title": "the Are We Fast Yet ports as benchmarks and regression cases",
+      "body": "The seven Are We Fast Yet ports (Bounce, List, Mandelbrot, Permute,\nQueens, Storage, Towers) now live in `bench/awfy/`, with their upstream\nattribution and licence notices. They are corpus programs, so every\ncompiler change is compared against them. `node bench/run.mjs --only awfy`\ntimes them (the median of the last 20 of 30 iterations). The `--validate`\nmode, which `npm test` runs, fails if any benchmark's `verifyResult`\ndoes. Storage no longer calls `Arena` itself: the compiler reclaims its\ntrees now.\n\n`docs/wp9-optimisation.md` records 0.10.0 against main after the\narena-scope, repeated-check and element-TBAA changes, on one machine, with\nthe targets that were and were not met. It also profiles Queens and Towers\nagainst the C++ port. The array header's `data` and `length` loads carry\nno TBAA tag, so a class-field store forces them to be reloaded. The doc\nproposes tagging them and, later, inlining fixed-length array fields.\n\nMeasured: Storage 381 → 166 ms and 390 MB → 1.7 MB peak RSS;\nPermute 36.6 → 31.2 ms; Queens +5.2% and Bounce +19.2% with equal or\nfewer instructions, which a loop-alignment diagnostic attributes to code\nplacement.",
+      "metrics": [],
+      "refs": [
+        "docs/wp9-optimisation.md (Are We Fast Yet)",
+        "bench/README.md"
+      ],
+      "tests": [
+        "node bench/run.mjs --validate --only awfy (the WP9 bench check in tests/run.js)"
+      ],
+      "commits": [
+        "2c1ac01"
+      ],
+      "pr": 214,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-24"
+    },
+    {
+      "id": "compile-time-function-parameters-monomorphised-per-callee-213",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "compile-time function parameters, monomorphised per callee",
+      "body": "A parameter of a top-level function may now have a function type. Its argument is either a top-level function named at the call or an arrow written there, and each distinct callee is its own instantiation, keyed by template, type arguments and function arguments:\n\n```ts\nconst apply = <T>(xs: T[], f: (x: T) => T): void => { ... f(xs[i]) ... };\napply(values, square);        // one specialised define, a direct call to square\napply(values, (x) => x * 3);  // a second one, calling the lifted arrow directly\n```\n\nThere is no runtime function value anywhere. The parameter has no LLVM parameter and no local, the call inside the instance is a direct call, and the whole-program fixpoint sees an ordinary call edge it can prove attributes through. This is the shape wp23 §6.1 described, and the zero-cost kind WP28 §7.4 measured: a callee the checker can name, and no other kind. The `Function` Phase 0 rule and its reason are unchanged.\n\nA name bound to a function parameter may only be called, or passed on to another function parameter. Storing, returning, comparing or collecting one is refused, and so is:\n- an arrow that captures a local, `this` or an outer function parameter;\n- an arrow anywhere but as a function argument;\n- a function type anywhere but a top-level function's parameter;\n- an argument that is not a function name or an arrow.\n\nThese are NL2334–NL2344. Each is reported once per template body, not once per instantiation. A lifted arrow is `@<enclosing>$arrow<n>` with its own `-g` subprogram. A private callee that another module's instantiation calls is `hidden`, not `internal`. No interop sidecar ever describes a function-argument instance.\n\nThis is the construct `parallelMapInto` and `parallelReduce` take their body through (wp29 P1).",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#function-parameters",
+        "docs/wp23-language-surface.md#6-compile-time-function-parameters"
+      ],
+      "tests": [
+        "tests/cases/fnarg_named",
+        "tests/cases/fnarg_arrow",
+        "tests/cases/fnarg_generic",
+        "tests/cases/fnarg_forward",
+        "tests/link/fnarg_private",
+        "tests/cases/reject_fnarg_*"
+      ],
+      "commits": [
+        "4fed2b7"
+      ],
+      "pr": 213,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "fail-the-suite-when-a-benchmark-executes-more",
+      "type": "test",
+      "scope": "bench",
+      "breaking": false,
+      "title": "fail the suite when a benchmark executes more instructions than its baseline",
+      "body": "Wall time on a VM is noisier than a codegen regression of a few\npercent, so `npm test` now counts the instructions each of the 14\nbenchmark programs executes (the seven `bench/*.ts` programs and the\nseven Are We Fast Yet ports) under cachegrind. It fails when any count\nrises more than 0.1% above `bench/instructions.json`.\n\n`node bench/run.mjs --instructions` builds the programs exactly as the\ntiming mode does and prints each count against the baseline. `--check`\nexits 1 on a regression, and `--update` rewrites the baseline. The count\ncovers the whole process, so everything about it that varies between\nhosts is pinned. The child's environment holds only `GLIBC_TUNABLES`,\nwhich sends every x86-64 host to glibc's SSE2 `memcpy`/`memset`; left\nalone, their choice varied strbuild's count by 30%. Programs run as\n`./name` from their own directory. After pinning, the largest residual\nbetween hosts measured is 0.006%.\n\nThe check is a counted skip off linux-x64, and when valgrind or clang is\nmissing. CI's Linux test row installs valgrind.",
+      "metrics": [
+        "whole check about 16 s; switching off the bounds prover raises Queens by 0.858% and fails it"
+      ],
+      "refs": [
+        "bench/README.md#instruction-counts"
+      ],
+      "tests": [
+        "tests/run.js instructions"
+      ],
+      "commits": [
+        "7ab3147"
+      ],
+      "pr": 218,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "parallelmapinto-and-parallelreduce-from-nish-threads-219",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "parallelMapInto and parallelReduce from nish/threads",
+      "body": "Two data-parallel calls arrive in `nish/threads`: `parallelMapInto(src, dst, f)` writes `f(src[i])` into `dst[i]`, and `parallelReduce(src, f, identity)` folds `src` with `f`. Both run across the machine's cores on the existing `nish_parallel_range` partitioner. They are the first use of compile-time function parameters: `f` is a named function or an arrow, and it is monomorphised into the call rather than passed as a value.\n\n`std/threads.ts` is ordinary Nish whose bodies are the sequential meaning, so the same file runs unchanged under Node. Importing it implies `--threads`, which makes the arena thread-local. A program that does not import it compiles byte for byte as before.\n\nRace freedom is judged at the call from the whole-program facts, and each refusal names what it found:\n\n- NL2345: `f` writes memory its caller can see, naming the store or the callee that makes it; `console.log` counts.\n- NL2346: `f` allocates. This is strict for now; the next stage relaxes it.\n- NL2347: `dst` is reachable from an element of `src`, naming the field path.\n- NL2348: the result is not a number, `boolean` or enum.\n- NL2349 and NL2350: a reduce arrow uses a non-associative operator, or an identity that does not match its operator.\n\nA bounds check, an integer division or a `panic` inside `f` is not a write, so bodies that contain them are accepted.\n\nA reduce is deterministic. It splits the input into at most 64 blocks of 2^20 elements (`BLOCK`), folds each from the identity, and combines the partial results in order. It does the same on one thread, so an `f64` sum has the same bits on any core count and under Node. A map divides its range by `GRAIN` (2^20 elements, independent of `BLOCK`), so a short array runs as the plain loop on the calling thread.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#data-parallelism-nishthreads",
+        "docs/wp29-thread-surface.md"
+      ],
+      "tests": [
+        "tests/link/par_map",
+        "tests/link/par_map_large",
+        "tests/link/par_reduce",
+        "tests/link/par_dst_short",
+        "tests/cases/reject_par_*"
+      ],
+      "commits": [
+        "bd01fd8"
+      ],
+      "pr": 219,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "allocating-parallel-bodies-a-cost-sized-grain-and",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "allocating parallel bodies, a cost-sized grain and the NL9012 warning",
+      "body": "A `parallelMapInto` body may now allocate. Before, any allocation in the function passed as `f` was refused.\n\n- **When an allocating body is admitted.** Nothing it allocates escapes, it returns a scalar, and it neither reads nor moves the `Arena`. The body then gets an arena scope of its own: it marks the arena on entry and releases it before returning, so every element's garbage is recycled at once.\n- **Why that is sound.** Importing `nish/threads` makes the arena thread-local, so the mark and release name the arena of whichever thread runs the element.\n- **The warning.** An allocating body compiles with performance warning NL9012, which says what the recycling costs. It honours `--no-warn-performance` and `--json`. (NL9011 was already the arena-loop warning.)\n- **New refusals.** NL2351 refuses a body that reads or moves the arena. NL2352 refuses one whose allocation is stored into memory, and names the site.\n- **A retired code.** NL2346, the old blanket refusal, is retired.\n\nA map's grain is now sized from a static estimate of one element's cost, `2^22 / cost(f)`, in place of a fixed 2^20 elements.\n\n- **How the cost is estimated.** It counts nodes, calls and allocations. A loop counts as its trip count when its header is written in literals, and as 64 trips otherwise.\n- **Short maps.** A map no longer than its grain calls its chunk loop directly, which LLVM inlines, so a short map costs about what the plain loop does.\n- **Reduce is unchanged.** Its blocking, and therefore its answer's bits, are exactly as before.\n\nMeasured with `node bench/run.mjs` on 4 cores, against the plain loop:\n\n| kernel | speedup |\n|---|---|\n| compute kernel | 3.71x |\n| partitioned n-body | 3.49x |\n| allocating kernel (peak memory unchanged) | 2.23x |\n| 8-element map | 0.97x, within noise |\n\nThe `par_*` kernels stay out of the instruction-count gate: valgrind serialises threads, so their counts would depend on scheduling.",
+      "metrics": [
+        "3.71x (par_compute, 4 cores)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#data-parallelism-nishthreads",
+        "docs/wp29-thread-surface.md"
+      ],
+      "tests": [
+        "tests/link/par_alloc",
+        "tests/cases/reject_par_arena",
+        "tests/cases/reject_par_alloc_escapes",
+        "tests/wordings/nl9012_par_alloc"
+      ],
+      "commits": [
+        "468f09a"
+      ],
+      "pr": 223,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "give-array-header-loads-and-stores-their-own",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "give array header loads and stores their own TBAA subtree",
+      "body": "Every load and store of an array header's `len`, `cap` or `data` now\ncarries a `!tbaa` tag in an `array header` subtree of its own. It sits\nunder the same root as the class-field paths and the element subtree,\nso LLVM knows that a class-field store cannot write an array's header.\nUntil now every field store forced the header to be reloaded. In AWFY\nTowers' inlined `moveTopDisk`, `opt -O3` now loads the header's length\nand data pointer once per move rather than three times each, and one\nbounds-check compare folds away with the reload.\n\nThe tag is sound because every write of a header's bytes either\ncarries it or sits behind a call. All header accesses in the compiler\ngo through `headerFieldPointer` in `self/emit_arrays.ts`. The runtime's\nC writers (`nish_array_grow`, `nish_alloc_array`, `nish_readdir`,\nargv) are reached only through calls, and carry clang's own TBAA root\nunder LTO. Parallel regions write no shared header. The full argument\nis in `docs/ARCHITECTURE.md`.\n\nIn the stripped speed-profile binary on one Intel host, Towers' wall\ntime is 6.8% slower. The cause is a fused compare-and-branch that now\nstraddles a 32-byte boundary (the JCC erratum), not extra work: linked\nwith branch padding, the same IR runs 11% faster than before.",
+      "metrics": [
+        "Towers executes 11.2% fewer instructions (263,067,587 to 233,554,787); the other 13 benchmarks are unchanged"
+      ],
+      "refs": [
+        "docs/ARCHITECTURE.md"
+      ],
+      "tests": [
+        "tests/cases/arr_header_tbaa"
+      ],
+      "commits": [
+        "9f5e124"
+      ],
+      "pr": 220,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "the-wp32-map-design-note-and-the-layout",
+      "type": "docs",
+      "scope": "bench",
+      "breaking": false,
+      "title": "the WP32 Map design note and the layout prototypes",
+      "body": "The design note for WP32, JavaScript's global `Map` and `Set`: `docs/wp32-map.md` decides every open question before any compiler code is written.\n\n- **Layout.** Insertion-ordered. Each bucket is a packed `u32`: an 8-bit hash fingerprint above a 24-bit entry index plus one. Every entry stores its full 32-bit hash. A lookup therefore reads the entry list only when a fingerprint matches: 0.0059 times per miss, against 1.47 for the compiler's own `StringMap`. Growth and compaction re-file buckets from the stored hashes and never hash a key again. The cap is 2^24 − 1 entries, Node's own, and the load factor is 3/4.\n- **`get`.** It answers `V | undefined`, narrowed by `!== undefined` or defaulted with `??`. It is bound only to a `const`, never crosses a call, and lowers to a new pair of SSA values.\n- **The rest.** Instances are emitted `internal` into the module that uses them, so `-o x.ll` keeps working. The note also settles:\n  - the key and value types, with SameValueZero equality;\n  - FNV-1a and murmur3 finalizers;\n  - tombstones with in-place compaction;\n  - exact JavaScript semantics for mutation during iteration;\n  - interop;\n  - the three fusion patterns that make word count one probe;\n  - what a `Map` read needs inside a `nish/threads` parallel body.\n\nFour hand-written prototypes of the candidate layouts (`bench/map_proto_*`) and a Node twin (`bench/map_node.mjs`) run insert, hit, miss, word-count and delete-churn workloads, with checksums that must agree (`node bench/run.mjs --only maps --validate`). At 2^20 keys the chosen layout is 1.7x to 4.9x faster than Node's `Map`, and within 10% of an unordered table on 8 of 10 workloads. The four prototypes join the instruction-count gate.",
+      "metrics": [
+        "1.7x–4.9x faster than Node's Map at 2^20 keys (bench/map_proto_ordered_fp32)"
+      ],
+      "refs": [
+        "docs/wp32-map.md"
+      ],
+      "tests": [
+        "bench/map_proto_ordered_fp32.ts",
+        "bench/map_node.mjs"
+      ],
+      "commits": [
+        "ab30e8c"
+      ],
+      "pr": 227,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "reclaim-a-loop-iteration-s-temporaries-when-nothing",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "reclaim a loop iteration's temporaries when nothing outlives the pass",
+      "body": "A loop whose pass drops everything it allocates now gets an arena scope\nof its own. The bump position is read at the top of the body, and every\nedge that leaves the pass rewinds to it: the back-edge, `continue`,\n`break`, and a `return`, which releases the outermost scope open. This\napplies in a function of any return type. A pointer-returning function\nnever had a scope, so #216's `summarise(rounds): Box`, which drops one\nlist per pass, kept every pass's list until its caller released. Its\npeak resident set is now flat from 100 rounds to 4000.\n\nA pass is scoped when nothing it allocates, itself or through a callee,\nis reachable afterwards except through a number, a `boolean` or an\n`enum`:\n- no allocation of the pass is stored into memory, by the body or by\n  any callee;\n- an outer local that can hold a pointer is assigned only values older\n  than the pass;\n- a `return` answers a scalar or an older value;\n- the function neither calls `Arena.mark`/`release`/`reset` nor reaches\n  a callee that releases or resets;\n- and the pass allocates something.\n\nThe mark is read inline from `@nish_arena`. The release rewinds `off`\nwhen `buf` is unchanged, and calls `nish_arena_release` only when the\npass pushed a chunk.\n\nAn element of an array whose elements are inline is the address of a\nslot in that array, and is now followed as the array. Before, a function\ncould store `xs[i]` into its parameter's object, take the function scope\nand release the block it pointed into: `mem_loop_scope_interior` printed\n`8 16` where the answer is `49 98`.\n\nNL9011 now fires in a function of any return type, and only where\nneither a pass scope nor a function scope reclaims the call's memory.\nIt names what refused each scope, and it stays silent under `Arena`\ncontrol.",
+      "metrics": [
+        "#216 probe 66,600 KB -> 1,448 KB at 4000 rounds; 10^8-pass loop 1.6-16.4 s -> 0.23 s; one small array per pass over 100k passes -0.6% instructions"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#memory-model",
+        "docs/wp6-memory.md"
+      ],
+      "tests": [
+        "tests/cases/mem_loop_scope",
+        "tests/cases/mem_loop_scope_escape",
+        "tests/cases/mem_loop_scope_interior",
+        "tests/cases/perf_arena_control"
+      ],
+      "commits": [
+        "1ccc4ba"
+      ],
+      "pr": 221,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "fingerprints-and-stored-hashes-in-stringmap-228",
+      "type": "perf",
+      "scope": "self",
+      "breaking": false,
+      "title": "fingerprints and stored hashes in StringMap",
+      "body": "The compiler's own string-keyed map, `StringMap` in `self/map.ts`, now uses the layout that `docs/wp32-map.md` chose for the global `Map`.\n\n- **Slots.** Each bucket is a packed `u32`: an 8-bit fingerprint (the top of the FNV-1a hash) above a 24-bit entry index plus one.\n- **Stored hashes.** Every entry stores its full hash.\n- **Probing.** A probe reads an entry only when the fingerprint matches, and compares the stored hash before the string.\n- **Growth** re-files buckets from the stored hashes and never hashes a key again.\n- **`StringSet.add`** is one probe instead of a lookup followed by an insert.\n- **Unchanged:** iteration order and the public API. The compiler's output is byte-identical: `nish-cmp` shows no moved program, and the bootstrap reaches its fixed point.\n\nOn compiling itself, the compiler is not measurably faster: wall time is within noise, instructions are +0.04%, and peak RSS is +0.4% for the stored hashes. The symbol tables are too small for the layout's gains to show. What the compiler gets is the WP32 layout, with its invariants pinned by the support oracle:\n- a fingerprint that matches while the hash differs;\n- a real FNV-1a collision;\n- growth to 2^18 buckets;\n- the slot packing at both ends of its 24-bit index field.",
+      "metrics": [
+        "stage-2 compile of self/compile.ts, median 474/472/479 ms before vs 490/472/460 ms after; +0.04% instructions; +0.4% peak RSS"
+      ],
+      "refs": [
+        "docs/wp32-map.md#2-the-layout"
+      ],
+      "tests": [
+        "tests/self/support_oracle.js"
+      ],
+      "commits": [
+        "f2c2cfa"
+      ],
+      "pr": 228,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "prove-an-index-in-range-from-what-every",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove an index in range from what every call site guarantees",
+      "body": "A new whole-program pass, `self/ranges.ts`, runs `self/bounds.ts`'s\nproof a second time once every body has been checked. This time it\nknows two things the per-body pass cannot: what each callee can do to a\ncaller's facts, and what every call site of a function proves about its\nparameters.\n\n**Call summaries.** A callee that resizes no array keeps the caller's\nlength facts alive across the call. A function loses its summary if it\ncalls a builtin handed an array or object (`push`, `pop`), `Arena`, a\nforeign function or an instantiation, or if it stores to a field named\n`length`.\n\n**Entry facts.** These are floors, upper bounds and `below`/`atMost`\nrelations on a parameter or on a path read off it. They are joined over\nevery call site, and a later argument that writes an earlier one's\nlocal voids what that earlier argument carried. Recursion is a fixpoint\ncapped at 64 rounds; past the cap the pass keeps no entry fact at all.\nA decrement keeps the upper bounds and loses the lower ones.\n\n**Who takes entry facts.** Only a function every call of which is\nvisible. `hostVisible` in the new `self/visibility.ts` decides this from\nthe declaration and the build mode. A `--link` build with a native\nprofile and triple, no `--emit-header`/`--emit-dts`/`--emit-napi` and\nno `declare function` is its own final link: the executable holds only\nthe program's modules and the runtime. There, `export` means only\n\"importable\", and exported functions and methods take entry facts. Every\nother build is open, and the entry point always is. A closed build's\n`.ll` files belong to that executable and are not objects for another\nlink.\n\nIn `--link` builds the pass now walks every exported function, and\n`self/` exports nearly all of them. Compiling `self/` costs +4.7%\ninstructions (+6.4% CPU, +4.4% peak RSS), and the AWFY harness +6.7%\n(about 0.4 ms). A narrower candidate test is planned as a follow-up.\nBuilds without `--link` pay only the base pass (+2.6%).",
+      "metrics": [
+        "AWFY Permute -42.5% instructions (286,429,789 -> 164,701,789), -53% wall; Towers -5.6%, Storage -3.2% instructions; 16 of self/'s NL9007 warnings retracted"
+      ],
+      "refs": [
+        "docs/ARCHITECTURE.md#attribute-soundness-rules",
+        "docs/LANGUAGE.md#export-and-import",
+        "docs/wp15-performance.md"
+      ],
+      "tests": [
+        "tests/cases/arr_range_call",
+        "tests/link/range_export"
+      ],
+      "commits": [
+        "67bc669"
+      ],
+      "pr": 222,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "the-global-map-and-set-backed-by-std",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "the global Map and Set, backed by std/collections.ts",
+      "body": "`Map<K, V>` and `Set<T>` are now globals, as in JavaScript. They keep insertion order, compare keys by SameValueZero, and need no import. They are generic classes written in Nish in `std/collections.ts`, with the layout `docs/wp32-map.md` chose:\n\n- **Buckets.** Each `u32` bucket holds eight fingerprint bits above a 24-bit entry index.\n- **Stored hashes.** Every entry keeps its full hash.\n- **Probing.** A probe reads a key only when the fingerprint and then the stored hash match. It answers a packed result: the entry and its bucket, or the empty bucket and the hash. So every `set`, `add`, `has` and `delete` is one probe.\n- **Growth and compaction** re-file buckets from the stored hashes and never hash a key again. A table that is mostly dead compacts in place instead of growing.\n- **The cap** is 2^24 − 1 entries, one fewer than Node's 2^24, the price of the `u32` slot.\n\n**Hashing.** The hash is lowered inline per key type, with no runtime function added:\n- FNV-1a for strings;\n- `fmix32` for 32-bit and narrower integers, booleans and enums;\n- `fmix64` folded to 32 bits for 64-bit integers, class references and floats.\n\nFloats are normalised first, so −0 and +0 are one key and NaN finds NaN.\n\n**Loading.** A module that names `Map` or `Set` in a type or after `new` gets the implicit import, unless it declares or imports its own. A type parameter called `Map` or `Set` does not count as a use of the global. A module that names neither loads nothing, so existing programs compile byte-for-byte as before.\n\n**Output.** `std/collections.ts` writes no `.ll` of its own. Each module emits the functions it reaches as `internal` copies, so a one-file program is still one `-o x.ll`. `--emit-header` declares an instance as an opaque struct, and `--emit-dts` and `--emit-napi` leave such functions unbridged.\n\n**The surface this release** is `size`, `set`/`add`, `has`, `delete` and `clear`. Everything else is refused by name, with a code (NL2353–NL2360, NL3030) and a reject case per form:\n- `get` (the next stage adds it);\n- `keys()`/`values()` (iteration follows);\n- `entries` and `forEach`;\n- `new Map(args)`;\n- excluded key and value types;\n- internal members;\n- writing `size`;\n- a program that both declares a `Map` and uses the global one.",
+      "metrics": [
+        "10000 absent string lookups make 0 key compares, 10000 hits make 10000"
+      ],
+      "refs": [
+        "docs/wp32-map.md",
+        "docs/LANGUAGE.md#map-and-set"
+      ],
+      "tests": [
+        "tests/cases/map_key_*",
+        "tests/cases/map_fingerprint_miss",
+        "tests/cases/map_type_param_shadow",
+        "tests/link/map_two_modules"
+      ],
+      "commits": [
+        "0e466d5"
+      ],
+      "pr": 229,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "store-a-fixed-length-array-field-inside-its",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "store a fixed-length array field inside its object",
+      "body": "A class field `f: T[]` that provably only ever holds a fresh array of a\nknown length, and whose array is never used as a value, is now laid out\ninside its object. The `nish_array` header and K element slots replace\nthe pointer, and the header's `data` points at the slots from `new` on.\n`this.f[i]` becomes a bounds check on `len` and one load at a constant\noffset from `this`, with no field pointer and no `data` load first.\nReference semantics are unchanged.\n\nA field qualifies only if all of these hold, over every module:\n- every assignment is a fresh array of a literal length: a literal,\n  `new Array<T>(n)`, or a top-level function proven to return one, like\n  AWFY Queens' `filledBooleans(8)`. K is the largest such length, and\n  the header keeps `len`;\n- `x.f` is only ever indexed or asked for `.length`;\n- no element access's index or stored value can reach an assignment to\n  the field;\n- the class is not host-visible;\n- the build shares no layouts: no header, dts, napi, wasm or\n  `declare function`;\n- the class is plain, and the slots fit in 256 bytes.\n\nA store into an inline field now counts as a write through the receiver,\nso `readonly` is no longer inferred on it. Header accesses still go\nthrough the tagged helpers, and inline members stay out of the class's\nstruct path.\n\nAn array assigned from a call is built and then copied into the slots.\nA field reassigned that way and read only a few times per assignment is\nslower (+85-118% in a microbenchmark); fields read dozens of times or\nmore per assignment are faster, and direct assignments are faster at\nevery size.",
+      "metrics": [
+        "AWFY wall Permute -15.2%, Towers -15.9%, Queens -5.4%; instructions Queens -16.8%, Permute -7.5%, Towers -4.2%; Queens.getRowColumn 12 loads -> 6 after opt -O3"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/ARCHITECTURE.md",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/cls_inline_array",
+        "tests/link/cls_inline_array_exported",
+        "tests/layout/inline_array"
+      ],
+      "commits": [
+        "e5e0cfe"
+      ],
+      "pr": 230,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "carry-the-licence-of-every-third-party-copy",
+      "type": "docs",
+      "breaking": false,
+      "title": "carry the licence of every third-party copy, and make agents keep it",
+      "body": "An audit of the tree found code copied from three upstreams without the\nnotice their licences require. One of them ships in the npm package.\n\n- `runtime/runtime.c`'s shortest round-trip float formatting is adapted\n  from Ryu (`ryu/d2s.c`, `ryu/common.h`, Copyright 2018 Ulf Adams),\n  which is dual-licensed Apache-2.0 or BSL-1.0. This repository takes\n  BSL-1.0, which exempts compiled object code: neither `nish` nor a\n  program it links needs a notice. The block now carries the notice,\n  and `runtime/LICENSE-ryu` ships with `runtime/` in every package and\n  release tarball.\n- `bench/nbody.*`, `examples/nbody.ts` and `bench/spectral.*` are\n  adapted from the Computer Language Benchmarks Game n-body and\n  spectral-norm programs (Revised BSD). They now carry its notice, with\n  the licence in `bench/LICENSE-benchmarksgame.md`.\n- Twelve tests and cookbook snippets copy parts of the Are We Fast Yet\n  ports (SOM, MIT). Each now carries the MIT notice and is listed in\n  `bench/awfy/LICENSE.md`.\n\n`THIRD_PARTY_NOTICES.md` lists every third-party file and its licence.\nThe README's licence section points at it. A new\n`.claude/licensing.md`, referenced from `CLAUDE.md`, `AGENTS.md` and\n`.claude/orientation.md`, gives every contributor and agent the rule:\n- what counts as a copy;\n- the notice and licence text a copy keeps, in the repository and in the\n  package when it ships;\n- the MIT-compatible licences allowed;\n- the sources never to take code from: GPL-family, Rosetta Code, Stack\n  Overflow, Project Euler, unlicensed.\n\n`node tests/run.js third-party-licence` holds the list, the files and\nthe packages to each other in both directions.",
+      "metrics": [
+        "IR unchanged apart from !dbg line numbers; all 18 instruction counts +0.000%"
+      ],
+      "refs": [
+        ".claude/licensing.md",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "tests": [
+        "tests/run.js third-party-licence"
+      ],
+      "commits": [
+        "7d40e07"
+      ],
+      "pr": 231,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "map-get-typed-v-undefined-and-narrowed-as",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "Map.get, typed V | undefined and narrowed as TypeScript does",
+      "body": "`m.get(k)` on the global `Map` now type-checks as it does under `tsc --strict`. Its type is `V | undefined`, a *maybe*, that is narrowed by `!== undefined` / `=== undefined` or collapsed by `??`, and every `get` is exactly one probe.\n\n**Where a maybe may appear.** The three places `docs/wp32-map.md` §3.2 decides:\n- the initialiser of a `const` (unannotated, or annotated `V | undefined`);\n- the left operand of `??`;\n- an operand of `=== undefined` / `!== undefined`.\n\nEverywhere else it is refused with a code for the place and a message that names the fix (NL2361–NL2369): a `let` (annotated or not), an argument, a `return`, a field, an element, a template hole, another operator's operand, and a `const` annotated `V`.\n\n**Narrowing** reuses the nullable rules, with `undefined` in place of `null`. `undefined` stays refused everywhere else.\n\n**`??`** parses with TypeScript's precedence: at the level of `||`, left associative. Mixing it with `||`/`&&` without parentheses is one syntax error, as TS5076 is. Its default must be `V` (NL2370, NL2371). For a nullable `V` it also replaces a stored `null`. A `??` whose left operand is not a maybe is still refused (NL1048).\n\n**Lowering: two SSA values and no memory.** The found bit is the probe's answer, and the value is read only on the found edge. `m.get(k) ?? d` is the probe, a branch and a `phi`, so `d` runs only when the key is missing, as in JavaScript. Under `-g` a maybe `const` is described with `llvm.dbg.value`.\n\n**Also fixed:** a miscompile found while building this, where `m.set(k, m.get(k) ?? new Node(...))` put the `Node` on the stack. The retired \"not supported yet\" refusal, NL2357, keeps its number reserved.",
+      "metrics": [
+        "a word count spelled `m.set(w, (m.get(w) ?? 0) + 1)` prints Node's counts in insertion order, byte for byte; 33 `get`s across the goldens make 33 probes"
+      ],
+      "refs": [
+        "docs/wp32-map.md#3-gets-type",
+        "docs/LANGUAGE.md#map-and-set"
+      ],
+      "tests": [
+        "tests/cases/map_get_nullish",
+        "tests/cases/map_get_narrow",
+        "tests/cases/map_get_pointer_value",
+        "tests/cases/map_get_default_escapes",
+        "tests/cases/reject_map_get_*",
+        "tests/cases/reject_nullish_mixed_chain_or",
+        "tests/cases/dbg_map_get"
+      ],
+      "commits": [
+        "c64b7e3"
+      ],
+      "pr": 232,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "cut-the-call-site-ranges-pass-to-the",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "cut the call-site ranges pass to the walks that can move a proof",
+      "body": "The call-site ranges pass from #222 cost +4.71% of `self/`'s `--link` compile against the build before it. This change brings that down to +1.52%, and AWFY's from +6.78% to +2.81%. Every proof it makes is unchanged.\n\nMost of the cost was not in the walks but around them: fresh joins, name lookups, linear searches and clones at every branch. The pass now:\n\n- counts only accesses some walk could prove as candidates (`isOpenAccess`);\n- re-joins only callees that a round touched;\n- hands a callee that is already entered with nothing a shared empty entry, and does not walk callers that can only reach such callees;\n- stops a walk early once every candidate call is noted;\n- skips pass 2 for bodies that judge no access.\n\nA hidden `--range-reference` flag restores the old rule. `range_reference` pins byte-identical IR and warnings between the two on `self/` and `bench/awfy`.",
+      "metrics": [
+        "self/ --link compile -2.97% instructions, -3.45% CPU, -4.64% peak RSS vs main"
+      ],
+      "refs": [
+        "docs/ARCHITECTURE.md (call-site ranges)",
+        "docs/wp15-performance.md#24"
+      ],
+      "tests": [
+        "tests/run.js range_reference",
+        "range_export",
+        "arr_range"
+      ],
+      "commits": [
+        "06d01f4"
+      ],
+      "pr": 236,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "are-we-fast-yet-after-round-2-238",
+      "type": "docs",
+      "scope": "bench",
+      "breaking": false,
+      "title": "Are We Fast Yet after round 2",
+      "body": "All seven Are We Fast Yet ports were re-measured after round 2, against 0.10.0 and against the main the round started from. The results are a new section in `docs/wp9-optimisation.md`, beside round 1's, with `--unchecked-indexing`, C++ and memory columns.\n\nAgainst 0.10.0:\n\n- Permute −67%, Storage −57%, Towers −38%, Queens −26% and Bounce −17%;\n- List and Mandelbrot unchanged;\n- geomean 0.92× of C++ (`-O3 -flto`), down from 1.40×.\n\nQueens' remaining gap to C++ is its bounds checks: unchecked, it matches.\n\nList, and round 1's Bounce and Queens, move when only code layout changes. On one VM List reads +7% with byte-identical IR. The note root-causes this from machine code: a hot loop spans one more 64-byte line when the code linked before it shrinks. Two alignment flags are listed as proposals, not shipped.\n\nAlso:\n\n- the instruction guard's `--check` now proves its own comparison on every run;\n- `--update --only` stamps only the entries it updates;\n- `bench/awfy/LICENSE.md` carries the fork's licence and provenance.",
+      "metrics": [
+        "geomean 0.92x of C++ -O3 -flto, from 1.40x at 0.10.0"
+      ],
+      "refs": [
+        "docs/wp9-optimisation.md (Are We Fast Yet",
+        "round 2)"
+      ],
+      "tests": [
+        "node bench/run.mjs --validate --only awfy; --instructions --check"
+      ],
+      "commits": [
+        "7123ce7"
+      ],
+      "pr": 238,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "for-of-over-map-keys-and-values-and",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "for...of over Map keys() and values() and over a Set",
+      "body": "`for...of` now walks the global `Map` and `Set`:\n\n- `for (const k of m.keys())` and `for (const v of m.values())` over a `Map`;\n- `for (const x of s)`, `s.keys()` and `s.values()` over a `Set`.\n\nEach walk visits the entries in insertion order.\n\n**Changing the table during a walk has JavaScript's effect exactly:**\n\n- a new key is visited later in the same walk;\n- setting an existing key shows the new value if the walk has not reached it yet;\n- a key deleted ahead of the walk is skipped;\n- a key deleted and set again is visited a second time, at the end;\n- `clear` ends what is left, then anything set after it is visited;\n- growth is invisible.\n\nThis works because no entry moves while a loop walks the table. Each table counts its live walks. The count is raised where a loop is entered and lowered on every edge that leaves it: the fall-through, `break`, and each `return` or `orReturn()` out of enclosing walks. While the count is above zero:\n\n- a rebuild doubles the table instead of compacting it;\n- `clear` marks entries dead instead of truncating.\n\nThe first rebuild after the walk compacts. The one cost is the entry cap: an insert at 2^24 − 1 entries during a walk cannot first compact dead entries away, so it panics.\n\nA walk is four calls of the table's own code, `walkOpen`, `walkNext`, `keyAt`/`valueAt` and `walkClose`, copied `internal` into each module that walks. It costs two stores a loop and none an entry.\n\n**Iterators are still not values.** `keys()` and `values()` anywhere else are refused, and the message names the place: stored (NL2372), passed (NL2373), returned (NL2374), or anywhere else (NL2358). `for (const e of m)` over a `Map` itself would need `entries()` and destructuring, so it is refused with the `m.keys()` rewrite (NL2375).",
+      "metrics": [
+        "18 f64 walk programs print exactly what Node prints, including one per mutation-during-walk row; after early exits by `break`, `return`, `orReturn()`, `return` inside a `switch` and a reassigned receiver, later churn allocates nothing"
+      ],
+      "refs": [
+        "docs/wp32-map.md#62-iteration-and-mutation-during-it",
+        "docs/LANGUAGE.md#map-and-set"
+      ],
+      "tests": [
+        "tests/cases/map_iter_*",
+        "tests/cases/set_iter*",
+        "tests/cases/dbg_map_iter",
+        "tests/cases/reject_map_iter_*",
+        "tests/link/map_walk_two_modules"
+      ],
+      "commits": [
+        "1dd3644"
+      ],
+      "pr": 237,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    }
+  ]
+}
