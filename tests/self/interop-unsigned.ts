@@ -20,22 +20,22 @@
 //
 // No strings and no arrays, so the module links under `--profile wasm` with
 // nothing but its own code.
-export const idU8 = (x: u8): u8 => x;
+export const idU8 = (x: u8): u8 => x
 
-export const addU8 = (a: u8, b: u8): u8 => a + b;
+export const addU8 = (a: u8, b: u8): u8 => a + b
 
-export const idU16 = (x: u16): u16 => x;
+export const idU16 = (x: u16): u16 => x
 
-export const addU16 = (a: u16, b: u16): u16 => a + b;
+export const addU16 = (a: u16, b: u16): u16 => a + b
 
-export const idU32 = (x: u32): u32 => x;
+export const idU32 = (x: u32): u32 => x
 
-export const addU32 = (a: u32, b: u32): u32 => a + b;
+export const addU32 = (a: u32, b: u32): u32 => a + b
 
-export const idU64 = (x: u64): u64 => x;
+export const idU64 = (x: u64): u64 => x
 
-export const addU64 = (a: u64, b: u64): u64 => a + b;
+export const addU64 = (a: u64, b: u64): u64 => a + b
 
-export const widen = (x: u8): u32 => toU32(x);
+export const widen = (x: u8): u32 => toU32(x)
 
-export const scaleF32 = (x: f32): f32 => x * 2.0;
+export const scaleF32 = (x: f32): f32 => x * 2.0

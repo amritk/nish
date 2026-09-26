@@ -7,9 +7,9 @@
 // a sentinel or stop. stage0's `src/` throws a `CompileError` from 292 sites and
 // catches it in six; every one of those catches becomes a status test here.
 
-import { DiagnosticSink, SourceFile } from "./diagnostics";
-import { StringMap, StringSet } from "./map";
-import { Node } from "./nodes";
+import { DiagnosticSink, SourceFile } from "./diagnostics"
+import { StringMap, StringSet } from "./map"
+import { Node } from "./nodes"
 import {
   CheckedProgram,
   DeferredConstraint,
@@ -19,64 +19,64 @@ import {
   StructInfo,
   StructInstantiation,
   TemplateInfo,
-} from "./program";
-import { Scope } from "./symbols";
-import { T_ERROR, T_F64, T_I32, TypeTable } from "./types";
+} from "./program"
+import { Scope } from "./symbols"
+import { T_ERROR, T_F64, T_I32, TypeTable } from "./types"
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
-export const NUMBER_MODE_I32: i32 = 0;
-export const NUMBER_MODE_F64: i32 = 1;
+export const NUMBER_MODE_I32: i32 = 0
+export const NUMBER_MODE_F64: i32 = 1
 
-export const LOOP_ITERATION: i32 = 0;
-export const LOOP_SWITCH: i32 = 1;
+export const LOOP_ITERATION: i32 = 0
+export const LOOP_SWITCH: i32 = 1
 
 export class CheckContext {
   /** Shared by every module of one compilation, so a type id means one thing. */
-  table: TypeTable;
-  program: CheckedProgram;
-  sink: DiagnosticSink;
-  source: SourceFile;
-  numberMode: i32;
+  table: TypeTable
+  program: CheckedProgram
+  sink: DiagnosticSink
+  source: SourceFile
+  numberMode: i32
   /**
    * `--wrapping` was given, so constant folding wraps at the declared width
    * instead of refusing an overflow (`self/constants.ts`). The fold has to
    * agree with the instruction it replaces, which is why an option reaches
    * pass 2 at all.
    */
-  wrapping: boolean;
+  wrapping: boolean
   /**
    * `--unchecked-indexing` was given, so no bounds check is emitted anywhere
    * and the WP15 §2 warning about a check that survived has nothing to report.
    * Read by that rule and by nothing else in the checker.
    */
-  uncheckedIndexing: boolean;
+  uncheckedIndexing: boolean
   /**
    * `--strict-exports`, which is the default. Off, a non-exported function
    * keeps external linkage, and the WP15 §8 walk says so at a call inside a
    * loop; nothing else in the checker reads it, because linkage is the
    * emitter's business.
    */
-  strictExports: boolean;
+  strictExports: boolean
   /** Function source name -> index into `program.functions`, for clash checks. */
-  sigs: StringMap;
+  sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
-  entryHasMain: boolean;
+  entryHasMain: boolean
   /** The function whose body is being checked, for `return` and `this`. */
-  current: FunctionSig | null;
+  current: FunctionSig | null
   /**
    * WP18: the type parameters in scope, bound to the types this instantiation
    * gives them. Non-empty only while an instantiation's signature is resolved
    * or its body is checked, and read by `resolveReference` — which is the whole
    * of how `T` becomes `i32`.
    */
-  typeBindings: StringMap;
+  typeBindings: StringMap
   /**
    * WP29: the compile-time function parameters in scope, bound to the
    * functions this instantiation was given. Empty outside an instantiation's
    * body, and read by `checkCall`, which is the whole of how `f(x)` becomes a
    * direct call to `square`.
    */
-  functionBindings: FunctionBindings;
+  functionBindings: FunctionBindings
   /**
    * WP29: while the body of an arrow argument is checked, the scopes and the
    * function bindings of every function it is written inside, innermost last.
@@ -84,10 +84,10 @@ export class CheckContext {
    * own; they are kept only so that reading one is refused as a capture,
    * naming what was captured, rather than as an unknown name.
    */
-  arrowOuterScopes: Scope[];
-  arrowOuterFunctions: FunctionBindings[];
+  arrowOuterScopes: Scope[]
+  arrowOuterFunctions: FunctionBindings[]
   /** The instantiation whose body is being checked, so a request from it records its parent. */
-  currentInstance: Instantiation | null;
+  currentInstance: Instantiation | null
   /**
    * The struct instantiation whose members are being collected, or whose method
    * body is being checked (WP18 G5). It is the struct half of `currentInstance`
@@ -95,23 +95,23 @@ export class CheckContext {
    * resolved during collection rather than while a body runs, so this is what
    * makes `class Nest<T> { inner: Nest<T[]> | null }` refusable by name.
    */
-  currentStructInstance: StructInstantiation | null;
+  currentStructInstance: StructInstantiation | null
   /**
    * WP18 G6: pass 1 is still running, so a struct instantiation's constraints
    * are written down in `deferredConstraints` rather than checked. Cleared once
    * every import is bound, when every class a type argument can name has its
    * `implements` clause.
    */
-  constraintsDeferred: boolean;
-  deferredConstraints: DeferredConstraint[];
+  constraintsDeferred: boolean
+  deferredConstraints: DeferredConstraint[]
   /**
    * Node ids a once-per-template diagnostic has been reported against (WP18
    * G6). A template's body is checked once per instantiation, and a mistake in
    * it is the template's, so the second instantiation refuses it silently.
    */
-  reportedOnce: StringSet;
+  reportedOnce: StringSet
   /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
-  pending: Instantiation[];
+  pending: Instantiation[]
   /**
    * Instantiated structs whose `implements` and definite-assignment checks are
    * still owed. They wait for the same reason a declared struct's do: both need
@@ -119,28 +119,28 @@ export class CheckContext {
    * requested by an annotation resolved before the interface it implements has
    * been collected.
    */
-  pendingFinish: StructInfo[];
+  pendingFinish: StructInfo[]
   /**
    * The loops and `switch`es enclosing the statement being checked, innermost
    * last. `break` marks the innermost; `continue` needs a real loop, because a
    * `switch` on the stack is a `break` target only, as it is in JavaScript.
    */
-  loopKinds: i32[];
-  loopBreaks: boolean[];
+  loopKinds: i32[]
+  loopBreaks: boolean[]
   /**
    * The expression of the statement being checked, when it is an expression
    * statement. `console.log` and the other `void` builtins may only appear
    * there; stage0 asks the node's parent, and this is the parent pointer the
    * tree does not have, recorded by the one caller that knows.
    */
-  statementExpression: Node | null;
+  statementExpression: Node | null
   /**
    * WP32: the `for...of` whose iterable is being checked, while it is. A
    * `keys()` or `values()` call of the global `Map` or `Set` is legal only as
    * that iterable, and `checkMethodCall` asks this rather than a parent
    * pointer the tree does not have, as `statementExpression` does.
    */
-  forOfWalk: Node | null;
+  forOfWalk: Node | null
   /**
    * Set by `error` and cleared at the start of each statement: the statement
    * has already been refused, so nothing further *in it* is checked or
@@ -155,7 +155,7 @@ export class CheckContext {
    * diagnostic and several, and it was about 950 rows of `--parity`
    * (WP19 §A3).
    */
-  errored: boolean;
+  errored: boolean
 
   constructor(
     table: TypeTable,
@@ -166,33 +166,33 @@ export class CheckContext {
     uncheckedIndexing: boolean,
     strictExports: boolean
   ) {
-    this.table = table;
-    this.program = program;
-    this.sink = sink;
-    this.source = program.source;
-    this.numberMode = numberMode;
-    this.wrapping = wrapping;
-    this.uncheckedIndexing = uncheckedIndexing;
-    this.strictExports = strictExports;
-    this.sigs = new StringMap();
-    this.entryHasMain = false;
-    this.current = null;
-    this.loopKinds = [];
-    this.loopBreaks = [];
-    this.statementExpression = null;
-    this.forOfWalk = null;
-    this.errored = false;
-    this.typeBindings = new StringMap();
-    this.functionBindings = new FunctionBindings();
-    this.arrowOuterScopes = [];
-    this.arrowOuterFunctions = [];
-    this.currentInstance = null;
-    this.currentStructInstance = null;
-    this.constraintsDeferred = true;
-    this.deferredConstraints = [];
-    this.reportedOnce = new StringSet();
-    this.pending = [];
-    this.pendingFinish = [];
+    this.table = table
+    this.program = program
+    this.sink = sink
+    this.source = program.source
+    this.numberMode = numberMode
+    this.wrapping = wrapping
+    this.uncheckedIndexing = uncheckedIndexing
+    this.strictExports = strictExports
+    this.sigs = new StringMap()
+    this.entryHasMain = false
+    this.current = null
+    this.loopKinds = []
+    this.loopBreaks = []
+    this.statementExpression = null
+    this.forOfWalk = null
+    this.errored = false
+    this.typeBindings = new StringMap()
+    this.functionBindings = new FunctionBindings()
+    this.arrowOuterScopes = []
+    this.arrowOuterFunctions = []
+    this.currentInstance = null
+    this.currentStructInstance = null
+    this.constraintsDeferred = true
+    this.deferredConstraints = []
+    this.reportedOnce = new StringSet()
+    this.pending = []
+    this.pendingFinish = []
   }
 
   /**
@@ -205,7 +205,7 @@ export class CheckContext {
    * statement stage0 had already left.
    */
   error(node: Node, message: string): void {
-    this.errorAtSpan(node.start, node.end, message);
+    this.errorAtSpan(node.start, node.end, message)
   }
 
   /**
@@ -217,10 +217,10 @@ export class CheckContext {
    */
   errorAtSpan(start: i32, end: i32, message: string): void {
     if (this.errored) {
-      return;
+      return
     }
-    this.sink.report(this.source, start, end, message);
-    this.errored = true;
+    this.sink.report(this.source, start, end, message)
+    this.errored = true
   }
 
   /**
@@ -234,25 +234,25 @@ export class CheckContext {
    */
   errorAtSpecifier(node: Node, message: string): void {
     if (this.errored) {
-      return;
+      return
     }
-    const text = this.source.text;
-    let end = node.end;
+    const text = this.source.text
+    let end = node.end
     while (end > node.start && text.charCodeAt(end - 1) !== 34 && text.charCodeAt(end - 1) !== 39) {
-      end = end - 1;
+      end = end - 1
     }
-    let start = end - 1;
-    const quote = start >= node.start ? text.charCodeAt(start) : 0;
+    let start = end - 1
+    const quote = start >= node.start ? text.charCodeAt(start) : 0
     while (start > node.start && text.charCodeAt(start - 1) !== quote) {
-      start = start - 1;
+      start = start - 1
     }
     if (start <= node.start || end <= start) {
       // No string literal to point at (the parser already said so); the
       // statement itself is the best span left.
-      this.error(node, message);
-      return;
+      this.error(node, message)
+      return
     }
-    this.errorAtSpan(start - 1, end, message);
+    this.errorAtSpan(start - 1, end, message)
   }
 
   /**
@@ -264,7 +264,7 @@ export class CheckContext {
    * caret sits under `g` where stage0 puts it under `paramNames`.
    */
   errorAtProperty(member: Node, message: string): void {
-    this.errorAtSpan(member.end - member.text.length, member.end, message);
+    this.errorAtSpan(member.end - member.text.length, member.end, message)
   }
 
   /**
@@ -279,7 +279,7 @@ export class CheckContext {
    * instead; two are cheaper than four bytes on every node in the program.
    */
   errorAtKey(property: Node, message: string): void {
-    this.errorAtSpan(property.start, property.start + property.text.length, message);
+    this.errorAtSpan(property.start, property.start + property.text.length, message)
   }
 
   /**
@@ -288,7 +288,7 @@ export class CheckContext {
    * exactly as it would have without it.
    */
   performance(node: Node, message: string): void {
-    this.sink.reportPerformance(this.source, node.start, node.end, message);
+    this.sink.reportPerformance(this.source, node.start, node.end, message)
   }
 
   /**
@@ -299,16 +299,16 @@ export class CheckContext {
    * one did rather than carrying on over a node whose type it never recorded.
    */
   errorOnce(node: Node, start: i32, message: string): void {
-    const key = `${node.id}`;
+    const key = `${node.id}`
     if (this.reportedOnce.has(key)) {
-      this.errored = true;
+      this.errored = true
     } else {
-      this.reportedOnce.add(key);
-      this.errorAtSpan(start, node.end, message);
+      this.reportedOnce.add(key)
+      this.errorAtSpan(start, node.end, message)
     }
-    const current = this.current;
+    const current = this.current
     if (current !== null) {
-      current.poisoned = true;
+      current.poisoned = true
     }
   }
 
@@ -321,61 +321,61 @@ export class CheckContext {
   capturesOuter(name: string): boolean {
     for (const scope of this.arrowOuterScopes) {
       if (scope.lookup(name) !== null) {
-        return true;
+        return true
       }
     }
     for (const bindings of this.arrowOuterFunctions) {
       if (bindings.get(name) !== null) {
-        return true;
+        return true
       }
     }
-    return false;
+    return false
   }
 
   /** Report and answer the sentinel type, for the many callers that want both. */
   errorType(node: Node, message: string): i32 {
-    this.error(node, message);
-    return T_ERROR;
+    this.error(node, message)
+    return T_ERROR
   }
 
   /** The source text a node covers, for a message that quotes what was written. */
   textOf(node: Node): string {
-    return this.source.text.substring(node.start, node.end);
+    return this.source.text.substring(node.start, node.end)
   }
 
   /** `number` as this compilation lowers it. */
   numberType(): i32 {
-    return this.numberMode === NUMBER_MODE_I32 ? T_I32 : T_F64;
+    return this.numberMode === NUMBER_MODE_I32 ? T_I32 : T_F64
   }
 
   /** The function called `name` in this module, or `null`. */
   signature(name: string): FunctionSig | null {
-    const at = this.sigs.get(name, -1);
-    return at < 0 ? null : this.program.functions[at];
+    const at = this.sigs.get(name, -1)
+    return at < 0 ? null : this.program.functions[at]
   }
 
   /** The generic template called `name` in this module, or `null` (WP18). */
   template(name: string): TemplateInfo | null {
-    return this.program.template(name);
+    return this.program.template(name)
   }
 
   /** Register a function under its source name and add it to the module. */
   addFunction(sig: FunctionSig): void {
-    this.sigs.set(sig.sourceName, this.program.functions.length);
-    this.program.functions.push(sig);
+    this.sigs.set(sig.sourceName, this.program.functions.length)
+    this.program.functions.push(sig)
   }
 
   /** Enter a loop (`LOOP_ITERATION`) or a `switch` (`LOOP_SWITCH`). */
   pushLoop(kind: i32): void {
-    this.loopKinds.push(kind);
-    this.loopBreaks.push(false);
+    this.loopKinds.push(kind)
+    this.loopBreaks.push(false)
   }
 
   /** Leave it, answering whether a `break` targeted it. */
   popLoop(): boolean {
-    const broke = this.loopBreaks[this.loopBreaks.length - 1];
-    this.loopKinds.pop();
-    this.loopBreaks.pop();
-    return broke;
+    const broke = this.loopBreaks[this.loopBreaks.length - 1]
+    this.loopKinds.pop()
+    this.loopBreaks.pop()
+    return broke
   }
 }

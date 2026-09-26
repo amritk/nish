@@ -94,12 +94,12 @@
  * is a record of intended output changes for one release, not an allowlist to
  * grow.
  */
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
 
 /**
  * Output differences that are decided rather than broken, each with the words
@@ -1645,7 +1645,7 @@ const DECLARED = [
     program: "tests/cases/arr_strings.ts",
     file: "arr_strings.ll",
     changelog: "A passed bounds check proves the same index on the same array",
-    why: "`words[0]` is proven by the checked store `words[0] = \"goodbye\"` before it",
+    why: '`words[0]` is proven by the checked store `words[0] = "goodbye"` before it',
   },
   {
     program: "tests/cases/arr_u8.ts",
@@ -1782,13 +1782,13 @@ const DECLARED = [
     changelog: "Prove an index in range from what every call site guarantees",
     why: "call-site ranges and callee summaries prove accesses the reference compiler checks, across the corpus, so those modules drop `nish_panic_index` calls and the attributes they cost",
   },
-];
+]
 
 /** Differing files printed in full before the rest are only counted. */
-const MAX_ROWS = 20;
+const MAX_ROWS = 20
 
 /** The dump flags: they print instead of writing IR, so there is no artefact to compare. */
-const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
+const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"])
 
 /**
  * `.js` / `.mjs` / `.cjs` is a Node entry point and everything else is a
@@ -1799,7 +1799,7 @@ const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
  * arrive without `+x` — and the suffix is what
  * whoever built the seed chose.
  */
-const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
+const NODE_ENTRY = /\.(?:js|mjs|cjs)$/
 
 /**
  * The package root a compiler will answer for itself: the directory holding
@@ -1814,18 +1814,20 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
  * the compilers use, checked here against the filesystem instead of assumed.
  */
 const packageRootOf = (file) => {
-  const candidates = [path.join(path.dirname(file), "..")];
+  const candidates = [path.join(path.dirname(file), "..")]
   try {
-    candidates.push(path.join(path.dirname(fs.realpathSync(file)), ".."));
+    candidates.push(path.join(path.dirname(fs.realpathSync(file)), ".."))
   } catch {
     // A compiler that cannot be realpath'd is one `resolveCompiler` has already
     // refused; there is simply no second candidate for it.
   }
   for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) { return path.resolve(candidate); }
+    if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) {
+      return path.resolve(candidate)
+    }
   }
-  return path.resolve(root);
-};
+  return path.resolve(root)
+}
 
 /**
  * `text` with one compiler's own package root removed, so a path under it is
@@ -1837,10 +1839,12 @@ const packageRootOf = (file) => {
  * left alone. Nothing else is rewritten.
  */
 const withoutOwnRoot = (text, ownRoot) => {
-  if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) { return text; }
-  const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`;
-  return text.split(prefix).join("");
-};
+  if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) {
+    return text
+  }
+  const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`
+  return text.split(prefix).join("")
+}
 
 /**
  * `withoutOwnRoot` over inputs a corpus cannot produce, on every run.
@@ -1852,27 +1856,35 @@ const withoutOwnRoot = (text, ownRoot) => {
  * Returns the reason it failed, or null.
  */
 const selfCheckRoots = () => {
-  const sep = path.sep;
+  const sep = path.sep
   const cases = [
-    [`; ModuleID = '${sep}opt${sep}nish${sep}std${sep}text.ts'`, `${sep}opt${sep}nish`, "; ModuleID = 'std/text.ts'".replace(/\//g, sep)],
+    [
+      `; ModuleID = '${sep}opt${sep}nish${sep}std${sep}text.ts'`,
+      `${sep}opt${sep}nish`,
+      "; ModuleID = 'std/text.ts'".replace(/\//g, sep),
+    ],
     // Already relative: a compiler standing in its own root writes this, and it
     // is the form the other side is being brought to.
     [`; ModuleID = 'std${sep}text.ts'`, `${sep}opt${sep}nish`, `; ModuleID = 'std${sep}text.ts'`],
     // A neighbour whose name starts with the root's is not under it.
-    [`${sep}opt${sep}nish-old${sep}std${sep}a.ts`, `${sep}opt${sep}nish`, `${sep}opt${sep}nish-old${sep}std${sep}a.ts`],
+    [
+      `${sep}opt${sep}nish-old${sep}std${sep}a.ts`,
+      `${sep}opt${sep}nish`,
+      `${sep}opt${sep}nish-old${sep}std${sep}a.ts`,
+    ],
     // A trailing separator on the root must not remove one character more.
     [`${sep}opt${sep}nish${sep}std${sep}a.ts`, `${sep}opt${sep}nish${sep}`, `std${sep}a.ts`],
     // No root at all: every caller's fallback, and it must change nothing.
     [`${sep}opt${sep}nish${sep}std${sep}a.ts`, null, `${sep}opt${sep}nish${sep}std${sep}a.ts`],
-  ];
+  ]
   for (const [text, ownRoot, want] of cases) {
-    const got = withoutOwnRoot(text, ownRoot);
+    const got = withoutOwnRoot(text, ownRoot)
     if (got !== want) {
-      return `withoutOwnRoot(${JSON.stringify(text)}, ${JSON.stringify(ownRoot)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `withoutOwnRoot(${JSON.stringify(text)}, ${JSON.stringify(ownRoot)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /**
  * `text` with one compiler's own version removed from the DWARF `producer`, so
@@ -1886,9 +1898,11 @@ const selfCheckRoots = () => {
  * left alone. Nothing else is rewritten.
  */
 const withoutOwnVersion = (text, ownVersion) => {
-  if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) { return text; }
-  return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"');
-};
+  if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) {
+    return text
+  }
+  return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"')
+}
 
 /**
  * `withoutOwnVersion` over inputs a corpus cannot produce, on every run, for
@@ -1898,7 +1912,7 @@ const withoutOwnVersion = (text, ownVersion) => {
  */
 const selfCheckVersions = () => {
   const unit = (producer) =>
-    `!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "${producer}", isOptimized: false)`;
+    `!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "${producer}", isOptimized: false)`
   const cases = [
     [unit("nish 0.6.0"), "nish 0.6.0", unit("<own version>")],
     // Another compiler's version is not this one's to forgive: a candidate
@@ -1907,22 +1921,26 @@ const selfCheckVersions = () => {
     // A version that only begins with this one's is a different version.
     [unit("nish 0.6.0-rc.1"), "nish 0.6.0", unit("nish 0.6.0-rc.1")],
     // The same words outside a `producer:` are the program's, not the compiler's.
-    ['@.str = private constant [10 x i8] c"nish 0.6.0"', "nish 0.6.0", '@.str = private constant [10 x i8] c"nish 0.6.0"'],
+    [
+      '@.str = private constant [10 x i8] c"nish 0.6.0"',
+      "nish 0.6.0",
+      '@.str = private constant [10 x i8] c"nish 0.6.0"',
+    ],
     // No version at all: every caller's fallback, and it must change nothing.
     [unit("nish 0.6.0"), null, unit("nish 0.6.0")],
     ["", "", ""],
-  ];
+  ]
   for (const [text, ownVersion, want] of cases) {
-    const got = withoutOwnVersion(text, ownVersion);
+    const got = withoutOwnVersion(text, ownVersion)
     if (got !== want) {
-      return `withoutOwnVersion(${JSON.stringify(text)}, ${JSON.stringify(ownVersion)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `withoutOwnVersion(${JSON.stringify(text)}, ${JSON.stringify(ownVersion)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /** `git` in the repository, as `spawnSync` answers it: the caller reads the status. */
-const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
 
 /**
  * The release section `scripts/changelog-gen.mjs` would write for the commits
@@ -1945,27 +1963,41 @@ const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxB
  * compare with either, since the seed *is* the last release.
  */
 const pendingNotes = () => {
-  const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"]);
-  const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true";
-  if (shallow()) { git(["fetch", "--quiet", "--unshallow", "--tags", "origin"]); }
-  else if (describe().status !== 0) { git(["fetch", "--quiet", "--tags", "origin"]); }
+  const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
+  const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true"
   if (shallow()) {
-    return { error: "the checkout is shallow and `git fetch --unshallow` did not deepen it, so the commits since the last release cannot be read" };
+    git(["fetch", "--quiet", "--unshallow", "--tags", "origin"])
+  } else if (describe().status !== 0) {
+    git(["fetch", "--quiet", "--tags", "origin"])
   }
-  const tag = describe();
+  if (shallow()) {
+    return {
+      error:
+        "the checkout is shallow and `git fetch --unshallow` did not deepen it, so the commits since the last release cannot be read",
+    }
+  }
+  const tag = describe()
   if (tag.status !== 0) {
-    return { error: `no v* release tag is reachable from HEAD, even after fetching the tags: ${tag.stderr.trim()}` };
+    return {
+      error: `no v* release tag is reachable from HEAD, even after fetching the tags: ${tag.stderr.trim()}`,
+    }
   }
-  const rendered = spawnSync(process.execPath, [path.join(root, "scripts", "changelog-gen.mjs"), "--stdout", "md"], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const rendered = spawnSync(
+    process.execPath,
+    [path.join(root, "scripts", "changelog-gen.mjs"), "--stdout", "md"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    }
+  )
   if (rendered.status !== 0) {
-    return { error: `scripts/changelog-gen.mjs could not render ${tag.stdout.trim()}..HEAD: ${rendered.stderr.trim()}` };
+    return {
+      error: `scripts/changelog-gen.mjs could not render ${tag.stdout.trim()}..HEAD: ${rendered.stderr.trim()}`,
+    }
   }
-  return { text: rendered.stdout };
-};
+  return { text: rendered.stdout }
+}
 
 /**
  * Whether a declaration's words are in the release notes: `CHANGELOG.md`, or
@@ -1978,7 +2010,7 @@ const pendingNotes = () => {
  * release notes carrying them.
  */
 const isNamed = (words, changelogText, pending) =>
-  changelogText.includes(words) || (pending?.text?.includes(words) ?? false);
+  changelogText.includes(words) || (pending?.text?.includes(words) ?? false)
 
 /**
  * `isNamed` over inputs no repository produces, on every run, for the reason
@@ -1987,9 +2019,9 @@ const isNamed = (words, changelogText, pending) =>
  * failed, or null.
  */
 const selfCheckNotes = () => {
-  const words = "Prove bounds through toI32(length)";
-  const released = `## [0.7.0] - 2026-09-22\n\n### Performance\n\n- checker: ${words} (#154)\n`;
-  const pending = { text: `### Performance\n\n- checker: ${words} (\`72a4b16\`)\n` };
+  const words = "Prove bounds through toI32(length)"
+  const released = `## [0.7.0] - 2026-09-22\n\n### Performance\n\n- checker: ${words} (#154)\n`
+  const pending = { text: `### Performance\n\n- checker: ${words} (\`72a4b16\`)\n` }
   const cases = [
     // Released: the file carries it, whatever the pending notes say.
     [words, released, null, true],
@@ -2003,15 +2035,15 @@ const selfCheckNotes = () => {
     [words, "## [Unreleased]\n", { error: `skipped 1 commit: abc1234 ${words}` }, false],
     // Not asked for at all.
     [words, "## [Unreleased]\n", null, false],
-  ];
+  ]
   for (const [w, changelogText, notes, want] of cases) {
-    const got = isNamed(w, changelogText, notes);
+    const got = isNamed(w, changelogText, notes)
     if (got !== want) {
-      return `isNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `isNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
@@ -2025,24 +2057,30 @@ const selfCheckNotes = () => {
  * that is not a compiler fails in a way that names the path the caller gave.
  */
 const resolveCompiler = (spec, role) => {
-  const file = path.resolve(root, spec);
-  const refuse = (why) => ({ error: `${role} ${spec} ${why}` });
-  if (!fs.existsSync(file)) { return refuse("does not exist"); }
-  if (!fs.statSync(file).isFile()) { return refuse("is not a file"); }
+  const file = path.resolve(root, spec)
+  const refuse = (why) => ({ error: `${role} ${spec} ${why}` })
+  if (!fs.existsSync(file)) {
+    return refuse("does not exist")
+  }
+  if (!fs.statSync(file).isFile()) {
+    return refuse("is not a file")
+  }
   const compiler = NODE_ENTRY.test(file)
     ? { label: spec, cmd: process.execPath, prefix: [file], packageRoot: packageRootOf(file) }
-    : { label: spec, cmd: file, prefix: [], packageRoot: packageRootOf(file) };
+    : { label: spec, cmd: file, prefix: [], packageRoot: packageRootOf(file) }
   if (compiler.prefix.length === 0) {
     try {
-      fs.accessSync(file, fs.constants.X_OK);
+      fs.accessSync(file, fs.constants.X_OK)
     } catch {
-      return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
+      return refuse("is not executable (only .js/.mjs/.cjs are run under node)")
     }
   }
-  const version = compile(compiler, ["--version"]);
-  if (version.status !== 0) { return refuse("is not runnable (`--version` failed)"); }
-  return { ...compiler, version: (version.stdout ?? "").trim() };
-};
+  const version = compile(compiler, ["--version"])
+  if (version.status !== 0) {
+    return refuse("is not runnable (`--version` failed)")
+  }
+  return { ...compiler, version: (version.stdout ?? "").trim() }
+}
 
 /**
  * The seed `NISH_BOOTSTRAP` names, or null when there is none. An empty value
@@ -2050,61 +2088,73 @@ const resolveCompiler = (spec, role) => {
  * off for one run, and reading it as a path would refuse to start instead.
  */
 const seedFromEnvironment = () => {
-  const seed = process.env.NISH_BOOTSTRAP;
-  return seed === undefined || seed === "" ? null : seed;
-};
+  const seed = process.env.NISH_BOOTSTRAP
+  return seed === undefined || seed === "" ? null : seed
+}
 
 /** Both compilers, or the first error. */
 const resolvePair = (referenceSpec, candidateSpec) => {
-  const reference = resolveCompiler(referenceSpec, "reference");
-  if (reference.error !== undefined) { return { error: reference.error }; }
-  const candidate = resolveCompiler(candidateSpec, "candidate");
-  if (candidate.error !== undefined) { return { error: candidate.error }; }
-  return { reference, candidate };
-};
+  const reference = resolveCompiler(referenceSpec, "reference")
+  if (reference.error !== undefined) {
+    return { error: reference.error }
+  }
+  const candidate = resolveCompiler(candidateSpec, "candidate")
+  if (candidate.error !== undefined) {
+    return { error: candidate.error }
+  }
+  return { reference, candidate }
+}
 
-const compile = (compiler, args) => spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
+const compile = (compiler, args) =>
+  spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-  });
+  })
 
 /** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four WP8 sidecars. */
 const sidecarFlags = (dir, stem) => [
-    "--emit-header",
-    path.join(dir, `${stem}.h`),
-    "--emit-dts",
-    path.join(dir, `${stem}.d.ts`),
-    "--emit-napi",
-    path.join(dir, `${stem}.napi.c`),
-  ];
+  "--emit-header",
+  path.join(dir, `${stem}.h`),
+  "--emit-dts",
+  path.join(dir, `${stem}.d.ts`),
+  "--emit-napi",
+  path.join(dir, `${stem}.napi.c`),
+]
 
 const fresh = (dir) => {
-  fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-};
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
 
 /** Every file under `dir` as `relative path -> bytes`, so a missing file is a difference too. */
 const tree = (dir) => {
-  const out = new Map();
+  const out = new Map()
   const walk = (at, prefix) => {
-    for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-      const full = path.join(at, entry.name);
-      const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) { walk(full, rel); }
-      else { out.set(rel, fs.readFileSync(full)); }
+    for (const entry of fs
+      .readdirSync(at, { withFileTypes: true })
+      .sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const full = path.join(at, entry.name)
+      const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name
+      if (entry.isDirectory()) {
+        walk(full, rel)
+      } else {
+        out.set(rel, fs.readFileSync(full))
+      }
     }
-  };
-  if (fs.existsSync(dir)) { walk(dir, ""); }
-  return out;
-};
+  }
+  if (fs.existsSync(dir)) {
+    walk(dir, "")
+  }
+  return out
+}
 
 /** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
 const firstLine = (output) => {
-  const line = output.trim().split("\n")[0] ?? "";
-  return line.replace(/^[^:]*:\d+:\d+: /, "");
-};
+  const line = output.trim().split("\n")[0] ?? ""
+  return line.replace(/^[^:]*:\d+:\d+: /, "")
+}
 
 /**
  * Where two texts differ, as at most `limit` lines with both spellings — the
@@ -2113,25 +2163,29 @@ const firstLine = (output) => {
  * the first line of it, not the two million after.
  */
 const excerpt = (want, got, limit) => {
-  const wantLines = want.split("\n");
-  const gotLines = got.split("\n");
-  const total = Math.max(wantLines.length, gotLines.length);
-  const shown = [];
-  let differing = 0;
+  const wantLines = want.split("\n")
+  const gotLines = got.split("\n")
+  const total = Math.max(wantLines.length, gotLines.length)
+  const shown = []
+  let differing = 0
   for (let i = 0; i < total; i++) {
-    if (wantLines[i] === gotLines[i]) { continue; }
-    differing++;
+    if (wantLines[i] === gotLines[i]) {
+      continue
+    }
+    differing++
     if (shown.length < limit) {
       shown.push(
         `line ${i + 1}: reference \`${wantLines[i] ?? "<end>"}\`\n` +
           `${" ".repeat(String(i + 1).length + 7)}candidate \`${gotLines[i] ?? "<end>"}\``
-      );
+      )
     }
   }
-  if (differing === 0) { return { differing, total, text: "the bytes differ but no line does" }; }
-  const more = differing > shown.length ? `\n... ${differing - shown.length} more differing line(s)` : "";
-  return { differing, total, text: `${shown.join("\n")}${more}` };
-};
+  if (differing === 0) {
+    return { differing, total, text: "the bytes differ but no line does" }
+  }
+  const more = differing > shown.length ? `\n... ${differing - shown.length} more differing line(s)` : ""
+  return { differing, total, text: `${shown.join("\n")}${more}` }
+}
 
 /**
  * Compile one program with both compilers and compare everything they wrote.
@@ -2151,31 +2205,33 @@ const excerpt = (want, got, limit) => {
  * is not in the comparison at all.
  */
 const compare = (pair, work, file, options = {}) => {
-  const limit = options.lines ?? 3;
-  const flags = extraArgs(file);
-  const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
-  if (dump !== undefined) { return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` }; }
+  const limit = options.lines ?? 3
+  const flags = extraArgs(file)
+  const dump = flags.find((flag) => DUMP_FLAGS.has(flag))
+  if (dump !== undefined) {
+    return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` }
+  }
 
   // Both compilers name each module by the path they resolved it to and write
   // that path into the module header, so the entry has to be spelled the same
   // for both. The output directories differ and may: nothing either compiler
   // writes carries the directory it was written to.
-  const named = path.relative(root, file);
-  const stem = path.basename(file, ".ts");
-  const referenceDir = fresh(path.join(work, "reference"));
-  const candidateDir = fresh(path.join(work, "candidate"));
+  const named = path.relative(root, file)
+  const stem = path.basename(file, ".ts")
+  const referenceDir = fresh(path.join(work, "reference"))
+  const candidateDir = fresh(path.join(work, "candidate"))
   const argv = (dir) => [
     named,
     "-o",
     `${dir}${path.sep}`,
     ...flags,
     ...(options.sidecars === false ? [] : sidecarFlags(dir, stem)),
-  ];
+  ]
 
-  const reference = compile(pair.reference, argv(referenceDir));
-  const candidate = compile(pair.candidate, argv(candidateDir));
+  const reference = compile(pair.reference, argv(referenceDir))
+  const candidate = compile(pair.candidate, argv(candidateDir))
   if (reference.status !== 0 && candidate.status !== 0) {
-    return { refused: firstLine(reference.stderr) || `exit ${reference.status}` };
+    return { refused: firstLine(reference.stderr) || `exit ${reference.status}` }
   }
   if (reference.status !== 0) {
     // A construct HEAD has and the seed does not is what the rolling freeze
@@ -2191,7 +2247,7 @@ const compare = (pair, work, file, options = {}) => {
             `(reference: ${firstLine(reference.stderr) || `exit ${reference.status}`})`,
         },
       ],
-    };
+    }
   }
   if (candidate.status !== 0) {
     return {
@@ -2201,30 +2257,34 @@ const compare = (pair, work, file, options = {}) => {
           detail: `the candidate refuses it: ${firstLine(candidate.stderr) || `exit ${candidate.status}`}`,
         },
       ],
-    };
+    }
   }
 
-  const want = tree(referenceDir);
-  const got = tree(candidateDir);
-  if (want.size === 0) { return { refused: "the reference wrote no files" }; }
-  const differences = [];
-  let lines = 0;
-  let rooted = 0;
-  let versioned = 0;
+  const want = tree(referenceDir)
+  const got = tree(candidateDir)
+  if (want.size === 0) {
+    return { refused: "the reference wrote no files" }
+  }
+  const differences = []
+  let lines = 0
+  let rooted = 0
+  let versioned = 0
   for (const name of [...new Set([...want.keys(), ...got.keys()])].sort()) {
-    const a = want.get(name);
-    const b = got.get(name);
+    const a = want.get(name)
+    const b = got.get(name)
     if (a === undefined) {
-      differences.push({ surface: name, detail: "the candidate wrote it and the reference did not" });
-      continue;
+      differences.push({ surface: name, detail: "the candidate wrote it and the reference did not" })
+      continue
     }
     if (b === undefined) {
-      differences.push({ surface: name, detail: "the reference wrote it and the candidate did not" });
-      continue;
+      differences.push({ surface: name, detail: "the reference wrote it and the candidate did not" })
+      continue
     }
     if (a.equals(b)) {
-      if (name.endsWith(".ll")) { lines += a.toString("utf8").split("\n").length; }
-      continue;
+      if (name.endsWith(".ll")) {
+        lines += a.toString("utf8").split("\n").length
+      }
+      continue
     }
     // The two compilers are installed in different directories — they have to
     // be — so a module either of them reached through its OWN package is named
@@ -2233,35 +2293,42 @@ const compare = (pair, work, file, options = {}) => {
     // identity the comparison is actually about. Counted rather than folded in:
     // the summary says how many files agreed only this way, because a number
     // that says a comparison happened must say what it set aside.
-    const wantText = a.toString("utf8");
-    const gotText = b.toString("utf8");
-    const wantRooted = withoutOwnRoot(wantText, pair.reference.packageRoot);
-    const gotRooted = withoutOwnRoot(gotText, pair.candidate.packageRoot);
+    const wantText = a.toString("utf8")
+    const gotText = b.toString("utf8")
+    const wantRooted = withoutOwnRoot(wantText, pair.reference.packageRoot)
+    const gotRooted = withoutOwnRoot(gotText, pair.candidate.packageRoot)
     if (wantRooted === gotRooted) {
-      rooted++;
-      if (name.endsWith(".ll")) { lines += wantText.split("\n").length; }
-      continue;
+      rooted++
+      if (name.endsWith(".ll")) {
+        lines += wantText.split("\n").length
+      }
+      continue
     }
     // The reference is the last release and the candidate is HEAD, which
     // carries the next version from the commit that bumps it, so a `-g` build
     // records a different `producer` on each side. Counted apart for the same
     // reason as the root.
     if (
-      withoutOwnVersion(wantRooted, pair.reference.version) === withoutOwnVersion(gotRooted, pair.candidate.version)
+      withoutOwnVersion(wantRooted, pair.reference.version) ===
+      withoutOwnVersion(gotRooted, pair.candidate.version)
     ) {
-      versioned++;
-      if (name.endsWith(".ll")) { lines += wantText.split("\n").length; }
-      continue;
+      versioned++
+      if (name.endsWith(".ll")) {
+        lines += wantText.split("\n").length
+      }
+      continue
     }
-    const where = excerpt(wantText, gotText, limit);
+    const where = excerpt(wantText, gotText, limit)
     differences.push({
       surface: name,
       detail: `differs (${where.differing} of ${where.total} lines)\n${where.text}`,
-    });
+    })
   }
-  if (differences.length > 0) { return { differences }; }
-  return { files: want.size, lines, rooted, versioned };
-};
+  if (differences.length > 0) {
+    return { differences }
+  }
+  return { files: want.size, lines, rooted, versioned }
+}
 
 /**
  * The declaration covering one difference, or null. Keyed on the program and
@@ -2270,12 +2337,16 @@ const compare = (pair, work, file, options = {}) => {
  */
 const declaredFor = (program, surface) => {
   for (const entry of DECLARED) {
-    if (entry.program !== undefined && entry.program !== program) { continue; }
-    if (entry.file !== undefined && entry.file !== surface) { continue; }
-    return entry;
+    if (entry.program !== undefined && entry.program !== program) {
+      continue
+    }
+    if (entry.file !== undefined && entry.file !== surface) {
+      continue
+    }
+    return entry
   }
-  return null;
-};
+  return null
+}
 
 /**
  * Every positive whole program of the corpus, plus the whole programs of
@@ -2283,7 +2354,7 @@ const declaredFor = (program, surface) => {
  * `ir_oracle.js` walks, from the same module, so the successor compares no
  * less than the oracle it replaces.
  */
-const corpus = () => [...programs(), ...linkPrograms().map((program) => program.main)];
+const corpus = () => [...programs(), ...linkPrograms().map((program) => program.main)]
 
 /**
  * The compiler HEAD builds: `self/compile.ts` linked into `build/self/compile`
@@ -2297,14 +2368,18 @@ const corpus = () => [...programs(), ...linkPrograms().map((program) => program.
  * built yourself and skip this.
  */
 const buildCandidate = (seedSpec) => {
-  const out = path.join(root, "build", "self", "compile");
-  const builder = resolveCompiler(seedSpec, "candidate builder");
-  if (builder.error !== undefined) { return { error: builder.error }; }
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const built = compile(builder, [path.join("self", "compile.ts"), "--link", out]);
-  if (built.status !== 0) { return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` }; }
-  return { path: path.relative(root, out) };
-};
+  const out = path.join(root, "build", "self", "compile")
+  const builder = resolveCompiler(seedSpec, "candidate builder")
+  if (builder.error !== undefined) {
+    return { error: builder.error }
+  }
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  const built = compile(builder, [path.join("self", "compile.ts"), "--link", out])
+  if (built.status !== 0) {
+    return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` }
+  }
+  return { path: path.relative(root, out) }
+}
 
 const HELP = `nish-cmp — compile the corpus with two compilers and compare every byte.
 
@@ -2330,34 +2405,43 @@ the same rule scripts/bootstrap.sh applies to NISH_BOOTSTRAP.
 With no programs named, the whole corpus is compared (tests/self/corpus.js).
 
 exit codes: 0 agreed (or skipped for want of a seed), 1 undeclared difference,
-2 usage or a compiler that would not build`;
+2 usage or a compiler that would not build`
 
 const main = (argv) => {
-  const options = { lines: 3, sidecars: true };
-  let referenceSpec = seedFromEnvironment();
-  let candidateSpec = null;
-  let changelog = "CHANGELOG.md";
-  let verbose = false;
-  const named = [];
+  const options = { lines: 3, sidecars: true }
+  let referenceSpec = seedFromEnvironment()
+  let candidateSpec = null
+  let changelog = "CHANGELOG.md"
+  let verbose = false
+  const named = []
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+    const arg = argv[i]
     if (arg === "-h" || arg === "--help") {
-      process.stdout.write(`${HELP}\n`);
-      return 0;
-    }if (arg === "-r" || arg === "--reference") { referenceSpec = argv[++i]; }
-    else if (arg === "-c" || arg === "--candidate") { candidateSpec = argv[++i]; }
-    else if (arg === "--changelog") { changelog = argv[++i]; }
-    else if (arg === "--no-sidecars") { options.sidecars = false; }
-    else if (arg === "--lines") { options.lines = Number(argv[++i]); }
-    else if (arg === "--verbose") { verbose = true; }
-    else if (arg.startsWith("-")) {
-      process.stderr.write(`nish-cmp: unknown option: ${arg}\n${HELP}\n`);
-      return 2;
-    } else { named.push(arg); }
+      process.stdout.write(`${HELP}\n`)
+      return 0
+    }
+    if (arg === "-r" || arg === "--reference") {
+      referenceSpec = argv[++i]
+    } else if (arg === "-c" || arg === "--candidate") {
+      candidateSpec = argv[++i]
+    } else if (arg === "--changelog") {
+      changelog = argv[++i]
+    } else if (arg === "--no-sidecars") {
+      options.sidecars = false
+    } else if (arg === "--lines") {
+      options.lines = Number(argv[++i])
+    } else if (arg === "--verbose") {
+      verbose = true
+    } else if (arg.startsWith("-")) {
+      process.stderr.write(`nish-cmp: unknown option: ${arg}\n${HELP}\n`)
+      return 2
+    } else {
+      named.push(arg)
+    }
   }
   if (referenceSpec === undefined || candidateSpec === undefined || Number.isNaN(options.lines)) {
-    process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`)
+    return 2
   }
 
   // The skip, in the runner's own idiom (`tests/run.js`'s `skip`): one SKIP
@@ -2368,38 +2452,40 @@ const main = (argv) => {
     process.stdout.write(
       "SKIP  nish-cmp: no seed available (no --reference and NISH_BOOTSTRAP is unset), " +
         "so HEAD was compared against nothing\n"
-    );
-    process.stdout.write("nish-cmp: 0 programs compared, 1 skipped (no seed available)\n");
-    return 0;
+    )
+    process.stdout.write("nish-cmp: 0 programs compared, 1 skipped (no seed available)\n")
+    return 0
   }
 
   // Before anything is compiled: the two pieces of comparison logic here that
   // can make two differing files look equal — each side's own root and each
   // side's own producer version — driven over inputs no corpus produces. A run whose own comparison is broken must say so instead of
   // agreeing about three hundred programs.
-  const selfCheck = selfCheckRoots();
+  const selfCheck = selfCheckRoots()
   if (selfCheck !== null) {
-    process.stderr.write(`nish-cmp: its own package-root comparison is wrong: ${selfCheck}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: its own package-root comparison is wrong: ${selfCheck}\n`)
+    return 2
   }
-  const selfCheckVersion = selfCheckVersions();
+  const selfCheckVersion = selfCheckVersions()
   if (selfCheckVersion !== null) {
-    process.stderr.write(`nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`)
+    return 2
   }
-  const selfCheckNote = selfCheckNotes();
+  const selfCheckNote = selfCheckNotes()
   if (selfCheckNote !== null) {
-    process.stderr.write(`nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`)
+    return 2
   }
 
   // The corpus is settled before a compiler is built, so that a mistyped
   // program name costs a message rather than the link that precedes it.
-  const inputs = named.length > 0 ? named.map((file) => path.resolve(file)) : corpus();
-  const missing = inputs.filter((file) => !fs.existsSync(file));
+  const inputs = named.length > 0 ? named.map((file) => path.resolve(file)) : corpus()
+  const missing = inputs.filter((file) => !fs.existsSync(file))
   if (missing.length > 0) {
-    process.stderr.write(`nish-cmp: no such program: ${missing.map((f) => path.relative(root, f)).join(", ")}\n`);
-    return 2;
+    process.stderr.write(
+      `nish-cmp: no such program: ${missing.map((f) => path.relative(root, f)).join(", ")}\n`
+    )
+    return 2
   }
 
   if (candidateSpec === null) {
@@ -2407,52 +2493,54 @@ const main = (argv) => {
     // is why the reference is what gets passed on here. A seed too old to
     // compile HEAD's `self/` fails here, naming itself, which is the G4 policy
     // being enforced rather than discovered halfway through a comparison.
-    const built = buildCandidate(referenceSpec);
+    const built = buildCandidate(referenceSpec)
     if (built.error !== undefined) {
-      process.stderr.write(`nish-cmp: ${built.error}\n`);
-      return 2;
+      process.stderr.write(`nish-cmp: ${built.error}\n`)
+      return 2
     }
-    candidateSpec = built.path;
+    candidateSpec = built.path
   }
-  const pair = resolvePair(referenceSpec, candidateSpec);
+  const pair = resolvePair(referenceSpec, candidateSpec)
   if (pair.error !== undefined) {
-    process.stderr.write(`nish-cmp: ${pair.error}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: ${pair.error}\n`)
+    return 2
   }
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-cmp-"));
-  const undeclared = [];
-  const declared = [];
-  const dumps = [];
-  const refused = [];
-  let agreed = 0;
-  let files = 0;
-  let lines = 0;
-  let rooted = 0;
-  let versioned = 0;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-cmp-"))
+  const undeclared = []
+  const declared = []
+  const dumps = []
+  const refused = []
+  let agreed = 0
+  let files = 0
+  let lines = 0
+  let rooted = 0
+  let versioned = 0
   for (const file of inputs) {
-    const program = path.relative(root, file);
-    const result = compare(pair, work, file, options);
+    const program = path.relative(root, file)
+    const result = compare(pair, work, file, options)
     if (result.dump !== undefined) {
-      dumps.push(`${program}: ${result.dump}`);
+      dumps.push(`${program}: ${result.dump}`)
     } else if (result.refused !== undefined) {
-      refused.push(`${program}: both refuse it: ${result.refused}`);
+      refused.push(`${program}: both refuse it: ${result.refused}`)
     } else if (result.differences !== undefined) {
       for (const difference of result.differences) {
-        const entry = declaredFor(program, difference.surface);
-        const row = { program, ...difference, declared: entry };
-        (entry === null ? undeclared : declared).push(row);
+        const entry = declaredFor(program, difference.surface)
+        const row = { program, ...difference, declared: entry }
+        ;(entry === null ? undeclared : declared).push(row)
       }
     } else {
-      agreed++;
-      files += result.files;
-      lines += result.lines;
-      rooted += result.rooted ?? 0;
-      versioned += result.versioned ?? 0;
-      if (verbose) { process.stdout.write(`  ok   ${program} (${result.files} files)\n`); }
+      agreed++
+      files += result.files
+      lines += result.lines
+      rooted += result.rooted ?? 0
+      versioned += result.versioned ?? 0
+      if (verbose) {
+        process.stdout.write(`  ok   ${program} (${result.files} files)\n`)
+      }
     }
   }
-  fs.rmSync(work, { recursive: true, force: true });
+  fs.rmSync(work, { recursive: true, force: true })
 
   // A release that changes one attribute changes it in every module, so the
   // report is bounded twice over: `--lines` lines per file, and this many
@@ -2460,10 +2548,12 @@ const main = (argv) => {
   // counts every one of them, and naming one program with a larger `--lines`
   // is how to look at a single difference closely.
   for (const row of undeclared.slice(0, MAX_ROWS)) {
-    process.stdout.write(`  FAIL ${row.program}: ${row.surface} ${row.detail}\n`.replace(/\n(?=.)/g, "\n       "));
+    process.stdout.write(
+      `  FAIL ${row.program}: ${row.surface} ${row.detail}\n`.replace(/\n(?=.)/g, "\n       ")
+    )
   }
   if (undeclared.length > MAX_ROWS) {
-    process.stdout.write(`  ... ${undeclared.length - MAX_ROWS} more differing file(s), not printed\n`);
+    process.stdout.write(`  ... ${undeclared.length - MAX_ROWS} more differing file(s), not printed\n`)
   }
   // A declaration is a claim that the release notes name the difference. The
   // claim is checked here rather than trusted, because the whole point of G2's
@@ -2474,24 +2564,26 @@ const main = (argv) => {
   // history to do it.
   const changelogText = fs.existsSync(path.resolve(root, changelog))
     ? fs.readFileSync(path.resolve(root, changelog), "utf8")
-    : "";
-  const byReason = new Map();
-  for (const row of declared) { byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1); }
-  const reasons = [...byReason.keys()];
-  const pending = reasons.some((r) => !changelogText.includes(r.changelog)) ? pendingNotes() : null;
-  const unnamed = reasons.filter((r) => !isNamed(r.changelog, changelogText, pending));
+    : ""
+  const byReason = new Map()
+  for (const row of declared) {
+    byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1)
+  }
+  const reasons = [...byReason.keys()]
+  const pending = reasons.some((r) => !changelogText.includes(r.changelog)) ? pendingNotes() : null
+  const unnamed = reasons.filter((r) => !isNamed(r.changelog, changelogText, pending))
   for (const [reason, count] of byReason) {
-    const where = `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim();
-    process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`);
+    const where = `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim()
+    process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`)
   }
   for (const reason of unnamed) {
     process.stdout.write(
       `  FAIL neither ${changelog} nor the pending release notes name this difference: the declaration asks ` +
         `for "${reason.changelog}"\n`
-    );
+    )
   }
   if (unnamed.length > 0 && pending?.error !== undefined) {
-    process.stdout.write(`  FAIL the pending release notes could not be read: ${pending.error}\n`);
+    process.stdout.write(`  FAIL the pending release notes could not be read: ${pending.error}\n`)
   }
   // A declaration that covers nothing is not a failure — a single-program run
   // is entitled to match none of them — but it is worth saying on a full run,
@@ -2500,14 +2592,18 @@ const main = (argv) => {
   if (named.length === 0) {
     for (const entry of DECLARED) {
       if (!byReason.has(entry)) {
-        const where = `${entry.program ?? "every program"} ${entry.file ?? ""}`.trim();
-        process.stdout.write(`note: nothing differs at ${where}; the declaration can go\n`);
+        const where = `${entry.program ?? "every program"} ${entry.file ?? ""}`.trim()
+        process.stdout.write(`note: nothing differs at ${where}; the declaration can go\n`)
       }
     }
   }
   if (verbose) {
-    for (const row of refused) { process.stdout.write(`  refused ${row}\n`); }
-    for (const row of dumps) { process.stdout.write(`  dump ${row}\n`); }
+    for (const row of refused) {
+      process.stdout.write(`  refused ${row}\n`)
+    }
+    for (const row of dumps) {
+      process.stdout.write(`  dump ${row}\n`)
+    }
   }
 
   // Said on its own line rather than only inside the summary, because it is the
@@ -2519,7 +2615,7 @@ const main = (argv) => {
         `(reference ${pair.reference.packageRoot}, candidate ${pair.candidate.packageRoot}): a module reached ` +
         `as \`nish/<name>\` is named by where that compiler's own \`std/\` is, which two installs cannot agree ` +
         "about. Every other byte of those files is compared as it stands.\n"
-    );
+    )
   }
 
   if (versioned > 0) {
@@ -2527,28 +2623,30 @@ const main = (argv) => {
       `note: ${versioned} file(s) agree once each compiler's own version is removed from the DWARF ` +
         `producer (reference "${pair.reference.version}", candidate "${pair.candidate.version}"): a \`-g\` build ` +
         "records the version of the compiler that wrote it. Every other byte of those files is compared as it stands.\n"
-    );
+    )
   }
 
-  const compared = inputs.length - refused.length - dumps.length;
+  const compared = inputs.length - refused.length - dumps.length
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
   // compiles proves nothing about either, and must not be able to hide inside
   // a number that reads like agreement.
-  const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : "";
-  const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
-  const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
-  const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : "";
-  const versionedNote = versioned > 0 ? `, ${versioned} equal after each compiler's own producer version` : "";
+  const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : ""
+  const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : ""
+  const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : ""
+  const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : ""
+  const versionedNote = versioned > 0 ? `, ${versioned} equal after each compiler's own producer version` : ""
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
       `${refusedNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
-  );
-  return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
-};
+  )
+  return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1
+}
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(main(process.argv.slice(2)))
+}
 export {
   buildCandidate,
   compare,
@@ -2563,4 +2661,4 @@ export {
   isNamed,
   withoutOwnRoot,
   withoutOwnVersion,
-};
+}

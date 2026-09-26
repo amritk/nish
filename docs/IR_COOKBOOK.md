@@ -76,7 +76,7 @@ function is pure and always returns. `add` is not `export`ed, so it is
 
 <!-- cookbook:begin fn-add -->
 ```ts
-const add = (a: number, b: number): number => a + b;
+const add = (a: number, b: number): number => a + b
 ```
 
 ```llvm
@@ -104,7 +104,7 @@ different thing (§9).
 <!-- cookbook:begin fn-add-function -->
 ```ts
 function add(a: number, b: number): number {
-  return a + b;
+  return a + b
 }
 ```
 
@@ -148,7 +148,7 @@ attributes #0 = { nounwind willreturn readnone }
 Compiled with `--plain`.
 
 ```ts
-const add = (a: number, b: number): number => a + b;
+const add = (a: number, b: number): number => a + b
 ```
 
 ```llvm
@@ -169,7 +169,7 @@ LLVM rejects decimal literals that do not round-trip exactly.
 Compiled with `--number-mode f64`.
 
 ```ts
-const halve = (x: number): number => x / 2.5;
+const halve = (x: number): number => x / 2.5
 ```
 
 ```llvm
@@ -204,13 +204,13 @@ cases that pin it.
 
 <!-- cookbook:begin gen-function -->
 ```ts
-const identity = <T>(x: T): T => x;
+const identity = <T>(x: T): T => x
 
 export const main = (): i32 => {
-  console.log(identity(7));
-  console.log(identity("hi"));
-  return 0;
-};
+  console.log(identity(7))
+  console.log(identity("hi"))
+  return 0
+}
 ```
 
 ```llvm
@@ -268,16 +268,16 @@ and `readonly` in the other.
 
 <!-- cookbook:begin gen-infer -->
 ```ts
-const firstOf = <T>(xs: T[]): T => xs[0];
+const firstOf = <T>(xs: T[]): T => xs[0]
 
-const eq = <T>(a: T, b: T): boolean => a === b;
+const eq = <T>(a: T, b: T): boolean => a === b
 
 export const main = (): i32 => {
-  console.log(firstOf([4, 5, 6]));
-  console.log(eq(1, 1));
-  console.log(eq("a", "b"));
-  return 0;
-};
+  console.log(firstOf([4, 5, 6]))
+  console.log(eq(1, 1))
+  console.log(eq("a", "b"))
+  return 0
+}
 ```
 
 ```llvm
@@ -411,23 +411,23 @@ it does for an imported declared class.
 <!-- cookbook:begin gen-class -->
 ```ts
 class Box<T> {
-  value: T;
+  value: T
 
   constructor(v: T) {
-    this.value = v;
+    this.value = v
   }
 
   get(): T {
-    return this.value;
+    return this.value
   }
 }
 
 export const main = (): i32 => {
-  const n = new Box<i32>(7);
-  const s = new Box<string>("hi");
-  console.log(s.get());
-  return n.get();
-};
+  const n = new Box<i32>(7)
+  const s = new Box<string>("hi")
+  console.log(s.get())
+  return n.get()
+}
 ```
 
 ```llvm
@@ -524,30 +524,30 @@ class that does not `implements Shape` is refused at the call).
 <!-- cookbook:begin gen-constraint -->
 ```ts
 interface Shape {
-  area: i32;
+  area: i32
 }
 
 class Circle implements Shape {
-  area: i32;
-  radius: i32;
+  area: i32
+  radius: i32
 
   constructor(radius: i32) {
-    this.area = 3 * radius * radius;
-    this.radius = radius;
+    this.area = 3 * radius * radius
+    this.radius = radius
   }
 }
 
 class Square implements Shape {
-  area: i32;
+  area: i32
 
   constructor(side: i32) {
-    this.area = side * side;
+    this.area = side * side
   }
 }
 
-const areaOf = <T extends Shape>(shape: T): i32 => shape.area;
+const areaOf = <T extends Shape>(shape: T): i32 => shape.area
 
-export const main = (): i32 => areaOf(new Circle(2)) + areaOf(new Square(3));
+export const main = (): i32 => areaOf(new Circle(2)) + areaOf(new Square(3))
 ```
 
 ```llvm
@@ -629,31 +629,31 @@ call at a tuple already asked for adds nothing. Inside `keep` both the class's
 <!-- cookbook:begin gen-method -->
 ```ts
 class Chooser {
-  flip: boolean = false;
+  flip: boolean = false
 
   pick<T>(a: T, b: T): T {
-    return this.flip ? b : a;
+    return this.flip ? b : a
   }
 }
 
 class Box<T> {
-  value: T;
+  value: T
 
   constructor(value: T) {
-    this.value = value;
+    this.value = value
   }
 
   keep<U>(other: U): T {
-    return this.value;
+    return this.value
   }
 }
 
 export const main = (): i32 => {
-  const c = new Chooser();
-  const word: string = c.pick("left", "right");
-  console.log(word);
-  return c.pick(1, 2) + new Box<i32>(7).keep("seven");
-};
+  const c = new Chooser()
+  const word: string = c.pick("left", "right")
+  console.log(word)
+  return c.pick(1, 2) + new Box<i32>(7).keep("seven")
+}
 ```
 
 ```llvm
@@ -774,12 +774,12 @@ indirect call, and each gets the attributes of its own callee
 ```ts
 // A function-typed parameter makes `apply` a template over its callee: one
 // `define` per function argument, each calling its callee directly.
-const apply = (f: (x: i32) => i32, x: i32): i32 => f(x) + 1;
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x) + 1
 
-const square = (x: i32): i32 => x * x;
-const cube = (x: i32): i32 => x * x * x;
+const square = (x: i32): i32 => x * x
+const cube = (x: i32): i32 => x * x * x
 
-export const both = (x: i32): i32 => apply(square, x) + apply(cube, x);
+export const both = (x: i32): i32 => apply(square, x) + apply(cube, x)
 ```
 
 ```llvm
@@ -836,14 +836,14 @@ binds `U`, so the instantiation is `map<i32, f64, (n) => ...>`,
 // An arrow argument is lifted into a function of its own, and `U` is bound
 // from its body: `map<i32, f64, (n) => ...>`.
 const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
-  const out: U[] = [];
+  const out: U[] = []
   for (const x of xs) {
-    out.push(f(x));
+    out.push(f(x))
   }
-  return out;
-};
+  return out
+}
 
-export const halves = (xs: i32[]): f64[] => map(xs, (n) => toF64(n) / 2.0);
+export const halves = (xs: i32[]): f64[] => map(xs, (n) => toF64(n) / 2.0)
 ```
 
 ```llvm
@@ -1020,14 +1020,14 @@ parallelism").
 
 <!-- cookbook:begin par-map -->
 ```ts
-import { parallelMapInto, parallelReduce } from "nish/threads";
+import { parallelMapInto, parallelReduce } from "nish/threads"
 
-const square = (x: f64): f64 => x * x;
+const square = (x: f64): f64 => x * x
 
 export const sumOfSquares = (xs: f64[], scratch: f64[]): f64 => {
-  parallelMapInto(xs, scratch, square);
-  return parallelReduce(scratch, (a, b) => a + b, 0.0);
-};
+  parallelMapInto(xs, scratch, square)
+  return parallelReduce(scratch, (a, b) => a + b, 0.0)
+}
 ```
 
 ```llvm
@@ -1070,19 +1070,19 @@ string at a time. The call compiles with performance warning NL9012.
 
 <!-- cookbook:begin par-alloc -->
 ```ts
-import { parallelMapInto } from "nish/threads";
+import { parallelMapInto } from "nish/threads"
 
 const label = (x: i32): i32 => {
-  let s = "small";
+  let s = "small"
   if (x > 9) {
-    s = `big ${x}`;
+    s = `big ${x}`
   }
-  return s.length;
-};
+  return s.length
+}
 
 export const labelAll = (xs: i32[], out: i32[]): void => {
-  parallelMapInto(xs, out, label);
-};
+  parallelMapInto(xs, out, label)
+}
 ```
 
 ```llvm
@@ -1149,7 +1149,7 @@ key is pushed as it is, with no instruction added
 
 <!-- cookbook:begin map-has -->
 ```ts
-export const seen = (s: Set<i32>, x: i32): boolean => s.has(x);
+export const seen = (s: Set<i32>, x: i32): boolean => s.has(x)
 ```
 
 ```llvm
@@ -1418,16 +1418,16 @@ with nothing stored and nothing probed a second time.
 <!-- cookbook:begin map-get -->
 ```ts
 export const bump = (m: Map<string, i32>, w: string): void => {
-  m.set(w, (m.get(w) ?? 0) + 1);
-};
+  m.set(w, (m.get(w) ?? 0) + 1)
+}
 
 export const known = (m: Map<string, i32>, w: string): i32 => {
-  const n = m.get(w);
+  const n = m.get(w)
   if (n === undefined) {
-    return -1;
+    return -1
   }
-  return n;
-};
+  return n
+}
 ```
 
 ```llvm
@@ -2733,15 +2733,15 @@ entry.
 <!-- cookbook:begin map-iter -->
 ```ts
 export const total = (m: Map<i32, i32>): i32 => {
-  let sum: i32 = 0;
+  let sum: i32 = 0
   for (const v of m.values()) {
     if (v < 0) {
-      return -1;
+      return -1
     }
-    sum += v;
+    sum += v
   }
-  return sum;
-};
+  return sum
+}
 ```
 
 ```llvm
@@ -2975,16 +2975,16 @@ and `add` are not called here, so they are not copied into the module.
 <!-- cookbook:begin map-fused -->
 ```ts
 export const count = (counts: Map<string, i32>, w: string): void => {
-  counts.set(w, (counts.get(w) ?? 0) + 1);
-};
+  counts.set(w, (counts.get(w) ?? 0) + 1)
+}
 
 export const firstTime = (seen: Set<string>, w: string): boolean => {
   if (!seen.has(w)) {
-    seen.add(w);
-    return true;
+    seen.add(w)
+    return true
   }
-  return false;
-};
+  return false
+}
 ```
 
 ```llvm
@@ -4521,13 +4521,13 @@ re-files it from the stored hashes, moving no entry.
 
 <!-- cookbook:begin map-fused-extras -->
 ```ts
-import { getOrInsert, reserve } from "nish/map";
+import { getOrInsert, reserve } from "nish/map"
 
-export const idOf = (ids: Map<string, i32>, w: string): i32 => getOrInsert(ids, w, ids.size);
+export const idOf = (ids: Map<string, i32>, w: string): i32 => getOrInsert(ids, w, ids.size)
 
 export const presize = (ids: Map<string, i32>, n: i32): void => {
-  reserve(ids, n);
-};
+  reserve(ids, n)
+}
 ```
 
 ```llvm
@@ -5850,9 +5850,9 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 <!-- cookbook:begin types-i64 -->
 ```ts
-const square = (x: i64): i64 => x * x;
+const square = (x: i64): i64 => x * x
 
-const low = (x: i64): number => toI32(x % 1000);
+const low = (x: i64): number => toI32(x % 1000)
 ```
 
 ```llvm
@@ -5896,9 +5896,9 @@ attributes #2 = { nounwind noreturn cold }
 
 <!-- cookbook:begin types-bool -->
 ```ts
-const xor = (a: boolean, b: boolean): boolean => a !== b;
+const xor = (a: boolean, b: boolean): boolean => a !== b
 
-const neither = (a: boolean, b: boolean): boolean => !a && !b;
+const neither = (a: boolean, b: boolean): boolean => !a && !b
 ```
 
 ```llvm
@@ -5934,11 +5934,11 @@ operand, and every `f64` constant is IEEE-754 hex.
 <!-- cookbook:begin expr-literals -->
 ```ts
 const literals = (): f64 => {
-  const big: i64 = 3000000000;
-  const ratio: f64 = 0.1;
-  const scaled = ratio * 2;
-  return scaled + toF64(big);
-};
+  const big: i64 = 3000000000
+  const ratio: f64 = 0.1
+  const scaled = ratio * 2
+  return scaled + toF64(big)
+}
 ```
 
 ```llvm
@@ -5974,11 +5974,11 @@ registers, so this costs nothing.
 <!-- cookbook:begin decl-locals -->
 ```ts
 const polynomial = (x: number, k: number): number => {
-  let acc: number = x * x * 3;
-  acc = acc + k * 2;
-  const bias = 7;
-  return acc - bias;
-};
+  let acc: number = x * x * 3
+  acc = acc + k * 2
+  const bias = 7
+  return acc - bias
+}
 ```
 
 ```llvm
@@ -6015,14 +6015,14 @@ expression.
 
 <!-- cookbook:begin decl-const -->
 ```ts
-const WIDTH: i32 = 8;
-const AREA: i32 = WIDTH * WIDTH;
-const LABEL: string = "area = ";
+const WIDTH: i32 = 8
+const AREA: i32 = WIDTH * WIDTH
+const LABEL: string = "area = "
 
 export const main = (): number => {
-  console.log(`${LABEL}${AREA}`);
-  return AREA;
-};
+  console.log(`${LABEL}${AREA}`)
+  return AREA
+}
 ```
 
 ```llvm
@@ -6066,18 +6066,18 @@ listing for "the alias", because there is nothing for it to be.
 
 <!-- cookbook:begin decl-type-alias -->
 ```ts
-type Byte = u8;
-type Bytes = Byte[];
-type Label = string;
+type Byte = u8
+type Bytes = Byte[]
+type Label = string
 
-const widen = (b: Byte): i32 => toI32(b);
+const widen = (b: Byte): i32 => toI32(b)
 
 export const main = (): number => {
-  const data: Bytes = [toU8(2), toU8(3)];
-  const label: Label = "sum = ";
-  console.log(`${label}${widen(data[0]) + widen(data[1])}`);
-  return 0;
-};
+  const data: Bytes = [toU8(2), toU8(3)]
+  const label: Label = "sum = "
+  console.log(`${label}${widen(data[0]) + widen(data[1])}`)
+  return 0
+}
 ```
 
 ```llvm
@@ -6206,11 +6206,11 @@ those.
 
 <!-- cookbook:begin decl-ffi -->
 ```ts
-declare function abs(n: i32): i32;
+declare function abs(n: i32): i32
 
-const pureDouble = (n: i32): i32 => n * 2;
+const pureDouble = (n: i32): i32 => n * 2
 
-export const main = (): i32 => abs(-7) + pureDouble(3);
+export const main = (): i32 => abs(-7) + pureDouble(3)
 ```
 
 ```llvm
@@ -6265,17 +6265,17 @@ releases.
 
 <!-- cookbook:begin decl-ffi-pointer -->
 ```ts
-declare function calloc(count: u64, size: u64): CPtr | null;
-declare function free(block: CPtr): void;
+declare function calloc(count: u64, size: u64): CPtr | null
+declare function free(block: CPtr): void
 
 export const main = (): i32 => {
-  const block = calloc(4, 16);
+  const block = calloc(4, 16)
   if (block === null) {
-    return 1;
+    return 1
   }
-  free(block);
-  return 0;
-};
+  free(block)
+  return 0
+}
 ```
 
 ```llvm
@@ -6334,19 +6334,19 @@ enum Kind {
 const weight = (k: Kind): i32 => {
   switch (k) {
     case Kind.If:
-      return 10;
+      return 10
     case Kind.While:
-      return 20;
+      return 20
     default:
-      return 30;
+      return 30
   }
-};
+}
 
 export const main = (): number => {
-  const k: Kind = Kind.While;
-  console.log(`weight = ${weight(k)}`);
-  return 0;
-};
+  const k: Kind = Kind.While
+  console.log(`weight = ${weight(k)}`)
+  return 0
+}
 ```
 
 ```llvm
@@ -6411,9 +6411,9 @@ calls it, releases the arena, and returns the exit code.
 <!-- cookbook:begin decl-main -->
 ```ts
 export const main = (): number => {
-  console.log("hello from Nish");
-  return 0;
-};
+  console.log("hello from Nish")
+  return 0
+}
 ```
 
 ```llvm
@@ -6452,9 +6452,9 @@ program starts the cached binary.
 ```ts
 #!/usr/bin/env -S nish run
 export const main = (): number => {
-  console.log("hello from a script");
-  return 0;
-};
+  console.log("hello from a script")
+  return 0
+}
 ```
 
 ```llvm
@@ -6490,9 +6490,9 @@ flags at all.
 
 <!-- cookbook:begin decl-strict-exports -->
 ```ts
-export const double = (n: number): number => helper(n) * 2;
+export const double = (n: number): number => helper(n) * 2
 
-const helper = (n: number): number => n + 1;
+const helper = (n: number): number => n + 1
 ```
 
 ```llvm
@@ -6520,9 +6520,9 @@ driver that calls a non-exported function needs. The same source:
 Compiled with `--no-strict-exports`.
 
 ```ts
-export const double = (n: number): number => helper(n) * 2;
+export const double = (n: number): number => helper(n) * 2
 
-const helper = (n: number): number => n + 1;
+const helper = (n: number): number => n + 1
 ```
 
 ```llvm
@@ -6547,7 +6547,7 @@ attributes #0 = { nounwind willreturn readnone }
 
 <!-- cookbook:begin mod-math -->
 ```ts
-export const square = (n: number): number => n * n;
+export const square = (n: number): number => n * n
 ```
 
 ```llvm
@@ -6569,9 +6569,9 @@ identical.
 
 <!-- cookbook:begin mod-main -->
 ```ts
-import { square } from "./mod-math";
+import { square } from "./mod-math"
 
-export const main = (): number => square(7);
+export const main = (): number => square(7)
 ```
 
 ```llvm
@@ -6608,9 +6608,9 @@ root package — the program being compiled — keeps the bare names it always h
 
 <!-- cookbook:begin mod-package -->
 ```ts
-import { scale } from "cookbook-pkg";
+import { scale } from "cookbook-pkg"
 
-export const main = (): number => scale(7);
+export const main = (): number => scale(7)
 ```
 
 ```llvm
@@ -6647,20 +6647,20 @@ A branch that already ended in `ret` gets no `br`.
 ```ts
 const abs = (x: number): number => {
   if (x < 0) {
-    return -x;
+    return -x
   }
-  return x;
-};
+  return x
+}
 
 const pick = (flag: boolean, a: number, b: number): number => {
-  let r = 0;
+  let r = 0
   if (flag) {
-    r = a;
+    r = a
   } else {
-    r = b;
+    r = b
   }
-  return r;
-};
+  return r
+}
 ```
 
 ```llvm
@@ -6708,14 +6708,14 @@ form. A loop that is not a counted `for` drops `willreturn`.
 <!-- cookbook:begin stmt-while -->
 ```ts
 const countDigits = (n: number): number => {
-  let digits = 0;
-  let rest = n;
+  let digits = 0
+  let rest = n
   while (rest > 0) {
-    rest = rest / 10;
-    digits = digits + 1;
+    rest = rest / 10
+    digits = digits + 1
   }
-  return digits;
-};
+  return digits
+}
 ```
 
 ```llvm
@@ -6770,14 +6770,14 @@ attributes #1 = { nounwind noreturn cold }
 <!-- cookbook:begin stmt-do -->
 ```ts
 const sumDigits = (n: number): number => {
-  let sum = 0;
-  let rest = n;
+  let sum = 0
+  let rest = n
   do {
-    sum += rest % 10;
-    rest = rest / 10;
-  } while (rest > 0);
-  return sum;
-};
+    sum += rest % 10
+    rest = rest / 10
+  } while (rest > 0)
+  return sum
+}
 ```
 
 ```llvm
@@ -6849,12 +6849,12 @@ A counted loop (`i < n; i++` with `i` and `n` untouched in the body) keeps
 <!-- cookbook:begin stmt-for -->
 ```ts
 const sumTo = (n: number): number => {
-  let sum = 0;
+  let sum = 0
   for (let i = 0; i < n; i++) {
-    sum += i;
+    sum += i
   }
-  return sum;
-};
+  return sum
+}
 ```
 
 ```llvm
@@ -6903,21 +6903,21 @@ constant is folded before the table is written, so `KIND_CALL` is a `4` here.
 
 <!-- cookbook:begin stmt-switch -->
 ```ts
-const KIND_CALL: i32 = 4;
+const KIND_CALL: i32 = 4
 
 const classify = (kind: number): number => {
   switch (kind) {
     case 0:
-      return 10;
+      return 10
     case 1:
     case 2:
-      return 20;
+      return 20
     case KIND_CALL:
-      return 30;
+      return 30
     default:
-      return 40;
+      return 40
   }
-};
+}
 ```
 
 ```llvm
@@ -6956,18 +6956,18 @@ also disqualifies nothing: the loop is still counted, so `willreturn` stays.
 <!-- cookbook:begin stmt-break-continue -->
 ```ts
 const sumOdd = (n: number): number => {
-  let s = 0;
+  let s = 0
   for (let i = 0; i < n; i++) {
     if (i % 2 === 0) {
-      continue;
+      continue
     }
     if (s > 1000) {
-      break;
+      break
     }
-    s += i;
+    s += i
   }
-  return s;
-};
+  return s
+}
 ```
 
 ```llvm
@@ -7052,23 +7052,23 @@ every function is still `nounwind`.
 ```ts
 const half = (n: number): Result<number, string> => {
   if (n % 2 !== 0) {
-    return Err("odd");
+    return Err("odd")
   }
-  return Ok(n / 2);
-};
+  return Ok(n / 2)
+}
 
 const quarter = (n: number): Result<number, string> => {
-  const h = half(n).orReturn();
-  return half(h);
-};
+  const h = half(n).orReturn()
+  return half(h)
+}
 
 const describe = (n: number): string => {
-  const outcome = quarter(n);
+  const outcome = quarter(n)
   if (outcome.isErr()) {
-    return outcome.error;
+    return outcome.error
   }
-  return `${outcome.value}`;
-};
+  return `${outcome.value}`
+}
 ```
 
 ```llvm
@@ -7247,23 +7247,23 @@ unchanged.
 ```ts
 const half = (n: number): Result<number, number> => {
   if (n % 2 !== 0) {
-    return Err(n);
+    return Err(n)
   }
-  return Ok(n / 2);
-};
+  return Ok(n / 2)
+}
 
 const quarter = (n: number): Result<number, number> => {
-  const h = half(n).orReturn();
-  return half(h);
-};
+  const h = half(n).orReturn()
+  return half(h)
+}
 
 const describe = (n: number): number => {
-  const outcome = quarter(n);
+  const outcome = quarter(n)
   if (outcome.isErr()) {
-    return -outcome.error;
+    return -outcome.error
   }
-  return outcome.value;
-};
+  return outcome.value
+}
 ```
 
 ```llvm
@@ -7411,9 +7411,9 @@ no `return`. Every function that can reach it loses `willreturn`.
 <!-- cookbook:begin stmt-process-exit -->
 ```ts
 const finish = (code: number): number => {
-  console.log("exiting");
-  process.exit(code);
-};
+  console.log("exiting")
+  process.exit(code)
+}
 ```
 
 ```llvm
@@ -7443,12 +7443,12 @@ check is needed because the loop condition is the check.
 <!-- cookbook:begin stmt-for-of -->
 ```ts
 const total = (xs: number[]): number => {
-  let sum = 0;
+  let sum = 0
   for (const x of xs) {
-    sum += x;
+    sum += x
   }
-  return sum;
-};
+  return sum
+}
 ```
 
 ```llvm
@@ -7519,7 +7519,7 @@ attributes #0 = { nounwind willreturn readonly }
 
 <!-- cookbook:begin expr-ternary -->
 ```ts
-const max = (a: number, b: number): number => (a > b ? a : b);
+const max = (a: number, b: number): number => (a > b ? a : b)
 ```
 
 ```llvm
@@ -7550,9 +7550,9 @@ The right operand lives in its own block (`land.rhs`, `lor.rhs`), so
 
 <!-- cookbook:begin expr-logical -->
 ```ts
-const inRange = (x: number, lo: number, hi: number): boolean => x >= lo && x < hi;
+const inRange = (x: number, lo: number, hi: number): boolean => x >= lo && x < hi
 
-const zeroOrSmallQuotient = (x: number): boolean => x === 0 || 100 / x < 50;
+const zeroOrSmallQuotient = (x: number): boolean => x === 0 || 100 / x < 50
 ```
 
 ```llvm
@@ -7612,13 +7612,13 @@ Load, apply, store; postfix yields the old value, prefix the new one.
 <!-- cookbook:begin expr-compound -->
 ```ts
 const step = (): number => {
-  let x = 10;
-  x += 5;
-  x *= 2;
-  const a = x++;
-  const b = --x;
-  return a + b;
-};
+  let x = 10
+  x += 5
+  x *= 2
+  const a = x++
+  const b = --x
+  return a + b
+}
 ```
 
 ```llvm
@@ -7659,11 +7659,11 @@ One instruction each, and no panic path: unlike `/` these leave the function
 
 <!-- cookbook:begin expr-bitwise -->
 ```ts
-const mix = (a: i32, b: i32): i32 => (a & b) | (a ^ b);
+const mix = (a: i32, b: i32): i32 => (a & b) | (a ^ b)
 
-const invert = (a: i32): i32 => ~a;
+const invert = (a: i32): i32 => ~a
 
-const pack = (hi: i32, lo: i32): i32 => (hi << 16) | (lo & 65535);
+const pack = (hi: i32, lo: i32): i32 => (hi << 16) | (lo & 65535)
 ```
 
 ```llvm
@@ -7706,20 +7706,20 @@ single time. The shift-count mask is the local's, too — `f.bits <<= n` masks
 <!-- cookbook:begin expr-compound-target -->
 ```ts
 class Flags {
-  bits: i32 = 0;
+  bits: i32 = 0
 }
 
 const set = (f: Flags, mask: i32): void => {
-  f.bits |= mask;
-};
+  f.bits |= mask
+}
 
 const clamp = (bytes: i32[], i: i32): void => {
-  bytes[i] &= 255;
-};
+  bytes[i] &= 255
+}
 
 const shiftField = (f: Flags, n: i32): void => {
-  f.bits <<= n;
-};
+  f.bits <<= n
+}
 ```
 
 ```llvm
@@ -7801,13 +7801,13 @@ and no `and` appears (`a >> 3` below); a variable one costs the `and`.
 
 <!-- cookbook:begin expr-shifts -->
 ```ts
-const constantCount = (a: i32): i32 => a >> 3;
+const constantCount = (a: i32): i32 => a >> 3
 
-const variableCount = (a: i32, n: i32): i32 => a << n;
+const variableCount = (a: i32, n: i32): i32 => a << n
 
-const fills = (a: i32, n: i32): i32 => (a >> n) + (a >>> n);
+const fills = (a: i32, n: i32): i32 => (a >> n) + (a >>> n)
 
-const wide = (a: i64, n: i64): i64 => a << n;
+const wide = (a: i64, n: i64): i64 => a << n
 ```
 
 ```llvm
@@ -7857,7 +7857,7 @@ constant divisor at `-O1`. `f64` division is a bare `fdiv`.
 
 <!-- cookbook:begin expr-div-checked -->
 ```ts
-const div = (a: number, b: number): number => a / b;
+const div = (a: number, b: number): number => a / b
 ```
 
 ```llvm
@@ -7903,15 +7903,15 @@ looking at in the listing below:
 
 <!-- cookbook:begin expr-unsigned -->
 ```ts
-const divide = (a: u32, b: u32): u32 => a / b;
+const divide = (a: u32, b: u32): u32 => a / b
 
-const below = (a: u32, b: u32): boolean => a < b;
+const below = (a: u32, b: u32): boolean => a < b
 
-const halve = (a: u32): u32 => a >> 1;
+const halve = (a: u32): u32 => a >> 1
 
-const widen = (a: u32): u64 => toU64(a);
+const widen = (a: u32): u64 => toU64(a)
 
-const reinterpret = (a: i32): u32 => toU32(a);
+const reinterpret = (a: i32): u32 => toU32(a)
 ```
 
 ```llvm
@@ -7974,15 +7974,15 @@ spelling `0x3FB999999999999A`.
 
 <!-- cookbook:begin expr-f32 -->
 ```ts
-const blend = (a: f32, b: f32): f32 => (a + b) / b;
+const blend = (a: f32, b: f32): f32 => (a + b) / b
 
-const narrow = (x: f64): f32 => toF32(x);
+const narrow = (x: f64): f32 => toF32(x)
 
-const widen = (x: f32): f64 => toF64(x);
+const widen = (x: f32): f64 => toF64(x)
 
-const truncate = (x: f32): i32 => toI32(x);
+const truncate = (x: f32): i32 => toI32(x)
 
-const tenth = (): f32 => 0.1;
+const tenth = (): f32 => 0.1
 ```
 
 ```llvm
@@ -8032,9 +8032,9 @@ the functions stay `readnone`.
 
 <!-- cookbook:begin str-literal -->
 ```ts
-const greeting = (): string => "hello, world";
+const greeting = (): string => "hello, world"
 
-const same = (): string => "hello, world";
+const same = (): string => "hello, world"
 ```
 
 ```llvm
@@ -8062,11 +8062,11 @@ attributes #0 = { nounwind willreturn readnone }
 
 <!-- cookbook:begin str-ops -->
 ```ts
-const join = (a: string, b: string): string => a + b;
+const join = (a: string, b: string): string => a + b
 
-const same = (a: string, b: string): boolean => a === b;
+const same = (a: string, b: string): boolean => a === b
 
-const len = (s: string): number => s.length;
+const len = (s: string): number => s.length
 ```
 
 ```llvm
@@ -8114,11 +8114,11 @@ becomes `max(0, min(n, len))` and the call.
 
 <!-- cookbook:begin str-bytes -->
 ```ts
-const firstByte = (s: string): number => s.charCodeAt(0);
+const firstByte = (s: string): number => s.charCodeAt(0)
 
-const head = (s: string, n: number): string => s.substring(0, n);
+const head = (s: string, n: number): string => s.substring(0, n)
 
-const has = (s: string, sub: string): boolean => s.startsWith(sub) || s.endsWith(sub);
+const has = (s: string, sub: string): boolean => s.startsWith(sub) || s.endsWith(sub)
 ```
 
 ```llvm
@@ -8211,11 +8211,11 @@ slices every word out of a 300 KB source.
 
 <!-- cookbook:begin str-slice -->
 ```ts
-const head = (s: string, n: number): string => s.slice(0, n);
+const head = (s: string, n: number): string => s.slice(0, n)
 
-const rest = (s: string, n: number): string => s.slice(n);
+const rest = (s: string, n: number): string => s.slice(n)
 
-const proven = (): string => "hello,world".slice(0, 5);
+const proven = (): string => "hello,world".slice(0, 5)
 ```
 
 ```llvm
@@ -8301,7 +8301,7 @@ through `nish_str_concat`.
 
 <!-- cookbook:begin str-template -->
 ```ts
-const describe = (n: number, ok: boolean, name: string): string => `${name}: n=${n}, ok=${ok}`;
+const describe = (n: number, ok: boolean, name: string): string => `${name}: n=${n}, ok=${ok}`
 ```
 
 ```llvm
@@ -8333,10 +8333,10 @@ attributes #0 = { nounwind willreturn }
 <!-- cookbook:begin str-console-log -->
 ```ts
 const report = (): void => {
-  console.log("text");
-  console.log(7);
-  console.log(false);
-};
+  console.log("text")
+  console.log(7)
+  console.log(false)
+}
 ```
 
 ```llvm
@@ -8375,11 +8375,11 @@ Unsigned compare against `len`; the failing branch calls the `noreturn cold`
 
 <!-- cookbook:begin arr-index -->
 ```ts
-const get = (a: number[], i: number): number => a[i];
+const get = (a: number[], i: number): number => a[i]
 
 const set = (a: number[], i: number, v: number): void => {
-  a[i] = v;
-};
+  a[i] = v
+}
 ```
 
 ```llvm
@@ -8467,11 +8467,11 @@ restore, because the element never travels in a value type at all.
 
 <!-- cookbook:begin arr-u8-elements -->
 ```ts
-const get = (bytes: u8[], i: number): u8 => bytes[i];
+const get = (bytes: u8[], i: number): u8 => bytes[i]
 
 const set = (bytes: u8[], i: number, v: u8): void => {
-  bytes[i] = v;
-};
+  bytes[i] = v
+}
 ```
 
 ```llvm
@@ -8552,19 +8552,19 @@ proves `i`; the length guard proves the constant `0`. Neither function names
 <!-- cookbook:begin arr-bounds-proven -->
 ```ts
 const sum = (a: number[]): number => {
-  let total = 0;
+  let total = 0
   for (let i = 0; i < a.length; i = i + 1) {
-    total = total + a[i];
+    total = total + a[i]
   }
-  return total;
-};
+  return total
+}
 
 const first = (a: number[]): number => {
   if (a.length > 0) {
-    return a[0];
+    return a[0]
   }
-  return 0;
-};
+  return 0
+}
 ```
 
 ```llvm
@@ -8664,21 +8664,21 @@ loop has none of them.
 <!-- cookbook:begin arr-bounds-path -->
 ```ts
 class Holder {
-  xs: i32[];
+  xs: i32[]
   constructor(xs: i32[]) {
-    this.xs = xs;
+    this.xs = xs
   }
 }
 
 const total = (h: Holder): i32 => {
-  let s = 0;
-  let i = 0;
+  let s = 0
+  let i = 0
   while (i < h.xs.length) {
-    s = s + h.xs[i];
-    i = i + 1;
+    s = s + h.xs[i]
+    i = i + 1
   }
-  return s;
-};
+  return s
+}
 ```
 
 ```llvm
@@ -8773,15 +8773,15 @@ passed on the array the path named before the call.
 // Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
 
 class Perm {
-  v: i32[];
+  v: i32[]
   constructor(n: i32) {
-    this.v = new Array<i32>(n);
+    this.v = new Array<i32>(n)
   }
 
   swap(i: i32, j: i32): void {
-    const tmp = this.v[i];
-    this.v[i] = this.v[j];
-    this.v[j] = tmp;
+    const tmp = this.v[i]
+    this.v[i] = this.v[j]
+    this.v[j] = tmp
   }
 }
 ```
@@ -8947,17 +8947,17 @@ Compiled with `--number-mode f64`.
 
 ```ts
 const countCode = (s: string, code: i32): i32 => {
-  const n: i32 = toI32(s.length);
-  let count: i32 = 0;
-  let i: i32 = 0;
+  const n: i32 = toI32(s.length)
+  let count: i32 = 0
+  let i: i32 = 0
   while (i < n) {
     if (toI32(s.charCodeAt(i)) === code) {
-      count += 1;
+      count += 1
     }
-    i += 1;
+    i += 1
   }
-  return count;
-};
+  return count
+}
 ```
 
 ```llvm
@@ -9109,16 +9109,16 @@ asserts the `opt -O3` result on `tests/cases/arr_field_reload.ts`, and
 
 // An element store beside the class field that holds the array.
 export class Perm {
-  v: i32[];
+  v: i32[]
 
   constructor() {
-    this.v = [];
+    this.v = []
   }
 
   swap(i: i32, j: i32): void {
-    const tmp = this.v[i];
-    this.v[i] = this.v[j];
-    this.v[j] = tmp;
+    const tmp = this.v[i]
+    this.v[i] = this.v[j]
+    this.v[j] = tmp
   }
 }
 ```
@@ -9281,23 +9281,23 @@ host entries), and the rule that makes that sound is in
 <!-- cookbook:begin arr-header-field -->
 ```ts
 class Link {
-  next: Link | null = null;
+  next: Link | null = null
 }
 
 export class Pile {
-  tops: (Link | null)[];
+  tops: (Link | null)[]
 
   constructor() {
-    this.tops = [null];
+    this.tops = [null]
   }
 
   drop(): Link | null {
-    const top = this.tops[0];
+    const top = this.tops[0]
     if (top !== null) {
-      this.tops[0] = top.next;
-      top.next = null;
+      this.tops[0] = top.next
+      top.next = null
     }
-    return this.tops[0];
+    return this.tops[0]
   }
 }
 ```
@@ -9454,28 +9454,28 @@ keeps the pointer layout in every build but a closed-world `--link`.
 <!-- cookbook:begin cls-inline-array -->
 ```ts
 class Rows {
-  free: boolean[];
+  free: boolean[]
 
   constructor() {
-    this.free = [];
+    this.free = []
   }
 
   reset(): void {
-    this.free = new Array<boolean>(8);
+    this.free = new Array<boolean>(8)
   }
 
   take(r: i32): boolean {
-    const was = this.free[r];
-    this.free[r] = false;
-    return was;
+    const was = this.free[r]
+    this.free[r] = false
+    return was
   }
 }
 
 export const run = (): boolean => {
-  const rows = new Rows();
-  rows.reset();
-  return rows.take(3);
-};
+  const rows = new Rows()
+  rows.reset()
+  return rows.take(3)
+}
 ```
 
 ```llvm
@@ -9595,7 +9595,7 @@ an out-of-range index is undefined behaviour rather than a panic.
 Compiled with `--unchecked-indexing`.
 
 ```ts
-const get = (a: number[], i: number): number => a[i];
+const get = (a: number[], i: number): number => a[i]
 ```
 
 ```llvm
@@ -9639,14 +9639,14 @@ bytes) and the data (`n * sizeof(T)`).
 <!-- cookbook:begin arr-literal-push -->
 ```ts
 const squares = (n: number): number[] => {
-  const xs: number[] = [];
+  const xs: number[] = []
   for (let i = 0; i < n; i++) {
-    xs.push(i * i);
+    xs.push(i * i)
   }
-  return xs;
-};
+  return xs
+}
 
-const pair = (): number[] => [1, 2];
+const pair = (): number[] => [1, 2]
 ```
 
 ```llvm
@@ -9794,9 +9794,9 @@ a number.
 
 <!-- cookbook:begin arr-join -->
 ```ts
-const report = (parts: string[]): string => parts.join(", ");
+const report = (parts: string[]): string => parts.join(", ")
 
-const firstAt = (names: string[], name: string): number => names.indexOf(name);
+const firstAt = (names: string[], name: string): number => names.indexOf(name)
 ```
 
 ```llvm
@@ -9981,9 +9981,9 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 <!-- cookbook:begin arr-new -->
 ```ts
-const zeros = (n: number): number[] => new Array<number>(n);
+const zeros = (n: number): number[] => new Array<number>(n)
 
-const len = (xs: number[]): number => xs.length;
+const len = (xs: number[]): number => xs.length
 ```
 
 ```llvm
@@ -10079,20 +10079,20 @@ it always was; on `sum` the signature guarantees it as well, which is what lets
 <!-- cookbook:begin arr-readonly -->
 ```ts
 const sum = (xs: readonly number[]): number => {
-  let total = 0;
+  let total = 0
   for (const x of xs) {
-    total = total + x;
+    total = total + x
   }
-  return total;
-};
+  return total
+}
 
 const sumMutable = (xs: number[]): number => {
-  let total = 0;
+  let total = 0
   for (const x of xs) {
-    total = total + x;
+    total = total + x
   }
-  return total;
-};
+  return total
+}
 ```
 
 ```llvm
@@ -10217,32 +10217,32 @@ and its reason are in `docs/LANGUAGE.md`,
 <!-- cookbook:begin arr-records -->
 ```ts
 interface Point {
-  x: f64;
-  y: f64;
+  x: f64
+  y: f64
 }
 
 // The whole array is one block of `Point`s, so the loop walks it with a single
 // `getelementptr %struct.Point, ..., i64 %i` per element: no pointer to load,
 // no second block to chase into, and two adjacent points on one cache line.
 const centroidX = (ps: readonly Point[]): f64 => {
-  let total: f64 = 0.0;
+  let total: f64 = 0.0
   for (const p of ps) {
-    total = total + p.x;
+    total = total + p.x
   }
-  return total / toF64(ps.length);
-};
+  return total / toF64(ps.length)
+}
 
 // `push` copies the record into the slot, which is why holding `ps[i]` across
 // one is a compile error: `nish_array_grow` moves the block the pointer is in.
 export const spread = (n: i32): f64 => {
-  const ps: Point[] = [];
-  let i = 0;
+  const ps: Point[] = []
+  let i = 0
   while (i < n) {
-    ps.push({ x: toF64(i), y: toF64(i) * 0.5 });
-    i = i + 1;
+    ps.push({ x: toF64(i), y: toF64(i) * 0.5 })
+    i = i + 1
   }
-  return centroidX(ps);
-};
+  return centroidX(ps)
+}
 ```
 
 ```llvm
@@ -10400,24 +10400,24 @@ first; fields are `getelementptr inbounds` + `load`/`store`.
 <!-- cookbook:begin cls-point -->
 ```ts
 class Point {
-  x: number;
-  y: number;
+  x: number
+  y: number
 
   constructor(x: number, y: number) {
-    this.x = x;
-    this.y = y;
+    this.x = x
+    this.y = y
   }
 
   manhattan(): number {
-    return this.x + this.y;
+    return this.x + this.y
   }
 }
 
 const origin = (): number => {
-  const p = new Point(3, 4);
-  p.x = 0;
-  return p.manhattan();
-};
+  const p = new Point(3, 4)
+  p.x = 0
+  return p.manhattan()
+}
 ```
 
 ```llvm
@@ -10476,12 +10476,12 @@ attributes #1 = { nounwind willreturn readonly }
 <!-- cookbook:begin cls-initializers -->
 ```ts
 class Defaults {
-  n: number = 42;
-  flag: boolean = true;
-  name: string = "anon";
+  n: number = 42
+  flag: boolean = true
+  name: string = "anon"
 }
 
-const make = (): Defaults => new Defaults();
+const make = (): Defaults => new Defaults()
 ```
 
 ```llvm
@@ -10555,23 +10555,23 @@ identical.
 <!-- cookbook:begin cls-interface -->
 ```ts
 interface Pair {
-  first: number;
-  second: number;
+  first: number
+  second: number
 }
 
 class Ordered implements Pair {
-  first: number;
-  second: number;
+  first: number
+  second: number
 
   constructor(a: number, b: number) {
-    this.first = a;
-    this.second = b;
+    this.first = a
+    this.second = b
   }
 }
 
-const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
+const swap = (p: Pair): Pair => ({ first: p.second, second: p.first })
 
-const asPair = (o: Ordered): Pair => o;
+const asPair = (o: Ordered): Pair => o
 ```
 
 ```llvm
@@ -10656,29 +10656,29 @@ offsets, the class keeps its own methods, and nothing converts back.
 <!-- cookbook:begin cls-prefix -->
 ```ts
 interface Shape {
-  x: number;
-  y: number;
+  x: number
+  y: number
 }
 
 class Square implements Shape {
-  x: number;
-  y: number;
-  side: number;
+  x: number
+  y: number
+  side: number
 
   constructor(x: number, y: number, side: number) {
-    this.x = x;
-    this.y = y;
-    this.side = side;
+    this.x = x
+    this.y = y
+    this.side = side
   }
 
   area(): number {
-    return this.side * this.side;
+    return this.side * this.side
   }
 }
 
-const originDistance = (s: Shape): number => s.x + s.y;
+const originDistance = (s: Shape): number => s.x + s.y
 
-const describe = (sq: Square): number => originDistance(sq) + sq.area();
+const describe = (sq: Square): number => originDistance(sq) + sq.area()
 ```
 
 ```llvm
@@ -10744,35 +10744,35 @@ the module touches the arena, so there is no arena prelude at all.
 <!-- cookbook:begin mem-stack-object -->
 ```ts
 interface Pair {
-  first: number;
-  second: number;
+  first: number
+  second: number
 }
 
 class Point {
-  x: number;
-  y: number;
+  x: number
+  y: number
 
   constructor(x: number, y: number) {
-    this.x = x;
-    this.y = y;
+    this.x = x
+    this.y = y
   }
 
   manhattan(): number {
-    return this.x + this.y;
+    return this.x + this.y
   }
 }
 
 // An object literal that is only read: the function's own memory, so `readnone`.
 const swapped = (a: number, b: number): number => {
-  const p: Pair = { first: b, second: a };
-  return p.first * 10 + p.second;
-};
+  const p: Pair = { first: b, second: a }
+  return p.first * 10 + p.second
+}
 
 // A constructed object that never escapes: an alloca, the constructor writes through it.
 const nearest = (x: number): number => {
-  const p = new Point(x, 4);
-  return p.manhattan();
-};
+  const p = new Point(x, 4)
+  return p.manhattan()
+}
 ```
 
 ```llvm
@@ -10854,35 +10854,35 @@ Compiled with `--no-stack-alloc`.
 
 ```ts
 interface Pair {
-  first: number;
-  second: number;
+  first: number
+  second: number
 }
 
 class Point {
-  x: number;
-  y: number;
+  x: number
+  y: number
 
   constructor(x: number, y: number) {
-    this.x = x;
-    this.y = y;
+    this.x = x
+    this.y = y
   }
 
   manhattan(): number {
-    return this.x + this.y;
+    return this.x + this.y
   }
 }
 
 // An object literal that is only read: the function's own memory, so `readnone`.
 const swapped = (a: number, b: number): number => {
-  const p: Pair = { first: b, second: a };
-  return p.first * 10 + p.second;
-};
+  const p: Pair = { first: b, second: a }
+  return p.first * 10 + p.second
+}
 
 // A constructed object that never escapes: an alloca, the constructor writes through it.
 const nearest = (x: number): number => {
-  const p = new Point(x, 4);
-  return p.manhattan();
-};
+  const p = new Point(x, 4)
+  return p.manhattan()
+}
 ```
 
 ```llvm
@@ -11003,11 +11003,11 @@ caller owns that memory and `label` gets no scope.
 // The concatenation is an arena temporary that dies with the call, so the
 // function marks the arena on entry and releases it before returning.
 const greet = (name: string): void => {
-  console.log("hello, " + name + "!");
-};
+  console.log("hello, " + name + "!")
+}
 
 // The template is returned, so the caller owns it: no scope here.
-const label = (name: string): string => `<${name}>`;
+const label = (name: string): string => `<${name}>`
 ```
 
 ```llvm
@@ -11063,33 +11063,33 @@ analysis, stack allocation, and arena scopes" (`tests/cases/mem_callee_scope`,
 // the list cannot outlive the call, and `size` brackets itself with the arena
 // scope. `chain` returns its list, so it gets none.
 class Cell {
-  v: i32;
-  next: Cell | null = null;
+  v: i32
+  next: Cell | null = null
 
   constructor(v: i32) {
-    this.v = v;
+    this.v = v
   }
 }
 
 const chain = (n: i32): Cell | null => {
-  let head: Cell | null = null;
+  let head: Cell | null = null
   for (let i = 0; i < n; i++) {
-    const c = new Cell(i);
-    c.next = head;
-    head = c;
+    const c = new Cell(i)
+    c.next = head
+    head = c
   }
-  return head;
-};
+  return head
+}
 
 export const size = (n: i32): i32 => {
-  let k = 0;
-  let p = chain(n);
+  let k = 0
+  let p = chain(n)
   while (p !== null) {
-    k = k + 1;
-    p = p.next;
+    k = k + 1
+    p = p.next
   }
-  return k;
-};
+  return k
+}
 ```
 
 ```llvm
@@ -11240,22 +11240,22 @@ returned. The rule and its proof are in [ARCHITECTURE.md](ARCHITECTURE.md),
 // bracketed: the mark is the arena's `buf` and `off`, and the release rewinds
 // `off` unless the pass pushed a chunk.
 class Box {
-  n: i32;
+  n: i32
 
   constructor(n: i32) {
-    this.n = n;
+    this.n = n
   }
 }
 
-const build = (n: i32): i32[] => [n, n + 1, n + 2];
+const build = (n: i32): i32[] => [n, n + 1, n + 2]
 
 export const summarise = (rounds: i32): Box => {
-  let total = 0;
+  let total = 0
   for (let i = 0; i < rounds; i++) {
-    total = total + build(i).length;
+    total = total + build(i).length
   }
-  return new Box(total);
-};
+  return new Box(total)
+}
 ```
 
 ```llvm
@@ -11431,27 +11431,33 @@ buys).
 // and the `ret` it would be work after the call — so `@nish_arena_release` is
 // emitted after the arguments and before the call instead.
 const sum = (n: number, acc: number): number => {
-  if (n === 0) { return acc; }
-  const label = `item ${n}`;
-  return sum(n - 1, acc + label.length);
-};
+  if (n === 0) {
+    return acc
+  }
+  const label = `item ${n}`
+  return sum(n - 1, acc + label.length)
+}
 
 // No temporaries, so no scope and nothing to move: here the marker is the
 // whole of it, and it is what makes a deep recursion fit at `--profile debug`,
 // where nothing rewrites the recursion into a loop.
 const steps = (n: number, acc: number): number => {
-  if (n === 0) { return acc; }
-  return steps(n - 1, acc + 1);
-};
+  if (n === 0) {
+    return acc
+  }
+  return steps(n - 1, acc + 1)
+}
 
 // Here the accumulator is arena memory the release would reclaim out from
 // under the callee — and a pointer into this frame is exactly what the marker
 // would be denying — so this one keeps its release after the call and carries
 // no `tail`.
 const joinTo = (n: number, text: string): number => {
-  if (n === 0) { return text.length; }
-  return joinTo(n - 1, text + `${n}`);
-};
+  if (n === 0) {
+    return text.length
+  }
+  return joinTo(n - 1, text + `${n}`)
+}
 ```
 
 ```llvm
@@ -11558,32 +11564,32 @@ measured are in [wp6-memory.md](wp6-memory.md) §2a and
 // because a call hands back exactly one value — so the call is bracketed by
 // `nish_arena_mark` and `nish_arena_keep`, which moves the returned string
 // down onto the mark and releases everything underneath it.
-const piece = (i: number): string => `${i},`;
+const piece = (i: number): string => `${i},`
 
 const join = (n: number): string => {
-  let s = "";
+  let s = ""
   for (let i = 0; i < n; i++) {
-    s = s + piece(i);
+    s = s + piece(i)
   }
-  return s;
-};
+  return s
+}
 
 class Box {
-  text: string;
+  text: string
   constructor(text: string) {
-    this.text = text;
+    this.text = text
   }
 }
 
 // `fill` hands the string it built to an object its caller still holds, so
 // what it allocated is not garbage and the call below carries no bracket.
 const fill = (b: Box, i: number): string => {
-  const s = `v${i}`;
-  b.text = s;
-  return s;
-};
+  const s = `v${i}`
+  b.text = s
+  return s
+}
 
-const report = (b: Box, n: number): string => join(n) + fill(b, n);
+const report = (b: Box, n: number): string => join(n) + fill(b, n)
 ```
 
 ```llvm
@@ -11690,16 +11696,16 @@ is an arena allocation that the release reclaims.
 <!-- cookbook:begin mem-arena-builtins -->
 ```ts
 const measure = (): i64 => {
-  const m = Arena.mark();
-  const xs = new Array<number>(2000); // 8000 bytes: over the 4096-byte stack cap, so arena
-  const used = Arena.used();
-  Arena.release(m);
-  return used + toI64(xs.length);
-};
+  const m = Arena.mark()
+  const xs = new Array<number>(2000) // 8000 bytes: over the 4096-byte stack cap, so arena
+  const used = Arena.used()
+  Arena.release(m)
+  return used + toI64(xs.length)
+}
 
 const recycle = (): void => {
-  Arena.reset();
-};
+  Arena.reset()
+}
 ```
 
 ```llvm
@@ -11812,33 +11818,33 @@ what make the *element* nullable rather than the array.
 <!-- cookbook:begin mem-nullable -->
 ```ts
 class Node {
-  value: number;
-  next: Node | null = null;
+  value: number
+  next: Node | null = null
 
   constructor(value: number) {
-    this.value = value;
+    this.value = value
   }
 }
 
-const valueOr = (n: Node | null, fallback: number): number => (n !== null ? n.value : fallback);
+const valueOr = (n: Node | null, fallback: number): number => (n !== null ? n.value : fallback)
 
 const sum = (head: Node | null): number => {
-  let total = 0;
-  let cur: Node | null = head;
+  let total = 0
+  let cur: Node | null = head
   while (cur !== null) {
-    total += cur.value;
-    cur = cur.next;
+    total += cur.value
+    cur = cur.next
   }
-  return total;
-};
+  return total
+}
 
 // `(Node | null)[]`, which is where a type needs its parentheses: `Node |
 // null[]` would group the other way. The element loads as a nullable and
 // narrows like any local once it is bound to one.
 const firstValue = (slots: (Node | null)[]): number => {
-  const head = slots[0];
-  return head !== null ? head.value : 0;
-};
+  const head = slots[0]
+  return head !== null ? head.value : 0
+}
 ```
 
 ```llvm
@@ -11983,11 +11989,11 @@ callers stay pure.
 Compiled with `--number-mode f64`.
 
 ```ts
-const hypot = (a: number, b: number): number => Math.sqrt(a * a + b * b);
+const hypot = (a: number, b: number): number => Math.sqrt(a * a + b * b)
 
-const roundHalfUp = (x: number): number => Math.round(x);
+const roundHalfUp = (x: number): number => Math.round(x)
 
-const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1);
+const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```
 
 ```llvm
@@ -12030,11 +12036,11 @@ attributes #0 = { nounwind willreturn readnone }
 
 <!-- cookbook:begin builtin-math-i32 -->
 ```ts
-const clamp = (x: number, lo: number, hi: number): number => Math.min(Math.max(x, lo), hi);
+const clamp = (x: number, lo: number, hi: number): number => Math.min(Math.max(x, lo), hi)
 
-const magnitude = (x: number): number => Math.abs(x);
+const magnitude = (x: number): number => Math.abs(x)
 
-const tau = (): f64 => Math.PI * 2;
+const tau = (): f64 => Math.PI * 2
 ```
 
 ```llvm
@@ -12071,11 +12077,11 @@ attributes #0 = { nounwind willreturn readnone }
 
 <!-- cookbook:begin builtin-conversions -->
 ```ts
-const widen = (n: number): i64 => toI64(n);
+const widen = (n: number): i64 => toI64(n)
 
-const narrow = (x: f64): number => toI32(x);
+const narrow = (x: f64): number => toI32(x)
 
-const toDouble = (n: number): f64 => toF64(n);
+const toDouble = (n: number): f64 => toF64(n)
 ```
 
 ```llvm
@@ -12109,7 +12115,7 @@ attributes #0 = { nounwind willreturn readnone }
 
 <!-- cookbook:begin builtin-random -->
 ```ts
-const coin = (): boolean => Math.random() < 0.5;
+const coin = (): boolean => Math.random() < 0.5
 ```
 
 ```llvm
@@ -12138,19 +12144,19 @@ a `ret` on that path. `readFileSyncOrNull` returns a pointer that may be
 <!-- cookbook:begin builtin-streams -->
 ```ts
 const report = (problem: string): void => {
-  console.error(problem);
-  write("progress: ");
-  writeError(problem);
-};
+  console.error(problem)
+  write("progress: ")
+  writeError(problem)
+}
 
 const load = (path: string): number => {
-  const text = readFileSyncOrNull(path);
+  const text = readFileSyncOrNull(path)
   if (text === null) {
-    panic(`cannot read ${path}`);
+    panic(`cannot read ${path}`)
   } else {
-    return text.length;
+    return text.length
   }
-};
+}
 ```
 
 ```llvm
@@ -12208,12 +12214,12 @@ attributes #2 = { noreturn nounwind }
 <!-- cookbook:begin builtin-files -->
 ```ts
 export const main = (): number => {
-  writeFileSync("out.txt", "hello\n");
-  appendFileSync("out.txt", "world\n");
-  const text = readFileSync("out.txt");
-  console.log(text.length);
-  return 0;
-};
+  writeFileSync("out.txt", "hello\n")
+  appendFileSync("out.txt", "world\n")
+  const text = readFileSync("out.txt")
+  console.log(text.length)
+  return 0
+}
 ```
 
 ```llvm
@@ -12272,11 +12278,11 @@ and `nish_main` gets no arena scope and no `willreturn`.
 ```ts
 export const main = (): number => {
   if (!mkdirSync("build/out")) {
-    panic("cannot create build/out");
+    panic("cannot create build/out")
   }
-  const argv: string[] = ["bash", "scripts/build.sh", "app.ll"];
-  return spawnSync(argv);
-};
+  const argv: string[] = ["bash", "scripts/build.sh", "app.ll"]
+  return spawnSync(argv)
+}
 ```
 
 ```llvm
@@ -12401,13 +12407,13 @@ directory to be made. `--target host` maps the same pair of strings to a triple
 <!-- cookbook:begin builtin-host -->
 ```ts
 export const main = (): number => {
-  const out = "build/out";
+  const out = "build/out"
   if (!isDirectorySync(out) && !mkdirSync(out)) {
-    panic(`cannot create ${out}`);
+    panic(`cannot create ${out}`)
   }
-  console.log(`${process.platform} ${process.arch}`);
-  return 0;
-};
+  console.log(`${process.platform} ${process.arch}`)
+  return 0
+}
 ```
 
 ```llvm
@@ -12501,15 +12507,15 @@ interval measured with them is exactly zero.
 <!-- cookbook:begin builtin-driver -->
 ```ts
 export const main = (): number => {
-  const cases = readdirSync("tests/cases");
+  const cases = readdirSync("tests/cases")
   if (cases === null) {
-    panic("cannot list tests/cases");
+    panic("cannot list tests/cases")
   }
-  const started = monotonicNanos();
-  const status = spawnSyncTo(["sh", "-c", "echo hello"], "build/out.txt", "");
-  console.log(`${cases.length} cases, status ${status}, ${monotonicNanos() - started} ns`);
-  return 0;
-};
+  const started = monotonicNanos()
+  const status = spawnSyncTo(["sh", "-c", "echo hello"], "build/out.txt", "")
+  console.log(`${cases.length} cases, status ${status}, ${monotonicNanos() - started} ns`)
+  return 0
+}
 ```
 
 ```llvm
@@ -12672,11 +12678,11 @@ nullable, so `getenv` does not need a spelling of its own for it.
 <!-- cookbook:begin builtin-env -->
 ```ts
 export const main = (): number => {
-  const cc = getenv("CC");
-  const compiler = cc === null ? "clang" : cc;
-  console.log(`building with ${compiler}`);
-  return 0;
-};
+  const cc = getenv("CC")
+  const compiler = cc === null ? "clang" : cc
+  console.log(`building with ${compiler}`)
+  return 0
+}
 ```
 
 ```llvm
@@ -12755,11 +12761,11 @@ directory `argv[0]` names is the link's rather than the package's
 <!-- cookbook:begin builtin-realpath -->
 ```ts
 export const main = (): number => {
-  const here = realpathSync(".");
-  const root = here === null ? "." : here;
-  console.log(`resolved to ${root}`);
-  return 0;
-};
+  const here = realpathSync(".")
+  const root = here === null ? "." : here
+  console.log(`resolved to ${root}`)
+  return 0
+}
 ```
 
 ```llvm
@@ -12825,15 +12831,15 @@ it (`docs/LANGUAGE.md` -> Builtin modules).
 
 <!-- cookbook:begin builtin-nish-modules -->
 ```ts
-import { readFileSync, writeFileSync } from "nish:fs";
-import { argv } from "nish:process";
-import { write } from "nish:io";
+import { readFileSync, writeFileSync } from "nish:fs"
+import { argv } from "nish:process"
+import { write } from "nish:io"
 
 export const main = (): number => {
-  writeFileSync("build/cookbook/out.txt", `${argv.length}\n`);
-  write(readFileSync("build/cookbook/out.txt"));
-  return 0;
-};
+  writeFileSync("build/cookbook/out.txt", `${argv.length}\n`)
+  write(readFileSync("build/cookbook/out.txt"))
+  return 0
+}
 ```
 
 ```llvm
@@ -12909,7 +12915,7 @@ compiled with no flags.
 
 <!-- cookbook:begin opt-nsw -->
 ```ts
-const poly = (x: number, y: number): number => x * x - 3 * y + -x;
+const poly = (x: number, y: number): number => x * x - 3 * y + -x
 ```
 
 ```llvm
@@ -12936,7 +12942,7 @@ source, one flag, and no `nsw` anywhere:
 Compiled with `--wrapping`.
 
 ```ts
-const poly = (x: number, y: number): number => x * x - 3 * y + -x;
+const poly = (x: number, y: number): number => x * x - 3 * y + -x
 ```
 
 ```llvm
@@ -12971,7 +12977,7 @@ flag the module is target-neutral and clang fills both in at link time.
 Compiled with `--target x86_64-unknown-linux-gnu`.
 
 ```ts
-const add = (a: number, b: number): number => a + b;
+const add = (a: number, b: number): number => a + b
 ```
 
 ```llvm
@@ -12999,7 +13005,7 @@ struct layouts must match `runtime/runtime.c` byte for byte.
 Compiled with `--runtime-decls`.
 
 ```ts
-const identity = (s: string): string => s;
+const identity = (s: string): string => s
 ```
 
 ```llvm

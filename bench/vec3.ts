@@ -7,60 +7,60 @@
 // the same expression order so the doubles agree bit for bit.
 // Compile with --number-mode f64.
 class Vec3 {
-  x: number;
-  y: number;
-  z: number;
+  x: number
+  y: number
+  z: number
   constructor(x: number, y: number, z: number) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
+    this.x = x
+    this.y = y
+    this.z = z
   }
   add(o: Vec3): void {
-    this.x = this.x + o.x;
-    this.y = this.y + o.y;
-    this.z = this.z + o.z;
+    this.x = this.x + o.x
+    this.y = this.y + o.y
+    this.z = this.z + o.z
   }
   addScaled(o: Vec3, s: number): void {
-    this.x = this.x + o.x * s;
-    this.y = this.y + o.y * s;
-    this.z = this.z + o.z * s;
+    this.x = this.x + o.x * s
+    this.y = this.y + o.y * s
+    this.z = this.z + o.z * s
   }
   scale(s: number): void {
-    this.x = this.x * s;
-    this.y = this.y * s;
-    this.z = this.z * s;
+    this.x = this.x * s
+    this.y = this.y * s
+    this.z = this.z * s
   }
   dot(o: Vec3): number {
-    return this.x * o.x + this.y * o.y + this.z * o.z;
+    return this.x * o.x + this.y * o.y + this.z * o.z
   }
   crossInto(o: Vec3, out: Vec3): void {
-    out.x = this.y * o.z - this.z * o.y;
-    out.y = this.z * o.x - this.x * o.z;
-    out.z = this.x * o.y - this.y * o.x;
+    out.x = this.y * o.z - this.z * o.y
+    out.y = this.z * o.x - this.x * o.z
+    out.z = this.x * o.y - this.y * o.x
   }
   norm(): number {
-    return Math.sqrt(this.dot(this));
+    return Math.sqrt(this.dot(this))
   }
 }
 
 export const main = (): i32 => {
-  const N: i32 = 50000000; // bench:n
-  const DT = 0.0000001;
-  const p = new Vec3(0, 0, 0);
-  const v = new Vec3(1, 2, 3);
-  const g = new Vec3(0, -0.0000001, 0);
-  const kick = new Vec3(0, 0, 0);
-  let energy = 0;
+  const N: i32 = 50000000 // bench:n
+  const DT = 0.0000001
+  const p = new Vec3(0, 0, 0)
+  const v = new Vec3(1, 2, 3)
+  const g = new Vec3(0, -0.0000001, 0)
+  const kick = new Vec3(0, 0, 0)
+  let energy = 0
   for (let i: i32 = 0; i < N; i++) {
-    v.add(g);
-    v.crossInto(g, kick);
-    v.addScaled(kick, 0.001);
-    p.addScaled(v, DT);
-    energy = energy + 0.5 * v.dot(v) + p.norm() * DT;
+    v.add(g)
+    v.crossInto(g, kick)
+    v.addScaled(kick, 0.001)
+    p.addScaled(v, DT)
+    energy = energy + 0.5 * v.dot(v) + p.norm() * DT
   }
-  console.log(p.x);
-  console.log(p.y);
-  console.log(p.z);
-  console.log(energy);
-  return 0;
-};
+  console.log(p.x)
+  console.log(p.y)
+  console.log(p.z)
+  console.log(energy)
+  return 0
+}

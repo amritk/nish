@@ -1,3 +1,3 @@
-import { scale } from "cookbook-pkg";
+import { scale } from "cookbook-pkg"
 
-export const main = (): number => scale(7);
+export const main = (): number => scale(7)

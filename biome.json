@@ -35,7 +35,7 @@
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
-      "semicolons": "always",
+      "semicolons": "asNeeded",
       "trailingCommas": "es5"
     }
   },
@@ -68,9 +68,7 @@
           "options": {
             "strictCase": false,
             "requireAscii": true,
-            "filenameCases": [
-              "kebab-case"
-            ]
+            "filenameCases": ["kebab-case"]
           }
         },
         "useImportType": "off",
@@ -100,20 +98,13 @@
                 "selector": {
                   "kind": "const"
                 },
-                "formats": [
-                  "camelCase",
-                  "PascalCase",
-                  "CONSTANT_CASE"
-                ]
+                "formats": ["camelCase", "PascalCase", "CONSTANT_CASE"]
               },
               {
                 "selector": {
                   "kind": "objectLiteralProperty"
                 },
-                "formats": [
-                  "camelCase",
-                  "CONSTANT_CASE"
-                ]
+                "formats": ["camelCase", "CONSTANT_CASE"]
               }
             ]
           }
@@ -216,15 +207,10 @@
         "scripts/**/*.js",
         ".claude/hooks/*.mjs"
       ],
-      "plugins": [
-        "biome-plugins/no-function-declaration.grit"
-      ]
+      "plugins": ["biome-plugins/no-function-declaration.grit"]
     },
     {
-      "includes": [
-        "web/wasi.mjs",
-        ".claude/hooks/*.mjs"
-      ],
+      "includes": ["web/wasi.mjs", ".claude/hooks/*.mjs"],
       "linter": {
         "rules": {
           "style": {
@@ -238,10 +224,7 @@
                     "selector": {
                       "kind": "objectLiteralProperty"
                     },
-                    "formats": [
-                      "camelCase",
-                      "snake_case"
-                    ]
+                    "formats": ["camelCase", "snake_case"]
                   }
                 ]
               }
@@ -251,10 +234,7 @@
       }
     },
     {
-      "includes": [
-        "self/**/*.ts",
-        "std/**/*.ts"
-      ],
+      "includes": ["self/**/*.ts", "std/**/*.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -263,12 +243,7 @@
               "options": {
                 "patterns": [
                   {
-                    "group": [
-                      "**/tests/**",
-                      "**/scripts/**",
-                      "**/bench/**",
-                      "**/examples/**"
-                    ],
+                    "group": ["**/tests/**", "**/scripts/**", "**/bench/**", "**/examples/**"],
                     "message": "The compiler and the standard library ship; they may not import from tests/, scripts/, bench/ or examples/."
                   }
                 ]

@@ -26,73 +26,73 @@
 
 export class Target {
   /** The triple written to `target triple`; aliases are normalised to this. */
-  triple: string;
-  datalayout: string;
+  triple: string
+  datalayout: string
 
   constructor(triple: string, datalayout: string) {
-    this.triple = triple;
-    this.datalayout = datalayout;
+    this.triple = triple
+    this.datalayout = datalayout
   }
 }
 
 const X86_64_LINUX_LAYOUT: string =
-  "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128";
+  "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string =
-  "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128";
-const WASM32_LAYOUT: string = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20";
+  "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+const WASM32_LAYOUT: string = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
 
 /** The canonical triples, in the order `--target` lists them when it refuses one. */
 export const supportedTargets = (): string[] => [
-    "x86_64-unknown-linux-gnu",
-    "aarch64-unknown-linux-gnu",
-    "x86_64-apple-darwin",
-    "aarch64-apple-darwin",
-    "wasm32-unknown-unknown",
-    "wasm32-wasi",
-  ];
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+  "wasm32-unknown-unknown",
+  "wasm32-wasi",
+]
 
 /** The layout of a canonical triple, or the empty string when it is not one. */
 const layoutOf = (triple: string): string => {
   if (triple === "x86_64-unknown-linux-gnu") {
-    return X86_64_LINUX_LAYOUT;
+    return X86_64_LINUX_LAYOUT
   }
   if (triple === "aarch64-unknown-linux-gnu") {
-    return "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128";
+    return "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
   }
   if (triple === "x86_64-apple-darwin") {
-    return X86_64_DARWIN_LAYOUT;
+    return X86_64_DARWIN_LAYOUT
   }
   if (triple === "aarch64-apple-darwin") {
-    return "e-m:o-i64:64-i128:128-n32:64-S128";
+    return "e-m:o-i64:64-i128:128-n32:64-S128"
   }
   if (triple === "wasm32-unknown-unknown" || triple === "wasm32-wasi") {
-    return WASM32_LAYOUT;
+    return WASM32_LAYOUT
   }
-  return "";
-};
+  return ""
+}
 
 /** Other spellings people type, each mapped to a canonical triple. */
 const aliasOf = (spec: string): string => {
   if (spec === "x86_64-linux-gnu" || spec === "x86_64-linux") {
-    return "x86_64-unknown-linux-gnu";
+    return "x86_64-unknown-linux-gnu"
   }
   if (spec === "aarch64-linux-gnu" || spec === "aarch64-linux") {
-    return "aarch64-unknown-linux-gnu";
+    return "aarch64-unknown-linux-gnu"
   }
   if (spec === "arm64-apple-darwin" || spec === "arm64-apple-macosx" || spec === "aarch64-apple-macosx") {
-    return "aarch64-apple-darwin";
+    return "aarch64-apple-darwin"
   }
   if (spec === "x86_64-apple-macosx") {
-    return "x86_64-apple-darwin";
+    return "x86_64-apple-darwin"
   }
   if (spec === "wasm32") {
-    return "wasm32-unknown-unknown";
+    return "wasm32-unknown-unknown"
   }
   if (spec === "wasm32-unknown-wasi") {
-    return "wasm32-wasi";
+    return "wasm32-wasi"
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * The triple of the machine the compiler is running on, from what the runtime
@@ -107,25 +107,25 @@ const aliasOf = (spec: string): string => {
  * machine (`tests/run.js`, the WP14 block).
  */
 export const hostTriple = (): string => {
-  const arch = process.arch;
-  let cpu = "";
+  const arch = process.arch
+  let cpu = ""
   if (arch === "x64") {
-    cpu = "x86_64";
+    cpu = "x86_64"
   } else if (arch === "arm64") {
-    cpu = "aarch64";
+    cpu = "aarch64"
   }
   if (cpu.length === 0) {
-    return "";
+    return ""
   }
-  const platform = process.platform;
+  const platform = process.platform
   if (platform === "linux") {
-    return `${cpu}-unknown-linux-gnu`;
+    return `${cpu}-unknown-linux-gnu`
   }
   if (platform === "darwin") {
-    return `${cpu}-apple-darwin`;
+    return `${cpu}-apple-darwin`
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * Resolve a `--target` argument: a supported triple, one of its aliases, or
@@ -133,24 +133,24 @@ export const hostTriple = (): string => {
  */
 export const resolveTarget = (spec: string): Target | null => {
   if (spec === "host") {
-    const triple = hostTriple();
-    return triple.length === 0 ? null : new Target(triple, layoutOf(triple));
+    const triple = hostTriple()
+    return triple.length === 0 ? null : new Target(triple, layoutOf(triple))
   }
-  const direct = layoutOf(spec);
+  const direct = layoutOf(spec)
   if (direct.length > 0) {
-    return new Target(spec, direct);
+    return new Target(spec, direct)
   }
-  const alias = aliasOf(spec);
+  const alias = aliasOf(spec)
   if (alias.length > 0) {
-    return new Target(alias, layoutOf(alias));
+    return new Target(alias, layoutOf(alias))
   }
-  return null;
-};
+  return null
+}
 
 /** The module-header lines that pin a module to `target`. */
 export const targetHeader = (target: Target): string[] => {
-  const lines: string[] = [];
-  lines.push(`target datalayout = "${target.datalayout}"`);
-  lines.push(`target triple = "${target.triple}"`);
-  return lines;
-};
+  const lines: string[] = []
+  lines.push(`target datalayout = "${target.datalayout}"`)
+  lines.push(`target triple = "${target.triple}"`)
+  return lines
+}

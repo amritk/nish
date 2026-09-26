@@ -1,13 +1,13 @@
 const sumOdd = (n: number): number => {
-  let s = 0;
+  let s = 0
   for (let i = 0; i < n; i++) {
     if (i % 2 === 0) {
-      continue;
+      continue
     }
     if (s > 1000) {
-      break;
+      break
     }
-    s += i;
+    s += i
   }
-  return s;
-};
+  return s
+}

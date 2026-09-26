@@ -56,28 +56,28 @@
  * never from stage0: stage1 is what survives, and the existing oracles are
  * what say the two agree.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { checkerArgs, programs, root } from "./corpus.js";
+import fs from "node:fs"
+import path from "node:path"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { checkerArgs, programs, root } from "./corpus.js"
 // The seed resolution is shared with the four oracles that survive stage0
 // (WP19 G2.3), and `defaultSeedSpec` is where this file's rule lives: three
 // answers and no fourth, because a tool that reached for stage0 would be the
 // dependency the gate exists to remove.
-import { defaultSeedSpec, resolveSeed, spawnSeed } from "./seed.js";
+import { defaultSeedSpec, resolveSeed, spawnSeed } from "./seed.js"
 
-const GOLDENS = path.join(root, "tests", "self", "goldens");
-const BUILD = path.join(root, "build", "self", "goldens");
+const GOLDENS = path.join(root, "tests", "self", "goldens")
+const BUILD = path.join(root, "build", "self", "goldens")
 
 /** Long dump lines are cut to this in a failure report, so a diff stays readable. */
-const MAX_LINE = 160;
+const MAX_LINE = 160
 
 /** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
 const firstLine = (output) => {
-  const line = output.trim().split("\n")[0] ?? "";
-  return line.replace(/^[^:]*:\d+:\d+: /, "");
-};
+  const line = output.trim().split("\n")[0] ?? ""
+  return line.replace(/^[^:]*:\d+:\d+: /, "")
+}
 
 /**
  * One stage1 program, built out of live sources by the seed. The binaries land
@@ -85,14 +85,16 @@ const firstLine = (output) => {
  * stale binary is a golden comparing itself with yesterday.
  */
 const link = (seed, source, stem) => {
-  const out = path.join(BUILD, stem);
-  fs.mkdirSync(BUILD, { recursive: true });
-  const built = spawnSeed(seed, [path.join(root, source), "--link", out]);
-  if (built.status !== 0) { return { error: `${seed.label} could not build ${source}:\n${built.stderr}` }; }
+  const out = path.join(BUILD, stem)
+  fs.mkdirSync(BUILD, { recursive: true })
+  const built = spawnSeed(seed, [path.join(root, source), "--link", out])
+  if (built.status !== 0) {
+    return { error: `${seed.label} could not build ${source}:\n${built.stderr}` }
+  }
   return {
     run: (args) => spawnSync(out, args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }),
-  };
-};
+  }
+}
 
 /**
  * The dump's lines, blanks dropped — `checked_oracle.js`'s normalisation —
@@ -106,19 +108,20 @@ const link = (seed, source, stem) => {
  * constant in the corpus; only the digits are let go. `tests/run.js` does the
  * same to the DWARF producer, for the same reason.
  */
-const dumpLines = (dump) => dump
+const dumpLines = (dump) =>
+  dump
     .split("\n")
     .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^(const VERSION: string = )"[^"]*"/, '$1"<version>"'));
+    .map((line) => line.replace(/^(const VERSION: string = )"[^"]*"/, '$1"<version>"'))
 
 /** `tests/cases/add.ts --number-mode f64`: the program as its record names it. */
-const programLabel = (named, flags) => flags.length > 0 ? `${named} ${flags.join(" ")}` : named;
+const programLabel = (named, flags) => (flags.length > 0 ? `${named} ${flags.join(" ")}` : named)
 
 const header = (what) => [
-    `# ${what}`,
-    "# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).",
-    "# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.",
-  ];
+  `# ${what}`,
+  "# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).",
+  "# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.",
+]
 
 /**
  * `--emit-checked` over the whole corpus, in two files: the construct corpus
@@ -133,76 +136,85 @@ const header = (what) => [
  * a golden nobody can read the diff of is a hash with extra bytes.
  */
 const produceChecked = (seed) => {
-  const dumper = link(seed, path.join("self", "dump-checked.ts"), "dump_checked");
-  if (dumper.error !== undefined) { return { error: dumper.error }; }
+  const dumper = link(seed, path.join("self", "dump-checked.ts"), "dump_checked")
+  if (dumper.error !== undefined) {
+    return { error: dumper.error }
+  }
 
-  const outside = [];
-  const entries = [];
-  const bodies = new Map();
-  const bodyOwner = new Map();
-  let outsidePrograms = 0;
-  let outsideLines = 0;
-  let selfPrograms = 0;
-  let selfLines = 0;
+  const outside = []
+  const entries = []
+  const bodies = new Map()
+  const bodyOwner = new Map()
+  let outsidePrograms = 0
+  let outsideLines = 0
+  let selfPrograms = 0
+  let selfLines = 0
 
   for (const file of programs()) {
-    const named = path.relative(root, file).split(path.sep).join("/");
-    const flags = checkerArgs(file);
-    const isSelf = named.startsWith("self/");
-    const result = dumper.run([...flags, named]);
+    const named = path.relative(root, file).split(path.sep).join("/")
+    const flags = checkerArgs(file)
+    const isSelf = named.startsWith("self/")
+    const result = dumper.run([...flags, named])
     if (result.status !== 0) {
       // A program the checker refuses has no dump, and the reason it gives is
       // a diagnostic wording nothing else here would pin. It belongs in the
       // record for the same reason the dump does.
-      const record = `reject ${programLabel(named, flags)}: ${firstLine(result.stderr)}`;
-      if (isSelf) { entries.push(record); }
-      else { outside.push(record); }
-      continue;
+      const record = `reject ${programLabel(named, flags)}: ${firstLine(result.stderr)}`
+      if (isSelf) {
+        entries.push(record)
+      } else {
+        outside.push(record)
+      }
+      continue
     }
-    const lines = dumpLines(result.stdout);
+    const lines = dumpLines(result.stdout)
     if (!isSelf) {
-      outsidePrograms++;
-      outsideLines += lines.length;
-      outside.push(`program ${programLabel(named, flags)}`, ...lines);
-      continue;
+      outsidePrograms++
+      outsideLines += lines.length
+      outside.push(`program ${programLabel(named, flags)}`, ...lines)
+      continue
     }
-    selfPrograms++;
-    selfLines += lines.length;
-    const order = [];
-    let module = null;
-    let body = [];
+    selfPrograms++
+    selfLines += lines.length
+    const order = []
+    let module = null
+    let body = []
     const close = () => {
-      if (module === null) { return; }
-      order.push(module);
-      const text = body.join("\n");
-      const seen = bodies.get(module);
+      if (module === null) {
+        return
+      }
+      order.push(module)
+      const text = body.join("\n")
+      const seen = bodies.get(module)
       if (seen === undefined) {
-        bodies.set(module, text);
-        bodyOwner.set(module, named);
-        return;
+        bodies.set(module, text)
+        bodyOwner.set(module, named)
+        return
       }
       if (seen !== text) {
         // Deduplication is only sound while a module dumps the same under
         // every entry that loads it. It does today; the day it stops, the
         // golden has to grow a dimension rather than quietly pick a winner.
-        return `module ${module} dumps differently under ${bodyOwner.get(module)} and ${named}`;
+        return `module ${module} dumps differently under ${bodyOwner.get(module)} and ${named}`
       }
-      return;
-    };
-    let conflict;
+      return
+    }
+    let conflict
     for (const line of lines) {
-      const at = /^module (\S+)(?: \(entry\))?$/.exec(line);
+      const at = /^module (\S+)(?: \(entry\))?$/.exec(line)
       if (at !== null) {
-        conflict = close() ?? conflict;
-        module = at[1];
-        body = [];
+        conflict = close() ?? conflict
+        module = at[1]
+        body = []
       } else if (module !== null) {
-        body.push(line);
+        body.push(line)
       }
     }
-    conflict = close() ?? conflict;
-    if (conflict !== undefined) { return { error: conflict }; }
-    entries.push(`entry ${programLabel(named, flags)}: ${order.join(" ")}`);
+    conflict = close() ?? conflict
+    if (conflict !== undefined) {
+      return { error: conflict }
+    }
+    entries.push(`entry ${programLabel(named, flags)}: ${order.join(" ")}`)
   }
 
   const selfText = [
@@ -215,10 +227,12 @@ const produceChecked = (seed) => {
     "# assumes. The comparison still runs all 57 programs and reads every byte.",
     `# ${selfPrograms} programs, ${selfLines} dump lines live, ${bodies.size} distinct modules.`,
     ...entries,
-  ];
+  ]
   for (const [module, text] of bodies) {
-    selfText.push(`module ${module}`);
-    if (text.length > 0) { selfText.push(text); }
+    selfText.push(`module ${module}`)
+    if (text.length > 0) {
+      selfText.push(text)
+    }
   }
 
   const outsideText = [
@@ -231,7 +245,7 @@ const produceChecked = (seed) => {
     "# refuses, and pins the wording it refuses it with.",
     `# ${outsidePrograms} programs, ${outsideLines} dump lines.`,
     ...outside,
-  ];
+  ]
 
   return {
     files: new Map([
@@ -239,8 +253,8 @@ const produceChecked = (seed) => {
       ["checked-self.txt", `${selfText.join("\n")}\n`],
     ]),
     note: `${outsidePrograms + selfPrograms} programs, ${outsideLines + selfLines} dump lines`,
-  };
-};
+  }
+}
 
 /**
  * One of the three driver programs the dying oracles run. Their stdout is the
@@ -248,16 +262,20 @@ const produceChecked = (seed) => {
  * `dist/types.js` and diffs it line by line — so the stdout is the golden.
  */
 const produceDriver = (name, source, args, what) => (seed) => {
-    const driver = link(seed, source, name);
-    if (driver.error !== undefined) { return { error: driver.error }; }
-    const run = driver.run(args);
-    if (run.status !== 0) { return { error: `${name} exited ${run.status}\n${run.stderr}` }; }
-    const lines = run.stdout.split("\n");
-    return {
-      files: new Map([[`${name}.txt`, `${header(what).join("\n")}\n${run.stdout}`]]),
-      note: `${lines.length - 1} lines`,
-    };
-  };
+  const driver = link(seed, source, name)
+  if (driver.error !== undefined) {
+    return { error: driver.error }
+  }
+  const run = driver.run(args)
+  if (run.status !== 0) {
+    return { error: `${name} exited ${run.status}\n${run.stderr}` }
+  }
+  const lines = run.stdout.split("\n")
+  return {
+    files: new Map([[`${name}.txt`, `${header(what).join("\n")}\n${run.stdout}`]]),
+    note: `${lines.length - 1} lines`,
+  }
+}
 
 /**
  * The four goldens, each named for the oracle whose coverage it holds. The
@@ -303,31 +321,35 @@ const GOLDEN_SET = [
       "`self/symbols.ts` over the scope script: what each name resolves to, what it reads as, and where every narrowing stops."
     ),
   },
-];
+]
 
 /** The first differences between two texts, bounded, with long lines cut. */
 const diff = (want, got, limit) => {
-  const a = want.split("\n");
-  const b = got.split("\n");
-  const out = [];
+  const a = want.split("\n")
+  const b = got.split("\n")
+  const out = []
   const cut = (line) => {
-    if (line === undefined) { return "<end of file>"; }
-    return line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}...` : line;
-  };
-  let total = 0;
-  let shown = 0;
+    if (line === undefined) {
+      return "<end of file>"
+    }
+    return line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}...` : line
+  }
+  let total = 0
+  let shown = 0
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if (a[i] === b[i]) { continue; }
-    total++;
+    if (a[i] === b[i]) {
+      continue
+    }
+    total++
     if (shown < limit) {
-      out.push(`  line ${i + 1}:`, `    golden: ${cut(a[i])}`, `    stage1: ${cut(b[i])}`);
-      shown++;
+      out.push(`  line ${i + 1}:`, `    golden: ${cut(a[i])}`, `    stage1: ${cut(b[i])}`)
+      shown++
     }
   }
-  return { total, shown, out };
-};
+  return { total, shown, out }
+}
 
-const goldenPath = (file) => path.join(GOLDENS, file);
+const goldenPath = (file) => path.join(GOLDENS, file)
 
 /**
  * The seed this file's rule allows: `given` (a `--seed` value), then
@@ -337,102 +359,118 @@ const goldenPath = (file) => path.join(GOLDENS, file);
  * fallback away, and one spelling of it is enough.
  */
 const seedWithoutStage0 = (given) => {
-  const spec = given ?? defaultSeedSpec();
+  const spec = given ?? defaultSeedSpec()
   if (spec === null) {
     return {
       error:
         "no seed compiler: pass --seed <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap` to leave one in build/nish",
-    };
+    }
   }
-  return resolveSeed(spec);
-};
+  return resolveSeed(spec)
+}
 
 /** `--seed` and `--lines` take a value; everything else is a flag or a golden's name. */
 const parse = (argv) => {
-  const options = { update: false, verbose: false, lines: 10, seed: undefined, names: [] };
+  const options = { update: false, verbose: false, lines: 10, seed: undefined, names: [] }
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--update") { options.update = true; }
-    else if (arg === "--verbose") { options.verbose = true; }
-    else if (arg === "--seed") { options.seed = argv[++i]; }
-    else if (arg === "--lines") { options.lines = Number(argv[++i]); }
-    else { options.names.push(arg); }
+    const arg = argv[i]
+    if (arg === "--update") {
+      options.update = true
+    } else if (arg === "--verbose") {
+      options.verbose = true
+    } else if (arg === "--seed") {
+      options.seed = argv[++i]
+    } else if (arg === "--lines") {
+      options.lines = Number(argv[++i])
+    } else {
+      options.names.push(arg)
+    }
   }
-  return options;
-};
+  return options
+}
 
 const main = (argv) => {
-  const { update, verbose, lines, seed: given, names: named } = parse(argv);
-  const limit = verbose ? Number.POSITIVE_INFINITY : lines;
-  const wanted = named.length > 0 ? GOLDEN_SET.filter((g) => named.includes(g.name)) : GOLDEN_SET;
+  const { update, verbose, lines, seed: given, names: named } = parse(argv)
+  const limit = verbose ? Number.POSITIVE_INFINITY : lines
+  const wanted = named.length > 0 ? GOLDEN_SET.filter((g) => named.includes(g.name)) : GOLDEN_SET
   if (wanted.length === 0) {
     process.stderr.write(
       `no such golden: ${named.join(" ")} (have ${GOLDEN_SET.map((g) => g.name).join(", ")})\n`
-    );
-    return 2;
+    )
+    return 2
   }
 
-  const seed = seedWithoutStage0(given);
+  const seed = seedWithoutStage0(given)
   if (seed.error !== undefined) {
-    process.stderr.write(`${seed.error}\n`);
-    return 2;
+    process.stderr.write(`${seed.error}\n`)
+    return 2
   }
 
-  fs.mkdirSync(GOLDENS, { recursive: true });
-  let failed = 0;
-  let bytes = 0;
-  const summary = [];
+  fs.mkdirSync(GOLDENS, { recursive: true })
+  let failed = 0
+  let bytes = 0
+  const summary = []
   for (const golden of wanted) {
-    const produced = golden.produce(seed);
+    const produced = golden.produce(seed)
     if (produced.error !== undefined) {
-      process.stdout.write(`  FAIL ${golden.name}: ${produced.error}\n`);
-      failed++;
-      continue;
+      process.stdout.write(`  FAIL ${golden.name}: ${produced.error}\n`)
+      failed++
+      continue
     }
     for (const [file, text] of produced.files) {
-      const at = goldenPath(file);
-      bytes += Buffer.byteLength(text);
+      const at = goldenPath(file)
+      bytes += Buffer.byteLength(text)
       if (update) {
-        const before = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null;
-        fs.writeFileSync(at, text);
-        let verb = before === null ? "written" : "updated";
-        if (before === text) { verb = "unchanged"; }
-        summary.push(`${file}: ${verb}`);
-        continue;
+        const before = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null
+        fs.writeFileSync(at, text)
+        let verb = before === null ? "written" : "updated"
+        if (before === text) {
+          verb = "unchanged"
+        }
+        summary.push(`${file}: ${verb}`)
+        continue
       }
       if (!fs.existsSync(at)) {
-        process.stdout.write(`  FAIL ${file} is missing (run with --update to write it)\n`);
-        failed++;
-        continue;
+        process.stdout.write(`  FAIL ${file} is missing (run with --update to write it)\n`)
+        failed++
+        continue
       }
-      const want = fs.readFileSync(at, "utf8");
+      const want = fs.readFileSync(at, "utf8")
       if (want === text) {
-        summary.push(`${file}: ${golden.name} agrees`);
-        continue;
+        summary.push(`${file}: ${golden.name} agrees`)
+        continue
       }
-      const d = diff(want, text, limit);
+      const d = diff(want, text, limit)
       process.stdout.write(
         `  FAIL ${file}: ${d.total} lines differ from what stage1 prints (${golden.oracle}'s coverage)\n`
-      );
-      for (const line of d.out) { process.stdout.write(`${line}\n`); }
-      if (d.shown < d.total) {
-        process.stdout.write(`  ... and ${d.total - d.shown} more differing lines (--verbose for all)\n`);
+      )
+      for (const line of d.out) {
+        process.stdout.write(`${line}\n`)
       }
-      failed++;
+      if (d.shown < d.total) {
+        process.stdout.write(`  ... and ${d.total - d.shown} more differing lines (--verbose for all)\n`)
+      }
+      failed++
     }
     if (produced.note !== undefined && verbose) {
-      process.stdout.write(`  ${golden.name}: ${produced.note}\n`);
+      process.stdout.write(`  ${golden.name}: ${produced.note}\n`)
     }
   }
   // Under `--update` these are the only evidence that a regeneration did or
   // did not move anything, which is the question the person running it has.
-  if (verbose) { for (const line of summary) { process.stdout.write(`  ${line}\n`); } }
+  if (verbose) {
+    for (const line of summary) {
+      process.stdout.write(`  ${line}\n`)
+    }
+  }
 
   process.stdout.write(
     `${summary.length} goldens ${update ? "written" : "agree"}, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB of goldens (seed ${seed.label})\n`
-  );
-  return failed === 0 ? 0 : 1;
-};
+  )
+  return failed === 0 ? 0 : 1
+}
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
-export { GOLDEN_SET, seedWithoutStage0 };
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(main(process.argv.slice(2)))
+}
+export { GOLDEN_SET, seedWithoutStage0 }

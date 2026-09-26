@@ -57,19 +57,20 @@
  * before the name, never the name, so `branding.ts` stays the only place it is
  * spelled (rule 5 in `.claude/orientation.md`). Keep to that when adding one.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseCodesRegistry } from "./codes-registry.js";
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { parseCodesRegistry, STRING_LITERAL } from "./codes-registry.js"
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REGISTRY = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join(ROOT, "self", "codes.ts");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const REGISTRY =
+  process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join(ROOT, "self", "codes.ts")
 
 /** The bands a table entry may use. Band 0 is constants, never a table row. */
-const BANDS = new Set(["1", "2", "3", "4", "9"]);
+const BANDS = new Set(["1", "2", "3", "4", "9"])
 
 /** Shorter than this, a fragment would match half the suite. */
-const MIN_FRAGMENT = 10;
+const MIN_FRAGMENT = 10
 
 /**
  * The text of one table in `self/codes.ts`: from its `name = (): string[] => [`
@@ -78,11 +79,13 @@ const MIN_FRAGMENT = 10;
  * against a performance message.
  */
 const tableText = (text, name) => {
-  const open = text.indexOf(`export const ${name} = (): string[] => [`);
-  if (open < 0) { return null; }
-  const close = text.indexOf("\n];", open);
-  return close < 0 ? null : text.slice(open, close + 1);
-};
+  const open = text.indexOf(`export const ${name} = (): string[] => [`)
+  if (open < 0) {
+    return null
+  }
+  const close = text.indexOf("\n]", open)
+  return close < 0 ? null : text.slice(open, close + 1)
+}
 
 /**
  * How many strings one table holds: every literal after the line that opens
@@ -90,67 +93,68 @@ const tableText = (text, name) => {
  * its own rather than read off the pairs -- a stray literal is exactly what
  * the pair reader skips.
  */
-const STRING = /"(?:[^"\\]|\\.)*"/g;
-const literalCount = (body) => body.slice(body.indexOf("\n")).match(STRING)?.length ?? 0;
+const literalCount = (body) => body.slice(body.indexOf("\n")).match(STRING_LITERAL)?.length ?? 0
 
 /** The order the compilers rely on: longest fragment first, then `localeCompare`. */
-const inOrder = (a, b) => b.fragment.length - a.fragment.length || a.fragment.localeCompare(b.fragment);
+const inOrder = (a, b) => b.fragment.length - a.fragment.length || a.fragment.localeCompare(b.fragment)
 
 /** Every rule of `self/codes.ts` it breaks, as a line each; empty when it holds. */
 const problems = (text) => {
-  const found = [];
-  const tables = [];
+  const found = []
+  const tables = []
   for (const [name, perf] of [
     ["diagnosticRules", false],
     ["performanceRules", true],
   ]) {
-    const body = tableText(text, name);
+    const body = tableText(text, name)
     if (body === null) {
-      found.push(`self/codes.ts has no \`${name}\` table`);
-      continue;
+      found.push(`self/codes.ts has no \`${name}\` table`)
+      continue
     }
     try {
-      const pairs = parseCodesRegistry(body, `self/codes.ts ${name}`);
-      const literals = literalCount(body);
+      const pairs = parseCodesRegistry(body, `self/codes.ts ${name}`)
+      const literals = literalCount(body)
       if (literals !== 2 * pairs.length) {
         found.push(
           `\`${name}\` holds ${literals} strings and ${pairs.length} fragment/code pairs: a string ` +
             "without its other half shifts every later pairing `codeFor` makes"
-        );
+        )
       }
-      tables.push({ name, perf, pairs });
+      tables.push({ name, perf, pairs })
     } catch (err) {
-      found.push(err.message);
+      found.push(err.message)
     }
   }
-  const all = tables.flatMap((t) => t.pairs);
+  const all = tables.flatMap((t) => t.pairs)
 
   // The tables are the whole registry: a pair the reader finds outside them is
   // one the compilers never match, and one of theirs the reader misses is one
   // `tests/diagnostic-coverage.js` never asks about.
-  let whole = [];
+  let whole = []
   try {
-    whole = parseCodesRegistry(text, "self/codes.ts");
+    whole = parseCodesRegistry(text, "self/codes.ts")
   } catch (err) {
-    found.push(err.message);
+    found.push(err.message)
   }
   if (whole.length !== all.length) {
-    found.push(`self/codes.ts holds ${whole.length} pairs, ${all.length} of them inside the two tables`);
+    found.push(`self/codes.ts holds ${whole.length} pairs, ${all.length} of them inside the two tables`)
   }
 
   for (const { name, perf, pairs } of tables) {
     for (let i = 0; i < pairs.length; i++) {
-      const { fragment, code } = pairs[i];
-      const band = code[2];
-      if (!BANDS.has(band)) { found.push(`${code} is not in a table band (1, 2, 3, 4 or 9): ${JSON.stringify(fragment)}`); }
+      const { fragment, code } = pairs[i]
+      const band = code[2]
+      if (!BANDS.has(band)) {
+        found.push(`${code} is not in a table band (1, 2, 3, 4 or 9): ${JSON.stringify(fragment)}`)
+      }
       if (perf !== (band === "9")) {
-        found.push(`${code} is in \`${name}\`, which holds ${perf ? "only" : "no"} NL9xxx codes`);
+        found.push(`${code} is in \`${name}\`, which holds ${perf ? "only" : "no"} NL9xxx codes`)
       }
       if (fragment.trim().length < MIN_FRAGMENT) {
-        found.push(`${code}'s fragment ${JSON.stringify(fragment)} is under ${MIN_FRAGMENT} characters`);
+        found.push(`${code}'s fragment ${JSON.stringify(fragment)} is under ${MIN_FRAGMENT} characters`)
       }
       if (i > 0 && inOrder(pairs[i - 1], pairs[i]) > 0) {
-        found.push(`${code} is out of order in \`${name}\`: it has to come before ${pairs[i - 1].code}`);
+        found.push(`${code} is out of order in \`${name}\`: it has to come before ${pairs[i - 1].code}`)
       }
     }
   }
@@ -158,42 +162,53 @@ const problems = (text) => {
   const perfCodes = tables
     .filter((t) => t.perf)
     .flatMap((t) => t.pairs.map((p) => Number(p.code.slice(3))))
-    .sort((a, b) => a - b);
-  const gap = perfCodes.findIndex((n, i) => n !== i + 1);
+    .sort((a, b) => a - b)
+  const gap = perfCodes.findIndex((n, i) => n !== i + 1)
   if (gap >= 0) {
-    found.push(`\`performanceRules\` has no NL${9000 + gap + 1} in its place: its codes run from NL9001 with no gap`);
+    found.push(
+      `\`performanceRules\` has no NL${9000 + gap + 1} in its place: its codes run from NL9001 with no gap`
+    )
   }
 
   const seen = (key) => {
-    const counts = new Map();
-    for (const pair of all) { counts.set(pair[key], (counts.get(pair[key]) ?? 0) + 1); }
-    return [...counts].filter(([, n]) => n > 1).map(([value]) => value);
-  };
-  for (const code of seen("code")) { found.push(`${code} names two rules`); }
-  for (const fragment of seen("fragment")) { found.push(`${JSON.stringify(fragment)} has two entries`); }
-
-  const count = /export const RULE_COUNT: i32 = (\d+);/.exec(text);
-  if (count === null) { found.push("self/codes.ts has no `RULE_COUNT`"); }
-  else if (Number(count[1]) !== all.length) {
-    found.push(`RULE_COUNT is ${count[1]} and the tables hold ${all.length} rules`);
+    const counts = new Map()
+    for (const pair of all) {
+      counts.set(pair[key], (counts.get(pair[key]) ?? 0) + 1)
+    }
+    return [...counts].filter(([, n]) => n > 1).map(([value]) => value)
+  }
+  for (const code of seen("code")) {
+    found.push(`${code} names two rules`)
+  }
+  for (const fragment of seen("fragment")) {
+    found.push(`${JSON.stringify(fragment)} has two entries`)
   }
 
-  return { found, all };
-};
+  const count = /export const RULE_COUNT: i32 = (\d+);?$/m.exec(text)
+  if (count === null) {
+    found.push("self/codes.ts has no `RULE_COUNT`")
+  } else if (Number(count[1]) !== all.length) {
+    found.push(`RULE_COUNT is ${count[1]} and the tables hold ${all.length} rules`)
+  }
+
+  return { found, all }
+}
 
 /** The next number nobody has held, per band -- what a hand-added rule takes. */
 const nextFree = (pairs) => {
-  const highest = new Map();
+  const highest = new Map()
   for (const { code } of pairs) {
-    const band = code[2];
-    highest.set(band, Math.max(highest.get(band) ?? 0, Number(code.slice(3))));
+    const band = code[2]
+    highest.set(band, Math.max(highest.get(band) ?? 0, Number(code.slice(3))))
   }
-  return [...BANDS].map((band) => `NL${band}${String((highest.get(band) ?? 0) + 1).padStart(3, "0")}`);
-};
-
-const { found, all } = problems(fs.readFileSync(REGISTRY, "utf8"));
-for (const problem of found) { console.error(`error: ${problem}`); }
-if (found.length === 0 && !process.argv.includes("--check")) {
-  console.log(`self/codes.ts: ${all.length} rules, well-formed; next free: ${nextFree(all).join(" ")}`);
+  return [...BANDS].map((band) => `NL${band}${String((highest.get(band) ?? 0) + 1).padStart(3, "0")}`)
 }
-process.exit(found.length > 0 ? 1 : 0);
+
+const { found, all } = problems(fs.readFileSync(REGISTRY, "utf8"))
+for (const problem of found) {
+  console.error(`error: ${problem}`)
+}
+if (found.length === 0 && !process.argv.includes("--check")) {
+  console.log(`self/codes.ts: ${all.length} rules, well-formed; next free: ${nextFree(all).join(" ")}`)
+}
+process.exit(found.length > 0 ? 1 : 0)

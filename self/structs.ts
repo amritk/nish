@@ -15,10 +15,15 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
-import { CheckContext } from "./context";
-import { rejectForeignPointer, resolveType } from "./annotations";
-import { collectTypeParamNames, implementsDeclaration, instantiateWritten, isGenericFunction } from "./generics";
-import { isExported, collectParams } from "./declarations";
+import { CheckContext } from "./context"
+import { rejectForeignPointer, resolveType } from "./annotations"
+import {
+  collectTypeParamNames,
+  implementsDeclaration,
+  instantiateWritten,
+  isGenericFunction,
+} from "./generics"
+import { isExported, collectParams } from "./declarations"
 import {
   FLAG_DEFINITE,
   FLAG_OPTIONAL,
@@ -38,7 +43,7 @@ import {
   N_TYPE_REF,
   N_UNARY,
   Node,
-} from "./nodes";
+} from "./nodes"
 import {
   FieldInfo,
   FunctionSig,
@@ -48,9 +53,9 @@ import {
   STRUCT_INTERFACE,
   StructInfo,
   TemplateInfo,
-} from "./program";
-import { StringSet } from "./map";
-import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
+} from "./program"
+import { StringSet } from "./map"
+import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /**
  * Size in bytes of a value stored in a struct field. `bool` is one byte
@@ -58,16 +63,16 @@ import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
  * every other type is its own alignment, which is right for every scalar
  * and every pointer.
  */
-export const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type);
+export const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type)
 
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
 export const roundUpTo = (value: i32, align: i32): i32 => {
-  const remainder = value % align;
-  return remainder === 0 ? value : value + align - remainder;
-};
+  const remainder = value % align
+  return remainder === 0 ? value : value + align - remainder
+}
 
 /** Bytes of the `struct nish_array` header an inline array field starts with (`len`, `cap`, `data`). */
-export const INLINE_HEADER_BYTES: i32 = 24;
+export const INLINE_HEADER_BYTES: i32 = 24
 
 /**
  * Bytes one field occupies in its object: its value's size, or for an inline
@@ -78,15 +83,15 @@ export const INLINE_HEADER_BYTES: i32 = 24;
  */
 export const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
   if (!field.inline()) {
-    return table.alignOf(field.type);
+    return table.alignOf(field.type)
   }
-  const stride = table.alignOf(table.refOf(field.type));
-  return roundUpTo(INLINE_HEADER_BYTES + field.inlineCapacity * stride, 8);
-};
+  const stride = table.alignOf(table.refOf(field.type))
+  return roundUpTo(INLINE_HEADER_BYTES + field.inlineCapacity * stride, 8)
+}
 
 /** The alignment one field needs: its value's, or the header's 8 for an inline array. */
 export const fieldAlign = (table: TypeTable, field: FieldInfo): i32 =>
-  field.inline() ? 8 : table.alignOf(field.type);
+  field.inline() ? 8 : table.alignOf(field.type)
 
 /**
  * Offsets in declaration order, and the size and alignment clang would
@@ -100,33 +105,33 @@ export const fieldAlign = (table: TypeTable, field: FieldInfo): i32 =>
  * reordering, and almost every struct is one of those.
  */
 export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
-  let offset = 0;
-  let align = 1;
-  let used = 0;
+  let offset = 0
+  let align = 1
+  let used = 0
   for (const field of info.fields) {
-    const need = fieldAlign(ctx.table, field);
-    const width = fieldWidth(ctx.table, field);
-    offset = roundUpTo(offset, need);
-    field.offset = offset;
-    offset = offset + width;
-    used = used + width;
+    const need = fieldAlign(ctx.table, field)
+    const width = fieldWidth(ctx.table, field)
+    offset = roundUpTo(offset, need)
+    field.offset = offset
+    offset = offset + width
+    used = used + width
     if (need > align) {
-      align = need;
+      align = need
     }
   }
-  info.size = roundUpTo(offset, align);
-  info.align = align;
-  return roundUpTo(used, align);
-};
+  info.size = roundUpTo(offset, align)
+  info.align = align
+  return roundUpTo(used, align)
+}
 
 /** The size `fields` lay out to in the order given, rounded up to `align`. */
 const layoutSize = (ctx: CheckContext, fields: FieldInfo[], align: i32): i32 => {
-  let offset = 0;
+  let offset = 0
   for (const field of fields) {
-    offset = roundUpTo(offset, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type);
+    offset = roundUpTo(offset, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
   }
-  return roundUpTo(offset, align);
-};
+  return roundUpTo(offset, align)
+}
 
 /**
  * The fields widest first, which is the order that reaches a struct's floor.
@@ -144,18 +149,18 @@ const layoutSize = (ctx: CheckContext, fields: FieldInfo[], align: i32): i32 => 
  * for none of it.
  */
 const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldInfo[] => {
-  const sorted: FieldInfo[] = [];
-  let width = align;
+  const sorted: FieldInfo[] = []
+  let width = align
   while (width >= 1) {
     for (const field of fields) {
       if (ctx.table.alignOf(field.type) === width) {
-        sorted.push(field);
+        sorted.push(field)
       }
     }
-    width = width >> 1;
+    width = width >> 1
   }
-  return sorted;
-};
+  return sorted
+}
 
 /**
  * The fields after an `implements` prefix, in the order that lays them out
@@ -185,51 +190,51 @@ const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldI
  * than its floor, over the fields it adds.
  */
 const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): FieldInfo[] => {
-  const order: FieldInfo[] = [];
-  let remaining = fields;
-  let offset = start;
+  const order: FieldInfo[] = []
+  let remaining = fields
+  let offset = start
   while (remaining.length > 0) {
     // Picked by position and carried as a reference, so neither list is indexed
     // and nothing here needs a bounds check (NL9007).
-    let chosen: FieldInfo | null = null;
-    let chosenAt = 0;
-    let chosenPad = 0;
-    let chosenAlign = 0;
-    let index = 0;
+    let chosen: FieldInfo | null = null
+    let chosenAt = 0
+    let chosenPad = 0
+    let chosenAlign = 0
+    let index = 0
     for (const field of remaining) {
-      const alignment = ctx.table.alignOf(field.type);
-      const pad = roundUpTo(offset, alignment) - offset;
+      const alignment = ctx.table.alignOf(field.type)
+      const pad = roundUpTo(offset, alignment) - offset
       if (chosen === null || pad < chosenPad || (pad === chosenPad && alignment > chosenAlign)) {
-        chosen = field;
-        chosenAt = index;
-        chosenPad = pad;
-        chosenAlign = alignment;
+        chosen = field
+        chosenAt = index
+        chosenPad = pad
+        chosenAlign = alignment
       }
-      index = index + 1;
+      index = index + 1
     }
     if (chosen === null) {
-      return order;
+      return order
     }
-    order.push(chosen);
-    offset = offset + chosenPad + sizeOfField(ctx, chosen.type);
-    const next: FieldInfo[] = [];
-    index = 0;
+    order.push(chosen)
+    offset = offset + chosenPad + sizeOfField(ctx, chosen.type)
+    const next: FieldInfo[] = []
+    index = 0
     for (const field of remaining) {
       if (index !== chosenAt) {
-        next.push(field);
+        next.push(field)
       }
-      index = index + 1;
+      index = index + 1
     }
-    remaining = next;
+    remaining = next
   }
-  return order;
-};
+  return order
+}
 
 /**
  * How a diagnostic names this struct: its declared name, or `Box<i32>` for an
  * instantiation, whose `name` is the mangled `Box$i32` (WP18 §6.7).
  */
-const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeName(info.type);
+const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeName(info.type)
 
 /**
  * How many fields an interface declares. Read off the declaration rather than
@@ -240,16 +245,16 @@ const spelled = (ctx: CheckContext, info: StructInfo): string => ctx.table.typeN
  */
 const declaredFieldCount = (iface: StructInfo): i32 => {
   if (iface.collected) {
-    return iface.fields.length;
+    return iface.fields.length
   }
-  let count = 0;
+  let count = 0
   for (const member of iface.decl.children[1].children) {
     if (member.kind === N_FIELD) {
-      count = count + 1;
+      count = count + 1
     }
   }
-  return count;
-};
+  return count
+}
 
 /**
  * WP15 section 8, the tenth rule: a struct whose declared field order costs it
@@ -307,62 +312,64 @@ const reportWastefulPadding = (
   prefix: StructInfo | null
 ): void => {
   if (floor >= info.size) {
-    return;
+    return
   }
   if (ctx.program.structArguments(info.name) !== null) {
-    return;
+    return
   }
-  const fixed = prefix === null ? 0 : declaredFieldCount(prefix);
+  const fixed = prefix === null ? 0 : declaredFieldCount(prefix)
   if (fixed > info.fields.length) {
     // The class lacks a field its interface has, which `checkImplements`
     // refuses; there is no layout here worth advice.
-    return;
+    return
   }
-  const fields: FieldInfo[] = [];
-  const rest: FieldInfo[] = [];
-  let prefixEnd = 0;
+  const fields: FieldInfo[] = []
+  const rest: FieldInfo[] = []
+  let prefixEnd = 0
   for (const field of info.fields) {
     if (fields.length < fixed) {
-      fields.push(field);
-      prefixEnd = roundUpTo(prefixEnd, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type);
+      fields.push(field)
+      prefixEnd = roundUpTo(prefixEnd, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
     } else {
-      rest.push(field);
+      rest.push(field)
     }
   }
-  const suffix = fixed === 0 ? widestFirst(ctx, rest, info.align) : leastPaddingFirst(ctx, rest, prefixEnd);
+  const suffix = fixed === 0 ? widestFirst(ctx, rest, info.align) : leastPaddingFirst(ctx, rest, prefixEnd)
   for (const field of suffix) {
-    fields.push(field);
+    fields.push(field)
   }
-  const packed = layoutSize(ctx, fields, info.align);
+  const packed = layoutSize(ctx, fields, info.align)
   if (packed >= info.size) {
-    return;
+    return
   }
-  const parts: string[] = [];
+  const parts: string[] = []
   for (const field of fields) {
-    parts.push(`${field.name}: ${ctx.table.typeName(field.type)}`);
+    parts.push(`${field.name}: ${ctx.table.typeName(field.type)}`)
   }
-  const order = parts.join(", ");
-  const alsoImplementers = info.kind === STRUCT_INTERFACE
-    ? " — here and in any class that `implements` it, since the interface's fields are its implementers' first fields"
-    : "";
+  const order = parts.join(", ")
+  const alsoImplementers =
+    info.kind === STRUCT_INTERFACE
+      ? " — here and in any class that `implements` it, since the interface's fields are its implementers' first fields"
+      : ""
   // An interface with no fields fixes nothing, and the advice is the plain one.
   // The suffix is not always widest first (`leastPaddingFirst`), so the advice
   // points at the order it names, and one kept field reads in the singular.
-  const kept = fixed === 1 ? "the first field" : `the first ${fixed} fields`;
-  const keptWhere = fixed === 1 ? "puts it" : "puts them";
-  const rewrite = prefix === null || fixed === 0
-    ? "declare the fields widest first"
-    : `keep ${kept} where \`implements ${spelled(ctx, prefix)}\` ${keptWhere} and declare the rest in this order`;
+  const kept = fixed === 1 ? "the first field" : `the first ${fixed} fields`
+  const keptWhere = fixed === 1 ? "puts it" : "puts them"
+  const rewrite =
+    prefix === null || fixed === 0
+      ? "declare the fields widest first"
+      : `keep ${kept} where \`implements ${spelled(ctx, prefix)}\` ${keptWhere} and declare the rest in this order`
   ctx.performance(
     info.decl.children[0],
     `\`${spelled(ctx, info)}\` is ${info.size} bytes and would be ${packed} with the same fields in a different ` +
       `order, so ${info.size - packed} bytes of every value are padding the alignment rules insert and nothing ` +
       `reads: ${rewrite} — \`${order}\`${alsoImplementers}`
-  );
-};
+  )
+}
 
 /** The word a message uses for this struct's kind. */
-const kindWord = (info: StructInfo): string => info.kind === STRUCT_CLASS ? "class" : "interface";
+const kindWord = (info: StructInfo): string => (info.kind === STRUCT_CLASS ? "class" : "interface")
 
 /**
  * Register a name so an annotation anywhere in the module resolves it. The
@@ -370,15 +377,15 @@ const kindWord = (info: StructInfo): string => info.kind === STRUCT_CLASS ? "cla
  * a class declared further down the file.
  */
 export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructInfo | null => {
-  const name = decl.children[0].text;
-  const what = kind === STRUCT_CLASS ? "Classes" : "Interfaces";
+  const name = decl.children[0].text
+  const what = kind === STRUCT_CLASS ? "Classes" : "Interfaces"
   if (name.length === 0) {
-    ctx.error(decl, `${what} must be named`);
-    return null;
+    ctx.error(decl, `${what} must be named`)
+    return null
   }
   if (name.startsWith("nish_")) {
-    ctx.error(decl.children[0], "Names starting with `nish_` are reserved for the runtime");
-    return null;
+    ctx.error(decl.children[0], "Names starting with `nish_` are reserved for the runtime")
+    return null
   }
   // A generic class counts as a declaration of the name, exactly as a declared
   // one counts against a template in `registerStructTemplate`: `class Box<T>`
@@ -386,23 +393,23 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   // would be unreachable because `Box` in an annotation resolves to the
   // template.
   if (ctx.program.structs.has(name) || ctx.program.structTemplates.has(name)) {
-    ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``);
-    return null;
+    ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``)
+    return null
   }
   if (ctx.sigs.has(name)) {
-    ctx.error(decl.children[0], `\`${name}\` is already declared as a function`);
-    return null;
+    ctx.error(decl.children[0], `\`${name}\` is already declared as a function`)
+    return null
   }
   if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
-    ctx.error(decl.children[0], `\`${name}\` is already declared in this module`);
-    return null;
+    ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
+    return null
   }
-  const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source);
-  info.exported = isExported(decl);
-  ctx.program.addStruct(name, info);
-  ctx.program.typeNames.add(name);
-  return info;
-};
+  const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source)
+  info.exported = isExported(decl)
+  ctx.program.addStruct(name, info)
+  ctx.program.typeNames.add(name)
+  return info
+}
 
 /**
  * Literal initializers only (`x: number = 0`, `next: Node | null = null`):
@@ -412,32 +419,35 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
 const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 => {
   switch (expr.kind) {
     case N_NUMBER:
-      return want;
+      return want
     case N_STRING:
-      return ctx.table.stripNull(want) === T_STRING ? want : T_STRING;
+      return ctx.table.stripNull(want) === T_STRING ? want : T_STRING
     case N_TEMPLATE:
       // A template with no holes is one text child, and is a plain string literal.
-      return expr.children.length === 1 ? T_STRING : -1;
+      return expr.children.length === 1 ? T_STRING : -1
     case N_TRUE:
-      return T_BOOL;
+      return T_BOOL
     case N_FALSE:
-      return T_BOOL;
+      return T_BOOL
     case N_NULL:
-      return ctx.table.isNullable(want) ? want : -1;
+      return ctx.table.isNullable(want) ? want : -1
     case N_UNARY:
-      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? want : -1;
+      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? want : -1
     default:
-      return -1;
+      return -1
   }
-};
+}
 
 /** One field of a class or interface, appended to `owner`. */
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
-  const name = decl.children[0].text;
-  const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``;
+  const name = decl.children[0].text
+  const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``
   if (owner.hasMember(name)) {
-    ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${spelled(ctx, owner)}\``);
-    return;
+    ctx.error(
+      decl.children[0],
+      `Duplicate member \`${name}\` in ${kindWord(owner)} \`${spelled(ctx, owner)}\``
+    )
+    return
   }
   // The three member headers the parser flags rather than refuses
   // (`self/nodes.ts`). Each is a rule about the *member*, so the sentence
@@ -455,42 +465,42 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   // call to `rejectMemberModifiers` here: `static` is the only modifier a field
   // cannot carry, and it is read after the marker.
   if ((decl.flags & FLAG_OPTIONAL) !== 0) {
-    ctx.error(decl, `${what} cannot be optional (every field has a fixed slot)`);
-    return;
+    ctx.error(decl, `${what} cannot be optional (every field has a fixed slot)`)
+    return
   }
   if ((decl.flags & FLAG_DEFINITE) !== 0) {
-    ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`);
-    return;
+    ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`)
+    return
   }
   if ((decl.flags & FLAG_STATIC) !== 0) {
-    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function or const)`);
-    return;
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function or const)`)
+    return
   }
-  const type = resolveType(decl.children[1], ctx);
+  const type = resolveType(decl.children[1], ctx)
   if (type === T_VOID) {
-    ctx.error(decl.children[1], `${what} cannot have type void`);
-    return;
+    ctx.error(decl.children[1], `${what} cannot have type void`)
+    return
   }
   // WP27 S2: a field would put a foreign address inside a value the arena owns
   // and the escape analysis walks. `self/annotations.ts` has the reasoning.
   if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
-    return;
+    return
   }
 
-  const field = new FieldInfo(name, type, decl);
-  field.index = owner.fields.length;
-  field.readonly = (decl.flags & FLAG_READONLY) !== 0;
-  const initializer = decl.children[2];
+  const field = new FieldInfo(name, type, decl)
+  field.index = owner.fields.length
+  field.readonly = (decl.flags & FLAG_READONLY) !== 0
+  const initializer = decl.children[2]
   if (initializer.kind !== N_EMPTY) {
-    const initType = literalInitializerType(ctx, initializer, type);
+    const initType = literalInitializerType(ctx, initializer, type)
     if (initType < 0) {
       ctx.error(
         initializer,
         `${what}: initializers must be literals (assign other values in the constructor)`
-      );
+      )
     } else if (!ctx.table.assignable(initType, type)) {
-      const got = ctx.table.typeName(initType);
-      ctx.error(initializer, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`);
+      const got = ctx.table.typeName(initType)
+      ctx.error(initializer, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`)
     }
     // The field keeps its initializer even when that initializer was refused.
     // What it is worth is nothing; what it *says* is that the programmer wrote
@@ -499,11 +509,11 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     // which is a second complaint about the line the first one is about.
     // stage0 says one thing here because it throws out of the class
     // (`tests/cases/reject_cls_field_init_type`).
-    field.initializer = initializer;
+    field.initializer = initializer
   }
-  owner.fieldIndex.set(name, owner.fields.length);
-  owner.fields.push(field);
-};
+  owner.fieldIndex.set(name, owner.fields.length)
+  owner.fields.push(field)
+}
 
 /**
  * The modifiers a method or a constructor may not carry, in stage0's order.
@@ -519,49 +529,51 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
  * Answers whether it reported, so a caller that must stop can.
  */
 const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boolean => {
-  const isStatic = (decl.flags & FLAG_STATIC) !== 0;
-  const isReadonly = (decl.flags & FLAG_READONLY) !== 0;
-  const staticFirst = (decl.flags & FLAG_STATIC_FIRST) !== 0;
+  const isStatic = (decl.flags & FLAG_STATIC) !== 0
+  const isReadonly = (decl.flags & FLAG_READONLY) !== 0
+  const staticFirst = (decl.flags & FLAG_STATIC_FIRST) !== 0
   if (isStatic && (!isReadonly || staticFirst)) {
-    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function)`);
-    return true;
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function)`)
+    return true
   }
   if (isReadonly) {
-    ctx.error(decl, `${what}: unsupported modifier \`readonly\``);
-    return true;
+    ctx.error(decl, `${what}: unsupported modifier \`readonly\``)
+    return true
   }
-  return false;
-};
+  return false
+}
 
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
-  const name = decl.children[0].text;
-  const what = `Method \`${name}\``;
-  const shown = spelled(ctx, owner);
+  const name = decl.children[0].text
+  const what = `Method \`${name}\``
+  const shown = spelled(ctx, owner)
   if (owner.hasMember(name)) {
-    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${shown}\``);
-    return;
+    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${shown}\``)
+    return
   }
   // As in `collectField` above, and worth the repetition rather than a shared
   // helper: the two sentences differ, and so does the order — stage0 reads a
   // method's modifiers before its `?` (`rejectMethodModifiers`), so
   // `readonly m?()` is about the modifier and not about the marker.
-  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${shown}\``)) { return; }
+  if (rejectMemberModifiers(ctx, decl, `${what} of class \`${shown}\``)) {
+    return
+  }
   if ((decl.flags & FLAG_OPTIONAL) !== 0) {
-    ctx.error(decl, `${what} of class \`${shown}\` cannot be optional`);
-    return;
+    ctx.error(decl, `${what} of class \`${shown}\` cannot be optional`)
+    return
   }
   // WP18 G8: a generic method has no signature until a call picks its type
   // arguments, so it becomes a template here, after every rule above that is
   // about the member rather than about its types.
   if (isGenericFunction(decl)) {
-    declareMethodTemplate(ctx, owner, decl);
-    return;
+    declareMethodTemplate(ctx, owner, decl)
+    return
   }
-  const sig = collectMethodSignature(ctx, owner, decl, `${owner.name}.${name}`, `${shown}.${name}`);
-  owner.methodIndex.set(name, owner.methodSigs.length);
-  owner.methodSigs.push(sig);
-  ctx.program.functions.push(sig);
-};
+  const sig = collectMethodSignature(ctx, owner, decl, `${owner.name}.${name}`, `${shown}.${name}`)
+  owner.methodIndex.set(name, owner.methodSigs.length)
+  owner.methodSigs.push(sig)
+  ctx.program.functions.push(sig)
+}
 
 /**
  * One method's signature, with `this` first: the declared method's, and since
@@ -576,25 +588,30 @@ export const collectMethodSignature = (
   symbol: string,
   shownName: string
 ): FunctionSig => {
-  const sig = new FunctionSig(symbol, shownName, decl);
-  sig.origin = ctx.source;
-  sig.exported = owner.exported;
-  sig.owner = owner;
-  sig.role = ROLE_METHOD;
-  collectParams(ctx, sig, decl.children[1], owner.type, false);
-  const returnAnnotation = decl.children[2];
+  const sig = new FunctionSig(symbol, shownName, decl)
+  sig.origin = ctx.source
+  sig.exported = owner.exported
+  sig.owner = owner
+  sig.role = ROLE_METHOD
+  collectParams(ctx, sig, decl.children[1], owner.type, false)
+  const returnAnnotation = decl.children[2]
   if (returnAnnotation.kind === N_EMPTY) {
     ctx.error(
       decl.children[0],
       `Method \`${decl.children[0].text}\` of class \`${spelled(ctx, owner)}\` needs an explicit return type annotation`
-    );
-    sig.returnType = T_ERROR;
+    )
+    sig.returnType = T_ERROR
   } else {
-    sig.returnType = resolveType(returnAnnotation, ctx);
-    rejectForeignPointer(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation);
+    sig.returnType = resolveType(returnAnnotation, ctx)
+    rejectForeignPointer(
+      ctx,
+      sig.returnType,
+      "the return type of a function this program defines",
+      returnAnnotation
+    )
   }
-  return sig;
-};
+  return sig
+}
 
 /**
  * A generic method of `owner` (WP18 G8): a template keyed by the receiver,
@@ -606,22 +623,22 @@ export const collectMethodSignature = (
  * with every receiver through `methodConstraintList`.
  */
 const declareMethodTemplate = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
-  const name = decl.children[0].text;
-  const template = new TemplateInfo(`${spelled(ctx, owner)}.${name}`, decl, ctx.source, ctx);
-  template.owner = owner;
-  template.exported = owner.exported;
-  template.typeParams = collectTypeParamNames(decl);
-  template.constraints = ctx.program.methodConstraintList(decl);
-  owner.methodTemplates.set(name, owner.methodTemplateList.length);
-  owner.methodTemplateList.push(template);
-  ctx.program.methodTemplateList.push(template);
-};
+  const name = decl.children[0].text
+  const template = new TemplateInfo(`${spelled(ctx, owner)}.${name}`, decl, ctx.source, ctx)
+  template.owner = owner
+  template.exported = owner.exported
+  template.typeParams = collectTypeParamNames(decl)
+  template.constraints = ctx.program.methodConstraintList(decl)
+  owner.methodTemplates.set(name, owner.methodTemplateList.length)
+  owner.methodTemplateList.push(template)
+  ctx.program.methodTemplateList.push(template)
+}
 
 const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
-  const shown = spelled(ctx, owner);
+  const shown = spelled(ctx, owner)
   if (owner.ctor !== null) {
-    ctx.error(decl, `Class \`${shown}\` has more than one constructor (no overloads)`);
-    return;
+    ctx.error(decl, `Class \`${shown}\` has more than one constructor (no overloads)`)
+    return
   }
   // stage0 reads a constructor's modifiers with the same function it reads a
   // method's (`rejectMethodModifiers`), so the sentence is the method's with
@@ -637,19 +654,19 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   // initializer and no constructor assigns it` — advice about a constructor
   // that is right there. stage0 says one thing here because it throws out of
   // the class, and this is that, without the throw.
-  const modifiers = `Constructor of class \`${shown}\``;
-  rejectMemberModifiers(ctx, decl, modifiers);
-  const symbol = `${owner.name}.constructor`;
-  const sig = new FunctionSig(symbol, `${shown}.constructor`, decl);
-  sig.origin = ctx.source;
-  sig.exported = owner.exported;
-  sig.owner = owner;
-  sig.role = ROLE_CONSTRUCTOR;
-  sig.returnType = T_VOID;
-  collectParams(ctx, sig, decl.children[0], owner.type, false);
-  owner.ctor = sig;
-  ctx.program.functions.push(sig);
-};
+  const modifiers = `Constructor of class \`${shown}\``
+  rejectMemberModifiers(ctx, decl, modifiers)
+  const symbol = `${owner.name}.constructor`
+  const sig = new FunctionSig(symbol, `${shown}.constructor`, decl)
+  sig.origin = ctx.source
+  sig.exported = owner.exported
+  sig.owner = owner
+  sig.role = ROLE_CONSTRUCTOR
+  sig.returnType = T_VOID
+  collectParams(ctx, sig, decl.children[0], owner.type, false)
+  owner.ctor = sig
+  ctx.program.functions.push(sig)
+}
 
 /**
  * The fields, layout, methods and constructor of a declared struct.
@@ -679,14 +696,14 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
  */
 export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {
-    return;
+    return
   }
-  const decl = info.decl;
+  const decl = info.decl
   // The implemented interface with the most fields, whose fields the padding
   // rule keeps first (`reportWastefulPadding`).
-  let prefix: StructInfo | null = null;
+  let prefix: StructInfo | null = null
   if (info.kind === STRUCT_CLASS) {
-    const extendsName = decl.children[1];
+    const extendsName = decl.children[1]
     if (extendsName.kind !== N_EMPTY) {
       // WP25. The rule lives in the checker rather than in Phase 0 because
       // inheritance needs nothing Phase 0 exists to refuse — it compiled until
@@ -695,11 +712,11 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       ctx.error(
         extendsName,
         `\`extends\` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of \`${spelled(ctx, info)}\` and \`implements\` an interface to convert between them`
-      );
+      )
       // Stop here, which is what stage0's `throw` out of pass 1b leaves
       // behind: the struct is registered but has no members and no layout.
-      info.poisoned = true;
-      return;
+      info.poisoned = true
+      return
     }
     for (const iface of decl.children[2].children) {
       // WP18 G5: `class Box<T> implements Container<T>` names an instantiated
@@ -712,51 +729,51 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         // `implements number[]`: stage0 sees a heritage expression that is not
         // an identifier and says this, so stage1 says it where its own grammar
         // puts the same mistake.
-        ctx.error(iface, "`implements` must name a declared interface");
-        continue;
+        ctx.error(iface, "`implements` must name a declared interface")
+        continue
       }
-      const template = ctx.program.structTemplate(iface.text);
-      let target: StructInfo | null = null;
+      const template = ctx.program.structTemplate(iface.text)
+      let target: StructInfo | null = null
       if (template !== null) {
-        target = instantiateWritten(ctx, template, iface.children[0], iface);
+        target = instantiateWritten(ctx, template, iface.children[0], iface)
         if (target === null) {
-          continue;
+          continue
         }
       } else if (iface.children[0].children.length > 0) {
-        ctx.error(iface, "`implements` must name a declared interface");
-        continue;
+        ctx.error(iface, "`implements` must name a declared interface")
+        continue
       } else {
-        target = ctx.program.struct(iface.text);
+        target = ctx.program.struct(iface.text)
       }
       if (target === null || target.kind !== STRUCT_INTERFACE) {
-        ctx.error(iface, `\`${iface.text}\` is not a declared interface`);
-        continue;
+        ctx.error(iface, `\`${iface.text}\` is not a declared interface`)
+        continue
       }
-      info.implementsNames.push(target.name);
+      info.implementsNames.push(target.name)
       if (prefix === null || declaredFieldCount(target) > declaredFieldCount(prefix)) {
-        prefix = target;
+        prefix = target
       }
     }
     for (const member of decl.children[3].children) {
       if (member.kind === N_FIELD) {
-        collectField(ctx, info, member);
+        collectField(ctx, info, member)
       } else if (member.kind === N_METHOD) {
-        collectMethod(ctx, info, member);
+        collectMethod(ctx, info, member)
       } else if (member.kind === N_CONSTRUCTOR) {
-        collectConstructor(ctx, info, member);
+        collectConstructor(ctx, info, member)
       }
     }
   } else {
     for (const member of decl.children[1].children) {
       if (member.kind === N_FIELD) {
-        collectField(ctx, info, member);
+        collectField(ctx, info, member)
       }
     }
   }
-  const floor = computeLayout(ctx, info);
-  info.collected = true;
-  reportWastefulPadding(ctx, info, floor, prefix);
-};
+  const floor = computeLayout(ctx, info)
+  info.collected = true
+  reportWastefulPadding(ctx, info, floor, prefix)
+}
 
 /**
  * `class C implements I` is a layout check, not a subtype relation: `I`'s
@@ -771,41 +788,42 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
     // `ctx` is the module that resolved these names in `collectStructMembers`
     // — the class's own, or its template's, to which `instantiateStruct`
     // forwards every request — so the name finds the declaration it found then.
-    const iface = ctx.program.struct(name);
+    const iface = ctx.program.struct(name)
     if (iface === null) {
-      continue;
+      continue
     }
     // WP15 section 2a: an interface with an implementer is a *view*, not a
     // record — an `I[]` may hold any implementer and they are all longer than
     // `I` — so its elements stay one pointer per slot. `StructInfo` objects are
     // shared across the modules of a compilation, so marking the one here is
     // what makes every module lay `I[]` out the same way.
-    iface.implemented = true;
-    let i = 0;
+    iface.implemented = true
+    let i = 0
     while (i < iface.fields.length) {
-      const want = iface.fields[i];
+      const want = iface.fields[i]
       if (i < cls.fields.length) {
-        const got = cls.fields[i];
+        const got = cls.fields[i]
         if (want.name === got.name && want.type === got.type) {
-          i = i + 1;
-          continue;
+          i = i + 1
+          continue
         }
         ctx.error(
           cls.decl.children[0],
           `Class \`${spelled(ctx, cls)}\` does not implement \`${spelled(ctx, iface)}\`: field ${i + 1} is ${describeField(ctx, want)} in \`${spelled(ctx, iface)}\` but ${describeField(ctx, got)} in \`${spelled(ctx, cls)}\` (the interface's fields must be the class's first fields, in order)`
-        );
-        return;
+        )
+        return
       }
       ctx.error(
         cls.decl.children[0],
         `Class \`${spelled(ctx, cls)}\` does not implement \`${spelled(ctx, iface)}\`: it lacks field ${describeField(ctx, want)} (the interface's fields must be the class's first fields, in order)`
-      );
-      return;
+      )
+      return
     }
   }
-};
+}
 
-const describeField = (ctx: CheckContext, field: FieldInfo): string => `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
+const describeField = (ctx: CheckContext, field: FieldInfo): string =>
+  `\`${field.name}: ${ctx.table.typeName(field.type)}\``
 
 /**
  * The struct names a type mentions, following `T[]` and `T | null` inwards.
@@ -814,21 +832,21 @@ const describeField = (ctx: CheckContext, field: FieldInfo): string => `\`${fiel
  */
 export const noteStructNames = (table: TypeTable, type: i32, out: StringSet): void => {
   if (table.isStruct(type)) {
-    out.add(table.nameOf(type));
-    return;
+    out.add(table.nameOf(type))
+    return
   }
   // A `Result<Config, IoError>` hands the importer both payload layouts
   // without either name appearing in its source (WP16), so both arms count.
   if (table.isResult(type)) {
-    noteStructNames(table, table.okOf(type), out);
-    noteStructNames(table, table.errOf(type), out);
-    return;
+    noteStructNames(table, table.okOf(type), out)
+    noteStructNames(table, table.errOf(type), out)
+    return
   }
-  const inner = table.refOf(type);
+  const inner = table.refOf(type)
   if (inner >= 0) {
-    noteStructNames(table, inner, out);
+    noteStructNames(table, inner, out)
   }
-};
+}
 
 /**
  * The struct names a signature mentions. `this` is skipped: it is the owner or
@@ -837,13 +855,13 @@ export const noteStructNames = (table: TypeTable, type: i32, out: StringSet): vo
  * behind a derived class.
  */
 export const signatureStructNames = (table: TypeTable, sig: FunctionSig, out: StringSet): void => {
-  let i = sig.owner === null ? 0 : 1;
+  let i = sig.owner === null ? 0 : 1
   while (i < sig.paramTypes.length) {
-    noteStructNames(table, sig.paramTypes[i], out);
-    i = i + 1;
+    noteStructNames(table, sig.paramTypes[i], out)
+    i = i + 1
   }
-  noteStructNames(table, sig.returnType, out);
-};
+  noteStructNames(table, sig.returnType, out)
+}
 
 /**
  * The struct names `info` mentions through its fields and its members, its
@@ -851,16 +869,16 @@ export const signatureStructNames = (table: TypeTable, sig: FunctionSig, out: St
  */
 export const referencedStructNames = (table: TypeTable, info: StructInfo, out: StringSet): void => {
   for (const field of info.fields) {
-    noteStructNames(table, field.type, out);
+    noteStructNames(table, field.type, out)
   }
   for (const method of info.methodSigs) {
-    signatureStructNames(table, method, out);
+    signatureStructNames(table, method, out)
   }
-  const ctor = info.ctor;
+  const ctor = info.ctor
   if (ctor !== null) {
-    signatureStructNames(table, ctor, out);
+    signatureStructNames(table, ctor, out)
   }
-};
+}
 
 /**
  * Whether a class value may stand where `want` is expected without a
@@ -876,16 +894,16 @@ export const referencedStructNames = (table: TypeTable, info: StructInfo, out: S
  */
 export const coercesTo = (ctx: CheckContext, from: i32, want: i32): boolean => {
   if (want < 0 || !ctx.table.isStruct(from)) {
-    return false;
+    return false
   }
-  const target = ctx.table.stripNull(want); // a class converts to `I | null` as it does to `I`
+  const target = ctx.table.stripNull(want) // a class converts to `I | null` as it does to `I`
   if (!ctx.table.isStruct(target) || target === from) {
-    return false;
+    return false
   }
-  const source = ctx.program.struct(ctx.table.nameOf(from));
-  const wanted = ctx.program.struct(ctx.table.nameOf(target));
+  const source = ctx.program.struct(ctx.table.nameOf(from))
+  const wanted = ctx.program.struct(ctx.table.nameOf(target))
   if (source === null || wanted === null) {
-    return false;
+    return false
   }
-  return wanted.kind === STRUCT_INTERFACE && implementsDeclaration(source, wanted);
-};
+  return wanted.kind === STRUCT_INTERFACE && implementsDeclaration(source, wanted)
+}

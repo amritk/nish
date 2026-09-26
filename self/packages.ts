@@ -36,23 +36,23 @@
 // agree wherever both apply, so the placeholder shrank to the cases the
 // resolver is never asked about rather than disappearing.
 
-import { splitByte, StringBuilder } from "./strings";
+import { splitByte, StringBuilder } from "./strings"
 
 /** The package every ordinary program is: no prefix, so no symbol moves. */
-export const ROOT_PACKAGE: string = "";
+export const ROOT_PACKAGE: string = ""
 
 /** The directory segment that introduces a package, as npm lays one out. */
-export const PACKAGE_ROOT_SEGMENT: string = "node_modules";
+export const PACKAGE_ROOT_SEGMENT: string = "node_modules"
 
-const SLASH: i32 = 47; // '/'
-const AT: i32 = 64; // '@'
-const UNDERSCORE: i32 = 95;
-const DIGIT_0: i32 = 48;
-const DIGIT_9: i32 = 57;
-const UPPER_A: i32 = 65;
-const UPPER_Z: i32 = 90;
-const LOWER_A: i32 = 97;
-const LOWER_Z: i32 = 122;
+const SLASH: i32 = 47 // '/'
+const AT: i32 = 64 // '@'
+const UNDERSCORE: i32 = 95
+const DIGIT_0: i32 = 48
+const DIGIT_9: i32 = 57
+const UPPER_A: i32 = 65
+const UPPER_Z: i32 = 90
+const LOWER_A: i32 = 97
+const LOWER_Z: i32 = 122
 
 /**
  * Where the innermost `node_modules` of a path is, or -1 when it has none. The
@@ -60,39 +60,39 @@ const LOWER_Z: i32 = 122;
  * dependencies: the last one on the path is the one that owns the file.
  */
 const packageRootAt = (segments: string[]): i32 => {
-  let at = -1;
-  let i = 0;
+  let at = -1
+  let i = 0
   while (i + 1 < segments.length) {
     if (segments[i] === PACKAGE_ROOT_SEGMENT && segments[i + 1].length > 0) {
-      at = i;
+      at = i
     }
-    i = i + 1;
+    i = i + 1
   }
-  return at;
-};
+  return at
+}
 
 /** How many leading segments make up the package root, or 0 for no package. */
 const packageRootLength = (segments: string[], at: i32): i32 => {
   if (at < 0) {
-    return 0;
+    return 0
   }
   // `@scope/name` is two segments and one package name.
   if (segments[at + 1].startsWith("@") && at + 2 < segments.length) {
-    return at + 3;
+    return at + 3
   }
-  return at + 2;
-};
+  return at + 2
+}
 
 /** `segments[from..to)` joined with `/`. */
 const joinSegments = (segments: string[], from: i32, to: i32): string => {
-  const parts: string[] = [];
-  let i = from;
+  const parts: string[] = []
+  let i = from
   while (i < to) {
-    parts.push(segments[i]);
-    i = i + 1;
+    parts.push(segments[i])
+    i = i + 1
   }
-  return parts.join("/");
-};
+  return parts.join("/")
+}
 
 /**
  * The package directory a module lives in, or `""` when it is in none. Two
@@ -103,24 +103,24 @@ const joinSegments = (segments: string[], from: i32, to: i32): string => {
  * dependency of itself.
  */
 export const packageDirOf = (modulePath: string): string => {
-  const segments = splitByte(modulePath, SLASH);
-  const length = packageRootLength(segments, packageRootAt(segments));
+  const segments = splitByte(modulePath, SLASH)
+  const length = packageRootLength(segments, packageRootAt(segments))
   if (length === 0) {
-    return "";
+    return ""
   }
-  return joinSegments(segments, 0, length);
-};
+  return joinSegments(segments, 0, length)
+}
 
 /** The package a module belongs to (`hash`, `@scope/hash`), or `""` for none. */
 export const packageNameOf = (modulePath: string): string => {
-  const segments = splitByte(modulePath, SLASH);
-  const at = packageRootAt(segments);
-  const length = packageRootLength(segments, at);
+  const segments = splitByte(modulePath, SLASH)
+  const at = packageRootAt(segments)
+  const length = packageRootLength(segments, at)
   if (length === 0) {
-    return ROOT_PACKAGE;
+    return ROOT_PACKAGE
   }
-  return joinSegments(segments, at + 1, length);
-};
+  return joinSegments(segments, at + 1, length)
+}
 
 /**
  * The prefix every symbol of `packageName` carries: `""` for the root package,
@@ -136,12 +136,12 @@ export const packageNameOf = (modulePath: string): string => {
  */
 export const packageSymbolPrefix = (packageName: string): string => {
   if (packageName === ROOT_PACKAGE) {
-    return "";
+    return ""
   }
-  const out = new StringBuilder();
-  let i = 0;
+  const out = new StringBuilder()
+  let i = 0
   while (i < packageName.length) {
-    const code = packageName.charCodeAt(i);
+    const code = packageName.charCodeAt(i)
     // The `@` of a scope is dropped rather than replaced, so `@scope/hash`
     // reads as `scope_hash` and not as `_scope_hash`.
     if (code !== AT || i !== 0) {
@@ -149,20 +149,20 @@ export const packageSymbolPrefix = (packageName: string): string => {
         (code >= DIGIT_0 && code <= DIGIT_9) ||
         (code >= UPPER_A && code <= UPPER_Z) ||
         (code >= LOWER_A && code <= LOWER_Z) ||
-        code === UNDERSCORE;
-      out.addChar(plain ? code : UNDERSCORE);
+        code === UNDERSCORE
+      out.addChar(plain ? code : UNDERSCORE)
     }
-    i = i + 1;
+    i = i + 1
   }
-  const mangled = out.toText();
+  const mangled = out.toText()
   // `2fast` would otherwise produce `@2fast.f`, which LLVM reads as a numbered
   // global, and a name that mangles away to nothing would produce `@.f`.
-  const first = mangled.length === 0 ? DIGIT_0 : mangled.charCodeAt(0);
+  const first = mangled.length === 0 ? DIGIT_0 : mangled.charCodeAt(0)
   if (first >= DIGIT_0 && first <= DIGIT_9) {
-    return `_${mangled}.`;
+    return `_${mangled}.`
   }
-  return `${mangled}.`;
-};
+  return `${mangled}.`
+}
 
 /**
  * A bare import specifier taken apart (WP21 S2): `@scope/hash/blake3` is the
@@ -176,14 +176,14 @@ export const packageSymbolPrefix = (packageName: string): string => {
  */
 export interface BareSpecifier {
   /** `hash`, `@scope/hash`. */
-  name: string;
+  name: string
   /** `.` or `./blake3`: the key in the package's `exports` map. */
-  subpath: string;
+  subpath: string
 }
 
 /** `/`, `\` and `:` are what separates a package name from a path or a URL. */
 const isNameSegment = (segment: string): boolean =>
-  segment.length > 0 && !segment.startsWith(".") && segment.indexOf("\\") < 0 && segment.indexOf(":") < 0;
+  segment.length > 0 && !segment.startsWith(".") && segment.indexOf("\\") < 0 && segment.indexOf(":") < 0
 
 /**
  * `specifier` as a package name and subpath, or null when it is not a package
@@ -202,24 +202,24 @@ const isNameSegment = (segment: string): boolean =>
  * being on disk, which names the package, rather than by a spelling rule.
  */
 export const parseBareSpecifier = (specifier: string): BareSpecifier | null => {
-  const segments = splitByte(specifier, SLASH);
-  const scoped = specifier.startsWith("@");
-  const nameLength = scoped ? 2 : 1;
+  const segments = splitByte(specifier, SLASH)
+  const scoped = specifier.startsWith("@")
+  const nameLength = scoped ? 2 : 1
   if (segments.length < nameLength) {
-    return null;
+    return null
   }
-  let i = 0;
+  let i = 0
   while (i < segments.length) {
-    const segment = i === 0 && scoped ? segments[0].substring(1) : segments[i];
+    const segment = i === 0 && scoped ? segments[0].substring(1) : segments[i]
     if (!isNameSegment(segment)) {
-      return null;
+      return null
     }
-    i = i + 1;
+    i = i + 1
   }
-  const rest = joinSegments(segments, nameLength, segments.length);
+  const rest = joinSegments(segments, nameLength, segments.length)
   const parsed: BareSpecifier = {
     name: joinSegments(segments, 0, nameLength),
     subpath: rest.length === 0 ? "." : `./${rest}`,
-  };
-  return parsed;
-};
+  }
+  return parsed
+}

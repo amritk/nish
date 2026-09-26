@@ -15,19 +15,19 @@
 // holds the narrowings of one region — so a scan beats a second hash table,
 // and it keeps a `Local` free of a field that exists only to be its own key.
 
-import { StringMap } from "./map";
-import { Node } from "./nodes";
+import { StringMap } from "./map"
+import { Node } from "./nodes"
 
 /** A parameter is an SSA value; a `let` or `const` lives in an alloca slot. */
-export const STORAGE_PARAM: i32 = 0;
-export const STORAGE_LOCAL: i32 = 1;
+export const STORAGE_PARAM: i32 = 0
+export const STORAGE_LOCAL: i32 = 1
 
 export class Local {
-  name: string;
+  name: string
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
-  type: i32;
-  mutable: boolean;
-  storage: i32;
+  type: i32
+  mutable: boolean
+  storage: i32
   /**
    * The type as the *template* wrote it, when this local is declared in the
    * body of an instantiation (WP18 G6), and `null` everywhere else. `type` is
@@ -35,14 +35,14 @@ export class Local {
    * only record that the local came from `T`, which is what decides whether a
    * member may be read through it (`refuseParameterMember` in `self/generics.ts`).
    */
-  origin: TypeOrigin | null;
+  origin: TypeOrigin | null
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
-    this.name = name;
-    this.type = type;
-    this.mutable = mutable;
-    this.storage = storage;
-    this.origin = null;
+    this.name = name
+    this.type = type
+    this.mutable = mutable
+    this.storage = storage
+    this.origin = null
   }
 }
 
@@ -64,68 +64,68 @@ export class Local {
  * and an array literal, whose one argument is the origin of its elements.
  */
 export class TypeOrigin {
-  annotation: Node;
-  names: string[];
-  args: (TypeOrigin | null)[];
+  annotation: Node
+  names: string[]
+  args: (TypeOrigin | null)[]
   /**
    * The value came from an expression `originOf` has no case for, so where it
    * came from is not known. It is refused as a type parameter's whenever its
    * type is one's binding: failing closed, for the reason `originOf` gives.
    */
-  unknown: boolean;
+  unknown: boolean
 
   constructor(annotation: Node, names: string[], args: (TypeOrigin | null)[]) {
-    this.annotation = annotation;
-    this.names = names;
-    this.args = args;
-    this.unknown = false;
+    this.annotation = annotation
+    this.names = names
+    this.args = args
+    this.unknown = false
   }
 }
 
 /** The origin of an expression nothing knows how to follow (see `TypeOrigin.unknown`). */
 export const unknownOrigin = (expr: Node): TypeOrigin => {
-  const origin = new TypeOrigin(expr, [], []);
-  origin.unknown = true;
-  return origin;
-};
+  const origin = new TypeOrigin(expr, [], [])
+  origin.unknown = true
+  return origin
+}
 
 export class Scope {
-  parent: Scope | null;
+  parent: Scope | null
   /** Name -> index into `locals`. */
-  names: StringMap;
-  locals: Local[];
+  names: StringMap
+  locals: Local[]
   /** Narrowed variables and the types they read as, in the same order. */
-  narrowedVars: Local[];
-  narrowedTypes: i32[];
+  narrowedVars: Local[]
+  narrowedTypes: i32[]
 
   constructor(parent: Scope | null) {
-    this.parent = parent;
-    this.names = new StringMap();
-    this.locals = [];
-    this.narrowedVars = [];
-    this.narrowedTypes = [];
+    this.parent = parent
+    this.names = new StringMap()
+    this.locals = []
+    this.narrowedVars = []
+    this.narrowedTypes = []
   }
 
   child(): Scope {
-    return new Scope(this);
+    return new Scope(this)
   }
 
   /** The variable `name` refers to, innermost scope first, or `null`. */
   lookup(name: string): Local | null {
-    const index = this.names.get(name, -1);
+    const index = this.names.get(name, -1)
     if (index >= 0) {
-      return this.locals[index];
+      return this.locals[index]
     }
-    const parent = this.parent;
+    const parent = this.parent
     if (parent !== null) {
-      return parent.lookup(name);
+      return parent.lookup(name)
     }
-    return null;
+    return null
   }
 
   /** Whether this scope — not the chain — already declares `name`. */
   declaresHere(name: string): boolean {
-    return this.names.has(name);
+    return this.names.has(name)
   }
 
   /**
@@ -136,47 +136,47 @@ export class Scope {
    */
   declare(local: Local): boolean {
     if (this.names.has(local.name)) {
-      return false;
+      return false
     }
-    this.names.set(local.name, this.locals.length);
-    this.locals.push(local);
-    return true;
+    this.names.set(local.name, this.locals.length)
+    this.locals.push(local)
+    return true
   }
 
   /** The position of `variable` in this scope's narrowings, or -1. */
   narrowingIndex(variable: Local): i32 {
-    let i = 0;
+    let i = 0
     while (i < this.narrowedVars.length) {
       if (this.narrowedVars[i] === variable) {
-        return i;
+        return i
       }
-      i = i + 1;
+      i = i + 1
     }
-    return -1;
+    return -1
   }
 
   /** Record that `variable` reads as `type` for the rest of this scope. */
   narrow(variable: Local, type: i32): void {
-    const at = this.narrowingIndex(variable);
+    const at = this.narrowingIndex(variable)
     if (at >= 0) {
-      this.narrowedTypes[at] = type;
-      return;
+      this.narrowedTypes[at] = type
+      return
     }
-    this.narrowedVars.push(variable);
-    this.narrowedTypes.push(type);
+    this.narrowedVars.push(variable)
+    this.narrowedTypes.push(type)
   }
 
   /** The type `variable` currently reads as: the innermost narrowing, else its declared type. */
   typeOf(variable: Local): i32 {
-    const at = this.narrowingIndex(variable);
+    const at = this.narrowingIndex(variable)
     if (at >= 0) {
-      return this.narrowedTypes[at];
+      return this.narrowedTypes[at]
     }
-    const parent = this.parent;
+    const parent = this.parent
     if (parent !== null) {
-      return parent.typeOf(variable);
+      return parent.typeOf(variable)
     }
-    return variable.type;
+    return variable.type
   }
 
   /**
@@ -184,19 +184,19 @@ export class Scope {
    * nothing proved about its old value holds any more.
    */
   clearNarrowing(variable: Local): void {
-    const at = this.narrowingIndex(variable);
+    const at = this.narrowingIndex(variable)
     if (at >= 0) {
       // Order does not matter and there is no `splice`: move the last entry
       // into the hole. A scope's narrowings are a set, never a sequence.
-      const last = this.narrowedVars.length - 1;
-      this.narrowedVars[at] = this.narrowedVars[last];
-      this.narrowedTypes[at] = this.narrowedTypes[last];
-      this.narrowedVars.pop();
-      this.narrowedTypes.pop();
+      const last = this.narrowedVars.length - 1
+      this.narrowedVars[at] = this.narrowedVars[last]
+      this.narrowedTypes[at] = this.narrowedTypes[last]
+      this.narrowedVars.pop()
+      this.narrowedTypes.pop()
     }
-    const parent = this.parent;
+    const parent = this.parent
     if (parent !== null) {
-      parent.clearNarrowing(variable);
+      parent.clearNarrowing(variable)
     }
   }
 }

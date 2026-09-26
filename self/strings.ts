@@ -19,43 +19,43 @@
  * cannot see it.
  */
 export class StringBuilder {
-  parts: string[];
+  parts: string[]
 
   constructor() {
-    this.parts = [];
+    this.parts = []
   }
 
   add(text: string): void {
-    this.parts.push(text);
+    this.parts.push(text)
   }
 
   /** One byte, for the escapes and separators written a character at a time. */
   addChar(code: i32): void {
-    this.parts.push(String.fromCharCode(code));
+    this.parts.push(String.fromCharCode(code))
   }
 
   /** The bytes added so far, without building the result. */
   length(): i32 {
-    let total = 0;
+    let total = 0
     for (const part of this.parts) {
-      total = total + part.length;
+      total = total + part.length
     }
-    return total;
+    return total
   }
 
   isEmpty(): boolean {
-    return this.parts.length === 0;
+    return this.parts.length === 0
   }
 
   /** Everything added, in order. The builder stays usable afterwards. */
   toText(): string {
-    return this.parts.join("");
+    return this.parts.join("")
   }
 
   /** Drop the contents and keep the capacity, so the next use reuses it. */
   reset(): void {
     while (this.parts.length > 0) {
-      this.parts.pop();
+      this.parts.pop()
     }
   }
 }
@@ -70,44 +70,44 @@ export class StringBuilder {
  * order for anything valid, which is what a stable output wants.
  */
 export const compareStrings = (a: string, b: string): i32 => {
-  let shared = a.length;
+  let shared = a.length
   if (b.length < shared) {
-    shared = b.length;
+    shared = b.length
   }
-  let i = 0;
+  let i = 0
   while (i < shared) {
-    const ca = a.charCodeAt(i);
-    const cb = b.charCodeAt(i);
+    const ca = a.charCodeAt(i)
+    const cb = b.charCodeAt(i)
     if (ca !== cb) {
-      return ca < cb ? -1 : 1;
+      return ca < cb ? -1 : 1
     }
-    i = i + 1;
+    i = i + 1
   }
   if (a.length === b.length) {
-    return 0;
+    return 0
   }
-  return a.length < b.length ? -1 : 1;
-};
+  return a.length < b.length ? -1 : 1
+}
 
-const HEX_LOWER: string = "0123456789abcdef";
-const HEX_UPPER: string = "0123456789ABCDEF";
+const HEX_LOWER: string = "0123456789abcdef"
+const HEX_UPPER: string = "0123456789ABCDEF"
 
 /** The low nibble of `value` as one lowercase hex digit. */
-export const hexDigitLower = (value: i32): string => HEX_LOWER.substring(value & 15, (value & 15) + 1);
+export const hexDigitLower = (value: i32): string => HEX_LOWER.substring(value & 15, (value & 15) + 1)
 
 /** The low nibble of `value` as one uppercase hex digit. */
-export const hexDigitUpper = (value: i32): string => HEX_UPPER.substring(value & 15, (value & 15) + 1);
+export const hexDigitUpper = (value: i32): string => HEX_UPPER.substring(value & 15, (value & 15) + 1)
 
 /** `value` as exactly `digits` uppercase hex digits, most significant first. */
 export const hexOfI64 = (value: i64, digits: i32): string => {
-  const out = new StringBuilder();
-  let shift = (digits - 1) * 4;
+  const out = new StringBuilder()
+  let shift = (digits - 1) * 4
   while (shift >= 0) {
-    out.add(hexDigitUpper(toI32(value >> toI64(shift)) & 15));
-    shift = shift - 4;
+    out.add(hexDigitUpper(toI32(value >> toI64(shift)) & 15))
+    shift = shift - 4
   }
-  return out.toText();
-};
+  return out.toText()
+}
 
 /**
  * An `f64` as LLVM writes it: `0x` and the 16 uppercase hex digits of the
@@ -115,14 +115,14 @@ export const hexOfI64 = (value: i64, digits: i32): string => {
  * round-trip exactly, so the hex form is the only one always valid, and
  * `f64ToBits` (WP14 B1) is what makes it reachable from the language at all.
  */
-export const f64Hex = (value: f64): string => `0x${hexOfI64(f64ToBits(value), 16)}`;
+export const f64Hex = (value: f64): string => `0x${hexOfI64(f64ToBits(value), 16)}`
 
 /**
  * The same for an `f32`. LLVM writes a `float` constant with the *64-bit* hex
  * of the double it equals and requires that double to be exactly
  * representable as a float, which the round trip through `toF32` guarantees.
  */
-export const f32Hex = (value: f64): string => f64Hex(toF64(toF32(value)));
+export const f32Hex = (value: f64): string => f64Hex(toF64(toF32(value)))
 
 /**
  * `s` as a JSON string literal, matching `JSON.stringify` byte for byte: the
@@ -131,37 +131,37 @@ export const f32Hex = (value: f64): string => f64Hex(toF64(toF32(value)));
  * `JSON.stringify` also passes through.
  */
 export const jsonQuote = (s: string): string => {
-  const out = new StringBuilder();
-  out.addChar(34);
-  let i = 0;
+  const out = new StringBuilder()
+  out.addChar(34)
+  let i = 0
   while (i < s.length) {
-    const c = s.charCodeAt(i);
+    const c = s.charCodeAt(i)
     if (c === 34) {
-      out.add('\\"');
+      out.add('\\"')
     } else if (c === 92) {
-      out.add("\\\\");
+      out.add("\\\\")
     } else if (c === 8) {
-      out.add("\\b");
+      out.add("\\b")
     } else if (c === 9) {
-      out.add("\\t");
+      out.add("\\t")
     } else if (c === 10) {
-      out.add("\\n");
+      out.add("\\n")
     } else if (c === 12) {
-      out.add("\\f");
+      out.add("\\f")
     } else if (c === 13) {
-      out.add("\\r");
+      out.add("\\r")
     } else if (c < 32) {
-      out.add("\\u00");
-      out.add(hexDigitLower(c >> 4));
-      out.add(hexDigitLower(c));
+      out.add("\\u00")
+      out.add(hexDigitLower(c >> 4))
+      out.add(hexDigitLower(c))
     } else {
-      out.addChar(c);
+      out.addChar(c)
     }
-    i = i + 1;
+    i = i + 1
   }
-  out.addChar(34);
-  return out.toText();
-};
+  out.addChar(34)
+  return out.toText()
+}
 
 /**
  * The body of an LLVM `c"..."` constant: printable ASCII verbatim except `"`
@@ -170,21 +170,21 @@ export const jsonQuote = (s: string): string => {
  * assembles into the wrong bytes, so they sit side by side here.
  */
 export const irEscape = (s: string): string => {
-  const out = new StringBuilder();
-  let i = 0;
+  const out = new StringBuilder()
+  let i = 0
   while (i < s.length) {
-    const c = s.charCodeAt(i);
+    const c = s.charCodeAt(i)
     if (c >= 32 && c <= 126 && c !== 34 && c !== 92) {
-      out.addChar(c);
+      out.addChar(c)
     } else {
-      out.addChar(92);
-      out.add(hexDigitUpper(c >> 4));
-      out.add(hexDigitUpper(c));
+      out.addChar(92)
+      out.add(hexDigitUpper(c >> 4))
+      out.add(hexDigitUpper(c))
     }
-    i = i + 1;
+    i = i + 1
   }
-  return out.toText();
-};
+  return out.toText()
+}
 
 /**
  * `text` cut at every occurrence of one byte, exactly as JavaScript's
@@ -194,27 +194,27 @@ export const irEscape = (s: string): string => {
  * not tell `a//b` from `a/b`, which is the distinction `paths.ts` is built on.
  */
 export const splitByte = (text: string, separator: i32): string[] => {
-  const parts: string[] = [];
-  let start = 0;
-  let i = 0;
+  const parts: string[] = []
+  let start = 0
+  let i = 0
   while (i < text.length) {
     if (text.charCodeAt(i) === separator) {
-      parts.push(text.substring(start, i));
-      start = i + 1;
+      parts.push(text.substring(start, i))
+      start = i + 1
     }
-    i = i + 1;
+    i = i + 1
   }
-  parts.push(text.substring(start, text.length));
-  return parts;
-};
+  parts.push(text.substring(start, text.length))
+  return parts
+}
 
 /** `s` repeated `count` times; `count <= 0` is the empty string. */
 export const repeatString = (s: string, count: i32): string => {
-  const out = new StringBuilder();
-  let i = 0;
+  const out = new StringBuilder()
+  let i = 0
   while (i < count) {
-    out.add(s);
-    i = i + 1;
+    out.add(s)
+    i = i + 1
   }
-  return out.toText();
-};
+  return out.toText()
+}

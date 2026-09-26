@@ -35,73 +35,73 @@
 // drifting under the run lands on both.
 
 const text = (bytes: number): string => {
-  const parts: string[] = [];
-  let n = 0;
+  const parts: string[] = []
+  let n = 0
   while (n < bytes) {
-    parts.push("the quick brown fox jumps over the lazy dog 0123456789 ");
-    n = n + 55;
+    parts.push("the quick brown fox jumps over the lazy dog 0123456789 ")
+    n = n + 55
   }
   // A whole number of 16-byte slices, so the guard never fails and the two
   // scans return the same checksum.
-  return parts.join("").substring(0, bytes);
-};
+  return parts.join("").substring(0, bytes)
+}
 
 const clampedScan = (s: string, rounds: number): number => {
-  let total = 0;
+  let total = 0
   for (let r = 0; r < rounds; r++) {
-    let at = 0;
+    let at = 0
     while (at < s.length) {
-      const end = at + 16;
+      const end = at + 16
       if (at >= 0 && at <= s.length && end >= 0 && end <= s.length) {
-        total = total + s.substring(at + 0, end + 0).length;
+        total = total + s.substring(at + 0, end + 0).length
       }
-      at = end;
+      at = end
     }
   }
-  return total;
-};
+  return total
+}
 
 const provenScan = (s: string, rounds: number): number => {
-  let total = 0;
+  let total = 0
   for (let r = 0; r < rounds; r++) {
-    let at = 0;
+    let at = 0
     while (at < s.length) {
-      const end = at + 16;
+      const end = at + 16
       if (at >= 0 && at <= s.length && end >= 0 && end <= s.length) {
-        total = total + s.substring(at, end).length;
+        total = total + s.substring(at, end).length
       }
-      at = end;
+      at = end
     }
   }
-  return total;
-};
+  return total
+}
 
 export const main = (): number => {
-  const BYTES = 40960; // 2,560 slices a round, and a multiple of 16
-  const ROUNDS = 400;
-  const REPS = 15;
-  const s = text(BYTES);
+  const BYTES = 40960 // 2,560 slices a round, and a multiple of 16
+  const ROUNDS = 400
+  const REPS = 15
+  const s = text(BYTES)
 
-  let clampedUs: i64 = 0;
-  let provenUs: i64 = 0;
-  let checksum = 0;
+  let clampedUs: i64 = 0
+  let provenUs: i64 = 0
+  let checksum = 0
   for (let rep = 0; rep < REPS; rep++) {
-    const a = monotonicNanos();
-    checksum = clampedScan(s, ROUNDS);
-    const b = monotonicNanos();
-    checksum = checksum + provenScan(s, ROUNDS);
-    const c = monotonicNanos();
+    const a = monotonicNanos()
+    checksum = clampedScan(s, ROUNDS)
+    const b = monotonicNanos()
+    checksum = checksum + provenScan(s, ROUNDS)
+    const c = monotonicNanos()
     if (rep === 0 || (b - a) / 1000 < clampedUs) {
-      clampedUs = (b - a) / 1000;
+      clampedUs = (b - a) / 1000
     }
     if (rep === 0 || (c - b) / 1000 < provenUs) {
-      provenUs = (c - b) / 1000;
+      provenUs = (c - b) / 1000
     }
   }
-  const calls = (BYTES / 16) * ROUNDS;
-  console.log(`checksum ${checksum}`);
-  console.log(`calls    ${calls}`);
-  console.log(`clamped  ${clampedUs} us`);
-  console.log(`proven   ${provenUs} us`);
-  return 0;
-};
+  const calls = (BYTES / 16) * ROUNDS
+  console.log(`checksum ${checksum}`)
+  console.log(`calls    ${calls}`)
+  console.log(`clamped  ${clampedUs} us`)
+  console.log(`proven   ${provenUs} us`)
+  return 0
+}

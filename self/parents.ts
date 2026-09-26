@@ -19,25 +19,25 @@
 // explicitly, because the index within the list is the argument index and it
 // would be lost by skipping the list silently.
 
-import { Node } from "./nodes";
+import { Node } from "./nodes"
 
 export class ParentTable {
   /** Node id -> the node that has it as a child; `null` for the source file. */
-  parents: (Node | null)[];
+  parents: (Node | null)[]
 
   constructor(file: Node, nodeCount: i32) {
-    this.parents = new Array<Node | null>(nodeCount);
-    this.link(file);
+    this.parents = new Array<Node | null>(nodeCount)
+    this.link(file)
   }
 
   link(node: Node): void {
     for (const child of node.children) {
-      this.parents[child.id] = node;
-      this.link(child);
+      this.parents[child.id] = node
+      this.link(child)
     }
   }
 
   parentOf(node: Node): Node | null {
-    return this.parents[node.id];
+    return this.parents[node.id]
   }
 }

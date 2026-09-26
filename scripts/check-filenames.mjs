@@ -30,48 +30,48 @@
 // (`.claude/linting.md`, "The cleanup pass"); the rename drops the flag and the
 // rule becomes a gate.
 // Not shipped in the npm package.
-import { execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process"
 
-const FIXTURE_ROOTS = ["tests/cases/", "tests/wordings/", "tests/link/", "tests/differential/corpus/"];
+const FIXTURE_ROOTS = ["tests/cases/", "tests/wordings/", "tests/link/", "tests/differential/corpus/"]
 
-const KEBAB_PART = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const SHOUTED_DOCUMENT = /^[A-Z][A-Z0-9]*([_-][A-Za-z0-9]+)*(\.[a-z]+)?$/;
+const KEBAB_PART = /^[a-z0-9]+(-[a-z0-9]+)*$/
+const SHOUTED_DOCUMENT = /^[A-Z][A-Z0-9]*([_-][A-Za-z0-9]+)*(\.[a-z]+)?$/
 
 /** Whether one path segment (a directory or a file name) is kebab-case. */
 const isKebabSegment = (segment) => {
-  const bare = segment.replace(/^[.@]/, "");
-  return bare.split(".").every((part) => KEBAB_PART.test(part));
-};
+  const bare = segment.replace(/^[.@]/, "")
+  return bare.split(".").every((part) => KEBAB_PART.test(part))
+}
 
 /** The segments of `file` that break the rule, empty when it is exempt or clean. */
 const offendingSegments = (file) => {
   if (FIXTURE_ROOTS.some((root) => file.startsWith(root))) {
-    return [];
+    return []
   }
-  const segments = file.split("/");
-  const base = segments[segments.length - 1];
-  const dirs = segments.slice(0, -1);
-  const bad = dirs.filter((dir) => dir !== "node_modules" && !isKebabSegment(dir));
+  const segments = file.split("/")
+  const base = segments[segments.length - 1]
+  const dirs = segments.slice(0, -1)
+  const bad = dirs.filter((dir) => dir !== "node_modules" && !isKebabSegment(dir))
   if (!SHOUTED_DOCUMENT.test(base) && !isKebabSegment(base)) {
-    bad.push(base);
+    bad.push(base)
   }
-  return bad;
-};
+  return bad
+}
 
 const main = (argv) => {
-  const advisory = argv.includes("--advisory");
-  const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0");
-  const violations = files.filter((file) => file.length > 0 && offendingSegments(file).length > 0);
+  const advisory = argv.includes("--advisory")
+  const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0")
+  const violations = files.filter((file) => file.length > 0 && offendingSegments(file).length > 0)
   if (violations.length === 0) {
-    return 0;
+    return 0
   }
 
-  const lines = violations.map((file) => `  ${file}  (${offendingSegments(file).join(", ")})\n`);
+  const lines = violations.map((file) => `  ${file}  (${offendingSegments(file).join(", ")})\n`)
   process.stderr.write(
     `${violations.length} path(s) are not kebab-case:\n${lines.join("")}` +
       "\nRename to kebab-case (`emit-arrays.ts` -> `emit-arrays.ts`); see .claude/linting.md.\n"
-  );
-  return advisory ? 0 : 1;
-};
+  )
+  return advisory ? 0 : 1
+}
 
-process.exitCode = main(process.argv.slice(2));
+process.exitCode = main(process.argv.slice(2))

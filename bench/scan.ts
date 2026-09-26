@@ -12,9 +12,9 @@
 // host has to build the header itself (bench/worker.mjs does, and says so).
 
 /** Tokens the scanner counts, and the error codes it answers instead. */
-const ERR_DEPTH: i32 = -1;
-const ERR_UNTERMINATED: i32 = -2;
-const MAX_DEPTH: i32 = 64;
+const ERR_DEPTH: i32 = -1
+const ERR_UNTERMINATED: i32 = -2
+const MAX_DEPTH: i32 = 64
 
 /**
  * One pass over `bytes`, answering the number of structural tokens found, or a
@@ -27,43 +27,49 @@ const MAX_DEPTH: i32 = 64;
  * of `i32` writes on top, and measuring them belongs with the real parser.
  */
 export const scanJson = (bytes: u8[]): i32 => {
-  let tokens = 0;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
+  let tokens = 0
+  let depth = 0
+  let inString = false
+  let escaped = false
   for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i];
+    const b = bytes[i]
     if (inString) {
       // An escape consumes exactly the next byte, whatever it is, so a `\"`
       // does not close the string and a `\\` does not escape the quote after it.
       if (escaped) {
-        escaped = false;
+        escaped = false
       } else if (b === 92) {
-        escaped = true;
+        escaped = true
       } else if (b === 34) {
-        inString = false;
-        tokens = tokens + 1;
+        inString = false
+        tokens = tokens + 1
       }
     } else if (b === 34) {
-      inString = true;
+      inString = true
     } else if (b === 123 || b === 91) {
-      depth = depth + 1;
+      depth = depth + 1
       // A depth cap is a validator's obligation rather than a nicety: without
       // one, a document of nothing but `[` recurses as deep as the input is
       // long, which is the cheapest denial of service a parser can offer.
-      if (depth > MAX_DEPTH) { return ERR_DEPTH; }
-      tokens = tokens + 1;
+      if (depth > MAX_DEPTH) {
+        return ERR_DEPTH
+      }
+      tokens = tokens + 1
     } else if (b === 125 || b === 93) {
-      depth = depth - 1;
-      if (depth < 0) { return ERR_DEPTH; }
-      tokens = tokens + 1;
+      depth = depth - 1
+      if (depth < 0) {
+        return ERR_DEPTH
+      }
+      tokens = tokens + 1
     } else if (b === 44 || b === 58) {
-      tokens = tokens + 1;
+      tokens = tokens + 1
     }
   }
-  if (inString || depth !== 0) { return ERR_UNTERMINATED; }
-  return tokens;
-};
+  if (inString || depth !== 0) {
+    return ERR_UNTERMINATED
+  }
+  return tokens
+}
 
 /**
  * The same pass, stopping at the first byte that proves the document invalid.
@@ -71,4 +77,4 @@ export const scanJson = (bytes: u8[]): i32 => {
  * difference at the boundary is that the answer is one `i32` either way, so
  * neither mode marshals anything on the way out.
  */
-export const isJsonShaped = (bytes: u8[]): boolean => scanJson(bytes) >= 0;
+export const isJsonShaped = (bytes: u8[]): boolean => scanJson(bytes) >= 0

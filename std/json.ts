@@ -53,18 +53,18 @@
  * (`docs/wp26-stdlib.md` §4).
  */
 
-const JSON_TAB: i32 = 9;
-const JSON_NEWLINE: i32 = 10;
-const JSON_CARRIAGE_RETURN: i32 = 13;
-const JSON_SPACE: i32 = 32;
-const JSON_QUOTE: i32 = 34;
-const JSON_COMMA: i32 = 44;
-const JSON_COLON: i32 = 58;
-const JSON_BACKSLASH: i32 = 92;
-const JSON_OPEN_BRACKET: i32 = 91;
-const JSON_CLOSE_BRACKET: i32 = 93;
-const JSON_OPEN_BRACE: i32 = 123;
-const JSON_CLOSE_BRACE: i32 = 125;
+const JSON_TAB: i32 = 9
+const JSON_NEWLINE: i32 = 10
+const JSON_CARRIAGE_RETURN: i32 = 13
+const JSON_SPACE: i32 = 32
+const JSON_QUOTE: i32 = 34
+const JSON_COMMA: i32 = 44
+const JSON_COLON: i32 = 58
+const JSON_BACKSLASH: i32 = 92
+const JSON_OPEN_BRACKET: i32 = 91
+const JSON_CLOSE_BRACKET: i32 = 93
+const JSON_OPEN_BRACE: i32 = 123
+const JSON_CLOSE_BRACE: i32 = 125
 /**
  * The UTF-8 tags a `\u` escape is rebuilt out of: a two-byte lead is
  * `110xxxxx`, a three-byte lead `1110xxxx`, a continuation byte `10xxxxxx`, and
@@ -77,19 +77,19 @@ const JSON_CLOSE_BRACE: i32 = 125;
  * (`docs/wp26-stdlib.md` §4, and `tests/link/std_text_f64` is what says so). A
  * constant declared `i32` means the same thing in both modes.
  */
-const JSON_UTF8_TWO_BYTE_LEAD: i32 = 192;
-const JSON_UTF8_THREE_BYTE_LEAD: i32 = 224;
-const JSON_UTF8_CONTINUATION: i32 = 128;
-const JSON_UTF8_LOW_SIX: i32 = 63;
+const JSON_UTF8_TWO_BYTE_LEAD: i32 = 192
+const JSON_UTF8_THREE_BYTE_LEAD: i32 = 224
+const JSON_UTF8_CONTINUATION: i32 = 128
+const JSON_UTF8_LOW_SIX: i32 = 63
 /** The first code point that needs two UTF-8 bytes, and the first that needs three. */
-const JSON_UTF8_TWO_BYTE_FLOOR: i32 = 128;
-const JSON_UTF8_THREE_BYTE_FLOOR: i32 = 2048;
+const JSON_UTF8_TWO_BYTE_FLOOR: i32 = 128
+const JSON_UTF8_THREE_BYTE_FLOOR: i32 = 2048
 /** The base `jsonHex4` accumulates in. */
-const JSON_HEX_BASE: i32 = 16;
+const JSON_HEX_BASE: i32 = 16
 
 /** The four bytes JSON allows between tokens. */
 const jsonIsBlankByte = (code: i32): boolean =>
-  code === JSON_SPACE || code === JSON_TAB || code === JSON_NEWLINE || code === JSON_CARRIAGE_RETURN;
+  code === JSON_SPACE || code === JSON_TAB || code === JSON_NEWLINE || code === JSON_CARRIAGE_RETURN
 
 /**
  * The first index at or after `from` that is not blank, or the length.
@@ -100,15 +100,15 @@ const jsonIsBlankByte = (code: i32): boolean =>
  */
 const jsonSkipBlank = (text: string, from: i32): i32 => {
   if (from < 0) {
-    return from;
+    return from
   }
-  const length: i32 = toI32(text.length);
-  let i: i32 = from;
+  const length: i32 = toI32(text.length)
+  let i: i32 = from
   while (i < length && jsonIsBlankByte(toI32(text.charCodeAt(i)))) {
-    i += 1;
+    i += 1
   }
-  return i;
-};
+  return i
+}
 
 /**
  * The index just past the string literal whose opening quote is at `at`, or `-1`
@@ -117,24 +117,24 @@ const jsonSkipBlank = (text: string, from: i32): i32 => {
  * literal and `\\` cannot make the next quote an escape.
  */
 const jsonEndOfString = (text: string, at: i32): i32 => {
-  const length: i32 = toI32(text.length);
+  const length: i32 = toI32(text.length)
   if (at < 0) {
-    return -1;
+    return -1
   }
-  let i: i32 = at + 1;
+  let i: i32 = at + 1
   while (i < length) {
-    const code: i32 = toI32(text.charCodeAt(i));
+    const code: i32 = toI32(text.charCodeAt(i))
     if (code === JSON_BACKSLASH) {
-      i += 2;
-      continue;
+      i += 2
+      continue
     }
     if (code === JSON_QUOTE) {
-      return i + 1;
+      return i + 1
     }
-    i += 1;
+    i += 1
   }
-  return -1;
-};
+  return -1
+}
 
 /**
  * The index just past the value that starts at `at`, or `-1` when it does not
@@ -152,91 +152,91 @@ const jsonEndOfString = (text: string, at: i32): i32 => {
  * and one assigned a callee's answer does not.
  */
 const jsonEndOfValue = (text: string, at: i32): i32 => {
-  const length: i32 = toI32(text.length);
+  const length: i32 = toI32(text.length)
   if (at < 0 || at >= length) {
-    return -1;
+    return -1
   }
-  const first: i32 = toI32(text.charCodeAt(at));
+  const first: i32 = toI32(text.charCodeAt(at))
   if (first === JSON_QUOTE) {
-    return jsonEndOfString(text, at);
+    return jsonEndOfString(text, at)
   }
   if (first === JSON_OPEN_BRACE || first === JSON_OPEN_BRACKET) {
-    let depth: i32 = 0;
-    let inString: boolean = false;
-    let i: i32 = at;
+    let depth: i32 = 0
+    let inString: boolean = false
+    let i: i32 = at
     while (i < length) {
-      const code: i32 = toI32(text.charCodeAt(i));
+      const code: i32 = toI32(text.charCodeAt(i))
       if (inString) {
         // `jsonEndOfString`'s rule: a backslash takes the byte after it along.
         if (code === JSON_BACKSLASH) {
-          i += 2;
-          continue;
+          i += 2
+          continue
         }
         if (code === JSON_QUOTE) {
-          inString = false;
+          inString = false
         }
-        i += 1;
-        continue;
+        i += 1
+        continue
       }
       if (code === JSON_QUOTE) {
-        inString = true;
+        inString = true
       } else if (code === JSON_OPEN_BRACE || code === JSON_OPEN_BRACKET) {
-        depth += 1;
+        depth += 1
       } else if (code === JSON_CLOSE_BRACE || code === JSON_CLOSE_BRACKET) {
-        depth -= 1;
+        depth -= 1
         if (depth === 0) {
-          return i + 1;
+          return i + 1
         }
       }
-      i += 1;
+      i += 1
     }
-    return -1;
+    return -1
   }
-  let i: i32 = at;
+  let i: i32 = at
   while (i < length) {
-    const code: i32 = toI32(text.charCodeAt(i));
+    const code: i32 = toI32(text.charCodeAt(i))
     if (code === JSON_COMMA || code === JSON_CLOSE_BRACE || code === JSON_CLOSE_BRACKET) {
-      return i;
+      return i
     }
     if (jsonIsBlankByte(code)) {
-      return i;
+      return i
     }
-    i += 1;
+    i += 1
   }
-  return length;
-};
+  return length
+}
 
 /** The value of one lower-case or upper-case hex digit, or `-1`. */
 const jsonHexDigit = (code: i32): i32 => {
   if (code >= 48 && code <= 57) {
-    return code - 48;
+    return code - 48
   }
   if (code >= 97 && code <= 102) {
-    return code - 87;
+    return code - 87
   }
   if (code >= 65 && code <= 70) {
-    return code - 55;
+    return code - 55
   }
-  return -1;
-};
+  return -1
+}
 
 /** The four hex digits at `at` as one code point, or `-1` when they are not four hex digits. */
 const jsonHex4 = (text: string, at: i32, end: i32): i32 => {
   if (at + 4 > end) {
-    return -1;
+    return -1
   }
-  let value: i32 = 0;
-  let i: i32 = 0;
+  let value: i32 = 0
+  let i: i32 = 0
   while (i < 4) {
-    const digit: i32 = jsonHexDigit(toI32(text.charCodeAt(at + i)));
+    const digit: i32 = jsonHexDigit(toI32(text.charCodeAt(at + i)))
     if (digit < 0) {
-      return -1;
+      return -1
     }
-    value = value * JSON_HEX_BASE + digit;
-    i += 1;
+    value = value * JSON_HEX_BASE + digit
+    i += 1
   }
-  return value;
-};
+  return value
+}
 
 /**
  * `code` as UTF-8, one to three bytes.
@@ -250,16 +250,16 @@ const jsonHex4 = (text: string, at: i32, end: i32): i32 => {
  */
 const jsonUtf8 = (code: i32): string => {
   if (code < JSON_UTF8_TWO_BYTE_FLOOR) {
-    return String.fromCharCode(code);
+    return String.fromCharCode(code)
   }
   if (code < JSON_UTF8_THREE_BYTE_FLOOR) {
-    const lead: string = String.fromCharCode(JSON_UTF8_TWO_BYTE_LEAD + (code >> 6));
-    return `${lead}${String.fromCharCode(JSON_UTF8_CONTINUATION + (code & JSON_UTF8_LOW_SIX))}`;
+    const lead: string = String.fromCharCode(JSON_UTF8_TWO_BYTE_LEAD + (code >> 6))
+    return `${lead}${String.fromCharCode(JSON_UTF8_CONTINUATION + (code & JSON_UTF8_LOW_SIX))}`
   }
-  const lead: string = String.fromCharCode(JSON_UTF8_THREE_BYTE_LEAD + (code >> 12));
-  const middle: string = String.fromCharCode(JSON_UTF8_CONTINUATION + ((code >> 6) & JSON_UTF8_LOW_SIX));
-  return `${lead}${middle}${String.fromCharCode(JSON_UTF8_CONTINUATION + (code & JSON_UTF8_LOW_SIX))}`;
-};
+  const lead: string = String.fromCharCode(JSON_UTF8_THREE_BYTE_LEAD + (code >> 12))
+  const middle: string = String.fromCharCode(JSON_UTF8_CONTINUATION + ((code >> 6) & JSON_UTF8_LOW_SIX))
+  return `${lead}${middle}${String.fromCharCode(JSON_UTF8_CONTINUATION + (code & JSON_UTF8_LOW_SIX))}`
+}
 
 /**
  * The bytes of `text[at..end)` with the JSON escapes decoded — the body of a
@@ -277,21 +277,21 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
   // `0 <= at` and `end <= text.length` always hold. Saying so here is what
   // proves every read below in range and drops the `substring` clamps.
   if (at < 0 || end > toI32(text.length)) {
-    return "";
+    return ""
   }
-  let i: i32 = at;
+  let i: i32 = at
   while (i < end && toI32(text.charCodeAt(i)) !== JSON_BACKSLASH) {
-    i += 1;
+    i += 1
   }
   if (i >= end) {
-    return text.substring(at, end);
+    return text.substring(at, end)
   }
-  const parts: string[] = [];
-  let start: i32 = at;
+  const parts: string[] = []
+  let start: i32 = at
   while (i < end) {
     if (toI32(text.charCodeAt(i)) !== JSON_BACKSLASH) {
-      i += 1;
-      continue;
+      i += 1
+      continue
     }
     // `start === i` is an escape straight after another, and the empty run
     // between them adds nothing to the join. The `start >= 0` half is always
@@ -299,49 +299,49 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
     // there because `start` is reassigned in the loop, which is where the
     // bounds proof stops following it.
     if (start >= 0 && start < i) {
-      parts.push(text.substring(start, i));
+      parts.push(text.substring(start, i))
     }
     // A trailing backslash has nothing after it: `0` is no escape letter, so it
     // falls to the default below and stands for itself.
-    const letter: i32 = i + 1 < end ? toI32(text.charCodeAt(i + 1)) : 0;
+    const letter: i32 = i + 1 < end ? toI32(text.charCodeAt(i + 1)) : 0
     if (letter === 110) {
-      parts.push("\n");
-      i += 2;
+      parts.push("\n")
+      i += 2
     } else if (letter === 116) {
-      parts.push("\t");
-      i += 2;
+      parts.push("\t")
+      i += 2
     } else if (letter === 114) {
-      parts.push("\r");
-      i += 2;
+      parts.push("\r")
+      i += 2
     } else if (letter === 98) {
-      parts.push(String.fromCharCode(8));
-      i += 2;
+      parts.push(String.fromCharCode(8))
+      i += 2
     } else if (letter === 102) {
-      parts.push(String.fromCharCode(12));
-      i += 2;
+      parts.push(String.fromCharCode(12))
+      i += 2
     } else if (letter === 117) {
-      const code: i32 = jsonHex4(text, i + 2, end);
+      const code: i32 = jsonHex4(text, i + 2, end)
       if (code < 0) {
         // Not four hex digits after the `u`: the escape is broken, and copying it
         // through unchanged is the reading that loses nothing.
-        parts.push("\\u");
-        i += 2;
+        parts.push("\\u")
+        i += 2
       } else {
-        parts.push(jsonUtf8(code));
-        i += 6;
+        parts.push(jsonUtf8(code))
+        i += 6
       }
     } else if (letter === 0) {
-      parts.push("\\");
-      i += 1;
+      parts.push("\\")
+      i += 1
     } else {
-      parts.push(String.fromCharCode(letter));
-      i += 2;
+      parts.push(String.fromCharCode(letter))
+      i += 2
     }
-    start = i;
+    start = i
   }
-  parts.push(text.substring(start, end));
-  return parts.join("");
-};
+  parts.push(text.substring(start, end))
+  return parts.join("")
+}
 
 /**
  * The value of `name` in `object`, or `null` when the object does not have that
@@ -358,45 +358,45 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
  * and it is the shape the compiler's `--json` line has.
  */
 export const jsonField = (object: string, name: string): string | null => {
-  const length: i32 = toI32(object.length);
-  let i: i32 = jsonSkipBlank(object, 0);
+  const length: i32 = toI32(object.length)
+  let i: i32 = jsonSkipBlank(object, 0)
   if (i >= length || toI32(object.charCodeAt(i)) !== JSON_OPEN_BRACE) {
-    return null;
+    return null
   }
-  i = jsonSkipBlank(object, i + 1);
+  i = jsonSkipBlank(object, i + 1)
   // `jsonSkipBlank` never answers a negative index for a non-negative one, but
   // the bounds proof does not look inside a callee, so every cursor it answers
   // is tested for `i < 0` beside `i >= length`: the pair is what lets each read
   // below go without a check.
   while (i >= 0 && i < length && toI32(object.charCodeAt(i)) === JSON_QUOTE) {
-    const keyEnd: i32 = jsonEndOfString(object, i);
+    const keyEnd: i32 = jsonEndOfString(object, i)
     if (keyEnd < 0) {
-      return null;
+      return null
     }
-    const key: string = jsonUnescape(object, i + 1, keyEnd - 1);
-    i = jsonSkipBlank(object, keyEnd);
+    const key: string = jsonUnescape(object, i + 1, keyEnd - 1)
+    i = jsonSkipBlank(object, keyEnd)
     if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COLON) {
-      return null;
+      return null
     }
-    const valueAt: i32 = jsonSkipBlank(object, i + 1);
-    const valueEnd: i32 = jsonEndOfValue(object, valueAt);
+    const valueAt: i32 = jsonSkipBlank(object, i + 1)
+    const valueEnd: i32 = jsonEndOfValue(object, valueAt)
     // `jsonEndOfValue` answers `-1` for a `valueAt` outside the object and never
     // answers past its end, so the last three tests change no answer: they are
     // the range the value's first byte and its `substring` are proved in.
     if (valueEnd < 0 || valueAt < 0 || valueAt >= length || valueEnd > toI32(object.length)) {
-      return null;
+      return null
     }
     if (key === name) {
       if (toI32(object.charCodeAt(valueAt)) === JSON_QUOTE) {
-        return jsonUnescape(object, valueAt + 1, valueEnd - 1);
+        return jsonUnescape(object, valueAt + 1, valueEnd - 1)
       }
-      return object.substring(valueAt, valueEnd);
+      return object.substring(valueAt, valueEnd)
     }
-    i = jsonSkipBlank(object, valueEnd);
+    i = jsonSkipBlank(object, valueEnd)
     if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COMMA) {
-      return null;
+      return null
     }
-    i = jsonSkipBlank(object, i + 1);
+    i = jsonSkipBlank(object, i + 1)
   }
-  return null;
-};
+  return null
+}

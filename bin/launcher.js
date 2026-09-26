@@ -29,14 +29,14 @@
  * `bin/` rather than the old `dist/` for the same reason: the command may not
  * be a build artifact of the compiler it installs.
  */
-import { spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-import { createRequire } from "node:module";
-import { assetFor, noCompilerMessage, platformPackageName } from "./packaging.js";
+import { spawnSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import { createRequire } from "node:module"
+import { assetFor, noCompilerMessage, platformPackageName } from "./packaging.js"
 
 /** Package root: bin/launcher.js -> `..`, the directory `package.json` sits in. */
-const PKG_ROOT = path.resolve(import.meta.dirname, "..");
+const PKG_ROOT = path.resolve(import.meta.dirname, "..")
 
 /**
  * Exit 3, the toolchain code.
@@ -54,17 +54,17 @@ const PKG_ROOT = path.resolve(import.meta.dirname, "..");
  * below is machine-readable. `scripts/postinstall.mjs`'s generated shim answers
  * 3 for its own version of this, so all three spell one situation the same way.
  */
-const NO_COMPILER = 3;
+const NO_COMPILER = 3
 
 /** This package's own name, or `null` when its `package.json` cannot be read. */
 const packageName = () => {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "package.json"), "utf8"));
-    return typeof pkg.name === "string" ? pkg.name : null;
+    const pkg = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "package.json"), "utf8"))
+    return typeof pkg.name === "string" ? pkg.name : null
   } catch {
-    return null;
+    return null
   }
-};
+}
 
 /**
  * Whether this invocation asked for machine-readable output.
@@ -75,7 +75,7 @@ const packageName = () => {
  * failure the `--json` contract covers (AGENTS.md, "Machine-readable
  * surfaces").
  */
-const wantsJson = () => process.argv.slice(2).includes("--json");
+const wantsJson = () => process.argv.slice(2).includes("--json")
 
 /**
  * Write and exit, without losing what was written.
@@ -87,9 +87,9 @@ const wantsJson = () => process.argv.slice(2).includes("--json");
  * there is nothing after it to run.
  */
 const writeAndExit = (stream, text, status) => {
-  stream.write(text);
-  process.exitCode = status;
-};
+  stream.write(text)
+  process.exitCode = status
+}
 
 /**
  * Where the native compiler for this machine is, or `null` when this machine
@@ -104,19 +104,23 @@ const writeAndExit = (stream, text, status) => {
  * exactly as it does when unpacked by hand.
  */
 const nativeCompiler = (assetName) => {
-  const name = packageName();
-  if (name === null) { return null; }
+  const name = packageName()
+  if (name === null) {
+    return null
+  }
   try {
-    const manifest = createRequire(import.meta.url).resolve(`${platformPackageName(name, assetName)}/package.json`);
-    const binary = path.join(path.dirname(manifest), "bin", "nish");
-    return fs.existsSync(binary) ? binary : null;
+    const manifest = createRequire(import.meta.url).resolve(
+      `${platformPackageName(name, assetName)}/package.json`
+    )
+    const binary = path.join(path.dirname(manifest), "bin", "nish")
+    return fs.existsSync(binary) ? binary : null
   } catch {
     // Not installed. On a supported platform that is a partial install; on an
     // unsupported one npm skipped the entry on purpose. `refuse` tells the two
     // apart, because the advice differs.
-    return null;
+    return null
   }
-};
+}
 
 /**
  * Say why there is no compiler to run, and stop.
@@ -137,50 +141,50 @@ const refuse = (unstartable) => {
     // none: it sends the user to install something that does not exist.
     packageName: packageName(),
     unstartable,
-  });
+  })
   if (wantsJson()) {
     writeAndExit(
       process.stdout,
       `${JSON.stringify({ severity: "error", code: why.code, message: why.summary })}\n`,
       NO_COMPILER
-    );
+    )
   } else {
-    writeAndExit(process.stderr, why.report, NO_COMPILER);
+    writeAndExit(process.stderr, why.report, NO_COMPILER)
   }
-};
+}
 
-const asset = assetFor(process.platform, process.arch);
+const asset = assetFor(process.platform, process.arch)
 // No binary for this machine, and none coming: musl, FreeBSD, 32-bit anything.
 // `refuse` sets an exit code rather than exiting, so each of these returns
 // before the next line runs: the sequence below is written as a chain for that
 // reason and `process.exitCode` is what carries the status out.
 if (asset === null) {
-  refuse(null);
+  refuse(null)
 } else {
-  const binary = nativeCompiler(asset);
+  const binary = nativeCompiler(asset)
   if (binary === null) {
     // A binary exists for this platform and this install does not have it.
-    refuse(null);
+    refuse(null)
   } else {
-    handOver(binary);
+    handOver(binary)
   }
 }
 
 /** Run the native compiler and give the caller back exactly what it answered. */
 function handOver(binary) {
-  const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
+  const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" })
   if (result.error !== undefined && result.error !== null) {
     // Installed and will not start -- a broken or partial install rather than an
     // unsupported platform. There is nothing to fall back to, so this is a
     // refusal with the reason in it rather than a warning above a slower compile.
-    refuse({ binary, reason: result.error.message });
-    } else if (result.signal !== null) {
+    refuse({ binary, reason: result.error.message })
+  } else if (result.signal !== null) {
     // Re-raise rather than translating to an exit code, so that a crash or an
     // interrupt reaches the shell as the signal it was. `process.exitCode`
     // cannot express one, and a wrapper that turned SIGINT into exit 130 would
     // make `nish` the one command in a pipeline that did.
-    process.kill(process.pid, result.signal);
+    process.kill(process.pid, result.signal)
   } else {
-    process.exitCode = result.status ?? 0;
+    process.exitCode = result.status ?? 0
   }
 }

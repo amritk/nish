@@ -36,18 +36,18 @@ import {
   N_UNARY,
   Node,
   nodeName,
-} from "./nodes";
+} from "./nodes"
 
 /** Two spaces per level of depth. */
 const indent = (depth: i32): string => {
-  let out = "";
-  let i = 0;
+  let out = ""
+  let i = 0
   while (i < depth) {
-    out = out + "  ";
-    i = i + 1;
+    out = out + "  "
+    i = i + 1
   }
-  return out;
-};
+  return out
+}
 
 /**
  * The modifiers a node carries, appended to its kind so that `export` and
@@ -63,30 +63,44 @@ const indent = (depth: i32): string => {
  * answer.
  */
 const kindWithFlags = (node: Node): string => {
-  let name = nodeName(node.kind);
-  if (node.kind === N_UNARY) { return node.flags === FLAG_POSTFIX ? `${name}+postfix` : `${name}+prefix`; }
-  if ((node.flags & FLAG_EXPORTED) !== 0) { name = `${name}+export`; }
-  if ((node.flags & FLAG_CONST) !== 0) { name = `${name}+const`; }
-  if ((node.flags & FLAG_STATIC) !== 0) { name = `${name}+static`; }
-  if ((node.flags & FLAG_READONLY) !== 0) { name = `${name}+readonly`; }
-  if ((node.flags & FLAG_OPTIONAL) !== 0) { name = `${name}+optional`; }
-  if ((node.flags & FLAG_DEFINITE) !== 0) { name = `${name}+definite`; }
-  return name;
-};
+  let name = nodeName(node.kind)
+  if (node.kind === N_UNARY) {
+    return node.flags === FLAG_POSTFIX ? `${name}+postfix` : `${name}+prefix`
+  }
+  if ((node.flags & FLAG_EXPORTED) !== 0) {
+    name = `${name}+export`
+  }
+  if ((node.flags & FLAG_CONST) !== 0) {
+    name = `${name}+const`
+  }
+  if ((node.flags & FLAG_STATIC) !== 0) {
+    name = `${name}+static`
+  }
+  if ((node.flags & FLAG_READONLY) !== 0) {
+    name = `${name}+readonly`
+  }
+  if ((node.flags & FLAG_OPTIONAL) !== 0) {
+    name = `${name}+optional`
+  }
+  if ((node.flags & FLAG_DEFINITE) !== 0) {
+    name = `${name}+definite`
+  }
+  return name
+}
 
 /** One line for `node`, then its children one level deeper. */
 export const astLines = (node: Node, depth: i32, lines: string[]): void => {
-  let line = `${indent(depth)}${kindWithFlags(node)} ${node.start} ${node.end}`;
+  let line = `${indent(depth)}${kindWithFlags(node)} ${node.start} ${node.end}`
   if (node.kind === N_STRING || node.kind === N_TEMPLATE_TEXT) {
-    line = `${line} #${node.text.length}`;
+    line = `${line} #${node.text.length}`
   } else if (node.text.length > 0) {
-    line = `${line} ${node.text}`;
+    line = `${line} ${node.text}`
   }
-  lines.push(line);
+  lines.push(line)
   for (const child of node.children) {
-    astLines(child, depth + 1, lines);
+    astLines(child, depth + 1, lines)
   }
-};
+}
 
 /**
  * One module as `--emit-ast` prints it: the file it came from, then its tree
@@ -96,10 +110,10 @@ export const astLines = (node: Node, depth: i32, lines: string[]): void => {
  * stage0's `SourceFile <path>` header makes the same trade.
  */
 export const astText = (file: Node, path: string): string => {
-  const lines: string[] = [];
-  lines.push(`${nodeName(file.kind)} ${path}`);
+  const lines: string[] = []
+  lines.push(`${nodeName(file.kind)} ${path}`)
   for (const child of file.children) {
-    astLines(child, 1, lines);
+    astLines(child, 1, lines)
   }
-  return `${lines.join("\n")}\n`;
-};
+  return `${lines.join("\n")}\n`
+}

@@ -9,13 +9,13 @@
 // paths resolve against) and process.argv (argv[0] is the module path, like
 // the native binary) all behave as in the native build. The process exit
 // status is the program's return value.
-import { readFileSync } from "node:fs";
-import { WASI } from "node:wasi";
+import { readFileSync } from "node:fs"
+import { WASI } from "node:wasi"
 
-const [module, ...args] = process.argv.slice(2);
+const [module, ...args] = process.argv.slice(2)
 if (!module) {
-  console.error("usage: node examples/wasi-host.mjs <program.wasm> [args...]");
-  process.exit(2);
+  console.error("usage: node examples/wasi-host.mjs <program.wasm> [args...]")
+  process.exit(2)
 }
 const wasi = new WASI({
   version: "preview1",
@@ -23,7 +23,7 @@ const wasi = new WASI({
   env: {},
   preopens: { ".": "." },
   returnOnExit: true,
-});
-const compiled = await WebAssembly.compile(readFileSync(module));
-const instance = await WebAssembly.instantiate(compiled, wasi.getImportObject());
-process.exitCode = wasi.start(instance);
+})
+const compiled = await WebAssembly.compile(readFileSync(module))
+const instance = await WebAssembly.instantiate(compiled, wasi.getImportObject())
+process.exitCode = wasi.start(instance)

@@ -1,1 +1,1 @@
-const identity = (s: string): string => s;
+const identity = (s: string): string => s

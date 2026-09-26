@@ -4,29 +4,29 @@
 // because a call hands back exactly one value — so the call is bracketed by
 // `nish_arena_mark` and `nish_arena_keep`, which moves the returned string
 // down onto the mark and releases everything underneath it.
-const piece = (i: number): string => `${i},`;
+const piece = (i: number): string => `${i},`
 
 const join = (n: number): string => {
-  let s = "";
+  let s = ""
   for (let i = 0; i < n; i++) {
-    s = s + piece(i);
+    s = s + piece(i)
   }
-  return s;
-};
+  return s
+}
 
 class Box {
-  text: string;
+  text: string
   constructor(text: string) {
-    this.text = text;
+    this.text = text
   }
 }
 
 // `fill` hands the string it built to an object its caller still holds, so
 // what it allocated is not garbage and the call below carries no bracket.
 const fill = (b: Box, i: number): string => {
-  const s = `v${i}`;
-  b.text = s;
-  return s;
-};
+  const s = `v${i}`
+  b.text = s
+  return s
+}
 
-const report = (b: Box, n: number): string => join(n) + fill(b, n);
+const report = (b: Box, n: number): string => join(n) + fill(b, n)

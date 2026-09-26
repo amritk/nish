@@ -29,7 +29,7 @@ export const BANNED = [
   // Deliberately not a bare `claude-<digit>`: a path like /tmp/claude-0/x is
   // not a model name, and a hook that cries wolf gets turned off.
   ["a model name", /\b(claude[- ](opus|sonnet|haiku|fable|code)\b|(opus|sonnet|haiku) [0-9])/i],
-];
+]
 
 /**
  * A shell string carries its newlines as the two characters `\` and `n`.
@@ -37,8 +37,8 @@ export const BANNED = [
  * names a trailer is not read as carrying it. A pull request body arrives with
  * real newlines and does not need this.
  */
-export const restoreNewlines = (text) => text.replace(/\\n/g, "\n");
+export const restoreNewlines = (text) => text.replace(/\\n/g, "\n")
 
 /** The name of every banned pattern that any of `texts` carries, in list order. */
 export const bannedIn = (texts) =>
-  BANNED.filter(([, pattern]) => texts.some((text) => pattern.test(text))).map(([name]) => name);
+  BANNED.filter(([, pattern]) => texts.some((text) => pattern.test(text))).map(([name]) => name)

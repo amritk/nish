@@ -11,40 +11,44 @@
 // headingSlugs below, which is written to agree with github-slugger rather than
 // to approximate it). A bare `#fragment` refers to the current file. Absolute
 // paths and directories are allowed as targets.
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 const listMarkdown = (dir) => {
-  const out = [];
+  const out = []
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
+    const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name.startsWith(".")) { continue; }
-      out.push(...listMarkdown(full));
-    } else if (entry.name.endsWith(".md")) { out.push(full); }
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) {
+        continue
+      }
+      out.push(...listMarkdown(full))
+    } else if (entry.name.endsWith(".md")) {
+      out.push(full)
+    }
   }
-  return out;
-};
+  return out
+}
 
 const files = ["README.md", "CHANGELOG.md", "std/README.md"]
   .map((f) => path.join(root, f))
   .filter((f) => fs.existsSync(f))
-  .concat(listMarkdown(path.join(root, "docs")));
+  .concat(listMarkdown(path.join(root, "docs")))
 
 /** Lines of a file with fenced code blocks blanked out (links inside them are not links). */
 const proseLines = (text) => {
-  let inFence = false;
+  let inFence = false
   return text.split("\n").map((line) => {
     if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence;
-      return "";
+      inFence = !inFence
+      return ""
     }
-    return inFence ? "" : line;
-  });
-};
+    return inFence ? "" : line
+  })
+}
 
 // GitHub slugs a heading with `github-slugger`, which is three steps and no
 // more: lower-case it, DELETE every character that is not a letter, a number, a
@@ -69,71 +73,89 @@ const proseLines = (text) => {
 // no heading here is written in.
 /** GitHub-style heading slugs for a Markdown file, in order. */
 const headingSlugs = (text) => {
-  const seen = new Map();
-  const slugs = new Set();
+  const seen = new Map()
+  const slugs = new Set()
   for (const line of proseLines(text)) {
-    const m = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
-    if (!m) { continue; }
+    const m = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line)
+    if (!m) {
+      continue
+    }
     let slug = m[1]
       .replace(/`([^`]*)`/g, "$1") // inline code keeps its text
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links keep their text
       .toLowerCase()
       .replace(/[^\p{L}\p{N}\p{M}\p{Pc}\- ]/gu, "") // deleted, not replaced
-      .replace(/ /g, "-"); // one hyphen per space, runs included
-    const n = seen.get(slug) ?? 0;
-    seen.set(slug, n + 1);
-    if (n > 0) { slug = `${slug}-${n}`; }
-    slugs.add(slug);
+      .replace(/ /g, "-") // one hyphen per space, runs included
+    const n = seen.get(slug) ?? 0
+    seen.set(slug, n + 1)
+    if (n > 0) {
+      slug = `${slug}-${n}`
+    }
+    slugs.add(slug)
   }
-  return slugs;
-};
+  return slugs
+}
 
-const slugCache = new Map();
+const slugCache = new Map()
 const slugsOf = (file) => {
-  if (!slugCache.has(file)) { slugCache.set(file, headingSlugs(fs.readFileSync(file, "utf8"))); }
-  return slugCache.get(file);
-};
+  if (!slugCache.has(file)) {
+    slugCache.set(file, headingSlugs(fs.readFileSync(file, "utf8")))
+  }
+  return slugCache.get(file)
+}
 
 // Inline links `[text](target)` (target up to the first unbalanced `)`) and reference definitions `[ref]: target`.
-const INLINE = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-const REFDEF = /^\s*\[[^\]]+\]:\s*(\S+)/;
+const INLINE = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+const REFDEF = /^\s*\[[^\]]+\]:\s*(\S+)/
 
-const problems = [];
-let checked = 0;
+const problems = []
+let checked = 0
 for (const file of files) {
-  const text = fs.readFileSync(file, "utf8");
+  const text = fs.readFileSync(file, "utf8")
   proseLines(text).forEach((line, index) => {
-    const targets = [];
-    for (const m of line.matchAll(INLINE)) { targets.push(m[1]); }
-    const ref = REFDEF.exec(line);
-    if (ref) { targets.push(ref[1]); }
+    const targets = []
+    for (const m of line.matchAll(INLINE)) {
+      targets.push(m[1])
+    }
+    const ref = REFDEF.exec(line)
+    if (ref) {
+      targets.push(ref[1])
+    }
     for (let target of targets) {
-      target = target.replace(/^<|>$/g, "");
-      if (/^(https?:|mailto:|tel:)/i.test(target)) { continue; }
-      checked++;
-      const [pathPart, fragment] = target.split("#");
-      const where = `${path.relative(root, file)}:${index + 1}`;
-      let resolved = file;
+      target = target.replace(/^<|>$/g, "")
+      if (/^(https?:|mailto:|tel:)/i.test(target)) {
+        continue
+      }
+      checked++
+      const [pathPart, fragment] = target.split("#")
+      const where = `${path.relative(root, file)}:${index + 1}`
+      let resolved = file
       if (pathPart) {
-        resolved = path.resolve(path.dirname(file), decodeURIComponent(pathPart));
+        resolved = path.resolve(path.dirname(file), decodeURIComponent(pathPart))
         if (!fs.existsSync(resolved)) {
-          problems.push(`${where}: broken link \`${target}\` (no such file: ${path.relative(root, resolved)})`);
-          continue;
+          problems.push(
+            `${where}: broken link \`${target}\` (no such file: ${path.relative(root, resolved)})`
+          )
+          continue
         }
       }
       if (fragment !== undefined && fragment !== "") {
-        if (!resolved.endsWith(".md") || fs.statSync(resolved).isDirectory()) { continue; }
+        if (!resolved.endsWith(".md") || fs.statSync(resolved).isDirectory()) {
+          continue
+        }
         if (!slugsOf(resolved).has(fragment.toLowerCase())) {
-          problems.push(`${where}: broken anchor \`${target}\` (no heading #${fragment} in ${path.relative(root, resolved)})`);
+          problems.push(
+            `${where}: broken anchor \`${target}\` (no heading #${fragment} in ${path.relative(root, resolved)})`
+          )
         }
       }
     }
-  });
+  })
 }
 
 if (problems.length > 0) {
-  console.error(problems.join("\n"));
-  console.error(`\n${problems.length} broken link(s) in ${files.length} files (${checked} links checked)`);
-  process.exit(1);
+  console.error(problems.join("\n"))
+  console.error(`\n${problems.length} broken link(s) in ${files.length} files (${checked} links checked)`)
+  process.exit(1)
 }
-console.log(`ok: ${checked} links in ${files.length} Markdown files`);
+console.log(`ok: ${checked} links in ${files.length} Markdown files`)

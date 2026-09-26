@@ -22,7 +22,7 @@
  */
 export const reserve = <K, V>(m: Map<K, V>, n: number): void => {
   // Nothing to do here: natively the compiler lowers the call itself, and Node has no table to presize.
-};
+}
 
 /**
  * The value of `key` in `m`; or, when `key` is missing, `value`, after
@@ -30,10 +30,10 @@ export const reserve = <K, V>(m: Map<K, V>, n: number): void => {
  * `value` is evaluated either way, as every argument is.
  */
 export const getOrInsert = <K, V>(m: Map<K, V>, key: K, value: V): V => {
-  const found = m.get(key);
+  const found = m.get(key)
   if (found !== undefined) {
-    return found;
+    return found
   }
-  m.set(key, value);
-  return value;
-};
+  m.set(key, value)
+  return value
+}

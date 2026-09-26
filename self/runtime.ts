@@ -22,14 +22,14 @@
 // `StringMap` from symbol to index so the attribute fixpoint can ask about a
 // callee by name.
 
-import { StringMap } from "./map";
+import { StringMap } from "./map"
 
 /** Global arena state; must match `struct nish_arena` in runtime.c. */
-export const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8* }";
+export const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8* }"
 /** Array header (WP4); must match `struct nish_array` in runtime.c: { len, cap, data }. */
-export const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }";
+export const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }"
 
-export const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_arena, align 8";
+export const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_arena, align 8"
 /**
  * The same global under `--threads` (WP20 T0): one arena per thread rather than
  * one per process. Only the storage class moves — `inlineAllocator` GEPs
@@ -44,20 +44,20 @@ export const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_
  * thread-pointer-relative addressing.
  */
 export const ARENA_GLOBAL_TLS: string =
-  "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8";
+  "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8"
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
  * `nish_argv_init(argc, argv)`; every module that reads it loads this global.
  */
-export const ARGV_GLOBAL: string = "@nish_argv = external global %struct.nish_array*, align 8";
+export const ARGV_GLOBAL: string = "@nish_argv = external global %struct.nish_array*, align 8"
 
 /** What calling a function does to memory; the rank is the order they merge in. */
-export const EFFECT_NONE: i32 = 0;
-export const EFFECT_READ: i32 = 1;
-export const EFFECT_WRITE: i32 = 2;
+export const EFFECT_NONE: i32 = 0
+export const EFFECT_READ: i32 = 1
+export const EFFECT_WRITE: i32 = 2
 
 /** The more impure of two effects, which is how a caller inherits its callees'. */
-export const maxEffect = (a: i32, b: i32): i32 => a >= b ? a : b;
+export const maxEffect = (a: i32, b: i32): i32 => (a >= b ? a : b)
 
 // WP29 P1: what a runtime symbol writes, for `FunctionFacts.sharedWrite`.
 // `effect` answers what LLVM may reorder a call across; this answers whether a
@@ -65,68 +65,68 @@ export const maxEffect = (a: i32, b: i32): i32 => a >= b ? a : b;
 // the `EFFECT_WRITE` entries on the harmless side of it.
 
 /** Writes nothing a program can observe: every `EFFECT_NONE` and `EFFECT_READ` entry, and a few more. */
-export const WRITES_NOTHING: i32 = 0;
+export const WRITES_NOTHING: i32 = 0
 /** Writes memory or external state a caller could observe. The default for `EFFECT_WRITE`. */
-export const WRITES_SHARED: i32 = 1;
+export const WRITES_SHARED: i32 = 1
 /** Prints to fd 2 and `_exit`s: no user memory is written, and no caller runs again to look. */
-export const WRITES_PANIC: i32 = 2;
+export const WRITES_PANIC: i32 = 2
 /** Writes only the arena and the fresh block it answers, or a header its caller already counted. */
-export const WRITES_ALLOC: i32 = 3;
+export const WRITES_ALLOC: i32 = 3
 
 export class RuntimeFunction {
-  name: string;
+  name: string
   /** The full `declare` line, minus the trailing attribute group. */
-  signature: string;
+  signature: string
   /** Function attributes for the attribute group. */
-  attrs: string[];
-  effect: i32;
+  attrs: string[]
+  effect: i32
   /**
    * An LLVM intrinsic (`llvm.*`) rather than a symbol from runtime.c. Declared
    * only when a module uses it, even under `--runtime-decls`, because the
    * prelude documents the C ABI and intrinsics are not part of it.
    */
-  intrinsic: boolean;
+  intrinsic: boolean
   /** Never returns to the caller (`nish_exit`); callers lose `willreturn`. */
-  noreturn: boolean;
+  noreturn: boolean
   /** One of the `WRITES_*` classes. Whatever writes is `WRITES_SHARED` until its entry says why not. */
-  writes: i32;
+  writes: i32
 
   constructor(name: string, signature: string, attrs: string[], effect: i32) {
-    this.name = name;
-    this.signature = signature;
-    this.attrs = attrs;
-    this.effect = effect;
-    this.intrinsic = false;
-    this.noreturn = false;
-    this.writes = effect === EFFECT_WRITE ? WRITES_SHARED : WRITES_NOTHING;
+    this.name = name
+    this.signature = signature
+    this.attrs = attrs
+    this.effect = effect
+    this.intrinsic = false
+    this.noreturn = false
+    this.writes = effect === EFFECT_WRITE ? WRITES_SHARED : WRITES_NOTHING
   }
 
   sharedWrite(): boolean {
-    return this.writes === WRITES_SHARED;
+    return this.writes === WRITES_SHARED
   }
 }
 
-const STR: string = "i8* noundef nonnull readonly align 8";
-const STR_NOCAP: string = "i8* noundef nonnull readonly align 8 nocapture";
+const STR: string = "i8* noundef nonnull readonly align 8"
+const STR_NOCAP: string = "i8* noundef nonnull readonly align 8 nocapture"
 
 const attrs1 = (a: string): string[] => {
-  const out: string[] = [];
-  out.push(a);
-  return out;
-};
+  const out: string[] = []
+  out.push(a)
+  return out
+}
 
 const attrs2 = (a: string, b: string): string[] => {
-  const out: string[] = [];
-  out.push(a);
-  out.push(b);
-  return out;
-};
+  const out: string[] = []
+  out.push(a)
+  out.push(b)
+  return out
+}
 
 const attrs3 = (a: string, b: string, c: string): string[] => {
-  const out = attrs2(a, b);
-  out.push(c);
-  return out;
-};
+  const out = attrs2(a, b)
+  out.push(c)
+  return out
+}
 
 /**
  * A pure math intrinsic (WP7). Every one is a total function of its operands
@@ -139,13 +139,14 @@ const intrinsic = (name: string, ret: string, params: string): RuntimeFunction =
     `declare ${ret} @${name}(${params})`,
     attrs3("nounwind", "willreturn", "readnone"),
     EFFECT_NONE
-  );
-  fn.intrinsic = true;
-  return fn;
-};
+  )
+  fn.intrinsic = true
+  return fn
+}
 
 /** `nounwind willreturn`, which is what almost every runtime symbol carries. */
-const plain = (name: string, signature: string, effect: i32): RuntimeFunction => new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect);
+const plain = (name: string, signature: string, effect: i32): RuntimeFunction =>
+  new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect)
 
 /**
  * The runtime ABI as one ordered table, with a name index beside it.
@@ -155,35 +156,35 @@ const plain = (name: string, signature: string, effect: i32): RuntimeFunction =>
  * seventy entries at start-up, which does not appear in a profile.
  */
 export class RuntimeTable {
-  functions: RuntimeFunction[];
-  index: StringMap;
+  functions: RuntimeFunction[]
+  index: StringMap
 
   constructor() {
-    this.functions = [];
-    this.index = new StringMap();
-    this.build();
+    this.functions = []
+    this.index = new StringMap()
+    this.build()
   }
 
   add(fn: RuntimeFunction): void {
-    this.index.set(fn.name, this.functions.length);
-    this.functions.push(fn);
+    this.index.set(fn.name, this.functions.length)
+    this.functions.push(fn)
   }
 
   /** `add`, with the `WRITES_*` class narrowed from the default; the line above the call says why. */
   addWrites(writes: i32, fn: RuntimeFunction): void {
-    fn.writes = writes;
-    this.add(fn);
+    fn.writes = writes
+    this.add(fn)
   }
 
   /** The entry for `name`, or `null` when it is not a runtime symbol. */
   lookup(name: string): RuntimeFunction | null {
-    const at = this.index.get(name, -1);
-    return at < 0 ? null : this.functions[at];
+    const at = this.index.get(name, -1)
+    return at < 0 ? null : this.functions[at]
   }
 
   /** One `llvm.<op>.<type>` family member per type, in the order stage0's `src/` builds them. */
   addIntrinsic(name: string, ret: string, params: string): void {
-    this.add(intrinsic(name, ret, params));
+    this.add(intrinsic(name, ret, params))
   }
 
   build(): void {
@@ -192,26 +193,26 @@ export class RuntimeTable {
       "declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef)",
       ["nounwind", "willreturn", "cold", "noinline", "allocsize(0)"],
       EFFECT_WRITE
-    );
+    )
     // The slow path of the inline allocator: it moves the arena to a new chunk
     // and answers a block nobody else holds, which is an allocation and nothing
     // more (`writesShared` in attributes.ts gives `nish_alloc_struct` the same answer).
-    this.addWrites(WRITES_ALLOC, grow);
-    this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE));
-    this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE));
+    this.addWrites(WRITES_ALLOC, grow)
+    this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE))
+    this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE))
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
     // `EFFECT_WRITE` so nothing is reordered across it, but it only reads the bump position.
     this.addWrites(
       WRITES_NOTHING,
       plain("nish_arena_mark", "declare noundef i64 @nish_arena_mark()", EFFECT_WRITE)
-    );
+    )
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
-    this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE));
+    this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE))
     // Reads the offset, and writes nothing, as `nish_arena_mark` does.
     this.addWrites(
       WRITES_NOTHING,
       plain("nish_arena_used", "declare noundef i64 @nish_arena_used()", EFFECT_WRITE)
-    );
+    )
     // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
     // which it moves down to the mark and answers at its new address. Neither
     // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
@@ -224,7 +225,7 @@ export class RuntimeTable {
         "declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
         EFFECT_WRITE
       )
-    );
+    )
     // A fresh arena string, written before anyone holds it: an allocation. The
     // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
     this.addWrites(
@@ -234,7 +235,7 @@ export class RuntimeTable {
         "declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -242,7 +243,7 @@ export class RuntimeTable {
         `declare noalias noundef nonnull align 8 i8* @nish_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
         EFFECT_WRITE
       )
-    );
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_eq",
@@ -250,7 +251,7 @@ export class RuntimeTable {
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
-    );
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_at",
@@ -258,7 +259,7 @@ export class RuntimeTable {
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
-    );
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_index_of",
@@ -266,7 +267,7 @@ export class RuntimeTable {
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
-    );
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_len",
@@ -274,11 +275,15 @@ export class RuntimeTable {
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
-    );
+    )
     this.add(
-      plain("nish_write", `declare void @nish_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`, EFFECT_WRITE)
-    );
-    this.add(plain("nish_print", `declare void @nish_print(${STR_NOCAP})`, EFFECT_WRITE));
+      plain(
+        "nish_write",
+        `declare void @nish_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(plain("nish_print", `declare void @nish_print(${STR_NOCAP})`, EFFECT_WRITE))
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -286,7 +291,7 @@ export class RuntimeTable {
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -294,7 +299,7 @@ export class RuntimeTable {
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     // WP7: i64 strings, Math.random, process, files.
     this.addWrites(
       WRITES_ALLOC,
@@ -303,7 +308,7 @@ export class RuntimeTable {
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     // WP15: the one unsigned formatter. `u8`/`u16`/`u32` are `zext`ed to i64 at
     // the call site rather than getting three more symbols of their own, which
     // is what keeps `runtime.c` inside its `.text` budget.
@@ -314,38 +319,46 @@ export class RuntimeTable {
         "declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     // xorshift64* over a global state word: reads and writes memory.
-    this.add(plain("nish_random", "declare noundef double @nish_random()", EFFECT_WRITE));
+    this.add(plain("nish_random", "declare noundef double @nish_random()", EFFECT_WRITE))
     const exit = new RuntimeFunction(
       "nish_exit",
       "declare void @nish_exit(i32 noundef)",
       attrs2("noreturn", "nounwind"),
       EFFECT_WRITE
-    );
-    exit.noreturn = true;
-    this.add(exit);
+    )
+    exit.noreturn = true
+    this.add(exit)
     this.add(
       plain(
         "nish_read_file",
         `declare noalias noundef nonnull align 8 i8* @nish_read_file(${STR_NOCAP})`,
         EFFECT_WRITE
       )
-    );
+    )
     this.add(
       plain(
         "nish_read_file_or_null",
         `declare noalias noundef align 8 i8* @nish_read_file_or_null(${STR_NOCAP})`,
         EFFECT_WRITE
       )
-    );
-    this.add(plain("nish_write_file", `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
-    this.add(plain("nish_append_file", `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
+    )
+    this.add(
+      plain("nish_write_file", `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+    )
+    this.add(
+      plain("nish_append_file", `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+    )
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
     this.add(
-      plain("nish_argv_init", "declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly)", EFFECT_WRITE)
-    );
+      plain(
+        "nish_argv_init",
+        "declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly)",
+        EFFECT_WRITE
+      )
+    )
     // mode 0 parseFloat, 1 Number, 2 parseInt (as a double; the caller saturates it).
     // The string is only read and never retained (`readonly nocapture`), but the
     // function itself is not `readonly`: strtod/strtoll may store errno on overflow.
@@ -353,20 +366,24 @@ export class RuntimeTable {
     // so it writes nothing a caller could observe.
     this.addWrites(
       WRITES_NOTHING,
-      plain("nish_parse_number", `declare noundef double @nish_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
-    );
+      plain(
+        "nish_parse_number",
+        `declare noundef double @nish_parse_number(${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
     // WP14 D4: the directory and subprocess calls a self-hosted driver needs
     // to link its own output, and the WP14 §7a `stat` beside them. Each
     // answers a value rather than exiting.
     // `mkdir`, then `nish_is_dir` when it failed: it changes the file system,
     // so `write`, and the path is only read and never retained (`STR_NOCAP`).
-    this.add(plain("nish_mkdir", `declare zeroext i1 @nish_mkdir(${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_mkdir", `declare zeroext i1 @nish_mkdir(${STR_NOCAP})`, EFFECT_WRITE))
     // WP14 §7a. One `stat`, answering only "is there a directory here?", which
     // is the question `-o <dir>` asks. `EFFECT_WRITE` rather than read for the
     // reason `nish_parse_number` is not readonly: a failed `stat` stores
     // `errno`, and the file system is not memory LLVM may reason about, so a
     // caller must not be hoisted across anything that could change it.
-    this.add(plain("nish_is_dir", `declare zeroext i1 @nish_is_dir(${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_is_dir", `declare zeroext i1 @nish_is_dir(${STR_NOCAP})`, EFFECT_WRITE))
     // Runs an arbitrary program, so the honest answer to every question is the
     // conservative one:
     //   - no `memory(...)` and `EFFECT_WRITE`: the child reads and writes
@@ -386,7 +403,7 @@ export class RuntimeTable {
         attrs1("nounwind"),
         EFFECT_WRITE
       )
-    );
+    )
     // `nish_spawn` with one or both of the child's streams pointed at a file,
     // and therefore the same conservative answers: the child still runs
     // arbitrary code, the vector is still captured, and `waitpid` still waits.
@@ -400,7 +417,7 @@ export class RuntimeTable {
         attrs1("nounwind"),
         EFFECT_WRITE
       )
-    );
+    )
     // A fresh `string[]` per call, so `noalias`, and null when the directory
     // cannot be read, so no `nonnull`. `EFFECT_WRITE` because it allocates (the
     // arena moves) and because the directory is not memory LLVM tracks: two
@@ -413,13 +430,13 @@ export class RuntimeTable {
         `declare noalias align 8 %struct.nish_array* @nish_readdir(${STR_NOCAP})`,
         EFFECT_WRITE
       )
-    );
+    )
     // The clock is not memory either, and that is the whole reason this is not
     // `readnone`: two reads with work between them are two different answers,
     // and a `readnone` pair would fold into one and measure zero. `willreturn`
     // holds — one `clock_gettime` and some arithmetic — and there is nothing to
     // capture, so the only argument-free entry here needs no parameter facts.
-    this.add(plain("nish_monotonic_nanos", "declare i64 @nish_monotonic_nanos()", EFFECT_WRITE));
+    this.add(plain("nish_monotonic_nanos", "declare i64 @nish_monotonic_nanos()", EFFECT_WRITE))
     // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
     // it spawns `scripts/build.sh` the way stage0's preflight does.
     // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the
@@ -431,7 +448,7 @@ export class RuntimeTable {
     // null, so no `nonnull`.
     this.add(
       plain("nish_getenv", `declare noalias noundef align 8 i8* @nish_getenv(${STR_NOCAP})`, EFFECT_WRITE)
-    );
+    )
     // WP19 §5a item 4: `realpathSync`. The same shape as `nish_getenv` above
     // and for the same reasons — it allocates, so it moves the arena;
     // `noalias` because every call answers a fresh arena string; the path is
@@ -440,12 +457,8 @@ export class RuntimeTable {
     // is what stops a resolution folding across a `mkdirSync` that could
     // create the component being resolved.
     this.add(
-      plain(
-        "nish_realpath",
-        `declare noalias noundef align 8 i8* @nish_realpath(${STR_NOCAP})`,
-        EFFECT_WRITE
-      )
-    );
+      plain("nish_realpath", `declare noalias noundef align 8 i8* @nish_realpath(${STR_NOCAP})`, EFFECT_WRITE)
+    )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build
@@ -460,7 +473,7 @@ export class RuntimeTable {
         attrs3("nounwind", "willreturn", "readnone"),
         EFFECT_NONE
       )
-    );
+    )
     this.add(
       new RuntimeFunction(
         "nish_arch",
@@ -468,7 +481,7 @@ export class RuntimeTable {
         attrs3("nounwind", "willreturn", "readnone"),
         EFFECT_NONE
       )
-    );
+    )
     // WP4: arrays. `nish_array_grow` doubles `cap` (4 when 0) and moves the
     // elements into fresh arena storage; `len` is untouched. It stores to the
     // header it is handed, but its only caller is `push`, and `FactCollector`
@@ -481,7 +494,7 @@ export class RuntimeTable {
         "declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
     // C hosts do, so it is part of the declared ABI and of nish.h.
@@ -492,16 +505,16 @@ export class RuntimeTable {
         "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef)",
         EFFECT_WRITE
       )
-    );
+    )
     // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
     const panicIndex = new RuntimeFunction(
       "nish_panic_index",
       "declare void @nish_panic_index(i64 noundef, i64 noundef)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
-    );
-    panicIndex.noreturn = true;
-    this.addWrites(WRITES_PANIC, panicIndex);
+    )
+    panicIndex.noreturn = true
+    this.addWrites(WRITES_PANIC, panicIndex)
     // `slice` range-check failure (WP15 section 4): prints "slice out of range:
     // [<start>, <end>) of length <len>" and exits 1. Its own symbol rather than
     // `nish_panic_index` because a reversed pair is as common a mistake as an
@@ -511,18 +524,18 @@ export class RuntimeTable {
       "declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
-    );
-    panicSlice.noreturn = true;
-    this.addWrites(WRITES_PANIC, panicSlice);
+    )
+    panicSlice.noreturn = true
+    this.addWrites(WRITES_PANIC, panicSlice)
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
       "nish_panic_div",
       "declare void @nish_panic_div(i1 noundef zeroext)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
-    );
-    panicDiv.noreturn = true;
-    this.addWrites(WRITES_PANIC, panicDiv);
+    )
+    panicDiv.noreturn = true
+    this.addWrites(WRITES_PANIC, panicDiv)
     // WP29 P1, runtime/runtime-parallel.c: how a `parallelMapInto` or a
     // `parallelReduce` becomes several threads (`self/emit-parallel.ts`). It
     // calls `body(lo, hi, ctx)` once per chunk, so it does whatever the body
@@ -536,87 +549,98 @@ export class RuntimeTable {
         attrs1("nounwind"),
         EFFECT_WRITE
       )
-    );
+    )
     // The partitioner's own question, declared because it is part of the ABI
     // nish.h publishes. It caches the answer in a word of its own, which no
     // program can observe.
-    this.addWrites(WRITES_NOTHING, plain("nish_cpu_count", "declare noundef i64 @nish_cpu_count()", EFFECT_WRITE));
-    this.buildIntrinsics();
+    this.addWrites(
+      WRITES_NOTHING,
+      plain("nish_cpu_count", "declare noundef i64 @nish_cpu_count()", EFFECT_WRITE)
+    )
+    this.buildIntrinsics()
   }
 
   /** WP7 and WP15: the LLVM intrinsics behind `Math.*` and the numeric conversions. */
   buildIntrinsics(): void {
-    const unary: string[] = ["sqrt", "floor", "ceil", "trunc", "sin", "cos", "exp", "log", "fabs"];
+    const unary: string[] = ["sqrt", "floor", "ceil", "trunc", "sin", "cos", "exp", "log", "fabs"]
     for (const f of unary) {
-      this.addIntrinsic(`llvm.${f}.f64`, "double", "double");
+      this.addIntrinsic(`llvm.${f}.f64`, "double", "double")
     }
-    const binary: string[] = ["pow", "minnum", "maxnum"];
+    const binary: string[] = ["pow", "minnum", "maxnum"]
     for (const f of binary) {
-      this.addIntrinsic(`llvm.${f}.f64`, "double", "double, double");
+      this.addIntrinsic(`llvm.${f}.f64`, "double", "double, double")
     }
-    const signed: string[] = ["i32", "i64"];
+    const signed: string[] = ["i32", "i64"]
     for (const t of signed) {
-      this.addIntrinsic(`llvm.abs.${t}`, t, `${t}, i1`);
-      this.addIntrinsic(`llvm.smin.${t}`, t, `${t}, ${t}`);
-      this.addIntrinsic(`llvm.smax.${t}`, t, `${t}, ${t}`);
-      this.addIntrinsic(`llvm.fptosi.sat.${t}.f64`, t, "double");
+      this.addIntrinsic(`llvm.abs.${t}`, t, `${t}, i1`)
+      this.addIntrinsic(`llvm.smin.${t}`, t, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.smax.${t}`, t, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.fptosi.sat.${t}.f64`, t, "double")
     }
     // WP15: the unsigned halves of the same intrinsics. `u8`/`u16` lower to
     // `i8`/`i16`, so the narrow widths appear here and nowhere else.
-    const widths: string[] = ["i8", "i16", "i32", "i64"];
+    const widths: string[] = ["i8", "i16", "i32", "i64"]
     for (const t of widths) {
-      this.addIntrinsic(`llvm.umin.${t}`, t, `${t}, ${t}`);
-      this.addIntrinsic(`llvm.umax.${t}`, t, `${t}, ${t}`);
-      this.addIntrinsic(`llvm.fptoui.sat.${t}.f64`, t, "double");
+      this.addIntrinsic(`llvm.umin.${t}`, t, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.umax.${t}`, t, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.fptoui.sat.${t}.f64`, t, "double")
       // The f32 saturating conversions; the `.f32` suffix is the *source* type.
-      this.addIntrinsic(`llvm.fptosi.sat.${t}.f32`, t, "float");
-      this.addIntrinsic(`llvm.fptoui.sat.${t}.f32`, t, "float");
+      this.addIntrinsic(`llvm.fptosi.sat.${t}.f32`, t, "float")
+      this.addIntrinsic(`llvm.fptoui.sat.${t}.f32`, t, "float")
     }
     // WP15: `Math.abs`/`min`/`max` on an `f32`. The f64-only Math functions
     // (sqrt, pow, ...) stay f64-only, so there is no `llvm.sqrt.f32` here.
-    this.addIntrinsic("llvm.fabs.f32", "float", "float");
-    this.addIntrinsic("llvm.minnum.f32", "float", "float, float");
-    this.addIntrinsic("llvm.maxnum.f32", "float", "float, float");
+    this.addIntrinsic("llvm.fabs.f32", "float", "float")
+    this.addIntrinsic("llvm.minnum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.maxnum.f32", "float", "float, float")
   }
 }
 
 export const inlineAllocatorAttrs = (): string[] => {
-  const out: string[] = [];
-  out.push("alwaysinline");
-  out.push("nounwind");
-  out.push("willreturn");
-  out.push("allocsize(0)");
-  return out;
-};
+  const out: string[] = []
+  out.push("alwaysinline")
+  out.push("nounwind")
+  out.push("willreturn")
+  out.push("allocsize(0)")
+  return out
+}
 
 /**
  * The inline bump allocator. `size` is rounded up to 8 bytes so every object
  * (and therefore every field of every struct) is 8-byte aligned.
  */
 export const inlineAllocator = (attrGroup: string): string => {
-  const lines: string[] = [];
-  lines.push(`define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) ${attrGroup} {`);
-  lines.push("entry:");
-  lines.push("  %size.p7 = add i64 %size, 7");
-  lines.push("  %size.aligned = and i64 %size.p7, -8");
-  lines.push("  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1");
-  lines.push("  %off = load i64, i64* %off.ptr, align 8");
-  lines.push("  %new.off = add i64 %off, %size.aligned");
-  lines.push("  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2");
-  lines.push("  %cap = load i64, i64* %cap.ptr, align 8");
-  lines.push("  %fits = icmp ule i64 %new.off, %cap");
-  lines.push("  br i1 %fits, label %fast, label %slow");
-  lines.push("");
-  lines.push("fast:");
-  lines.push("  store i64 %new.off, i64* %off.ptr, align 8");
-  lines.push("  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0");
-  lines.push("  %buf = load i8*, i8** %buf.ptr, align 8");
-  lines.push("  %obj = getelementptr inbounds i8, i8* %buf, i64 %off");
-  lines.push("  ret i8* %obj");
-  lines.push("");
-  lines.push("slow:");
-  lines.push("  %grown = call i8* @nish_arena_grow(i64 %size.aligned)");
-  lines.push("  ret i8* %grown");
-  lines.push("}");
-  return lines.join("\n");
-};
+  const lines: string[] = []
+  lines.push(
+    `define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) ${attrGroup} {`
+  )
+  lines.push("entry:")
+  lines.push("  %size.p7 = add i64 %size, 7")
+  lines.push("  %size.aligned = and i64 %size.p7, -8")
+  lines.push(
+    "  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1"
+  )
+  lines.push("  %off = load i64, i64* %off.ptr, align 8")
+  lines.push("  %new.off = add i64 %off, %size.aligned")
+  lines.push(
+    "  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2"
+  )
+  lines.push("  %cap = load i64, i64* %cap.ptr, align 8")
+  lines.push("  %fits = icmp ule i64 %new.off, %cap")
+  lines.push("  br i1 %fits, label %fast, label %slow")
+  lines.push("")
+  lines.push("fast:")
+  lines.push("  store i64 %new.off, i64* %off.ptr, align 8")
+  lines.push(
+    "  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0"
+  )
+  lines.push("  %buf = load i8*, i8** %buf.ptr, align 8")
+  lines.push("  %obj = getelementptr inbounds i8, i8* %buf, i64 %off")
+  lines.push("  ret i8* %obj")
+  lines.push("")
+  lines.push("slow:")
+  lines.push("  %grown = call i8* @nish_arena_grow(i64 %size.aligned)")
+  lines.push("  ret i8* %grown")
+  lines.push("}")
+  return lines.join("\n")
+}

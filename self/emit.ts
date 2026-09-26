@@ -37,11 +37,16 @@ import {
   AnalysisUnit,
   FactsTable,
   FunctionFacts,
-} from "./attributes";
-import { DebugInfo } from "./debug";
-import { marksTailCall, reclaimsReturnedString } from "./escape";
-import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays";
-import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit-builtins";
+} from "./attributes"
+import { DebugInfo } from "./debug"
+import { marksTailCall, reclaimsReturnedString } from "./escape"
+import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays"
+import {
+  emitBuiltinCall,
+  emitIdentifierBuiltinCall,
+  emitNamespaceProperty,
+  isIdentifierBuiltinCall,
+} from "./emit-builtins"
 import {
   emitBreak,
   emitConditional,
@@ -52,7 +57,7 @@ import {
   emitSwitch,
   emitThrow,
   emitWhile,
-} from "./emit-control";
+} from "./emit-control"
 import {
   emitConstructorPrologue,
   emitMethodCall,
@@ -61,8 +66,8 @@ import {
   emitPropertyAccess,
   structFunctions,
   structTypeDeclarations,
-} from "./emit-classes";
-import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit-ops";
+} from "./emit-classes"
+import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit-ops"
 import {
   declareResultTypes,
   emitPackedResult,
@@ -74,7 +79,7 @@ import {
   isResultConstructorCall,
   privateResultAbi,
   unpackReturnedResult,
-} from "./emit-result";
+} from "./emit-result"
 import {
   emitFusedCall,
   emitLibraryCopies,
@@ -87,13 +92,13 @@ import {
   FusedProbe,
   maybeLocalIndex,
   MaybeParts,
-} from "./emit-map";
-import { emitParallelRegion, isParallelRegionCall } from "./emit-parallel";
-import { addStringConstant, emitTemplate } from "./emit-strings";
-import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util";
-import { internalErrorFor } from "./ice";
-import { IRBlock, IRFunction, IRModule, IRParam } from "./ir";
-import { StringMap, StringSet } from "./map";
+} from "./emit-map"
+import { emitParallelRegion, isParallelRegionCall } from "./emit-parallel"
+import { addStringConstant, emitTemplate } from "./emit-strings"
+import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
+import { internalErrorFor } from "./ice"
+import { IRBlock, IRFunction, IRModule, IRParam } from "./ir"
+import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
   N_BINARY,
@@ -130,17 +135,10 @@ import {
   N_WHILE,
   Node,
   nodeName,
-} from "./nodes";
-import { Options } from "./options";
+} from "./nodes"
+import { Options } from "./options"
 
-import {
-  CheckedProgram,
-  FUSE_NONE,
-  FunctionSig,
-  MAP_NONE,
-  MAP_STORED_KEY,
-  ROLE_CONSTRUCTOR,
-} from "./program";
+import { CheckedProgram, FUSE_NONE, FunctionSig, MAP_NONE, MAP_STORED_KEY, ROLE_CONSTRUCTOR } from "./program"
 import {
   ARENA_GLOBAL,
   ARENA_GLOBAL_TLS,
@@ -150,11 +148,10 @@ import {
   inlineAllocator,
   inlineAllocatorAttrs,
   RuntimeTable,
-} from "./runtime";
-import { Local, STORAGE_PARAM } from "./symbols";
-import { resolveTarget, targetHeader } from "./target";
-import { T_VOID, TypeTable } from "./types";
-
+} from "./runtime"
+import { Local, STORAGE_PARAM } from "./symbols"
+import { resolveTarget, targetHeader } from "./target"
+import { T_VOID, TypeTable } from "./types"
 
 /**
  * Branch targets of an enclosing loop, for `break` and `continue`. A `switch`
@@ -162,87 +159,87 @@ import { T_VOID, TypeTable } from "./types";
  * looks past it for the enclosing loop, as in JavaScript.
  */
 export class LoopTarget {
-  breakBlock: IRBlock;
-  continueBlock: IRBlock | null;
+  breakBlock: IRBlock
+  continueBlock: IRBlock | null
   /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
-  hasBreak: boolean;
+  hasBreak: boolean
   /**
    * The arena's `buf` and `off` at the top of the current pass when the
    * loop's passes are scoped (`emitPass`), and `""` otherwise; a `switch`
    * never has them.
    */
-  markBuf: string;
-  markOff: string;
+  markBuf: string
+  markOff: string
   /**
    * WP32: for a walk of the global `Map` or `Set`, the call that ends it,
    * which a `return` out of the loop emits too (`emitWalkExits`); `""`
    * otherwise.
    */
-  walkClose: string;
+  walkClose: string
 
   constructor(breakBlock: IRBlock, continueBlock: IRBlock | null) {
-    this.breakBlock = breakBlock;
-    this.continueBlock = continueBlock;
-    this.hasBreak = false;
-    this.markBuf = "";
-    this.markOff = "";
-    this.walkClose = "";
+    this.breakBlock = breakBlock
+    this.continueBlock = continueBlock
+    this.hasBreak = false
+    this.markBuf = ""
+    this.markOff = ""
+    this.walkClose = ""
   }
 
   scopesPass(): boolean {
-    return this.markBuf.length > 0;
+    return this.markBuf.length > 0
   }
 }
 
 export class Emitter {
-  program: CheckedProgram;
-  table: TypeTable;
-  opts: Options;
-  runtime: RuntimeTable;
-  facts: FactsTable;
-  module: IRModule;
+  program: CheckedProgram
+  table: TypeTable
+  opts: Options
+  runtime: RuntimeTable
+  facts: FactsTable
+  module: IRModule
   /** The function being emitted. */
-  fn: IRFunction;
+  fn: IRFunction
   /** Its facts: stack sites and the arena scope. */
-  current: FunctionFacts;
+  current: FunctionFacts
   /** Its signature, which is how the prologue finds the class `this` belongs to. */
-  currentSig: FunctionSig | null;
+  currentSig: FunctionSig | null
   /**
    * WP6: node id of the call this function's `return` lowers as a tail call,
    * or `-1` for none. See `planTailCall`.
    */
-  tailCallId: i32;
+  tailCallId: i32
   /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
-  readsArenaGlobal: boolean;
+  readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
-  loops: LoopTarget[];
+  loops: LoopTarget[]
   /** Alloca slots of the locals of the function being emitted, by identity. */
-  slotLocals: Local[];
-  slotNames: string[];
+  slotLocals: Local[]
+  slotNames: string[]
   /**
    * WP32: each maybe `const` of the function being emitted, and its found bit
    * and value, which are SSA values rather than a slot (`self/emit-map.ts`).
    */
-  maybeLocals: Local[];
-  maybeParts: MaybeParts[];
+  maybeLocals: Local[]
+  maybeParts: MaybeParts[]
   /** WP32 S5: each fused probe of the function being emitted, by the id of its call, for the write that reuses it. */
-  fusedProbes: FusedProbe[];
+  fusedProbes: FusedProbe[]
   /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
-  paramObjectNames: string[];
-  paramObjectValues: string[];
+  paramObjectNames: string[]
+  paramObjectValues: string[]
   /** Runtime symbols this module referenced; drives which declarations are emitted. */
-  usedRuntime: StringSet;
+  usedRuntime: StringSet
   /** Interned string literals: text -> index into `stringRefs`. */
-  strings: StringMap;
-  stringRefs: string[];
+  strings: StringMap
+  stringRefs: string[]
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
-  debug: DebugInfo | null;
+  debug: DebugInfo | null
   /**
    * WP32: `std/collections.ts`, whose functions this module's code reaches are
    * emitted into this module as `internal` copies (`self/emit-map.ts`), or
    * `null` when the program never named `Map` or `Set`.
    */
-  library: CheckedProgram | null;
+  library: CheckedProgram | null
 
   constructor(
     unit: AnalysisUnit,
@@ -252,42 +249,42 @@ export class Emitter {
     facts: FactsTable,
     library: AnalysisUnit | null
   ) {
-    this.program = unit.program;
-    this.table = table;
-    this.opts = opts;
-    this.runtime = runtime;
-    this.facts = facts;
-    this.module = new IRModule(this.program.source.path);
-    const noParams: IRParam[] = [];
-    const noNames: string[] = [];
-    this.fn = new IRFunction("", noParams, "void");
-    this.current = new FunctionFacts(noNames, 0);
-    this.currentSig = null;
-    this.tailCallId = -1;
-    this.loops = [];
-    this.slotLocals = [];
-    this.slotNames = [];
-    this.maybeLocals = [];
-    this.maybeParts = [];
-    this.fusedProbes = [];
-    this.paramObjectNames = [];
-    this.paramObjectValues = [];
-    this.usedRuntime = new StringSet();
-    this.readsArenaGlobal = false;
-    this.strings = new StringMap();
-    this.stringRefs = [];
-    this.debug = null;
-    this.library = library === null ? null : library.program;
+    this.program = unit.program
+    this.table = table
+    this.opts = opts
+    this.runtime = runtime
+    this.facts = facts
+    this.module = new IRModule(this.program.source.path)
+    const noParams: IRParam[] = []
+    const noNames: string[] = []
+    this.fn = new IRFunction("", noParams, "void")
+    this.current = new FunctionFacts(noNames, 0)
+    this.currentSig = null
+    this.tailCallId = -1
+    this.loops = []
+    this.slotLocals = []
+    this.slotNames = []
+    this.maybeLocals = []
+    this.maybeParts = []
+    this.fusedProbes = []
+    this.paramObjectNames = []
+    this.paramObjectValues = []
+    this.usedRuntime = new StringSet()
+    this.readsArenaGlobal = false
+    this.strings = new StringMap()
+    this.stringRefs = []
+    this.debug = null
+    this.library = library === null ? null : library.program
     if (opts.debugInfo) {
-      this.debug = new DebugInfo(this.module, this.program, table);
+      this.debug = new DebugInfo(this.module, this.program, table)
     }
     if (opts.target.length > 0) {
       // The driver validated the spec; an unknown one here is a programming error.
-      const target = resolveTarget(opts.target);
+      const target = resolveTarget(opts.target)
       if (target === null) {
-        process.exit(internalErrorFor(`emitter: unsupported target \`${opts.target}\``, opts.json));
+        process.exit(internalErrorFor(`emitter: unsupported target \`${opts.target}\``, opts.json))
       } else {
-        this.module.targetHeader = targetHeader(target);
+        this.module.targetHeader = targetHeader(target)
       }
     }
   }
@@ -295,7 +292,7 @@ export class Emitter {
   emitModule(): string {
     // `%struct.X = type { ... }` for every class or interface the module can see.
     for (const decl of structTypeDeclarations(this)) {
-      this.module.addTypeDecl(decl);
+      this.module.addTypeDecl(decl)
     }
     for (const sig of this.program.functions) {
       if (sig.definedIn(this.program.source)) {
@@ -303,87 +300,92 @@ export class Emitter {
         // never an instantiation either — a foreign declaration cannot be
         // generic — so it needs none of the side-table installing below.
         if (sig.foreign()) {
-          this.module.addDeclaration(this.foreignDeclarationFor(sig));
+          this.module.addDeclaration(this.foreignDeclarationFor(sig))
         } else {
           // WP18: an instantiation's body is the template's tree checked into
           // that instantiation's own side tables, so they are installed around
           // its emission and every `nodeTypes[node.id]` below answers for this
           // type-argument tuple.
-          const instance = sig.instance;
+          const instance = sig.instance
           if (instance !== null) {
-            this.program.enterInstance(instance);
+            this.program.enterInstance(instance)
           }
-          this.module.addFunction(this.emitFunction(sig));
+          this.module.addFunction(this.emitFunction(sig))
           if (instance !== null) {
-            this.program.leaveInstance();
+            this.program.leaveInstance()
           }
         }
       }
     }
-    const entry = this.program.entryMain;
+    const entry = this.program.entryMain
     if (entry !== null) {
-      this.module.addFunction(this.emitEntryWrapper(entry));
+      this.module.addFunction(this.emitEntryWrapper(entry))
     }
     // WP32: what this module's code reaches of `std/collections.ts`.
-    const library = this.library;
+    const library = this.library
     if (library !== null) {
-      emitLibraryCopies(this, library, libraryReach(this, library));
+      emitLibraryCopies(this, library, libraryReach(this, library))
     }
-    this.emitImportDeclarations();
-    this.emitRuntimePrelude();
-    return this.module.toText();
+    this.emitImportDeclarations()
+    this.emitRuntimePrelude()
+    return this.module.toText()
   }
 
   // ---- Functions ----------------------------------------------------------
 
   factsFor(sig: FunctionSig): FunctionFacts {
-    const facts = this.facts.get(sig.name);
+    const facts = this.facts.get(sig.name)
     if (facts !== null) {
-      return facts;
+      return facts
     }
-    process.exit(internalErrorFor(`emitter: no attribute facts for \`${sig.name}\` (was the whole program analysed?)`, this.opts.json));
+    process.exit(
+      internalErrorFor(
+        `emitter: no attribute facts for \`${sig.name}\` (was the whole program analysed?)`,
+        this.opts.json
+      )
+    )
   }
 
   /** Named types a signature mentions must be declared in the module (the array header). */
   declareSignatureTypes(sig: FunctionSig): void {
     if (this.table.isArray(sig.returnType)) {
-      this.module.addTypeDecl(ARRAY_TYPE);
+      this.module.addTypeDecl(ARRAY_TYPE)
     }
-    declareResultTypes(this, sig.returnType);
+    declareResultTypes(this, sig.returnType)
     for (const type of sig.paramTypes) {
       if (this.table.isArray(type)) {
-        this.module.addTypeDecl(ARRAY_TYPE);
+        this.module.addTypeDecl(ARRAY_TYPE)
       }
-      declareResultTypes(this, type);
+      declareResultTypes(this, type)
     }
   }
 
   emitFunction(sig: FunctionSig): IRFunction {
-    const facts = this.factsFor(sig);
-    this.declareSignatureTypes(sig);
-    const optimize = this.opts.optimizeAttributes;
-    const params: IRParam[] = [];
+    const facts = this.factsFor(sig)
+    this.declareSignatureTypes(sig)
+    const optimize = this.opts.optimizeAttributes
+    const params: IRParam[] = []
     // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
-    const privateAbi = privateResultAbi(this, sig.visibleOutside());
-    let i = 0;
+    const privateAbi = privateResultAbi(this, sig.visibleOutside())
+    let i = 0
     while (i < sig.paramNames.length) {
       // WP29: a compile-time function parameter is a position in the call and
       // no LLVM parameter; the body calls what it was bound to directly.
       if (sig.isCompileTime(i)) {
-        i = i + 1;
-        continue;
+        i = i + 1
+        continue
       }
-      const name = sig.paramNames[i];
-      const type = sig.paramTypes[i];
-      let attrs: string[] = [];
+      const name = sig.paramNames[i]
+      const type = sig.paramTypes[i]
+      let attrs: string[] = []
       if (optimize) {
-        attrs = paramAttributes(this.table, name, type, facts, privateAbi);
+        attrs = paramAttributes(this.table, name, type, facts, privateAbi)
       }
-      params.push(new IRParam(name, this.llvmAbi(type, privateAbi), attrs));
-      i = i + 1;
+      params.push(new IRParam(name, this.llvmAbi(type, privateAbi), attrs))
+      i = i + 1
     }
-    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, privateAbi));
+    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, privateAbi))
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
     // WP29: a function another module's instantiation calls is `hidden`
@@ -392,43 +394,49 @@ export class Emitter {
       // WP32: a copy of a `std/collections.ts` function is private to this
       // module whatever its declaration says. Its `Result` ABI stays the one
       // its declaration picks, and the library has no `Result` in it.
-      this.fn.linkage = "internal";
+      this.fn.linkage = "internal"
     } else if (sig.hidden) {
-      this.fn.linkage = "hidden";
+      this.fn.linkage = "hidden"
     } else if (this.opts.strictExports && !sig.exported) {
-      this.fn.linkage = "internal";
+      this.fn.linkage = "internal"
     }
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref, privateAbi, facts.returnAlign);
-      this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts));
+      this.fn.returnAttrs = returnAttributes(
+        this.table,
+        sig.returnType,
+        facts.returnDeref,
+        privateAbi,
+        facts.returnAlign
+      )
+      this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts))
     }
-    this.slotLocals = [];
-    this.slotNames = [];
-    this.maybeLocals = [];
-    this.maybeParts = [];
-    this.fusedProbes = [];
-    this.loops = [];
-    this.current = facts;
-    this.currentSig = sig;
-    this.tailCallId = -1;
+    this.slotLocals = []
+    this.slotNames = []
+    this.maybeLocals = []
+    this.maybeParts = []
+    this.fusedProbes = []
+    this.loops = []
+    this.current = facts
+    this.currentSig = sig
+    this.tailCallId = -1
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
-    const debug = this.debug;
+    const debug = this.debug
     if (debug !== null) {
-      debug.beginFunction(this.fn, sig, false, "", privateAbi);
+      debug.beginFunction(this.fn, sig, false, "", privateAbi)
     }
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
-      this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("nish_arena_mark")}()`);
+      this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("nish_arena_mark")}()`)
     }
     // WP17: a `Result` parameter small enough to pack arrives as an `i64`, or
     // as the tag and one slot per arm under the private ABI. Either way it is
     // unpacked once, before the body, into the object every construct reads.
-    this.paramObjectNames = [];
-    this.paramObjectValues = [];
-    i = 0;
+    this.paramObjectNames = []
+    this.paramObjectValues = []
+    i = 0
     while (i < sig.paramNames.length) {
-      const name = sig.paramNames[i];
+      const name = sig.paramNames[i]
       if (this.table.resultByValue(sig.paramTypes[i])) {
         const object = unpackReturnedResult(
           this,
@@ -436,34 +444,34 @@ export class Emitter {
           `%${name}`,
           facts.isStackParam(name),
           privateAbi
-        );
-        this.paramObjectNames.push(name);
-        this.paramObjectValues.push(object);
+        )
+        this.paramObjectNames.push(name)
+        this.paramObjectValues.push(object)
       }
-      i = i + 1;
+      i = i + 1
     }
     // A constructor stores the field initializers before its body runs.
     if (sig.role === ROLE_CONSTRUCTOR) {
-      emitConstructorPrologue(this, sig);
+      emitConstructorPrologue(this, sig)
     }
-    const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3];
+    const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
     // A concise arrow body is the one `return` it means.
     if (body.kind === N_BLOCK) {
-      this.emitBlock(body);
+      this.emitBlock(body)
     } else {
-      this.emitReturnValue(body);
+      this.emitReturnValue(body)
     }
 
     // Void functions may fall off the end; give them an explicit terminator.
     if (!this.fn.currentBlock().terminated()) {
-      this.emitScopeExit();
-      this.fn.emit("ret void");
+      this.emitScopeExit()
+      this.fn.emit("ret void")
     }
-    return this.fn;
+    return this.fn
   }
 
   isStackSite(node: Node): boolean {
-    return this.current.isStackSite(node);
+    return this.current.isStackSite(node)
   }
 
   /**
@@ -476,9 +484,9 @@ export class Emitter {
    */
   beginReclaim(callee: FunctionSig): string {
     if (!reclaimsReturnedString(callee, this.facts)) {
-      return "";
+      return ""
     }
-    return this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`);
+    return this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`)
   }
 
   /**
@@ -489,9 +497,9 @@ export class Emitter {
    */
   endReclaim(mark: string, value: string): string {
     if (mark.length === 0) {
-      return value;
+      return value
     }
-    return this.fn.emitValue(`call i8* ${this.useRuntime("nish_arena_keep")}(i64 ${mark}, i8* ${value})`);
+    return this.fn.emitValue(`call i8* ${this.useRuntime("nish_arena_keep")}(i64 ${mark}, i8* ${value})`)
   }
 
   /**
@@ -504,34 +512,34 @@ export class Emitter {
    * `marksTailCall`'s proof in escape.ts.
    */
   planTailCall(value: Node): boolean {
-    this.tailCallId = -1;
-    let inner = value;
+    this.tailCallId = -1
+    let inner = value
     while (inner.kind === N_PAREN) {
-      inner = inner.children[0];
+      inner = inner.children[0]
     }
     if (inner.kind !== N_CALL) {
-      return false;
+      return false
     }
-    const callee = this.program.nodeCallees[inner.id];
+    const callee = this.program.nodeCallees[inner.id]
     if (callee === null) {
-      return false;
+      return false
     }
-    const argTypes: i32[] = [];
+    const argTypes: i32[] = []
     for (const arg of inner.children[1].children) {
-      argTypes.push(this.typeOf(arg));
+      argTypes.push(this.typeOf(arg))
     }
     if (!marksTailCall(this.table, this.current, callee, argTypes, this.facts)) {
-      return false;
+      return false
     }
     // The release a tail call sinks ahead of itself is a pass's too, inside a
     // scoped loop, and the callee reading the bump position is what
     // `marksTailCall` refuses for the function's scope.
-    const g = this.facts.get(callee.name);
+    const g = this.facts.get(callee.name)
     if (this.outermostPass() !== null && g !== null && g.readsArenaState) {
-      return false;
+      return false
     }
-    this.tailCallId = inner.id;
-    return true;
+    this.tailCallId = inner.id
+    return true
   }
 
   /**
@@ -540,7 +548,7 @@ export class Emitter {
    * there is one, releases ahead of it.
    */
   marksTailCall(expr: Node): boolean {
-    return expr.id === this.tailCallId;
+    return expr.id === this.tailCallId
   }
 
   /**
@@ -552,14 +560,14 @@ export class Emitter {
    * walk the exit leaves (WP32, `emitWalkExits`).
    */
   emitScopeExit(): void {
-    emitWalkExits(this); // WP32: a `return` leaves every walk around it
+    emitWalkExits(this) // WP32: a `return` leaves every walk around it
     if (this.current.arenaScope) {
-      this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`);
-      return;
+      this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
+      return
     }
-    const pass = this.outermostPass();
+    const pass = this.outermostPass()
     if (pass !== null) {
-      this.releasePass(pass);
+      this.releasePass(pass)
     }
   }
 
@@ -571,41 +579,41 @@ export class Emitter {
    * nor provably returning.
    */
   emitEntryWrapper(userMain: FunctionSig): IRFunction {
-    const optimize = this.opts.optimizeAttributes;
-    const attrs: string[] = [];
+    const optimize = this.opts.optimizeAttributes
+    const attrs: string[] = []
     if (optimize) {
-      attrs.push("noundef");
+      attrs.push("noundef")
     }
-    const params: IRParam[] = [];
-    params.push(new IRParam("argc", "i32", attrs));
-    params.push(new IRParam("argv", "i8**", attrs));
-    const fn = new IRFunction("main", params, "i32");
+    const params: IRParam[] = []
+    params.push(new IRParam("argc", "i32", attrs))
+    params.push(new IRParam("argv", "i8**", attrs))
+    const fn = new IRFunction("main", params, "i32")
     if (optimize) {
-      const returnAttrs: string[] = [];
-      returnAttrs.push("noundef");
-      fn.returnAttrs = returnAttrs;
-      const group: string[] = [];
-      group.push("nounwind");
-      fn.attrGroup = this.module.attrGroupFor(group);
+      const returnAttrs: string[] = []
+      returnAttrs.push("noundef")
+      fn.returnAttrs = returnAttrs
+      const group: string[] = []
+      group.push("nounwind")
+      fn.attrGroup = this.module.attrGroupFor(group)
     }
     // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
-    const debug = this.debug;
+    const debug = this.debug
     if (debug !== null) {
-      debug.beginFunction(fn, userMain, true, "main", false);
+      debug.beginFunction(fn, userMain, true, "main", false)
     }
-    const freeArena = this.useRuntime("nish_free_arena");
+    const freeArena = this.useRuntime("nish_free_arena")
     if (this.program.usesArgv) {
-      fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`);
+      fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`)
     }
-    let code = "0";
+    let code = "0"
     if (userMain.returnType === T_VOID) {
-      fn.emit(`call void @${userMain.name}()`);
+      fn.emit(`call void @${userMain.name}()`)
     } else {
-      code = fn.emitValue(`call i32 @${userMain.name}()`);
+      code = fn.emitValue(`call i32 @${userMain.name}()`)
     }
-    fn.emit(`call void ${freeArena}()`);
-    fn.emit(`ret i32 ${code}`);
-    return fn;
+    fn.emit(`call void ${freeArena}()`)
+    fn.emit(`ret i32 ${code}`)
+    return fn
   }
 
   // ---- Imports ------------------------------------------------------------
@@ -618,16 +626,16 @@ export class Emitter {
    * there is no symbol to link against.
    */
   emitImportDeclarations(): void {
-    const seen = new StringSet();
+    const seen = new StringSet()
     for (const imp of this.program.imports) {
       if (imp.constant !== null) {
-        continue;
+        continue
       }
       // A builtin import declares nothing: the call it names lowers the same
       // way the global spelling does, to an intrinsic or a `nish_*` symbol the
       // runtime table already declares on first use.
       if (imp.builtin !== null) {
-        continue;
+        continue
       }
       // WP18 G7: an imported template declares nothing by itself. One name
       // becomes a symbol per distinct type-argument tuple, and the tuples this
@@ -635,37 +643,42 @@ export class Emitter {
       // `externalInstances`, an instantiated class's members through
       // `reachableStructs`, exactly as an imported declared class's are.
       if (imp.template !== null || imp.structTemplate !== null) {
-        continue;
+        continue
       }
-      const struct = imp.struct;
-      const sig = imp.sig;
+      const struct = imp.struct
+      const sig = imp.sig
       if (struct !== null) {
-        this.declareAll(structFunctions(struct), seen);
+        this.declareAll(structFunctions(struct), seen)
       } else if (sig !== null) {
-        const one: FunctionSig[] = [];
-        one.push(sig);
-        this.declareAll(one, seen);
+        const one: FunctionSig[] = []
+        one.push(sig)
+        this.declareAll(one, seen)
       } else {
-        process.exit(internalErrorFor(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``, this.opts.json));
+        process.exit(
+          internalErrorFor(
+            `emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``,
+            this.opts.json
+          )
+        )
       }
     }
     // WP18 G7: an instantiation this module calls and another module defines.
     // It hangs off no `ImportBinding`, because one imported template becomes a
     // symbol per distinct type-argument tuple rather than a symbol per name, so
     // the checker collected the ones this module actually asked for.
-    this.declareAll(this.program.externalInstances, seen);
+    this.declareAll(this.program.externalInstances, seen)
     // A struct this module never named but can hold values of: its methods and
     // constructor are defined by whichever module declared it, so they are
     // `declare`d here for the same reason an imported class's are.
     for (const index of this.program.reachableStructs) {
-      this.declareAll(structFunctions(this.program.structList[index]), seen);
+      this.declareAll(structFunctions(this.program.structList[index]), seen)
     }
   }
 
   /** WP32: whether `sig` is a function of `std/collections.ts`, which this module copies rather than links against. */
   isLibraryCopy(sig: FunctionSig): boolean {
-    const library = this.library;
-    return library !== null && sig.definedIn(library.source);
+    const library = this.library
+    return library !== null && sig.definedIn(library.source)
   }
 
   declareAll(sigs: FunctionSig[], seen: StringSet): void {
@@ -673,12 +686,12 @@ export class Emitter {
       // WP32: a library function is never linked against. The ones this module
       // reaches are defined in it, and the rest are not called.
       if (this.isLibraryCopy(sig)) {
-        continue;
+        continue
       }
       if (seen.add(sig.name)) {
         // WP29: a C function passed to another module's template is declared
         // there as C's, with no attribute this compiler cannot prove.
-        this.module.addDeclaration(sig.foreign() ? this.foreignDeclarationFor(sig) : this.declarationFor(sig));
+        this.module.addDeclaration(sig.foreign() ? this.foreignDeclarationFor(sig) : this.declarationFor(sig))
       }
     }
   }
@@ -700,116 +713,122 @@ export class Emitter {
    * same compiler wrote, so its attributes are facts and must match.
    */
   foreignDeclarationFor(sig: FunctionSig): string {
-    const params: string[] = [];
-    let i = 0;
+    const params: string[] = []
+    let i = 0
     while (i < sig.paramNames.length) {
-      params.push(this.llvmAbi(sig.paramTypes[i], false));
-      i = i + 1;
+      params.push(this.llvmAbi(sig.paramTypes[i], false))
+      i = i + 1
     }
-    return `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`;
+    return `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
   }
 
   declarationFor(sig: FunctionSig): string {
-    const facts = this.factsFor(sig);
-    this.declareSignatureTypes(sig);
-    const optimize = this.opts.optimizeAttributes;
-    const params: string[] = [];
-    let i = 0;
+    const facts = this.factsFor(sig)
+    this.declareSignatureTypes(sig)
+    const optimize = this.opts.optimizeAttributes
+    const params: string[] = []
+    let i = 0
     while (i < sig.paramNames.length) {
       if (sig.isCompileTime(i)) {
-        i = i + 1;
-        continue;
+        i = i + 1
+        continue
       }
-      const parts: string[] = [this.llvmAbi(sig.paramTypes[i], false)];
+      const parts: string[] = [this.llvmAbi(sig.paramTypes[i], false)]
       if (optimize) {
         for (const attr of paramAttributes(this.table, sig.paramNames[i], sig.paramTypes[i], facts, false)) {
-          parts.push(attr);
+          parts.push(attr)
         }
       }
-      params.push(parts.join(" "));
-      i = i + 1;
+      params.push(parts.join(" "))
+      i = i + 1
     }
-    const ret: string[] = [];
+    const ret: string[] = []
     if (optimize) {
-      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref, false, facts.returnAlign)) {
-        ret.push(attr);
+      for (const attr of returnAttributes(
+        this.table,
+        sig.returnType,
+        facts.returnDeref,
+        false,
+        facts.returnAlign
+      )) {
+        ret.push(attr)
       }
     }
-    ret.push(this.llvmAbi(sig.returnType, false));
-    const group = optimize ? ` ${this.module.attrGroupFor(functionAttributes(facts))}` : "";
-    return `declare ${ret.join(" ")} @${sig.name}(${params.join(", ")})${group}`;
+    ret.push(this.llvmAbi(sig.returnType, false))
+    const group = optimize ? ` ${this.module.attrGroupFor(functionAttributes(facts))}` : ""
+    return `declare ${ret.join(" ")} @${sig.name}(${params.join(", ")})${group}`
   }
 
   // ---- Runtime ABI --------------------------------------------------------
 
   useRuntime(name: string): string {
-    this.usedRuntime.add(name);
-    return `@${name}`;
+    this.usedRuntime.add(name)
+    return `@${name}`
   }
 
   stringConstant(text: string): string {
-    const at = this.strings.get(text, -1);
+    const at = this.strings.get(text, -1)
     if (at >= 0) {
-      return this.stringRefs[at];
+      return this.stringRefs[at]
     }
-    const index = this.stringRefs.length;
-    const ref = addStringConstant(this.module, index, text);
-    this.strings.set(text, index);
-    this.stringRefs.push(ref);
-    return ref;
+    const index = this.stringRefs.length
+    const ref = addStringConstant(this.module, index, text)
+    this.strings.set(text, index)
+    this.stringRefs.push(ref)
+    return ref
   }
 
   declare(text: string): void {
-    this.module.addDeclaration(text);
+    this.module.addDeclaration(text)
   }
 
   declareType(text: string): void {
-    this.module.addTypeDecl(text);
+    this.module.addTypeDecl(text)
   }
 
   declareGlobal(text: string): void {
-    this.module.addGlobal(text);
+    this.module.addGlobal(text)
   }
 
   /** Intern a module metadata node and return its `!N` reference; identical texts share a node. */
   metadata(text: string): string {
-    return this.module.addMetadata(text);
+    return this.module.addMetadata(text)
   }
 
   emitRuntimePrelude(): void {
-    const all = this.opts.runtimeDecls;
-    const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct");
+    const all = this.opts.runtimeDecls
+    const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct")
     if (wantsAlloc) {
-      this.usedRuntime.add("nish_arena_grow");
+      this.usedRuntime.add("nish_arena_grow")
     }
     if (wantsAlloc || this.readsArenaGlobal) {
-      this.module.addTypeDecl(ARENA_TYPE);
+      this.module.addTypeDecl(ARENA_TYPE)
       // WP20 T0: `--threads` gives every thread its own arena, and the only
       // thing that changes in the IR is this declaration.
       if (this.opts.threads) {
-        this.module.addGlobal(ARENA_GLOBAL_TLS);
+        this.module.addGlobal(ARENA_GLOBAL_TLS)
       } else {
-        this.module.addGlobal(ARENA_GLOBAL);
+        this.module.addGlobal(ARENA_GLOBAL)
       }
     }
     // The array header type is referenced by `nish_array_grow`'s declaration.
     if (all || this.usedRuntime.has("nish_array_grow")) {
-      this.module.addTypeDecl(ARRAY_TYPE);
+      this.module.addTypeDecl(ARRAY_TYPE)
     }
     // `@nish_argv` is part of the C ABI too; modules that read `process.argv` declared it already.
     if (all) {
-      this.module.addGlobal(ARGV_GLOBAL);
+      this.module.addGlobal(ARGV_GLOBAL)
     }
     for (const rt of this.runtime.functions) {
       // Intrinsics are not part of the C ABI prelude: declared only when used.
       if (!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) {
-        continue;
+        continue
       }
-      const group = this.opts.optimizeAttributes ? ` ${this.module.attrGroupFor(rt.attrs)}` : "";
-      this.module.addDeclaration(`${rt.signature}${group}`);
+      const group = this.opts.optimizeAttributes ? ` ${this.module.attrGroupFor(rt.attrs)}` : ""
+      this.module.addDeclaration(`${rt.signature}${group}`)
     }
     if (wantsAlloc) {
-      this.module.addRawDefinition(inlineAllocator(this.module.attrGroupFor(inlineAllocatorAttrs())));
+      this.module.addRawDefinition(inlineAllocator(this.module.attrGroupFor(inlineAllocatorAttrs())))
     }
   }
 
@@ -817,7 +836,7 @@ export class Emitter {
 
   emitBlock(block: Node): void {
     for (const stmt of block.children) {
-      this.emitStatement(stmt);
+      this.emitStatement(stmt)
     }
   }
 
@@ -827,13 +846,13 @@ export class Emitter {
    * each arm, and stage0's `src/` gets the same shape for free from its handler table.
    */
   emitStatement(stmt: Node): void {
-    const saved = this.enterLocation(stmt);
+    const saved = this.enterLocation(stmt)
     if (this.current.loopScopes.length > 0 && this.current.scopesPass(stmt)) {
-      this.emitPass(stmt);
+      this.emitPass(stmt)
     } else {
-      this.emitStatementKind(stmt);
+      this.emitStatementKind(stmt)
     }
-    this.fn.setLocation(saved);
+    this.fn.setLocation(saved)
   }
 
   /**
@@ -849,13 +868,13 @@ export class Emitter {
    * these loads and the rewind in `releasePass` cost nothing measurable.
    */
   emitPass(body: Node): void {
-    const loop = this.loops[this.loops.length - 1];
-    this.readsArenaGlobal = true;
-    loop.markBuf = this.fn.emitValue(`load i8*, i8** ${this.arenaField(0)}, align 8`);
-    loop.markOff = this.fn.emitValue(`load i64, i64* ${this.arenaField(1)}, align 8`);
-    this.emitStatementKind(body);
+    const loop = this.loops[this.loops.length - 1]
+    this.readsArenaGlobal = true
+    loop.markBuf = this.fn.emitValue(`load i8*, i8** ${this.arenaField(0)}, align 8`)
+    loop.markOff = this.fn.emitValue(`load i64, i64* ${this.arenaField(1)}, align 8`)
+    this.emitStatementKind(body)
     if (!this.fn.currentBlock().terminated()) {
-      this.releasePass(loop);
+      this.releasePass(loop)
     }
   }
 
@@ -868,96 +887,96 @@ export class Emitter {
    * mark `nish_arena_mark` answers, `0` for an arena that had no chunk yet.
    */
   releasePass(loop: LoopTarget): void {
-    const fn = this.fn;
-    const rewind = fn.newBlock("pass.rewind");
-    const free = fn.newBlock("pass.free");
-    const done = fn.newBlock("pass.done");
-    const buf = fn.emitValue(`load i8*, i8** ${this.arenaField(0)}, align 8`);
-    const same = fn.emitValue(`icmp eq i8* ${buf}, ${loop.markBuf}`);
-    fn.emit(`br i1 ${same}, label %${rewind.label}, label %${free.label}`);
-    fn.placeBlock(rewind);
-    fn.emit(`store i64 ${loop.markOff}, i64* ${this.arenaField(1)}, align 8`);
-    fn.emit(`br label %${done.label}`);
-    fn.placeBlock(free);
-    const base = fn.emitValue(`ptrtoint i8* ${loop.markBuf} to i64`);
-    const mark = fn.emitValue(`add i64 ${base}, ${loop.markOff}`);
-    fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 ${mark})`);
-    fn.emit(`br label %${done.label}`);
-    fn.placeBlock(done);
+    const fn = this.fn
+    const rewind = fn.newBlock("pass.rewind")
+    const free = fn.newBlock("pass.free")
+    const done = fn.newBlock("pass.done")
+    const buf = fn.emitValue(`load i8*, i8** ${this.arenaField(0)}, align 8`)
+    const same = fn.emitValue(`icmp eq i8* ${buf}, ${loop.markBuf}`)
+    fn.emit(`br i1 ${same}, label %${rewind.label}, label %${free.label}`)
+    fn.placeBlock(rewind)
+    fn.emit(`store i64 ${loop.markOff}, i64* ${this.arenaField(1)}, align 8`)
+    fn.emit(`br label %${done.label}`)
+    fn.placeBlock(free)
+    const base = fn.emitValue(`ptrtoint i8* ${loop.markBuf} to i64`)
+    const mark = fn.emitValue(`add i64 ${base}, ${loop.markOff}`)
+    fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 ${mark})`)
+    fn.emit(`br label %${done.label}`)
+    fn.placeBlock(done)
   }
 
   /** The address of field `index` of `@nish_arena`: `buf` is 0, `off` is 1. */
   arenaField(index: i32): string {
     return this.fn.emitValue(
       `getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 ${index}`
-    );
+    )
   }
 
   /** The outermost scoped pass being emitted, or null. */
   outermostPass(): LoopTarget | null {
     for (const loop of this.loops) {
       if (loop.scopesPass()) {
-        return loop;
+        return loop
       }
     }
-    return null;
+    return null
   }
 
   emitStatementKind(stmt: Node): void {
     switch (stmt.kind) {
       case N_RETURN:
-        this.emitReturn(stmt);
-        return;
+        this.emitReturn(stmt)
+        return
       case N_VAR:
-        this.emitVariableDeclarations(stmt.children[0]);
-        return;
+        this.emitVariableDeclarations(stmt.children[0])
+        return
       case N_EXPR_STMT:
-        this.emitExpression(stmt.children[0]);
-        return;
+        this.emitExpression(stmt.children[0])
+        return
       case N_BLOCK:
-        this.emitBlock(stmt);
-        return;
+        this.emitBlock(stmt)
+        return
       case N_IF:
-        emitIf(this, stmt);
-        return;
+        emitIf(this, stmt)
+        return
       case N_WHILE:
-        emitWhile(this, stmt);
-        return;
+        emitWhile(this, stmt)
+        return
       case N_DO:
-        emitDo(this, stmt);
-        return;
+        emitDo(this, stmt)
+        return
       case N_FOR:
-        emitFor(this, stmt);
-        return;
+        emitFor(this, stmt)
+        return
       case N_FOR_OF:
-        emitForOf(this, stmt);
-        return;
+        emitForOf(this, stmt)
+        return
       case N_SWITCH:
-        emitSwitch(this, stmt);
-        return;
+        emitSwitch(this, stmt)
+        return
       case N_BREAK:
-        emitBreak(this);
-        return;
+        emitBreak(this)
+        return
       case N_CONTINUE:
-        emitContinue(this);
-        return;
+        emitContinue(this)
+        return
       case N_THROW:
-        emitThrow(this, stmt);
-        return;
+        emitThrow(this, stmt)
+        return
       default:
-        process.exit(internalErrorFor(`emitter: unexpected statement ${nodeName(stmt.kind)}`, this.opts.json));
+        process.exit(internalErrorFor(`emitter: unexpected statement ${nodeName(stmt.kind)}`, this.opts.json))
     }
   }
 
   /** `return e`: the value first (it may allocate), then the arena scope release, then `ret`. */
   emitReturn(stmt: Node): void {
-    const value = stmt.children[0];
+    const value = stmt.children[0]
     if (value.kind === N_EMPTY) {
-      this.emitScopeExit();
-      this.fn.emit("ret void");
-      return;
+      this.emitScopeExit()
+      this.fn.emit("ret void")
+      return
     }
-    this.emitReturnValue(value);
+    this.emitReturnValue(value)
   }
 
   /**
@@ -966,37 +985,42 @@ export class Emitter {
    * lowers to (docs/wp22-arrow-functions.md).
    */
   emitReturnValue(value: Node): void {
-    const sig = this.currentSig;
+    const sig = this.currentSig
     if (sig === null) {
-      process.exit(internalErrorFor("emitter: `return` outside a function", this.opts.json));
+      process.exit(internalErrorFor("emitter: `return` outside a function", this.opts.json))
     }
     // WP17: a small `Result` leaves in a register. It is built before the
     // scope release, because the object it may be read out of is arena memory
     // the release reclaims.
     if (this.table.resultByValue(sig.returnType)) {
-      const packed = emitPackedResult(this, value, sig.returnType, privateResultAbi(this, sig.visibleOutside()));
-      this.emitScopeExit();
-      emitResultReturn(this, packed);
-      return;
+      const packed = emitPackedResult(
+        this,
+        value,
+        sig.returnType,
+        privateResultAbi(this, sig.visibleOutside())
+      )
+      this.emitScopeExit()
+      emitResultReturn(this, packed)
+      return
     }
-    const type = this.typeOf(value);
+    const type = this.typeOf(value)
     // WP6: a tail call is marked `tail` and takes the scope release with it,
     // ahead of the call, so this `return` emits none of its own. Decided
     // before the expression is lowered, because that is when `emitCall` needs
     // the answer.
-    const sunk = this.planTailCall(value);
-    const result = this.emitExpression(value);
+    const sunk = this.planTailCall(value)
+    const result = this.emitExpression(value)
     if (!sunk) {
-      this.emitScopeExit();
+      this.emitScopeExit()
     }
     // `return g()` where `g` answers nothing is a `ret` with no operand: the
     // call is the whole of the statement, and `emitExpression` answers the
     // marker string `"void"` for it rather than a value. Writing that marker
     // after `ret void` is what made this one shape assemble to nothing at all.
     if (type === T_VOID) {
-      this.fn.emit("ret void");
+      this.fn.emit("ret void")
     } else {
-      this.fn.emit(`ret ${this.llvm(type)} ${result}`);
+      this.fn.emit(`ret ${this.llvm(type)} ${result}`)
     }
   }
 
@@ -1007,20 +1031,22 @@ export class Emitter {
    */
   emitVariableDeclarations(list: Node): void {
     for (const decl of list.children) {
-      const local = this.program.nodeLocals[decl.id];
+      const local = this.program.nodeLocals[decl.id]
       if (local === null) {
-        process.exit(internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json));
+        process.exit(
+          internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json)
+        )
       } else if (this.table.isMaybe(local.type)) {
-        emitMaybeLocal(this, local, decl); // WP32: two SSA values, no slot
+        emitMaybeLocal(this, local, decl) // WP32: two SSA values, no slot
       } else {
-        const ty = this.llvm(local.type);
-        const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type));
-        this.setSlot(local, slot);
-        const init = this.emitExpression(decl.children[2]);
-        this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`);
-        const debug = this.debug;
+        const ty = this.llvm(local.type)
+        const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type))
+        this.setSlot(local, slot)
+        const init = this.emitExpression(decl.children[2])
+        this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`)
+        const debug = this.debug
         if (debug !== null) {
-          debug.declareLocal(this.fn, local, slot, decl); // `-g`: llvm.dbg.declare on the slot
+          debug.declareLocal(this.fn, local, slot, decl) // `-g`: llvm.dbg.declare on the slot
         }
       }
     }
@@ -1028,17 +1054,17 @@ export class Emitter {
 
   /** Lower an expression and answer the LLVM value holding its result. */
   emitExpression(expr: Node): string {
-    const saved = this.enterLocation(expr);
-    const value = this.emitRawExpression(expr);
+    const saved = this.enterLocation(expr)
+    const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
     // are its first fields, so the recorded conversion is a pointer bitcast.
-    const from = this.program.nodeCoercions[expr.id];
-    let result = value;
+    const from = this.program.nodeCoercions[expr.id]
+    let result = value
     if (from >= 0) {
-      result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`);
+      result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`)
     }
-    this.fn.setLocation(saved);
-    return result;
+    this.fn.setLocation(saved)
+    return result
   }
 
   /**
@@ -1049,54 +1075,56 @@ export class Emitter {
    * no-op and the location stays empty.
    */
   enterLocation(node: Node): string {
-    const saved = this.fn.location();
-    const debug = this.debug;
+    const saved = this.fn.location()
+    const debug = this.debug
     if (debug !== null) {
-      this.fn.setLocation(debug.locationOf(node));
+      this.fn.setLocation(debug.locationOf(node))
     }
-    return saved;
+    return saved
   }
 
   emitRawExpression(expr: Node): string {
     switch (expr.kind) {
       case N_PAREN:
-        return this.emitExpression(expr.children[0]);
+        return this.emitExpression(expr.children[0])
       case N_NUMBER:
-        return numericConstant(expr.text, this.typeOf(expr));
+        return numericConstant(expr.text, this.typeOf(expr))
       case N_TRUE:
-        return "true";
+        return "true"
       case N_FALSE:
-        return "false";
+        return "false"
       case N_NULL:
-        return "null"; // `null` of a `T | null` type: the pointer constant
+        return "null" // `null` of a `T | null` type: the pointer constant
       case N_STRING:
-        return this.stringConstant(expr.text);
+        return this.stringConstant(expr.text)
       case N_TEMPLATE:
-        return emitTemplate(this, expr);
+        return emitTemplate(this, expr)
       case N_IDENT:
-        return this.emitIdentifier(expr);
+        return this.emitIdentifier(expr)
       case N_THIS:
-        return "%this";
+        return "%this"
       case N_UNARY:
-        return emitUnary(this, expr);
+        return emitUnary(this, expr)
       case N_BINARY:
-        return this.emitBinaryExpression(expr);
+        return this.emitBinaryExpression(expr)
       case N_CONDITIONAL:
-        return emitConditional(this, expr);
+        return emitConditional(this, expr)
       case N_CALL:
-        return this.emitCall(expr);
+        return this.emitCall(expr)
       case N_NEW:
-        return emitNew(this, expr);
+        return emitNew(this, expr)
       case N_MEMBER:
-        return this.emitMember(expr);
+        return this.emitMember(expr)
       case N_INDEX:
-        return emitElementAccess(this, expr);
+        return emitElementAccess(this, expr)
       case N_ARRAY:
-        return emitArrayLiteral(this, expr);
+        return emitArrayLiteral(this, expr)
       case N_OBJECT:
-        return emitObjectLiteral(this, expr);
+        return emitObjectLiteral(this, expr)
       default:
-        process.exit(internalErrorFor(`emitter: unexpected expression ${nodeName(expr.kind)}`, this.opts.json));
+        process.exit(
+          internalErrorFor(`emitter: unexpected expression ${nodeName(expr.kind)}`, this.opts.json)
+        )
     }
   }
 
@@ -1106,36 +1134,36 @@ export class Emitter {
    * name lowers to the value, with no global and no load.
    */
   emitIdentifier(expr: Node): string {
-    const constant = this.program.nodeConstants[expr.id];
+    const constant = this.program.nodeConstants[expr.id]
     if (constant !== null) {
-      return constantText(this, constant);
+      return constantText(this, constant)
     }
     // `import { argv } from "nish:process"`: the same load as `process.argv`,
     // reached by a name instead of a dot.
-    const builtin = this.program.nodeBuiltins[expr.id];
+    const builtin = this.program.nodeBuiltins[expr.id]
     if (builtin.length > 0) {
-      return emitNamespaceProperty(this, expr, builtin);
+      return emitNamespaceProperty(this, expr, builtin)
     }
-    const local = this.program.nodeLocals[expr.id];
+    const local = this.program.nodeLocals[expr.id]
     if (local !== null) {
       if (local.storage === STORAGE_PARAM) {
         // WP17: a by-value `Result` parameter *is* a pointer to the object the
         // prologue unpacked it into, so the name lowers to that value.
-        const object = this.paramObject(local.name);
-        return object.length > 0 ? object : `%${local.name}`;
+        const object = this.paramObject(local.name)
+        return object.length > 0 ? object : `%${local.name}`
       }
       // WP32: a maybe `const` read by name is read where a test narrowed it to its value.
       if (this.table.isMaybe(local.type)) {
-        return this.maybeParts[maybeLocalIndex(this, local)].value;
+        return this.maybeParts[maybeLocalIndex(this, local)].value
       }
-      const ty = this.llvm(local.type);
-      return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`);
+      const ty = this.llvm(local.type)
+      return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`)
     }
-    process.exit(internalErrorFor(`emitter: no binding for \`${expr.text}\``, this.opts.json));
+    process.exit(internalErrorFor(`emitter: no binding for \`${expr.text}\``, this.opts.json))
   }
 
   emitBinaryExpression(expr: Node): string {
-    return isAssignmentOperator(expr.text) ? emitAssignment(this, expr) : emitBinary(this, expr);
+    return isAssignmentOperator(expr.text) ? emitAssignment(this, expr) : emitBinary(this, expr)
   }
 
   emitMember(expr: Node): string {
@@ -1143,93 +1171,93 @@ export class Emitter {
       // WP23: `Kind.If` was folded by the checker, so it lowers to its integer
       // with no global and no load — the arrangement a module constant has.
       if (this.program.isEnumMember(this.table, expr)) {
-        return `${this.program.nodeEnumValues[expr.id]}`;
+        return `${this.program.nodeEnumValues[expr.id]}`
       }
-      return emitNamespaceProperty(this, expr, dottedName(expr));
+      return emitNamespaceProperty(this, expr, dottedName(expr))
     }
     if (this.table.isResult(this.typeOf(expr.children[0]))) {
-      return emitResultProperty(this, expr, this.typeOf(expr.children[0])); // WP16
+      return emitResultProperty(this, expr, this.typeOf(expr.children[0])) // WP16
     }
-    return emitPropertyAccess(this, expr);
+    return emitPropertyAccess(this, expr)
   }
 
   emitCall(expr: Node): string {
-    const callee = expr.children[0];
+    const callee = expr.children[0]
     if (callee.kind === N_MEMBER) {
       if (!receiverIsValue(this.program, callee.children[0])) {
-        return emitBuiltinCall(this, expr, dottedName(callee));
+        return emitBuiltinCall(this, expr, dottedName(callee))
       }
-      const receiver = this.typeOf(callee.children[0]);
+      const receiver = this.typeOf(callee.children[0])
       if (this.table.isResult(receiver)) {
-        return emitResultMethod(this, expr, receiver); // WP16
+        return emitResultMethod(this, expr, receiver) // WP16
       }
       if (this.program.fusion.roleOf(expr.id) !== FUSE_NONE) {
-        return emitFusedCall(this, expr); // WP32 S5: a fused `has`, `set` or `add`
+        return emitFusedCall(this, expr) // WP32 S5: a fused `has`, `set` or `add`
       }
-      return emitMethodCall(this, expr);
+      return emitMethodCall(this, expr)
     }
     if (isResultConstructorCall(this.program, this.table, expr)) {
-      return emitResultConstructor(this, expr, callee.text); // WP16: `Ok(v)` / `Err(e)`
+      return emitResultConstructor(this, expr, callee.text) // WP16: `Ok(v)` / `Err(e)`
     }
     // Under a `nish:` import the identifier is the local name, so the checker
     // recorded which builtin it is. A dotted one (`process.exit`) then goes to
     // the emitter for dotted callees: the import is what let the program call
     // it without writing the dot.
-    const imported = this.program.nodeBuiltins[expr.id];
+    const imported = this.program.nodeBuiltins[expr.id]
     if (imported.length > 0) {
       // A dotted canonical name (`process.exit`) belongs to the emitter for
       // dotted callees; the import is what let the program call it without
       // writing the dot.
       return imported.indexOf(".") < 0
         ? emitIdentifierBuiltinCall(this, expr, imported)
-        : emitBuiltinCall(this, expr, imported);
+        : emitBuiltinCall(this, expr, imported)
     }
     if (isIdentifierBuiltinCall(this.program, expr)) {
-      return emitIdentifierBuiltinCall(this, expr, callee.text);
+      return emitIdentifierBuiltinCall(this, expr, callee.text)
     }
-    const sig = this.program.nodeCallees[expr.id];
+    const sig = this.program.nodeCallees[expr.id]
     if (sig === null) {
-      process.exit(internalErrorFor(`emitter: no callee recorded for \`${callee.text}\``, this.opts.json));
+      process.exit(internalErrorFor(`emitter: no callee recorded for \`${callee.text}\``, this.opts.json))
     }
-    const args = expr.children[1];
+    const args = expr.children[1]
     // WP32: `storedKey` is the key as an entry stores it, lowered in place.
     if (mapIntrinsicOf(sig) === MAP_STORED_KEY) {
-      return emitStoredKey(this, sig, args.children[0]);
+      return emitStoredKey(this, sig, args.children[0])
     }
-    const operands: string[] = [];
-    const operandTypes: string[] = [];
-    const operandValues: string[] = [];
+    const operands: string[] = []
+    const operandTypes: string[] = []
+    const operandValues: string[] = []
     // A non-exported callee takes and answers one slot per arm (WP15).
-    const calleePrivate = privateResultAbi(this, sig.visibleOutside());
-    let i = 0;
+    const calleePrivate = privateResultAbi(this, sig.visibleOutside())
+    let i = 0
     while (i < args.children.length) {
       // WP29: a function argument chose which function this call reaches, and
       // that is the whole of it: there is no value to pass.
       if (sig.isCompileTime(i)) {
-        i = i + 1;
-        continue;
+        i = i + 1
+        continue
       }
       // WP17: an argument feeding a `Result` parameter the ABI packs is passed
       // as the word, exactly as a `return` of one is — or as the arms when the
       // callee uses the private ABI.
-      const want = sig.paramTypes[i];
+      const want = sig.paramTypes[i]
       const value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
-        : this.emitExpression(args.children[i]);
-      operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`);
-      operandTypes.push(this.llvmAbi(want, calleePrivate));
-      operandValues.push(value);
-      i = i + 1;
+        : this.emitExpression(args.children[i])
+      operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
+      operandTypes.push(this.llvmAbi(want, calleePrivate))
+      operandValues.push(value)
+      i = i + 1
     }
     // WP32: `hashKey` and `sameKey` are lowered in place, per key type.
     if (mapIntrinsicOf(sig) !== MAP_NONE) {
-      return emitMapIntrinsic(this, sig, operandValues);
+      return emitMapIntrinsic(this, sig, operandValues)
     }
     // WP29 P1: inside a `parallelMapInto` or `parallelReduce` instance, the
     // call to the chunk loop is the one that runs on several threads.
     if (isParallelRegionCall(this.currentSig, sig)) {
-      emitParallelRegion(this, sig, operandTypes, operandValues);
-      return "void";
+      emitParallelRegion(this, sig, operandTypes, operandValues)
+      return "void"
     }
     // WP6: this call is the whole of a `return` and the proof in escape.ts
     // (`marksTailCall`) clears, so it is the last thing the function does. Two
@@ -1240,87 +1268,87 @@ export class Emitter {
     // `tail`, which says the callee cannot reach this frame's stack slots, so
     // the frame may go before the jump. It is never both this and the reclaim
     // below: the proof excludes a callee the reclaim would bracket.
-    const tail = this.marksTailCall(expr);
+    const tail = this.marksTailCall(expr)
     if (tail) {
-      this.emitScopeExit();
+      this.emitScopeExit()
     }
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).
-    const mark = this.beginReclaim(sig);
-    const marker = tail ? "tail " : "";
-    const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`;
+    const mark = this.beginReclaim(sig)
+    const marker = tail ? "tail " : ""
+    const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
-      this.fn.emit(call);
-      return "void";
+      this.fn.emit(call)
+      return "void"
     }
     // WP17: a small `Result` comes back in a register; unpack it into the
     // caller's own object, which is what every other construct reads.
     if (this.table.resultByValue(sig.returnType)) {
-      return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate);
+      return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
-    return this.endReclaim(mark, this.fn.emitValue(call));
+    return this.endReclaim(mark, this.fn.emitValue(call))
   }
 
   // ---- Context helpers ----------------------------------------------------
 
   slotOf(local: Local): string {
-    let i = this.slotLocals.length - 1;
+    let i = this.slotLocals.length - 1
     while (i >= 0) {
       if (this.slotLocals[i] === local) {
-        return this.slotNames[i];
+        return this.slotNames[i]
       }
-      i = i - 1;
+      i = i - 1
     }
-    process.exit(internalErrorFor(`emitter: no slot for local \`${local.name}\``, this.opts.json));
+    process.exit(internalErrorFor(`emitter: no slot for local \`${local.name}\``, this.opts.json))
   }
 
   setSlot(local: Local, slot: string): void {
-    this.slotLocals.push(local);
-    this.slotNames.push(slot);
+    this.slotLocals.push(local)
+    this.slotNames.push(slot)
   }
 
   typeOf(expr: Node): i32 {
-    const type = this.program.nodeTypes[expr.id];
+    const type = this.program.nodeTypes[expr.id]
     if (type < 0) {
-      process.exit(internalErrorFor(`emitter: no type recorded for ${nodeName(expr.kind)}`, this.opts.json));
+      process.exit(internalErrorFor(`emitter: no type recorded for ${nodeName(expr.kind)}`, this.opts.json))
     }
-    return type;
+    return type
   }
 
   llvm(type: i32): string {
-    return this.table.llvmType(type);
+    return this.table.llvmType(type)
   }
 
   /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
   paramObject(name: string): string {
-    let i = 0;
+    let i = 0
     while (i < this.paramObjectNames.length) {
       if (this.paramObjectNames[i] === name) {
-        return this.paramObjectValues[i];
+        return this.paramObjectValues[i]
       }
-      i = i + 1;
+      i = i + 1
     }
-    return "";
+    return ""
   }
 
   /** The LLVM type at a call boundary: `i64` for a `Result` the ABI packs (WP17). */
   llvmAbi(type: i32, privateAbi: boolean): string {
-    return this.table.llvmAbiType(type, privateAbi);
+    return this.table.llvmAbiType(type, privateAbi)
   }
 
   /** Alignment for a type, or 0 when attributes are disabled. */
   align(type: i32): i32 {
-    return this.opts.optimizeAttributes ? this.table.alignOf(type) : 0;
+    return this.opts.optimizeAttributes ? this.table.alignOf(type) : 0
   }
 
   alignSuffix(type: i32): string {
-    const a = this.align(type);
-    return a > 0 ? `, align ${a}` : "";
+    const a = this.align(type)
+    return a > 0 ? `, align ${a}` : ""
   }
 
   /** `, align 8` for the header fields and data of the runtime structures. */
   align8(): string {
-    return this.opts.optimizeAttributes ? ", align 8" : "";
+    return this.opts.optimizeAttributes ? ", align 8" : ""
   }
 }
 
@@ -1333,6 +1361,6 @@ export const emitProgram = (
   facts: FactsTable,
   library: AnalysisUnit | null
 ): string => {
-  const emitter = new Emitter(unit, table, opts, runtime, facts, library);
-  return emitter.emitModule();
-};
+  const emitter = new Emitter(unit, table, opts, runtime, facts, library)
+  return emitter.emitModule()
+}

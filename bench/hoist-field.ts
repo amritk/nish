@@ -58,36 +58,36 @@
 // drifting under the run lands on all three.
 
 class Holder {
-  xs: f64[];
+  xs: f64[]
   constructor(xs: f64[]) {
-    this.xs = xs;
+    this.xs = xs
   }
 }
 
 export const paramScan = (dst: f64[], src: f64[]): void => {
-  let i: i32 = 0;
+  let i: i32 = 0
   while (i < src.length) {
-    dst[i] = src[i] * 2.0;
-    i = i + 1;
+    dst[i] = src[i] * 2.0
+    i = i + 1
   }
-};
+}
 
 export const fieldScan = (dst: f64[], h: Holder): void => {
-  let i: i32 = 0;
+  let i: i32 = 0
   while (i < h.xs.length) {
-    dst[i] = h.xs[i] * 2.0;
-    i = i + 1;
+    dst[i] = h.xs[i] * 2.0
+    i = i + 1
   }
-};
+}
 
 export const hoistedScan = (dst: f64[], h: Holder): void => {
-  const xs = h.xs;
-  let i: i32 = 0;
+  const xs = h.xs
+  let i: i32 = 0
   while (i < xs.length) {
-    dst[i] = xs[i] * 2.0;
-    i = i + 1;
+    dst[i] = xs[i] * 2.0
+    i = i + 1
   }
-};
+}
 
 // The three pass loops are one loop written three times, and each keeps its
 // scan alive the way §2c's `main` does: it reads `dst[0]` back into an
@@ -96,93 +96,93 @@ export const hoistedScan = (dst: f64[], h: Holder): void => {
 // `src` for that bump rather than writing `h.xs[0]`, so that the only read of
 // the field anywhere in the three is the one being measured.
 const paramPasses = (dst: f64[], src: f64[], passes: i32): f64 => {
-  let acc: f64 = 0.0;
-  let pass: i32 = 0;
+  let acc: f64 = 0.0
+  let pass: i32 = 0
   while (pass < passes) {
-    paramScan(dst, src);
-    acc = acc + dst[0];
-    src[0] = src[0] + 1.0;
-    pass = pass + 1;
+    paramScan(dst, src)
+    acc = acc + dst[0]
+    src[0] = src[0] + 1.0
+    pass = pass + 1
   }
-  return acc;
-};
+  return acc
+}
 
 const fieldPasses = (dst: f64[], src: f64[], h: Holder, passes: i32): f64 => {
-  let acc: f64 = 0.0;
-  let pass: i32 = 0;
+  let acc: f64 = 0.0
+  let pass: i32 = 0
   while (pass < passes) {
-    fieldScan(dst, h);
-    acc = acc + dst[0];
-    src[0] = src[0] + 1.0;
-    pass = pass + 1;
+    fieldScan(dst, h)
+    acc = acc + dst[0]
+    src[0] = src[0] + 1.0
+    pass = pass + 1
   }
-  return acc;
-};
+  return acc
+}
 
 const hoistedPasses = (dst: f64[], src: f64[], h: Holder, passes: i32): f64 => {
-  let acc: f64 = 0.0;
-  let pass: i32 = 0;
+  let acc: f64 = 0.0
+  let pass: i32 = 0
   while (pass < passes) {
-    hoistedScan(dst, h);
-    acc = acc + dst[0];
-    src[0] = src[0] + 1.0;
-    pass = pass + 1;
+    hoistedScan(dst, h)
+    acc = acc + dst[0]
+    src[0] = src[0] + 1.0
+    pass = pass + 1
   }
-  return acc;
-};
+  return acc
+}
 
 export const main = (): number => {
-  const N: i32 = 8192; // L2-resident, the size §2b and §2c both measured
-  const PASSES: i32 = 150000;
-  const REPS: i32 = 7;
+  const N: i32 = 8192 // L2-resident, the size §2b and §2c both measured
+  const PASSES: i32 = 150000
+  const REPS: i32 = 7
 
-  const src: f64[] = new Array<f64>(N);
-  const dst: f64[] = new Array<f64>(N);
-  let i: i32 = 0;
+  const src: f64[] = new Array<f64>(N)
+  const dst: f64[] = new Array<f64>(N)
+  let i: i32 = 0
   while (i < N) {
-    src[i] = toF64(i);
-    i = i + 1;
+    src[i] = toF64(i)
+    i = i + 1
   }
   // One array, reached two ways: as `src` by the parameter shape, and as `h.xs`
   // by the two field shapes. Nothing but the spelling of the loop differs.
-  const h = new Holder(src);
+  const h = new Holder(src)
 
-  let paramUs: i64 = 0;
-  let fieldUs: i64 = 0;
-  let hoistedUs: i64 = 0;
-  let checksum: f64 = 0.0;
-  let rep: i32 = 0;
+  let paramUs: i64 = 0
+  let fieldUs: i64 = 0
+  let hoistedUs: i64 = 0
+  let checksum: f64 = 0.0
+  let rep: i32 = 0
   while (rep < REPS) {
-    const a = monotonicNanos();
-    checksum = checksum + paramPasses(dst, src, PASSES);
-    const b = monotonicNanos();
-    checksum = checksum + fieldPasses(dst, src, h, PASSES);
-    const c = monotonicNanos();
-    checksum = checksum + hoistedPasses(dst, src, h, PASSES);
-    const d = monotonicNanos();
-    const param = (b - a) / 1000;
-    const field = (c - b) / 1000;
-    const hoisted = (d - c) / 1000;
+    const a = monotonicNanos()
+    checksum = checksum + paramPasses(dst, src, PASSES)
+    const b = monotonicNanos()
+    checksum = checksum + fieldPasses(dst, src, h, PASSES)
+    const c = monotonicNanos()
+    checksum = checksum + hoistedPasses(dst, src, h, PASSES)
+    const d = monotonicNanos()
+    const param = (b - a) / 1000
+    const field = (c - b) / 1000
+    const hoisted = (d - c) / 1000
     if (rep === 0 || param < paramUs) {
-      paramUs = param;
+      paramUs = param
     }
     if (rep === 0 || field < fieldUs) {
-      fieldUs = field;
+      fieldUs = field
     }
     if (rep === 0 || hoisted < hoistedUs) {
-      hoistedUs = hoisted;
+      hoistedUs = hoisted
     }
-    rep = rep + 1;
+    rep = rep + 1
   }
 
   // `toI64` on each side rather than on the product: the multiply happens in
   // whatever type its operands have, so `toI64(N * PASSES)` would still wrap.
-  console.log(`elements ${toI64(N) * toI64(PASSES)} per scan, per round`);
-  console.log(`param    ${paramUs} us`);
-  console.log(`field    ${fieldUs} us`);
-  console.log(`hoisted  ${hoistedUs} us`);
-  console.log(`field/param   ${toF64(fieldUs) / toF64(paramUs)}`);
-  console.log(`field/hoisted ${toF64(fieldUs) / toF64(hoistedUs)}`);
-  console.log(`checksum ${checksum}`);
-  return 0;
-};
+  console.log(`elements ${toI64(N) * toI64(PASSES)} per scan, per round`)
+  console.log(`param    ${paramUs} us`)
+  console.log(`field    ${fieldUs} us`)
+  console.log(`hoisted  ${hoistedUs} us`)
+  console.log(`field/param   ${toF64(fieldUs) / toF64(paramUs)}`)
+  console.log(`field/hoisted ${toF64(fieldUs) / toF64(hoistedUs)}`)
+  console.log(`checksum ${checksum}`)
+  return 0
+}

@@ -18,10 +18,10 @@
  *   - `// smoke: args <flags>` on a line of the source — `examples/`, the
  *     marker `scripts/smoke.sh` reads.
  */
-import fs from "node:fs";
-import path from "node:path";
+import fs from "node:fs"
+import path from "node:path"
 
-const root = path.resolve(import.meta.dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..")
 
 /**
  * Every directory of positive programs, in the order the oracles report them.
@@ -44,24 +44,26 @@ const CORPUS_DIRS = [
   "bench",
   "tests/parser",
   "tests/differential/corpus",
-];
+]
 
 /**
  * The extra CLI flags this program is compiled with, exactly as written where
  * they live. The caller decides which of them it can pass on.
  */
 const extraArgs = (file) => {
-  const sidecar = file.replace(/\.ts$/, ".args");
-  if (fs.existsSync(sidecar)) { return split(fs.readFileSync(sidecar, "utf8")); }
-  const dirArgs = path.join(path.dirname(file), "args");
-  if (path.basename(file) === "main.ts" && fs.existsSync(dirArgs)) {
-    return split(fs.readFileSync(dirArgs, "utf8"));
+  const sidecar = file.replace(/\.ts$/, ".args")
+  if (fs.existsSync(sidecar)) {
+    return split(fs.readFileSync(sidecar, "utf8"))
   }
-  const marker = /^\/\/ smoke: args (.*)$/m.exec(fs.readFileSync(file, "utf8"));
-  return marker ? split(marker[1]) : [];
-};
+  const dirArgs = path.join(path.dirname(file), "args")
+  if (path.basename(file) === "main.ts" && fs.existsSync(dirArgs)) {
+    return split(fs.readFileSync(dirArgs, "utf8"))
+  }
+  const marker = /^\/\/ smoke: args (.*)$/m.exec(fs.readFileSync(file, "utf8"))
+  return marker ? split(marker[1]) : []
+}
 
-const split = (text) => text.trim().split(/\s+/).filter(Boolean);
+const split = (text) => text.trim().split(/\s+/).filter(Boolean)
 
 /**
  * The flags of a program that the *checker* reads, so a dump comparison runs
@@ -73,13 +75,17 @@ const split = (text) => text.trim().split(/\s+/).filter(Boolean);
  * an `.args` changes the IR and belongs to `ir_oracle.js`.
  */
 const checkerArgs = (file) => {
-  const flags = extraArgs(file);
-  const out = [];
-  const at = flags.indexOf("--number-mode");
-  if (at >= 0) { out.push("--number-mode", flags[at + 1]); }
-  if (flags.includes("--wrapping")) { out.push("--wrapping"); }
-  return out;
-};
+  const flags = extraArgs(file)
+  const out = []
+  const at = flags.indexOf("--number-mode")
+  if (at >= 0) {
+    out.push("--number-mode", flags[at + 1])
+  }
+  if (flags.includes("--wrapping")) {
+    out.push("--wrapping")
+  }
+  return out
+}
 
 /**
  * Every positive whole program of the corpus. A source with a `.err` sidecar
@@ -97,27 +103,33 @@ const checkerArgs = (file) => {
  * fixture rather than a program.
  */
 const programs = () => {
-  const files = [];
+  const files = []
   for (const dir of CORPUS_DIRS) {
-    const full = path.join(root, dir);
-    if (!fs.existsSync(full)) { continue; }
+    const full = path.join(root, dir)
+    if (!fs.existsSync(full)) {
+      continue
+    }
     for (const name of fs.readdirSync(full).sort()) {
-      const file = path.join(full, name);
+      const file = path.join(full, name)
       if (!name.endsWith(".ts")) {
         // `<entry>/main.ts` existing is the whole test: it is false for a file
         // and for a directory that is not a program, so nothing here has to
         // `stat` an entry — which would throw on a dangling symlink the tree
         // is entitled to hold (`tests/link/package_symlink` is one).
-        const main = path.join(file, "main.ts");
-        if (fs.existsSync(main)) { files.push(main); }
-        continue;
+        const main = path.join(file, "main.ts")
+        if (fs.existsSync(main)) {
+          files.push(main)
+        }
+        continue
       }
-      if (fs.existsSync(file.replace(/\.ts$/, ".err"))) { continue; }
-      files.push(file);
+      if (fs.existsSync(file.replace(/\.ts$/, ".err"))) {
+        continue
+      }
+      files.push(file)
     }
   }
-  return files;
-};
+  return files
+}
 
 /**
  * The whole programs of `tests/link/`, which is where the multi-module shapes
@@ -127,20 +139,24 @@ const programs = () => {
  * program is a positive one.
  */
 const linkPrograms = () => {
-  const dir = path.join(root, "tests", "link");
-  if (!fs.existsSync(dir)) { return []; }
-  const out = [];
+  const dir = path.join(root, "tests", "link")
+  if (!fs.existsSync(dir)) {
+    return []
+  }
+  const out = []
   for (const name of fs.readdirSync(dir).sort()) {
-    const main = path.join(dir, name, "main.ts");
-    if (!fs.existsSync(main)) { continue; }
-    const err = path.join(dir, name, "expected.err");
+    const main = path.join(dir, name, "main.ts")
+    if (!fs.existsSync(main)) {
+      continue
+    }
+    const err = path.join(dir, name, "expected.err")
     out.push({
       name,
       main,
       expectedErr: fs.existsSync(err) ? fs.readFileSync(err, "utf8").trim() : null,
-    });
+    })
   }
-  return out;
-};
+  return out
+}
 
-export { CORPUS_DIRS, checkerArgs, extraArgs, programs, linkPrograms, root };
+export { CORPUS_DIRS, checkerArgs, extraArgs, programs, linkPrograms, root }

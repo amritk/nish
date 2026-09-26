@@ -69,15 +69,15 @@
  * line that counted a whole-tree rewrite against a corpus-sized comparison
  * would be describing two different sets.
  */
-import { execFileSync, spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-import ts from "typescript";
-import { CORPUS_DIRS, extraArgs, linkPrograms, programs, root } from "../tests/self/corpus.js";
-import { resolveSeed } from "../tests/self/seed.js";
-import { rewrite } from "./arrowify.mjs";
+import { execFileSync, spawnSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import ts from "typescript"
+import { CORPUS_DIRS, extraArgs, linkPrograms, programs, root } from "../tests/self/corpus.js"
+import { resolveSeed } from "../tests/self/seed.js"
+import { rewrite } from "./arrowify.mjs"
 
-const work = path.join(root, "build", "arrowify");
+const work = path.join(root, "build", "arrowify")
 
 /**
  * The compiler both sides of the sweep run, `--compiler` or `build/nish` --
@@ -88,11 +88,11 @@ const work = path.join(root, "build", "arrowify");
  * byte?", is one any compiler can answer, as long as the same one answers both
  * sides. Set once by `main` before anything is compiled.
  */
-let compiler = { cmd: "", prefix: [] };
+let compiler = { cmd: "", prefix: [] }
 
-const DEFAULT_COMPILER = path.join("build", "nish");
-const tree = path.join(work, "tree");
-const lock = path.join(root, "build", "arrowify.lock");
+const DEFAULT_COMPILER = path.join("build", "nish")
+const tree = path.join(work, "tree")
+const lock = path.join(root, "build", "arrowify.lock")
 
 /**
  * One sweep at a time, because they share `build/arrowify`: a second run's
@@ -104,23 +104,25 @@ const lock = path.join(root, "build", "arrowify.lock");
  * message says so rather than leaving somebody to guess.
  */
 const takeLock = () => {
-  fs.mkdirSync(path.dirname(lock), { recursive: true });
+  fs.mkdirSync(path.dirname(lock), { recursive: true })
   try {
-    fs.mkdirSync(lock);
+    fs.mkdirSync(lock)
   } catch (error) {
-    if (error.code !== "EEXIST") { throw error; }
-    return false;
+    if (error.code !== "EEXIST") {
+      throw error
+    }
+    return false
   }
-  const release = () => fs.rmSync(lock, { recursive: true, force: true });
-  process.on("exit", release);
+  const release = () => fs.rmSync(lock, { recursive: true, force: true })
+  process.on("exit", release)
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => {
-      release();
-      process.exit(130);
-    });
+      release()
+      process.exit(130)
+    })
   }
-  return true;
-};
+  return true
+}
 
 /**
  * Reproduce one tracked path in the copy: a file as its bytes, a symlink as the
@@ -145,19 +147,24 @@ const takeLock = () => {
  */
 export const copyInto = (from, to, rootDir) => {
   if (!fs.lstatSync(from).isSymbolicLink()) {
-    fs.copyFileSync(from, to);
-    return "file";
+    fs.copyFileSync(from, to)
+    return "file"
   }
-  const target = fs.readlinkSync(from);
+  const target = fs.readlinkSync(from)
   // Where the link lands once the copy holds it, and whether that is under root.
-  const landing = path.resolve(path.dirname(to), target);
-  const inside = path.relative(rootDir, landing);
+  const landing = path.resolve(path.dirname(to), target)
+  const inside = path.relative(rootDir, landing)
   const escapes =
-    path.isAbsolute(target) || path.isAbsolute(inside) || inside === ".." || inside.startsWith(`..${path.sep}`);
-  if (escapes) { return "escapes"; }
-  fs.symlinkSync(target, to);
-  return "link";
-};
+    path.isAbsolute(target) ||
+    path.isAbsolute(inside) ||
+    inside === ".." ||
+    inside.startsWith(`..${path.sep}`)
+  if (escapes) {
+    return "escapes"
+  }
+  fs.symlinkSync(target, to)
+  return "link"
+}
 
 /**
  * Is this tracked path still in the working tree?
@@ -167,34 +174,36 @@ export const copyInto = (from, to, rootDir) => {
  * the repository holds. `existsSync` answers "no" for it and would drop it out
  * of the copy as though somebody had deleted it.
  */
-export const presentInTree = (from) => Boolean(fs.lstatSync(from, { throwIfNoEntry: false }));
+export const presentInTree = (from) => Boolean(fs.lstatSync(from, { throwIfNoEntry: false }))
 
 /** Copy every tracked file, so the copy resolves imports exactly as the repo does. */
 const copyTree = () => {
-  fs.rmSync(work, { recursive: true, force: true });
+  fs.rmSync(work, { recursive: true, force: true })
   const files = execFileSync("git", ["ls-files", "-z"], { cwd: root, maxBuffer: 1 << 28 })
     .toString()
     .split("\0")
-    .filter(Boolean);
-  const missing = [];
-  const escaping = [];
+    .filter(Boolean)
+  const missing = []
+  const escaping = []
   for (const rel of files) {
-    const from = path.join(root, rel);
+    const from = path.join(root, rel)
     // `git ls-files` prints the index, which can name a file the working tree no
     // longer has. Aborting the whole sweep on the first of them is not a useful
     // answer to "somebody deleted a file"; the copy is of what is there, and what
     // is not there is counted and named. A broken symlink is *not* one of those:
     // see `presentInTree`.
     if (!presentInTree(from)) {
-      missing.push(rel);
-      continue;
+      missing.push(rel)
+      continue
     }
-    const to = path.join(tree, rel);
-    fs.mkdirSync(path.dirname(to), { recursive: true });
-    if (copyInto(from, to, tree) === "escapes") { escaping.push(rel); }
+    const to = path.join(tree, rel)
+    fs.mkdirSync(path.dirname(to), { recursive: true })
+    if (copyInto(from, to, tree) === "escapes") {
+      escaping.push(rel)
+    }
   }
-  return { files, missing, escaping };
-};
+  return { files, missing, escaping }
+}
 
 /**
  * Every positive whole program the sweep compiles, as a path relative to the repo.
@@ -209,12 +218,14 @@ const copyTree = () => {
  * corpus is.
  */
 const sweepPrograms = () => {
-  const out = programs().map((file) => path.relative(root, file));
+  const out = programs().map((file) => path.relative(root, file))
   for (const program of linkPrograms()) {
-    if (program.expectedErr === null) { out.push(path.relative(root, program.main)); }
+    if (program.expectedErr === null) {
+      out.push(path.relative(root, program.main))
+    }
   }
-  return [...new Set(out)].sort();
-};
+  return [...new Set(out)].sort()
+}
 
 /**
  * Every program the sweep re-diagnoses rather than compiles: the `.err` cases of
@@ -224,37 +235,47 @@ const sweepPrograms = () => {
  * Here they are the other half of what the compiler emits.
  */
 const sweepRejections = () => {
-  const out = [];
+  const out = []
   for (const dir of [...CORPUS_DIRS, "tests/wordings"]) {
-    const full = path.join(root, dir);
-    if (!fs.existsSync(full)) { continue; }
+    const full = path.join(root, dir)
+    if (!fs.existsSync(full)) {
+      continue
+    }
     for (const name of fs.readdirSync(full).sort()) {
-      if (!name.endsWith(".ts")) { continue; }
-      const rel = path.join(dir, name);
-      const isWording = dir === "tests/wordings";
-      if (!isWording && !fs.existsSync(path.join(root, rel.replace(/\.ts$/, ".err")))) { continue; }
-      out.push(rel);
+      if (!name.endsWith(".ts")) {
+        continue
+      }
+      const rel = path.join(dir, name)
+      const isWording = dir === "tests/wordings"
+      if (!isWording && !fs.existsSync(path.join(root, rel.replace(/\.ts$/, ".err")))) {
+        continue
+      }
+      out.push(rel)
     }
   }
   for (const program of linkPrograms()) {
-    if (program.expectedErr !== null) { out.push(path.relative(root, program.main)); }
+    if (program.expectedErr !== null) {
+      out.push(path.relative(root, program.main))
+    }
   }
-  return [...new Set(out)].sort();
-};
+  return [...new Set(out)].sort()
+}
 
 /**
  * The modules one source imports, memoised: the closure is walked once for the
  * whole scope and then again per program, to ask which of them the change
  * reached, so without this every file would be parsed a few hundred times.
  */
-const importCache = new Map();
+const importCache = new Map()
 const importsOf = (rel) => {
-  const cached = importCache.get(rel);
-  if (cached !== undefined) { return cached; }
-  const found = readImports(rel);
-  importCache.set(rel, found);
-  return found;
-};
+  const cached = importCache.get(rel)
+  if (cached !== undefined) {
+    return cached
+  }
+  const found = readImports(rel)
+  importCache.set(rel, found)
+  return found
+}
 
 /**
  * The modules one source imports, as repo-relative paths. A specifier that
@@ -267,23 +288,34 @@ const importsOf = (rel) => {
  * migration that keeps being wrong.
  */
 const readImports = (rel) => {
-  const file = path.join(root, rel);
-  if (!fs.existsSync(file)) { return []; }
-  const sf = ts.createSourceFile(rel, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
-  const out = [];
-  for (const stmt of sf.statements) {
-    const specifier = ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt) ? stmt.moduleSpecifier : undefined;
-    if (specifier === undefined || !ts.isStringLiteral(specifier)) { continue; }
-    const text = specifier.text;
-    let target;
-    if (text.startsWith(".")) { target = path.resolve(path.dirname(file), text.replace(/\.js$/, "")); }
-    else if (text.startsWith("nish/")) { target = path.join(root, "std", text.slice("nish/".length)); }
-    else { continue; }
-    const candidate = target.endsWith(".ts") ? target : `${target}.ts`;
-    if (fs.existsSync(candidate)) { out.push(path.relative(root, candidate)); }
+  const file = path.join(root, rel)
+  if (!fs.existsSync(file)) {
+    return []
   }
-  return out;
-};
+  const sf = ts.createSourceFile(rel, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true)
+  const out = []
+  for (const stmt of sf.statements) {
+    const specifier =
+      ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt) ? stmt.moduleSpecifier : undefined
+    if (specifier === undefined || !ts.isStringLiteral(specifier)) {
+      continue
+    }
+    const text = specifier.text
+    let target
+    if (text.startsWith(".")) {
+      target = path.resolve(path.dirname(file), text.replace(/\.js$/, ""))
+    } else if (text.startsWith("nish/")) {
+      target = path.join(root, "std", text.slice("nish/".length))
+    } else {
+      continue
+    }
+    const candidate = target.endsWith(".ts") ? target : `${target}.ts`
+    if (fs.existsSync(candidate)) {
+      out.push(path.relative(root, candidate))
+    }
+  }
+  return out
+}
 
 /**
  * Every source the sweep is answerable for: the programs and rejections it
@@ -292,28 +324,34 @@ const readImports = (rel) => {
  * change did.
  */
 const closure = (roots) => {
-  const seen = new Set();
-  const queue = [...roots];
+  const seen = new Set()
+  const queue = [...roots]
   while (queue.length > 0) {
-    const rel = queue.pop();
-    if (seen.has(rel)) { continue; }
-    seen.add(rel);
-    for (const next of importsOf(rel)) { if (!seen.has(next)) { queue.push(next); } }
+    const rel = queue.pop()
+    if (seen.has(rel)) {
+      continue
+    }
+    seen.add(rel)
+    for (const next of importsOf(rel)) {
+      if (!seen.has(next)) {
+        queue.push(next)
+      }
+    }
   }
-  return [...seen].sort();
-};
+  return [...seen].sort()
+}
 
 /** The `--json` diagnostics of one program, and the status it exited with. */
 const diagnose = (rel) => {
   // A rejection writes nothing, but name a directory rather than a file so that
   // a case which stops being one does not land its IR on top of the last.
-  const out = path.join(work, "diagnose");
-  fs.mkdirSync(out, { recursive: true });
-  const args = [...compiler.prefix, path.join(tree, rel), "--json", "-o", `${out}/`];
-  args.push(...extraArgs(path.join(tree, rel)));
-  const run = spawnSync(compiler.cmd, args, { encoding: "utf8" });
-  return { status: run.status, said: (run.stdout ?? "").trim() };
-};
+  const out = path.join(work, "diagnose")
+  fs.mkdirSync(out, { recursive: true })
+  const args = [...compiler.prefix, path.join(tree, rel), "--json", "-o", `${out}/`]
+  args.push(...extraArgs(path.join(tree, rel)))
+  const run = spawnSync(compiler.cmd, args, { encoding: "utf8" })
+  return { status: run.status, said: (run.stdout ?? "").trim() }
+}
 
 /**
  * Whether a compile said anything a diagnostic comparison should read: a
@@ -323,7 +361,7 @@ const diagnose = (rel) => {
  */
 const speaks = (run) =>
   (!run.absent && run.status !== 0) ||
-  run.stderr.split("\n").some((line) => line.trim().length > 0 && !line.startsWith("wrote "));
+  run.stderr.split("\n").some((line) => line.trim().length > 0 && !line.startsWith("wrote "))
 
 /**
  * The `--json` diagnostics of every subject that had any, this side of the
@@ -340,7 +378,7 @@ const speaks = (run) =>
  * program that has something to say rather than per program.
  */
 const readDiagnostics = (subjects, results) =>
-  new Map(subjects.filter((rel) => speaks(results.get(rel))).map((rel) => [rel, diagnose(rel).said]));
+  new Map(subjects.filter((rel) => speaks(results.get(rel))).map((rel) => [rel, diagnose(rel).said]))
 
 /**
  * One program's diagnostics with every position stripped: the severity, the
@@ -358,13 +396,13 @@ export const diagnosticWords = (said) =>
     .filter((line) => line.length > 0)
     .map((line) => {
       try {
-        const one = JSON.parse(line);
-        return JSON.stringify({ severity: one.severity, code: one.code, message: one.message });
+        const one = JSON.parse(line)
+        return JSON.stringify({ severity: one.severity, code: one.code, message: one.message })
       } catch {
-        return line;
+        return line
       }
     })
-    .join("\n");
+    .join("\n")
 
 /**
  * Compile every program into `<out>/<program>/`. A program the compiler
@@ -373,10 +411,10 @@ export const diagnosticWords = (said) =>
  * the *same* program is refused on both sides.
  */
 const compileAll = (relPrograms, out, debug) => {
-  const results = new Map();
+  const results = new Map()
   for (const rel of relPrograms) {
-    const dir = path.join(out, subjectDir(rel));
-    fs.mkdirSync(dir, { recursive: true });
+    const dir = path.join(out, subjectDir(rel))
+    fs.mkdirSync(dir, { recursive: true })
     // A subject can be legitimately absent on one side: a file added since the
     // revision has no `<rev>:<path>`, so `--applied` empties it out of the copy
     // for the before compile. Reading it anyway is how this crashed — `extraArgs`
@@ -385,21 +423,23 @@ const compileAll = (relPrograms, out, debug) => {
     // own header tells a migrator to add a module the rewrite created and then ask.
     // It is a verdict instead.
     if (!fs.existsSync(path.join(tree, rel))) {
-      results.set(rel, { status: null, absent: true, stdout: "", stderr: "", dir });
-      continue;
+      results.set(rel, { status: null, absent: true, stdout: "", stderr: "", dir })
+      continue
     }
-    const args = [...compiler.prefix, path.join(tree, rel), "-o", `${dir}/`];
+    const args = [...compiler.prefix, path.join(tree, rel), "-o", `${dir}/`]
     // The flags come out of the *copy*, not out of the working tree, so that each
     // side is compiled the way its own `.args` sidecar says. Reading them from the
     // working tree made `--applied` hand the before side the after side's flags,
     // and a changed `.args` then verified as clean.
-    args.push(...intoDir(extraArgs(path.join(tree, rel)), dir));
-    if (debug) { args.push("-g"); }
-    const run = spawnSync(compiler.cmd, args, { encoding: "utf8" });
-    results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir });
+    args.push(...intoDir(extraArgs(path.join(tree, rel)), dir))
+    if (debug) {
+      args.push("-g")
+    }
+    const run = spawnSync(compiler.cmd, args, { encoding: "utf8" })
+    results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir })
   }
-  return results;
-};
+  return results
+}
 
 /**
  * One subject's own output directory name, and it has to be injective.
@@ -408,7 +448,7 @@ const compileAll = (relPrograms, out, debug) => {
  * second side's identical write covers the first's. There is no such pair in
  * the corpus today, which is the only reason this was latent rather than wrong.
  */
-const subjectDir = (rel) => encodeURIComponent(rel);
+const subjectDir = (rel) => encodeURIComponent(rel)
 
 /**
  * The flags that name an output file of their own, which the compiler resolves
@@ -419,7 +459,7 @@ const subjectDir = (rel) => encodeURIComponent(rel);
  * into the subject's own directory, keeping the basename, which is what makes
  * "every file each side wrote" true rather than aspirational.
  */
-const OUTPUT_FLAGS = new Set(["--emit-header", "--emit-dts", "--emit-napi", "--emit-napi-async"]);
+const OUTPUT_FLAGS = new Set(["--emit-header", "--emit-dts", "--emit-napi", "--emit-napi-async"])
 
 // `--link <exe>` names a path too and is deliberately not in that set: this sweep
 // compiles and never links, `compileAll` never passes it, and no `.args` sidecar
@@ -428,16 +468,16 @@ const OUTPUT_FLAGS = new Set(["--emit-header", "--emit-dts", "--emit-napi", "--e
 // hole, and both sides would write the same path.
 
 const intoDir = (args, dir) => {
-  const out = [];
+  const out = []
   for (let i = 0; i < args.length; i += 1) {
-    out.push(args[i]);
+    out.push(args[i])
     if (OUTPUT_FLAGS.has(args[i]) && i + 1 < args.length) {
-      out.push(path.join(dir, path.basename(args[i + 1])));
-      i += 1;
+      out.push(path.join(dir, path.basename(args[i + 1])))
+      i += 1
     }
   }
-  return out;
-};
+  return out
+}
 
 /**
  * Every file a compile wrote, keyed by its path relative to the output
@@ -447,17 +487,24 @@ const intoDir = (args, dir) => {
  * quiet about them the first time an in-scope program asked for one.
  */
 const emittedFiles = (dir) => {
-  const out = new Map();
+  const out = new Map()
   const walk = (at, prefix) => {
-    for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-      const full = path.join(at, entry.name);
-      if (entry.isDirectory()) { walk(full, `${prefix}${entry.name}/`); }
-      else { out.set(`${prefix}${entry.name}`, fs.readFileSync(full)); }
+    for (const entry of fs
+      .readdirSync(at, { withFileTypes: true })
+      .sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const full = path.join(at, entry.name)
+      if (entry.isDirectory()) {
+        walk(full, `${prefix}${entry.name}/`)
+      } else {
+        out.set(`${prefix}${entry.name}`, fs.readFileSync(full))
+      }
     }
-  };
-  if (fs.existsSync(dir)) { walk(dir, ""); }
-  return out;
-};
+  }
+  if (fs.existsSync(dir)) {
+    walk(dir, "")
+  }
+  return out
+}
 
 /**
  * The differences between what one subject emitted before and after, over the
@@ -467,16 +514,20 @@ const emittedFiles = (dir) => {
  * changed what the program is, not only how it is spelled.
  */
 export const diffEmitted = (before, after) => {
-  const out = [];
+  const out = []
   for (const name of [...new Set([...before.keys(), ...after.keys()])].sort()) {
-    const one = before.get(name);
-    const two = after.get(name);
-    if (one === undefined) { out.push({ name, why: "emitted only after the rewrite" }); }
-    else if (two === undefined) { out.push({ name, why: "is missing after the rewrite" }); }
-    else if (!one.equals(two)) { out.push({ name, why: `differs (${one.length} vs ${two.length} bytes)` }); }
+    const one = before.get(name)
+    const two = after.get(name)
+    if (one === undefined) {
+      out.push({ name, why: "emitted only after the rewrite" })
+    } else if (two === undefined) {
+      out.push({ name, why: "is missing after the rewrite" })
+    } else if (!one.equals(two)) {
+      out.push({ name, why: `differs (${one.length} vs ${two.length} bytes)` })
+    }
   }
-  return out;
-};
+  return out
+}
 
 /**
  * What a comparison is evidence of, which is not the same as what it compared.
@@ -488,7 +539,7 @@ export const diffEmitted = (before, after) => {
  * for nothing at all. So each program and each rejection is asked whether the
  * change reached its own import closure, and the summary says how many did.
  */
-export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touched.has(file));
+export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touched.has(file))
 
 /**
  * One subject's verdict, from what each side of it produced and nothing else.
@@ -533,14 +584,16 @@ export const verdict = (a, b) => {
   // leaving a migrator with a stack trace where a verdict should be.
   if (a.absent === true || b.absent === true) {
     if (a.absent === true && b.absent === true) {
-      return { kind: "blind", why: "has no source on either side, so nothing was compiled" };
+      return { kind: "blind", why: "has no source on either side, so nothing was compiled" }
     }
     return {
       kind: "absent",
       why: a.absent === true ? "did not exist before the change" : "exists only before the change",
-    };
+    }
   }
-  if (a.status !== b.status) { return { kind: "status" }; }
+  if (a.status !== b.status) {
+    return { kind: "status" }
+  }
   if (a.status !== 0) {
     // A refusal with nothing in it is the same empty comparison in its last
     // hiding place: `"" === ""` is true and says nothing. Every failure is a
@@ -548,10 +601,12 @@ export const verdict = (a, b) => {
     // a refusal that produced none is a subject this sweep cannot read rather
     // than one it agrees with.
     if (a.said.length === 0 && b.said.length === 0) {
-      return { kind: "blind", why: "was refused and printed no diagnostics to compare" };
+      return { kind: "blind", why: "was refused and printed no diagnostics to compare" }
     }
-    if (diagnosticWords(a.said) !== diagnosticWords(b.said)) { return { kind: "reworded" }; }
-    return { kind: "refusal", moved: a.said !== b.said };
+    if (diagnosticWords(a.said) !== diagnosticWords(b.said)) {
+      return { kind: "reworded" }
+    }
+    return { kind: "refusal", moved: a.said !== b.said }
   }
   // A compile that succeeded still has a diagnostic surface — the performance
   // warnings — and it is compared by the same rule the refusals are: the words
@@ -559,11 +614,11 @@ export const verdict = (a, b) => {
   // collapsed declaration moves by construction, so a move is reported rather
   // than failed; what may not happen is a warning that appears, disappears, or
   // says something else.
-  const talk = diagnosticWords(a.said) === diagnosticWords(b.said);
-  const moved = talk && a.said !== b.said;
-  const spoke = a.said.length > 0 || b.said.length > 0;
-  const said = talk ? [] : [{ name: "--json", why: "says something else after the change" }];
-  const names = new Set([...a.emitted.keys(), ...b.emitted.keys()]);
+  const talk = diagnosticWords(a.said) === diagnosticWords(b.said)
+  const moved = talk && a.said !== b.said
+  const spoke = a.said.length > 0 || b.said.length > 0
+  const said = talk ? [] : [{ name: "--json", why: "says something else after the change" }]
+  const names = new Set([...a.emitted.keys(), ...b.emitted.keys()])
   if (names.size > 0) {
     return {
       kind: "emitted",
@@ -571,7 +626,7 @@ export const verdict = (a, b) => {
       spoke,
       moved,
       differences: [...diffEmitted(a.emitted, b.emitted), ...said],
-    };
+    }
   }
   if (a.stdout.length > 0 || b.stdout.length > 0) {
     return {
@@ -584,10 +639,10 @@ export const verdict = (a, b) => {
           : [{ name: "stdout", why: `differs (${a.stdout.length} vs ${b.stdout.length} bytes)` }]),
         ...said,
       ],
-    };
+    }
   }
-  return { kind: "blind", why: "compiled clean and produced nothing to compare" };
-};
+  return { kind: "blind", why: "compiled clean and produced nothing to compare" }
+}
 
 /**
  * The files that differ between a revision and the working tree, with both
@@ -597,7 +652,7 @@ export const verdict = (a, b) => {
  * green line covered it.
  */
 const changedSince = (rev, scope) => {
-  const inScope = new Set(scope);
+  const inScope = new Set(scope)
   const all = execFileSync(
     "git",
     // `args` on its own is a literal path from the repo root, so it matched nothing:
@@ -609,22 +664,22 @@ const changedSince = (rev, scope) => {
   )
     .toString()
     .split("\n")
-    .filter((rel) => rel.length > 0);
-  const outside = all.filter((rel) => !inScope.has(owns(rel)));
+    .filter((rel) => rel.length > 0)
+  const outside = all.filter((rel) => !inScope.has(owns(rel)))
   const changes = all
     .filter((rel) => inScope.has(owns(rel)))
     .map((rel) => {
-      const show = spawnSync("git", ["show", `${rev}:${rel}`], { cwd: root, maxBuffer: 1 << 28 });
-      const file = path.join(root, rel);
+      const show = spawnSync("git", ["show", `${rev}:${rel}`], { cwd: root, maxBuffer: 1 << 28 })
+      const file = path.join(root, rel)
       return {
         rel,
         owner: owns(rel),
         before: show.status === 0 ? show.stdout : null,
         after: fs.existsSync(file) ? fs.readFileSync(file) : null,
-      };
-    });
-  return { changes, outside };
-};
+      }
+    })
+  return { changes, outside }
+}
 
 /**
  * The source a changed file belongs to. A `.args` sidecar is not a program but
@@ -635,21 +690,25 @@ const changedSince = (rev, scope) => {
  * same sidecar spelled per directory (`tests/self/corpus.js`).
  */
 const owns = (rel) => {
-  if (rel.endsWith(".args")) { return rel.replace(/\.args$/, ".ts"); }
-  if (path.basename(rel) === "args") { return path.posix.join(path.posix.dirname(rel), "main.ts"); }
-  return rel;
-};
+  if (rel.endsWith(".args")) {
+    return rel.replace(/\.args$/, ".ts")
+  }
+  if (path.basename(rel) === "args") {
+    return path.posix.join(path.posix.dirname(rel), "main.ts")
+  }
+  return rel
+}
 
 /** Put one side of an `--applied` comparison into the copy of the tree. */
 const put = (rel, content) => {
-  const file = path.join(tree, rel);
+  const file = path.join(tree, rel)
   if (content === null) {
-    fs.rmSync(file, { force: true });
-    return;
+    fs.rmSync(file, { force: true })
+    return
   }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, content);
-};
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, content)
+}
 
 const usage = `usage: node scripts/arrow-verify.mjs [--compiler <nish>] [--concise] [--debug] [--applied [--rev <ref>]] [--verbose] [<filter>...]
 
@@ -659,7 +718,7 @@ const usage = `usage: node scripts/arrow-verify.mjs [--compiler <nish>] [--conci
   --applied  compare the working tree against --rev instead of deriving a rewrite
   --rev      the revision --applied compares against (default HEAD)
   --verbose  name every skipped declaration, and every subject whose diagnostics moved
-`;
+`
 
 /**
  * The flags this sweep has. An unknown one is refused rather than ignored, for
@@ -668,94 +727,105 @@ const usage = `usage: node scripts/arrow-verify.mjs [--compiler <nish>] [--conci
  * token from `--rev`, so the guard that checks the revision never saw it and the
  * run quietly compared against `HEAD`. A verifier is worth what its flags are.
  */
-const FLAGS = new Set(["--concise", "--debug", "--applied", "--verbose", "--help", "--rev", "--compiler"]);
+const FLAGS = new Set(["--concise", "--debug", "--applied", "--verbose", "--help", "--rev", "--compiler"])
 
 /** The flags that take a value, as `--flag <value>` or `--flag=<value>`. */
-const VALUED = ["--rev", "--compiler"];
+const VALUED = ["--rev", "--compiler"]
 
 /** `--flag=value` spelled as the flag it is. */
-const flagName = (word) => VALUED.find((name) => word.startsWith(`${name}=`)) ?? word;
+const flagName = (word) => VALUED.find((name) => word.startsWith(`${name}=`)) ?? word
 
 /** The value a valued flag was given, or undefined when it is absent or last. */
 const flagValue = (argv, name) => {
-  const inline = argv.find((a) => a.startsWith(`${name}=`));
-  if (inline !== undefined) { return inline.slice(name.length + 1); }
-  const at = argv.indexOf(name);
-  return at >= 0 ? argv[at + 1] : undefined;
-};
+  const inline = argv.find((a) => a.startsWith(`${name}=`))
+  if (inline !== undefined) {
+    return inline.slice(name.length + 1)
+  }
+  const at = argv.indexOf(name)
+  return at >= 0 ? argv[at + 1] : undefined
+}
 
 const main = (argv) => {
-  const words = argv.filter((a) => a.startsWith("-"));
-  const flags = new Set(words.map(flagName));
-  const revArg = flagValue(argv, "--rev");
-  const compilerArg = flagValue(argv, "--compiler");
-  const rev = flags.has("--rev") ? revArg : "HEAD";
+  const words = argv.filter((a) => a.startsWith("-"))
+  const flags = new Set(words.map(flagName))
+  const revArg = flagValue(argv, "--rev")
+  const compilerArg = flagValue(argv, "--compiler")
+  const rev = flags.has("--rev") ? revArg : "HEAD"
   // A separated value is a word after its flag, not a filter.
-  const values = new Set(VALUED.filter((name) => argv.includes(name)).map((name) => argv[argv.indexOf(name) + 1]));
-  const filters = argv.filter((a) => !a.startsWith("-") && !values.has(a));
-  const unknown = words.filter((a) => !FLAGS.has(flagName(a)) && !values.has(a));
+  const values = new Set(
+    VALUED.filter((name) => argv.includes(name)).map((name) => argv[argv.indexOf(name) + 1])
+  )
+  const filters = argv.filter((a) => !a.startsWith("-") && !values.has(a))
+  const unknown = words.filter((a) => !FLAGS.has(flagName(a)) && !values.has(a))
   if (unknown.length > 0) {
-    process.stderr.write(`arrow-verify: unknown flag ${unknown.join(", ")}\n${usage}`);
-    return 2;
+    process.stderr.write(`arrow-verify: unknown flag ${unknown.join(", ")}\n${usage}`)
+    return 2
   }
-  const concise = flags.has("--concise");
-  const debug = flags.has("--debug");
-  const applied = flags.has("--applied");
+  const concise = flags.has("--concise")
+  const debug = flags.has("--debug")
+  const applied = flags.has("--applied")
 
   if (flags.has("--help")) {
-    process.stdout.write(usage);
-    return 0;
+    process.stdout.write(usage)
+    return 0
   }
-  if (flags.has("--compiler") && (compilerArg === undefined || compilerArg.length === 0 || compilerArg.startsWith("-"))) {
-    process.stderr.write(`arrow-verify: --compiler needs a path, not ${compilerArg ?? "the end of the command"}\n`);
-    return 2;
+  if (
+    flags.has("--compiler") &&
+    (compilerArg === undefined || compilerArg.length === 0 || compilerArg.startsWith("-"))
+  ) {
+    process.stderr.write(
+      `arrow-verify: --compiler needs a path, not ${compilerArg ?? "the end of the command"}\n`
+    )
+    return 2
   }
-  const resolved = resolveSeed(flags.has("--compiler") ? compilerArg : DEFAULT_COMPILER);
+  const resolved = resolveSeed(flags.has("--compiler") ? compilerArg : DEFAULT_COMPILER)
   if (resolved.error !== undefined) {
     process.stderr.write(
       `arrow-verify: ${resolved.error}; pass --compiler <nish>, or run \`npm run bootstrap\` to leave one in ${DEFAULT_COMPILER}\n`
-    );
-    return 2;
+    )
+    return 2
   }
-  compiler = resolved;
+  compiler = resolved
   // A `--rev` that swallowed the next flag would compare the working tree with
   // the index and go on printing the revision's name in the banner.
   if (flags.has("--rev") && (revArg === undefined || revArg.length === 0 || revArg.startsWith("-"))) {
-    process.stderr.write(`arrow-verify: --rev needs a revision, not ${revArg ?? "the end of the command"}\n`);
-    return 2;
+    process.stderr.write(`arrow-verify: --rev needs a revision, not ${revArg ?? "the end of the command"}\n`)
+    return 2
   }
   if (applied && concise) {
-    process.stderr.write("arrow-verify: --applied verifies the tree as it stands; --concise derives a rewrite\n");
-    return 2;
+    process.stderr.write(
+      "arrow-verify: --applied verifies the tree as it stands; --concise derives a rewrite\n"
+    )
+    return 2
   }
 
-  const matches = (rel) => filters.length === 0 || filters.some((f) => rel.includes(f));
-  const relPrograms = sweepPrograms().filter(matches);
-  const negatives = sweepRejections().filter(matches);
+  const matches = (rel) => filters.length === 0 || filters.some((f) => rel.includes(f))
+  const relPrograms = sweepPrograms().filter(matches)
+  const negatives = sweepRejections().filter(matches)
   if (relPrograms.length === 0 && negatives.length === 0) {
-    process.stderr.write(`arrow-verify: no corpus program matches ${filters.join(", ")}\n`);
-    return 2;
+    process.stderr.write(`arrow-verify: no corpus program matches ${filters.join(", ")}\n`)
+    return 2
   }
   // One list. A program and a rejection differ in how they are *reported*, not in
   // how they are compared: both are compiled, both are compared through `verdict`,
   // and a "rejection" that turns out to compile is therefore compared by what it
   // emitted rather than falling out of the run.
-  const subjects = [...new Set([...relPrograms, ...negatives])].sort();
-  const scope = closure(subjects);
+  const subjects = [...new Set([...relPrograms, ...negatives])].sort()
+  const scope = closure(subjects)
 
   process.stdout.write(
     `arrow-verify: ${relPrograms.length} program(s), ${negatives.length} rejection(s), ` +
       `${scope.length} source file(s)${debug ? ", with -g" : ""}${applied ? `, against ${rev}` : ""}\n`
-  );
+  )
   if (!takeLock()) {
     process.stderr.write(
       `arrow-verify: another sweep holds ${path.relative(root, lock)}; two of them share one work ` +
         "directory and would delete each other's tree. Wait for it, or remove that directory if no " +
         "sweep is running.\n"
-    );
-    return 2;
+    )
+    return 2
   }
-  const copied = copyTree();
+  const copied = copyTree()
   // A link out of the copy is not a file to count and carry on past, the way a
   // deleted one is: it would make one side of the comparison read the working
   // tree, so there is no sweep to run until somebody looks at it.
@@ -763,68 +833,86 @@ const main = (argv) => {
     process.stderr.write(
       `arrow-verify: ${copied.escaping.length} tracked symlink(s) point outside the tree, so a compile ` +
         "would read through them into the working tree instead of the copy and prove nothing:\n"
-    );
-    for (const rel of copied.escaping) { process.stderr.write(`escapes  ${rel}\n`); }
-    return 2;
+    )
+    for (const rel of copied.escaping) {
+      process.stderr.write(`escapes  ${rel}\n`)
+    }
+    return 2
   }
   if (copied.missing.length > 0) {
     process.stdout.write(
       `arrow-verify: ${copied.missing.length} tracked file(s) are not in the working tree and were not copied\n`
-    );
-    if (flags.has("--verbose")) { for (const rel of copied.missing) { process.stdout.write(`gone     ${rel}\n`); } }
+    )
+    if (flags.has("--verbose")) {
+      for (const rel of copied.missing) {
+        process.stdout.write(`gone     ${rel}\n`)
+      }
+    }
   }
 
   // In `--applied` the copy starts as the working tree, so the *before* side is
   // the one that has to be put back; in the derived mode the copy is already
   // the before side and the codemod makes the after side.
-  const { changes, outside } = applied ? changedSince(rev, scope) : { changes: [], outside: [] };
+  const { changes, outside } = applied ? changedSince(rev, scope) : { changes: [], outside: [] }
   if (applied) {
     if (outside.length > 0) {
       process.stdout.write(
         `arrow-verify: ${outside.length} changed file(s) are outside this sweep's scope and are not verified here\n`
-      );
-      if (flags.has("--verbose")) { for (const rel of outside) { process.stdout.write(`outside  ${rel}\n`); } }
+      )
+      if (flags.has("--verbose")) {
+        for (const rel of outside) {
+          process.stdout.write(`outside  ${rel}\n`)
+        }
+      }
     }
     if (changes.length === 0) {
       process.stderr.write(
         `arrow-verify: nothing in scope has changed since ${rev}, so there is no rewrite to verify\n`
-      );
-      return 1;
+      )
+      return 1
     }
-    process.stdout.write(`arrow-verify: ${changes.length} file(s) changed since ${rev}\n`);
-    for (const change of changes) { put(change.rel, change.before); }
+    process.stdout.write(`arrow-verify: ${changes.length} file(s) changed since ${rev}\n`)
+    for (const change of changes) {
+      put(change.rel, change.before)
+    }
   }
 
-  const before = compileAll(subjects, path.join(work, "before"), debug);
+  const before = compileAll(subjects, path.join(work, "before"), debug)
   // A subject the compiler refuses prints its refusal and nothing else, so that is
   // what there will be to compare — and this side of it has to be read now, while
   // the before side is still what is in the tree.
-  const saidBefore = readDiagnostics(subjects, before);
+  const saidBefore = readDiagnostics(subjects, before)
 
-  let rewritten = 0;
-  const touched = new Set();
-  const skipped = [];
+  let rewritten = 0
+  const touched = new Set()
+  const skipped = []
   if (applied) {
     for (const change of changes) {
-      put(change.rel, change.after);
-      touched.add(change.owner);
+      put(change.rel, change.after)
+      touched.add(change.owner)
     }
   } else {
     for (const rel of scope) {
-      const file = path.join(tree, rel);
-      if (!fs.existsSync(file)) { continue; }
-      const text = fs.readFileSync(file, "utf8");
-      const result = rewrite(text, rel, { concise });
-      for (const skip of result.skipped) { skipped.push(`${rel}:${skip.line} ${skip.name} — ${skip.reason}`); }
-      if (result.changed === 0) { continue; }
-      fs.writeFileSync(file, result.text);
-      rewritten += result.changed;
-      touched.add(rel);
+      const file = path.join(tree, rel)
+      if (!fs.existsSync(file)) {
+        continue
+      }
+      const text = fs.readFileSync(file, "utf8")
+      const result = rewrite(text, rel, { concise })
+      for (const skip of result.skipped) {
+        skipped.push(`${rel}:${skip.line} ${skip.name} — ${skip.reason}`)
+      }
+      if (result.changed === 0) {
+        continue
+      }
+      fs.writeFileSync(file, result.text)
+      rewritten += result.changed
+      touched.add(rel)
     }
     process.stdout.write(
       `arrow-verify: rewrote ${rewritten} declaration(s)${concise ? ", concise bodies" : ""} in ` +
         `${touched.size} of ${scope.length} file(s), ${skipped.length} left alone\n`
-    );
+    )
   }
 
   // What the run is evidence of. A derived sweep that rewrote nothing, and an
@@ -833,39 +921,39 @@ const main = (argv) => {
   // is what happens when §8b's recipe is run in the wrong order, the codemod
   // having already rewritten the tree in place, so say so and fail rather than
   // handing back a zero somebody will read as a verification.
-  const coveredPrograms = relPrograms.filter((rel) => sitsOnChange(rel, touched));
-  const coveredNegatives = negatives.filter((rel) => sitsOnChange(rel, touched));
+  const coveredPrograms = relPrograms.filter((rel) => sitsOnChange(rel, touched))
+  const coveredNegatives = negatives.filter((rel) => sitsOnChange(rel, touched))
   process.stdout.write(
     `arrow-verify: ${coveredPrograms.length} of ${relPrograms.length} program(s) and ` +
       `${coveredNegatives.length} of ${negatives.length} rejection(s) sit on changed source; ` +
       "the rest are identical on both sides and prove nothing\n"
-  );
+  )
   if (coveredPrograms.length === 0 && coveredNegatives.length === 0) {
     process.stderr.write(
       applied
         ? `arrow-verify: nothing this sweep compiles has changed since ${rev}, so there is no rewrite to verify\n`
         : "arrow-verify: nothing in scope was rewritten, so both compiles saw the same source. " +
             "Use `--applied` to verify a rewrite that is already in the tree.\n"
-    );
-    return 1;
+    )
+    return 1
   }
 
-  const after = compileAll(subjects, path.join(work, "after"), debug);
-  const saidAfter = readDiagnostics(subjects, after);
+  const after = compileAll(subjects, path.join(work, "after"), debug)
+  const saidAfter = readDiagnostics(subjects, after)
 
   // One loop, one exit path. Which list a subject came from decides how it is
   // reported and nothing else; `verdict` decides what happened to it.
-  let differed = 0;
-  let compared = 0;
-  let dumps = 0;
-  let refusals = 0;
-  let reworded = 0;
-  let moved = 0;
-  let spoke = 0;
-  const blind = [];
+  let differed = 0
+  let compared = 0
+  let dumps = 0
+  let refusals = 0
+  let reworded = 0
+  let moved = 0
+  let spoke = 0
+  const blind = []
   for (const rel of subjects) {
-    const a = before.get(rel);
-    const b = after.get(rel);
+    const a = before.get(rel)
+    const b = after.get(rel)
     const answer = verdict(
       {
         status: a.status,
@@ -881,90 +969,107 @@ const main = (argv) => {
         said: saidAfter.get(rel) ?? "",
         emitted: emittedFiles(b.dir),
       }
-    );
+    )
     if (answer.kind === "absent") {
-      differed += 1;
-      process.stdout.write(`DIFF  ${rel}: ${answer.why}, so there is nothing to compare it against\n`);
-      continue;
+      differed += 1
+      process.stdout.write(`DIFF  ${rel}: ${answer.why}, so there is nothing to compare it against\n`)
+      continue
     }
     if (answer.kind === "status") {
-      differed += 1;
-      process.stdout.write(`DIFF  ${rel}: exit ${a.status} before, ${b.status} after\n`);
-      const said = (b.status === 0 ? a.stderr : b.stderr).trim().split("\n")[0];
-      if (said) { process.stdout.write(`      ${said}\n`); }
-      continue;
+      differed += 1
+      process.stdout.write(`DIFF  ${rel}: exit ${a.status} before, ${b.status} after\n`)
+      const said = (b.status === 0 ? a.stderr : b.stderr).trim().split("\n")[0]
+      if (said) {
+        process.stdout.write(`      ${said}\n`)
+      }
+      continue
     }
     if (answer.kind === "reworded") {
-      differed += 1;
-      reworded += 1;
-      process.stdout.write(`DIFF  ${rel}: refused differently after the change\n`);
-      process.stdout.write(`      before ${diagnosticWords(saidBefore.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
-      process.stdout.write(`      after  ${diagnosticWords(saidAfter.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
-      continue;
+      differed += 1
+      reworded += 1
+      process.stdout.write(`DIFF  ${rel}: refused differently after the change\n`)
+      process.stdout.write(
+        `      before ${diagnosticWords(saidBefore.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`
+      )
+      process.stdout.write(
+        `      after  ${diagnosticWords(saidAfter.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`
+      )
+      continue
     }
     if (answer.kind === "refusal") {
-      refusals += 1;
+      refusals += 1
       if (answer.moved) {
-        moved += 1;
+        moved += 1
         if (flags.has("--verbose")) {
           process.stdout.write(
             `MOVED ${rel}\n      before ${(saidBefore.get(rel) ?? "").split("\n")[0]}\n` +
               `      after  ${(saidAfter.get(rel) ?? "").split("\n")[0]}\n`
-          );
+          )
         }
       }
-      continue;
+      continue
     }
     if (answer.kind === "blind") {
-      blind.push({ rel, why: answer.why });
-      continue;
+      blind.push({ rel, why: answer.why })
+      continue
     }
-    if (answer.kind === "dump") { dumps += 1; }
-    else { compared += answer.compared; }
+    if (answer.kind === "dump") {
+      dumps += 1
+    } else {
+      compared += answer.compared
+    }
     if (answer.spoke) {
-      spoke += 1;
+      spoke += 1
       if (answer.moved) {
-        moved += 1;
+        moved += 1
         if (flags.has("--verbose")) {
           process.stdout.write(
             `MOVED ${rel}\n      before ${(saidBefore.get(rel) ?? "").split("\n")[0]}\n` +
               `      after  ${(saidAfter.get(rel) ?? "").split("\n")[0]}\n`
-          );
+          )
         }
       }
     }
     for (const difference of answer.differences) {
-      differed += 1;
-      process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`);
+      differed += 1
+      process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`)
       if (answer.kind === "emitted" && difference.name !== "--json") {
-        process.stdout.write(`      diff ${path.join(a.dir, difference.name)} ${path.join(b.dir, difference.name)}\n`);
+        process.stdout.write(
+          `      diff ${path.join(a.dir, difference.name)} ${path.join(b.dir, difference.name)}\n`
+        )
       }
       if (difference.name === "--json") {
-        process.stdout.write(`      before ${diagnosticWords(saidBefore.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
-        process.stdout.write(`      after  ${diagnosticWords(saidAfter.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
+        process.stdout.write(
+          `      before ${diagnosticWords(saidBefore.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`
+        )
+        process.stdout.write(
+          `      after  ${diagnosticWords(saidAfter.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`
+        )
       }
     }
   }
 
   for (const one of blind) {
-    process.stdout.write(`BLIND ${one.rel}: ${one.why}\n`);
+    process.stdout.write(`BLIND ${one.rel}: ${one.why}\n`)
   }
 
   if (skipped.length > 0 && flags.has("--verbose")) {
-    for (const line of skipped) { process.stdout.write(`skip  ${line}\n`); }
+    for (const line of skipped) {
+      process.stdout.write(`skip  ${line}\n`)
+    }
   }
   process.stdout.write(
     `arrow-verify: ${subjects.length} subject(s) — ${compared} emitted file(s), ${dumps} dump(s) and ` +
       `${refusals} refusal(s) compared, ${blind.length} with nothing to compare\n`
-  );
-  process.stdout.write(
-    `arrow-verify: ${spoke} compile(s) that also warned, compared by their words too\n`
-  );
+  )
+  process.stdout.write(`arrow-verify: ${spoke} compile(s) that also warned, compared by their words too\n`)
   process.stdout.write(
     `arrow-verify: ${differed} difference(s), of which ${reworded} refused differently; ` +
       `${moved} subject(s) whose diagnostic positions moved\n`
-  );
-  return differed > 0 || blind.length > 0 ? 1 : 0;
-};
+  )
+  return differed > 0 || blind.length > 0 ? 1 : 0
+}
 
-if (process.argv[1] === import.meta.filename) { process.exit(main(process.argv.slice(2))); }
+if (process.argv[1] === import.meta.filename) {
+  process.exit(main(process.argv.slice(2)))
+}

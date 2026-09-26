@@ -30,82 +30,82 @@
 //                     held by pointer does not cross, for the same reason a
 //                     string does not.
 
-import { Compilation } from "./compilation";
-import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignature } from "./interop-abi";
-import { wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm";
+import { Compilation } from "./compilation"
+import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignature } from "./interop-abi"
+import { wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
 
 export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
-  const table = compilation.table;
-  const bridge = wasmBridged(table, fns);
-  const lines: string[] = [];
-  lines.push(banner(compilation, "--emit-dts", "// "));
-  lines.push("// Typings for the wasm build (scripts/build.sh --profile wasm), implemented by");
-  lines.push("// the companion loader written next to this file. Values cross with the wasm");
-  lines.push("// C ABI: `number` is i32 or f64 exactly as compiled, `boolean` comes back as");
-  lines.push("// 0 | 1, `i64` is a bigint. An unsigned width shares a wasm value type with");
-  lines.push("// the signed one of its size, so the loader masks a u8 / u16 argument into");
-  lines.push("// range on the way in and every u8 / u16 / u32 / u64 result on the way out,");
-  lines.push("// the way a typed-array store would. Int32Array / Float64Array / BigInt64Array");
-  lines.push("// arguments are copied into the module's arena for the call (link");
-  lines.push("// runtime/runtime-wasm.c), written-through arguments are copied back, and");
-  lines.push("// an array result is copied out, so the typed arrays you see are your own.");
-  lines.push("// String functions are not callable from the freestanding wasm profile and");
-  lines.push("// are listed below as comments.");
-  lines.push("");
-  lines.push("/** A wasm i1 result: JS receives 0 or 1, never `true` / `false`. */");
-  lines.push("export type WasmBool = 0 | 1;");
-  lines.push("");
-  lines.push("export interface Exports {");
-  lines.push("  /** Linear memory of the instance (the arena and string constants live here). */");
-  lines.push("  readonly memory: WebAssembly.Memory;");
+  const table = compilation.table
+  const bridge = wasmBridged(table, fns)
+  const lines: string[] = []
+  lines.push(banner(compilation, "--emit-dts", "// "))
+  lines.push("// Typings for the wasm build (scripts/build.sh --profile wasm), implemented by")
+  lines.push("// the companion loader written next to this file. Values cross with the wasm")
+  lines.push("// C ABI: `number` is i32 or f64 exactly as compiled, `boolean` comes back as")
+  lines.push("// 0 | 1, `i64` is a bigint. An unsigned width shares a wasm value type with")
+  lines.push("// the signed one of its size, so the loader masks a u8 / u16 argument into")
+  lines.push("// range on the way in and every u8 / u16 / u32 / u64 result on the way out,")
+  lines.push("// the way a typed-array store would. Int32Array / Float64Array / BigInt64Array")
+  lines.push("// arguments are copied into the module's arena for the call (link")
+  lines.push("// runtime/runtime-wasm.c), written-through arguments are copied back, and")
+  lines.push("// an array result is copied out, so the typed arrays you see are your own.")
+  lines.push("// String functions are not callable from the freestanding wasm profile and")
+  lines.push("// are listed below as comments.")
+  lines.push("")
+  lines.push("/** A wasm i1 result: JS receives 0 or 1, never `true` / `false`. */")
+  lines.push("export type WasmBool = 0 | 1;")
+  lines.push("")
+  lines.push("export interface Exports {")
+  lines.push("  /** Linear memory of the instance (the arena and string constants live here). */")
+  lines.push("  readonly memory: WebAssembly.Memory;")
   if (bridge.needsRuntime) {
     lines.push(
       "  /** runtime-wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */"
-    );
-    lines.push("  nish_reset_arena(): void;");
+    )
+    lines.push("  nish_reset_arena(): void;")
     lines.push(
       "  /** runtime-wasm.c: same as nish_reset_arena; wasm memory is never returned to the host. */"
-    );
-    lines.push("  nish_free_arena(): void;");
+    )
+    lines.push("  nish_free_arena(): void;")
   }
 
   // One question decides both files: a function is declared here exactly when
   // `wasmSkipReason` lets it onto the bridge, which is what interop-wasm.ts
   // filters the loader's entries by. Deciding it twice is what let the
   // declarations get ahead of the loader once already.
-  let count = 0;
+  let count = 0
   for (const fn of fns) {
-    const source = tsSignature(table, fn.sig);
-    const skip = wasmSkipReason(table, fn.sig);
+    const source = tsSignature(table, fn.sig)
+    const skip = wasmSkipReason(table, fn.sig)
     if (skip.length > 0) {
-      lines.push(`  // ${source}  -- not exported to JS: ${skip}`);
-      continue;
+      lines.push(`  // ${source}  -- not exported to JS: ${skip}`)
+      continue
     }
-    const params: string[] = [];
-    let i = 0;
+    const params: string[] = []
+    let i = 0
     while (i < fn.sig.paramNames.length) {
-      params.push(`${fn.sig.paramNames[i]}: ${wasmType(table, fn.sig.paramTypes[i], POS_PARAM)}`);
-      i = i + 1;
+      params.push(`${fn.sig.paramNames[i]}: ${wasmType(table, fn.sig.paramTypes[i], POS_PARAM)}`)
+      i = i + 1
     }
-    count = count + 1;
-    lines.push(`  /** ${fn.unit.name}: ${source} */`);
+    count = count + 1
+    lines.push(`  /** ${fn.unit.name}: ${source} */`)
     lines.push(
       `  ${jsExportName(fn.sig)}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
-    );
+    )
   }
   if (count === 0) {
-    lines.push("  // No scalar functions are exported.");
+    lines.push("  // No scalar functions are exported.")
   }
-  lines.push("}");
-  lines.push("");
+  lines.push("}")
+  lines.push("")
 
-  lines.push("/**");
-  lines.push(" * Instantiate the module and return its typed exports. `bytes` is the");
-  lines.push(" * `.wasm` file: `readFileSync(path)` in Node, a `fetch` response");
-  lines.push(" * `arrayBuffer()` in browsers. The companion `.mjs` next to this file");
-  lines.push(" * implements it (examples/node-host.mjs shows the plain, scalar-only form).");
-  lines.push(" */");
-  lines.push("export function load(bytes: BufferSource): Promise<Exports>;");
-  lines.push("");
-  return lines.join("\n");
-};
+  lines.push("/**")
+  lines.push(" * Instantiate the module and return its typed exports. `bytes` is the")
+  lines.push(" * `.wasm` file: `readFileSync(path)` in Node, a `fetch` response")
+  lines.push(" * `arrayBuffer()` in browsers. The companion `.mjs` next to this file")
+  lines.push(" * implements it (examples/node-host.mjs shows the plain, scalar-only form).")
+  lines.push(" */")
+  lines.push("export function load(bytes: BufferSource): Promise<Exports>;")
+  lines.push("")
+  return lines.join("\n")
+}

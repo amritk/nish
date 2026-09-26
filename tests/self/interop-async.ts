@@ -11,20 +11,20 @@
 
 /** A long scalar call: a xorshift chain, so the loop is work LLVM cannot fold into a formula. */
 export const spin = (rounds: i32): i32 => {
-  let x: i32 = 123456789;
-  let i: i32 = 0;
+  let x: i32 = 123456789
+  let i: i32 = 0
   while (i < rounds) {
-    let j: i32 = 0;
+    let j: i32 = 0
     while (j < 1000) {
-      x = x ^ (x << 13);
-      x = x ^ (x >>> 17);
-      x = x ^ (x << 5);
-      j = j + 1;
+      x = x ^ (x << 13)
+      x = x ^ (x >>> 17)
+      x = x ^ (x << 5)
+      j = j + 1
     }
-    i = i + 1;
+    i = i + 1
   }
-  return x;
-};
+  return x
+}
 
 /**
  * Scalar in, scalar out, and it allocates: every round builds a string in the
@@ -35,15 +35,15 @@ export const spin = (rounds: i32): i32 => {
  * Only xor and small addends, so nothing here can overflow an `i32`.
  */
 export const digest = (seed: i32, rounds: i32): i32 => {
-  let acc: i32 = seed;
-  let i: i32 = 0;
+  let acc: i32 = seed
+  let i: i32 = 0
   while (i < rounds) {
-    const s = `round-${i}-of-${seed}`;
-    acc = acc ^ (s.length + i);
-    i = i + 1;
+    const s = `round-${i}-of-${seed}`
+    acc = acc ^ (s.length + i)
+    i = i + 1
   }
-  return acc;
-};
+  return acc
+}
 
 /**
  * A `void` result: the one asynchronous shape whose work item carries no
@@ -52,20 +52,20 @@ export const digest = (seed: i32, rounds: i32): i32 => {
  * the crossing is what is under test, as in `interop-widths.ts`.
  */
 export const touch = (rounds: i32): void => {
-  let i: i32 = 0;
+  let i: i32 = 0
   while (i < rounds) {
-    i = i + 1;
+    i = i + 1
   }
-};
+}
 
 /** A string result: no `labelAsync`, because the string lives in the arena. */
-export const label = (n: i32): string => `n=${n}`;
+export const label = (n: i32): string => `n=${n}`
 
 /** A borrowed typed array: no `totalAsync`, because the bytes are the caller's. */
 export const total = (xs: Int32Array): i32 => {
-  let sum: i32 = 0;
+  let sum: i32 = 0
   for (const x of xs) {
-    sum = sum ^ x;
+    sum = sum ^ x
   }
-  return sum;
-};
+  return sum
+}

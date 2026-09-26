@@ -42,10 +42,10 @@
  * `self/parallel.ts`), which decides only how a map is divided and may
  * change without changing any result; this one may not.
  */
-const BLOCK: i32 = 1048576;
+const BLOCK: i32 = 1048576
 
 /** The most blocks a reduce is split into: the partitioner's own ceiling on threads. */
-const MAX_BLOCKS: i32 = 64;
+const MAX_BLOCKS: i32 = 64
 
 /**
  * Writes `f(src[i])` into `dst[i]` for every `i` in `[lo, hi)`: one thread's
@@ -57,30 +57,30 @@ const MAX_BLOCKS: i32 = 64;
  */
 const mapRange = <T, U>(src: T[], dst: U[], f: (x: T) => U, lo: i32, hi: i32): void => {
   for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(src.length); i++) {
-    const y = f(src[i]);
+    const y = f(src[i])
     if (i < toI32(dst.length)) {
-      dst[i] = y;
+      dst[i] = y
     }
   }
-};
+}
 
 /** `f` folded over `src[lo..hi)` from `identity`: one block of a reduce. */
 const reduceRange = <T>(src: T[], f: (acc: T, x: T) => T, identity: T, lo: i32, hi: i32): T => {
-  let acc = identity;
+  let acc = identity
   for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(src.length); i++) {
-    acc = f(acc, src[i]);
+    acc = f(acc, src[i])
   }
-  return acc;
-};
+  return acc
+}
 
 /** How many blocks a reduce over `n` elements is split into: `min(MAX_BLOCKS, ceil(n / BLOCK))`. */
 const reduceBlockCount = (n: i32): i32 => {
-  const wanted: i32 = toI32((toI64(n) + toI64(BLOCK) - 1) / toI64(BLOCK));
-  return wanted < MAX_BLOCKS ? wanted : MAX_BLOCKS;
-};
+  const wanted: i32 = toI32((toI64(n) + toI64(BLOCK) - 1) / toI64(BLOCK))
+  return wanted < MAX_BLOCKS ? wanted : MAX_BLOCKS
+}
 
 /** Where block `k` of `blocks` over `n` elements starts; block `blocks` starts at `n`. */
-const reduceBlockStart = (n: i32, blocks: i32, k: i32): i32 => toI32((toI64(n) * toI64(k)) / toI64(blocks));
+const reduceBlockStart = (n: i32, blocks: i32, k: i32): i32 => toI32((toI64(n) * toI64(k)) / toI64(blocks))
 
 /** Folds blocks `[lo, hi)` of `src` into `partials`, one result per block: one thread's share of a reduce. */
 const reduceBlocks = <T>(
@@ -91,8 +91,8 @@ const reduceBlocks = <T>(
   lo: i32,
   hi: i32
 ): void => {
-  const n: i32 = toI32(src.length);
-  const blocks: i32 = toI32(partials.length);
+  const n: i32 = toI32(src.length)
+  const blocks: i32 = toI32(partials.length)
   for (let k: i32 = lo; k >= 0 && k < hi && k < blocks; k++) {
     const partial = reduceRange(
       src,
@@ -100,12 +100,12 @@ const reduceBlocks = <T>(
       identity,
       reduceBlockStart(n, blocks, k),
       reduceBlockStart(n, blocks, k + 1)
-    );
+    )
     if (k < toI32(partials.length)) {
-      partials[k] = partial;
+      partials[k] = partial
     }
   }
-};
+}
 
 /**
  * The panic of a map whose `dst` is shorter than its `src`. A function of its
@@ -114,8 +114,8 @@ const reduceBlocks = <T>(
  * and release, which is most of what a map over a few elements costs.
  */
 const dstTooShort = (have: i32, want: i32): void => {
-  panic(`parallelMapInto: dst has ${have} elements and src has ${want}`);
-};
+  panic(`parallelMapInto: dst has ${have} elements and src has ${want}`)
+}
 
 /**
  * `dst[i] = f(src[i])` for every index of `src`, on as many threads as the
@@ -123,12 +123,12 @@ const dstTooShort = (have: i32, want: i32): void => {
  * `src`, which is checked once, before any element is written.
  */
 export const parallelMapInto = <T, U>(src: T[], dst: U[], f: (x: T) => U): void => {
-  const n: i32 = toI32(src.length);
+  const n: i32 = toI32(src.length)
   if (toI32(dst.length) < n) {
-    dstTooShort(toI32(dst.length), n);
+    dstTooShort(toI32(dst.length), n)
   }
-  mapRange(src, dst, f, 0, n);
-};
+  mapRange(src, dst, f, 0, n)
+}
 
 /**
  * `f` folded over `src`, blockwise from `identity` and then left to right over
@@ -136,15 +136,15 @@ export const parallelMapInto = <T, U>(src: T[], dst: U[], f: (x: T) => U): void 
  * An empty `src` answers `identity`.
  */
 export const parallelReduce = <T>(src: T[], f: (acc: T, x: T) => T, identity: T): T => {
-  const blocks: i32 = reduceBlockCount(toI32(src.length));
+  const blocks: i32 = reduceBlockCount(toI32(src.length))
   if (blocks === 0) {
-    return identity;
+    return identity
   }
-  const partials = new Array<T>(blocks);
-  reduceBlocks(src, f, identity, partials, 0, blocks);
-  let acc = partials[0];
+  const partials = new Array<T>(blocks)
+  reduceBlocks(src, f, identity, partials, 0, blocks)
+  let acc = partials[0]
   for (let k: i32 = 1; k < toI32(partials.length); k++) {
-    acc = f(acc, partials[k]);
+    acc = f(acc, partials[k])
   }
-  return acc;
-};
+  return acc
+}

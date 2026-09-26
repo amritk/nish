@@ -43,14 +43,14 @@
 // stage0 does, for the input file and the command line, which is the half
 // stage0 was echoing anyway.
 
-import { CLI, VERSION } from "./branding";
-import { INTERNAL } from "./codes";
+import { CLI, VERSION } from "./branding"
+import { INTERNAL } from "./codes"
 
 /**
  * `EX_SOFTWARE` from `sysexits.h`, which is what stage0 exits with for an
  * internal error and what `docs/wp12-release.md` documents.
  */
-export const EXIT_INTERNAL: i32 = 70;
+export const EXIT_INTERNAL: i32 = 70
 
 /**
  * The variable stage0 reads for the stack behind an internal error. Named here
@@ -61,7 +61,7 @@ export const EXIT_INTERNAL: i32 = 70;
  * to print whether or not it is set — so the report says so once, rather than
  * branching on a variable to print two versions of the same "nothing here".
  */
-const ENV_DEBUG: string = "NISH_DEBUG";
+const ENV_DEBUG: string = "NISH_DEBUG"
 
 /**
  * The test hook for this report, stage0's `NISH_SIMULATE_ICE` carried over so
@@ -70,16 +70,16 @@ const ENV_DEBUG: string = "NISH_DEBUG";
  * `tests/run.js` asks for one through the environment instead. Not a user
  * feature: set and non-empty is all it reads, as stage0's truthiness test was.
  */
-const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE";
+const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE"
 
 /** Whether the run asked for a simulated internal error (`ENV_SIMULATE_ICE`). */
 export const simulatedInternalError = (): boolean => {
-  const value = getenv(ENV_SIMULATE_ICE);
-  return value !== null && value.length > 0;
-};
+  const value = getenv(ENV_SIMULATE_ICE)
+  return value !== null && value.length > 0
+}
 
 /** The sixteen digits a `\u00XX` escape spells a control character with. */
-const HEX_DIGITS: string = "0123456789abcdef";
+const HEX_DIGITS: string = "0123456789abcdef"
 
 /**
  * Report a broken compiler invariant and answer the exit status for it. Every
@@ -102,52 +102,54 @@ const HEX_DIGITS: string = "0123456789abcdef";
  */
 export const internalErrorFor = (message: string, json: boolean): i32 => {
   if (json) {
-    write('{"severity":"error","code":"');
-    write(INTERNAL);
-    write('","message":"internal compiler error: ');
-    let start = 0;
-    let i = 0;
+    write('{"severity":"error","code":"')
+    write(INTERNAL)
+    write('","message":"internal compiler error: ')
+    let start = 0
+    let i = 0
     while (i < message.length) {
-      const c = message.charCodeAt(i);
+      const c = message.charCodeAt(i)
       if (c === 34 || c === 92 || c < 32) {
         if (i > start) {
-          write(message.substring(start, i));
+          write(message.substring(start, i))
         }
         if (c === 34) {
-          write('\\"');
+          write('\\"')
         } else if (c === 92) {
-          write("\\\\");
+          write("\\\\")
         } else if (c === 8) {
-          write("\\b");
+          write("\\b")
         } else if (c === 9) {
-          write("\\t");
+          write("\\t")
         } else if (c === 10) {
-          write("\\n");
+          write("\\n")
         } else if (c === 12) {
-          write("\\f");
+          write("\\f")
         } else if (c === 13) {
-          write("\\r");
+          write("\\r")
         } else {
-          write("\\u00");
-          write(HEX_DIGITS.substring(c >> 4, (c >> 4) + 1));
-          write(HEX_DIGITS.substring(c & 15, (c & 15) + 1));
+          write("\\u00")
+          write(HEX_DIGITS.substring(c >> 4, (c >> 4) + 1))
+          write(HEX_DIGITS.substring(c & 15, (c & 15) + 1))
         }
-        start = i + 1;
+        start = i + 1
       }
-      i = i + 1;
+      i = i + 1
     }
     if (message.length > start) {
-      write(message.substring(start, message.length));
+      write(message.substring(start, message.length))
     }
-    write('"}\n');
+    write('"}\n')
   }
-  console.error(`${CLI} ${VERSION}: internal compiler error`);
-  console.error(`  ${message}`);
-  console.error(`  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`);
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
-  console.error("the command line at https://github.com/amritk/nish/issues");
-  return EXIT_INTERNAL;
-};
+  console.error(`${CLI} ${VERSION}: internal compiler error`)
+  console.error(`  ${message}`)
+  console.error(
+    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
+  )
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
+  console.error("the command line at https://github.com/amritk/nish/issues")
+  return EXIT_INTERNAL
+}
 
 /**
  * The same report for a caller with no command line to answer to. Its lines
@@ -157,10 +159,12 @@ export const internalErrorFor = (message: string, json: boolean): i32 => {
  * unnoticed.
  */
 export const internalError = (message: string): i32 => {
-  console.error(`${CLI} ${VERSION}: internal compiler error`);
-  console.error(`  ${message}`);
-  console.error(`  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`);
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
-  console.error("the command line at https://github.com/amritk/nish/issues");
-  return EXIT_INTERNAL;
-};
+  console.error(`${CLI} ${VERSION}: internal compiler error`)
+  console.error(`  ${message}`)
+  console.error(
+    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
+  )
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
+  console.error("the command line at https://github.com/amritk/nish/issues")
+  return EXIT_INTERNAL
+}

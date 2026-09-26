@@ -34,17 +34,21 @@
 // Handing over 25 MB measured 4.8 ms transferred against 29 ms cloned.
 
 /** The compiled module, set by the first `{ wasm }` message and kept. */
-let compiled = null;
+let compiled = null
 
 /** The single instance every batch runs on, and the exports we reach for. */
-let instance = null;
+let instance = null
 
 /** `WebAssembly.compile` the module once; every later batch reuses it. */
 const load = (source) => {
-  if (source instanceof WebAssembly.Module) { return source; }
-  if (typeof source === "string") { return WebAssembly.compileStreaming(fetch(source)); }
-  return WebAssembly.compile(source);
-};
+  if (source instanceof WebAssembly.Module) {
+    return source
+  }
+  if (typeof source === "string") {
+    return WebAssembly.compileStreaming(fetch(source))
+  }
+  return WebAssembly.compile(source)
+}
 
 // Views over linear memory, rebuilt only when `memory.grow` replaces the
 // backing `ArrayBuffer`. Taking a fresh `DataView` and `Uint8Array` per
@@ -52,19 +56,19 @@ const load = (source) => {
 // is the same lesson the copy-out path teaches: at this size the allocator, not
 // the copy, is the boundary. The identity check is the whole invalidation
 // strategy — a grown memory is a different `ArrayBuffer` object.
-let cachedBuffer = null;
-let cachedBytes = null;
-let cachedFields = null;
+let cachedBuffer = null
+let cachedBytes = null
+let cachedFields = null
 
 const views = (exports) => {
-  const buffer = exports.memory.buffer;
+  const buffer = exports.memory.buffer
   if (buffer !== cachedBuffer) {
-    cachedBuffer = buffer;
-    cachedBytes = new Uint8Array(buffer);
-    cachedFields = new DataView(buffer);
+    cachedBuffer = buffer
+    cachedBytes = new Uint8Array(buffer)
+    cachedFields = new DataView(buffer)
   }
-  return { bytes: cachedBytes, fields: cachedFields };
-};
+  return { bytes: cachedBytes, fields: cachedFields }
+}
 
 /**
  * Scan a batch of documents on one instance, answering one `i32` per document.
@@ -92,59 +96,67 @@ const views = (exports) => {
  * `cap` at 8, `data` at 16.
  */
 export const scanBatch = (exports, docs, mode = "validate") => {
-  const results = new Int32Array(docs.length);
+  const results = new Int32Array(docs.length)
   if (mode === "echo") {
-    for (let i = 0; i < docs.length; i++) { results[i] = docs[i].length; }
-    return results;
+    for (let i = 0; i < docs.length; i++) {
+      results[i] = docs[i].length
+    }
+    return results
   }
-  const entry = mode === "guard" ? exports.isJsonShaped : exports.scanJson;
-  if (docs.length === 0) { return results; }
+  const entry = mode === "guard" ? exports.isJsonShaped : exports.scanJson
+  if (docs.length === 0) {
+    return results
+  }
 
-  let widest = 0;
+  let widest = 0
   for (const doc of docs) {
-    if (doc.length > widest) { widest = doc.length; }
+    if (doc.length > widest) {
+      widest = doc.length
+    }
   }
 
-  const mark = exports.nish_arena_mark();
+  const mark = exports.nish_arena_mark()
   try {
-    const header = exports.nish_alloc_array(1n, BigInt(widest));
+    const header = exports.nish_alloc_array(1n, BigInt(widest))
     // Read the views only after the allocation: it is the call that can grow
     // linear memory, and a view taken before it would be detached — silently,
     // with `length` 0 and every read `undefined`, rather than throwing.
-    const { bytes, fields } = views(exports);
-    const data = fields.getUint32(header + 16, true);
+    const { bytes, fields } = views(exports)
+    const data = fields.getUint32(header + 16, true)
     for (let i = 0; i < docs.length; i++) {
-      const doc = docs[i];
+      const doc = docs[i]
       // `len` is an i64; write it as two i32s so that no `BigInt` is allocated
       // per document. A document longer than 4 GiB cannot exist in a wasm32
       // memory at all, so the high word is always zero.
-      fields.setUint32(header, doc.length, true);
-      fields.setUint32(header + 4, 0, true);
-      bytes.set(doc, data);
-      results[i] = entry(header);
+      fields.setUint32(header, doc.length, true)
+      fields.setUint32(header + 4, 0, true)
+      bytes.set(doc, data)
+      results[i] = entry(header)
     }
   } finally {
     // A trap inside the module leaves the arena wherever it stopped, so the
     // release belongs in a `finally` — otherwise one malformed document leaks
     // its bytes for the life of the worker, and linear memory never shrinks.
-    exports.nish_arena_release(mark);
+    exports.nish_arena_release(mark)
   }
-  return results;
-};
+  return results
+}
 
 /** Handle one message; `{ wasm }` loads the module, anything else is a batch. */
 export const handle = async (message) => {
   if (message.wasm !== undefined) {
-    compiled = await load(message.wasm);
-    instance = await WebAssembly.instantiate(compiled, {});
-    return { reply: { id: message.id, ready: true }, transfer: [] };
+    compiled = await load(message.wasm)
+    instance = await WebAssembly.instantiate(compiled, {})
+    return { reply: { id: message.id, ready: true }, transfer: [] }
   }
-  if (instance === null) { throw new Error("bytes-worker: send { wasm } before the first batch"); }
-  const results = scanBatch(instance.exports, message.docs, message.mode);
+  if (instance === null) {
+    throw new Error("bytes-worker: send { wasm } before the first batch")
+  }
+  const results = scanBatch(instance.exports, message.docs, message.mode)
   // Transfer the results back rather than cloning them: the caller is the only
   // reader and the buffer is ours to give away.
-  return { reply: { id: message.id, results }, transfer: [results.buffer] };
-};
+  return { reply: { id: message.id, results }, transfer: [results.buffer] }
+}
 
 // ---- The two host bindings ---------------------------------------------------
 // Same bridge as `web/worker.mjs`: a browser worker talks through `self`, a Node
@@ -152,13 +164,13 @@ export const handle = async (message) => {
 // `scanBatch` and `handle` stay callable without spawning anything.
 if (typeof self !== "undefined" && typeof self.postMessage === "function" && typeof window === "undefined") {
   self.onmessage = async (event) => {
-    const { reply, transfer } = await handle(event.data);
-    self.postMessage(reply, transfer);
-  };
+    const { reply, transfer } = await handle(event.data)
+    self.postMessage(reply, transfer)
+  }
 } else if (typeof process !== "undefined" && process.versions?.node) {
-  const { parentPort } = await import("node:worker_threads");
+  const { parentPort } = await import("node:worker_threads")
   parentPort?.on("message", async (message) => {
-    const { reply, transfer } = await handle(message);
-    parentPort.postMessage(reply, transfer);
-  });
+    const { reply, transfer } = await handle(message)
+    parentPort.postMessage(reply, transfer)
+  })
 }

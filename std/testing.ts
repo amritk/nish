@@ -70,7 +70,7 @@
  * of generated text, and a detail line forty thousand bytes long is not a
  * diagnostic — it is the output the reader was already searching by hand.
  */
-const TESTING_EXCERPT: i32 = 200;
+const TESTING_EXCERPT: i32 = 200
 
 /**
  * `text` when it is short enough to read, and its first `TESTING_EXCERPT` bytes
@@ -88,12 +88,12 @@ const TESTING_EXCERPT: i32 = 200;
  * exported").
  */
 const testingExcerpt = (text: string): string => {
-  const length: i32 = toI32(text.length);
+  const length: i32 = toI32(text.length)
   if (length <= TESTING_EXCERPT) {
-    return text;
+    return text
   }
-  return `${text.substring(0, TESTING_EXCERPT)}... (${length} bytes)`;
-};
+  return `${text.substring(0, TESTING_EXCERPT)}... (${length} bytes)`
+}
 
 /**
  * The index of the first line at which `actual` and `expected` differ, the
@@ -107,21 +107,21 @@ const testingExcerpt = (text: string): string => {
  * Ten lines is the cheaper half of that trade.
  */
 const testingFirstDifferentLine = (actual: string[], expected: string[]): i32 => {
-  const actualLength: i32 = toI32(actual.length);
-  const expectedLength: i32 = toI32(expected.length);
-  const shorter: i32 = actualLength < expectedLength ? actualLength : expectedLength;
-  let i: i32 = 0;
+  const actualLength: i32 = toI32(actual.length)
+  const expectedLength: i32 = toI32(expected.length)
+  const shorter: i32 = actualLength < expectedLength ? actualLength : expectedLength
+  let i: i32 = 0
   // Two bounds rather than `i < shorter`: they stop at the same index, and each
   // is what proves one of the two reads below in range, where the minimum of
   // the pair proves neither.
   while (i < actualLength && i < expectedLength) {
     if (actual[i] !== expected[i]) {
-      return i;
+      return i
     }
-    i += 1;
+    i += 1
   }
-  return actualLength === expectedLength ? -1 : shorter;
-};
+  return actualLength === expectedLength ? -1 : shorter
+}
 
 /**
  * One run of checks, and the tally it reports.
@@ -132,30 +132,30 @@ const testingFirstDifferentLine = (actual: string[], expected: string[]): i32 =>
  */
 export class Suite {
   /** Names the summary line, so several suites in one program stay apart. */
-  name: string;
+  name: string
   // These three have initializers because the constructor does not assign them,
   // and every field holds a value once it returns. `name` does not, and an
   // initializer there would only be a store the constructor overwrites.
-  passed: i32 = 0;
-  failed: i32 = 0;
-  skipped: i32 = 0;
+  passed: i32 = 0
+  failed: i32 = 0
+  skipped: i32 = 0
   /**
    * The names of the checks that failed, recapped by `done`. The detail of
    * each was printed when it happened; this is the list a reader wants after
    * a hundred lines of output have scrolled the failures off the screen.
    */
-  failures: string[];
+  failures: string[]
 
   constructor(name: string) {
-    this.name = name;
-    this.failures = [];
+    this.name = name
+    this.failures = []
   }
 
   /** Records a pass. Public because a program with a check of its own shape still wants the tally. */
   pass(name: string): boolean {
-    this.passed += 1;
-    console.log(`PASS  ${name}`);
-    return true;
+    this.passed += 1
+    console.log(`PASS  ${name}`)
+    return true
   }
 
   /**
@@ -164,13 +164,13 @@ export class Suite {
    * name already says everything wants.
    */
   fail(name: string, detail: string): boolean {
-    this.failed += 1;
-    this.failures.push(name);
-    console.log(`FAIL  ${name}`);
+    this.failed += 1
+    this.failures.push(name)
+    console.log(`FAIL  ${name}`)
     if (toI32(detail.length) > 0) {
-      console.log(`      ${detail}`);
+      console.log(`      ${detail}`)
     }
-    return false;
+    return false
   }
 
   /**
@@ -179,36 +179,36 @@ export class Suite {
    * decided to skip, the way `tests/run.js` decides when `llvm-as` is missing.
    */
   skip(name: string, reason: string): void {
-    this.skipped += 1;
-    console.log(`SKIP  ${name} (${reason})`);
+    this.skipped += 1
+    console.log(`SKIP  ${name} (${reason})`)
   }
 
   ok(name: string, condition: boolean): boolean {
     if (condition) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, "expected true, got false");
+    return this.fail(name, "expected true, got false")
   }
 
   eqBool(name: string, actual: boolean, expected: boolean): boolean {
     if (actual === expected) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected ${expected}, got ${actual}`);
+    return this.fail(name, `expected ${expected}, got ${actual}`)
   }
 
   eqI32(name: string, actual: i32, expected: i32): boolean {
     if (actual === expected) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected ${expected}, got ${actual}`);
+    return this.fail(name, `expected ${expected}, got ${actual}`)
   }
 
   eqI64(name: string, actual: i64, expected: i64): boolean {
     if (actual === expected) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected ${expected}, got ${actual}`);
+    return this.fail(name, `expected ${expected}, got ${actual}`)
   }
 
   /**
@@ -218,9 +218,9 @@ export class Suite {
    */
   eqF64(name: string, actual: f64, expected: f64): boolean {
     if (actual === expected) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected ${expected}, got ${actual}`);
+    return this.fail(name, `expected ${expected}, got ${actual}`)
   }
 
   /**
@@ -229,14 +229,14 @@ export class Suite {
    * belongs to the computation, not to the harness.
    */
   nearF64(name: string, actual: f64, expected: f64, tolerance: f64): boolean {
-    let delta: f64 = actual - expected;
+    let delta: f64 = actual - expected
     if (delta < 0) {
-      delta = -delta;
+      delta = -delta
     }
     if (delta <= tolerance) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected ${expected} +/- ${tolerance}, got ${actual}`);
+    return this.fail(name, `expected ${expected} +/- ${tolerance}, got ${actual}`)
   }
 
   /**
@@ -246,9 +246,9 @@ export class Suite {
    */
   eqStr(name: string, actual: string, expected: string): boolean {
     if (actual === expected) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected "${expected}", got "${actual}"`);
+    return this.fail(name, `expected "${expected}", got "${actual}"`)
   }
 
   /**
@@ -264,9 +264,9 @@ export class Suite {
    */
   contains(name: string, haystack: string, needle: string): boolean {
     if (toI32(haystack.indexOf(needle)) >= 0) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    return this.fail(name, `expected to contain "${needle}", got "${testingExcerpt(haystack)}"`);
+    return this.fail(name, `expected to contain "${needle}", got "${testingExcerpt(haystack)}"`)
   }
 
   /**
@@ -281,30 +281,30 @@ export class Suite {
    * the one a reader fixes first.
    */
   containsAll(name: string, haystack: string, needles: string[]): boolean {
-    let looked: i32 = 0;
-    let missing: i32 = 0;
-    let first = "";
+    let looked: i32 = 0
+    let missing: i32 = 0
+    let first = ""
     for (const needle of needles) {
       if (toI32(needle.length) === 0) {
-        continue;
+        continue
       }
-      looked += 1;
+      looked += 1
       if (toI32(haystack.indexOf(needle)) < 0) {
-        missing += 1;
+        missing += 1
         if (toI32(first.length) === 0) {
-          first = needle;
+          first = needle
         }
       }
     }
     if (missing === 0) {
-      return this.pass(name);
+      return this.pass(name)
     }
     if (missing === 1) {
-      return this.fail(name, `missing "${first}"`);
+      return this.fail(name, `missing "${first}"`)
     }
     // `looked` and not `needles.length`, because the blank lines this ignored are
     // not fragments anybody expected to find.
-    return this.fail(name, `missing ${missing} of ${looked}, first "${first}"`);
+    return this.fail(name, `missing ${missing} of ${looked}, first "${first}"`)
   }
 
   /**
@@ -319,13 +319,13 @@ export class Suite {
    * one an editor takes.
    */
   eqLines(name: string, actual: string[], expected: string[]): boolean {
-    const at: i32 = testingFirstDifferentLine(actual, expected);
+    const at: i32 = testingFirstDifferentLine(actual, expected)
     if (at < 0) {
-      return this.pass(name);
+      return this.pass(name)
     }
-    const wanted = at < toI32(expected.length) ? `"${expected[at]}"` : "<end of input>";
-    const saw = at < toI32(actual.length) ? `"${actual[at]}"` : "<end of input>";
-    return this.fail(name, `line ${at + 1}: expected ${wanted}, got ${saw}`);
+    const wanted = at < toI32(expected.length) ? `"${expected[at]}"` : "<end of input>"
+    const saw = at < toI32(actual.length) ? `"${actual[at]}"` : "<end of input>"
+    return this.fail(name, `line ${at + 1}: expected ${wanted}, got ${saw}`)
   }
 
   /**
@@ -336,12 +336,12 @@ export class Suite {
    */
   done(): i32 {
     if (toI32(this.failures.length) > 0) {
-      console.log(`failed: ${this.failures.join(", ")}`);
+      console.log(`failed: ${this.failures.join(", ")}`)
     }
-    console.log(`${this.name}: ${this.passed} passed, ${this.failed} failed, ${this.skipped} skipped`);
+    console.log(`${this.name}: ${this.passed} passed, ${this.failed} failed, ${this.skipped} skipped`)
     if (this.failed > 0) {
-      return 1;
+      return 1
     }
-    return 0;
+    return 0
   }
 }

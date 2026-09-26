@@ -27,10 +27,10 @@
  * immutable, so its length cannot change underneath the local.
  */
 
-const NEWLINE: i32 = 10;
-const CARRIAGE_RETURN: i32 = 13;
-const SPACE: i32 = 32;
-const TAB: i32 = 9;
+const NEWLINE: i32 = 10
+const CARRIAGE_RETURN: i32 = 13
+const SPACE: i32 = 32
+const TAB: i32 = 9
 
 /**
  * Whether `code` is one of the four ASCII bytes this module treats as blank.
@@ -42,7 +42,7 @@ const TAB: i32 = 9;
  * makes the collision unlikely instead.
  */
 const isTextBlankByte = (code: i32): boolean =>
-  code === SPACE || code === TAB || code === NEWLINE || code === CARRIAGE_RETURN;
+  code === SPACE || code === TAB || code === NEWLINE || code === CARRIAGE_RETURN
 
 /**
  * The lines of `text`, without their terminators.
@@ -55,10 +55,10 @@ const isTextBlankByte = (code: i32): boolean =>
  * `trimEnd` each line.
  */
 export const splitLines = (text: string): string[] => {
-  const length: i32 = toI32(text.length);
-  const lines: string[] = [];
-  let start: i32 = 0;
-  let i: i32 = 0;
+  const length: i32 = toI32(text.length)
+  const lines: string[] = []
+  let start: i32 = 0
+  let i: i32 = 0
   while (i < length) {
     if (toI32(text.charCodeAt(i)) === NEWLINE) {
       // `start` is never negative and never passes `i`, which is below
@@ -66,17 +66,17 @@ export const splitLines = (text: string): string[] => {
       // proves `start` within `text`: the clamp on that bound is dead once it
       // is proven, and the emitter drops it.
       if (start >= 0 && start < length) {
-        lines.push(text.substring(start, i));
+        lines.push(text.substring(start, i))
       }
-      start = i + 1;
+      start = i + 1
     }
-    i += 1;
+    i += 1
   }
   if (start < length) {
-    lines.push(text.substring(start, length));
+    lines.push(text.substring(start, length))
   }
-  return lines;
-};
+  return lines
+}
 
 /**
  * The runs of non-blank bytes in `text`, with every blank run as the separator.
@@ -85,57 +85,57 @@ export const splitLines = (text: string): string[] => {
  * `split(text, " ")`, which would.
  */
 export const splitWhitespace = (text: string): string[] => {
-  const length: i32 = toI32(text.length);
-  const parts: string[] = [];
-  let start: i32 = -1;
-  let i: i32 = 0;
+  const length: i32 = toI32(text.length)
+  const parts: string[] = []
+  let start: i32 = -1
+  let i: i32 = 0
   while (i < length) {
     if (isTextBlankByte(toI32(text.charCodeAt(i)))) {
       // `start` is `-1` or a byte already passed, so the second half always
       // holds when the first does; it proves the bound, as in `splitLines`.
       if (start >= 0 && start < length) {
-        parts.push(text.substring(start, i));
-        start = -1;
+        parts.push(text.substring(start, i))
+        start = -1
       }
     } else if (start < 0) {
-      start = i;
+      start = i
     }
-    i += 1;
+    i += 1
   }
   if (start >= 0) {
-    parts.push(text.substring(start, length));
+    parts.push(text.substring(start, length))
   }
-  return parts;
-};
+  return parts
+}
 
 /** `text` without its leading blank bytes. */
 export const trimStart = (text: string): string => {
-  const length: i32 = toI32(text.length);
-  let i: i32 = 0;
+  const length: i32 = toI32(text.length)
+  let i: i32 = 0
   while (i < length && isTextBlankByte(toI32(text.charCodeAt(i)))) {
-    i += 1;
+    i += 1
   }
-  return text.substring(i, length);
-};
+  return text.substring(i, length)
+}
 
 /** `text` without its trailing blank bytes. */
 export const trimEnd = (text: string): string => {
-  let end: i32 = toI32(text.length);
+  let end: i32 = toI32(text.length)
   while (end > 0 && isTextBlankByte(toI32(text.charCodeAt(end - 1)))) {
-    end -= 1;
+    end -= 1
   }
-  return text.substring(0, end);
-};
+  return text.substring(0, end)
+}
 
 /** `text` without blank bytes at either end. */
-export const trim = (text: string): string => trimEnd(trimStart(text));
+export const trim = (text: string): string => trimEnd(trimStart(text))
 
 /**
  * Whether `needle` occurs anywhere in `haystack`. One `indexOf`, named, because
  * `indexOf(...) >= 0` at a call site reads as arithmetic where the question is a
  * yes or a no. `contains(s, "")` is `true`, as `indexOf("")` is `0`.
  */
-export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0;
+export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0
 
 /**
  * `text` with every occurrence of `needle` replaced by `replacement`.
@@ -149,25 +149,25 @@ export const contains = (haystack: string, needle: string): boolean => toI32(hay
  * choice about how many empty matches a string contains.
  */
 export const replaceAll = (text: string, needle: string, replacement: string): string => {
-  const needleLength: i32 = toI32(needle.length);
+  const needleLength: i32 = toI32(needle.length)
   if (needleLength === 0) {
-    return text;
+    return text
   }
-  const parts: string[] = [];
-  let rest = text;
+  const parts: string[] = []
+  let rest = text
   while (true) {
-    const at: i32 = toI32(rest.indexOf(needle));
+    const at: i32 = toI32(rest.indexOf(needle))
     // `indexOf` never answers past `rest.length`, so the second half never
     // holds; it is written because its negation is what proves `at` within
     // `rest` for the `substring` below, as in `splitLines`.
     if (at < 0 || at > toI32(rest.length)) {
-      parts.push(rest);
-      return parts.join(replacement);
+      parts.push(rest)
+      return parts.join(replacement)
     }
-    parts.push(rest.substring(0, at));
-    rest = rest.substring(at + needleLength, toI32(rest.length));
+    parts.push(rest.substring(0, at))
+    rest = rest.substring(at + needleLength, toI32(rest.length))
   }
-};
+}
 
 /**
  * The index of the first line at which `left` and `right` differ, or `-1` when
@@ -177,17 +177,17 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
  * not a diagnostic.
  */
 export const firstDifference = (left: string[], right: string[]): i32 => {
-  const leftLength: i32 = toI32(left.length);
-  const rightLength: i32 = toI32(right.length);
-  let i: i32 = 0;
+  const leftLength: i32 = toI32(left.length)
+  const rightLength: i32 = toI32(right.length)
+  let i: i32 = 0
   // Two tests rather than one against the shorter length: each proves `i`
   // within one of the arrays, and a minimum taken with a ternary proves
   // neither. The loop ends with `i` at the shorter length.
   while (i < leftLength && i < rightLength) {
     if (left[i] !== right[i]) {
-      return i;
+      return i
     }
-    i += 1;
+    i += 1
   }
-  return leftLength === rightLength ? -1 : i;
-};
+  return leftLength === rightLength ? -1 : i
+}

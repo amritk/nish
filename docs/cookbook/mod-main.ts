@@ -1,3 +1,3 @@
-import { square } from "./mod-math";
+import { square } from "./mod-math"
 
-export const main = (): number => square(7);
+export const main = (): number => square(7)

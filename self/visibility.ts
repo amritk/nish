@@ -37,8 +37,8 @@
 // the open-world answer: a new output mode is open until it is added here with
 // the reason it is closed.
 
-import { Options } from "./options";
-import { CheckedProgram } from "./program";
+import { Options } from "./options"
+import { CheckedProgram } from "./program"
 
 /**
  * The part of a build `hostVisible` reads, worked out once per compilation from
@@ -47,12 +47,12 @@ import { CheckedProgram } from "./program";
  */
 export class BuildMode {
   /** Every call into the program is one the compiler sees (the module header's list). */
-  closedWorld: boolean;
+  closedWorld: boolean
   /**
    * `--no-strict-exports` gives every function external linkage, so in an open
    * build a host can call a function nobody exported.
    */
-  everySymbolPublic: boolean;
+  everySymbolPublic: boolean
   /**
    * Some code this compiler did not write is handed the program's class
    * layouts, whatever `export` says: a header lists every class's C struct, a
@@ -61,29 +61,29 @@ export class BuildMode {
    * layout decision that is only this program's to make (`self/inline-arrays.ts`)
    * keeps the declared layout in such a build, for every class.
    */
-  layoutsShared: boolean;
+  layoutsShared: boolean
 
   constructor(closedWorld: boolean, everySymbolPublic: boolean, layoutsShared: boolean) {
-    this.closedWorld = closedWorld;
-    this.everySymbolPublic = everySymbolPublic;
-    this.layoutsShared = layoutsShared;
+    this.closedWorld = closedWorld
+    this.everySymbolPublic = everySymbolPublic
+    this.layoutsShared = layoutsShared
   }
 }
 
 /** A wasm triple: the module is instantiated by a host, which calls its exports. */
-const wasmTarget = (target: string): boolean => target.startsWith("wasm");
+const wasmTarget = (target: string): boolean => target.startsWith("wasm")
 
 /** Whether any module of the program declares a C function. */
 const declaresForeign = (programs: CheckedProgram[]): boolean => {
   for (const program of programs) {
     for (const sig of program.functions) {
       if (sig.foreign()) {
-        return true;
+        return true
       }
     }
   }
-  return false;
-};
+  return false
+}
 
 /** The build `opts` describes, for a program made of `programs`. */
 export const buildModeOf = (opts: Options, programs: CheckedProgram[]): BuildMode => {
@@ -91,12 +91,12 @@ export const buildModeOf = (opts: Options, programs: CheckedProgram[]): BuildMod
     opts.emitHeader.length > 0 ||
     opts.emitDts.length > 0 ||
     opts.emitNapi.length > 0 ||
-    opts.emitNapiAsync.length > 0;
-  const foreign = declaresForeign(programs);
-  const wasm = opts.profile === "wasi" || wasmTarget(opts.target);
-  const closed = opts.link.length > 0 && !wasm && !sidecar && !foreign;
-  return new BuildMode(closed, !opts.strictExports, sidecar || foreign || wasm);
-};
+    opts.emitNapiAsync.length > 0
+  const foreign = declaresForeign(programs)
+  const wasm = opts.profile === "wasi" || wasmTarget(opts.target)
+  const closed = opts.link.length > 0 && !wasm && !sidecar && !foreign
+  return new BuildMode(closed, !opts.strictExports, sidecar || foreign || wasm)
+}
 
 /**
  * Whether code this compiler did not see may call a declaration, or see its
@@ -107,4 +107,4 @@ export const buildModeOf = (opts: Options, programs: CheckedProgram[]): BuildMod
  * asks the same question.
  */
 export const hostVisible = (mode: BuildMode, exported: boolean, isEntry: boolean): boolean =>
-  isEntry || (!mode.closedWorld && (exported || mode.everySymbolPublic));
+  isEntry || (!mode.closedWorld && (exported || mode.everySymbolPublic))

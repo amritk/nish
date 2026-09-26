@@ -1,7 +1,7 @@
 const total = (xs: number[]): number => {
-  let sum = 0;
+  let sum = 0
   for (const x of xs) {
-    sum += x;
+    sum += x
   }
-  return sum;
-};
+  return sum
+}

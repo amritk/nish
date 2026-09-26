@@ -22,41 +22,41 @@
  * say so when none was installed; two packages claiming one command name would
  * leave which binary wins up to npm's link order.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { targetForAsset } from "../bin/packaging.js";
+import fs from "node:fs"
+import path from "node:path"
+import { targetForAsset } from "../bin/packaging.js"
 
-const args = process.argv.slice(2);
+const args = process.argv.slice(2)
 const flag = (name) => {
-  const i = args.indexOf(name);
-  return i < 0 ? null : args[i + 1];
-};
-const positional = args.filter((a, i) => !a.startsWith("--") && !(args[i - 1] ?? "").startsWith("--"));
-const [stageDir, asset] = positional;
+  const i = args.indexOf(name)
+  return i < 0 ? null : args[i + 1]
+}
+const positional = args.filter((a, i) => !a.startsWith("--") && !(args[i - 1] ?? "").startsWith("--"))
+const [stageDir, asset] = positional
 
 if (stageDir === undefined || asset === undefined) {
-  console.error("usage: platform-package.mjs <stage-dir> <asset> [--version <v>]");
-  process.exit(2);
+  console.error("usage: platform-package.mjs <stage-dir> <asset> [--version <v>]")
+  process.exit(2)
 }
 
-const root = path.resolve(import.meta.dirname, "..");
-const main = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-const version = flag("--version") ?? main.version;
+const root = path.resolve(import.meta.dirname, "..")
+const main = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
+const version = flag("--version") ?? main.version
 
-const target = targetForAsset(asset);
+const target = targetForAsset(asset)
 if (target === null) {
-  console.error(`platform-package.mjs: ${asset} is not a platform this project builds for`);
-  process.exit(1);
+  console.error(`platform-package.mjs: ${asset} is not a platform this project builds for`)
+  process.exit(1)
 }
 
-const binary = path.join(stageDir, "bin", "nish");
+const binary = path.join(stageDir, "bin", "nish")
 if (!fs.existsSync(binary)) {
-  console.error(`platform-package.mjs: ${binary} does not exist; stage the binary before packaging it`);
-  process.exit(1);
+  console.error(`platform-package.mjs: ${binary} does not exist; stage the binary before packaging it`)
+  process.exit(1)
 }
 
-const pretty = { linux: "Linux", darwin: "macOS" }[target.os] ?? target.os;
-const chip = { x64: "x86_64", arm64: "ARM64" }[target.cpu] ?? target.cpu;
+const pretty = { linux: "Linux", darwin: "macOS" }[target.os] ?? target.os
+const chip = { x64: "x86_64", arm64: "ARM64" }[target.cpu] ?? target.cpu
 
 const manifest = {
   name: `${main.name}-${asset}`,
@@ -84,8 +84,8 @@ const manifest = {
   repository: main.repository,
   bugs: main.bugs,
   homepage: main.homepage,
-};
+}
 
-const out = path.join(stageDir, "package.json");
-fs.writeFileSync(out, `${JSON.stringify(manifest, null, 2)}\n`);
-console.log(`${manifest.name}@${version} (os ${target.os}, cpu ${target.cpu}) -> ${out}`);
+const out = path.join(stageDir, "package.json")
+fs.writeFileSync(out, `${JSON.stringify(manifest, null, 2)}\n`)
+console.log(`${manifest.name}@${version} (os ${target.os}, cpu ${target.cpu}) -> ${out}`)

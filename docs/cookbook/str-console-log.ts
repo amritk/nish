@@ -1,5 +1,5 @@
 const report = (): void => {
-  console.log("text");
-  console.log(7);
-  console.log(false);
-};
+  console.log("text")
+  console.log(7)
+  console.log(false)
+}

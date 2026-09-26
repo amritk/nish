@@ -1,15 +1,15 @@
 const sum = (xs: readonly number[]): number => {
-  let total = 0;
+  let total = 0
   for (const x of xs) {
-    total = total + x;
+    total = total + x
   }
-  return total;
-};
+  return total
+}
 
 const sumMutable = (xs: number[]): number => {
-  let total = 0;
+  let total = 0
   for (const x of xs) {
-    total = total + x;
+    total = total + x
   }
-  return total;
-};
+  return total
+}

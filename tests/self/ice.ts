@@ -7,8 +7,8 @@
 // `process.exit(internalError(...))` site in `self/` prints, and exit 70,
 // which is the code `docs/wp12-release.md` gives internal errors and the one
 // `NISH_SIMULATE_ICE` provokes in the compiler itself.
-import { internalError } from "../../self/ice";
+import { internalError } from "../../self/ice"
 
 export const main = (): number => {
-  process.exit(internalError("emitter: no callee recorded for `f`"));
-};
+  process.exit(internalError("emitter: no callee recorded for `f`"))
+}

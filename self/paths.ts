@@ -10,12 +10,12 @@
 // POSIX only: `self/` is built and tested on Linux and macOS, and a backslash
 // is an ordinary character in a file name on both.
 
-import { splitByte, StringBuilder } from "./strings";
+import { splitByte, StringBuilder } from "./strings"
 
-const SLASH: i32 = 47; // '/'
-const DOT: i32 = 46; // '.'
+const SLASH: i32 = 47 // '/'
+const DOT: i32 = 46 // '.'
 
-const isAbsolutePath = (p: string): boolean => p.length > 0 && p.charCodeAt(0) === SLASH;
+const isAbsolutePath = (p: string): boolean => p.length > 0 && p.charCodeAt(0) === SLASH
 
 /**
  * `p` split on `/` with the empty pieces dropped, so `//a//b/` gives
@@ -23,20 +23,21 @@ const isAbsolutePath = (p: string): boolean => p.length > 0 && p.charCodeAt(0) =
  * off a leading empty segment.
  */
 const splitSegments = (p: string): string[] => {
-  const parts: string[] = [];
+  const parts: string[] = []
   for (const part of splitByte(p, SLASH)) {
     if (part.length > 0) {
-      parts.push(part);
+      parts.push(part)
     }
   }
-  return parts;
-};
+  return parts
+}
 
 /** Whether `segment` is exactly `..`. */
-const isParent = (segment: string): boolean => segment.length === 2 && segment.charCodeAt(0) === DOT && segment.charCodeAt(1) === DOT;
+const isParent = (segment: string): boolean =>
+  segment.length === 2 && segment.charCodeAt(0) === DOT && segment.charCodeAt(1) === DOT
 
 /** Whether `segment` is exactly `.`. */
-const isHere = (segment: string): boolean => segment.length === 1 && segment.charCodeAt(0) === DOT;
+const isHere = (segment: string): boolean => segment.length === 1 && segment.charCodeAt(0) === DOT
 
 /**
  * `path.posix.normalize` for a path with no trailing slash to preserve:
@@ -46,28 +47,28 @@ const isHere = (segment: string): boolean => segment.length === 1 && segment.cha
  * `.` when not, as Node's is.
  */
 export const normalizePath = (p: string): string => {
-  const absolute = isAbsolutePath(p);
-  const out: string[] = [];
+  const absolute = isAbsolutePath(p)
+  const out: string[] = []
   for (const segment of splitSegments(p)) {
     if (isHere(segment)) {
-      continue;
+      continue
     }
     if (!isParent(segment)) {
-      out.push(segment);
-      continue;
+      out.push(segment)
+      continue
     }
     if (out.length > 0 && !isParent(out[out.length - 1])) {
-      out.pop();
+      out.pop()
     } else if (!absolute) {
-      out.push(segment);
+      out.push(segment)
     }
   }
-  const joined = out.join("/");
+  const joined = out.join("/")
   if (absolute) {
-    return `/${joined}`;
+    return `/${joined}`
   }
-  return joined.length === 0 ? "." : joined;
-};
+  return joined.length === 0 ? "." : joined
+}
 
 /**
  * `path.posix.resolve(base, spec)` for an already-resolved `base`: an
@@ -81,13 +82,13 @@ export const normalizePath = (p: string): string => {
  */
 export const resolvePath = (base: string, spec: string): string => {
   if (isAbsolutePath(spec)) {
-    return normalizePath(spec);
+    return normalizePath(spec)
   }
   if (base.length === 0) {
-    return normalizePath(spec);
+    return normalizePath(spec)
   }
-  return normalizePath(`${base}/${spec}`);
-};
+  return normalizePath(`${base}/${spec}`)
+}
 
 /**
  * `path.posix.dirname`: trailing slashes ignored, then everything before the
@@ -99,45 +100,45 @@ export const resolvePath = (base: string, spec: string): string => {
  * goes through `normalizePath` anyway.
  */
 export const dirname = (p: string): string => {
-  const absolute = isAbsolutePath(p);
-  let end = p.length;
+  const absolute = isAbsolutePath(p)
+  let end = p.length
   while (end > 0 && p.charCodeAt(end - 1) === SLASH) {
-    end = end - 1;
+    end = end - 1
   }
-  let cut = -1;
-  let i = end - 1;
+  let cut = -1
+  let i = end - 1
   while (i >= 0) {
     if (p.charCodeAt(i) === SLASH) {
-      cut = i;
-      i = -1;
+      cut = i
+      i = -1
     } else {
-      i = i - 1;
+      i = i - 1
     }
   }
   if (cut < 0) {
-    return absolute ? "/" : ".";
+    return absolute ? "/" : "."
   }
-  return cut === 0 ? "/" : p.substring(0, cut);
-};
+  return cut === 0 ? "/" : p.substring(0, cut)
+}
 
 /** `path.posix.basename`: everything after the last `/`, trailing slashes ignored. */
 export const basename = (p: string): string => {
-  let end = p.length;
+  let end = p.length
   while (end > 0 && p.charCodeAt(end - 1) === SLASH) {
-    end = end - 1;
+    end = end - 1
   }
-  let start = 0;
-  let i = end - 1;
+  let start = 0
+  let i = end - 1
   while (i >= 0) {
     if (p.charCodeAt(i) === SLASH) {
-      start = i + 1;
-      i = -1;
+      start = i + 1
+      i = -1
     } else {
-      i = i - 1;
+      i = i - 1
     }
   }
-  return p.substring(start, end);
-};
+  return p.substring(start, end)
+}
 
 /**
  * `basename(p)` without `suffix`, when it ends with it and something is left.
@@ -150,12 +151,12 @@ export const basename = (p: string): string => {
  * keeps it.
  */
 export const basenameWithout = (p: string, suffix: string): string => {
-  const name = basename(p);
+  const name = basename(p)
   if (suffix.length > 0 && suffix.length < name.length && name.endsWith(suffix)) {
-    return name.substring(0, name.length - suffix.length);
+    return name.substring(0, name.length - suffix.length)
   }
-  return name;
-};
+  return name
+}
 
 /**
  * The file a module specifier names: `./x` and `./x.js` both mean `x.ts`,
@@ -163,15 +164,15 @@ export const basenameWithout = (p: string, suffix: string): string => {
  * out. The result is the module's identity, so it goes through `resolvePath`.
  */
 export const resolveModule = (importerDir: string, specifier: string): string => {
-  const resolved = resolvePath(importerDir, specifier);
+  const resolved = resolvePath(importerDir, specifier)
   if (resolved.endsWith(".js")) {
-    return `${resolved.substring(0, resolved.length - 3)}.ts`;
+    return `${resolved.substring(0, resolved.length - 3)}.ts`
   }
   if (resolved.endsWith(".ts")) {
-    return resolved;
+    return resolved
   }
-  return `${resolved}.ts`;
-};
+  return `${resolved}.ts`
+}
 
 /**
  * `path.posix.relative(from, to)` for two paths **rooted at the same base**:
@@ -187,50 +188,50 @@ export const resolveModule = (importerDir: string, specifier: string): string =>
  * `to` follows.
  */
 export const relativePath = (from: string, to: string): string => {
-  const fromParts = pathSegments(normalizePath(from));
-  const toParts = pathSegments(normalizePath(to));
-  let common = 0;
+  const fromParts = pathSegments(normalizePath(from))
+  const toParts = pathSegments(normalizePath(to))
+  let common = 0
   while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
-    common = common + 1;
+    common = common + 1
   }
-  const out: string[] = [];
-  let i = common;
+  const out: string[] = []
+  let i = common
   while (i < fromParts.length) {
-    out.push("..");
-    i = i + 1;
+    out.push("..")
+    i = i + 1
   }
-  i = common;
+  i = common
   while (i < toParts.length) {
-    out.push(toParts[i]);
-    i = i + 1;
+    out.push(toParts[i])
+    i = i + 1
   }
-  return out.join("/");
-};
+  return out.join("/")
+}
 
 /** The meaningful segments of a normalised path: no empties, no bare `.`. */
 const pathSegments = (p: string): string[] => {
-  const out: string[] = [];
+  const out: string[] = []
   for (const part of splitByte(p, SLASH)) {
     if (part.length > 0 && part !== ".") {
-      out.push(part);
+      out.push(part)
     }
   }
-  return out;
-};
+  return out
+}
 
 /** `parts` joined with `/` and normalised, for building a path in pieces. */
 export const joinPath = (parts: string[]): string => {
-  const out = new StringBuilder();
-  let first = true;
+  const out = new StringBuilder()
+  let first = true
   for (const part of parts) {
     if (part.length === 0) {
-      continue;
+      continue
     }
     if (!first) {
-      out.add("/");
+      out.add("/")
     }
-    out.add(part);
-    first = false;
+    out.add(part)
+    first = false
   }
-  return out.isEmpty() ? "." : normalizePath(out.toText());
-};
+  return out.isEmpty() ? "." : normalizePath(out.toText())
+}
