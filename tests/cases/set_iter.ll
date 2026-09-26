@@ -86,10 +86,9 @@ walk.body:
   br label %walk.inc
 
 walk.inc:
-  %17 = load i32, i32* %walk.idx, align 4
-  %18 = add i32 %17, 1
-  %19 = call i32 @nish.Set$str.walkNext(%struct.Set$str* %11, i32 %18)
-  store i32 %19, i32* %walk.idx, align 4
+  %17 = add i32 %13, 1
+  %18 = call i32 @nish.Set$str.walkNext(%struct.Set$str* %11, i32 %17)
+  store i32 %18, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:

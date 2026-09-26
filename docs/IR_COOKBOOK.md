@@ -2775,16 +2775,15 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %10 = load i32, i32* %walk.idx, align 4
-  %11 = add i32 %10, 1
-  %12 = call i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* %m, i32 %11)
-  store i32 %12, i32* %walk.idx, align 4
+  %10 = add i32 %1, 1
+  %11 = call i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* %m, i32 %10)
+  store i32 %11, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$i32$i32.walkClose(%struct.Map$i32$i32* %m)
-  %13 = load i32, i32* %sum.addr, align 4
-  ret i32 %13
+  %12 = load i32, i32* %sum.addr, align 4
+  ret i32 %12
 }
 
 define internal noundef i32 @nish.nextLive(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, i32 noundef %from) #1 {

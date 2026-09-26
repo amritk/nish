@@ -134,45 +134,43 @@ walk.body:
   br label %walk.inc
 
 walk.inc:
-  %9 = load i32, i32* %walk.idx, align 4
-  %10 = add i32 %9, 1
-  %11 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %1, i32 %10)
-  store i32 %11, i32* %walk.idx, align 4
+  %9 = add i32 %3, 1
+  %10 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %1, i32 %9)
+  store i32 %10, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %1)
-  %12 = getelementptr inbounds %struct.Bag$f64, %struct.Bag$f64* %this, i32 0, i32 0
-  %13 = load %struct.Map$f64$f64*, %struct.Map$f64$f64** %12, align 8, !tbaa !4
-  call void @nish.Map$f64$f64.walkOpen(%struct.Map$f64$f64* %13)
-  %14 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %13, i32 0)
-  store i32 %14, i32* %walk.idx.1, align 4
+  %11 = getelementptr inbounds %struct.Bag$f64, %struct.Bag$f64* %this, i32 0, i32 0
+  %12 = load %struct.Map$f64$f64*, %struct.Map$f64$f64** %11, align 8, !tbaa !4
+  call void @nish.Map$f64$f64.walkOpen(%struct.Map$f64$f64* %12)
+  %13 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %12, i32 0)
+  store i32 %13, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.cond.1:
-  %15 = load i32, i32* %walk.idx.1, align 4
-  %16 = icmp sge i32 %15, 0
-  br i1 %16, label %walk.body.1, label %walk.end.1
+  %14 = load i32, i32* %walk.idx.1, align 4
+  %15 = icmp sge i32 %14, 0
+  br i1 %15, label %walk.body.1, label %walk.end.1
 
 walk.body.1:
-  %17 = call double @nish.Map$f64$f64.keyAt(%struct.Map$f64$f64* %13, i32 %15)
-  store double %17, double* %k.addr, align 8
-  %18 = load double, double* %t.addr, align 8
-  %19 = fadd double %18, 0x3FF0000000000000
-  store double %19, double* %t.addr, align 8
+  %16 = call double @nish.Map$f64$f64.keyAt(%struct.Map$f64$f64* %12, i32 %14)
+  store double %16, double* %k.addr, align 8
+  %17 = load double, double* %t.addr, align 8
+  %18 = fadd double %17, 0x3FF0000000000000
+  store double %18, double* %t.addr, align 8
   br label %walk.inc.1
 
 walk.inc.1:
-  %20 = load i32, i32* %walk.idx.1, align 4
-  %21 = add i32 %20, 1
-  %22 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %13, i32 %21)
-  store i32 %22, i32* %walk.idx.1, align 4
+  %19 = add i32 %14, 1
+  %20 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %12, i32 %19)
+  store i32 %20, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.end.1:
-  call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %13)
-  %23 = load double, double* %t.addr, align 8
-  ret double %23
+  call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %12)
+  %21 = load double, double* %t.addr, align 8
+  ret double %21
 }
 
 define internal noundef double @count$str(%struct.Set$str* noundef nonnull align 8 dereferenceable(48) nocapture %s) #0 {
@@ -200,16 +198,15 @@ walk.body:
   br label %walk.inc
 
 walk.inc:
-  %6 = load i32, i32* %walk.idx, align 4
-  %7 = add i32 %6, 1
-  %8 = call i32 @nish.Set$str.walkNext(%struct.Set$str* %s, i32 %7)
-  store i32 %8, i32* %walk.idx, align 4
+  %6 = add i32 %1, 1
+  %7 = call i32 @nish.Set$str.walkNext(%struct.Set$str* %s, i32 %6)
+  store i32 %7, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Set$str.walkClose(%struct.Set$str* %s)
-  %9 = load double, double* %n.addr, align 8
-  ret double %9
+  %8 = load double, double* %n.addr, align 8
+  ret double %8
 }
 
 define internal noundef double @count$f64(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %s) #0 {
@@ -237,16 +234,15 @@ walk.body:
   br label %walk.inc
 
 walk.inc:
-  %6 = load i32, i32* %walk.idx, align 4
-  %7 = add i32 %6, 1
-  %8 = call i32 @nish.Set$f64.walkNext(%struct.Set$f64* %s, i32 %7)
-  store i32 %8, i32* %walk.idx, align 4
+  %6 = add i32 %1, 1
+  %7 = call i32 @nish.Set$f64.walkNext(%struct.Set$f64* %s, i32 %6)
+  store i32 %7, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Set$f64.walkClose(%struct.Set$f64* %s)
-  %9 = load double, double* %n.addr, align 8
-  ret double %9
+  %8 = load double, double* %n.addr, align 8
+  ret double %8
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {

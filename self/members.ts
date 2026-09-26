@@ -14,6 +14,7 @@ import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builti
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
 import { internalErrorFor } from "./ice";
+import { unwrapParens } from "./emit_util";
 import {
   checkGenericCall,
   instantiateWritten,
@@ -21,7 +22,7 @@ import {
   isCollectionTemplate,
   refuseParameterMember,
 } from "./generics";
-import { assignInto, checkExpression } from "./expressions";
+import { assignInto, checkExpression, linkedParent } from "./expressions";
 import {
   N_ARRAY,
   N_ARROW,
@@ -262,16 +263,7 @@ const isWalkIterable = (ctx: CheckContext, info: StructInfo, call: Node, access:
   if (access.text !== "keys" && access.text !== "values") {
     return false;
   }
-  return withoutParens(loop.children[1]) === call;
-};
-
-/** `expr` with any parentheses around it taken off. */
-export const withoutParens = (expr: Node): Node => {
-  let node = expr;
-  while (node.kind === N_PAREN && node.children.length > 0) {
-    node = node.children[0];
-  }
-  return node;
+  return unwrapParens(loop.children[1]) === call;
 };
 
 /**
@@ -644,15 +636,15 @@ const iteratorPlaceReason = (ctx: CheckContext, access: Node, call: boolean): st
     return ITERATOR_ELSEWHERE;
   }
   const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length);
-  const callNode = parentIn(parents, access);
+  const callNode = linkedParent(parents, access);
   if (callNode === null) {
     return ITERATOR_ELSEWHERE;
   }
   let node: Node = callNode;
-  let parent = parentIn(parents, node);
+  let parent = linkedParent(parents, node);
   while (parent !== null && parent.kind === N_PAREN) {
     node = parent;
-    parent = parentIn(parents, node);
+    parent = linkedParent(parents, node);
   }
   if (parent === null) {
     return ITERATOR_ELSEWHERE;
@@ -664,7 +656,7 @@ const iteratorPlaceReason = (ctx: CheckContext, access: Node, call: boolean): st
     return ITERATOR_STORED;
   }
   if (parent.kind === N_LIST) {
-    const owner = parentIn(parents, parent);
+    const owner = linkedParent(parents, parent);
     const isArguments =
       owner !== null &&
       ((owner.kind === N_CALL && owner.children[1] === parent) || (owner.kind === N_NEW && owner.children[2] === parent));
@@ -677,27 +669,6 @@ const iteratorPlaceReason = (ctx: CheckContext, access: Node, call: boolean): st
     return ITERATOR_RETURNED; // a concise body is its `return`
   }
   return ITERATOR_ELSEWHERE;
-};
-
-/**
- * `node`'s parent when the table really holds it, or `null`: a body checked
- * for an instantiation can belong to another module's tree, whose ids are not
- * this table's.
- */
-const parentIn = (parents: ParentTable, node: Node): Node | null => {
-  if (node.id < 0 || node.id >= parents.parents.length) {
-    return null;
-  }
-  const parent = parents.parentOf(node);
-  if (parent === null) {
-    return null;
-  }
-  for (const child of parent.children) {
-    if (child === node) {
-      return parent;
-    }
-  }
-  return null;
 };
 
 // The reasons, one per place and one diagnostic code each (NL2358, NL2372-NL2374).

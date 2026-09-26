@@ -556,7 +556,9 @@ export const emitWalk = (emitter: Emitter, stmt: Node): void => {
   const iterable = unwrapParens(stmt.children[1]);
   // `m.keys()` was checked as a call of `walkOpen`; any other iterable, a call
   // that answers a `Set` included, is the table itself.
-  const receiverExpr = isWalkOpenCall(emitter.program, iterable) ? iterable.children[0].children[0] : iterable;
+  const recorded = emitter.program.nodeCallees[iterable.id];
+  const isCall = iterable.kind === N_CALL && recorded !== null && recorded === open;
+  const receiverExpr = isCall ? iterable.children[0].children[0] : iterable;
   const receiver = `${emitter.llvm(open.paramTypes[0])} ${emitter.emitExpression(receiverExpr)}`;
   fn.emit(`call void @${open.name}(${receiver})`);
   const first = fn.emitValue(`call i32 @${next.name}(${receiver}, i32 0)`);
@@ -581,31 +583,13 @@ export const emitWalk = (emitter: Emitter, stmt: Node): void => {
   }
 
   fn.placeBlock(incBlock);
-  const current = fn.emitValue(`load i32, i32* ${idxSlot}${emitter.alignSuffix(T_I32)}`);
-  const after = fn.emitValue(`add i32 ${current}, 1`);
+  const after = fn.emitValue(`add i32 ${at}, 1`); // `walk.cond`'s load dominates this block
   const found = fn.emitValue(`call i32 @${next.name}(${receiver}, i32 ${after})`);
   fn.emit(`store i32 ${found}, i32* ${idxSlot}${emitter.alignSuffix(T_I32)}`);
   fn.emit(`br label %${condBlock.label}`);
 
   fn.placeBlock(endBlock);
   fn.emit(target.walkClose);
-};
-
-/** Whether `iterable` is `m.keys()` or `m.values()`, which the checker records as a call of `walkOpen`. */
-export const isWalkOpenCall = (program: CheckedProgram, iterable: Node): boolean => {
-  if (iterable.kind !== N_CALL) {
-    return false;
-  }
-  const callee = program.nodeCallees[iterable.id];
-  if (callee === null) {
-    return false;
-  }
-  const owner = callee.owner;
-  if (owner === null) {
-    return false;
-  }
-  const open = owner.method("walkOpen");
-  return open !== null && open === callee;
 };
 
 /**
@@ -619,17 +603,11 @@ export const walkMethodsOf = (read: FunctionSig): FunctionSig[] => {
   if (owner === null) {
     return out;
   }
-  const open = owner.method("walkOpen");
-  const next = owner.method("walkNext");
-  const close = owner.method("walkClose");
-  if (open !== null) {
-    out.push(open);
-  }
-  if (next !== null) {
-    out.push(next);
-  }
-  if (close !== null) {
-    out.push(close);
+  for (const name of ["walkOpen", "walkNext", "walkClose"]) {
+    const sig = owner.method(name);
+    if (sig !== null) {
+      out.push(sig);
+    }
   }
   return out;
 };
@@ -641,12 +619,10 @@ export const walkMethodsOf = (read: FunctionSig): FunctionSig[] => {
  * a function goes through `emitScopeExit`, which calls this.
  */
 export const emitWalkExits = (emitter: Emitter): void => {
-  let i = emitter.loops.length - 1;
-  while (i >= 0) {
+  for (let i = emitter.loops.length - 1; i >= 0; i--) {
     const close = emitter.loops[i].walkClose;
     if (close.length > 0) {
       emitter.fn.emit(close);
     }
-    i = i - 1;
   }
 };

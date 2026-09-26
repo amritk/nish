@@ -109,79 +109,77 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %22 = load i32, i32* %walk.idx, align 4
-  %23 = add i32 %22, 1
-  %24 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %6, i32 %23)
-  store i32 %24, i32* %walk.idx, align 4
+  %22 = add i32 %8, 1
+  %23 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %6, i32 %22)
+  store i32 %23, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %6)
-  %25 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  %26 = getelementptr inbounds %struct.Map$str$f64, %struct.Map$str$f64* %25, i32 0, i32 0
-  %27 = load double, double* %26, align 8, !tbaa !6
-  %28 = call i8* @nish_str_from_f64(double %27)
-  %29 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*), i8* %28)
-  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
-  %31 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  %32 = call i1 @nish.Map$str$f64.has(%struct.Map$str$f64* %31, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
-  %33 = select i1 %32, i8* bitcast ({ i64, [5 x i8] }* @.str.7 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*)
-  %34 = call i8* @nish_str_concat(i8* %30, i8* %33)
-  %35 = call i8* @nish_str_concat(i8* %34, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
-  %36 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  %37 = call i1 @nish.Map$str$f64.has(%struct.Map$str$f64* %36, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %38 = select i1 %37, i8* bitcast ({ i64, [5 x i8] }* @.str.7 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*)
-  %39 = call i8* @nish_str_concat(i8* %35, i8* %38)
-  call void @nish_print(i8* %39)
-  %40 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  call void @nish.Map$str$f64.walkOpen(%struct.Map$str$f64* %40)
-  %41 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %40, i32 0)
-  store i32 %41, i32* %walk.idx.1, align 4
+  %24 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
+  %25 = getelementptr inbounds %struct.Map$str$f64, %struct.Map$str$f64* %24, i32 0, i32 0
+  %26 = load double, double* %25, align 8, !tbaa !6
+  %27 = call i8* @nish_str_from_f64(double %26)
+  %28 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*), i8* %27)
+  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
+  %30 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
+  %31 = call i1 @nish.Map$str$f64.has(%struct.Map$str$f64* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %32 = select i1 %31, i8* bitcast ({ i64, [5 x i8] }* @.str.7 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*)
+  %33 = call i8* @nish_str_concat(i8* %29, i8* %32)
+  %34 = call i8* @nish_str_concat(i8* %33, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
+  %35 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
+  %36 = call i1 @nish.Map$str$f64.has(%struct.Map$str$f64* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %37 = select i1 %36, i8* bitcast ({ i64, [5 x i8] }* @.str.7 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*)
+  %38 = call i8* @nish_str_concat(i8* %34, i8* %37)
+  call void @nish_print(i8* %38)
+  %39 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
+  call void @nish.Map$str$f64.walkOpen(%struct.Map$str$f64* %39)
+  %40 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %39, i32 0)
+  store i32 %40, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.cond.1:
-  %42 = load i32, i32* %walk.idx.1, align 4
-  %43 = icmp sge i32 %42, 0
-  br i1 %43, label %walk.body.1, label %walk.end.1
+  %41 = load i32, i32* %walk.idx.1, align 4
+  %42 = icmp sge i32 %41, 0
+  br i1 %42, label %walk.body.1, label %walk.end.1
 
 walk.body.1:
-  %44 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %40, i32 %42)
-  store double %44, double* %v.addr, align 8
-  %45 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %46 = load i8*, i8** %45, align 8
-  %47 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  %48 = load i64, i64* %47, align 8
-  %49 = load double, double* %v.addr, align 8
-  %50 = call i8* @nish_str_from_f64(double %49)
-  call void @nish_print(i8* %50)
-  %51 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %52 = load i8*, i8** %51, align 8
-  %53 = icmp eq i8* %52, %46
-  br i1 %53, label %pass.rewind, label %pass.free
+  %43 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %39, i32 %41)
+  store double %43, double* %v.addr, align 8
+  %44 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %45 = load i8*, i8** %44, align 8
+  %46 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %47 = load i64, i64* %46, align 8
+  %48 = load double, double* %v.addr, align 8
+  %49 = call i8* @nish_str_from_f64(double %48)
+  call void @nish_print(i8* %49)
+  %50 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %51 = load i8*, i8** %50, align 8
+  %52 = icmp eq i8* %51, %45
+  br i1 %52, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %54 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %48, i64* %54, align 8
+  %53 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %47, i64* %53, align 8
   br label %pass.done
 
 pass.free:
-  %55 = ptrtoint i8* %46 to i64
-  %56 = add i64 %55, %48
-  call void @nish_arena_release(i64 %56)
+  %54 = ptrtoint i8* %45 to i64
+  %55 = add i64 %54, %47
+  call void @nish_arena_release(i64 %55)
   br label %pass.done
 
 pass.done:
   br label %walk.inc.1
 
 walk.inc.1:
-  %57 = load i32, i32* %walk.idx.1, align 4
-  %58 = add i32 %57, 1
-  %59 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %40, i32 %58)
-  store i32 %59, i32* %walk.idx.1, align 4
+  %56 = add i32 %41, 1
+  %57 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %39, i32 %56)
+  store i32 %57, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.end.1:
-  call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %40)
+  call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %39)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -578,41 +576,6 @@ for.end:
   ret i32 %20
 }
 
-define internal void @nish.killAll(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 {
-entry:
-  %i.addr = alloca i32, align 4
-  store i32 0, i32* %i.addr, align 4
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
-  %3 = load i8*, i8** %2, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  br label %for.cond
-
-for.cond:
-  %4 = load i32, i32* %i.addr, align 4
-  %5 = sitofp i64 %1 to double
-  %6 = call i32 @llvm.fptosi.sat.i32.f64(double %5)
-  %7 = icmp slt i32 %4, %6
-  br i1 %7, label %for.body, label %for.end
-
-for.body:
-  %8 = load i32, i32* %i.addr, align 4
-  %9 = sext i32 %8 to i64
-  %10 = bitcast i8* %3 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %9
-  store i32 0, i32* %11, align 4, !alias.scope !11, !noalias !10, !tbaa !18
-  br label %for.inc
-
-for.inc:
-  %12 = load i32, i32* %i.addr, align 4
-  %13 = add nsw i32 %12, 1
-  store i32 %13, i32* %i.addr, align 4
-  br label %for.cond
-
-for.end:
-  ret void
-}
-
 define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #0 {
 entry:
   %0 = icmp sge i32 %bucket, 0
@@ -765,7 +728,7 @@ entry:
 if.then:
   %5 = getelementptr inbounds %struct.Map$str$f64, %struct.Map$str$f64* %this, i32 0, i32 6
   %6 = load %struct.nish_array*, %struct.nish_array** %5, align 8, !tbaa !26
-  call void @nish.killAll(%struct.nish_array* %6)
+  call void @nish.clearSlots(%struct.nish_array* %6)
   br label %if.end
 
 if.else:

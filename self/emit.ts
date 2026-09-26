@@ -534,7 +534,9 @@ export class Emitter {
    * Leave every arena scope open at a `return`: the function's own when it
    * has one, the outermost scoped pass otherwise. One release is all of them,
    * because the outermost mark is the lowest and releasing to it frees
-   * everything bumped since, the inner passes' memory included.
+   * everything bumped since, the inner passes' memory included. Every exit
+   * of a function comes through here, so it also closes each `Map` or `Set`
+   * walk the exit leaves (WP32, `emitWalkExits`).
    */
   emitScopeExit(): void {
     emitWalkExits(this); // WP32: a `return` leaves every walk around it

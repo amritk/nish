@@ -517,40 +517,6 @@ for.end:
   ret void
 }
 
-define internal void @nish.killAll(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 {
-entry:
-  %i.addr = alloca i32, align 4
-  store i32 0, i32* %i.addr, align 4
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
-  %3 = load i8*, i8** %2, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  br label %for.cond
-
-for.cond:
-  %4 = load i32, i32* %i.addr, align 4
-  %5 = trunc i64 %1 to i32
-  %6 = icmp slt i32 %4, %5
-  br i1 %6, label %for.body, label %for.end
-
-for.body:
-  %7 = load i32, i32* %i.addr, align 4
-  %8 = sext i32 %7 to i64
-  %9 = bitcast i8* %3 to i32*
-  %10 = getelementptr inbounds i32, i32* %9, i64 %8
-  store i32 0, i32* %10, align 4, !alias.scope !10, !noalias !9, !tbaa !17
-  br label %for.inc
-
-for.inc:
-  %11 = load i32, i32* %i.addr, align 4
-  %12 = add nsw i32 %11, 1
-  store i32 %12, i32* %i.addr, align 4
-  br label %for.cond
-
-for.end:
-  ret void
-}
-
 define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #0 {
 entry:
   %0 = icmp sge i32 %bucket, 0
@@ -718,7 +684,7 @@ entry:
 if.then:
   %5 = getelementptr inbounds %struct.Set$str, %struct.Set$str* %this, i32 0, i32 5
   %6 = load %struct.nish_array*, %struct.nish_array** %5, align 8, !tbaa !24
-  call void @nish.killAll(%struct.nish_array* %6)
+  call void @nish.clearSlots(%struct.nish_array* %6)
   br label %if.end
 
 if.else:

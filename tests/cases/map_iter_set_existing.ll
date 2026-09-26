@@ -97,41 +97,39 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %19 = load i32, i32* %walk.idx, align 4
-  %20 = add i32 %19, 1
-  %21 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %6, i32 %20)
-  store i32 %21, i32* %walk.idx, align 4
+  %19 = add i32 %8, 1
+  %20 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %6, i32 %19)
+  store i32 %20, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %6)
-  %22 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  call void @nish.Map$str$f64.walkOpen(%struct.Map$str$f64* %22)
-  %23 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %22, i32 0)
-  store i32 %23, i32* %walk.idx.1, align 4
+  %21 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
+  call void @nish.Map$str$f64.walkOpen(%struct.Map$str$f64* %21)
+  %22 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %21, i32 0)
+  store i32 %22, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.cond.1:
-  %24 = load i32, i32* %walk.idx.1, align 4
-  %25 = icmp sge i32 %24, 0
-  br i1 %25, label %walk.body.1, label %walk.end.1
+  %23 = load i32, i32* %walk.idx.1, align 4
+  %24 = icmp sge i32 %23, 0
+  br i1 %24, label %walk.body.1, label %walk.end.1
 
 walk.body.1:
-  %26 = call i8* @nish.Map$str$f64.keyAt(%struct.Map$str$f64* %22, i32 %24)
-  store i8* %26, i8** %k.addr, align 8
-  %27 = load i8*, i8** %k.addr, align 8
-  call void @nish_print(i8* %27)
+  %25 = call i8* @nish.Map$str$f64.keyAt(%struct.Map$str$f64* %21, i32 %23)
+  store i8* %25, i8** %k.addr, align 8
+  %26 = load i8*, i8** %k.addr, align 8
+  call void @nish_print(i8* %26)
   br label %walk.inc.1
 
 walk.inc.1:
-  %28 = load i32, i32* %walk.idx.1, align 4
-  %29 = add i32 %28, 1
-  %30 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %22, i32 %29)
-  store i32 %30, i32* %walk.idx.1, align 4
+  %27 = add i32 %23, 1
+  %28 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %21, i32 %27)
+  store i32 %28, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.end.1:
-  call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %22)
+  call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %21)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

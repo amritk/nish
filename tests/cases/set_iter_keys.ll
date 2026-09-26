@@ -123,10 +123,9 @@ pass.done:
   br label %walk.inc
 
 walk.inc:
-  %31 = load i32, i32* %walk.idx, align 4
-  %32 = add i32 %31, 1
-  %33 = call i32 @nish.Set$f64.walkNext(%struct.Set$f64* %14, i32 %32)
-  store i32 %33, i32* %walk.idx, align 4
+  %31 = add i32 %16, 1
+  %32 = call i32 @nish.Set$f64.walkNext(%struct.Set$f64* %14, i32 %31)
+  store i32 %32, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:

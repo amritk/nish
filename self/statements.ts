@@ -25,7 +25,8 @@ import { isMaybeAnnotation } from "./validator";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { declaredOrigin, elementOrigin, isCollectionStruct } from "./generics";
-import { structOf, walkReaderOf, withoutParens } from "./members";
+import { structOf, walkReaderOf } from "./members";
+import { unwrapParens } from "./emit_util";
 import { terminatesControlFlow } from "./builtins";
 import { rejectDiscardedResult } from "./result";
 import {
@@ -382,18 +383,17 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const outer = scope.child();
   const name = decl.children[0].text;
   let element = T_ERROR;
-  const walked = ctx.program.nodeCallees[stmt.id];
-  if (walked !== null) {
-    element = walked.returnType; // the reader `checkWalkIterable` recorded
-  } else if (iterable !== T_ERROR) {
+  if (ctx.program.nodeCallees[stmt.id] === null && iterable !== T_ERROR) {
     if (ctx.table.isArray(iterable)) {
       element = ctx.table.refOf(iterable);
     } else if (!checkCollectionWalk(ctx, stmt, iterable)) {
       ctx.error(stmt.children[1], `\`for...of\` requires an array, got ${ctx.table.typeName(iterable)}`);
-    } else {
-      const reader = ctx.program.nodeCallees[stmt.id];
-      element = reader === null ? T_ERROR : reader.returnType;
     }
+  }
+  // WP32: a walk's reader, recorded by `checkWalkIterable` or `checkCollectionWalk`, gives its variable its type.
+  const walked = ctx.program.nodeCallees[stmt.id];
+  if (walked !== null) {
+    element = walked.returnType;
   }
   // `for (let x of a)` binds a mutable element, `for (const x of a)` does not,
   // and an element of a `T[]` came from `T` (WP18 G6).
@@ -424,7 +424,7 @@ const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): bool
   if (instance !== null && instance.template.sourceName === "Map") {
     ctx.error(
       stmt.children[1],
-      `\`for...of\` over \`${ctx.table.typeName(iterable)}\` needs \`entries()\`, whose \`[key, value]\` pairs need destructuring, which this version does not have: walk \`keys()\` or \`values()\` instead, as in \`for (const k of ${ctx.textOf(withoutParens(stmt.children[1]))}.keys())\``
+      `\`for...of\` over \`${ctx.table.typeName(iterable)}\` needs \`entries()\`, whose \`[key, value]\` pairs need destructuring, which this version does not have: walk \`keys()\` or \`values()\` instead, as in \`for (const k of ${ctx.textOf(unwrapParens(stmt.children[1]))}.keys())\``
     );
     return true;
   }

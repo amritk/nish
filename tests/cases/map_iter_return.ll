@@ -178,10 +178,9 @@ if.end:
   br label %walk.inc.1
 
 walk.inc.1:
-  %20 = load i32, i32* %walk.idx.1, align 4
-  %21 = add i32 %20, 1
-  %22 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %21)
-  store i32 %22, i32* %walk.idx.1, align 4
+  %20 = add i32 %5, 1
+  %21 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %20)
+  store i32 %21, i32* %walk.idx.1, align 4
   br label %walk.cond.1
 
 walk.end.1:
@@ -189,16 +188,15 @@ walk.end.1:
   br label %walk.inc
 
 walk.inc:
-  %23 = load i32, i32* %walk.idx, align 4
-  %24 = add i32 %23, 1
-  %25 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %24)
-  store i32 %25, i32* %walk.idx, align 4
+  %22 = add i32 %1, 1
+  %23 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %22)
+  store i32 %23, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %m)
-  %26 = fneg double 0x3FF0000000000000
-  ret double %26
+  %24 = fneg double 0x3FF0000000000000
+  ret double %24
 }
 
 define internal noundef double @firstOver(%struct.Map$f64$f64* noundef nonnull align 8 dereferenceable(56) nocapture %m, double noundef %limit) #0 {
@@ -231,16 +229,15 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %7 = load i32, i32* %walk.idx, align 4
-  %8 = add i32 %7, 1
-  %9 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %8)
-  store i32 %9, i32* %walk.idx, align 4
+  %7 = add i32 %1, 1
+  %8 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %7)
+  store i32 %8, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %m)
-  %10 = fneg double 0x3FF0000000000000
-  ret double %10
+  %9 = fneg double 0x3FF0000000000000
+  ret double %9
 }
 
 define noundef i32 @nish_main() #0 {

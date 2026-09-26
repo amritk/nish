@@ -210,7 +210,11 @@ const killEntry = (slots: u32[], hashes: u32[], found: i64): void => {
   }
 };
 
-/** Zero every bucket in place, which is what emptying a table and compacting one both start with. */
+/**
+ * Zero every element in place: the buckets, which emptying a table and
+ * compacting one both start with, and under a walk the stored hashes, which
+ * is how `clear` marks every entry dead without moving one (§6.1).
+ */
 const clearSlots = (slots: u32[]): void => {
   for (let i: i32 = 0; i < toI32(slots.length); i++) {
     slots[i] = 0;
@@ -231,17 +235,6 @@ const nextLive = (hashes: u32[], from: i32): i32 => {
     }
   }
   return -1;
-};
-
-/**
- * `clear` while a loop walks the table: every entry is marked dead and none is
- * removed, so the walk's cursor still indexes the same entries, finds nothing
- * more of them, and goes on to whatever is inserted after (§6.1).
- */
-const killAll = (hashes: u32[]): void => {
-  for (let i: i32 = 0; i < toI32(hashes.length); i++) {
-    hashes[i] = 0;
-  }
 };
 
 /** Drop every element of `items`, keeping its capacity. */
@@ -335,7 +328,7 @@ export class Map<K, V> {
   clear(): void {
     clearSlots(this.slots);
     if (this.walks > 0) {
-      killAll(this.entryHashes);
+      clearSlots(this.entryHashes); // every entry dead, and the count kept
     } else {
       truncate(this.entryKeys);
       truncate(this.entryValues);
@@ -486,7 +479,7 @@ export class Set<T> {
   clear(): void {
     clearSlots(this.slots);
     if (this.walks > 0) {
-      killAll(this.entryHashes);
+      clearSlots(this.entryHashes); // every entry dead, and the count kept
     } else {
       truncate(this.entryKeys);
       truncate(this.entryHashes);

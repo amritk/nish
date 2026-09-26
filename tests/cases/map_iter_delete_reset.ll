@@ -130,18 +130,17 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %33 = load i32, i32* %walk.idx, align 4
-  %34 = add i32 %33, 1
-  %35 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %6, i32 %34)
-  store i32 %35, i32* %walk.idx, align 4
+  %33 = add i32 %8, 1
+  %34 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %6, i32 %33)
+  store i32 %34, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$str$f64.walkClose(%struct.Map$str$f64* %6)
-  %36 = load double, double* %visits.addr, align 8
-  %37 = call i8* @nish_str_from_f64(double %36)
-  %38 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*), i8* %37)
-  call void @nish_print(i8* %38)
+  %35 = load double, double* %visits.addr, align 8
+  %36 = call i8* @nish_str_from_f64(double %35)
+  %37 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*), i8* %36)
+  call void @nish_print(i8* %37)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

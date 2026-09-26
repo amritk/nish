@@ -124,22 +124,21 @@ res.ok:
   br label %walk.inc
 
 walk.inc:
-  %18 = load i32, i32* %walk.idx, align 4
-  %19 = add i32 %18, 1
-  %20 = call i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* %m, i32 %19)
-  store i32 %20, i32* %walk.idx, align 4
+  %18 = add i32 %1, 1
+  %19 = call i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* %m, i32 %18)
+  store i32 %19, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$i32$i32.walkClose(%struct.Map$i32$i32* %m)
-  %21 = load i32, i32* %sum.addr, align 4
-  %22 = call i8* @nish_alloc_struct(i64 16)
-  %23 = bitcast i8* %22 to %struct.nish_result.i32.str*
-  %24 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %23, i32 0, i32 0
-  store i1 true, i1* %24, align 1
-  %25 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %23, i32 0, i32 1
-  store i32 %21, i32* %25, align 4
-  ret %struct.nish_result.i32.str* %23
+  %20 = load i32, i32* %sum.addr, align 4
+  %21 = call i8* @nish_alloc_struct(i64 16)
+  %22 = bitcast i8* %21 to %struct.nish_result.i32.str*
+  %23 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %22, i32 0, i32 0
+  store i1 true, i1* %23, align 1
+  %24 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %22, i32 0, i32 1
+  store i32 %20, i32* %24, align 4
+  ret %struct.nish_result.i32.str* %22
 }
 
 define internal noundef zeroext i1 @churnsFlat(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) %m) #1 {

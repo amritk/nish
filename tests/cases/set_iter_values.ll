@@ -93,20 +93,19 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %19 = load i32, i32* %walk.idx, align 4
-  %20 = add i32 %19, 1
-  %21 = call i32 @nish.Set$f64.walkNext(%struct.Set$f64* %6, i32 %20)
-  store i32 %21, i32* %walk.idx, align 4
+  %19 = add i32 %8, 1
+  %20 = call i32 @nish.Set$f64.walkNext(%struct.Set$f64* %6, i32 %19)
+  store i32 %20, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Set$f64.walkClose(%struct.Set$f64* %6)
-  %22 = load %struct.Set$f64*, %struct.Set$f64** %s.addr, align 8
-  %23 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %22, i32 0, i32 0
-  %24 = load double, double* %23, align 8, !tbaa !6
-  %25 = call i8* @nish_str_from_f64(double %24)
-  %26 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %25)
-  call void @nish_print(i8* %26)
+  %21 = load %struct.Set$f64*, %struct.Set$f64** %s.addr, align 8
+  %22 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %21, i32 0, i32 0
+  %23 = load double, double* %22, align 8, !tbaa !6
+  %24 = call i8* @nish_str_from_f64(double %23)
+  %25 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %24)
+  call void @nish_print(i8* %25)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

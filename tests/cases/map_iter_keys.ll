@@ -91,10 +91,9 @@ walk.body:
   br label %walk.inc
 
 walk.inc:
-  %21 = load i32, i32* %walk.idx, align 4
-  %22 = add i32 %21, 1
-  %23 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %15, i32 %22)
-  store i32 %23, i32* %walk.idx, align 4
+  %21 = add i32 %17, 1
+  %22 = call i32 @nish.Map$str$f64.walkNext(%struct.Map$str$f64* %15, i32 %21)
+  store i32 %22, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:

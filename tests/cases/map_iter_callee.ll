@@ -144,16 +144,15 @@ walk.body:
   br label %walk.inc
 
 walk.inc:
-  %10 = load i32, i32* %walk.idx, align 4
-  %11 = add i32 %10, 1
-  %12 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %11)
-  store i32 %12, i32* %walk.idx, align 4
+  %10 = add i32 %1, 1
+  %11 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %m, i32 %10)
+  store i32 %11, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %m)
-  %13 = load double, double* %sum.addr, align 8
-  ret double %13
+  %12 = load double, double* %sum.addr, align 8
+  ret double %12
 }
 
 define noundef i32 @nish_main() #0 {
@@ -227,25 +226,24 @@ if.end:
   br label %walk.inc
 
 walk.inc:
-  %26 = load i32, i32* %walk.idx, align 4
-  %27 = add i32 %26, 1
-  %28 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %9, i32 %27)
-  store i32 %28, i32* %walk.idx, align 4
+  %26 = add i32 %11, 1
+  %27 = call i32 @nish.Map$f64$f64.walkNext(%struct.Map$f64$f64* %9, i32 %26)
+  store i32 %27, i32* %walk.idx, align 4
   br label %walk.cond
 
 walk.end:
   call void @nish.Map$f64$f64.walkClose(%struct.Map$f64$f64* %9)
-  %29 = load %struct.Map$f64$f64*, %struct.Map$f64$f64** %m.addr, align 8
-  %30 = getelementptr inbounds %struct.Map$f64$f64, %struct.Map$f64$f64* %29, i32 0, i32 0
-  %31 = load double, double* %30, align 8, !tbaa !6
-  %32 = call i8* @nish_str_from_f64(double %31)
-  %33 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %32)
-  %34 = call i8* @nish_str_concat(i8* %33, i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*))
-  %35 = load %struct.Map$f64$f64*, %struct.Map$f64$f64** %m.addr, align 8
-  %36 = call i1 @churnsFlat(%struct.Map$f64$f64* %35)
-  %37 = select i1 %36, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*)
-  %38 = call i8* @nish_str_concat(i8* %34, i8* %37)
-  call void @nish_print(i8* %38)
+  %28 = load %struct.Map$f64$f64*, %struct.Map$f64$f64** %m.addr, align 8
+  %29 = getelementptr inbounds %struct.Map$f64$f64, %struct.Map$f64$f64* %28, i32 0, i32 0
+  %30 = load double, double* %29, align 8, !tbaa !6
+  %31 = call i8* @nish_str_from_f64(double %30)
+  %32 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %31)
+  %33 = call i8* @nish_str_concat(i8* %32, i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*))
+  %34 = load %struct.Map$f64$f64*, %struct.Map$f64$f64** %m.addr, align 8
+  %35 = call i1 @churnsFlat(%struct.Map$f64$f64* %34)
+  %36 = select i1 %35, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*)
+  %37 = call i8* @nish_str_concat(i8* %33, i8* %36)
+  call void @nish_print(i8* %37)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
