@@ -1,4 +1,4 @@
-// The data model the checker fills and the emitter reads (`src/checker/program.ts`),
+// The data model the checker fills and the emitter reads (stage0's `src/checker/program.ts`),
 // for stage1 (docs/wp14-selfhost.md, milestone S3).
 //
 // Two changes of shape, both forced and both improvements:
@@ -798,7 +798,7 @@ export class ConstInfo {
 /**
  * A module-level `type` alias. It is not a type of its own: `type Byte = u8`
  * says that `Byte` and `u8` are two spellings of one type, so this record
- * holds a type id and the emitter never hears of it (`src/checker/aliases.ts`).
+ * holds a type id and the emitter never hears of it (stage0's `src/checker/aliases.ts`).
  *
  * Resolution is lazy and memoised, for the reasons `ConstInfo`'s fold is: an
  * alias may name a class declared further down the file, or another alias, and
@@ -828,7 +828,7 @@ export class AliasInfo {
  * representation, and its members are folded when the declaration is read, so
  * this record answers an annotation (`Kind`) and a member reference
  * (`Kind.If`) and the emitter never hears of it — `Kind.If` lowers to the
- * literal the checker wrote into `nodeEnumValues` (`src/checker/enums.ts`).
+ * literal the checker wrote into `nodeEnumValues` (stage0's `src/checker/enums.ts`).
  */
 export class EnumInfo {
   name: string;
@@ -969,7 +969,7 @@ export class ImportBinding {
  *
  * A struct name is already a program-wide symbol (`%struct.<name>` and
  * `@<name>.method`), so a collision is a broken program either way and the
- * first declaration wins here, as it does in `src/compilation.ts`.
+ * first declaration wins here, as it does in stage0's `src/compilation.ts`.
  */
 export class StructRegistry {
   index: StringMap;
@@ -1034,7 +1034,7 @@ export class CheckedProgram {
    */
   structs: StringMap;
   structList: StructInfo[];
-  /** Indices into `structList` that this module never named; see `src/checker/index.ts`. */
+  /** Indices into `structList` that this module never named; see stage0's `src/checker/index.ts`. */
   reachableStructs: i32[];
   /**
    * Instantiations this module *calls* but does not define: WP18 G7's half of
@@ -1180,7 +1180,7 @@ export class CheckedProgram {
    * is no presence flag beside it and none is needed: a member's value may be
    * 0 or negative, but the node that carries one is exactly an `N_MEMBER` of
    * enum type whose receiver is not a value, and both of those are already
-   * recorded (`isEnumMember`). `src/` uses a `WeakMap`, where presence is the
+   * recorded (`isEnumMember`). stage0's `src/` uses a `WeakMap`, where presence is the
    * key's own answer.
    */
   nodeEnumValues: i32[];
@@ -1575,7 +1575,7 @@ export class CheckedProgram {
 // ---- WP15 §2a: element layout ------------------------------------------------
 
 /**
- * How one element of a `T[]` is stored (`src/checker/program.ts`).
+ * How one element of a `T[]` is stored (stage0's `src/checker/program.ts`).
  *
  * An array of *records* is contiguous storage — `N` of them end to end in one
  * block — so `ps[i]` is an interior `getelementptr` rather than a load of a
@@ -1594,7 +1594,7 @@ export class CheckedProgram {
  * would cost the most, and the answer was no. The full argument, and the
  * `self/` evidence behind it — the aliased `FunctionSig`, the identity
  * comparisons in `bounds.ts` that a value slot would make a miscompile, and
- * the syntax tree becoming storage — is in `src/checker/program.ts` and in
+ * the syntax tree becoming storage — is in stage0's `src/checker/program.ts` and in
  * §2a of `docs/wp15-performance.md`.
  */
 export const inlineElementStruct = (program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null => {

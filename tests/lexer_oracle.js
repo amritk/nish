@@ -266,8 +266,8 @@ function corpus() {
  * or null without a toolchain.
  *
  * The seed rather than stage0 (WP19 G2.3): this oracle compares stage1 with
- * the `typescript` package and outlives `src/`, so the compiler that links its
- * subject must outlive `src/` too: `seedWithoutStage0` in `tests/self/goldens.js`.
+ * the `typescript` package and outlives stage0's `src/`, so the compiler that links its
+ * subject must outlive stage0's `src/` too: `seedWithoutStage0` in `tests/self/goldens.js`.
  */
 function build(seed) {
   return linkWith(seed, path.join("self", "dump_tokens.ts"), path.join(root, "build", "self", "dump_tokens"));

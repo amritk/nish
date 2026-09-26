@@ -44,7 +44,7 @@ offsets in the header, for one language rule. Every supported data layout is
 little-endian (all six begin `e-`), so bit 0 of the word is byte 0 of the
 struct and the encoding is exact rather than approximately right.
 
-`resultByValue` in `src/types.ts` (and `TypeTable.resultByValue` in
+`resultByValue` in stage0's `src/types.ts` (and `TypeTable.resultByValue` in
 `self/types.ts`) is the one place that decides, and the payload predicate is
 the whole of it: `void`,
 `boolean`, `u8`, `u16`, `i32`, `u32`, `f32`. `i64`, `u64` and `f64` are four
@@ -72,7 +72,7 @@ command. `struct R { bool ok; int32_t value; int32_t error; }` returned from
 Three different signatures for one C type, and the same split in argument
 position — `int32_t describe(struct R)` is `i32 @describe(i64)` on the four
 native triples and `i32 @describe(ptr byval(%struct.R))` on both wasm32 ones.
-`src/codegen/target.ts` emits
+stage0's `src/codegen/target.ts` emits
 target-neutral IR by default — no `target triple`, no `target datalayout` —
 precisely so one `.ll` links against a C host built for any of them, and
 `--target` exists to pin the *layout*, not to change what the module means.
@@ -435,10 +435,10 @@ still emits `i64` for all four of its shapes.
 Same rule as WP16 and for the same reason: stage0 is frozen as the bootstrap
 seed and the differential oracle, not retired, and `tests/self/ir_oracle.js`
 requires stage1 to compile every program in the corpus with no exemption
-list. So this lands in `src/` and `self/` together — `src/types.ts` /
+list. So this lands in stage0's `src/` and `self/` together — stage0's `src/types.ts` /
 `self/types.ts` (the predicate and the return slot),
-`src/codegen/emit/result.ts` / `self/emit_result.ts` (the pack and the
-unpack), `src/codegen/emitter.ts`, `emit/statements.ts`, `emit/expressions.ts`
+stage0's `src/codegen/emit/result.ts` / `self/emit_result.ts` (the pack and the
+unpack), stage0's `src/codegen/emitter.ts`, `emit/statements.ts`, `emit/expressions.ts`
 and `emit/classes.ts` / `self/emit.ts` and `self/emit_classes.ts` (the
 `define`, the `declare`, the `ret`, the prologue and the two call sites), plus
 `escape.ts` and `attributes.ts` on each side (the allocation moved to whichever

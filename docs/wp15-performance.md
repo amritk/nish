@@ -90,7 +90,7 @@ That spelling needs a generic type parameter, which Phase 0 refuses and which
 §9 item 8 owns, so item 6 could not have built it without building item 8's
 prerequisite first — the sequencing rules it out, and this note had not
 noticed. What shipped instead is the *range analysis* the declared form would
-have fed: `src/checker/bounds.ts` and `self/bounds.ts` infer the range of every
+have fed: stage0's `src/checker/bounds.ts` and `self/bounds.ts` infer the range of every
 integer local from the guards, loop conditions and initialisers already in the
 program, and from the one ranged type the language does have — `u8`/`u16`/
 `u32`/`u64`, whose lower bound is the declaration rather than a proof. A
@@ -113,7 +113,7 @@ through assignment, parameter passing and the two type tables, and everything
 it buys is already bought by recording `data.length >= 4` as a fact keyed by
 the variable. The facts are `i >= 0`, `i < w.length`, `i <= w.length`,
 `i < n` and `w.length >= n`, and the rules that invalidate them are the
-soundness argument — they are written out in `src/checker/bounds.ts` and
+soundness argument — they are written out in stage0's `src/checker/bounds.ts` and
 stated normatively in `docs/LANGUAGE.md` under "Element access".
 
 The shape the domain most obviously cannot hold is **`min`**:
@@ -706,7 +706,7 @@ So this is **closed by decision rather than deferred**: an array of classes is
 one pointer per slot, permanently, and the contiguous shape is spelled
 `interface`. `docs/LANGUAGE.md` already states the rule that way, and
 `inlineElementStruct` is where the decision lives in the code — in
-`src/checker/program.ts`, which carries the argument, and in `self/program.ts`,
+stage0's `src/checker/program.ts`, which carries the argument, and in `self/program.ts`,
 which carries the rule and points at it. The first of those read "a separate
 change with a migration of its own" until this section was written, and the
 second sent the reader to it for the full argument; both say "a decision and
@@ -750,7 +750,7 @@ four shapes the two occupy disjoint byte ranges, so no store through an element
 pointer reaches a header field and none the other way. `nish_array_grow` bumps
 a fresh buffer and writes `data`/`cap`, which is a header write, and stays
 inside the same split. The argument lives beside the code in
-`src/codegen/emit/arrays.ts`, per the "no attribute without a proof" rule.
+stage0's `src/codegen/emit/arrays.ts`, per the "no attribute without a proof" rule.
 
 Strings are deliberately left out: a string is one block whose length header and
 bytes are contiguous, so there is no split to describe. Struct fields are left
@@ -1778,8 +1778,8 @@ measurement closed says so and says why.
    nothing.
 2. **`performance` diagnostics** (§8) — **done**. The framework plus the two
    warnings that need no new analysis: quadratic string building and allocation
-   in a loop. `--no-warn-performance` is in `src/index.ts` and
-   `self/compile.ts`, `PerformanceWarning` is in `src/diagnostics.ts`, both
+   in a loop. `--no-warn-performance` is in stage0's `src/index.ts` and
+   `self/compile.ts`, `PerformanceWarning` is in stage0's `src/diagnostics.ts`, both
    warnings are specified in `docs/LANGUAGE.md`, and
    `tests/cases/perf_str_concat_loop`, `perf_str_concat_quiet`,
    `perf_alloc_loop` and `perf_alloc_quiet` pin them.
@@ -1924,7 +1924,7 @@ measurement closed says so and says why.
      it might. `widestFirst` is a stable bucket pass down the powers of two
      rather than a sort, because the message *quotes* the order and the two
      compilers have to agree on it to the byte — and `self/` has no
-     `Array.sort`, so `src/` computes it the way `self/` has to.
+     `Array.sort`, so stage0's `src/` computes it the way `self/` has to.
 
      **The report was the real blocker, it was closed first in its own change,
      and the premise this row used to give for it was already false.** The old
@@ -2028,7 +2028,7 @@ measurement closed says so and says why.
    `tests/differential/corpus/str_slice` pin it.
 6. **Ranged types and length narrowing** (§2.1, §2.2) — **done, and smaller
    than it was written**. The flow-sensitive analysis shipped
-   (`src/checker/bounds.ts`, `self/bounds.ts`), and with it the §8 warning for
+   (stage0's `src/checker/bounds.ts`, `self/bounds.ts`), and with it the §8 warning for
    a check that survives, which is what proves it worked. What did *not* ship
    is the declared surface: `integer<0, 255>` waited on the generics of item 8,
    and is now next after the data-parallel call in [wp31-ranged-integers.md](wp31-ranged-integers.md),

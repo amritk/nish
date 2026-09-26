@@ -121,7 +121,7 @@ export function main(): number {
   out.push(`distinct ${table.arrayOf(T_I32) === table.arrayOf(T_I64) ? 1 : 0}`);
   out.push(`table size ${table.size()}`);
 
-  // `T_ERROR` has no counterpart in `src/types.ts`: it is D1's sentinel, and
+  // `T_ERROR` has no counterpart in stage0's `src/types.ts`: it is D1's sentinel, and
   // its whole job is to be assignable in both directions so that one bad
   // expression does not produce a diagnostic at every site it reaches.
   out.push(`error name ${table.typeName(T_ERROR)}`);

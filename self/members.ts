@@ -1,4 +1,4 @@
-// Members for stage1 (`src/checker/members.ts`, `classes.ts` and
+// Members for stage1 (stage0's `src/checker/members.ts`, `classes.ts` and
 // `nullable.ts`, docs/wp14-selfhost.md milestone S3, pass 2): property
 // access, method calls, `new`, object literals and `super`.
 //
@@ -422,11 +422,11 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  *
  * stage0 answers the question with three separate walks up the parent chain
  * and stage1 threads one `want` down, so where they part has to be written
- * here. `contextualType` in `src/checker/classes.ts` names both positions,
+ * here. `contextualType` in stage0's `src/checker/classes.ts` names both positions,
  * which is why an object literal or a `null` in either does get the declared
- * type; the numeric walk (`contextType` in `src/checker/math.ts`, the
+ * type; the numeric walk (`contextType` in stage0's `src/checker/math.ts`, the
  * enumerated table in `docs/LANGUAGE.md`) names neither, and the array one
- * (`contextualType` in `src/checker/arrays.ts`) names neither, so a numeric
+ * (`contextualType` in stage0's `src/checker/arrays.ts`) names neither, so a numeric
  * literal there takes the mode's default and `[]` there has no element type at
  * all and is refused. Handing `want` to those two made stage1 compile
  * `{ b: 255 }` for a `u8` field, `{ xs: [] }` and `b.get(-1)` for a method
@@ -710,7 +710,7 @@ const assignableReadonly = (
 
 // ---- String members -----------------------------------------------------------------
 //
-// `src/checker/strings.ts` registers these in the member dispatch tables; with
+// stage0's `src/checker/strings.ts` registers these in the member dispatch tables; with
 // the central `switch` of D2 they sit beside the other receiver kinds. Every
 // index is a **byte** offset, matching `.length`: a lexer walks bytes, and a
 // code-point index would need a decode per access.
@@ -736,7 +736,7 @@ const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
   const type = checkExpression(ctx, arg, scope, T_STRING);
   if (type !== T_ERROR && type !== T_STRING) {
     // The wording `checkArgumentType` uses in `self/builtins.ts`, and stage0's
-    // in `src/checker/builtins.ts`: one run for the code registry to derive a
+    // in stage0's `src/checker/builtins.ts`: one run for the code registry to derive a
     // rule from, and one sentence for a reader to recognise.
     ctx.error(arg, `\`${name}\` expects an argument of type string, got ${ctx.table.typeName(type)}`);
   }

@@ -1,5 +1,5 @@
 // `--emit-header <file.h>`: a C header for every function a host can call
-// (`src/interop/header.ts`, WP8).
+// (stage0's `src/interop/header.ts`, WP8).
 //
 // The C ABI of a compiled function is the LLVM signature the emitter wrote:
 //   number   -> int32_t (i32 mode) or double (f64 mode)

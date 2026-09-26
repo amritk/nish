@@ -16,7 +16,7 @@
  * The rewrite is what makes that exact — it needs the static type of every
  * expression, because `i32`, `u8`, `f32` and `i64` are all just `number` to
  * `tsc` — so `rewrite.js` drives **stage0's own `Compilation`** in process.
- * §2B's table said this oracle survives stage0. It does not: deleting `src/`
+ * §2B's table said this oracle survives stage0. It does not: deleting stage0's `src/`
  * takes the rewriter with it, and with it 176 programs of semantic comparison.
  *
  * So the rewrite is frozen the way the four dying oracles' output was frozen

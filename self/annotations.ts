@@ -1,5 +1,5 @@
 // Type annotations, for stage1 (docs/wp14-selfhost.md, milestone S3): the
-// `resolveTypeNode` of `src/types.ts`, over the `N_TYPE_*` nodes of
+// `resolveTypeNode` of stage0's `src/types.ts`, over the `N_TYPE_*` nodes of
 // `self/nodes.ts` and against a module's own named types.
 //
 // Every message here is byte-for-byte stage0's, because the `.err` goldens
@@ -10,7 +10,7 @@
 // gets a signature rather than cascading.
 //
 // The named-type lookup is a *parameter* rather than the `WeakMap` registry
-// keyed by source file that `src/types.ts` uses. That registry exists to keep
+// keyed by source file that stage0's `src/types.ts` uses. That registry exists to keep
 // `resolveTypeNode`'s signature unchanged for recursive callers; here the
 // context is one argument that is already being threaded.
 
@@ -172,7 +172,7 @@ export const rejectForeignPointer = (ctx: CheckContext, type: i32, position: str
 export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
     case N_TYPE_PAREN:
-      // Transparent, as `ParenthesizedType` is in `src/types.ts`: the
+      // Transparent, as `ParenthesizedType` is in stage0's `src/types.ts`: the
       // parentheses exist to group, and `(T | null)[]` is the shape that needs
       // them, because `T | null[]` groups the other way.
       return resolveType(node.children[0], ctx);

@@ -490,7 +490,7 @@ Because the seed is the last release, `self/` may only *use* in its own
 source what that release compiles. A new construct is implemented in `self/`
 and becomes usable inside `self/` from the next release on — the rolling
 freeze CI's `bootstrap` job checks. Until R6 there was a second compiler, the
-TypeScript one in `src/`, which seeded every bootstrap and served as the
+TypeScript one in stage0's `src/`, which seeded every bootstrap and served as the
 oracle each `self/` phase was compared against; it was deleted once the
 self-hosted compiler did everything it did
 ([wp19](docs/wp19-stage0-retirement.md)).

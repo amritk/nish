@@ -159,7 +159,7 @@ export const basenameWithout = (p: string, suffix: string): string => {
 
 /**
  * The file a module specifier names: `./x` and `./x.js` both mean `x.ts`,
- * which is `src/compilation.ts`'s rule (TypeScript's ESM convention) written
+ * which is stage0's `src/compilation.ts`'s rule (TypeScript's ESM convention) written
  * out. The result is the module's identity, so it goes through `resolvePath`.
  */
 export const resolveModule = (importerDir: string, specifier: string): string => {

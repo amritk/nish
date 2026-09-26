@@ -10,13 +10,13 @@
  *
  * `checked_oracle.js`, `types_oracle.js`, `diagnostics_oracle.js` and
  * `symbols_oracle.js` each prove stage1 correct by comparing it with stage0.
- * The day `src/` is deleted they prove nothing, because the thing they compare
+ * The day stage0's `src/` is deleted they prove nothing, because the thing they compare
  * against is gone. They are green today, which is the whole opportunity: the
  * two implementations agree, so stage1's output *is* the agreed behaviour, and
  * writing it down keeps it past stage0's death.
  *
  * So this tool records the same four outputs as goldens and compares stage1's
- * live output against them. It names neither `src/` nor `dist/` anywhere, and
+ * live output against them. It names neither stage0's `src/` nor `dist/` anywhere, and
  * the only compiler it runs is one it builds out of `self/` — which is why it
  * still works in a tree where stage0 has been deleted. The four oracles keep
  * running beside it for as long as stage0 lives; nothing here replaces them

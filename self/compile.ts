@@ -29,7 +29,7 @@
 //
 // `-o`, `--link` and `--profile` are stage1's too, which is D4 answered rather
 // than kept: `mkdirSync` and `spawnSync` are two runtime calls, and with them
-// the output planning is the same twenty lines `src/index.ts` has and the link
+// the output planning is the same twenty lines stage0's `src/index.ts` has and the link
 // is the same `bash scripts/build.sh` that stage0 spawns. Nothing about the
 // platform comes in with them, because the `uname` and the profile flag sets
 // live in that script and always did — for both compilers.
@@ -68,7 +68,7 @@ const usageText = (): string =>
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
- * (`PROFILES` in `src/index.ts`). A module constant is a scalar here, so the
+ * (`PROFILES` in stage0's `src/index.ts`). A module constant is a scalar here, so the
  * set is a predicate and the list is the string the message needs.
  */
 const PROFILE_NAMES: string = "speed, size, debug, wasi";
@@ -107,7 +107,7 @@ const makeDirectoryFor = (file: string): boolean => {
 
 /**
  * Where each module's IR goes, in module order — the same rules as
- * `planOutputs` in `src/index.ts`:
+ * `planOutputs` in stage0's `src/index.ts`:
  *
  *   -o <dir>/     one `.ll` per module, named by its stem
  *   -o <file.ll>  the one module's IR; two or more modules is refused, with
@@ -183,7 +183,7 @@ const report = (compilation: Compilation, json: boolean): void => {
 
 /**
  * The WP15 §8 performance warnings, in the same two shapes and on the same two
- * streams stage0 prints them on (`reportPerformance` in `src/index.ts`): the
+ * streams stage0 prints them on (`reportPerformance` in stage0's `src/index.ts`): the
  * human report on **stderr**, capped where the error report is capped, or one
  * flat object per warning on **stdout** under `--json`. Neither touches the
  * exit code, and `--no-warn-performance` silences both.
@@ -225,7 +225,7 @@ const reportRootFailure = (message: string, json: boolean): void => {
 /**
  * A `--link` failure: the C toolchain could not be used, so the run is wrong
  * rather than the program. stage0 shapes it the same way (`failureJson` in
- * `src/index.ts`) and both carry the band-0 code, so a reader parses one shape
+ * stage0's `src/index.ts`) and both carry the band-0 code, so a reader parses one shape
  * whichever compiler it ran.
  */
 const reportToolchainFailure = (message: string, json: boolean): void => {
@@ -327,7 +327,7 @@ export const main = (): number => {
       const mode = process.argv[arg];
       if (mode !== "i32" && mode !== "f64") {
         // stage0 refuses an unknown mode rather than falling back to i32
-        // (`src/index.ts`), and a silent fallback is the worst of the three
+        // (stage0's `src/index.ts`), and a silent fallback is the worst of the three
         // outcomes: the program compiles, in the other arithmetic.
         console.error(`compile: --number-mode must be i32 or f64, not \`${mode}\``);
         return 2;
@@ -449,7 +449,7 @@ export const main = (): number => {
       emitAst = true;
     } else if (value === "-h" || value === "--help") {
       // A request that succeeded, not a refusal: stdout and exit 0. stage0
-      // answers it the same way (`usageText` in `src/index.ts`), so a script
+      // answers it the same way (`usageText` in stage0's `src/index.ts`), so a script
       // that asks either compiler for its help sees the same shape; an actual
       // usage error still prints the usage on stderr and returns 2 below.
       console.log(usageText());
@@ -559,7 +559,7 @@ export const main = (): number => {
     if (compilation.unreadableRoot.length > 0) {
       // stage0 answers a root it cannot open with the syscall it failed at,
       // on stderr with an `error:` prefix, or as one JSON object under
-      // `--json` (`src/index.ts`). The errno itself stays stage0's: Node names
+      // `--json` (stage0's `src/index.ts`). The errno itself stays stage0's: Node names
       // it, and `readFileSyncOrNull` answers null without saying why.
       reportRootFailure(`cannot open ${compilation.unreadableRoot}`, json);
     } else if (compilation.sink.hasErrors()) {
@@ -697,7 +697,7 @@ const programOnPath = (program: string): string => {
 
 /**
  * The package root: the directory holding `scripts/`, `runtime/` and `std/`.
- * stage0 reads it from `import.meta.dirname` (`src/version.ts`); this compiler
+ * stage0 reads it from `import.meta.dirname` (stage0's `src/version.ts`); this compiler
  * is a binary, so it derives it from the path it was invoked by —
  * `<prefix>/bin/nish` and `build/nish` both put it one level up — and falls
  * back to the working directory, which is what a checkout wants. Empty when
@@ -880,7 +880,7 @@ const buildIntoCache = (
 
 /**
  * `--link`: hand the emitted IR and `runtime/runtime.c` to
- * `scripts/build.sh`, which is the same script `src/index.ts` spawns and the
+ * `scripts/build.sh`, which is the same script stage0's `src/index.ts` spawns and the
  * only place either compiler knows what `uname` says or what `-O3 -flto` is
  * spelled on this platform. Answers the process exit code.
  *

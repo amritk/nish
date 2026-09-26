@@ -1,6 +1,6 @@
 // `--emit-napi <shim.c>`: a Node-API (N-API) shim that turns every external
 // function whose types JS can carry into a JS function
-// (`src/interop/napi.ts`, WP8).
+// (stage0's `src/interop/napi.ts`, WP8).
 //
 // The shim is plain C against node_api.h (Node's stable ABI, so the addon
 // survives Node upgrades without a rebuild). Per function it:
@@ -38,7 +38,7 @@
 // so a host never has to reset the arena for bridged calls. `nish_reset_arena`
 // / `nish_free_arena` are still exported for hosts that want to.
 //
-// This is the most host-shaped of the five generators, because `src/` models
+// This is the most host-shaped of the five generators, because stage0's `src/` models
 // a reader and a boxer as records of closures. Closures are what the language
 // does not have, so a `Reader` and a `Boxer` here are **data with a kind**,
 // and `napiReaderLines` / `napiBoxerCall` switch on that kind to write the same lines.
@@ -114,7 +114,7 @@ const napiStartsWithVowel = (noun: string): boolean => {
   );
 };
 
-// How a JS value becomes a parameter of this type. `src/` writes the lines
+// How a JS value becomes a parameter of this type. stage0's `src/` writes the lines
 // with a closure per shape; here the shape is a tag and the switch in
 // `readerLines` writes them.
 const READ_SCALAR: i32 = 0;
@@ -138,7 +138,7 @@ const F32_HELPER: string = "nish_napi_f32";
  * Out-of-range JS numbers truncate, they do not throw: 300 reaches a `u8`
  * parameter as 44 and -1 reaches a `u32` as 4294967295, which is what
  * JavaScript itself does storing a number into a typed array. The reasoning is
- * written out over `ScalarReader` in `src/interop/napi.ts`.
+ * written out over `ScalarReader` in stage0's `src/interop/napi.ts`.
  */
 export class ScalarReader {
   jsType: string;
@@ -185,7 +185,7 @@ const napiUnsignedReader = (c: string): ScalarReader => {
 };
 
 /**
- * `SCALAR_READERS` in `src/`, which is a record keyed by type kind. `null` for
+ * `SCALAR_READERS` in stage0's `src/`, which is a record keyed by type kind. `null` for
  * a type N-API has no getter for at all — a class, an array, a nullable — and
  * that is what keeps such a parameter out of this shim.
  */
@@ -335,7 +335,7 @@ const napiResultReader = (table: TypeTable, t: i32): Reader | null => {
 };
 
 // How a wrapper gives up: throw, release the arena and throw, or -- once it has
-// handed a promise back -- reject that promise. `src/` picks this with a closure
+// handed a promise back -- reject that promise. stage0's `src/` picks this with a closure
 // per wrapper; a mode is what the language has instead, and the three spell the
 // same three failing returns.
 const FAIL_THROW: i32 = 0;

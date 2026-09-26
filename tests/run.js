@@ -1970,8 +1970,8 @@ const llFilesIn = (dir) =>
   fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).sort() : [];
 
 // WP21 S2: `node_modules` above the working directory. `tests/link/package_above`
-// is the ordinary npm layout — the manifest beside `src/`, not inside it — compiled
-// the ordinary way, `nish main.ts` from `src/`, so the entry is relative and the
+// is the ordinary npm layout — the manifest beside stage0's `src/`, not inside it — compiled
+// the ordinary way, `nish main.ts` from stage0's `src/`, so the entry is relative and the
 // package is two directories up. stage0 resolves an absolute path and climbs to
 // `/`; stage1 has no `process.cwd()` to build one from (WP19 §A3) and has to climb
 // past `.` by spelling `..`. This is the case that tells a walk that stops at `.`
@@ -6338,7 +6338,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   }
 
   // Wave C: the support library the checker and the emitter are written
-  // over (docs/wp14-selfhost.md §3). It has no counterpart in `src/` to
+  // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
   // already exists — stage0's IR escape and f64 hex, recorded in a golden
   // while it was in the tree, `node:path` for
@@ -6562,7 +6562,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // was released, which forbids every improvement a release cycle exists to
   // carry and says nothing about the bootstrap, so it is reported and not
   // asserted. (While stage0 was a seed the same comparison was diverse
-  // double-compiling, and was asserted; that went with `src/`.)
+  // double-compiling, and was asserted; that went with stage0's `src/`.)
   // `IR(stage1) == IR(stage2)` and `stage3 == stage2` are properties of the
   // working tree alone and are asserted for every seed.
   //
@@ -6779,7 +6779,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // `tests/link/package_above` installs the package *above* the directory
     // the compiler is run in -- `proj/node_modules` beside `proj/src/main.ts`,
     // which is what npm produces -- and is compiled the way that program is
-    // compiled, `nish main.ts` from `src/`. stage1 has no `process.cwd()`
+    // compiled, `nish main.ts` from stage0's `src/`. stage1 has no `process.cwd()`
     // (WP19 §A3) and climbs past `.` by spelling `..`, so a stage1 that
     // stopped where `dirname` stops answered `` Cannot find package
     // `pkg_above` `` for a program that resolves. The two modules are the
@@ -7389,7 +7389,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     // lower bound across `i = i + 1` when the wrap is *defined*, because the
     // increment that passes `INT_MAX` then lands on `INT_MIN` rather than being
     // undefined behaviour the compiler may assume away
-    // (`src/checker/bounds.ts`). So the counted loop in `sum` keeps the checks
+    // (stage0's `src/checker/bounds.ts`). So the counted loop in `sum` keeps the checks
     // the default build proves away, and the two IRs are compared with the
     // checks out of the picture on both sides — where the only difference left
     // is the flag itself.
@@ -10821,7 +10821,7 @@ if (!only || "release".includes(only) || "changelog".includes(only)) {
 // ---- WP19 G2.4: the frozen rewrites the WP13 oracle keeps once stage0 is gone -------
 // `tests/differential/rewrite.js` typed its rewrite with stage0's own `Compilation`, so
 // the differential comparison against Node -- the only oracle here about runtime
-// semantics rather than emitted text -- would have gone with `src/`.
+// semantics rather than emitted text -- would have gone with stage0's `src/`.
 // `tests/differential/goldens/rewrites.txt` is that rewrite written down while stage0
 // existed, and what outlives it is **freshness**: every program's sources still hash to
 // what they hashed when it was frozen, which is the reason a stale golden reads as a
@@ -10850,7 +10850,7 @@ if (!only || "differential".includes(only) || "goldens".includes(only)) {
 // Stage A was declared done on "the two spellings of one program emit byte-identical IR",
 // and until now nothing in `npm test` asked. The claim is structural rather than lucky --
 // the emitter iterates checked `FunctionSig`s and there is no `isFunctionDeclaration`
-// anywhere in `src/codegen/` -- which is exactly why it is worth a check: a pass that
+// anywhere in stage0's `src/codegen/` -- which is exactly why it is worth a check: a pass that
 // started reading the declaration's syntax kind would break it silently, and the goldens
 // would not notice, because every golden is written in one spelling or the other and each
 // would go on matching itself.

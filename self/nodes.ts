@@ -161,7 +161,7 @@ export class Node {
   kind: i32;
   /**
    * Dense index into the side tables the checker fills (`self/program.ts`),
-   * assigned by the parser as it builds the tree. `src/` keys those tables by
+   * assigned by the parser as it builds the tree. stage0's `src/` keys those tables by
    * `WeakMap<ts.Node, ...>`; the language has no `WeakMap` and this is the faster
    * shape anyway — an array index rather than a hash of a pointer — and it
    * keeps the rule that the checker records and the emitter reads, with the

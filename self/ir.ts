@@ -1,4 +1,4 @@
-// The textual LLVM IR builder for stage1 (`src/codegen/ir.ts`,
+// The textual LLVM IR builder for stage1 (stage0's `src/codegen/ir.ts`,
 // docs/wp14-selfhost.md milestone S4).
 //
 // Responsible only for the *shape* of the output: module header, type and
@@ -11,7 +11,7 @@
 // parameter this builder emits is *named*, so they never consume a number and
 // the first temporary of a function is always `%0`.
 //
-// Two shape changes from `src/`, both forced by the language and neither
+// Two shape changes from stage0's `src/`, both forced by the language and neither
 // visible in the output:
 //
 //   - `Map<string, i32>` becomes `StringMap`, for the label and alloca
@@ -40,7 +40,7 @@ export class IRBlock {
   }
 
   /**
-   * Whether a terminator has been emitted. `src/` asks this with the regular
+   * Whether a terminator has been emitted. stage0's `src/` asks this with the regular
    * expression `^(ret|br|switch|unreachable)\b`; the language has no regular
    * expressions, and a prefix test with the word boundary spelled out is the
    * same predicate over the instructions this builder can produce.
@@ -77,7 +77,7 @@ export class IRBlock {
 
 /**
  * `text` begins with `word` at a word boundary, which is `\b` in the regular
- * expression `src/` uses. The boundary matters: with `-g` an `unreachable` is
+ * expression stage0's `src/` uses. The boundary matters: with `-g` an `unreachable` is
  * written `unreachable, !dbg !9`, so testing only for a following space would
  * miss the terminator and the emitter would add a second one.
  */
@@ -427,7 +427,7 @@ export class IRModule {
 }
 
 /**
- * The number in a `!N` reference. `src/` writes `Number(ref.slice(1))`; the
+ * The number in a `!N` reference. stage0's `src/` writes `Number(ref.slice(1))`; the
  * digits are read here instead so that filling a reserved slot needs no
  * `parseInt` call at run time.
  */

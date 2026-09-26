@@ -1,7 +1,7 @@
 // The lexer for the subset `self/` is written in, and itself written in that
 // subset (docs/wp14-selfhost.md, milestone S1).
 //
-// It is the first piece of `self/` that is not a table: `src/` has
+// It is the first piece of `self/` that is not a table: stage0's `src/` has
 // no lexer at all, because the `typescript` package is the scanner there, so
 // this is new code rather than a port, and it is the half of the bootstrap
 // whose risk the S2 gate exists to measure.

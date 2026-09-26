@@ -1,9 +1,9 @@
-// String lowering for stage1 (`src/codegen/emit/strings.ts`,
+// String lowering for stage1 (stage0's `src/codegen/emit/strings.ts`,
 // docs/wp14-selfhost.md milestone S4).
 //
 // Layout (ABI, shared with `runtime/runtime.c`): a `string` is an `i8*` to
 // `{ i64 len, i8 data[len], i8 0 }`, 8-byte aligned, immutable. The lowerings
-// are `src/codegen/emit/strings.ts`'s, unchanged: a literal is an interned
+// are stage0's `src/codegen/emit/strings.ts`'s, unchanged: a literal is an interned
 // `@.str.N`, `a + b` is `nish_str_concat`, `a === b` is `nish_str_eq`,
 // `.length` is a header load with no call, and the byte methods lower inline
 // so `runtime.c` stays inside its budget.
@@ -28,7 +28,7 @@ import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } fro
  */
 export const addStringConstant = (module: IRModule, index: i32, text: string): string => {
   // A string is bytes, so `length` is already the byte length the
-  // header needs; `src/` gets the same number from `Buffer.byteLength`.
+  // header needs; stage0's `src/` gets the same number from `Buffer.byteLength`.
   const array = `[${text.length + 1} x i8]`;
   const type = `{ i64, ${array} }`;
   module.addGlobal(
@@ -287,7 +287,7 @@ const emitSubstring = (emitter: Emitter, expr: Node, str: string): string => {
  * `runtime.c` inside its size budget. That made the idiomatic search a
  * byte-at-a-time scan, and the budget yields to a measured win, so it moved
  * into the runtime where the libc's vectorised routines can do it
- * (`src/codegen/emit/strings.ts` has the measurement).
+ * (stage0's `src/codegen/emit/strings.ts` has the measurement).
  */
 const emitStringIndexOf = (emitter: Emitter, expr: Node, str: string): string => {
   const sub = emitter.emitExpression(expr.children[1].children[0]);

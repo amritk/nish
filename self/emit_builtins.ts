@@ -1,4 +1,4 @@
-// Builtin lowering for stage1 (`src/codegen/emit/math.ts`, `io.ts`, `arena.ts`
+// Builtin lowering for stage1 (stage0's `src/codegen/emit/math.ts`, `io.ts`, `arena.ts`
 // and the dotted-call table of `emit/strings.ts`; docs/wp14-selfhost.md
 // milestone S4).
 //
@@ -8,7 +8,7 @@
 // **plain callees** (`toI32`, `parseInt`, `readFileSync`, `panic`) are
 // consulted only when no user function of that name is in scope.
 //
-// `src/` pairs each lowering with a `callees` function inside one
+// stage0's `src/` pairs each lowering with a `callees` function inside one
 // `BuiltinCall` object, so that what a builtin *emits* and what the attribute
 // analysis is *told* it emits cannot drift apart. The language has no function
 // values, so the pair is kept by locality instead: `emitBuiltinCall` and

@@ -1,4 +1,4 @@
-// Class, interface and struct lowering for stage1 (`src/codegen/emit/
+// Class, interface and struct lowering for stage1 (stage0's `src/codegen/emit/
 // classes.ts` and the member dispatch of `emit/members.ts`;
 // docs/wp14-selfhost.md milestone S4).
 //
@@ -13,7 +13,7 @@
 // one `bitcast`. There is no inheritance and no vtable — a method call
 // resolves to the method of the receiver's own type.
 //
-// The member dispatch that `src/` spreads over three tables keyed by the
+// The member dispatch that stage0's `src/` spreads over three tables keyed by the
 // receiver's type kind is the `if` chain in `emitPropertyAccess` and
 // `emitMethodCall` here, which is D2 again: the tables needed a registration
 // per family and the language has no function values to register.
@@ -359,7 +359,7 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
   // emitted here rather than looked up: a field or signature that mentions one
   // is enough to need it in this module.
   const results: string[] = [];
-  // The array header, as a list rather than the flag `src/` uses, because
+  // The array header, as a list rather than the flag stage0's `src/` uses, because
   // `noteStruct` is a free function here and has nothing to close over.
   const headers: string[] = [];
   for (const info of emitter.program.structList) {

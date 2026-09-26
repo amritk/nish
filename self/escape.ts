@@ -1,8 +1,8 @@
-// Allocation escape analysis for stage1 (`src/codegen/escape.ts`,
+// Allocation escape analysis for stage1 (stage0's `src/codegen/escape.ts`,
 // docs/wp14-selfhost.md milestone S4): which allocations can live on the
 // stack, and which functions can reclaim their arena temporaries on exit.
 //
-// The model is `src/codegen/escape.ts`'s and its long header states it in
+// The model is stage0's `src/codegen/escape.ts`'s and its long header states it in
 // full: an *allocation site* is an expression that produces fresh memory, its
 // value *flows* somewhere through the transparent wrappers and the locals it
 // is stored in, and the flow is `local`, `returned` or `leaks`. A stackable
@@ -113,7 +113,7 @@ const worse = (a: i32, b: i32): i32 => a >= b ? a : b;
  *
  * Adding an allocating builtin to `builtins.ts` and forgetting this predicate is
  * a use-after-free rather than a missed optimisation, so the three `mem_*_scope`
- * cases pin one each. `src/codegen/escape.ts` holds the same four names in a
+ * cases pin one each. stage0's `src/codegen/escape.ts` holds the same four names in a
  * `Set`; a module constant in this language is a scalar or a string, so the set
  * is a function here and the two are read side by side.
  */

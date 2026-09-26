@@ -1,5 +1,5 @@
-// Statement checking for stage1 (`src/checker/statements.ts` and
-// `src/checker/control-flow.ts`, docs/wp14-selfhost.md milestone S3, pass 2).
+// Statement checking for stage1 (stage0's `src/checker/statements.ts` and
+// stage0's `src/checker/control-flow.ts`, docs/wp14-selfhost.md milestone S3, pass 2).
 //
 // Every checker answers **whether the statement definitely terminates the
 // path**, which is the same fact three rules read: a non-`void` function must
@@ -96,7 +96,7 @@ export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope):
     // statement of each list in its own `try`, so a `CompileError` thrown from
     // anywhere inside one statement costs exactly that statement's worth of
     // checking and the next statement starts clean
-    // (`checkStatements` in `src/checker/statements.ts`). `errored` is this
+    // (`checkStatements` in stage0's `src/checker/statements.ts`). `errored` is this
     // file's throw, so it is cleared exactly where that `catch` is.
     ctx.errored = false;
     const before = terminator;
@@ -245,7 +245,7 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
     // not say. Without a type there is nothing to declare it as, so it stays
     // undeclared and its later uses are `Unknown identifier` —
     // stage0's `catch` declares it in exactly the annotated case and rethrows
-    // otherwise (`checkVariableDeclaration` in `src/checker/statements.ts`),
+    // otherwise (`checkVariableDeclaration` in stage0's `src/checker/statements.ts`),
     // and the cascade that follows is the visible half of the difference
     // (WP19 §A3: `const at = m.get(k, -1)` in f64 mode).
     if (ctx.errored && (declared < 0 || declared === T_ERROR)) {
@@ -355,7 +355,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   clearNarrowingsAssignedIn(ctx, stmt, scope);
-  // The head, before the iterable, in stage0's order (`src/checker/arrays.ts`).
+  // The head, before the iterable, in stage0's order (stage0's `src/checker/arrays.ts`).
   // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of
   // a)` without complaint, because the grammar it uses for the head is the
   // ordinary variable-declaration one; the rules about what a `for...of` head

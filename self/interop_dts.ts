@@ -1,6 +1,6 @@
 // `--emit-dts <file.d.ts>`: TypeScript declarations for the wasm build, plus
 // the companion loader `<file>.mjs` (see `self/interop_wasm.ts`) that
-// implements them (`src/interop/dts.ts`, WP8).
+// implements them (stage0's `src/interop/dts.ts`, WP8).
 //
 // `scripts/build.sh --profile wasm` exports every external function with the
 // wasm C ABI, which JS sees as:

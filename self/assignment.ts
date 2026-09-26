@@ -1,4 +1,4 @@
-// Definite assignment for stage1 (`src/checker/classes.ts` pass 1c,
+// Definite assignment for stage1 (stage0's `src/checker/classes.ts` pass 1c,
 // docs/wp14-selfhost.md milestone S3).
 //
 // A class has no zero value: every field is either given a literal

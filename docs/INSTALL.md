@@ -198,7 +198,7 @@ nish: no prebuilt compiler for freebsd/x64
 
 Until 0.6.0 it ran the TypeScript compiler that shipped in the same package
 instead — the same compiler by every test here, about eight times slower, and
-no C toolchain needed. That compiler was `src/`, which was deleted in R6
+no C toolchain needed. That compiler was stage0's `src/`, which was deleted in R6
 ([wp19](wp19-stage0-retirement.md)), so there is nothing left in the package to
 fall back to. The cost is stated where the rest of that deletion's costs are,
 in [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
@@ -410,7 +410,7 @@ Because the seed is the last release, `self/` may only *use* in its own
 source the constructs that release compiles. A new construct is implemented
 in `self/` and becomes usable inside `self/` from the next release on; CI's
 `bootstrap` job is what checks that the released seed still builds stage1.
-Until R6 the seed was a TypeScript compiler in `src/`, run under Node; it was
+Until R6 the seed was a TypeScript compiler in stage0's `src/`, run under Node; it was
 deleted once the native one answered every flag it did
 ([wp19](wp19-stage0-retirement.md)).
 

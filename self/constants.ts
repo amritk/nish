@@ -1,4 +1,4 @@
-// Module constants for stage1 (`src/checker/constants.ts`,
+// Module constants for stage1 (stage0's `src/checker/constants.ts`,
 // docs/wp14-selfhost.md milestone S3).
 //
 // A module constant is a name for a value the compiler already knows, not a
@@ -39,7 +39,7 @@ import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING } from "./types";
 
 /**
  * A folded value. One class with a type discriminant rather than the
- * four-way union `src/` writes, per §2.1: the field the type selects is the
+ * four-way union stage0's `src/` writes, per §2.1: the field the type selects is the
  * live one, and `bool` lives in `intValue` as 0 or 1.
  */
 export class ConstValue {
@@ -172,7 +172,7 @@ export const foldConstant = (ctx: CheckContext, info: ConstInfo): void => {
   if (ctx.errored) {
     // Nothing is marked folded: stage0's `catch` resets the marker and
     // rethrows so that "a second reference reports the same error rather than
-    // a stale `folding`" (`constValue` in `src/checker/constants.ts`). Each
+    // a stale `folding`" (`constValue` in stage0's `src/checker/constants.ts`). Each
     // constant of a cycle is then reported against itself, which is what
     // `tests/cases/reject_const_cycle` pins.
     return;

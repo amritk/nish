@@ -1,6 +1,6 @@
 # WP0: Phase 0 validator
 
-`src/validator.ts` is the first phase of the pipeline. It runs on the raw
+stage0's `src/validator.ts` is the first phase of the pipeline. It runs on the raw
 syntax tree immediately after parsing and before the checker, and throws a
 `CompileError` (`file:line:col: error: <message>`) on the first construct that
 Nish can never compile. Every rule is decided from syntax alone: no

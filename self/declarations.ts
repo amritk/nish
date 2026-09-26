@@ -1,4 +1,4 @@
-// Top-level declarations for stage1 (`src/checker/declarations.ts`,
+// Top-level declarations for stage1 (stage0's `src/checker/declarations.ts`,
 // docs/wp14-selfhost.md milestone S3): function signatures, `export`,
 // `import`, and the entry point.
 //
@@ -187,7 +187,7 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
 export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
   if (sig.paramTypes.length > 0) {
     // Against the first parameter, as stage0 hands `sig.decl.parameters[0]` to
-    // the error (`markEntryMain` in `src/checker/declarations.ts`), not against
+    // the error (`markEntryMain` in stage0's `src/checker/declarations.ts`), not against
     // the whole declaration.
     ctx.error(
       sig.decl.children[1].children[0],

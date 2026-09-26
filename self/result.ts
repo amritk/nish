@@ -1,4 +1,4 @@
-// `Result<T, E>` for stage1 (`src/checker/result.ts`, WP16): the type, the
+// `Result<T, E>` for stage1 (stage0's `src/checker/result.ts`, WP16): the type, the
 // three rules that make an error impossible to ignore, and the layout the
 // emitter shares with the checker.
 //
@@ -135,7 +135,7 @@ export const checkResultConstructor = (ctx: CheckContext, call: Node, scope: Sco
   // No `want`, for `checkUnwrapOr`'s reason below: `docs/LANGUAGE.md`'s
   // contextual-literal table is an enumerated list and a `Result` payload is
   // not one of its positions, so stage0 checks this argument with no
-  // contextual type (`checkOk` / `checkErr` in `src/checker/result.ts`) and in
+  // contextual type (`checkOk` / `checkErr` in stage0's `src/checker/result.ts`) and in
   // f64 mode `Ok(3)` for a `Result<i32, E>` is an f64 meeting an i32. Passing
   // `payload` down made stage1 compile what stage0 refuses, which
   // `tests/run.js --parity` found (WP19 G1) and `reject_res_ok_f64` pins.
@@ -268,7 +268,7 @@ const checkUnwrapOr = (ctx: CheckContext, call: Node, args: Node, receiver: i32,
   // No `want`, deliberately. `docs/LANGUAGE.md` grants a bare numeric literal
   // its context's type only in the positions its table names, and this is not
   // one of them: stage0 checks the argument with no contextual type at all
-  // (`checkUnwrapOr` in `src/checker/result.ts`), so in f64 mode
+  // (`checkUnwrapOr` in stage0's `src/checker/result.ts`), so in f64 mode
   // `r.unwrapOr(-1)` on a `Result<i32, string>` is an f64 meeting an i32 and
   // is refused. Threading `ok` down here made stage1 accept it, which
   // `tests/run.js --parity` found (WP19 G1) and

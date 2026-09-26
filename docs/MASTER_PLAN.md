@@ -155,10 +155,10 @@ function, class, interface or method is monomorphised, WP18), `symbol`,
 
 There is **one compiler**, and it is written in the language it compiles:
 `self/`, 64 modules (`ls self/*.ts | wc -l`) and 35,601 lines of Nish
-(`cat self/*.ts | wc -l`). Until R6 it had a twin, `src/`
+(`cat self/*.ts | wc -l`). Until R6 it had a twin, stage0's `src/`
 (stage0, the same compiler in TypeScript on Node), and the two agreed byte for
 byte on the IR of every program in the corpus, which is what WP14 below means
-by self-hosting. R6 deleted `src/` (§9, M6); `self/` is now built by the last
+by self-hosting. R6 deleted stage0's `src/` (§9, M6); `self/` is now built by the last
 released `nish`, the seed. `.claude/orientation.md` is the
 ninety-second map; the table below is the inventory.
 
@@ -207,7 +207,7 @@ rather than only what was planned: five of them have landed, and WP15 is the
 roadmap the project is on now. Each entry carries its state in its heading.
 
 The file paths in the packages up to WP17 are where the work was done at the
-time, which for most of them was `src/`, the TypeScript compiler R6 deleted
+time, which for most of them was stage0's `src/`, the TypeScript compiler R6 deleted
 (§9, M6). Each piece now lives in `self/`; [ARCHITECTURE.md](ARCHITECTURE.md)'s
 pipeline table is the map.
 
@@ -218,8 +218,8 @@ Wave 1 agents do not all edit the same two functions.
 
 - `checkStatement`/`checkExpression` and `emitStatement`/`emitExpression`
   were split into dispatch tables keyed by `ts.SyntaxKind`, with one module per
-  construct family: `src/checker/{statements,expressions,declarations}.ts`,
-  `src/codegen/emit/{statements,expressions}.ts`.
+  construct family: stage0's `src/checker/{statements,expressions,declarations}.ts`,
+  stage0's `src/codegen/emit/{statements,expressions}.ts`.
 - Introduce a golden-test harness: `tests/cases/<name>.ts` + `<name>.ll` +
   optional `<name>.out` (expected stdout when linked with `tests/driver.c`
   that calls `main`) and `<name>.err` for negative cases. `tests/run.js`
@@ -233,11 +233,11 @@ Acceptance: `npm test` unchanged and green; existing goldens byte-identical.
 Goal: a dedicated, un-bypassable forbidden-syntax sweep that runs before the
 checker, plus Biome configured purely as a formatter/linter for humans.
 
-- `src/validator.ts`: `validateNish(sourceFile)` walked the whole tree
+- stage0's `src/validator.ts`: `validateNish(sourceFile)` walked the whole tree
   with `ts.forEachChild` and threw `CompileError` for everything in §3.2.
   It had to catch things the checker never reaches (e.g. `any` nested in a
   type argument, `delete` inside an unreachable branch).
-- It was wired into `src/compiler.ts` as Phase 0, and the checker kept its own
+- It was wired into stage0's `src/compiler.ts` as Phase 0, and the checker kept its own
   checks: the validator is defence in depth, not a replacement. Its successor
   is `self/validator.ts`.
 - `biome.json` with format + recommended lint for the compiler's own source
@@ -468,7 +468,7 @@ three; `lldb` shows a `.ts` line on a breakpoint in the fib example.
 Goal: make the compiler something a stranger can install, and make its
 refusals legible.
 
-- `package.json#files` whitelists what `npm pack` ships; `src/index.ts`
+- `package.json#files` whitelists what `npm pack` ships; stage0's `src/index.ts`
   resolved `scripts/build.sh` and `runtime/runtime.c` from the package root
   (`PKG_ROOT`), never from the working directory, so `npm install -g` worked
   from anywhere. `self/compile.ts` does the same from its own binary's path.
@@ -521,7 +521,7 @@ compares the last release's IR with HEAD's.
 
 ### WP14: Self-hosting (L, after WP8) — landed
 
-Goal: the compiler compiles itself. `self/` was `src/` rewritten in Nish,
+Goal: the compiler compiles itself. `self/` was stage0's `src/` rewritten in Nish,
 and the claim is an equality rather than a demo:
 `IR(stage1, self/) == IR(stage2, self/)` byte for byte, with stage3 identical
 to stage2.
@@ -532,7 +532,7 @@ to stage2.
   interned integer types, `StringMap` over parallel arrays, error-value
   threading instead of exceptions, side tables as arrays indexed by node id.
 - The language gap measured first and closed construct by construct, each one
-  entering `src/` with its golden, round trip, negatives, LANGUAGE.md rule and
+  entering stage0's `src/` with its golden, round trip, negatives, LANGUAGE.md rule and
   cookbook entry before it entered `self/`.
 - An oracle per phase (lexer, parser, support, types, diagnostics, symbols,
   the checked dump, the rejections, the IR, the interop sidecars), each
@@ -749,7 +749,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x, which the run's own analysis reads as spread rather than the program ([BENCHMARKS.md](BENCHMARKS.md), [wp9-optimisation.md](wp9-optimisation.md#summary)). The other three closed: the causes were named rather than guessed, and each section below the gap table says what the measurement was before the change |
 | M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **not scheduled.** The project stays on 0.x until its owner declares 1.0. The rule that will apply then is already written at the head of [LANGUAGE.md](LANGUAGE.md) — see [What remains](#what-remains). WP2b left the milestone rather than being finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)) |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
-| M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** — R6 ([wp19 §5](wp19-stage0-retirement.md#5-order)) deleted `src/`, the TypeScript compiler that `tsc` built into `dist/`, and with it the `typescript` runtime dependency (it stays a devDependency, for `npm run check` and the lexer and parser oracles), the six oracles that compared stage1 with stage0 (types, diagnostics, symbols, checked, IR, interop), the parity mode and its workflows, and the stage1-only register, which had nothing left to register once every case was stage1's. Each oracle has a successor that runs without stage0: the types, diagnostics, symbols and checked dumps are held to the goldens in `tests/self/goldens/` (`tests/self/goldens.js`), which were written from stage0 while it still existed; the IR and the interop sidecars are held to the `tests/cases/*.ll` goldens and to `tests/nish-cmp.js`, which compares HEAD with the last released compiler. The seed is that release, fetched by `scripts/fetch-seed.sh`, and `self/` is the only compiler. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `self/` to TypeScript: with the `@ts-expect-error` at `self/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
+| M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** — R6 ([wp19 §5](wp19-stage0-retirement.md#5-order)) deleted stage0's `src/`, the TypeScript compiler that `tsc` built into `dist/`, and with it the `typescript` runtime dependency (it stays a devDependency, for `npm run check` and the lexer and parser oracles), the six oracles that compared stage1 with stage0 (types, diagnostics, symbols, checked, IR, interop), the parity mode and its workflows, and the stage1-only register, which had nothing left to register once every case was stage1's. Each oracle has a successor that runs without stage0: the types, diagnostics, symbols and checked dumps are held to the goldens in `tests/self/goldens/` (`tests/self/goldens.js`), which were written from stage0 while it still existed; the IR and the interop sidecars are held to the `tests/cases/*.ll` goldens and to `tests/nish-cmp.js`, which compares HEAD with the last released compiler. The seed is that release, fetched by `scripts/fetch-seed.sh`, and `self/` is the only compiler. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under stage0's `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `self/` to TypeScript: with the `@ts-expect-error` at `self/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
 
 WP12, WP13, WP16 and WP17 landed between M3 and M5 without a milestone of
 their own; releasing what they built is part of M4.

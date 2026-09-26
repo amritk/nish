@@ -740,7 +740,7 @@ function corpus() {
 /**
  * `self/dump_ast.ts`, linked by the seed rather than by stage0 (WP19 G2.3):
  * what this oracle compares against is the `typescript` parser, which outlives
- * `src/`, so the compiler that builds its subject has to as well.
+ * stage0's `src/`, so the compiler that builds its subject has to as well.
  */
 function build(seed) {
   return linkWith(seed, path.join("self", "dump_ast.ts"), path.join(root, "build", "self", "dump_ast"));

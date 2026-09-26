@@ -61,7 +61,7 @@ design with a different memory model underneath it.
 
 Go treats a data race as a bug you find with a detector at runtime.
 Nish cannot, because it has already spent the assumption such a
-detector would have to preserve. `src/codegen/attributes.ts` emits `readnone`,
+detector would have to preserve. stage0's `src/codegen/attributes.ts` emits `readnone`,
 `readonly` and the pointer-parameter facts only where a fixpoint over the
 whole program's call graph proves them, and the rule is that a wrong attribute
 is undefined behaviour rather than a missed optimisation
@@ -83,7 +83,7 @@ Unusually much, and all of it by accident of other decisions.
 | --- | --- | --- |
 | **No mutable global state, at all** | top-level `let` is rejected (`reject_const_top_level_let`), static class fields are rejected (`reject_cls_static`), top-level statements are rejected (`reject_top_level_stmt`), and a module `const` emits no symbol — it folds into the IR (LANGUAGE.md, "Module constants") | The largest category of shared-mutable-state bug in C and half of it in Go cannot be written. Everything two threads can both reach arrived through a pointer somebody passed, which is exactly the thing an analysis can follow. |
 | **No closures** | a function is declared as an arrow bound to a module-level `const`, and the `function` keyword is the legacy spelling of the same thing; but a function is still not a value — a name bound to one may only be called, so `const alias = double` is `` Unknown identifier `double` `` (`reject_arrow_as_value`). An arrow anywhere else is `Unsupported expression in Phase 1: ArrowFunction`, nested function declarations are rejected, and there is no function type in the type table (`reject_function_type`) (LANGUAGE.md, "Functions") | A thread entry can only be a named top-level function. The "what did the closure capture, and who owns it after the spawning frame returns" problem — which costs Rust `move` plus `Send` bounds and costs Go a GC — does not arise. |
-| **A whole-program compiler with the analysis already in the right shape** | `Compilation` loads every import transitively and runs `src/codegen/attributes.ts` over all modules at once; `src/codegen/escape.ts` already classifies each allocation site as `local` / `returned` / `leaks`, and the `pointerParams` / `escaping` fixpoints already answer "does this callee capture this pointer" | A `Send`-shaped judgment is the same fixpoint with one new flow class, not a new subsystem. This is why §4 does not propose a trait system: with the whole program in hand, one is not needed for the cases threads care about. |
+| **A whole-program compiler with the analysis already in the right shape** | `Compilation` loads every import transitively and runs stage0's `src/codegen/attributes.ts` over all modules at once; stage0's `src/codegen/escape.ts` already classifies each allocation site as `local` / `returned` / `leaks`, and the `pointerParams` / `escaping` fixpoints already answer "does this callee capture this pointer" | A `Send`-shaped judgment is the same fixpoint with one new flow class, not a new subsystem. This is why §4 does not propose a trait system: with the whole program in hand, one is not needed for the cases threads care about. |
 | **Immutability that is already checked** | strings are immutable, shared by pointer and never individually freed; `readonly T[]` is a checker-enforced promise of no store, no `push`, no `pop`, and no widening back (LANGUAGE.md, "Readonly arrays") | The shareable-type set of §4 T2 is not built from nothing. Strings and `readonly` arrays of shareable elements are safe to share the day the arena question is settled. |
 | **Nothing unwinds** | functions are `nounwind`; a failure is a `Result` and `throw` is gone (WP16) | A thread trampoline has one exit and no cleanup path. Compare the care a language with exceptions needs at a thread boundary. |
 | **Two targets already separated** | `runtime/runtime.c` and the freestanding `runtime/runtime_wasm.c` | The wasm story (§6) can be deferred without a fork, because the split already exists. |
@@ -94,7 +94,7 @@ Unusually much, and all of it by accident of other decisions.
 
 `struct nish_arena nish_arena;` is a single process-wide object
 (`runtime/runtime.c:35`, `runtime/nish.h`), and — the sharp part — the fast
-path is not a call. `inlineAllocator()` (`src/codegen/runtime.ts:385`) emits
+path is not a call. `inlineAllocator()` (stage0's `src/codegen/runtime.ts:385`) emits
 an `alwaysinline` function that GEPs into `@nish_arena` and does a plain
 non-atomic `load` / `add` / `store` on the bump offset, and every `new`,
 object literal, array literal, string concatenation and template with a hole
@@ -105,7 +105,7 @@ merely in the C runtime. It cannot be fixed in `runtime.c` alone.
 
 The fix is a thread-local arena: `@nish_arena` becomes `thread_local`, the
 allocator's GEPs go through it, and each thread bumps its own chunks. That
-touches the ABI (`%struct.nish_arena` in `src/codegen/runtime.ts` and
+touches the ABI (`%struct.nish_arena` in stage0's `src/codegen/runtime.ts` and
 `runtime/nish.h` and `runtime/runtime.c`, which change together by rule 4 of
 the orientation), and it rewrites the allocator prologue in the golden `.ll`
 of every test that allocates. The exact IR spelling — a `thread_local`
@@ -160,7 +160,7 @@ bumped on thread A is reclaimed by A's `nish_arena_release` while B may still
 hold it. Neither the stack rule nor the scope rule is sound across a spawn
 without a new fact.
 
-`src/codegen/escape.ts` therefore needs a fourth flow beside `local`,
+stage0's `src/codegen/escape.ts` therefore needs a fourth flow beside `local`,
 `returned` and `leaks`: **escapes to another thread**. A site with that flow
 is barred from an `alloca` and from a scope-bracketed region, exactly as
 `leaks` bars it from the stack today.
@@ -207,7 +207,7 @@ spawns must keep paying nothing, and that is an acceptance test, not a hope.
 
 ### 3.6 Every rule lands twice
 
-`src/` and `self/` mirror each other construct for construct, and stage1 must
+stage0's `src/` and `self/` mirror each other construct for construct, and stage1 must
 still compile itself to a byte-identical fixed point
 ([selfhost.md](../.claude/selfhost.md), [wp14-selfhost.md](wp14-selfhost.md)).
 A new flow class in escape analysis, a new statement form and a new family of
@@ -433,7 +433,7 @@ the driver rather than the workload was the limiter.
 
 ## 5. Diagnostics
 
-Each stage adds a family, generated into `src/codes.ts` / `self/codes.ts` by
+Each stage adds a family, generated into stage0's `src/codes.ts` / `self/codes.ts` by
 `scripts/gen-diagnostic-codes.mjs` like every other. The shape, in the
 existing voice:
 

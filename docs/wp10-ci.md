@@ -22,7 +22,7 @@ comment above the `on:` block has the details.
 
 Every job that compiles anything compiles it with `self/`, built from the
 seed: there is no other compiler in the repository. Until WP19 R6 deleted
-`src/`, the workflow also carried the jobs that compared the two
+stage0's `src/`, the workflow also carried the jobs that compared the two
 implementations — `batch-parity`, `parity-select` and `parity-changed` in this
 file, the nightly `parity.yml` beside it, and the `ddc` job in `release.yml` —
 and they went with it, because each one's subject was stage0
@@ -34,7 +34,7 @@ reason, so the table of conclusions under
 both: an absent row means no comparison happened, and never that one happened
 and passed. It is the successor to `tests/self/ir_oracle.js` and
 `tests/self/interop_oracle.js`, the two largest of the six oracles WP19 R6
-deleted with `src/`, and the axis it compares on is the one that survived that
+deleted with stage0's `src/`, and the axis it compares on is the one that survived that
 deletion — not two implementations against each other, but the last release
 against HEAD.
 
@@ -415,7 +415,7 @@ when one was, because a gate that goes red where nobody looks is the silence
 [§A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)
 records.
 
-All three compared stage0 with stage1, so R6 deleted them with `src/`; a
+All three compared stage0 with stage1, so R6 deleted them with stage0's `src/`; a
 comparison with one side gone has nothing left to say. What the corpus is
 held to now is its goldens — `tests/cases/*.ll`, `.err` and `.stdout`, compiled
 by stage1 in `npm test` — and `nish-cmp`, which compares HEAD with the last
@@ -458,7 +458,7 @@ Measured on 2026-09-18, run 474 on `main` (`a89bee7`), six jobs on
 | `seeds` | 8 s | — |
 
 The jobs run in parallel, so the workflow's wall clock was the longest of them:
-**18 m 27 s**. `batch-parity` went with `src/`, and so did most of what made
+**18 m 27 s**. `batch-parity` went with stage0's `src/`, and so did most of what made
 `test` long (below); these numbers are the record of that tree, not of this
 one, and want re-measuring before anyone cites them.
 
@@ -519,7 +519,7 @@ for the import, and `--batch-gate-only` so `batch-parity` stopped repeating the
 the suite spawns now is the native stage1 binary, which imports nothing, so
 the per-process cost those two measures were shaving is no longer in the
 suite. `tests/batch_compile.js`, `tests/batch_worker.js` and `--batch-gate-only`
-went with `src/`.
+went with stage0's `src/`.
 
 ### What is still on the table
 
@@ -658,8 +658,8 @@ free number in its band; a code is never renumbered, and a retired rule keeps
 its number reserved rather than handing it to another.
 
 `scripts/gen-diagnostic-codes.mjs` generated the registry while there were two
-compilers to keep in step (`src/codes.ts` and `self/codes.ts`, from the
-diagnostic sites of `src/`). It is frozen now: it scans nothing and writes
+compilers to keep in step (stage0's `src/codes.ts` and `self/codes.ts`, from the
+diagnostic sites of stage0's `src/`). It is frozen now: it scans nothing and writes
 nothing, and `--check`, which CI runs, validates the file's format and that
 every code in it is unique. What stops a diagnostic shipping without a real
 code is `tests/diagnostic_coverage.js`: every registry code has to be provoked

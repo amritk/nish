@@ -2,7 +2,7 @@
 # stage1 does` per line. Nothing here is declared: these are open differences,
 # found by writing this corpus and reported rather than fixed, because a
 # diagnostic code is keyed on its message text and rewording one retires the
-# code (`src/codes.ts`).
+# code (stage0's `src/codes.ts`).
 #
 # They are all invisible to `tests/self/parity.js`, and for one reason: that
 # mode runs the *corpus* through fourteen flag variations, and no corpus

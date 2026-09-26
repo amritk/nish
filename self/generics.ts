@@ -1,4 +1,4 @@
-// WP18: generics by monomorphisation, for stage1 (`src/checker/generics.ts`).
+// WP18: generics by monomorphisation, for stage1 (stage0's `src/checker/generics.ts`).
 //
 // A generic function is a *template*: its body is never checked and never
 // emitted. Every call the checker resolves picks a tuple of concrete type
@@ -790,7 +790,7 @@ export const registerForeignLayouts = (
   if (reachForeignLayout(ctx, root, symbols)) {
     pending.push(root);
   }
-  // A cursor rather than `pop()`, and `src/` walks it the same way so the two
+  // A cursor rather than `pop()`, and stage0's `src/` walks it the same way so the two
   // registries end up in the same order: `pop()` answers `T` in this language
   // and `T | undefined` in `lib.es5`, which is the one divergence
   // `runtime/nish.d.ts` documents, and the suite's `tsc` pass over `self/`
@@ -919,7 +919,7 @@ export const instantiateStructHere = (
   // `T` — which is every shape that lays the type out or puts it across an
   // exported boundary. It is not the whole of the rule: a template that never
   // mentions `T` in a member (`class Empty<T> { n: i32 = 0; }`) compiles
-  // `new Empty<CPtr>()`, here and in `src/checker/index.ts`, which agree.
+  // `new Empty<CPtr>()`, here and in stage0's `src/checker/index.ts`, which agree.
   // `docs/wp27-ffi.md` §7a.
 
   // Termination, the struct half. A field whose type puts one of the struct's

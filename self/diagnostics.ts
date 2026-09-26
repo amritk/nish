@@ -1,12 +1,12 @@
 // Diagnostics for stage1 (docs/wp14-selfhost.md, milestone S3), ported from
-// `src/diagnostics.ts`. Every user-facing error has the same fixed shape it
+// stage0's `src/diagnostics.ts`. Every user-facing error has the same fixed shape it
 // has today, because the `.err` goldens match on the summary line:
 //
 //   <file>:<line>:<col>: error: <text>          the summary; the tests match this
 //     3 | return a + true;                      the offending source line
 //       |            ^~~~~~~~                   a caret at the start, ~ to the end
 //
-// **No exceptions.** `src/` throws a `CompileError` from 292 sites and catches
+// **No exceptions.** stage0's `src/` throws a `CompileError` from 292 sites and catches
 // it in six; a `throw` traps and discards its value, so this is the
 // error-value threading of §3a D1: a phase reports into a sink and returns a
 // sentinel, and the sink is asked at the end of the phase whether to stop.
@@ -36,7 +36,7 @@
 // diluted with advice about code that is about to change. They have a report
 // order of their own — by file, then by position, then by diagnostic code —
 // which `reportPerformance` keeps as the list is built, for the reason written
-// there. `src/diagnostics.ts` orders them the same way and has to, because the
+// there. stage0's `src/diagnostics.ts` orders them the same way and has to, because the
 // two are one compiler in two implementations and `--json` promises the same
 // stream from either. Two things catch a drift: the WP15 block of
 // `tests/run.js`, which reruns the cases it names through stage1 and compares
@@ -62,7 +62,7 @@ export const PERFORMANCE: string = "performance";
 
 /**
  * One source file and the line index a diagnostic needs. The line starts are
- * computed once: `src/` gets them from `ts.SourceFile.getLineStarts()`, and a
+ * computed once: stage0's `src/` gets them from `ts.SourceFile.getLineStarts()`, and a
  * scan per diagnostic would be quadratic in a file with many errors.
  */
 export class SourceFile {
@@ -240,14 +240,14 @@ export class Diagnostic {
     const markerEnd = this.end < lineEnd ? this.end : lineEnd;
     // In code units, like the column: the caret has to land under the byte the
     // column names, and a terminal counts characters rather than bytes
-    // (`formatSourceExcerpt` in `src/diagnostics.ts` pads by code units too).
+    // (`formatSourceExcerpt` in stage0's `src/diagnostics.ts` pads by code units too).
     let markerLength = this.source.codeUnits(this.start, markerEnd);
     if (markerLength < 1) {
       markerLength = 1;
     }
 
     // One pad character per code unit, as `formatSourceExcerpt` in
-    // `src/diagnostics.ts` emits one per JavaScript string index. `codeUnits`
+    // stage0's `src/diagnostics.ts` emits one per JavaScript string index. `codeUnits`
     // cannot do it: the tab has to be mirrored per character, not counted.
     const prefix = this.start - lineStart;
     const pad = new StringBuilder();
@@ -292,7 +292,7 @@ export class Diagnostic {
    * `self/codes.ts` — the field to key on rather than the prose, since the
    * prose may improve and the code may not.
    *
-   * The key order matches `diagnosticJson` in `src/diagnostics.ts` exactly:
+   * The key order matches `diagnosticJson` in stage0's `src/diagnostics.ts` exactly:
    * `tests/run.js` compares the two compilers' `--json` byte for byte.
    */
   json(): string {

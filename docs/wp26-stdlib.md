@@ -41,7 +41,7 @@ compilation is what makes §1 true rather than aspirational.
 
 **A `std/` module is an ordinary Nish source file that is compiled into the
 program importing it.** There is no library artifact, no link step, and nothing
-the compiler knows about the directory: `src/` and `self/` contain no reference
+the compiler knows about the directory: stage0's `src/` and `self/` contain no reference
 to `std/` at all, and a program reaches a module by relative specifier because
 that is the only import form the language has.
 
@@ -132,7 +132,7 @@ existing builtin exists:
    [LANGUAGE.md](LANGUAGE.md#the-clock)).
 2. **An operation the runtime must own for memory-layout reasons.** A string is
    a header plus bytes and an array is a 24-byte header; allocating one means
-   agreeing with `src/codegen/runtime.ts`, `runtime/nish.h` and `runtime.c` at
+   agreeing with stage0's `src/codegen/runtime.ts`, `runtime/nish.h` and `runtime.c` at
    the same time (orientation rule 4). `nish_str_new` cannot be written in Nish
    because writing it means describing the layout twice.
 3. **Something the whole-program pass has to see through.** An effect the
@@ -399,7 +399,7 @@ an editor open on `std/testing.ts` is how most people will meet the claim.
 Stated as the rule a contributor needs: **a `std/` module with no importer in
 `tests/link/` is compiled by neither compiler on any run.** It is not in
 `tests/cases`, so the golden harness never sees it; it is not in `CORPUS_DIRS`,
-so the oracles never see it; and it is not imported by `src/` or `self/`, so no
+so the oracles never see it; and it is not imported by stage0's `src/` or `self/`, so no
 build touches it. It would be a file that type-checks in an editor and nothing
 else.
 

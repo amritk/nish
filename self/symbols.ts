@@ -1,6 +1,6 @@
 // Locals and the lexical scope chain for stage1 (docs/wp14-selfhost.md,
-// milestone S3), ported from `src/checker/scope.ts` and the `LocalVar` of
-// `src/checker/program.ts`.
+// milestone S3), ported from stage0's `src/checker/scope.ts` and the `LocalVar` of
+// stage0's `src/checker/program.ts`.
 //
 // A scope also carries **narrowings**: inside `if (p !== null) { ... }` a
 // nullable local reads as its non-null type. A narrowing belongs to the scope
@@ -10,7 +10,7 @@
 // rule `docs/LANGUAGE.md` states under "Nullable types", and it is the whole
 // reason a scope is more than a name table.
 //
-// Narrowings are keyed by **identity**, as they are in `src/`, and identity is
+// Narrowings are keyed by **identity**, as they are in stage0's `src/`, and identity is
 // what `===` on a class value already gives. The lists are short — one scope
 // holds the narrowings of one region — so a scan beats a second hash table,
 // and it keeps a `Local` free of a field that exists only to be its own key.
@@ -130,7 +130,7 @@ export class Scope {
 
   /**
    * Declare `local`, answering false when this scope already has that name.
-   * `src/` throws a `CompileError` here; D1's threading makes it a status the
+   * stage0's `src/` throws a `CompileError` here; D1's threading makes it a status the
    * caller reports against the declaration it is looking at, which is the
    * node with the right span anyway.
    */

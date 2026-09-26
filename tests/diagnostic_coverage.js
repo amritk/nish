@@ -17,7 +17,7 @@
  * directory. So the question this tool asks is: **which registry codes does the
  * suite actually provoke, and where is the wording written down?**
  *
- * It asks it the only way that survives `src/` being deleted: by compiling
+ * It asks it the only way that survives stage0's `src/` being deleted: by compiling
  * programs and reading `--json`, never by matching the compiler's source
  * against a table copied out of it. The registry it reads is `self/codes.ts`,
  * and the compiler it runs is a parameter.

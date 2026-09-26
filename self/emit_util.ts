@@ -1,7 +1,7 @@
 // Questions about a checked tree that both the emitter and the whole-program
 // analyses ask, for stage1 (docs/wp14-selfhost.md milestone S4).
 //
-// In `src/` these live next to the family that owns them — `arrayMethodName`
+// In stage0's `src/` these live next to the family that owns them — `arrayMethodName`
 // in `emit/arrays.ts`, `isStringMethodCall` in `emit/strings.ts`,
 // `dottedName` in `checker/builtins.ts` — and `escape.ts` imports them from
 // there. Here they are gathered into one module that depends on nothing but
@@ -35,7 +35,7 @@ export const unwrapParens = (expr: Node): Node => {
 
 /**
  * `console.log` for a member access on a plain identifier, and the empty
- * string for anything else. Mirrors `dottedName` in `src/checker/builtins.ts`;
+ * string for anything else. Mirrors `dottedName` in stage0's `src/checker/builtins.ts`;
  * the empty string stands in for its `undefined`, and no builtin is called
  * `""`, so the two readings cannot be confused.
  */
@@ -50,7 +50,7 @@ export const dottedName = (expr: Node): string => {
  * Whether `receiver` is a value rather than a builtin namespace. The checker
  * records a type for every expression it checks and none for `console` or
  * `Math`, so the recorded type *is* the answer — the same test as
- * `program.types.has(receiver)` in `src/`.
+ * `program.types.has(receiver)` in stage0's `src/`.
  */
 export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolean => program.nodeTypes[receiver.id] >= 0;
 
@@ -163,7 +163,7 @@ export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean 
 
 /**
  * A `N_TEMPLATE` with at least one hole. A template with none is a plain
- * string literal — `src/` parses `` `abc` `` as a
+ * string literal — stage0's `src/` parses `` `abc` `` as a
  * `NoSubstitutionTemplateLiteral`, which is not a `TemplateExpression` and so
  * is neither an allocation site nor a concatenation, and this is the test that
  * keeps the two trees answering the same way.

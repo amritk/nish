@@ -7,7 +7,7 @@
  *   node tests/self/support_oracle.js --verbose   print every differing line
  *   node tests/self/support_oracle.js --update    rewrite goldens/support.txt
  *
- * The support library is the part of `self/` with no counterpart in `src/` to
+ * The support library is the part of `self/` with no counterpart in stage0's `src/` to
  * diff against phase by phase, so each function is matched with the thing it
  * has to agree with instead:
  *
@@ -243,7 +243,7 @@ function expected(caseText) {
 /**
  * The driver, linked by the seed rather than by stage0 (WP19 G2.3). Most of
  * what this oracle compares against — `node:path`, `JSON.stringify`, `Buffer`,
- * `Map` — outlives `src/`, so the compiler that builds the driver has to too.
+ * `Map` — outlives stage0's `src/`, so the compiler that builds the driver has to too.
  */
 function build(seed) {
   return linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));

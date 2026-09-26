@@ -1,4 +1,4 @@
-// Arrays for stage1 (`src/checker/arrays.ts`, docs/wp14-selfhost.md milestone
+// Arrays for stage1 (stage0's `src/checker/arrays.ts`, docs/wp14-selfhost.md milestone
 // S3, pass 2): literals, indexing, `length`, the four methods, `new Array<T>`
 // and element assignment.
 
@@ -106,7 +106,7 @@ const readonlyWriteMessage = (ctx: CheckContext, receiver: i32, what: string): s
 export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (isArgvExpression(ctx, expr.children[0].children[0], scope)) {
     // At the `process.argv` itself, parentheses stepped through, where stage0
-    // puts it (`checkProcessArgv` in `src/checker/io.ts`).
+    // puts it (`checkProcessArgv` in stage0's `src/checker/io.ts`).
     return ctx.errorType(unwrapParens(expr.children[0].children[0]), "`process.argv` is read-only");
   }
   const elem = checkIndex(ctx, expr.children[0], scope);
@@ -139,7 +139,7 @@ export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope
     return ctx.errorType(
       expr,
       // The token as it was written, `*=` and not `*`: stage0's element path
-      // names the compound one (`src/checker/arrays.ts`), as its local and
+      // names the compound one (stage0's `src/checker/arrays.ts`), as its local and
       // field paths do (WP19 §A2).
       `Operator \`${op}\` requires two operands of the same numeric type, got ${a} and ${ctx.table.typeName(rhs)}`
     );
@@ -294,7 +294,7 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
 // ---- WP15 §2a: element references ------------------------------------------------
 
 // The rule that makes contiguous storage safe: an element reference may not be
-// held across a mutation of the array it came from (`src/checker/arrays.ts`,
+// held across a mutation of the array it came from (stage0's `src/checker/arrays.ts`,
 // where the whole argument is written out).
 //
 // An array of classes is one block of objects, so `ps[i]` hands out a pointer

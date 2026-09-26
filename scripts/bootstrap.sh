@@ -68,9 +68,9 @@
 # optimisation worked. So the difference is reported, and the report is
 # information about this release rather than a verdict on the bootstrap.
 #
-# While `src/` existed, a stage0 seed made the same comparison the second half
+# While stage0's `src/` existed, a stage0 seed made the same comparison the second half
 # of Wheeler's diverse double-compiling, and it was asserted there
-# (docs/wp19-stage0-retirement.md §1, G6). That claim went with `src/`.
+# (docs/wp19-stage0-retirement.md §1, G6). That claim went with stage0's `src/`.
 #
 # What the seeded run buys is not that equality. The rolling freeze — "a
 # construct added in 0.N cannot be used by `self/` until 0.(N+1)" — is enforced

@@ -1,7 +1,7 @@
 // The type model for stage1 (docs/wp14-selfhost.md, milestone S3),
-// ported from `src/types.ts`.
+// ported from stage0's `src/types.ts`.
 //
-// **A type is an `i32`.** `src/` writes a `StaticType` as a discriminated
+// **A type is an `i32`.** stage0's `src/` writes a `StaticType` as a discriminated
 // union of objects and compares them with a recursive `sameType`; here every
 // type is *interned* into a `TypeTable` and named by its index, so two types
 // are equal exactly when their ids are `===`. Three things fall out of that
@@ -12,11 +12,11 @@
 //     "different" for two spellings of one type.
 //   - A type fits in the `i32` a `StringMap` stores, so a scope maps a name to
 //     a type without a second table.
-//   - `T[]` and `T[][]` cost one entry each, not one per mention. `src/`
+//   - `T[]` and `T[][]` cost one entry each, not one per mention. stage0's `src/`
 //     allocates a fresh `{ kind: "array", elem }` at every annotation.
 //
 // It is the same model, not a smaller one: the scalar ids below are the union
-// members of `src/types.ts` in order, and `tests/self/types_oracle.js` checks
+// members of stage0's `src/types.ts` in order, and `tests/self/types_oracle.js` checks
 // this file against that one over every type either can build.
 
 import { internalErrorFor } from "./ice";
@@ -141,11 +141,11 @@ export const RESULT_PAYLOAD_SHIFT: i32 = 32;
  * The private ABI a non-exported function may use for a by-value `Result`:
  * the discriminant and one slot per arm rather than one packed word. The dead
  * arm's slot is `undef`, which is what keeps it out of the live arm's
- * arithmetic. The reasoning and the measurement are in `src/types.ts`.
+ * arithmetic. The reasoning and the measurement are in stage0's `src/types.ts`.
  */
 export const RESULT_ARMS: string = "{ i1, i32, i32 }";
 
-/** The one header type every array shares; `ARRAY_TYPE` in `src/codegen/runtime.ts`. */
+/** The one header type every array shares; `ARRAY_TYPE` in stage0's `src/codegen/runtime.ts`. */
 export const ARRAY_STRUCT: string = "%struct.nish_array";
 
 /**
@@ -331,7 +331,7 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_ENUM;
   }
 
-  /** `T | null`, which is already itself for a `T | null`, as in `src/types.ts`. */
+  /** `T | null`, which is already itself for a `T | null`, as in stage0's `src/types.ts`. */
   nullableOf(inner: i32): i32 {
     if (this.kinds[inner] === K_NULLABLE) {
       return inner;
@@ -490,7 +490,7 @@ export class TypeTable {
    * twelve bytes as a struct — fit in a word. Eight bytes is not a tuning
    * knob: `i64` is the only return width whose C-ABI lowering is the same LLVM
    * type on all six supported triples. `docs/wp17-result-abi.md` has the
-   * measurements; `src/types.ts` has the same predicate.
+   * measurements; stage0's `src/types.ts` has the same predicate.
    */
   resultByValue(type: i32): boolean {
     if (!this.isResult(type)) {

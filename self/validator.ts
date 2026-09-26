@@ -1,4 +1,4 @@
-// Phase 0 for stage1 (`src/validator.ts`, docs/wp14-selfhost.md milestone S3):
+// Phase 0 for stage1 (stage0's `src/validator.ts`, docs/wp14-selfhost.md milestone S3):
 // a syntax-only sweep that refuses every construct the language can *never*
 // compile, before the checker runs.
 //
@@ -355,7 +355,7 @@ const isNumericLiteralShape = (expr: Node): boolean => {
 
 const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
   // Against the member name, as stage0 hands `access.name` to `fail`
-  // (`src/validator.ts`), not against the whole access.
+  // (stage0's `src/validator.ts`), not against the whole access.
   if (node.text === "__proto__") {
     ctx.errorAtProperty(node, "`__proto__` access is forbidden in " + LANGUAGE + " (no prototype chain)");
     return;

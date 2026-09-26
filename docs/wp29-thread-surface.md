@@ -192,7 +192,7 @@ Why this is the right first stage, and it is not only the measurement:
 - **The purity rule is already computed, and it is the only rule.** The body
   must be one the fixpoint clears as `readnone` or `readonly` — it may read
   what the parent owns and may write nothing — and
-  `src/codegen/attributes.ts` computes that today, for other reasons, over the
+  stage0's `src/codegen/attributes.ts` computes that today, for other reasons, over the
   whole call graph. A body it cannot clear is a compile error naming the write.
   That is the entire race-freedom argument for this stage: no `Send`, no
   `Sync`, no detector, and no annotation.

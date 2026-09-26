@@ -23,7 +23,7 @@ them differs:
   it tests and the dynamic corners are the ones a reader can point at.
 
 The compiler was once in the second group: until WP19 R6 a TypeScript
-implementation in `src/` ran under Node beside `self/`. It is deleted, and the
+implementation in stage0's `src/` ran under Node beside `self/`. It is deleted, and the
 compiler is an Nish program like any other — held, on top of the rules below,
 to the smaller subset `.claude/selfhost.md` calls Nish-0.
 

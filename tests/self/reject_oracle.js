@@ -336,7 +336,7 @@ function corpus() {
 
 /**
  * `self/dump_checked.ts`, linked by the seed. What this oracle compares
- * against is each case's checked-in `.err` fragments, which outlive `src/`, so
+ * against is each case's checked-in `.err` fragments, which outlive stage0's `src/`, so
  * the compiler that builds the binary must too (WP19 G2.3).
  */
 function build(seed) {

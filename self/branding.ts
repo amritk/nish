@@ -1,4 +1,4 @@
-// The one place stage1 spells the project's own name; `src/branding.ts` is the
+// The one place stage1 spells the project's own name; stage0's `src/branding.ts` is the
 // stage0 twin and holds the same language name. The two must agree: every
 // diagnostic the two compilers produce is compared byte for byte by
 // `tests/self/reject_oracle.js`, so a name changed on one side and not the
@@ -14,7 +14,7 @@
 //
 // Every value is a literal rather than an expression over another constant,
 // because a module constant here is folded at compile time and the folder has
-// less to work with than stage0's does: `CLI.toUpperCase()` is how `src/`
+// less to work with than stage0's does: `CLI.toUpperCase()` is how stage0's `src/`
 // spells the guard prefix, and there is no `toUpperCase` in the language.
 //
 // The `nish_` prefix on the runtime's C symbols is deliberately not here: it

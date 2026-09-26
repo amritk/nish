@@ -1,8 +1,8 @@
-// Constants, operators and assignment for stage1 (`src/codegen/emit/
+// Constants, operators and assignment for stage1 (stage0's `src/codegen/emit/
 // arithmetic.ts`, `bitwise.ts` and the operator half of `emit/expressions.ts`;
 // docs/wp14-selfhost.md milestone S4).
 //
-// Two rules from `src/` that this file is the whole of:
+// Two rules from stage0's `src/` that this file is the whole of:
 //
 //   - **Signedness lives in the opcode.** LLVM has no unsigned types, so
 //     `u8`..`u64` are `i8`..`i64` and `signedOpcode` swaps `sdiv`/`srem`/

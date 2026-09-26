@@ -21,12 +21,12 @@ heuristic, plus `T | null`:
 
 Reference counting is not in this package (see "Left out").
 
-Files: `src/codegen/escape.ts` (the analysis), `src/codegen/attributes.ts`
-(integration into the fact fixpoint), `src/codegen/emit/{classes,arrays}.ts`
-(allocas), `src/codegen/emitter.ts` and `emit/statements.ts` (scopes),
-`src/checker/nullable.ts`, `src/checker/arena.ts`, `src/codegen/emit/arena.ts`,
+Files: stage0's `src/codegen/escape.ts` (the analysis), stage0's `src/codegen/attributes.ts`
+(integration into the fact fixpoint), stage0's `src/codegen/emit/{classes,arrays}.ts`
+(allocas), stage0's `src/codegen/emitter.ts` and `emit/statements.ts` (scopes),
+stage0's `src/checker/nullable.ts`, stage0's `src/checker/arena.ts`, stage0's `src/codegen/emit/arena.ts`,
 `runtime/runtime.c`, `runtime/nish.h`; the call-site reclaim adds
-`src/codegen/emit/{expressions,classes}.ts` (the bracket) and
+stage0's `src/codegen/emit/{expressions,classes}.ts` (the bracket) and
 `nish_arena_keep`. Tests: `tests/cases/mem_*`,
 `tests/cases/reject_null_*`, `reject_nullable_scalar`,
 `reject_arena_release_type`, the `WP6: memory` block in `tests/run.js`, and
@@ -826,7 +826,7 @@ Operations:
   initializer.
 - `c ? p : null` has type `T | null`.
 
-Narrowing (`src/checker/nullable.ts`): inside the region a condition guards,
+Narrowing (stage0's `src/checker/nullable.ts`): inside the region a condition guards,
 the nullable *variable* (a local or parameter, never a property path) reads
 as `T`:
 

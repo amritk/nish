@@ -1,4 +1,4 @@
-// Builtins for stage1 (`src/checker/builtins.ts`, `math.ts`, `io.ts` and the
+// Builtins for stage1 (stage0's `src/checker/builtins.ts`, `math.ts`, `io.ts` and the
 // dotted-call table of `strings.ts`; docs/wp14-selfhost.md milestone S3,
 // pass 2): the functions that exist without a declaration.
 //
@@ -142,7 +142,7 @@ const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: str
   if (got !== T_ERROR && got !== want) {
     // "an argument of type" rather than the bare type, so the message has a
     // literal run a diagnostic code can be derived from; stage0 words it the
-    // same way in `src/checker/builtins.ts` and `src/checker/math.ts`.
+    // same way in stage0's `src/checker/builtins.ts` and stage0's `src/checker/math.ts`.
     ctx.error(arg, `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`);
   }
 };
@@ -174,7 +174,7 @@ export const checkNamespaceProperty = (
   // library without a `main` may read them too. They exist because
   // `--target host` has to ask the machine what it is and nothing else in the
   // language does; the spellings are Node's, so `self/target.ts` composes the
-  // triple from them exactly as `src/codegen/target.ts` does.
+  // triple from them exactly as stage0's `src/codegen/target.ts` does.
   if (namespace === "process" && (member === "platform" || member === "arch")) {
     return T_STRING;
   }
@@ -188,7 +188,7 @@ export const checkNamespaceProperty = (
 
 /** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
 /**
- * Every dotted builtin, in the order `src/checker/strings.ts` builds its
+ * Every dotted builtin, in the order stage0's `src/checker/strings.ts` builds its
  * `builtinCalls` table — `Object.keys` there, so the order is the table's and
  * the string is the tail of the one refusal stage0 has for an unknown one.
  * stage1 refused in four places with four shorter sentences and named the
@@ -499,7 +499,7 @@ export const checkBuiltinFunctionNamed = (
   }
   // `spawnSync` is checked down to the element type — a `number[]` is not a
   // command line — which an interned type id gives for nothing here and cost
-  // `src/checker/builtins.ts` a change from comparing kinds to `sameType`.
+  // stage0's `src/checker/builtins.ts` a change from comparing kinds to `sameType`.
   if (name === "spawnSync") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING));

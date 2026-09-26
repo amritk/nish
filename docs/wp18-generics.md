@@ -35,10 +35,10 @@ cannot prove purity, termination or escape through an unknown callee.
 Monomorphisation is not the faster of two defensible answers here; it is the
 only one that fits.
 
-**Both compilers, together.** stage0 (`src/`) is the bootstrap seed and the
+**Both compilers, together.** stage0 (stage0's `src/`) is the bootstrap seed and the
 differential oracle, `tests/self/ir_oracle.js` has no exemption list, and
 `tests/self/bootstrap.js` must still reach a byte-identical fixed point. So
-this lands in `src/` and `self/` in the same milestones, and the oracles are
+this lands in stage0's `src/` and `self/` in the same milestones, and the oracles are
 what say the two agree — exactly as WP16 and WP17 did
 ([wp17-result-abi.md](wp17-result-abi.md) §6).
 
@@ -187,7 +187,7 @@ class whose arguments are written out.
 
 ### 3a. The instantiation set and the worklist
 
-Today's passes (`src/checker/index.ts`, `src/compilation.ts`):
+Today's passes (stage0's `src/checker/index.ts`, stage0's `src/compilation.ts`):
 
 ```
 1   collectSignatures    per module, during load
@@ -286,7 +286,7 @@ different things depending on who asked for it.
 
 ### 3c. The mangling
 
-`mangleType` (`src/types.ts`) and `TypeTable.mangle` (`self/types.ts`) already
+`mangleType` (stage0's `src/types.ts`) and `TypeTable.mangle` (`self/types.ts`) already
 prefix-code a type — every constructor writes its tag before its operands, so
 `res.res.i32.str.str` can only be read one way. Two additions:
 
@@ -341,7 +341,7 @@ prefix-coded and therefore self-delimiting.
 refuses `$` in a C identifier — measured, clang 18.1.3:
 `error: '$' in identifier [-Wdollar-in-identifier-extension]` — and the WP17
 header test compiles its driver with `-Wall -Wextra -Werror -pedantic`. The
-mechanism for this exists: `cFunctionName` in `src/interop/abi.ts` already
+mechanism for this exists: `cFunctionName` in stage0's `src/interop/abi.ts` already
 collapses `.` to `_` and binds the C declaration to the real symbol with
 `NISH_SYMBOL`, which is how `Point.shifted` becomes `Point_shifted`. It needs
 one character added to its condition. Measured end to end:
@@ -398,7 +398,7 @@ compilers, with no behaviour change and every golden unmoved. That is G1's real
 content.
 
 Three consumers outside the checker and emitter read those tables and move with
-them: `src/codegen/escape.ts`, `src/codegen/attributes.ts`, and
+them: stage0's `src/codegen/escape.ts`, stage0's `src/codegen/attributes.ts`, and
 `tests/differential/rewrite.js` (§12).
 
 ---
@@ -878,7 +878,7 @@ deliberately in different places:
   message 8).
 - **At each instantiation**, the type argument must satisfy the constraint:
   `implementsInterface(arg, Shape) || isSubclassOf(arg, Shape)`, the two
-  predicates `src/checker/classes.ts` already has. Failure is reported at the
+  predicates stage0's `src/checker/classes.ts` already has. Failure is reported at the
   request site, which is where the user wrote the type argument.
 
 A constrained parameter is still monomorphised: `Shape`'s methods are called
@@ -931,7 +931,7 @@ A generic function has no single C signature, but `identity$i32` has one, and
 — by the linkage rule of §3b — it is already an external symbol of the final
 link. A header that omitted it would describe a different ABI than the module
 defines, which is the one thing the interop generators must never do
-(`src/interop/abi.ts`: "Everything is derived from the `Compilation` the
+(stage0's `src/interop/abi.ts`: "Everything is derived from the `Compilation` the
 emitter already used").
 
 So:
@@ -965,7 +965,7 @@ argument can hold a `.` (`identity$arr.i32`), which is no more a JavaScript
 identifier than a C one, so "export `identity$i32` verbatim" was wrong for any
 array, nullable or `Result` argument. Every sidecar now uses one name,
 `nish_gen_identity_i32`, bound to the symbol with `NISH_SYMBOL` in C. The
-`src/interop/` paths above are stage0's and historical since WP19 R6; the code
+stage0's `src/interop/` paths above are stage0's and historical since WP19 R6; the code
 is `self/interop_*.ts`.
 
 ---
@@ -1200,7 +1200,7 @@ its own note, and §14 records it. It would change the IR of every module of
 ## 11. The plan
 
 *Historical.* This is the plan as written, with a stage0 column: WP19 R6
-deleted `src/`, so every path in that column is gone and the stage1 column is
+deleted stage0's `src/`, so every path in that column is gone and the stage1 column is
 the only compiler. §15 records what each milestone actually did.
 
 Eight milestones, in the style of wp14 §4. Each lands in **both** compilers,
@@ -1210,14 +1210,14 @@ each row says what proves it.
 
 | | Lands | stage0 | stage1 | Proved by |
 | --- | --- | --- | --- | --- |
-| **G1** | The side-table accessor refactor, and nothing else. Every node-keyed table (`types`, `bindings`, `locals`, `callees`, `coercions`, `caseValues`) moves behind a getter/setter; the parser records each top-level declaration's node-id span. No behaviour change. | `src/checker/program.ts`, `index.ts`, every `checker/<family>.ts`, `codegen/emit/*`, `codegen/escape.ts`, `codegen/attributes.ts` | `self/program.ts`, `self/checker.ts`, `self/parser.ts`, `self/emit*.ts`, `self/escape.ts`, `self/attributes.ts` | Every golden byte-identical; every oracle unchanged; the bootstrap green. A milestone whose diff is large and whose test output is empty. |
-| **G2** | The template surface. Phase 0 stops rejecting type parameters on functions, classes and interfaces; pass 1 collects templates; **every use is still refused** (`` `Box` is generic and this compiler cannot instantiate it yet ``). `mangleType` gains the instantiation encoding; the `$`-in-a-declared-name rule lands. | `src/validator.ts`, `src/types.ts`, `src/checker/declarations.ts`, `classes.ts`, `program.ts` | `self/validator.ts`, `self/types.ts`, `self/parser.ts` (type-parameter lists), `self/nodes.ts`, `self/declarations.ts`, `self/structs.ts` | `tests/self/types_oracle.js` over the new mangled strings; `reject_generic_dollar_name`; the two old cases `reject_generic_function` / `reject_generic_class` are re-pointed at the new message rather than deleted. |
-| **G3** | Generic **functions**: the instantiation set on the `Compilation`, the FIFO worklist, the overlay, inference from arguments, the mangled symbol, one `define` per instantiation. Single module only. | `src/checker/generics.ts` (new), `src/checker/index.ts`, `src/compilation.ts`, `src/codegen/emitter.ts` | `self/generics.ts` (new), `self/checker.ts`, `self/compilation.ts`, `self/emit.ts` | `gen_identity`, `gen_eq_purity`, `gen_infer_two`; the byte-identity check against the hand-written twin; `ir_oracle.js` and `checked_oracle.js` over the new cases. |
-| **G4** | **Termination**, for functions. The template graph (self-edges included), the no-expanding-edge rule with its three argument cases, the two caps, messages 5 and 6. Lands immediately after G3 because G3 can already diverge. | `src/checker/generics.ts` | `self/generics.ts` | `reject_generic_polymorphic_recursion`, `reject_generic_instantiation_limit`, and the two positives `gen_recursive_same_type` and `gen_recursive_ground`; `reject_oracle.js` on both messages. |
-| **G5** | Generic **classes and interfaces**: a `StructInfo` per instantiation, methods, constructor, `new Box<i32>(v)`, fields, layout, the struct half of the template graph, `implements` at the template, `extends` including a generic base. | `src/checker/classes.ts`, `generics.ts`, `src/codegen/emit/classes.ts` | `self/structs.ts`, `self/generics.ts`, `self/emit_classes.ts` | `gen_box_i32`, `gen_box_string`, `gen_box_struct`, `gen_nested`, `gen_extends`, `gen_implements`, `gen_stack`; `reject_generic_expanding_field`, `reject_generic_extends_type_param`; `tests/layout/` offsets against clang. |
-| **G6** | **Constraints** (`<T extends Shape>`): member access admitted at the template, satisfaction checked at each instantiation. | `src/checker/generics.ts`, `classes.ts` | `self/generics.ts`, `self/structs.ts` | `gen_constraint`, `gen_constraint_method`; `reject_generic_unsatisfied_constraint`, `reject_generic_member_unconstrained`. |
-| **G7** | **Whole-program**: a generic exported from one module and instantiated in two others; one definition in the defining module; `declare`s elsewhere; linkage; `--strict-exports`. | `src/compilation.ts`, `src/codegen/emitter.ts` | `self/compilation.ts`, `self/emit.ts` | `tests/link/generic_import/`, `tests/link/generic_two_importers/` (asserting exactly one `define` across the program's modules); `reject_oracle.js` reads the link negatives already. |
-| **G8** | **The peripheries**: `-g` naming, the three interop sidecars, the differential rewrite (§12), the cookbook entries, the LANGUAGE.md rules, the size report, the `CHANGELOG.md` line. | `src/codegen/debug.ts`, `src/interop/*` | `self/debug.ts`, `self/interop_*.ts` | `dbg_generic`; `interop_oracle.js`; `npm run test:diff`; `docs/cookbook/regen.sh --check`; `node docs/check-links.mjs`; and the bootstrap, which must still reach its fixed point over an unchanged `self/`. |
+| **G1** | The side-table accessor refactor, and nothing else. Every node-keyed table (`types`, `bindings`, `locals`, `callees`, `coercions`, `caseValues`) moves behind a getter/setter; the parser records each top-level declaration's node-id span. No behaviour change. | stage0's `src/checker/program.ts`, `index.ts`, every `checker/<family>.ts`, `codegen/emit/*`, `codegen/escape.ts`, `codegen/attributes.ts` | `self/program.ts`, `self/checker.ts`, `self/parser.ts`, `self/emit*.ts`, `self/escape.ts`, `self/attributes.ts` | Every golden byte-identical; every oracle unchanged; the bootstrap green. A milestone whose diff is large and whose test output is empty. |
+| **G2** | The template surface. Phase 0 stops rejecting type parameters on functions, classes and interfaces; pass 1 collects templates; **every use is still refused** (`` `Box` is generic and this compiler cannot instantiate it yet ``). `mangleType` gains the instantiation encoding; the `$`-in-a-declared-name rule lands. | stage0's `src/validator.ts`, stage0's `src/types.ts`, stage0's `src/checker/declarations.ts`, `classes.ts`, `program.ts` | `self/validator.ts`, `self/types.ts`, `self/parser.ts` (type-parameter lists), `self/nodes.ts`, `self/declarations.ts`, `self/structs.ts` | `tests/self/types_oracle.js` over the new mangled strings; `reject_generic_dollar_name`; the two old cases `reject_generic_function` / `reject_generic_class` are re-pointed at the new message rather than deleted. |
+| **G3** | Generic **functions**: the instantiation set on the `Compilation`, the FIFO worklist, the overlay, inference from arguments, the mangled symbol, one `define` per instantiation. Single module only. | stage0's `src/checker/generics.ts` (new), stage0's `src/checker/index.ts`, stage0's `src/compilation.ts`, stage0's `src/codegen/emitter.ts` | `self/generics.ts` (new), `self/checker.ts`, `self/compilation.ts`, `self/emit.ts` | `gen_identity`, `gen_eq_purity`, `gen_infer_two`; the byte-identity check against the hand-written twin; `ir_oracle.js` and `checked_oracle.js` over the new cases. |
+| **G4** | **Termination**, for functions. The template graph (self-edges included), the no-expanding-edge rule with its three argument cases, the two caps, messages 5 and 6. Lands immediately after G3 because G3 can already diverge. | stage0's `src/checker/generics.ts` | `self/generics.ts` | `reject_generic_polymorphic_recursion`, `reject_generic_instantiation_limit`, and the two positives `gen_recursive_same_type` and `gen_recursive_ground`; `reject_oracle.js` on both messages. |
+| **G5** | Generic **classes and interfaces**: a `StructInfo` per instantiation, methods, constructor, `new Box<i32>(v)`, fields, layout, the struct half of the template graph, `implements` at the template, `extends` including a generic base. | stage0's `src/checker/classes.ts`, `generics.ts`, stage0's `src/codegen/emit/classes.ts` | `self/structs.ts`, `self/generics.ts`, `self/emit_classes.ts` | `gen_box_i32`, `gen_box_string`, `gen_box_struct`, `gen_nested`, `gen_extends`, `gen_implements`, `gen_stack`; `reject_generic_expanding_field`, `reject_generic_extends_type_param`; `tests/layout/` offsets against clang. |
+| **G6** | **Constraints** (`<T extends Shape>`): member access admitted at the template, satisfaction checked at each instantiation. | stage0's `src/checker/generics.ts`, `classes.ts` | `self/generics.ts`, `self/structs.ts` | `gen_constraint`, `gen_constraint_method`; `reject_generic_unsatisfied_constraint`, `reject_generic_member_unconstrained`. |
+| **G7** | **Whole-program**: a generic exported from one module and instantiated in two others; one definition in the defining module; `declare`s elsewhere; linkage; `--strict-exports`. | stage0's `src/compilation.ts`, stage0's `src/codegen/emitter.ts` | `self/compilation.ts`, `self/emit.ts` | `tests/link/generic_import/`, `tests/link/generic_two_importers/` (asserting exactly one `define` across the program's modules); `reject_oracle.js` reads the link negatives already. |
+| **G8** | **The peripheries**: `-g` naming, the three interop sidecars, the differential rewrite (§12), the cookbook entries, the LANGUAGE.md rules, the size report, the `CHANGELOG.md` line. | stage0's `src/codegen/debug.ts`, stage0's `src/interop/*` | `self/debug.ts`, `self/interop_*.ts` | `dbg_generic`; `interop_oracle.js`; `npm run test:diff`; `docs/cookbook/regen.sh --check`; `node docs/check-links.mjs`; and the bootstrap, which must still reach its fixed point over an unchanged `self/`. |
 
 The ordering constraint that matters: **G4 cannot be later than it is.** The
 moment G3 lands, a program can be written that makes the compiler allocate
@@ -1230,7 +1230,7 @@ not acceptable. If G3 and G4 are hard to separate in practice, merge them.
 
 *Historical in its stage0 half.* The oracles below that compare stage0 with
 stage1 (`checked_oracle.js`, `reject_oracle.js`, `ir_oracle.js`,
-`interop_oracle.js`, `fuzz.js --stage1`) and `src/dump.ts` went with stage0 in
+`interop_oracle.js`, `fuzz.js --stage1`) and stage0's `src/dump.ts` went with stage0 in
 WP19 R6; `docs/wp19-stage0-retirement.md` records what replaced each. The
 fuzzer now compares the seed with HEAD (§15.7), and the differential rewrite
 below is deferred (§16).
@@ -1307,7 +1307,7 @@ belongs in G8 rather than being discovered there. The corpus then wants
 - `checked_oracle.js` — `--emit-checked` must print the instantiation set (key,
   template, type arguments, in discovery order) in both compilers, so a
   divergence in *which* instantiations exist is caught before the IR is
-  compared. That is an addition to `src/dump.ts` and `self/dump.ts`.
+  compared. That is an addition to stage0's `src/dump.ts` and `self/dump.ts`.
 - `reject_oracle.js` — the eleven new negatives, character for character.
 - `ir_oracle.js` — the new cases and the two link programs, byte for byte,
   module set included.
@@ -1457,7 +1457,7 @@ point over an unchanged `self/`.
 **G1's accessor refactor did not happen, and is not needed.** §3d recommended
 putting every node-keyed side table behind an accessor so an instantiation
 could answer from its own overlay. The cheaper shape with the same effect is to
-**swap the tables themselves**: `swapTables` in `src/checker/generics.ts` and
+**swap the tables themselves**: `swapTables` in stage0's `src/checker/generics.ts` and
 `CheckedProgram.enterInstance` / `leaveInstance` in `self/program.ts` point the
 program's seven (stage0) or six (stage1) table fields at the instantiation's
 copies for the duration of one body, so every existing `program.types.get(node)`
