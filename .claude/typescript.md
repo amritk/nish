@@ -215,9 +215,10 @@ linted. What still differs:
   locals. It keeps the source's licence notice too, at the top of the file,
   and is listed in `THIRD_PARTY_NOTICES.md` ([`licensing.md`](./licensing.md)).
 - **Biome enforces this**, through `useNamingConvention` with three
-  allowances: `strictCase` off for the acronyms, CONSTANT_CASE for a `const`
-  and for an object key, and snake_case keys where the keys are someone else's
-  ABI (`web/wasi.mjs`, the hook payloads in `.claude/hooks/`). Those
+  allowances: `strictCase` off for the acronyms, CONSTANT_CASE or snake_case
+  for a `const`, CONSTANT_CASE for an object key, and snake_case keys where
+  the keys are someone else's ABI (`web/wasi.mjs`, the hook payloads in
+  `.claude/hooks/`). Those
   allowances exist because the strict rule flagged 86 names, almost all of
   them in the exempt classes above. With the allowances it flags 5, and those
   are names that really should change. [`linting.md`](./linting.md) has the details.
