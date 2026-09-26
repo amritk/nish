@@ -1800,6 +1800,16 @@ const DECLARED = [
     changelog: "A surrogate-pair escape is the code point it spells",
     why: "the one pair escape it compares against is the four bytes of U+1F600, where the reference writes six bytes of two lone surrogates; its lone surrogates are the reference's bytes",
   },
+  {
+    program: "tests/cases/reject_surrogate_escape_too_large.ts",
+    changelog: "A surrogate-pair escape is the code point it spells",
+    why: "a `\\u{...}` escape above 0x10FFFF is refused with TypeScript's words, where the reference encodes it",
+  },
+  {
+    program: "tests/cases/reject_surrogate_escape_wraps.ts",
+    changelog: "A surrogate-pair escape is the code point it spells",
+    why: "`\\u{10000D800}` is refused as above 0x10FFFF, where the reference wraps it in i32 to a lone high surrogate",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */

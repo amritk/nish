@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 679 programs, 49151 dump lines.
+# 679 programs, 49153 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -38296,6 +38296,8 @@ function main(): i32 -> @nish_main [exported entry]
   local 6:9 pair: string (const)
   local 7:9 braced: string (const)
   local 8:9 literal: string (const)
+  local 12:9 whole: string (const)
+  local 13:9 split: string (const)
 program tests/cases/str_template.ts
 module tests/cases/str_template.ts (entry)
 function describe(n: i32, ok: boolean, name: string): string -> @describe
