@@ -35,8 +35,7 @@ goldens cite.
   flagged real code that nobody would want renamed:
   - `strictCase: false`, so an acronym keeps its case (`IRBlock`,
     `fieldLLVMType`).
-  - A `const` may be CONSTANT_CASE (`T_ERROR`, a benchmark's `SOLAR_MASS`) or
-    snake_case (`ts_start`). A `let`, a parameter or a function may not.
+  - A `const` may be CONSTANT_CASE (`T_ERROR`, a benchmark's `SOLAR_MASS`).
   - An object-literal key may be CONSTANT_CASE, because environment variables
     are spelled that way (`{ NISH_BOOTSTRAP: seed }`).
   - `web/wasi.mjs` and `.claude/hooks/` also allow snake_case keys, because

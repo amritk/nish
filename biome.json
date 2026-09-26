@@ -103,8 +103,7 @@
                 "formats": [
                   "camelCase",
                   "PascalCase",
-                  "CONSTANT_CASE",
-                  "snake_case"
+                  "CONSTANT_CASE"
                 ]
               },
               {
