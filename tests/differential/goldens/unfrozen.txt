@@ -142,9 +142,11 @@ cases/map_key_bool added after R6: no rewriter to freeze it with
 cases/map_key_class added after R6: no rewriter to freeze it with
 cases/map_key_enum added after R6: no rewriter to freeze it with
 cases/map_key_f32 added after R6: no rewriter to freeze it with
+cases/map_key_f32_negzero added after R6: no rewriter to freeze it with
 cases/map_key_f64 added after R6: no rewriter to freeze it with
 cases/map_key_i32 added after R6: no rewriter to freeze it with
 cases/map_key_i64 added after R6: no rewriter to freeze it with
+cases/map_key_negzero added after R6: no rewriter to freeze it with
 cases/map_key_str added after R6: no rewriter to freeze it with
 cases/map_key_u16 added after R6: no rewriter to freeze it with
 cases/map_key_u32 added after R6: no rewriter to freeze it with

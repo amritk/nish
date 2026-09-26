@@ -80,6 +80,7 @@ import {
   emitLibraryCopies,
   emitMapIntrinsic,
   emitMaybeLocal,
+  emitStoredKey,
   emitWalkExits,
   libraryReach,
   mapIntrinsicOf,
@@ -133,7 +134,15 @@ import {
 } from "./nodes";
 import { Options } from "./options";
 
-import { CheckedProgram, FUSE_NONE, FunctionSig, MAP_NONE, ROLE_CONSTRUCTOR, StructInfo } from "./program";
+import {
+  CheckedProgram,
+  FUSE_NONE,
+  FunctionSig,
+  MAP_NONE,
+  MAP_STORED_KEY,
+  ROLE_CONSTRUCTOR,
+  StructInfo,
+} from "./program";
 import {
   ARENA_GLOBAL,
   ARENA_GLOBAL_TLS,
@@ -1185,6 +1194,10 @@ export class Emitter {
       process.exit(internalErrorFor(`emitter: no callee recorded for \`${callee.text}\``, this.opts.json));
     }
     const args = expr.children[1];
+    // WP32: `storedKey` is the key as an entry stores it, lowered in place.
+    if (mapIntrinsicOf(sig) === MAP_STORED_KEY) {
+      return emitStoredKey(this, sig, args.children[0]);
+    }
     const operands: string[] = [];
     const operandTypes: string[] = [];
     const operandValues: string[] = [];

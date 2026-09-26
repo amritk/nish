@@ -1,0 +1,6 @@
+map 0 Infinity 1
+set 0 Infinity 1
+update Infinity 2
+guarded set Infinity 7
+guarded add Infinity 1
+getOrInsert Infinity 10

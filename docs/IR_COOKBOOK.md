@@ -1141,8 +1141,11 @@ code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
 place — here `fmix32`, then 0 moved to 1 — and the loop reads `entryHashes`
 and `entryKeys` only after the bucket word's top eight bits match the hash's,
 comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
-never called: they are the two intrinsics `self/emit_map.ts` lowers per key
-type.
+never called: they are intrinsics `self/emit_map.ts` lowers per key type. So is
+`storedKey`, where `insertAt` pushes the key: a float key is pushed as
+`fadd <key>, 0.0`, which stores a -0 as +0 as JavaScript does, and every other
+key is pushed as it is, with no instruction added
+(`tests/cases/map_key_negzero`).
 
 <!-- cookbook:begin map_has -->
 ```ts

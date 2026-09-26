@@ -90,6 +90,7 @@ import {
   MAP_NONE,
   MAP_RESERVE,
   MAP_SAME_KEY,
+  MAP_STORED_KEY,
   ROLE_FUNCTION,
   STRUCT_CLASS,
   StructInfo,
@@ -180,10 +181,10 @@ const isInterfaceType = (ctx: CheckContext, type: i32): boolean => {
 };
 
 /**
- * WP32: the `MAP_*` role of an instantiation of `template`: `hashKey` and
- * `sameKey` in `std/collections.ts`, and `reserve` and `getOrInsert` in
- * `std/map.ts`, are lowered in place by the emitter (`self/emit_map.ts`), and
- * every other template is what it says.
+ * WP32: the `MAP_*` role of an instantiation of `template`: `hashKey`,
+ * `sameKey` and `storedKey` in `std/collections.ts`, and `reserve` and
+ * `getOrInsert` in `std/map.ts`, are lowered in place by the emitter
+ * (`self/emit_map.ts`), and every other template is what it says.
  */
 export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
   if (template.owner === null && template.home.program.isMapExtras()) {
@@ -198,6 +199,9 @@ export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
   }
   if (template.sourceName === "hashKey") {
     return MAP_HASH_KEY;
+  }
+  if (template.sourceName === "storedKey") {
+    return MAP_STORED_KEY;
   }
   return template.sourceName === "sameKey" ? MAP_SAME_KEY : MAP_NONE;
 };

@@ -394,7 +394,7 @@ export class Map<K, V> {
       this.rebuild();
       bucket = -1;
     }
-    this.entryKeys.push(key);
+    this.entryKeys.push(storedKey(key));
     this.entryValues.push(value);
     this.entryHashes.push(h);
     this.live = this.live + 1;
@@ -546,7 +546,7 @@ export class Set<T> {
       this.rebuild();
       bucket = -1;
     }
-    this.entryKeys.push(key);
+    this.entryKeys.push(storedKey(key));
     this.entryHashes.push(h);
     this.live = this.live + 1;
     this.size = this.size + 1;
@@ -573,3 +573,13 @@ export class Set<T> {
     refile(slots, this.entryHashes);
   }
 }
+
+/**
+ * The key as an entry stores it: a float's -0 becomes +0, as ECMA-262's
+ * `Map.prototype.set` and `Set.prototype.add` store it, so a walk over the
+ * keys yields +0 whichever zero was inserted. Lowered in place, like `hashKey`
+ * and `sameKey`: `fadd` of +0 for a float, and nothing at all for every other
+ * key. It sits last in the file so that adding it moved no line a `-g` build
+ * of an earlier function records.
+ */
+const storedKey = <K>(key: K): K => key;

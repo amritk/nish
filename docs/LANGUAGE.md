@@ -3335,7 +3335,11 @@ export const main = (): i32 => {
   `reject_map_key_result`, and for a `Set` element, `reject_set_key_interface`).
   A float key is SameValueZero, and so is its hash: `-0` and `+0` are one key
   and every `NaN` is one key, and `map_key_f64` prints under Node's own `Map`
-  what it prints compiled (`tests/differential/unmodified.js`).
+  what it prints compiled (`tests/differential/unmodified.js`). A `-0` key is
+  stored as `+0`, as JavaScript stores it, so a walk over `keys()` or a `Set`
+  yields `+0` whichever zero was inserted, by every insert path: `set`, `add`,
+  a fused update or guarded insert, and `getOrInsert` (`map_key_negzero`, which
+  Node runs unmodified too, and `map_key_f32_negzero` for an `f32` key).
 - **A value is anything but `void` and an interface**, whose record would be
   copied into the table rather than shared:
   `` `Point` cannot be the value type of `Map<string, Point>` ``

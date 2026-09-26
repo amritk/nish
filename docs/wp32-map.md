@@ -481,7 +481,13 @@ runtime's `.text` budget has no room:
 
 Normalising a float means −0 becomes +0 (`fadd x, 0.0` does it), and every NaN
 becomes the one canonical `0x7FF8000000000000`. Keys that SameValueZero calls
-equal then hash equal. A hash of 0 is moved to 1 (§2.4). `fmix64`'s constants
+equal then hash equal. A hash of 0 is moved to 1 (§2.4).
+
+An entry stores a −0 key as +0, as JavaScript's `Map.prototype.set` and
+`Set.prototype.add` do, so a walk yields +0 whichever zero was inserted. That
+is a third intrinsic, `storedKey<K>`, called where `insertAt` pushes the key:
+the same `fadd x, 0.0` for a float, and nothing at all for every other key
+(`tests/cases/map_key_negzero`, `map_key_f32_negzero`). `fmix64`'s constants
 are above 2^53, which a Nish literal cannot spell. That is why this is IR the
 compiler writes, and not Nish in `std/`.
 

@@ -496,6 +496,16 @@ const DECLARED = [
     why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
   },
   {
+    program: "tests/cases/map_key_f32_negzero.ts",
+    changelog: "Store a -0 Map key or Set element as +0, as JavaScript does",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
+    program: "tests/cases/map_key_negzero.ts",
+    changelog: "Store a -0 Map key or Set element as +0, as JavaScript does",
+    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
+  },
+  {
     program: "tests/cases/map_key_i32.ts",
     changelog: "The global Map and Set, backed by std/collections.ts",
     why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
