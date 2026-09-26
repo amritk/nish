@@ -15,7 +15,7 @@ of the JavaScript file it was ported from: the MIT copyright and permission
 notice for the SOM-derived programs, and the Revised BSD notice with its
 contributor list for `mandelbrot.ts`. Those headers are at commit
 [`8c2ac1b`](https://github.com/amritk/are-we-fast-yet/commit/8c2ac1b035674fc08541365a9c9349306dc45bdd),
-on the branch `claude/brave-ritchie-sjl752`, in `benchmarks/Nish/`, whose
+in `benchmarks/Nish/`, whose
 `README.md` has a Licence section saying which notice covers which file. The
 copies here keep the short header of `b4d09d4` and point to this file, which
 holds the same two notices in full.
