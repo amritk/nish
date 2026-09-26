@@ -1,14 +1,14 @@
 ---
-name: Index safety — at(), strict indexing, and an honest --unchecked-indexing
-overview: Give programs a non-panicking element read (Array.prototype.at, the TypeScript spelling of Rust's get), an opt-in --strict-indexing that makes every unproven index a compile error, and make --unchecked-indexing say out loud which accesses it leaves unguarded. Runs after awfy-perf-2 closes; checks stay on by default and no existing program changes meaning.
+name: Index safety — at(), proven-only indexing, and no --unchecked-indexing
+overview: Make an index that can go out of range impossible to write. xs[i] compiles only where the compiler proves i in range, so it never needs a runtime check and never panics; Array.prototype.at is the explicit, always-safe read for everything else; --unchecked-indexing is removed because nothing unproven is left to uncheck. Lands as an opt-in first, migrates std, self and the tests, then flips the default in one breaking 0.x release. Runs after awfy-perf-2 closes.
 stages:
   - id: design
     title: Design note
-    goal: Settle every open semantic question in one reviewed doc before any code — at() semantics and name, what strict mode refuses, the unchecked warning
-    verification: docs/wp33-index-safety.md merged, owner has signed off on the open decisions it lists
+    goal: Settle the semantics before code — at(), the exact provable forms that become part of the language, pop(), and the migration path
+    verification: docs/wp33-index-safety.md merged and the owner has signed off on its open decisions
     todos:
       - id: design-note
-        content: Write docs/wp33-index-safety.md covering at() typing and lowering, the strict-mode rule set, the unchecked warning, and the open decisions — see Design note
+        content: Write docs/wp33-index-safety.md — at() typing and lowering, the provable-forms contract, pop(), the migration and the breaking release — see Design note
         status: pending
       - id: design-signoff
         content: Put the open decisions to the owner and record the answers in the note — see Open decisions
@@ -19,7 +19,7 @@ stages:
     verification: npm run check and an undegraded npm test green; at goldens and negatives pass; npm run test:diff agrees with Node on every at case
     todos:
       - id: at-checker
-        content: Type xs.at(i) as the existing maybe type (T | undefined) in self/members.ts and self/types.ts, reusing Map.get's rules for where a maybe may appear — see Array.prototype.at
+        content: Type xs.at(i) as the existing maybe type (T | undefined) in self/members.ts and self/types.ts, reusing Map.get rules for where a maybe may appear — see Array.prototype.at
         status: pending
       - id: at-lowering
         content: Lower at() in self/emit_arrays.ts — negative index adds length, one unsigned compare, element load on the present edge, select for ?? with a literal default — see Array.prototype.at
@@ -28,50 +28,56 @@ stages:
         content: Teach self/bounds.ts that inside a present region of at(i) with i known non-negative, xs[i] is proven — see Array.prototype.at
         status: pending
       - id: at-tests
-        content: Add arr_at goldens (positive, negative index, ?? default, narrowing proof, pointer and scalar element types) and reject_arr_at_* negatives, plus LANGUAGE.md rule and cookbook entry — see Tests
+        content: Add arr_at goldens and reject_arr_at_* negatives, the LANGUAGE.md rule and a cookbook entry — see Tests
         status: pending
   - id: strict
-    title: --strict-indexing
-    goal: An opt-in flag under which every access the prover cannot prove in range is a compile error naming the fix, so a program that builds cannot panic on an index
-    verification: npm test green; strict_* goldens pass; every refusal message names a rewrite that compiles; flag off leaves every golden byte-identical
+    title: Proven-only indexing, opt-in
+    goal: Under --strict-indexing every access the prover cannot prove is a compile error naming a rewrite that compiles, and the rule set is written down as the language contract
+    verification: npm test green; strict goldens pass; every refusal names a rewrite that is itself a passing case; the flag off leaves every golden byte-identical
     todos:
-      - id: strict-flag
-        content: Add --strict-indexing to self/options.ts and self/compile.ts, carried to the checker, rejected together with --unchecked-indexing — see --strict-indexing
+      - id: strict-contract
+        content: Write the provable forms into docs/LANGUAGE.md as a numbered, append-only list, each pinned by a golden — see Provable forms
         status: pending
-      - id: strict-errors
-        content: Raise NL9007, NL9008 and NL9009 to errors under the flag with a fix-it naming the guard or at() rewrite, and cover pop() on an array not proven non-empty — see --strict-indexing
+      - id: strict-flag
+        content: Add --strict-indexing to self/options.ts and self/compile.ts and raise NL9007, NL9008, NL9009 and unproven pop() to errors under it — see Proven-only indexing
+        status: pending
+      - id: strict-count
+        content: Add a --report-unproven mode (or reuse --json diagnostics) that counts the rewrites a program needs, and run it over std, self and tests to size the migration — see Migration
         status: pending
       - id: strict-tests
-        content: Add strict_* goldens and reject_strict_* negatives, one per refused shape, each whose suggested rewrite is itself a passing case — see Tests
+        content: Add strict_* goldens and reject_strict_* negatives, one per refused shape — see Tests
         status: pending
-  - id: unchecked-warn
-    title: --unchecked-indexing reports what it leaves unguarded
-    goal: Every access that --unchecked-indexing turns into undefined behaviour without a proof is reported under a new warning that --no-warn-performance does not silence
-    verification: npm test green; unchecked_* wordings goldens pass; a fully proven program builds under --unchecked-indexing with no new output
+  - id: migrate
+    title: Migrate std, self and the tests
+    goal: Everything in the repository compiles under --strict-indexing with no behaviour change
+    verification: std, self (stage 2) and every tests/cases and tests/link program compile under --strict-indexing; npm test and test:diff green; instruction counts equal or lower
     todos:
-      - id: unchecked-code
-        content: Add a new NL code in self/codes.ts via scripts/gen-diagnostic-codes.mjs for an unproven access under --unchecked-indexing, plus a one-line count summary — see --unchecked-indexing
+      - id: migrate-std
+        content: Rewrite the std accesses strict refuses with guards or at() — see Migration
         status: pending
-      - id: unchecked-emit
-        content: Report it from the same site as NL9007/NL9008 whenever uncheckedIndexing is set, independent of warnPerformance — see --unchecked-indexing
+      - id: migrate-self
+        content: Rewrite the roughly 52 unproven accesses in self (48 NL9007, 4 NL9009 per tests/perf-baseline.json) without using at() until the seed has it (rolling freeze) — see Migration
         status: pending
-      - id: unchecked-docs
-        content: Update the --unchecked-indexing section of docs/LANGUAGE.md to point at --strict-indexing as the safe way to drop every check — see --unchecked-indexing
+      - id: migrate-tests
+        content: Rewrite or re-classify every test program strict refuses; negatives that exist to panic become reject_* or at() cases — see Migration
         status: pending
-  - id: std-strict
-    title: std/ under --strict-indexing
-    goal: Every std/ module compiles clean under --strict-indexing, and a test keeps it that way
-    verification: node tests/run.js std-strict passes; std/ IR unchanged or strictly fewer checks
+  - id: flip
+    title: Make it the default and remove --unchecked-indexing
+    goal: One breaking 0.x release in which xs[i] compiles only when proven, --unchecked-indexing no longer exists, and the docs say so
+    verification: feat! commit; the flag is refused with a message pointing at at(); every golden that used it is gone or rewritten; the AWFY unchecked column is retired from bench/run.mjs and docs
     todos:
-      - id: std-fix
-        content: Rewrite the std/ accesses strict mode refuses with guards or at(), no behaviour change — see std under strict
+      - id: flip-default
+        content: Make proven-only indexing the default in self/compile.ts and drop --strict-indexing to a no-op alias for one release — see Breaking release
         status: pending
-      - id: std-pin
-        content: Add a named std-strict check to tests/run.js compiling every std/ module with --strict-indexing — see std under strict
+      - id: flip-remove-unchecked
+        content: Remove --unchecked-indexing and its code paths (self/bounds.ts, self/emit_arrays.ts, self/emit_strings.ts, self/checker.ts), its tests (arr_unchecked, arr_sum args) and doc mentions — see Breaking release
+        status: pending
+      - id: flip-docs
+        content: Update docs/LANGUAGE.md, docs/AI.md, the cookbook and the changelog body to describe indexing as proven-or-at() — see Breaking release
         status: pending
 ---
 
-# Index safety
+# Index safety — proven-only indexing
 
 ## Context
 
@@ -83,21 +89,24 @@ stages:
 
 ## Approach
 
+**The rule.** `xs[i]` compiles only where the compiler proves `0 <= i < xs.length`; there it needs no runtime check, so checked and unchecked are the same speed by construction. Everywhere else the program says what it wants: `xs.at(i)` (a `T | undefined` it must handle) or a guard the prover understands. Indexing can then neither corrupt memory nor panic, and `--unchecked-indexing` has nothing left to do.
+
 | Decision | Choice | Why |
 |---|---|---|
-| Name of the non-panicking read | `xs.at(i)` | It is the JavaScript/TypeScript method with Rust `get`'s meaning (`T \| undefined`), so a Nish program still type-checks under `tsc` and runs the same under Node. A Nish-only `get` would need an ambient type in `runtime/nish.d.ts` *and* a prototype shim, and would still diverge from TS. **Open decision** for the owner. |
+| Name of the non-panicking read | `xs.at(i)` | It is the JavaScript/TypeScript method with Rust `get`'s meaning (`T \| undefined`), so a Nish program still type-checks under `tsc` and runs the same under Node. A Nish-only `get` would need an ambient type in `runtime/nish.d.ts` *and* a prototype shim, and would still diverge from TS. Owner-approved. |
 | Negative index | JavaScript's: `at(-1)` is the last element | Nish is a TypeScript subset; `test:diff` runs every program under Node and must agree. |
 | Return type | the existing maybe, `T \| undefined` | Reuses Map.get's typing, narrowing, `??` and all their negatives — no new type-system surface, works for scalars. |
-| Strict mode | opt-in flag | Default builds must not change (the owner's rule). `self/` still has unproven accesses; it tightens file by file under the existing `tests/perf-baseline.json` ratchet. |
-| Unchecked | warn, never refuse | Refusing would change an existing flag's meaning (a break under the stability rule at the head of `docs/LANGUAGE.md`). |
+| Rollout | opt-in `--strict-indexing` first, then the default | The default flips only once std, self and every test already pass, so the breaking release is a flag flip, not a migration. |
+| `--unchecked-indexing` | removed in the same breaking release | With proven-only indexing every compiled access is already check-free; the flag could only remove checks from code that no longer compiles. |
+| Provable forms | a numbered, append-only list in `docs/LANGUAGE.md` | What compiles now depends on the prover, so its rules are language, not optimisation: a form once provable stays provable. |
 
 ## Design note
 
 `docs/wp33-index-safety.md` (next free WP number — confirm against `docs/MASTER_PLAN.md`) settles, with examples:
 
 - `at()`: exact semantics (`i < 0` → `i + length`; then `0 <= k < length` or `undefined`), the maybe rules it inherits, and the lowering (below). What `at()` on a `string` does, or that it is refused for now.
-- Strict mode: the exact set of refused shapes (NL9007, NL9008, NL9009, `pop()` on an array not proven non-empty), whether `shift`/`slice` bounds are in scope, whether integer division's divisor check is in or out (recommend out: a separate `--strict-division` later), and the fix-it wording for each.
-- The unchecked warning: code, wording, the summary line, and that it fires only when `--unchecked-indexing` is set.
+- Proven-only indexing: the exact set of refused shapes (NL9007, NL9008, NL9009, `pop()` on an array not proven non-empty), whether `shift`/`slice` bounds are in scope, whether integer division's divisor check is in or out (recommend out: a separate `--strict-division` later), and the fix-it wording for each.
+- The provable-forms contract (below), `pop()`, the migration count, and the breaking release's wording.
 - The open decisions below, answered.
 
 ## Array.prototype.at
@@ -120,7 +129,7 @@ Lowering ([self/emit_arrays.ts](../../self/emit_arrays.ts)), for `const v = xs.a
 
 Proof carry-over ([self/bounds.ts](../../self/bounds.ts)): inside the region where `v !== undefined` holds, and where `i` is known non-negative, record `i < xs.length` so later `xs[i]` in that region needs no check. A negative `i` gets no fact, because `xs[i]` with a negative `i` panics where `at(i)` would not.
 
-## --strict-indexing
+## Proven-only indexing
 
 - **Flag.** New in [self/options.ts](../../self/options.ts) and [self/compile.ts](../../self/compile.ts). Passing it together with `--unchecked-indexing` is an error: strict proves the checks away, unchecked deletes them unproven.
 - **Refusals.** Under the flag, NL9007, NL9008 and NL9009 are errors, not warnings. They keep their codes, with the severity raised; confirm in the design note whether the diagnostics registry wants separate error codes. Each message ends with a rewrite that compiles. For example:
@@ -131,12 +140,26 @@ Proof carry-over ([self/bounds.ts](../../self/bounds.ts)): inside the region whe
 - **`pop()`.** On an array not proven non-empty it panics today (`index out of range: 0 >= 0`). Under strict it is refused unless the prover knows `length >= 1`.
 - **Unchanged meaning.** A strict build's IR is identical to a default build's IR for any program strict accepts: strict refuses, it never changes codegen.
 
-## --unchecked-indexing
+## Provable forms
 
-- **New code.** Add an NL code through [scripts/gen-diagnostic-codes.mjs](../../scripts/gen-diagnostic-codes.mjs) and [self/codes.ts](../../self/codes.ts): "`xs[i]` is not proven in range, and `--unchecked-indexing` removed its check: an out-of-range index here is undefined behaviour".
-- **When it fires.** It is raised at the NL9007/NL9008 sites whenever `uncheckedIndexing` is set, and **not** gated by `warnPerformance`. It ends with one summary line: `N accesses are unchecked and unproven`.
-- **Proven programs stay quiet.** A program every access of which is proven prints nothing new.
-- **Docs.** The `--unchecked-indexing` section of [docs/LANGUAGE.md](../../docs/LANGUAGE.md) says to use `--strict-indexing` to drop every check safely: once strict passes, unchecked has nothing left to remove.
+The contract `docs/LANGUAGE.md` states, each pinned by a golden, and only ever extended:
+
+1. A loop index bounded by the array's length: `for (let i = 0; i < xs.length; i++)`, and the count-down form.
+2. A dominating guard: `if (i >= 0 && i < xs.length)`, including early-exit forms (`if (i >= xs.length) return`).
+3. A constant index into an array of known minimum length (a literal, `new Array<T>(K)`, an inline fixed field).
+4. A fact carried across a call by the call-site ranges pass (#222), including the closed-world rule.
+5. The present region of `xs.at(i)` with `i` known non-negative.
+6. `pop()` / `xs[xs.length - 1]` where the length is proven at least 1.
+
+The design note lists anything else the prover proves today and decides which of it becomes contract.
+
+## Migration
+
+`--report-unproven` (or the existing `--json` diagnostics) counts, per file, the accesses strict refuses; the count for std, self and the test corpus sizes this stage before it starts. Rewrites use a guard where the index is really in range and `at()` where it is data-dependent; a rewrite never changes output (`test:diff`, goldens). `self/` may not use `at()` until the seed has it, so its rewrites are guards. Test programs whose purpose is to panic on an index become `reject_*` cases or `at()` cases.
+
+## Breaking release
+
+A `feat!` commit whose body explains the rule and the rewrite, moving the minor version (0.x). `--strict-indexing` stays as a no-op alias for one release; `--unchecked-indexing` is refused with `` `--unchecked-indexing` is gone: an index either is proven, and has no check to remove, or is written `xs.at(i)` ``. The AWFY "unchecked" column leaves `bench/run.mjs` and the docs, since it now equals the default.
 
 ## std under strict
 
@@ -148,15 +171,14 @@ Proof carry-over ([self/bounds.ts](../../self/bounds.ts)): inside the region whe
 
 For the owner, recorded in the design note:
 
-1. `at()` (TypeScript's name, negative indices from the end) vs a Nish-only `get(i)` (Rust's name, no negative indices, needs a shim under Node). **Recommend `at()`.**
-2. Strict mode's scope. Indices and `pop` only, or also divisor checks? **Recommend indices and `pop` only; division separately.**
-3. Should `std/` adopt strict now (stage `std-strict`), or wait? **Recommend now: it is small, and it proves the fix-its are usable.**
+1. `at()` (TypeScript's name, negative indices from the end, owner-approved) — confirm `at()` on strings is out for now.
+2. Scope: indices and `pop` only, or also integer division's divisor check? **Recommend indices and `pop`; division separately.**
+3. A migration escape hatch for users in the breaking release (e.g. a one-release `--allow-unproven-indexing` that keeps runtime checks), or none? **Recommend none beyond the no-op alias: `at()` is the migration.**
+4. Which provable forms the design note finds today but does not want to promise forever.
 
 ## Out of scope
 
-- Changing the default: checks stay on, and strict stays opt-in.
-- Making `--unchecked-indexing` refuse to build.
-- Strict mode for `self/`.
+- A runtime-checked `xs[i]` after the breaking release.
 - Optional chaining, `?.[]`, or any new union types beyond the existing maybe.
 - `at()` on strings, unless the design note decides otherwise.
 
@@ -172,16 +194,17 @@ Every case gets a golden `.ll`, an `llvm-as` pass, a native round trip with `.ou
 | `reject_arr_at_*` | a maybe used as a value, in arithmetic, stored, or returned — each with Map.get's message naming `at` |
 | `strict_*` | each accepted shape: a guarded loop, `at() ??`, a proven `pop` |
 | `reject_strict_*` | one per refused shape (NL9007, NL9008, NL9009, `pop`), each whose suggested rewrite is itself a `strict_*` case |
-| `unchecked_*` (wordings) | the new warning and the summary line; a fully proven program prints nothing |
 | `std-strict` (named check) | every std module compiles under `--strict-indexing` |
+| `repo-strict` (named check, after migration) | self and every test program compile under `--strict-indexing` |
+| `reject_unchecked_flag` (after the flip) | `--unchecked-indexing` is refused with the message above |
 
 ## Verification
 
 - `npm run check`
 - An undegraded `npm test`: read the skip count; no `DEGRADED:` line.
 - `npm run test:diff`: every `at` case agrees with Node.
-- `node tests/run.js arr_at strict unchecked std-strict`
-- `node bench/run.mjs --instructions --check`: no count moves, since no existing program uses the new surface.
+- `node tests/run.js arr_at strict std-strict repo-strict`
+- `node bench/run.mjs --instructions --check`: counts equal or lower at every stage.
 - `NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js`: 0 undeclared differences.
 - `npm run lint` and `node docs/check-links.mjs`.
 - The rolling freeze: `self/` may not *use* `at()` until the next release's seed.
