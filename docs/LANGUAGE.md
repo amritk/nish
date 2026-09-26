@@ -3349,7 +3349,12 @@ export const main = (): i32 => {
   not an error: it compiles as the separate calls it is, one probe each, and
   prints what they print (`map_fused_no_call`, `map_fused_no_assign`,
   `map_fused_no_key_spelling`, `map_fused_no_element_receiver`,
-  `map_fused_no_template`, `map_fused_no_statement_before`). A pattern in a
+  `map_fused_no_template`, `map_fused_no_statement_before`). The places are
+  compared, not what they hold, so an alias of the receiver is not fused
+  (`map_fused_no_alias`), and neither is a value that reads the key twice or
+  reads another map (`map_fused_no_two_gets`, `map_fused_no_other_map`); a
+  guard fuses the write that starts its then-branch, and a `set` in its `else`
+  is an ordinary call (`map_fused_no_else_branch`). A pattern in a
   generic function or method is fused in every instantiation
   (`map_fused_generic`), and one inside a walk of the table it writes does
   what the separate calls do: a key it inserts is appended past the cursor and
@@ -3403,7 +3408,13 @@ export const main = (): i32 => {
     `` `getOrInsert` expects 3 argument(s), got 2 `` (`reject_map_extras_arity`);
     and a `Set` is not a table `reserve` takes:
     `` Cannot infer `K` for `reserve`: argument 1 is Set<string>, which does not match the declared `Map<K, V>` ``
-    (`reject_map_extras_reserve_set`).
+    (`reject_map_extras_reserve_set`). The module has those two and nothing
+    else: `` Module `nish/map` has no exported function `peek` ``
+    (`reject_map_extras_unknown_export`, NL2376, the code any module's missing export now carries).
+  - **The lowering belongs to `nish/map`'s two functions**, found by the module
+    that declares them and not by their names: a program's own `reserve`, or a
+    `getOrInsert` from its own module `./map`, is an ordinary function whose
+    body runs (`tests/link/map_extras_user_names`).
 - **`std/collections.ts` writes no `.ll` of its own.** What a module uses of it
   is emitted into that module, `internal`, after the module's own functions,
   so a one-file program that names `Map` is still one module for

@@ -2247,9 +2247,8 @@ if (!only || "map_fingerprint_miss".includes(only)) {
 // proves it without trusting anyone's eye: exactly one call of the table's
 // `probe`, whose hash is inside it, no hash loop of its own (`hash.test` is the
 // block FNV-1a is lowered to), and no call of `get`, `set`, `has` or of
-// `getOrInsert` itself. The negative is counted too, so the rule is proven on
-// both sides: a call in the value leaves a `probe` for the `get` and a `set`
-// that probes again. A golden that is not there reads as no function at all,
+// `getOrInsert` itself. The negatives are counted too, so the rule is proven
+// on both sides. A golden that is not there reads as no function at all,
 // which fails the check, so a renamed fixture fails here rather than dropping it.
 if (!only || "map_fused".includes(only) || "map_extras".includes(only) || "probe".includes(only)) {
   /** The `define` of `fn` in the golden `name.ll`, up to its closing brace. */
@@ -2274,11 +2273,35 @@ if (!only || "map_fused".includes(only) || "map_extras".includes(only) || "probe
       ir || `no \`define\` of @${fn} in tests/cases/${name}.ll`
     );
   }
-  const unfused = goldenFunction("map_fused_no_call", "touch");
+  // Each shape that must stay unfused keeps a probe for every `get` and a
+  // `set` that probes again: a call in the value, an alias of the receiver
+  // (the rule compares the places, not what they hold), two reads of the key,
+  // and a read of another map.
+  const unfusedShapes = [
+    ["map_fused_no_call", "touch", 1, "a call in the value"],
+    ["map_fused_no_alias", "bump", 1, "a receiver alias"],
+    ["map_fused_no_two_gets", "twice", 2, "two reads of the key"],
+    ["map_fused_no_other_map", "merge", 2, "a read of another map"],
+  ];
+  for (const [name, fn, gets, shape] of unfusedShapes) {
+    const unfused = goldenFunction(name, fn);
+    const probes = countOf(unfused, /call i64 @[\w.$]+\.probe\(/g);
+    const sets = countOf(unfused, /call [^@\n]*@[\w.$]+\.set\(/g);
+    check(
+      `${name}: ${shape} is not fused (${probes} probe for the get(s), ${sets} set that probes again)`,
+      probes === gets && sets === 1,
+      unfused || `no \`define\` of @${fn} in tests/cases/${name}.ll`
+    );
+  }
+  // A guard fuses the write that starts its then-branch and nothing else: the
+  // `else` branch's `set` is a call with a probe of its own.
+  const guarded = goldenFunction("map_fused_no_else_branch", "put");
   check(
-    "map_fused_no_call: a call in the value leaves the `get` its probe and the `set` its own",
-    countOf(unfused, /call i64 @[\w.$]+\.probe\(/g) === 1 && countOf(unfused, /call [^@\n]*@[\w.$]+\.set\(/g) === 1,
-    unfused || "no `define` of @touch in tests/cases/map_fused_no_call.ll"
+    "map_fused_no_else_branch: the then-branch write goes through the guard's probe, the else-branch `set` does not",
+    countOf(guarded, /call i64 @[\w.$]+\.probe\(/g) === 1 &&
+      countOf(guarded, /call void @[\w.$]+\.setValueAt\(/g) === 1 &&
+      countOf(guarded, /call [^@\n]*@[\w.$]+\.set\(/g) === 1,
+    guarded || "no `define` of @put in tests/cases/map_fused_no_else_branch.ll"
   );
 }
 

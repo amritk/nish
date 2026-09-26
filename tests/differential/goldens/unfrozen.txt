@@ -91,12 +91,16 @@ cases/map_fused_generic added after R6: no rewriter to freeze it with
 cases/map_fused_guard_has added after R6: no rewriter to freeze it with
 cases/map_fused_guard_not_has added after R6: no rewriter to freeze it with
 cases/map_fused_literal_key added after R6: no rewriter to freeze it with
+cases/map_fused_no_alias added after R6: no rewriter to freeze it with
 cases/map_fused_no_assign added after R6: no rewriter to freeze it with
 cases/map_fused_no_call added after R6: no rewriter to freeze it with
 cases/map_fused_no_element_receiver added after R6: no rewriter to freeze it with
+cases/map_fused_no_else_branch added after R6: no rewriter to freeze it with
 cases/map_fused_no_key_spelling added after R6: no rewriter to freeze it with
+cases/map_fused_no_other_map added after R6: no rewriter to freeze it with
 cases/map_fused_no_statement_before added after R6: no rewriter to freeze it with
 cases/map_fused_no_template added after R6: no rewriter to freeze it with
+cases/map_fused_no_two_gets added after R6: no rewriter to freeze it with
 cases/map_fused_set_insert added after R6: no rewriter to freeze it with
 cases/map_fused_this_field added after R6: no rewriter to freeze it with
 cases/map_fused_update_has added after R6: no rewriter to freeze it with

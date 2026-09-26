@@ -125,6 +125,117 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/map_fused_generic.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_guard_has.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_guard_not_has.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_literal_key.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_no_else_branch.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_set_insert.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_this_field.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_update_has.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_walk.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_fused_wordcount.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_get_nullish.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "its word count, `counts.set(w, (counts.get(w) ?? 0) + 1)`, is now one probe",
+  },
+  {
+    program: "docs/cookbook/map_get.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "its `bump` is the word-count update, now one probe",
+  },
+  {
+    program: "tests/link/map_two_modules/main.ts",
+    file: "tally.ll",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "`tally.ts` is a guarded insert, `if (!m.has(w)) { m.set(w, 1); }`, now one probe",
+  },
+  {
+    program: "docs/cookbook/map_fused.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
+  },
+  {
+    program: "tests/cases/map_dbg.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "under `-g` the `Set` methods' DWARF lines move: `Map.reserveSlots` now sits above `Set` in `std/collections.ts`",
+  },
+  {
+    program: "tests/cases/map_extras_generic.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
+    program: "tests/cases/map_extras_get_or_insert.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
+    program: "tests/cases/map_extras_reserve.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
+    program: "tests/cases/map_extras_walk.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
+    program: "tests/link/map_extras_two_modules/main.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
+    program: "examples/wordcount.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
+    program: "docs/cookbook/map_fused_extras.ts",
+    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+    why: "it imports `nish/map`, which the reference compiler does not have",
+  },
+  {
     program: "tests/cases/map_iter_exit_edges.ts",
     changelog: "For...of over Map keys() and values() and over a Set",
     why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
