@@ -1,6 +1,3 @@
 tests/parser/recovery.ts:11:1: syntax error: expected an expression, found `}`
   11 | }
      | ^
-tests/parser/recovery.ts:11:1: syntax error: expected `;`, found `}`
-  11 | }
-     | ^

@@ -50,6 +50,27 @@ tokens, comments, and ASI; `tests/lexer_oracle.js` and
 parser over the test corpus. Syntax errors are reported as `syntax error:` in
 the same `file:line:col` shape (`tests/run.js`, WP10 block).
 
+- **Semicolons are optional, by TypeScript's rule.** A statement may end
+  without `;` where TypeScript would insert one: at a line break, before a
+  `}`, and at the end of the file. A `;` written and a `;` inserted parse to
+  the same tree, so the IR is the same byte for byte
+  (`tests/cases/asi_statements`). The rule is TypeScript's so that a program
+  means what it means under Node, and that includes its three surprises
+  (`tests/cases/asi_continuation`):
+  - a line that starts with `(` or `[` continues the expression before it
+    (`f` then `(x)` on the next line is a call);
+  - a `++` or `--` at the start of a line is a prefix operator of a new
+    statement, not a postfix one of the line before;
+  - `return` followed by a line break returns nothing. The value on the next
+    line is then unreachable code, which is an error here
+    (`Unreachable code after return`, `tests/cases/reject_asi_return_newline`),
+    where TypeScript would run it silently as a separate statement.
+
+  Nothing is inserted between two statements on one line
+  (`` expected `;`, found `const` ``, `tests/cases/reject_asi_same_line`) or
+  in a `for` header (`reject_asi_for_header`). A template at the start of a
+  line is not inserted before either, because TypeScript reads it as a tagged
+  template of the line before (`reject_asi_template`).
 - **Encoding.** Source is UTF-8. String contents are stored as UTF-8 bytes
   (`tests/cases/str_escape`).
 - **A diagnostic column counts UTF-16 code units**, 1-based, from the start of

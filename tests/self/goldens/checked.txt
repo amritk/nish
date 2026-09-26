@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 666 programs, 44874 dump lines.
+# 669 programs, 44928 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3067,6 +3067,58 @@ function set(xs: i32[], i: i32, v: i32): void -> @set
   calls: nish_panic_index
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+program tests/cases/asi_continuation.ts
+module tests/cases/asi_continuation.ts (entry)
+function twice(x: i32): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 twice
+  stackSites=1 stackLocals=1
+  local 7:9 xs: i32[] (const)
+  local 8:9 picked: i32 (const)
+  local 10:9 doubled: i32 (const)
+  callee 10:19 twice -> @twice
+  local 12:7 a: i32 (let)
+  local 13:7 b: i32 (let)
+program tests/cases/asi_statements.ts
+module tests/cases/asi_statements.ts (entry)
+struct Counter (class) size=16 align=8
+  field n: i32 index=0 offset=0 initialized
+  field label: string index=1 offset=8 initialized
+  method bump -> @Counter.bump
+struct Pair (interface) size=8 align=4
+  field a: i32 index=0 offset=0
+  field b: i32 index=1 offset=4
+function Counter.bump(this: Counter): void -> @Counter.bump [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:5
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function twice(x: i32): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function total(xs: i32[]): i32 -> @total
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 23:7 sum: i32 (let)
+  local 24:14 x: i32 (const)
+  local 28:7 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Counter.bump
+  calls: Counter.bump nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 total twice
+  stackSites=3 stackLocals=2
+  local 40:9 c: Counter (const)
+  callee 41:3 Counter.bump -> @Counter.bump
+  callee 41:13 Counter.bump -> @Counter.bump
+  local 42:9 p: Pair (const)
+  local 43:9 t: i32 (const)
+  callee 43:13 total -> @total
+  callee 44:30 twice -> @twice
 program tests/cases/attr_panic_charcodeat.ts
 module tests/cases/attr_panic_charcodeat.ts (entry)
 function at(s: string, i: i32): i32 -> @at
@@ -38253,6 +38305,11 @@ function add(a: i32, b: i32): i32 -> @add
   stackSites=0 stackLocals=0
 program docs/cookbook/fn_add_function.ts
 module docs/cookbook/fn_add_function.ts (entry)
+function add(a: i32, b: i32): i32 -> @add
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/fn_add_no_semicolons.ts
+module docs/cookbook/fn_add_no_semicolons.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
