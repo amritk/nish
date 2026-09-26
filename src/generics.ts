@@ -34,7 +34,7 @@ import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression } from "./expressions"
 import { StringMap, StringSet } from "./map"
-import { parallelRole, recordParallelCall } from "./parallel"
+import { parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
 import {
   collectMethodSignature,
   collectStructMembers,
@@ -1374,6 +1374,12 @@ export const checkGenericCall = (
   }
   if (!matchFunctionArguments(ctx, template, bindings, functions, args)) {
     return T_ERROR
+  }
+  // WP29 P1: a reduce over a string or a class is refused at this call, before
+  // `nish/threads` is instantiated for an element its body cannot hold.
+  const refused = reduceElementMessage(ctx.table, template, functions, tuple)
+  if (refused.length > 0) {
+    return ctx.errorType(expr, refused)
   }
   const sig = instantiate(ctx, template, tuple, functions, expr)
   if (sig === null) {

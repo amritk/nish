@@ -267,15 +267,40 @@ export const allocationWarning = (
   )
 }
 
-/** A result the join could hand back: a number, a `boolean` or an enum, and nothing that points. */
-export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string => {
+/** The refusal of a body answering `type`, which is not a number, a `boolean` or an enum, from `intrinsic`. */
+const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32): string => {
   if (isScalarArgument(table, type)) {
     return ""
   }
   return (
-    `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsicName(sig)}\` hands back only a ` +
+    `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
     "number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory"
   )
+}
+
+/** A result the join could hand back: a number, a `boolean` or an enum, and nothing that points. */
+export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
+  resultWording(table, intrinsicName(sig), fn, type)
+
+/**
+ * The same rule for a reduce, asked before `template` is instantiated rather
+ * than once the fixpoint has run. A reduce's `T` is its element, its identity
+ * and its result at once, and the template's body is written for a scalar `T`
+ * (`new Array<T>(blocks)` zero-fills its partials), so instantiating it for a
+ * string or a class would report errors inside `std/threads.ts` and never
+ * reach the call. `functions` and `typeArgs` are the call's, in the
+ * template's order: the combining function, and `T`.
+ */
+export const reduceElementMessage = (
+  table: TypeTable,
+  template: TemplateInfo,
+  functions: FunctionSig[],
+  typeArgs: i32[]
+): string => {
+  if (parallelRole(template) !== PAR_REDUCE || functions.length !== 1 || typeArgs.length !== 1) {
+    return ""
+  }
+  return resultWording(table, "parallelReduce", functions[0], typeArgs[0])
 }
 
 /**

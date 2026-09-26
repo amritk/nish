@@ -1953,6 +1953,43 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+// #224: a `nish/threads` program prints the same under Node, through the path
+// docs/RUN_UNDER_NODE.md documents, as it does natively. The std bodies are the
+// sequential meaning and are what Node runs, so a reduce whose blocking used
+// `i64` threw there (a BigInt meets a number) while the native build was right.
+// Node's stdout is compared with `expected.out`, which the link loop above holds
+// the native binary to, and the specifier is the one a program writes:
+// `nish/threads`, answered by `runtime/nish.mjs`'s resolve hook.
+for (const name of ["par_map", "par_reduce"]) {
+  if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
+    continue
+  }
+  const entry = path.join(linkDir, name, "main.ts")
+  const fixture = fs.existsSync(entry)
+  const run = fixture
+    ? spawnSync(
+        "node",
+        [
+          "--experimental-strip-types",
+          "--no-warnings",
+          "--import",
+          path.join(root, "runtime", "nish.mjs"),
+          "-e",
+          `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    : null
+  const want = fixture ? fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8") : ""
+  check(
+    `link/${name}: nish/threads-under-node prints what the native binary prints`,
+    run !== null && run.status === 0 && run.stdout === want,
+    run === null
+      ? `no such fixture: tests/link/${name}`
+      : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the
