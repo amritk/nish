@@ -57,6 +57,12 @@ the same commit.
   documented rules
 - `process.argv` — reindexed so `argv[0]` is the program on both sides
 - `Arena` — no-ops, `used()` answering zero
+- `nish/<module>` imports — resolved to `std/<module>.ts` beside the prelude,
+  the way the compiler resolves them, so `import { parallelReduce } from
+  "nish/threads"` runs as written. The standard library's bodies are the
+  sequential meaning of each function and are what Node runs; they keep to
+  the overlap below, which is why `std/threads.ts` computes a reduce's blocks
+  in `f64` rather than `i64`
 
 A program that declares its own function of one of these names keeps it, the
 way a user function shadows a builtin in the compiler.
@@ -114,6 +120,10 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 ```bash
 node tests/differential/unmodified.js --verbose
 ```
+
+Two `nish/threads` programs are held to the same claim by name,
+`tests/link/par_map` and `tests/link/par_reduce`: each prints under Node what
+its native binary prints (`node tests/run.js threads-under-node`).
 
 Today: **7 of 11 agree, 4 known divergences, 0 unexpected.**
 
