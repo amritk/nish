@@ -26,6 +26,49 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-26
+
+### Added
+
+- checker: Compile-time function parameters, monomorphised per callee ([#213](https://github.com/amritk/nish/pull/213))
+- checker: ParallelMapInto and parallelReduce from nish/threads ([#219](https://github.com/amritk/nish/pull/219))
+- codegen: Allocating parallel bodies, a cost-sized grain and the NL9012 warning ([#223](https://github.com/amritk/nish/pull/223))
+- checker: The global Map and Set, backed by std/collections.ts ([#229](https://github.com/amritk/nish/pull/229))
+- checker: Map.get, typed V | undefined and narrowed as TypeScript does ([#232](https://github.com/amritk/nish/pull/232))
+- codegen: For...of over Map keys() and values() and over a Set ([#237](https://github.com/amritk/nish/pull/237))
+
+### Performance
+
+- codegen: Give a function the arena scope when only its callees allocate ([#210](https://github.com/amritk/nish/pull/210))
+- checker: A passed bounds check proves the same index on the same array ([#209](https://github.com/amritk/nish/pull/209))
+- codegen: Keep a field array's header live across element stores ([#208](https://github.com/amritk/nish/pull/208))
+- codegen: Give array header loads and stores their own TBAA subtree ([#220](https://github.com/amritk/nish/pull/220))
+- codegen: Reclaim a loop iteration's temporaries when nothing outlives the pass ([#221](https://github.com/amritk/nish/pull/221))
+- self: Fingerprints and stored hashes in StringMap ([#228](https://github.com/amritk/nish/pull/228))
+- checker: Prove an index in range from what every call site guarantees ([#222](https://github.com/amritk/nish/pull/222))
+- codegen: Store a fixed-length array field inside its object ([#230](https://github.com/amritk/nish/pull/230))
+- checker: Cut the call-site ranges pass to the walks that can move a proof ([#236](https://github.com/amritk/nish/pull/236))
+
+### Changed
+
+- codegen: Record the shared write that denies a function purity ([#212](https://github.com/amritk/nish/pull/212))
+
+### Documentation
+
+- bench: The WP32 Map design note and the layout prototypes ([#227](https://github.com/amritk/nish/pull/227))
+- Carry the licence of every third-party copy, and make agents keep it ([#231](https://github.com/amritk/nish/pull/231))
+- bench: Are We Fast Yet after round 2 ([#238](https://github.com/amritk/nish/pull/238))
+
+### Tests
+
+- bench: The Are We Fast Yet ports as benchmarks and regression cases ([#214](https://github.com/amritk/nish/pull/214))
+- bench: Fail the suite when a benchmark executes more instructions than its baseline ([#218](https://github.com/amritk/nish/pull/218))
+
+### Build
+
+- release: Publish to npm by trusted publishing ([#205](https://github.com/amritk/nish/pull/205))
+
+
 ## [0.10.0] - 2026-09-24
 
 ### Breaking changes
@@ -395,3 +438,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.8.0]: https://github.com/amritk/nish/releases/tag/v0.8.0
 [0.9.0]: https://github.com/amritk/nish/releases/tag/v0.9.0
 [0.10.0]: https://github.com/amritk/nish/releases/tag/v0.10.0
+[0.11.0]: https://github.com/amritk/nish/releases/tag/v0.11.0
