@@ -215,6 +215,10 @@ on insert.
   reserved encoding, and keeping the `u32` slot is the trade: half the bucket
   memory, for that one entry. S2 panics with Node's wording, `Map maximum size
   exceeded` (or `Set …`), when an insert would pass the cap after compaction.
+  While a loop walks the table there is no compaction (§6.2), so an insert at
+  the cap then panics at once, however few entries are live: a walk whose
+  body churns about 16.7 million times panics where Node's would not. S4
+  records it in [LANGUAGE.md → `Map` and `Set`](LANGUAGE.md#map-and-set).
 - **The fingerprint is the hash's top eight bits, and the bucket its low bits
   folded with the high half:** `home = (h ^ (h >>> 16)) & mask`, as `StringMap`
   does. The fold brings the top bits into the bucket index only XORed with
@@ -541,7 +545,9 @@ increments it where the loop is entered and decrements it on every edge that
 leaves: the fall-through, `break`, and each `return` out of an enclosing
 walk. `panic` and `process.exit` end the process, so they need nothing. A
 rebuild with the count above zero doubles instead of compacting, and the next
-rebuild after the walk compacts. Iterators are not values ("iterators as
+rebuild after the walk compacts. The one cost is the cap (§2.4): an insert
+at 2^24 − 1 entries during a walk cannot compact dead entries away first, so
+it panics. Iterators are not values ("iterators as
 values" is out of the plan's scope), so every walk is a lexical loop and the
 counter is exact, nested walks and a walk in a callee included. It costs two
 stores a loop, not one per element.

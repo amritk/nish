@@ -24,7 +24,9 @@ import {
 import { isMaybeAnnotation } from "./validator";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
-import { declaredOrigin, elementOrigin } from "./generics";
+import { declaredOrigin, elementOrigin, isCollectionStruct } from "./generics";
+import { structOf, walkReaderOf } from "./members";
+import { unwrapParens } from "./emit_util";
 import { terminatesControlFlow } from "./builtins";
 import { rejectDiscardedResult } from "./result";
 import {
@@ -373,16 +375,25 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     ctx.error(decl.children[2], "The `for...of` variable cannot have an initializer");
     return false;
   }
+  // WP32: `m.keys()` and `m.values()` are legal here and nowhere else, which
+  // `checkMethodCall` learns from `forOfWalk` (docs/wp32-map.md §6.2).
+  ctx.forOfWalk = stmt;
   const iterable = checkExpression(ctx, stmt.children[1], scope, -1);
+  ctx.forOfWalk = null;
   const outer = scope.child();
   const name = decl.children[0].text;
   let element = T_ERROR;
-  if (iterable !== T_ERROR) {
-    if (!ctx.table.isArray(iterable)) {
-      ctx.error(stmt.children[1], `\`for...of\` requires an array, got ${ctx.table.typeName(iterable)}`);
-    } else {
+  if (ctx.program.nodeCallees[stmt.id] === null && iterable !== T_ERROR) {
+    if (ctx.table.isArray(iterable)) {
       element = ctx.table.refOf(iterable);
+    } else if (!checkCollectionWalk(ctx, stmt, iterable)) {
+      ctx.error(stmt.children[1], `\`for...of\` requires an array, got ${ctx.table.typeName(iterable)}`);
     }
+  }
+  // WP32: a walk's reader, recorded by `checkWalkIterable` or `checkCollectionWalk`, gives its variable its type.
+  const walked = ctx.program.nodeCallees[stmt.id];
+  if (walked !== null) {
+    element = walked.returnType;
   }
   // `for (let x of a)` binds a mutable element, `for (const x of a)` does not,
   // and an element of a `T[]` came from `T` (WP18 G6).
@@ -392,6 +403,33 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   checkStatement(ctx, stmt.children[2], outer.child());
   ctx.popLoop();
   return false;
+};
+
+/**
+ * WP32: `for (const x of s)` over the global `Set` walks it as `s.values()`
+ * does, and records the reader, `keyAt`, on the loop (docs/wp32-map.md §6.3).
+ * The same loop over a `Map` is refused: JavaScript walks its `entries()`,
+ * `[key, value]` pairs that need destructuring. Answers whether `iterable` was
+ * one of the two, having reported the second.
+ */
+const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): boolean => {
+  if (!ctx.table.isStruct(iterable) || ctx.table.isNullable(iterable)) {
+    return false;
+  }
+  const info = structOf(ctx, iterable);
+  if (info === null || !isCollectionStruct(info) || ctx.program.isCollections()) {
+    return false;
+  }
+  const instance = info.instance;
+  if (instance !== null && instance.template.sourceName === "Map") {
+    ctx.error(
+      stmt.children[1],
+      `\`for...of\` over \`${ctx.table.typeName(iterable)}\` needs \`entries()\`, whose \`[key, value]\` pairs need destructuring, which this version does not have: walk \`keys()\` or \`values()\` instead, as in \`for (const k of ${ctx.textOf(unwrapParens(stmt.children[1]))}.keys())\``
+    );
+    return true;
+  }
+  ctx.program.nodeCallees[stmt.id] = walkReaderOf(ctx, info, "values");
+  return true;
 };
 
 /**

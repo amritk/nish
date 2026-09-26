@@ -38,6 +38,7 @@ import {
   isBitwiseAssignment,
 } from "./emit_ops";
 import { arrayMethodName, isAssignmentOperator, unwrapParens } from "./emit_util";
+import { emitWalk } from "./emit_map";
 import { internalErrorFor } from "./ice";
 import {
   N_ARRAY,
@@ -1325,6 +1326,10 @@ export const emitArrayMethodCall = (emitter: Emitter, expr: Node, receiver: i32)
  * `forof.end`, `continue` goes to `forof.inc`.
  */
 export const emitForOf = (emitter: Emitter, stmt: Node): void => {
+  if (emitter.program.nodeCallees[stmt.id] !== null) {
+    emitWalk(emitter, stmt); // WP32: a walk of the global `Map` or `Set`
+    return;
+  }
   const decl = stmt.children[0].children[0].children[0];
   const local = emitter.program.nodeLocals[decl.id];
   if (local === null) {

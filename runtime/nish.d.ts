@@ -29,10 +29,11 @@
  * **`Map` and `Set` are not declared here**, although `nish` has them as
  * globals: the `"lib": ["ES2022"]` a program is checked against already
  * declares JavaScript's, and a second declaration would clash with it.
- * `nish`'s are that surface less what it defers — no iteration, no `entries`
- * or `forEach` — and with `get`'s `V | undefined` admitted only as a `const`'s
- * initialiser, the left of `??` or an operand of `=== undefined`, which `tsc`
- * cannot know (docs/LANGUAGE.md -> `Map` and `Set`).
+ * `nish`'s are that surface less what it defers — no `entries`, no `forEach`,
+ * no `for...of` over a `Map` itself — with `keys()` and `values()` admitted
+ * only as the iterable of a `for...of`, and `get`'s `V | undefined` only as a
+ * `const`'s initialiser, the left of `??` or an operand of `=== undefined`,
+ * none of which `tsc` can know (docs/LANGUAGE.md -> `Map` and `Set`).
  */
 
 // ---- Numeric widths (docs/LANGUAGE.md -> Types) ------------------------------

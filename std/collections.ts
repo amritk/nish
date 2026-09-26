@@ -33,9 +33,13 @@
  * nothing but what their names say: `probe` writes no memory at all.
  *
  * A program sees only the JavaScript members (§7), `size`, `get`, `set`/`add`,
- * `has`, `delete` and `clear`, and `get` has no method here: its `V | undefined`
- * never crosses a call, so the compiler lowers it to `probe` and, where found,
- * `valueAt` (§3.2). The rest of this file is refused by name outside it.
+ * `has`, `delete` and `clear`, and `keys()` and `values()` as the iterable of
+ * a `for...of`. Neither `get` nor the iterators has a method here: `get`'s
+ * `V | undefined` never crosses a call, so the compiler lowers it to `probe`
+ * and, where found, `valueAt` (§3.2), and an iterator is not a value, so a
+ * `for...of` over one is lowered to `walkOpen`, `walkNext`, `keyAt` or
+ * `valueAt`, and `walkClose` (§6.2). The rest of this file is refused by name
+ * outside it.
  */
 
 /**
@@ -175,11 +179,18 @@ const rebuiltSlots = (slots: u32[], live: i32, used: i32): u32[] => {
   return new Array<u32>(n * 2);
 };
 
-/** Re-file every entry from its stored hash; the entries are compacted, so none is dead. */
+/**
+ * Re-file every live entry from its stored hash. After a compaction none is
+ * dead; after a rebuild during a walk, which does not compact, a dead entry
+ * keeps its place and takes no bucket, since no probe can find it.
+ */
 const refile = (slots: u32[], hashes: u32[]): void => {
   const mask = toI32(slots.length) - 1;
   for (let i: i32 = 0; i < toI32(hashes.length); i++) {
-    fileEntry(slots, mask, hashes[i], i);
+    const h = hashes[i];
+    if (h !== 0) {
+      fileEntry(slots, mask, h, i);
+    }
   }
 };
 
@@ -199,11 +210,31 @@ const killEntry = (slots: u32[], hashes: u32[], found: i64): void => {
   }
 };
 
-/** Zero every bucket in place, which is what emptying a table and compacting one both start with. */
+/**
+ * Zero every element in place: the buckets, which emptying a table and
+ * compacting one both start with, and under a walk the stored hashes, which
+ * is how `clear` marks every entry dead without moving one (§6.1).
+ */
 const clearSlots = (slots: u32[]): void => {
   for (let i: i32 = 0; i < toI32(slots.length); i++) {
     slots[i] = 0;
   }
+};
+
+/**
+ * The index of the first live entry at `from` or after it, or -1 when there is
+ * none: a `for...of` walk's step. It reads the entry count on every call, so
+ * an entry appended during the walk is reached, and it skips a dead entry,
+ * whose stored hash is 0, so a key deleted before the walk reaches it is not
+ * visited (docs/wp32-map.md §6.2).
+ */
+const nextLive = (hashes: u32[], from: i32): i32 => {
+  for (let i: i32 = from; i >= 0 && i < toI32(hashes.length); i++) {
+    if (hashes[i] !== 0) {
+      return i;
+    }
+  }
+  return -1;
 };
 
 /** Drop every element of `items`, keeping its capacity. */
@@ -245,6 +276,12 @@ export class Map<K, V> {
   entryValues: V[];
   /** The full hash of each entry; 0 once the entry is deleted. */
   entryHashes: u32[];
+  /**
+   * How many `for...of` loops are walking the table now. While it is above 0
+   * a rebuild doubles rather than compacts, and `clear` marks entries dead
+   * rather than truncating, so no entry moves under a walk's cursor (§6.2).
+   */
+  walks: i32 = 0;
 
   constructor() {
     this.slots = new Array<u32>(INITIAL_SLOTS);
@@ -284,17 +321,51 @@ export class Map<K, V> {
     return true;
   }
 
-  /** Empty the table in place: the buckets are zeroed and the entries truncated. */
+  /**
+   * Empty the table in place: the buckets are zeroed and the entries
+   * truncated, or, while a loop walks the table, marked dead and kept (§6.1).
+   */
   clear(): void {
     clearSlots(this.slots);
-    truncate(this.entryKeys);
-    truncate(this.entryValues);
-    truncate(this.entryHashes);
+    if (this.walks > 0) {
+      clearSlots(this.entryHashes); // every entry dead, and the count kept
+    } else {
+      truncate(this.entryKeys);
+      truncate(this.entryValues);
+      truncate(this.entryHashes);
+    }
     this.live = 0;
     this.size = 0;
   }
 
-  /** The value of the entry a probe found. */
+  /**
+   * The four pieces a `for...of` over `keys()` or `values()` is lowered to
+   * (`emitForOf`, docs/wp32-map.md §6.2): `walkOpen` where the loop is
+   * entered, `walkNext` for the first live entry and after each pass,
+   * `keyAt` or `valueAt` for the loop variable, and `walkClose` on every edge
+   * that leaves the loop. Two stores a loop, and none per entry.
+   */
+  walkOpen(): void {
+    this.walks = this.walks + 1;
+  }
+
+  walkNext(from: i32): i32 {
+    return nextLive(this.entryHashes, from);
+  }
+
+  walkClose(): void {
+    this.walks = this.walks - 1;
+  }
+
+  /** The key of entry `index`, which `walkNext` answered. */
+  keyAt(index: i32): K {
+    if (index < 0 || index >= toI32(this.entryKeys.length)) {
+      panic("Map: no entry at this index");
+    }
+    return this.entryKeys[index];
+  }
+
+  /** The value of the entry a probe found, or a walk reached. */
   valueAt(index: i32): V {
     if (index < 0 || index >= toI32(this.entryValues.length)) {
       panic("Map: no entry at this index");
@@ -315,10 +386,11 @@ export class Map<K, V> {
     let bucket = toI32(packed >> 32);
     const h = toU32(packed);
     if (toI32(this.entryKeys.length) >= INDEX_CAP) {
-      if (this.live >= INDEX_CAP) {
+      // Dead entries hold the cap: compact them away, then find the bucket
+      // again. A walk defers compaction, so under one the cap is full.
+      if (this.live >= INDEX_CAP || this.walks > 0) {
         panic("Map maximum size exceeded");
       }
-      // Dead entries hold the cap: compact them away, then find the bucket again.
       this.rebuild();
       bucket = -1;
     }
@@ -337,11 +409,16 @@ export class Map<K, V> {
     }
   }
 
-  /** Compact or double, then re-file the buckets from the stored hashes (§6.1). */
+  /**
+   * Compact or double, then re-file the buckets from the stored hashes (§6.1).
+   * While a loop walks the table it always doubles and moves no entry, and the
+   * first rebuild after the walk compacts (§6.2).
+   */
   rebuild(): void {
     const used = toI32(this.entryKeys.length);
-    const slots = rebuiltSlots(this.slots, this.live, used);
-    if (this.live < used) {
+    const walking = this.walks > 0;
+    const slots = rebuiltSlots(this.slots, walking ? used : this.live, used);
+    if (!walking && this.live < used) {
       compactEntries(this.entryKeys, this.entryHashes);
       compactEntries(this.entryValues, this.entryHashes);
       compactHashes(this.entryHashes);
@@ -362,6 +439,8 @@ export class Set<T> {
   live: i32 = 0;
   entryKeys: T[];
   entryHashes: u32[];
+  /** `Map`'s walk count: how many `for...of` loops are walking the table now. */
+  walks: i32 = 0;
 
   constructor() {
     this.slots = new Array<u32>(INITIAL_SLOTS);
@@ -399,10 +478,34 @@ export class Set<T> {
 
   clear(): void {
     clearSlots(this.slots);
-    truncate(this.entryKeys);
-    truncate(this.entryHashes);
+    if (this.walks > 0) {
+      clearSlots(this.entryHashes); // every entry dead, and the count kept
+    } else {
+      truncate(this.entryKeys);
+      truncate(this.entryHashes);
+    }
     this.live = 0;
     this.size = 0;
+  }
+
+  /** `Map`'s walk: `for (const x of s)`, `s.keys()` and `s.values()` are all this one. */
+  walkOpen(): void {
+    this.walks = this.walks + 1;
+  }
+
+  walkNext(from: i32): i32 {
+    return nextLive(this.entryHashes, from);
+  }
+
+  walkClose(): void {
+    this.walks = this.walks - 1;
+  }
+
+  keyAt(index: i32): T {
+    if (index < 0 || index >= toI32(this.entryKeys.length)) {
+      panic("Set: no entry at this index");
+    }
+    return this.entryKeys[index];
   }
 
   insertAt(absent: i64, key: T): void {
@@ -410,7 +513,7 @@ export class Set<T> {
     let bucket = toI32(packed >> 32);
     const h = toU32(packed);
     if (toI32(this.entryKeys.length) >= INDEX_CAP) {
-      if (this.live >= INDEX_CAP) {
+      if (this.live >= INDEX_CAP || this.walks > 0) {
         panic("Set maximum size exceeded");
       }
       this.rebuild();
@@ -432,8 +535,9 @@ export class Set<T> {
 
   rebuild(): void {
     const used = toI32(this.entryKeys.length);
-    const slots = rebuiltSlots(this.slots, this.live, used);
-    if (this.live < used) {
+    const walking = this.walks > 0;
+    const slots = rebuiltSlots(this.slots, walking ? used : this.live, used);
+    if (!walking && this.live < used) {
       compactEntries(this.entryKeys, this.entryHashes);
       compactHashes(this.entryHashes);
     }

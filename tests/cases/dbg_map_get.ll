@@ -1,4 +1,4 @@
-%struct.Map$str$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array* }
+%struct.Map$str$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -51,836 +51,887 @@ define noundef i32 @nish_main() #0 !dbg !7 {
 entry:
   %m.addr = alloca %struct.Map$str$i32*, align 8
   %arena.mark = call i64 @nish_arena_mark(), !dbg !8
-  %0 = call i8* @nish_alloc_struct(i64 48), !dbg !10
+  %0 = call i8* @nish_alloc_struct(i64 56), !dbg !10
   %1 = bitcast i8* %0 to %struct.Map$str$i32*, !dbg !10
   call void @nish.Map$str$i32.constructor(%struct.Map$str$i32* %1), !dbg !10
   store %struct.Map$str$i32* %1, %struct.Map$str$i32** %m.addr, align 8, !dbg !9
-  call void @llvm.dbg.declare(metadata %struct.Map$str$i32** %m.addr, metadata !47, metadata !DIExpression()), !dbg !9
-  %2 = load %struct.Map$str$i32*, %struct.Map$str$i32** %m.addr, align 8, !dbg !48
-  %3 = call %struct.Map$str$i32* @nish.Map$str$i32.set(%struct.Map$str$i32* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i32 4), !dbg !48
-  %4 = load %struct.Map$str$i32*, %struct.Map$str$i32** %m.addr, align 8, !dbg !52
-  %5 = call i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* %4, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*)), !dbg !51
-  %6 = icmp sge i64 %5, 0, !dbg !51
-  br i1 %6, label %get.found, label %get.end, !dbg !51
+  call void @llvm.dbg.declare(metadata %struct.Map$str$i32** %m.addr, metadata !48, metadata !DIExpression()), !dbg !9
+  %2 = load %struct.Map$str$i32*, %struct.Map$str$i32** %m.addr, align 8, !dbg !49
+  %3 = call %struct.Map$str$i32* @nish.Map$str$i32.set(%struct.Map$str$i32* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i32 4), !dbg !49
+  %4 = load %struct.Map$str$i32*, %struct.Map$str$i32** %m.addr, align 8, !dbg !53
+  %5 = call i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* %4, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*)), !dbg !52
+  %6 = icmp sge i64 %5, 0, !dbg !52
+  br i1 %6, label %get.found, label %get.end, !dbg !52
 
 get.found:
-  %7 = trunc i64 %5 to i32, !dbg !51
-  %8 = call i32 @nish.Map$str$i32.valueAt(%struct.Map$str$i32* %4, i32 %7), !dbg !51
-  br label %get.end, !dbg !51
+  %7 = trunc i64 %5 to i32, !dbg !52
+  %8 = call i32 @nish.Map$str$i32.valueAt(%struct.Map$str$i32* %4, i32 %7), !dbg !52
+  br label %get.end, !dbg !52
 
 get.end:
-  %9 = phi i32 [ %8, %get.found ], [ 0, %entry ], !dbg !51
-  call void @llvm.dbg.value(metadata i32 %9, metadata !54, metadata !DIExpression()), !dbg !51
-  br i1 %6, label %if.then, label %if.end, !dbg !55
+  %9 = phi i32 [ %8, %get.found ], [ 0, %entry ], !dbg !52
+  call void @llvm.dbg.value(metadata i32 %9, metadata !55, metadata !DIExpression()), !dbg !52
+  br i1 %6, label %if.then, label %if.end, !dbg !56
 
 if.then:
-  %10 = call i8* @nish_str_from_i32(i32 %9), !dbg !59
-  call void @nish_print(i8* %10), !dbg !58
-  br label %if.end, !dbg !55
+  %10 = call i8* @nish_str_from_i32(i32 %9), !dbg !60
+  call void @nish_print(i8* %10), !dbg !59
+  br label %if.end, !dbg !56
 
 if.end:
-  call void @nish_arena_release(i64 %arena.mark), !dbg !61
-  ret i32 0, !dbg !61
+  call void @nish_arena_release(i64 %arena.mark), !dbg !62
+  ret i32 0, !dbg !62
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 !dbg !63 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 !dbg !64 {
 entry:
-  %0 = call i32 @nish_main(), !dbg !64
-  call void @nish_free_arena(), !dbg !64
-  ret i32 %0, !dbg !64
+  %0 = call i32 @nish_main(), !dbg !65
+  call void @nish_free_arena(), !dbg !65
+  ret i32 %0, !dbg !65
 }
 
-define internal noundef i32 @nish.homeBucket(i32 noundef %h, i32 noundef %mask) #1 !dbg !67 {
+define internal noundef i32 @nish.homeBucket(i32 noundef %h, i32 noundef %mask) #1 !dbg !68 {
 entry:
-  call void @llvm.dbg.value(metadata i32 %h, metadata !69, metadata !DIExpression()), !dbg !68
-  call void @llvm.dbg.value(metadata i32 %mask, metadata !70, metadata !DIExpression()), !dbg !68
-  %0 = lshr i32 %h, 16, !dbg !74
-  %1 = xor i32 %h, %0, !dbg !72
-  %2 = and i32 %1, %mask, !dbg !71
-  ret i32 %2, !dbg !68
+  call void @llvm.dbg.value(metadata i32 %h, metadata !70, metadata !DIExpression()), !dbg !69
+  call void @llvm.dbg.value(metadata i32 %mask, metadata !71, metadata !DIExpression()), !dbg !69
+  %0 = lshr i32 %h, 16, !dbg !75
+  %1 = xor i32 %h, %0, !dbg !73
+  %2 = and i32 %1, %mask, !dbg !72
+  ret i32 %2, !dbg !69
 }
 
-define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #1 !dbg !78 {
+define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #1 !dbg !79 {
 entry:
-  call void @llvm.dbg.value(metadata i32 %h, metadata !80, metadata !DIExpression()), !dbg !79
-  call void @llvm.dbg.value(metadata i32 %index, metadata !81, metadata !DIExpression()), !dbg !79
-  %0 = lshr i32 %h, 24, !dbg !84
-  %1 = shl i32 %0, 24, !dbg !83
-  %2 = add nsw i32 %index, 1, !dbg !86
-  %3 = or i32 %1, %2, !dbg !82
-  ret i32 %3, !dbg !79
+  call void @llvm.dbg.value(metadata i32 %h, metadata !81, metadata !DIExpression()), !dbg !80
+  call void @llvm.dbg.value(metadata i32 %index, metadata !82, metadata !DIExpression()), !dbg !80
+  %0 = lshr i32 %h, 24, !dbg !85
+  %1 = shl i32 %0, 24, !dbg !84
+  %2 = add nsw i32 %index, 1, !dbg !87
+  %3 = or i32 %1, %2, !dbg !83
+  ret i32 %3, !dbg !80
 }
 
-define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #1 !dbg !90 {
+define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #1 !dbg !91 {
 entry:
-  call void @llvm.dbg.value(metadata i32 %bucket, metadata !92, metadata !DIExpression()), !dbg !91
-  call void @llvm.dbg.value(metadata i32 %index, metadata !93, metadata !DIExpression()), !dbg !91
-  %0 = sext i32 %bucket to i64, !dbg !95
-  %1 = shl i64 %0, 32, !dbg !95
-  %2 = sext i32 %index to i64, !dbg !97
-  %3 = or i64 %1, %2, !dbg !94
-  ret i64 %3, !dbg !91
+  call void @llvm.dbg.value(metadata i32 %bucket, metadata !93, metadata !DIExpression()), !dbg !92
+  call void @llvm.dbg.value(metadata i32 %index, metadata !94, metadata !DIExpression()), !dbg !92
+  %0 = sext i32 %bucket to i64, !dbg !96
+  %1 = shl i64 %0, 32, !dbg !96
+  %2 = sext i32 %index to i64, !dbg !98
+  %3 = or i64 %1, %2, !dbg !95
+  ret i64 %3, !dbg !92
 }
 
-define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #1 !dbg !101 {
+define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #1 !dbg !102 {
 entry:
-  call void @llvm.dbg.value(metadata i32 %bucket, metadata !103, metadata !DIExpression()), !dbg !102
-  call void @llvm.dbg.value(metadata i32 %h, metadata !104, metadata !DIExpression()), !dbg !102
-  %0 = sub nsw i32 0, 1, !dbg !106
-  %1 = sext i32 %0 to i64, !dbg !105
-  %2 = sext i32 %bucket to i64, !dbg !110
-  %3 = shl i64 %2, 32, !dbg !110
-  %4 = zext i32 %h to i64, !dbg !112
-  %5 = or i64 %3, %4, !dbg !109
-  %6 = sub nsw i64 %1, %5, !dbg !105
-  ret i64 %6, !dbg !102
+  call void @llvm.dbg.value(metadata i32 %bucket, metadata !104, metadata !DIExpression()), !dbg !103
+  call void @llvm.dbg.value(metadata i32 %h, metadata !105, metadata !DIExpression()), !dbg !103
+  %0 = sub nsw i32 0, 1, !dbg !107
+  %1 = sext i32 %0 to i64, !dbg !106
+  %2 = sext i32 %bucket to i64, !dbg !111
+  %3 = shl i64 %2, 32, !dbg !111
+  %4 = zext i32 %h to i64, !dbg !113
+  %5 = or i64 %3, %4, !dbg !110
+  %6 = sub nsw i64 %1, %5, !dbg !106
+  ret i64 %6, !dbg !103
 }
 
-define internal void @nish.fileEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %h, i32 noundef %index) #0 !dbg !116 {
+define internal void @nish.fileEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %h, i32 noundef %index) #0 !dbg !117 {
 entry:
   %word.addr = alloca i32, align 4
   %bucket.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !118, metadata !DIExpression()), !dbg !117
-  call void @llvm.dbg.value(metadata i32 %mask, metadata !119, metadata !DIExpression()), !dbg !117
-  call void @llvm.dbg.value(metadata i32 %h, metadata !120, metadata !DIExpression()), !dbg !117
-  call void @llvm.dbg.value(metadata i32 %index, metadata !121, metadata !DIExpression()), !dbg !117
-  %0 = call i32 @nish.slotWord(i32 %h, i32 %index), !dbg !123
-  store i32 %0, i32* %word.addr, align 4, !dbg !122
-  call void @llvm.dbg.declare(metadata i32* %word.addr, metadata !126, metadata !DIExpression()), !dbg !122
-  %1 = call i32 @nish.homeBucket(i32 %h, i32 %mask), !dbg !128
-  store i32 %1, i32* %bucket.addr, align 4, !dbg !127
-  call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !131, metadata !DIExpression()), !dbg !127
-  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !132
-  %3 = load i64, i64* %2, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !132
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !132
-  %5 = load i8*, i8** %4, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !132
-  br label %while.cond, !dbg !132
+  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !119, metadata !DIExpression()), !dbg !118
+  call void @llvm.dbg.value(metadata i32 %mask, metadata !120, metadata !DIExpression()), !dbg !118
+  call void @llvm.dbg.value(metadata i32 %h, metadata !121, metadata !DIExpression()), !dbg !118
+  call void @llvm.dbg.value(metadata i32 %index, metadata !122, metadata !DIExpression()), !dbg !118
+  %0 = call i32 @nish.slotWord(i32 %h, i32 %index), !dbg !124
+  store i32 %0, i32* %word.addr, align 4, !dbg !123
+  call void @llvm.dbg.declare(metadata i32* %word.addr, metadata !127, metadata !DIExpression()), !dbg !123
+  %1 = call i32 @nish.homeBucket(i32 %h, i32 %mask), !dbg !129
+  store i32 %1, i32* %bucket.addr, align 4, !dbg !128
+  call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !132, metadata !DIExpression()), !dbg !128
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !133
+  %3 = load i64, i64* %2, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !133
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !133
+  %5 = load i8*, i8** %4, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !133
+  br label %while.cond, !dbg !133
 
 while.cond:
-  %6 = load i32, i32* %bucket.addr, align 4, !dbg !146
-  %7 = icmp sge i32 %6, 0, !dbg !146
-  br i1 %7, label %land.rhs, label %land.end, !dbg !146
+  %6 = load i32, i32* %bucket.addr, align 4, !dbg !147
+  %7 = icmp sge i32 %6, 0, !dbg !147
+  br i1 %7, label %land.rhs, label %land.end, !dbg !147
 
 land.rhs:
-  %8 = load i32, i32* %bucket.addr, align 4, !dbg !148
-  %9 = trunc i64 %3 to i32, !dbg !133
-  %10 = icmp slt i32 %8, %9, !dbg !148
-  br label %land.end, !dbg !146
+  %8 = load i32, i32* %bucket.addr, align 4, !dbg !149
+  %9 = trunc i64 %3 to i32, !dbg !134
+  %10 = icmp slt i32 %8, %9, !dbg !149
+  br label %land.end, !dbg !147
 
 land.end:
-  %11 = phi i1 [ false, %while.cond ], [ %10, %land.rhs ], !dbg !146
-  br i1 %11, label %while.body, label %while.end, !dbg !132
+  %11 = phi i1 [ false, %while.cond ], [ %10, %land.rhs ], !dbg !147
+  br i1 %11, label %while.body, label %while.end, !dbg !133
 
 while.body:
-  %12 = load i32, i32* %bucket.addr, align 4, !dbg !153
-  %13 = sext i32 %12 to i64, !dbg !152
-  %14 = bitcast i8* %5 to i32*, !dbg !152
-  %15 = getelementptr inbounds i32, i32* %14, i64 %13, !dbg !152
-  %16 = load i32, i32* %15, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !152
-  %17 = icmp eq i32 %16, 0, !dbg !152
-  br i1 %17, label %if.then, label %if.end, !dbg !151
+  %12 = load i32, i32* %bucket.addr, align 4, !dbg !154
+  %13 = sext i32 %12 to i64, !dbg !153
+  %14 = bitcast i8* %5 to i32*, !dbg !153
+  %15 = getelementptr inbounds i32, i32* %14, i64 %13, !dbg !153
+  %16 = load i32, i32* %15, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !153
+  %17 = icmp eq i32 %16, 0, !dbg !153
+  br i1 %17, label %if.then, label %if.end, !dbg !152
 
 if.then:
-  %18 = load i32, i32* %bucket.addr, align 4, !dbg !159
-  %19 = sext i32 %18 to i64, !dbg !158
-  %20 = load i32, i32* %word.addr, align 4, !dbg !160
-  %21 = bitcast i8* %5 to i32*, !dbg !158
-  %22 = getelementptr inbounds i32, i32* %21, i64 %19, !dbg !158
-  store i32 %20, i32* %22, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !158
-  ret void, !dbg !161
+  %18 = load i32, i32* %bucket.addr, align 4, !dbg !160
+  %19 = sext i32 %18 to i64, !dbg !159
+  %20 = load i32, i32* %word.addr, align 4, !dbg !161
+  %21 = bitcast i8* %5 to i32*, !dbg !159
+  %22 = getelementptr inbounds i32, i32* %21, i64 %19, !dbg !159
+  store i32 %20, i32* %22, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !159
+  ret void, !dbg !162
 
 if.end:
-  %23 = load i32, i32* %bucket.addr, align 4, !dbg !164
-  %24 = add nsw i32 %23, 1, !dbg !164
-  %25 = and i32 %24, %mask, !dbg !163
-  store i32 %25, i32* %bucket.addr, align 4, !dbg !162
-  br label %while.cond, !dbg !132
+  %23 = load i32, i32* %bucket.addr, align 4, !dbg !165
+  %24 = add nsw i32 %23, 1, !dbg !165
+  %25 = and i32 %24, %mask, !dbg !164
+  store i32 %25, i32* %bucket.addr, align 4, !dbg !163
+  br label %while.cond, !dbg !133
 
 while.end:
-  ret void, !dbg !117
+  ret void, !dbg !118
 }
 
-define internal void @nish.compactHashes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 !dbg !169 {
+define internal void @nish.compactHashes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 !dbg !170 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
   %from.addr = alloca i32, align 4
   %h.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !171, metadata !DIExpression()), !dbg !170
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !174
-  %1 = load i64, i64* %0, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !174
-  %2 = trunc i64 %1 to i32, !dbg !174
-  store i32 %2, i32* %used.addr, align 4, !dbg !172
-  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !175, metadata !DIExpression()), !dbg !172
-  store i32 0, i32* %to.addr, align 4, !dbg !176
-  call void @llvm.dbg.declare(metadata i32* %to.addr, metadata !178, metadata !DIExpression()), !dbg !176
-  store i32 0, i32* %from.addr, align 4, !dbg !179
-  call void @llvm.dbg.declare(metadata i32* %from.addr, metadata !181, metadata !DIExpression()), !dbg !179
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !179
-  %4 = load i8*, i8** %3, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !179
-  br label %for.cond, !dbg !179
+  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !172, metadata !DIExpression()), !dbg !171
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !175
+  %1 = load i64, i64* %0, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !175
+  %2 = trunc i64 %1 to i32, !dbg !175
+  store i32 %2, i32* %used.addr, align 4, !dbg !173
+  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !176, metadata !DIExpression()), !dbg !173
+  store i32 0, i32* %to.addr, align 4, !dbg !177
+  call void @llvm.dbg.declare(metadata i32* %to.addr, metadata !179, metadata !DIExpression()), !dbg !177
+  store i32 0, i32* %from.addr, align 4, !dbg !180
+  call void @llvm.dbg.declare(metadata i32* %from.addr, metadata !182, metadata !DIExpression()), !dbg !180
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !180
+  %4 = load i8*, i8** %3, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !180
+  br label %for.cond, !dbg !180
 
 for.cond:
-  %5 = load i32, i32* %from.addr, align 4, !dbg !183
-  %6 = load i32, i32* %used.addr, align 4, !dbg !184
-  %7 = icmp slt i32 %5, %6, !dbg !183
-  br i1 %7, label %for.body, label %for.end, !dbg !179
+  %5 = load i32, i32* %from.addr, align 4, !dbg !184
+  %6 = load i32, i32* %used.addr, align 4, !dbg !185
+  %7 = icmp slt i32 %5, %6, !dbg !184
+  br i1 %7, label %for.body, label %for.end, !dbg !180
 
 for.body:
-  %8 = load i32, i32* %from.addr, align 4, !dbg !187
-  %9 = sext i32 %8 to i64, !dbg !182
-  %10 = bitcast i8* %4 to i32*, !dbg !182
-  %11 = getelementptr inbounds i32, i32* %10, i64 %9, !dbg !182
-  %12 = load i32, i32* %11, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !182
-  store i32 %12, i32* %h.addr, align 4, !dbg !186
-  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !188, metadata !DIExpression()), !dbg !186
-  %13 = load i32, i32* %h.addr, align 4, !dbg !190
-  %14 = icmp ne i32 %13, 0, !dbg !190
-  br i1 %14, label %land.rhs.1, label %land.end.1, !dbg !190
+  %8 = load i32, i32* %from.addr, align 4, !dbg !188
+  %9 = sext i32 %8 to i64, !dbg !183
+  %10 = bitcast i8* %4 to i32*, !dbg !183
+  %11 = getelementptr inbounds i32, i32* %10, i64 %9, !dbg !183
+  %12 = load i32, i32* %11, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !183
+  store i32 %12, i32* %h.addr, align 4, !dbg !187
+  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !189, metadata !DIExpression()), !dbg !187
+  %13 = load i32, i32* %h.addr, align 4, !dbg !191
+  %14 = icmp ne i32 %13, 0, !dbg !191
+  br i1 %14, label %land.rhs.1, label %land.end.1, !dbg !191
 
 land.rhs.1:
-  %15 = load i32, i32* %to.addr, align 4, !dbg !192
-  %16 = icmp sge i32 %15, 0, !dbg !192
-  br label %land.end.1, !dbg !190
+  %15 = load i32, i32* %to.addr, align 4, !dbg !193
+  %16 = icmp sge i32 %15, 0, !dbg !193
+  br label %land.end.1, !dbg !191
 
 land.end.1:
-  %17 = phi i1 [ false, %for.body ], [ %16, %land.rhs.1 ], !dbg !190
-  br i1 %17, label %land.rhs, label %land.end, !dbg !190
+  %17 = phi i1 [ false, %for.body ], [ %16, %land.rhs.1 ], !dbg !191
+  br i1 %17, label %land.rhs, label %land.end, !dbg !191
 
 land.rhs:
-  %18 = load i32, i32* %to.addr, align 4, !dbg !194
-  %19 = load i32, i32* %used.addr, align 4, !dbg !195
-  %20 = icmp slt i32 %18, %19, !dbg !194
-  br label %land.end, !dbg !190
+  %18 = load i32, i32* %to.addr, align 4, !dbg !195
+  %19 = load i32, i32* %used.addr, align 4, !dbg !196
+  %20 = icmp slt i32 %18, %19, !dbg !195
+  br label %land.end, !dbg !191
 
 land.end:
-  %21 = phi i1 [ false, %land.end.1 ], [ %20, %land.rhs ], !dbg !190
-  br i1 %21, label %if.then, label %if.end, !dbg !189
+  %21 = phi i1 [ false, %land.end.1 ], [ %20, %land.rhs ], !dbg !191
+  br i1 %21, label %if.then, label %if.end, !dbg !190
 
 if.then:
-  %22 = load i32, i32* %to.addr, align 4, !dbg !198
-  %23 = sext i32 %22 to i64, !dbg !197
-  %24 = load i32, i32* %h.addr, align 4, !dbg !199
-  %25 = bitcast i8* %4 to i32*, !dbg !197
-  %26 = getelementptr inbounds i32, i32* %25, i64 %23, !dbg !197
-  store i32 %24, i32* %26, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !197
-  %27 = load i32, i32* %to.addr, align 4, !dbg !200
-  %28 = add nsw i32 %27, 1, !dbg !200
-  store i32 %28, i32* %to.addr, align 4, !dbg !200
-  br label %if.end, !dbg !189
+  %22 = load i32, i32* %to.addr, align 4, !dbg !199
+  %23 = sext i32 %22 to i64, !dbg !198
+  %24 = load i32, i32* %h.addr, align 4, !dbg !200
+  %25 = bitcast i8* %4 to i32*, !dbg !198
+  %26 = getelementptr inbounds i32, i32* %25, i64 %23, !dbg !198
+  store i32 %24, i32* %26, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !198
+  %27 = load i32, i32* %to.addr, align 4, !dbg !201
+  %28 = add nsw i32 %27, 1, !dbg !201
+  store i32 %28, i32* %to.addr, align 4, !dbg !201
+  br label %if.end, !dbg !190
 
 if.end:
-  br label %for.inc, !dbg !179
+  br label %for.inc, !dbg !180
 
 for.inc:
-  %29 = load i32, i32* %from.addr, align 4, !dbg !201
-  %30 = add nsw i32 %29, 1, !dbg !201
-  store i32 %30, i32* %from.addr, align 4, !dbg !201
-  br label %for.cond, !dbg !179
+  %29 = load i32, i32* %from.addr, align 4, !dbg !202
+  %30 = add nsw i32 %29, 1, !dbg !202
+  store i32 %30, i32* %from.addr, align 4, !dbg !202
+  br label %for.cond, !dbg !180
 
 for.end:
-  br label %while.cond, !dbg !202
+  br label %while.cond, !dbg !203
 
 while.cond:
-  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !204
-  %32 = load i64, i64* %31, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !204
-  %33 = trunc i64 %32 to i32, !dbg !204
-  %34 = load i32, i32* %to.addr, align 4, !dbg !205
-  %35 = icmp sgt i32 %33, %34, !dbg !203
-  br i1 %35, label %while.body, label %while.end, !dbg !202
+  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !205
+  %32 = load i64, i64* %31, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !205
+  %33 = trunc i64 %32 to i32, !dbg !205
+  %34 = load i32, i32* %to.addr, align 4, !dbg !206
+  %35 = icmp sgt i32 %33, %34, !dbg !204
+  br i1 %35, label %while.body, label %while.end, !dbg !203
 
 while.body:
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !207
-  %37 = load i64, i64* %36, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !207
-  %38 = icmp eq i64 %37, 0, !dbg !207
-  br i1 %38, label %pop.empty, label %pop.ok, !dbg !207
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !208
+  %37 = load i64, i64* %36, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !208
+  %38 = icmp eq i64 %37, 0, !dbg !208
+  br i1 %38, label %pop.empty, label %pop.ok, !dbg !208
 
 pop.empty:
-  call void @nish_panic_index(i64 0, i64 0), !dbg !207
-  unreachable, !dbg !207
+  call void @nish_panic_index(i64 0, i64 0), !dbg !208
+  unreachable, !dbg !208
 
 pop.ok:
-  %39 = sub i64 %37, 1, !dbg !207
-  store i64 %39, i64* %36, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !207
-  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !207
-  %41 = load i8*, i8** %40, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !207
-  %42 = bitcast i8* %41 to i32*, !dbg !207
-  %43 = getelementptr inbounds i32, i32* %42, i64 %39, !dbg !207
-  %44 = load i32, i32* %43, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !207
-  br label %while.cond, !dbg !202
+  %39 = sub i64 %37, 1, !dbg !208
+  store i64 %39, i64* %36, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !208
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !208
+  %41 = load i8*, i8** %40, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !208
+  %42 = bitcast i8* %41 to i32*, !dbg !208
+  %43 = getelementptr inbounds i32, i32* %42, i64 %39, !dbg !208
+  %44 = load i32, i32* %43, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !208
+  br label %while.cond, !dbg !203
 
 while.end:
-  ret void, !dbg !170
+  ret void, !dbg !171
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %slots, i32 noundef %live, i32 noundef %used) #0 !dbg !210 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %slots, i32 noundef %live, i32 noundef %used) #0 !dbg !211 {
 entry:
   %n.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !212, metadata !DIExpression()), !dbg !211
-  call void @llvm.dbg.value(metadata i32 %live, metadata !213, metadata !DIExpression()), !dbg !211
-  call void @llvm.dbg.value(metadata i32 %used, metadata !214, metadata !DIExpression()), !dbg !211
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !217
-  %1 = load i64, i64* %0, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !217
-  %2 = trunc i64 %1 to i32, !dbg !217
-  store i32 %2, i32* %n.addr, align 4, !dbg !215
-  call void @llvm.dbg.declare(metadata i32* %n.addr, metadata !218, metadata !DIExpression()), !dbg !215
-  %3 = mul nsw i32 %live, 2, !dbg !220
-  %4 = icmp slt i32 %3, %used, !dbg !220
-  br i1 %4, label %if.then, label %if.end, !dbg !219
+  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !213, metadata !DIExpression()), !dbg !212
+  call void @llvm.dbg.value(metadata i32 %live, metadata !214, metadata !DIExpression()), !dbg !212
+  call void @llvm.dbg.value(metadata i32 %used, metadata !215, metadata !DIExpression()), !dbg !212
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !218
+  %1 = load i64, i64* %0, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !218
+  %2 = trunc i64 %1 to i32, !dbg !218
+  store i32 %2, i32* %n.addr, align 4, !dbg !216
+  call void @llvm.dbg.declare(metadata i32* %n.addr, metadata !219, metadata !DIExpression()), !dbg !216
+  %3 = mul nsw i32 %live, 2, !dbg !221
+  %4 = icmp slt i32 %3, %used, !dbg !221
+  br i1 %4, label %if.then, label %if.end, !dbg !220
 
 if.then:
-  call void @nish.clearSlots(%struct.nish_array* %slots), !dbg !224
-  ret %struct.nish_array* %slots, !dbg !226
+  call void @nish.clearSlots(%struct.nish_array* %slots), !dbg !225
+  ret %struct.nish_array* %slots, !dbg !227
 
 if.end:
-  %5 = load i32, i32* %n.addr, align 4, !dbg !230
-  %6 = mul nsw i32 %5, 2, !dbg !230
-  %7 = sext i32 %6 to i64, !dbg !229
-  %8 = call i8* @nish_alloc_struct(i64 24), !dbg !229
-  %9 = bitcast i8* %8 to %struct.nish_array*, !dbg !229
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0, !dbg !229
-  store i64 %7, i64* %10, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !229
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 1, !dbg !229
-  store i64 %7, i64* %11, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !229
-  %12 = mul i64 %7, 4, !dbg !229
-  %13 = call i8* @nish_alloc_struct(i64 %12), !dbg !229
-  call void @llvm.memset.p0i8.i64(i8* align 8 %13, i8 0, i64 %12, i1 false), !alias.scope !138, !noalias !137, !dbg !229
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !229
-  store i8* %13, i8** %14, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !229
-  ret %struct.nish_array* %9, !dbg !228
+  %5 = load i32, i32* %n.addr, align 4, !dbg !231
+  %6 = mul nsw i32 %5, 2, !dbg !231
+  %7 = sext i32 %6 to i64, !dbg !230
+  %8 = call i8* @nish_alloc_struct(i64 24), !dbg !230
+  %9 = bitcast i8* %8 to %struct.nish_array*, !dbg !230
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0, !dbg !230
+  store i64 %7, i64* %10, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !230
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 1, !dbg !230
+  store i64 %7, i64* %11, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !230
+  %12 = mul i64 %7, 4, !dbg !230
+  %13 = call i8* @nish_alloc_struct(i64 %12), !dbg !230
+  call void @llvm.memset.p0i8.i64(i8* align 8 %13, i8 0, i64 %12, i1 false), !alias.scope !139, !noalias !138, !dbg !230
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !230
+  store i8* %13, i8** %14, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !230
+  ret %struct.nish_array* %9, !dbg !229
 }
 
-define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 !dbg !235 {
+define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 !dbg !236 {
 entry:
   %mask.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !237, metadata !DIExpression()), !dbg !236
-  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !238, metadata !DIExpression()), !dbg !236
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !241
-  %1 = load i64, i64* %0, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !241
-  %2 = trunc i64 %1 to i32, !dbg !241
-  %3 = sub nsw i32 %2, 1, !dbg !240
-  store i32 %3, i32* %mask.addr, align 4, !dbg !239
-  call void @llvm.dbg.declare(metadata i32* %mask.addr, metadata !243, metadata !DIExpression()), !dbg !239
-  store i32 0, i32* %i.addr, align 4, !dbg !244
-  call void @llvm.dbg.declare(metadata i32* %i.addr, metadata !246, metadata !DIExpression()), !dbg !244
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !244
-  %5 = load i64, i64* %4, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !244
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !244
-  %7 = load i8*, i8** %6, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !244
-  br label %for.cond, !dbg !244
+  %h.addr = alloca i32, align 4
+  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !238, metadata !DIExpression()), !dbg !237
+  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !239, metadata !DIExpression()), !dbg !237
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !242
+  %1 = load i64, i64* %0, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !242
+  %2 = trunc i64 %1 to i32, !dbg !242
+  %3 = sub nsw i32 %2, 1, !dbg !241
+  store i32 %3, i32* %mask.addr, align 4, !dbg !240
+  call void @llvm.dbg.declare(metadata i32* %mask.addr, metadata !244, metadata !DIExpression()), !dbg !240
+  store i32 0, i32* %i.addr, align 4, !dbg !245
+  call void @llvm.dbg.declare(metadata i32* %i.addr, metadata !247, metadata !DIExpression()), !dbg !245
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !245
+  %5 = load i64, i64* %4, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !245
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !245
+  %7 = load i8*, i8** %6, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !245
+  br label %for.cond, !dbg !245
 
 for.cond:
-  %8 = load i32, i32* %i.addr, align 4, !dbg !248
-  %9 = trunc i64 %5 to i32, !dbg !247
-  %10 = icmp slt i32 %8, %9, !dbg !248
-  br i1 %10, label %for.body, label %for.end, !dbg !244
+  %8 = load i32, i32* %i.addr, align 4, !dbg !249
+  %9 = trunc i64 %5 to i32, !dbg !248
+  %10 = icmp slt i32 %8, %9, !dbg !249
+  br i1 %10, label %for.body, label %for.end, !dbg !245
 
 for.body:
-  %11 = load i32, i32* %mask.addr, align 4, !dbg !253
-  %12 = load i32, i32* %i.addr, align 4, !dbg !255
-  %13 = sext i32 %12 to i64, !dbg !254
-  %14 = bitcast i8* %7 to i32*, !dbg !254
-  %15 = getelementptr inbounds i32, i32* %14, i64 %13, !dbg !254
-  %16 = load i32, i32* %15, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !254
-  %17 = load i32, i32* %i.addr, align 4, !dbg !256
-  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %11, i32 %16, i32 %17), !dbg !251
-  br label %for.inc, !dbg !244
+  %11 = load i32, i32* %i.addr, align 4, !dbg !254
+  %12 = sext i32 %11 to i64, !dbg !253
+  %13 = bitcast i8* %7 to i32*, !dbg !253
+  %14 = getelementptr inbounds i32, i32* %13, i64 %12, !dbg !253
+  %15 = load i32, i32* %14, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !253
+  store i32 %15, i32* %h.addr, align 4, !dbg !252
+  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !255, metadata !DIExpression()), !dbg !252
+  %16 = load i32, i32* %h.addr, align 4, !dbg !257
+  %17 = icmp ne i32 %16, 0, !dbg !257
+  br i1 %17, label %if.then, label %if.end, !dbg !256
+
+if.then:
+  %18 = load i32, i32* %mask.addr, align 4, !dbg !262
+  %19 = load i32, i32* %h.addr, align 4, !dbg !263
+  %20 = load i32, i32* %i.addr, align 4, !dbg !264
+  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %18, i32 %19, i32 %20), !dbg !260
+  br label %if.end, !dbg !256
+
+if.end:
+  br label %for.inc, !dbg !245
 
 for.inc:
-  %18 = load i32, i32* %i.addr, align 4, !dbg !257
-  %19 = add nsw i32 %18, 1, !dbg !257
-  store i32 %19, i32* %i.addr, align 4, !dbg !257
-  br label %for.cond, !dbg !244
+  %21 = load i32, i32* %i.addr, align 4, !dbg !265
+  %22 = add nsw i32 %21, 1, !dbg !265
+  store i32 %22, i32* %i.addr, align 4, !dbg !265
+  br label %for.cond, !dbg !245
 
 for.end:
-  ret void, !dbg !236
+  ret void, !dbg !237
 }
 
-define internal void @nish.clearSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots) #0 !dbg !258 {
+define internal void @nish.clearSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots) #0 !dbg !266 {
 entry:
   %i.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !260, metadata !DIExpression()), !dbg !259
-  store i32 0, i32* %i.addr, align 4, !dbg !261
-  call void @llvm.dbg.declare(metadata i32* %i.addr, metadata !263, metadata !DIExpression()), !dbg !261
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !261
-  %1 = load i64, i64* %0, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !261
-  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !261
-  %3 = load i8*, i8** %2, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !261
-  br label %for.cond, !dbg !261
+  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !268, metadata !DIExpression()), !dbg !267
+  store i32 0, i32* %i.addr, align 4, !dbg !269
+  call void @llvm.dbg.declare(metadata i32* %i.addr, metadata !271, metadata !DIExpression()), !dbg !269
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !269
+  %1 = load i64, i64* %0, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !269
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !269
+  %3 = load i8*, i8** %2, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !269
+  br label %for.cond, !dbg !269
 
 for.cond:
-  %4 = load i32, i32* %i.addr, align 4, !dbg !265
-  %5 = trunc i64 %1 to i32, !dbg !264
-  %6 = icmp slt i32 %4, %5, !dbg !265
-  br i1 %6, label %for.body, label %for.end, !dbg !261
+  %4 = load i32, i32* %i.addr, align 4, !dbg !273
+  %5 = trunc i64 %1 to i32, !dbg !272
+  %6 = icmp slt i32 %4, %5, !dbg !273
+  br i1 %6, label %for.body, label %for.end, !dbg !269
 
 for.body:
-  %7 = load i32, i32* %i.addr, align 4, !dbg !269
-  %8 = sext i32 %7 to i64, !dbg !268
-  %9 = bitcast i8* %3 to i32*, !dbg !268
-  %10 = getelementptr inbounds i32, i32* %9, i64 %8, !dbg !268
-  store i32 0, i32* %10, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !268
-  br label %for.inc, !dbg !261
+  %7 = load i32, i32* %i.addr, align 4, !dbg !277
+  %8 = sext i32 %7 to i64, !dbg !276
+  %9 = bitcast i8* %3 to i32*, !dbg !276
+  %10 = getelementptr inbounds i32, i32* %9, i64 %8, !dbg !276
+  store i32 0, i32* %10, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !276
+  br label %for.inc, !dbg !269
 
 for.inc:
-  %11 = load i32, i32* %i.addr, align 4, !dbg !271
-  %12 = add nsw i32 %11, 1, !dbg !271
-  store i32 %12, i32* %i.addr, align 4, !dbg !271
-  br label %for.cond, !dbg !261
+  %11 = load i32, i32* %i.addr, align 4, !dbg !279
+  %12 = add nsw i32 %11, 1, !dbg !279
+  store i32 %12, i32* %i.addr, align 4, !dbg !279
+  br label %for.cond, !dbg !269
 
 for.end:
-  ret void, !dbg !259
+  ret void, !dbg !267
 }
 
-define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #0 !dbg !274 {
+define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #0 !dbg !282 {
 entry:
-  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !276, metadata !DIExpression()), !dbg !275
-  call void @llvm.dbg.value(metadata i32 %mask, metadata !277, metadata !DIExpression()), !dbg !275
-  call void @llvm.dbg.value(metadata i32 %bucket, metadata !278, metadata !DIExpression()), !dbg !275
-  call void @llvm.dbg.value(metadata i32 %h, metadata !279, metadata !DIExpression()), !dbg !275
-  call void @llvm.dbg.value(metadata i32 %used, metadata !280, metadata !DIExpression()), !dbg !275
-  %0 = icmp sge i32 %bucket, 0, !dbg !282
-  br i1 %0, label %land.rhs, label %land.end, !dbg !282
+  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !284, metadata !DIExpression()), !dbg !283
+  call void @llvm.dbg.value(metadata i32 %mask, metadata !285, metadata !DIExpression()), !dbg !283
+  call void @llvm.dbg.value(metadata i32 %bucket, metadata !286, metadata !DIExpression()), !dbg !283
+  call void @llvm.dbg.value(metadata i32 %h, metadata !287, metadata !DIExpression()), !dbg !283
+  call void @llvm.dbg.value(metadata i32 %used, metadata !288, metadata !DIExpression()), !dbg !283
+  %0 = icmp sge i32 %bucket, 0, !dbg !290
+  br i1 %0, label %land.rhs, label %land.end, !dbg !290
 
 land.rhs:
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !286
-  %2 = load i64, i64* %1, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !286
-  %3 = trunc i64 %2 to i32, !dbg !286
-  %4 = icmp slt i32 %bucket, %3, !dbg !284
-  br label %land.end, !dbg !282
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !294
+  %2 = load i64, i64* %1, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !294
+  %3 = trunc i64 %2 to i32, !dbg !294
+  %4 = icmp slt i32 %bucket, %3, !dbg !292
+  br label %land.end, !dbg !290
 
 land.end:
-  %5 = phi i1 [ false, %entry ], [ %4, %land.rhs ], !dbg !282
-  br i1 %5, label %if.then, label %if.else, !dbg !281
+  %5 = phi i1 [ false, %entry ], [ %4, %land.rhs ], !dbg !290
+  br i1 %5, label %if.then, label %if.else, !dbg !289
 
 if.then:
-  %6 = sext i32 %bucket to i64, !dbg !288
-  %7 = sub nsw i32 %used, 1, !dbg !292
-  %8 = call i32 @nish.slotWord(i32 %h, i32 %7), !dbg !290
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !288
-  %10 = load i8*, i8** %9, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !288
-  %11 = bitcast i8* %10 to i32*, !dbg !288
-  %12 = getelementptr inbounds i32, i32* %11, i64 %6, !dbg !288
-  store i32 %8, i32* %12, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !288
-  br label %if.end, !dbg !281
+  %6 = sext i32 %bucket to i64, !dbg !296
+  %7 = sub nsw i32 %used, 1, !dbg !300
+  %8 = call i32 @nish.slotWord(i32 %h, i32 %7), !dbg !298
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !296
+  %10 = load i8*, i8** %9, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !296
+  %11 = bitcast i8* %10 to i32*, !dbg !296
+  %12 = getelementptr inbounds i32, i32* %11, i64 %6, !dbg !296
+  store i32 %8, i32* %12, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !296
+  br label %if.end, !dbg !289
 
 if.else:
-  %13 = sub nsw i32 %used, 1, !dbg !299
-  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %13), !dbg !295
-  br label %if.end, !dbg !281
+  %13 = sub nsw i32 %used, 1, !dbg !307
+  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %13), !dbg !303
+  br label %if.end, !dbg !289
 
 if.end:
-  ret void, !dbg !275
+  ret void, !dbg !283
 }
 
-define internal void @nish.Map$str$i32.constructor(%struct.Map$str$i32* noundef nonnull noalias align 8 dereferenceable(48) nocapture %this) #2 !dbg !303 {
+define internal void @nish.Map$str$i32.constructor(%struct.Map$str$i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #2 !dbg !311 {
 entry:
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !305, metadata !DIExpression()), !dbg !304
-  %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !304
-  store i32 0, i32* %0, align 4, !tbaa !309, !dbg !304
-  %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !304
-  store i32 7, i32* %1, align 4, !tbaa !310, !dbg !304
-  %2 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !304
-  store i32 0, i32* %2, align 4, !tbaa !311, !dbg !304
-  %3 = sext i32 8 to i64, !dbg !313
-  %4 = call i8* @nish_alloc_struct(i64 24), !dbg !313
-  %5 = bitcast i8* %4 to %struct.nish_array*, !dbg !313
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 0, !dbg !313
-  store i64 %3, i64* %6, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !313
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 1, !dbg !313
-  store i64 %3, i64* %7, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !313
-  %8 = mul i64 %3, 4, !dbg !313
-  %9 = call i8* @nish_alloc_struct(i64 %8), !dbg !313
-  call void @llvm.memset.p0i8.i64(i8* align 8 %9, i8 0, i64 %8, i1 false), !alias.scope !138, !noalias !137, !dbg !313
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 2, !dbg !313
-  store i8* %9, i8** %10, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !313
-  %11 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !312
-  store %struct.nish_array* %5, %struct.nish_array** %11, align 8, !tbaa !315, !dbg !312
-  %12 = call i8* @nish_alloc_struct(i64 24), !dbg !317
-  %13 = bitcast i8* %12 to %struct.nish_array*, !dbg !317
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 0, !dbg !317
-  store i64 0, i64* %14, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !317
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 1, !dbg !317
-  store i64 0, i64* %15, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !317
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2, !dbg !317
-  store i8* null, i8** %16, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !317
-  %17 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !316
-  store %struct.nish_array* %13, %struct.nish_array** %17, align 8, !tbaa !318, !dbg !316
-  %18 = call i8* @nish_alloc_struct(i64 24), !dbg !320
-  %19 = bitcast i8* %18 to %struct.nish_array*, !dbg !320
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 0, !dbg !320
-  store i64 0, i64* %20, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !320
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 1, !dbg !320
-  store i64 0, i64* %21, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !320
-  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2, !dbg !320
-  store i8* null, i8** %22, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !320
-  %23 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !319
-  store %struct.nish_array* %19, %struct.nish_array** %23, align 8, !tbaa !321, !dbg !319
-  %24 = call i8* @nish_alloc_struct(i64 24), !dbg !323
-  %25 = bitcast i8* %24 to %struct.nish_array*, !dbg !323
-  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 0, !dbg !323
-  store i64 0, i64* %26, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !323
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 1, !dbg !323
-  store i64 0, i64* %27, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !323
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 2, !dbg !323
-  store i8* null, i8** %28, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !323
-  %29 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !322
-  store %struct.nish_array* %25, %struct.nish_array** %29, align 8, !tbaa !324, !dbg !322
-  ret void, !dbg !304
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !313, metadata !DIExpression()), !dbg !312
+  %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !312
+  store i32 0, i32* %0, align 4, !tbaa !317, !dbg !312
+  %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !312
+  store i32 7, i32* %1, align 4, !tbaa !318, !dbg !312
+  %2 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !312
+  store i32 0, i32* %2, align 4, !tbaa !319, !dbg !312
+  %3 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7, !dbg !312
+  store i32 0, i32* %3, align 4, !tbaa !320, !dbg !312
+  %4 = sext i32 8 to i64, !dbg !322
+  %5 = call i8* @nish_alloc_struct(i64 24), !dbg !322
+  %6 = bitcast i8* %5 to %struct.nish_array*, !dbg !322
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 0, !dbg !322
+  store i64 %4, i64* %7, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !322
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 1, !dbg !322
+  store i64 %4, i64* %8, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !322
+  %9 = mul i64 %4, 4, !dbg !322
+  %10 = call i8* @nish_alloc_struct(i64 %9), !dbg !322
+  call void @llvm.memset.p0i8.i64(i8* align 8 %10, i8 0, i64 %9, i1 false), !alias.scope !139, !noalias !138, !dbg !322
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 2, !dbg !322
+  store i8* %10, i8** %11, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !322
+  %12 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !321
+  store %struct.nish_array* %6, %struct.nish_array** %12, align 8, !tbaa !324, !dbg !321
+  %13 = call i8* @nish_alloc_struct(i64 24), !dbg !326
+  %14 = bitcast i8* %13 to %struct.nish_array*, !dbg !326
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0, !dbg !326
+  store i64 0, i64* %15, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !326
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 1, !dbg !326
+  store i64 0, i64* %16, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !326
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2, !dbg !326
+  store i8* null, i8** %17, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !326
+  %18 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !325
+  store %struct.nish_array* %14, %struct.nish_array** %18, align 8, !tbaa !327, !dbg !325
+  %19 = call i8* @nish_alloc_struct(i64 24), !dbg !329
+  %20 = bitcast i8* %19 to %struct.nish_array*, !dbg !329
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0, !dbg !329
+  store i64 0, i64* %21, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !329
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1, !dbg !329
+  store i64 0, i64* %22, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !329
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2, !dbg !329
+  store i8* null, i8** %23, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !329
+  %24 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !328
+  store %struct.nish_array* %20, %struct.nish_array** %24, align 8, !tbaa !330, !dbg !328
+  %25 = call i8* @nish_alloc_struct(i64 24), !dbg !332
+  %26 = bitcast i8* %25 to %struct.nish_array*, !dbg !332
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0, !dbg !332
+  store i64 0, i64* %27, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !332
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 1, !dbg !332
+  store i64 0, i64* %28, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !332
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2, !dbg !332
+  store i8* null, i8** %29, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !332
+  %30 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !331
+  store %struct.nish_array* %26, %struct.nish_array** %30, align 8, !tbaa !333, !dbg !331
+  ret void, !dbg !312
 }
 
-define internal noundef i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(48) nocapture %this, i8* noundef nonnull noalias readonly align 8 %key) #0 !dbg !327 {
+define internal noundef i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i8* noundef nonnull noalias readonly align 8 %key) #0 !dbg !336 {
 entry:
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !329, metadata !DIExpression()), !dbg !328
-  call void @llvm.dbg.value(metadata i8* %key, metadata !330, metadata !DIExpression()), !dbg !328
-  %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !333
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !315, !dbg !333
-  %2 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !334
-  %3 = load i32, i32* %2, align 4, !tbaa !310, !dbg !334
-  %4 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !335
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !324, !dbg !335
-  %6 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !336
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !318, !dbg !336
-  %8 = call i64 @nish.probeTable$str(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i8* %key), !dbg !332
-  ret i64 %8, !dbg !331
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !338, metadata !DIExpression()), !dbg !337
+  call void @llvm.dbg.value(metadata i8* %key, metadata !339, metadata !DIExpression()), !dbg !337
+  %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !342
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !324, !dbg !342
+  %2 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !343
+  %3 = load i32, i32* %2, align 4, !tbaa !318, !dbg !343
+  %4 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !344
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !333, !dbg !344
+  %6 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !345
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !327, !dbg !345
+  %8 = call i64 @nish.probeTable$str(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i8* %key), !dbg !341
+  ret i64 %8, !dbg !340
 }
 
-define internal noundef nonnull align 8 dereferenceable(48) %struct.Map$str$i32* @nish.Map$str$i32.set(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(48) %this, i8* noundef nonnull noalias readonly align 8 %key, i32 noundef %value) #0 !dbg !340 {
+define internal noundef nonnull align 8 dereferenceable(56) %struct.Map$str$i32* @nish.Map$str$i32.set(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) %this, i8* noundef nonnull noalias readonly align 8 %key, i32 noundef %value) #0 !dbg !349 {
 entry:
   %found.addr = alloca i64, align 8
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !342, metadata !DIExpression()), !dbg !341
-  call void @llvm.dbg.value(metadata i8* %key, metadata !343, metadata !DIExpression()), !dbg !341
-  call void @llvm.dbg.value(metadata i32 %value, metadata !344, metadata !DIExpression()), !dbg !341
-  %0 = call i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* %this, i8* %key), !dbg !346
-  store i64 %0, i64* %found.addr, align 8, !dbg !345
-  call void @llvm.dbg.declare(metadata i64* %found.addr, metadata !348, metadata !DIExpression()), !dbg !345
-  %1 = load i64, i64* %found.addr, align 8, !dbg !350
-  %2 = icmp sge i64 %1, 0, !dbg !350
-  br i1 %2, label %if.then, label %if.else, !dbg !349
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !351, metadata !DIExpression()), !dbg !350
+  call void @llvm.dbg.value(metadata i8* %key, metadata !352, metadata !DIExpression()), !dbg !350
+  call void @llvm.dbg.value(metadata i32 %value, metadata !353, metadata !DIExpression()), !dbg !350
+  %0 = call i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* %this, i8* %key), !dbg !355
+  store i64 %0, i64* %found.addr, align 8, !dbg !354
+  call void @llvm.dbg.declare(metadata i64* %found.addr, metadata !357, metadata !DIExpression()), !dbg !354
+  %1 = load i64, i64* %found.addr, align 8, !dbg !359
+  %2 = icmp sge i64 %1, 0, !dbg !359
+  br i1 %2, label %if.then, label %if.else, !dbg !358
 
 if.then:
-  %3 = load i64, i64* %found.addr, align 8, !dbg !355
-  %4 = trunc i64 %3 to i32, !dbg !354
-  call void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* %this, i32 %4, i32 %value), !dbg !353
-  br label %if.end, !dbg !349
+  %3 = load i64, i64* %found.addr, align 8, !dbg !364
+  %4 = trunc i64 %3 to i32, !dbg !363
+  call void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* %this, i32 %4, i32 %value), !dbg !362
+  br label %if.end, !dbg !358
 
 if.else:
-  %5 = load i64, i64* %found.addr, align 8, !dbg !359
-  call void @nish.Map$str$i32.insertAt(%struct.Map$str$i32* %this, i64 %5, i8* %key, i32 %value), !dbg !358
-  br label %if.end, !dbg !349
+  %5 = load i64, i64* %found.addr, align 8, !dbg !368
+  call void @nish.Map$str$i32.insertAt(%struct.Map$str$i32* %this, i64 %5, i8* %key, i32 %value), !dbg !367
+  br label %if.end, !dbg !358
 
 if.end:
-  ret %struct.Map$str$i32* %this, !dbg !362
+  ret %struct.Map$str$i32* %this, !dbg !371
 }
 
-define internal noundef i32 @nish.Map$str$i32.valueAt(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(48) nocapture %this, i32 noundef %index) #0 !dbg !366 {
+define internal noundef i32 @nish.Map$str$i32.valueAt(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #0 !dbg !375 {
 entry:
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !368, metadata !DIExpression()), !dbg !367
-  call void @llvm.dbg.value(metadata i32 %index, metadata !369, metadata !DIExpression()), !dbg !367
-  %0 = icmp slt i32 %index, 0, !dbg !371
-  br i1 %0, label %lor.end, label %lor.rhs, !dbg !371
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !377, metadata !DIExpression()), !dbg !376
+  call void @llvm.dbg.value(metadata i32 %index, metadata !378, metadata !DIExpression()), !dbg !376
+  %0 = icmp slt i32 %index, 0, !dbg !380
+  br i1 %0, label %lor.end, label %lor.rhs, !dbg !380
 
 lor.rhs:
-  %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !375
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !321, !dbg !375
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0, !dbg !375
-  %4 = load i64, i64* %3, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !375
-  %5 = trunc i64 %4 to i32, !dbg !375
-  %6 = icmp sge i32 %index, %5, !dbg !373
-  br label %lor.end, !dbg !371
+  %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !384
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !330, !dbg !384
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0, !dbg !384
+  %4 = load i64, i64* %3, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !384
+  %5 = trunc i64 %4 to i32, !dbg !384
+  %6 = icmp sge i32 %index, %5, !dbg !382
+  br label %lor.end, !dbg !380
 
 lor.end:
-  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ], !dbg !371
-  br i1 %7, label %if.then, label %if.end, !dbg !370
+  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ], !dbg !380
+  br i1 %7, label %if.then, label %if.end, !dbg !379
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.1 to i8*), i32 2, i1 true), !dbg !377
-  call void @nish_exit(i32 1), !dbg !377
-  unreachable, !dbg !377
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.1 to i8*), i32 2, i1 true), !dbg !386
+  call void @nish_exit(i32 1), !dbg !386
+  unreachable, !dbg !386
 
 if.end:
-  %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !380
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !321, !dbg !380
-  %10 = sext i32 %index to i64, !dbg !380
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0, !dbg !380
-  %12 = load i64, i64* %11, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !380
-  %13 = icmp ult i64 %10, %12, !dbg !380
-  br i1 %13, label %bounds.ok, label %bounds.fail, !dbg !380
+  %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !389
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !330, !dbg !389
+  %10 = sext i32 %index to i64, !dbg !389
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0, !dbg !389
+  %12 = load i64, i64* %11, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !389
+  %13 = icmp ult i64 %10, %12, !dbg !389
+  br i1 %13, label %bounds.ok, label %bounds.fail, !dbg !389
 
 bounds.fail:
-  call void @nish_panic_index(i64 %10, i64 %12), !dbg !380
-  unreachable, !dbg !380
+  call void @nish_panic_index(i64 %10, i64 %12), !dbg !389
+  unreachable, !dbg !389
 
 bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !380
-  %15 = load i8*, i8** %14, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !380
-  %16 = bitcast i8* %15 to i32*, !dbg !380
-  %17 = getelementptr inbounds i32, i32* %16, i64 %10, !dbg !380
-  %18 = load i32, i32* %17, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !380
-  ret i32 %18, !dbg !379
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !389
+  %15 = load i8*, i8** %14, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !389
+  %16 = bitcast i8* %15 to i32*, !dbg !389
+  %17 = getelementptr inbounds i32, i32* %16, i64 %10, !dbg !389
+  %18 = load i32, i32* %17, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !389
+  ret i32 %18, !dbg !388
 }
 
-define internal void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(48) nocapture %this, i32 noundef %index, i32 noundef %value) #2 !dbg !384 {
+define internal void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i32 noundef %value) #2 !dbg !393 {
 entry:
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !386, metadata !DIExpression()), !dbg !385
-  call void @llvm.dbg.value(metadata i32 %index, metadata !387, metadata !DIExpression()), !dbg !385
-  call void @llvm.dbg.value(metadata i32 %value, metadata !388, metadata !DIExpression()), !dbg !385
-  %0 = icmp sge i32 %index, 0, !dbg !390
-  br i1 %0, label %land.rhs, label %land.end, !dbg !390
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !395, metadata !DIExpression()), !dbg !394
+  call void @llvm.dbg.value(metadata i32 %index, metadata !396, metadata !DIExpression()), !dbg !394
+  call void @llvm.dbg.value(metadata i32 %value, metadata !397, metadata !DIExpression()), !dbg !394
+  %0 = icmp sge i32 %index, 0, !dbg !399
+  br i1 %0, label %land.rhs, label %land.end, !dbg !399
 
 land.rhs:
-  %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !394
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !321, !dbg !394
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0, !dbg !394
-  %4 = load i64, i64* %3, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !394
-  %5 = trunc i64 %4 to i32, !dbg !394
-  %6 = icmp slt i32 %index, %5, !dbg !392
-  br label %land.end, !dbg !390
+  %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !403
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !330, !dbg !403
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0, !dbg !403
+  %4 = load i64, i64* %3, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !403
+  %5 = trunc i64 %4 to i32, !dbg !403
+  %6 = icmp slt i32 %index, %5, !dbg !401
+  br label %land.end, !dbg !399
 
 land.end:
-  %7 = phi i1 [ false, %entry ], [ %6, %land.rhs ], !dbg !390
-  br i1 %7, label %if.then, label %if.end, !dbg !389
+  %7 = phi i1 [ false, %entry ], [ %6, %land.rhs ], !dbg !399
+  br i1 %7, label %if.then, label %if.end, !dbg !398
 
 if.then:
-  %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !396
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !321, !dbg !396
-  %10 = sext i32 %index to i64, !dbg !396
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !396
-  %12 = load i8*, i8** %11, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !396
-  %13 = bitcast i8* %12 to i32*, !dbg !396
-  %14 = getelementptr inbounds i32, i32* %13, i64 %10, !dbg !396
-  store i32 %value, i32* %14, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !396
-  br label %if.end, !dbg !389
+  %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !405
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !330, !dbg !405
+  %10 = sext i32 %index to i64, !dbg !405
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !405
+  %12 = load i8*, i8** %11, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !405
+  %13 = bitcast i8* %12 to i32*, !dbg !405
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10, !dbg !405
+  store i32 %value, i32* %14, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !405
+  br label %if.end, !dbg !398
 
 if.end:
-  ret void, !dbg !385
+  ret void, !dbg !394
 }
 
-define internal void @nish.Map$str$i32.insertAt(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(48) nocapture %this, i64 noundef %absent, i8* noundef nonnull noalias readonly align 8 %key, i32 noundef %value) #0 !dbg !401 {
+define internal void @nish.Map$str$i32.insertAt(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this, i64 noundef %absent, i8* noundef nonnull noalias readonly align 8 %key, i32 noundef %value) #0 !dbg !410 {
 entry:
   %packed.addr = alloca i64, align 8
   %bucket.addr = alloca i32, align 4
   %h.addr = alloca i32, align 4
   %used.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !403, metadata !DIExpression()), !dbg !402
-  call void @llvm.dbg.value(metadata i64 %absent, metadata !404, metadata !DIExpression()), !dbg !402
-  call void @llvm.dbg.value(metadata i8* %key, metadata !405, metadata !DIExpression()), !dbg !402
-  call void @llvm.dbg.value(metadata i32 %value, metadata !406, metadata !DIExpression()), !dbg !402
-  %0 = sub nsw i64 0, 1, !dbg !408
-  %1 = sub nsw i64 %0, %absent, !dbg !408
-  store i64 %1, i64* %packed.addr, align 8, !dbg !407
-  call void @llvm.dbg.declare(metadata i64* %packed.addr, metadata !411, metadata !DIExpression()), !dbg !407
-  %2 = load i64, i64* %packed.addr, align 8, !dbg !414
-  %3 = ashr i64 %2, 32, !dbg !414
-  %4 = trunc i64 %3 to i32, !dbg !413
-  store i32 %4, i32* %bucket.addr, align 4, !dbg !412
-  call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !415, metadata !DIExpression()), !dbg !412
-  %5 = load i64, i64* %packed.addr, align 8, !dbg !418
-  %6 = trunc i64 %5 to i32, !dbg !417
-  store i32 %6, i32* %h.addr, align 4, !dbg !416
-  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !419, metadata !DIExpression()), !dbg !416
-  %7 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !422
-  %8 = load %struct.nish_array*, %struct.nish_array** %7, align 8, !tbaa !318, !dbg !422
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0, !dbg !422
-  %10 = load i64, i64* %9, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !422
-  %11 = trunc i64 %10 to i32, !dbg !422
-  %12 = icmp sge i32 %11, 16777215, !dbg !421
-  br i1 %12, label %if.then, label %if.end, !dbg !420
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !412, metadata !DIExpression()), !dbg !411
+  call void @llvm.dbg.value(metadata i64 %absent, metadata !413, metadata !DIExpression()), !dbg !411
+  call void @llvm.dbg.value(metadata i8* %key, metadata !414, metadata !DIExpression()), !dbg !411
+  call void @llvm.dbg.value(metadata i32 %value, metadata !415, metadata !DIExpression()), !dbg !411
+  %0 = sub nsw i64 0, 1, !dbg !417
+  %1 = sub nsw i64 %0, %absent, !dbg !417
+  store i64 %1, i64* %packed.addr, align 8, !dbg !416
+  call void @llvm.dbg.declare(metadata i64* %packed.addr, metadata !420, metadata !DIExpression()), !dbg !416
+  %2 = load i64, i64* %packed.addr, align 8, !dbg !423
+  %3 = ashr i64 %2, 32, !dbg !423
+  %4 = trunc i64 %3 to i32, !dbg !422
+  store i32 %4, i32* %bucket.addr, align 4, !dbg !421
+  call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !424, metadata !DIExpression()), !dbg !421
+  %5 = load i64, i64* %packed.addr, align 8, !dbg !427
+  %6 = trunc i64 %5 to i32, !dbg !426
+  store i32 %6, i32* %h.addr, align 4, !dbg !425
+  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !428, metadata !DIExpression()), !dbg !425
+  %7 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !431
+  %8 = load %struct.nish_array*, %struct.nish_array** %7, align 8, !tbaa !327, !dbg !431
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0, !dbg !431
+  %10 = load i64, i64* %9, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !431
+  %11 = trunc i64 %10 to i32, !dbg !431
+  %12 = icmp sge i32 %11, 16777215, !dbg !430
+  br i1 %12, label %if.then, label %if.end, !dbg !429
 
 if.then:
-  %13 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !426
-  %14 = load i32, i32* %13, align 4, !tbaa !311, !dbg !426
-  %15 = icmp sge i32 %14, 16777215, !dbg !426
-  br i1 %15, label %if.then.1, label %if.end.1, !dbg !425
+  %13 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !435
+  %14 = load i32, i32* %13, align 4, !tbaa !319, !dbg !435
+  %15 = icmp sge i32 %14, 16777215, !dbg !435
+  br i1 %15, label %lor.end, label %lor.rhs, !dbg !435
+
+lor.rhs:
+  %16 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7, !dbg !437
+  %17 = load i32, i32* %16, align 4, !tbaa !320, !dbg !437
+  %18 = icmp sgt i32 %17, 0, !dbg !437
+  br label %lor.end, !dbg !435
+
+lor.end:
+  %19 = phi i1 [ true, %if.then ], [ %18, %lor.rhs ], !dbg !435
+  br i1 %19, label %if.then.1, label %if.end.1, !dbg !434
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !429
-  call void @nish_exit(i32 1), !dbg !429
-  unreachable, !dbg !429
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !440
+  call void @nish_exit(i32 1), !dbg !440
+  unreachable, !dbg !440
 
 if.end.1:
-  call void @nish.Map$str$i32.rebuild(%struct.Map$str$i32* %this), !dbg !431
-  %16 = sub nsw i32 0, 1, !dbg !433
-  store i32 %16, i32* %bucket.addr, align 4, !dbg !432
-  br label %if.end, !dbg !420
+  call void @nish.Map$str$i32.rebuild(%struct.Map$str$i32* %this), !dbg !442
+  %20 = sub nsw i32 0, 1, !dbg !444
+  store i32 %20, i32* %bucket.addr, align 4, !dbg !443
+  br label %if.end, !dbg !429
 
 if.end:
-  %17 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !435
-  %18 = load %struct.nish_array*, %struct.nish_array** %17, align 8, !tbaa !318, !dbg !435
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0, !dbg !435
-  %20 = load i64, i64* %19, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !435
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 1, !dbg !435
-  %22 = load i64, i64* %21, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !435
-  %23 = icmp eq i64 %20, %22, !dbg !435
-  br i1 %23, label %push.grow, label %push.store, !dbg !435
+  %21 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !446
+  %22 = load %struct.nish_array*, %struct.nish_array** %21, align 8, !tbaa !327, !dbg !446
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0, !dbg !446
+  %24 = load i64, i64* %23, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !446
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 1, !dbg !446
+  %26 = load i64, i64* %25, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !446
+  %27 = icmp eq i64 %24, %26, !dbg !446
+  br i1 %27, label %push.grow, label %push.store, !dbg !446
 
 push.grow:
-  call void @nish_array_grow(%struct.nish_array* %18, i64 8), !dbg !435
-  br label %push.store, !dbg !435
+  call void @nish_array_grow(%struct.nish_array* %22, i64 8), !dbg !446
+  br label %push.store, !dbg !446
 
 push.store:
-  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 2, !dbg !435
-  %25 = load i8*, i8** %24, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !435
-  %26 = bitcast i8* %25 to i8**, !dbg !435
-  %27 = getelementptr inbounds i8*, i8** %26, i64 %20, !dbg !435
-  store i8* %key, i8** %27, align 8, !alias.scope !138, !noalias !137, !tbaa !438, !dbg !435
-  %28 = add i64 %20, 1, !dbg !435
-  store i64 %28, i64* %19, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !435
-  %29 = trunc i64 %28 to i32, !dbg !435
-  %30 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !439
-  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !321, !dbg !439
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 0, !dbg !439
-  %33 = load i64, i64* %32, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !439
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 1, !dbg !439
-  %35 = load i64, i64* %34, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !439
-  %36 = icmp eq i64 %33, %35, !dbg !439
-  br i1 %36, label %push.grow.1, label %push.store.1, !dbg !439
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 2, !dbg !446
+  %29 = load i8*, i8** %28, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !446
+  %30 = bitcast i8* %29 to i8**, !dbg !446
+  %31 = getelementptr inbounds i8*, i8** %30, i64 %24, !dbg !446
+  store i8* %key, i8** %31, align 8, !alias.scope !139, !noalias !138, !tbaa !449, !dbg !446
+  %32 = add i64 %24, 1, !dbg !446
+  store i64 %32, i64* %23, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !446
+  %33 = trunc i64 %32 to i32, !dbg !446
+  %34 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !450
+  %35 = load %struct.nish_array*, %struct.nish_array** %34, align 8, !tbaa !330, !dbg !450
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 0, !dbg !450
+  %37 = load i64, i64* %36, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !450
+  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 1, !dbg !450
+  %39 = load i64, i64* %38, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !450
+  %40 = icmp eq i64 %37, %39, !dbg !450
+  br i1 %40, label %push.grow.1, label %push.store.1, !dbg !450
 
 push.grow.1:
-  call void @nish_array_grow(%struct.nish_array* %31, i64 4), !dbg !439
-  br label %push.store.1, !dbg !439
+  call void @nish_array_grow(%struct.nish_array* %35, i64 4), !dbg !450
+  br label %push.store.1, !dbg !450
 
 push.store.1:
-  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 2, !dbg !439
-  %38 = load i8*, i8** %37, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !439
-  %39 = bitcast i8* %38 to i32*, !dbg !439
-  %40 = getelementptr inbounds i32, i32* %39, i64 %33, !dbg !439
-  store i32 %value, i32* %40, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !439
-  %41 = add i64 %33, 1, !dbg !439
-  store i64 %41, i64* %32, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !439
-  %42 = trunc i64 %41 to i32, !dbg !439
-  %43 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !441
-  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !324, !dbg !441
-  %45 = load i32, i32* %h.addr, align 4, !dbg !442
-  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 0, !dbg !441
-  %47 = load i64, i64* %46, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !441
-  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 1, !dbg !441
-  %49 = load i64, i64* %48, align 8, !alias.scope !137, !noalias !138, !tbaa !232, !dbg !441
-  %50 = icmp eq i64 %47, %49, !dbg !441
-  br i1 %50, label %push.grow.2, label %push.store.2, !dbg !441
+  %41 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 2, !dbg !450
+  %42 = load i8*, i8** %41, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !450
+  %43 = bitcast i8* %42 to i32*, !dbg !450
+  %44 = getelementptr inbounds i32, i32* %43, i64 %37, !dbg !450
+  store i32 %value, i32* %44, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !450
+  %45 = add i64 %37, 1, !dbg !450
+  store i64 %45, i64* %36, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !450
+  %46 = trunc i64 %45 to i32, !dbg !450
+  %47 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !452
+  %48 = load %struct.nish_array*, %struct.nish_array** %47, align 8, !tbaa !333, !dbg !452
+  %49 = load i32, i32* %h.addr, align 4, !dbg !453
+  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 0, !dbg !452
+  %51 = load i64, i64* %50, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !452
+  %52 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 1, !dbg !452
+  %53 = load i64, i64* %52, align 8, !alias.scope !138, !noalias !139, !tbaa !233, !dbg !452
+  %54 = icmp eq i64 %51, %53, !dbg !452
+  br i1 %54, label %push.grow.2, label %push.store.2, !dbg !452
 
 push.grow.2:
-  call void @nish_array_grow(%struct.nish_array* %44, i64 4), !dbg !441
-  br label %push.store.2, !dbg !441
+  call void @nish_array_grow(%struct.nish_array* %48, i64 4), !dbg !452
+  br label %push.store.2, !dbg !452
 
 push.store.2:
-  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2, !dbg !441
-  %52 = load i8*, i8** %51, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !441
-  %53 = bitcast i8* %52 to i32*, !dbg !441
-  %54 = getelementptr inbounds i32, i32* %53, i64 %47, !dbg !441
-  store i32 %45, i32* %54, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !441
-  %55 = add i64 %47, 1, !dbg !441
-  store i64 %55, i64* %46, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !441
-  %56 = trunc i64 %55 to i32, !dbg !441
-  %57 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !444
-  %58 = load i32, i32* %57, align 4, !tbaa !311, !dbg !444
-  %59 = add nsw i32 %58, 1, !dbg !444
-  %60 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !443
-  store i32 %59, i32* %60, align 4, !tbaa !311, !dbg !443
-  %61 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !447
-  %62 = load i32, i32* %61, align 4, !tbaa !309, !dbg !447
-  %63 = add nsw i32 %62, 1, !dbg !447
-  %64 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !446
-  store i32 %63, i32* %64, align 4, !tbaa !309, !dbg !446
-  %65 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !451
-  %66 = load %struct.nish_array*, %struct.nish_array** %65, align 8, !tbaa !318, !dbg !451
-  %67 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %66, i64 0, i32 0, !dbg !451
-  %68 = load i64, i64* %67, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !451
-  %69 = trunc i64 %68 to i32, !dbg !451
-  store i32 %69, i32* %used.addr, align 4, !dbg !449
-  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !452, metadata !DIExpression()), !dbg !449
-  %70 = load i32, i32* %used.addr, align 4, !dbg !454
-  %71 = mul nsw i32 %70, 4, !dbg !454
-  %72 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !457
-  %73 = load %struct.nish_array*, %struct.nish_array** %72, align 8, !tbaa !315, !dbg !457
-  %74 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %73, i64 0, i32 0, !dbg !457
-  %75 = load i64, i64* %74, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !457
-  %76 = trunc i64 %75 to i32, !dbg !457
-  %77 = mul nsw i32 %76, 3, !dbg !456
-  %78 = icmp sgt i32 %71, %77, !dbg !454
-  br i1 %78, label %if.then.2, label %if.else, !dbg !453
+  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 2, !dbg !452
+  %56 = load i8*, i8** %55, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !452
+  %57 = bitcast i8* %56 to i32*, !dbg !452
+  %58 = getelementptr inbounds i32, i32* %57, i64 %51, !dbg !452
+  store i32 %49, i32* %58, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !452
+  %59 = add i64 %51, 1, !dbg !452
+  store i64 %59, i64* %50, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !452
+  %60 = trunc i64 %59 to i32, !dbg !452
+  %61 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !455
+  %62 = load i32, i32* %61, align 4, !tbaa !319, !dbg !455
+  %63 = add nsw i32 %62, 1, !dbg !455
+  %64 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !454
+  store i32 %63, i32* %64, align 4, !tbaa !319, !dbg !454
+  %65 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !458
+  %66 = load i32, i32* %65, align 4, !tbaa !317, !dbg !458
+  %67 = add nsw i32 %66, 1, !dbg !458
+  %68 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !457
+  store i32 %67, i32* %68, align 4, !tbaa !317, !dbg !457
+  %69 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !462
+  %70 = load %struct.nish_array*, %struct.nish_array** %69, align 8, !tbaa !327, !dbg !462
+  %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 0, !dbg !462
+  %72 = load i64, i64* %71, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !462
+  %73 = trunc i64 %72 to i32, !dbg !462
+  store i32 %73, i32* %used.addr, align 4, !dbg !460
+  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !463, metadata !DIExpression()), !dbg !460
+  %74 = load i32, i32* %used.addr, align 4, !dbg !465
+  %75 = mul nsw i32 %74, 4, !dbg !465
+  %76 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !468
+  %77 = load %struct.nish_array*, %struct.nish_array** %76, align 8, !tbaa !324, !dbg !468
+  %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %77, i64 0, i32 0, !dbg !468
+  %79 = load i64, i64* %78, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !468
+  %80 = trunc i64 %79 to i32, !dbg !468
+  %81 = mul nsw i32 %80, 3, !dbg !467
+  %82 = icmp sgt i32 %75, %81, !dbg !465
+  br i1 %82, label %if.then.2, label %if.else, !dbg !464
 
 if.then.2:
-  call void @nish.Map$str$i32.rebuild(%struct.Map$str$i32* %this), !dbg !460
-  br label %if.end.2, !dbg !453
+  call void @nish.Map$str$i32.rebuild(%struct.Map$str$i32* %this), !dbg !471
+  br label %if.end.2, !dbg !464
 
 if.else:
-  %79 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !463
-  %80 = load %struct.nish_array*, %struct.nish_array** %79, align 8, !tbaa !315, !dbg !463
-  %81 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !464
-  %82 = load i32, i32* %81, align 4, !tbaa !310, !dbg !464
-  %83 = load i32, i32* %bucket.addr, align 4, !dbg !465
-  %84 = load i32, i32* %h.addr, align 4, !dbg !466
-  %85 = load i32, i32* %used.addr, align 4, !dbg !467
-  call void @nish.fileAppended(%struct.nish_array* %80, i32 %82, i32 %83, i32 %84, i32 %85), !dbg !462
-  br label %if.end.2, !dbg !453
+  %83 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !474
+  %84 = load %struct.nish_array*, %struct.nish_array** %83, align 8, !tbaa !324, !dbg !474
+  %85 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !475
+  %86 = load i32, i32* %85, align 4, !tbaa !318, !dbg !475
+  %87 = load i32, i32* %bucket.addr, align 4, !dbg !476
+  %88 = load i32, i32* %h.addr, align 4, !dbg !477
+  %89 = load i32, i32* %used.addr, align 4, !dbg !478
+  call void @nish.fileAppended(%struct.nish_array* %84, i32 %86, i32 %87, i32 %88, i32 %89), !dbg !473
+  br label %if.end.2, !dbg !464
 
 if.end.2:
-  ret void, !dbg !402
+  ret void, !dbg !411
 }
 
-define internal void @nish.Map$str$i32.rebuild(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(48) nocapture %this) #0 !dbg !468 {
+define internal void @nish.Map$str$i32.rebuild(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 !dbg !479 {
 entry:
   %used.addr = alloca i32, align 4
+  %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
-  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !470, metadata !DIExpression()), !dbg !469
-  %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !473
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !318, !dbg !473
-  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0, !dbg !473
-  %3 = load i64, i64* %2, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !473
-  %4 = trunc i64 %3 to i32, !dbg !473
-  store i32 %4, i32* %used.addr, align 4, !dbg !471
-  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !474, metadata !DIExpression()), !dbg !471
-  %5 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !477
-  %6 = load %struct.nish_array*, %struct.nish_array** %5, align 8, !tbaa !315, !dbg !477
-  %7 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !478
-  %8 = load i32, i32* %7, align 4, !tbaa !311, !dbg !478
-  %9 = load i32, i32* %used.addr, align 4, !dbg !479
-  %10 = call %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* %6, i32 %8, i32 %9), !dbg !476
-  store %struct.nish_array* %10, %struct.nish_array** %slots.addr, align 8, !dbg !475
-  call void @llvm.dbg.declare(metadata %struct.nish_array** %slots.addr, metadata !480, metadata !DIExpression()), !dbg !475
-  %11 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !482
-  %12 = load i32, i32* %11, align 4, !tbaa !311, !dbg !482
-  %13 = load i32, i32* %used.addr, align 4, !dbg !483
-  %14 = icmp slt i32 %12, %13, !dbg !482
-  br i1 %14, label %if.then, label %if.end, !dbg !481
+  call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !481, metadata !DIExpression()), !dbg !480
+  %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !484
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !327, !dbg !484
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0, !dbg !484
+  %3 = load i64, i64* %2, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !484
+  %4 = trunc i64 %3 to i32, !dbg !484
+  store i32 %4, i32* %used.addr, align 4, !dbg !482
+  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !485, metadata !DIExpression()), !dbg !482
+  %5 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7, !dbg !487
+  %6 = load i32, i32* %5, align 4, !tbaa !320, !dbg !487
+  %7 = icmp sgt i32 %6, 0, !dbg !487
+  store i1 %7, i1* %walking.addr, align 1, !dbg !486
+  call void @llvm.dbg.declare(metadata i1* %walking.addr, metadata !490, metadata !DIExpression()), !dbg !486
+  %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !493
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !324, !dbg !493
+  %10 = load i1, i1* %walking.addr, align 1, !dbg !494
+  br i1 %10, label %cond.true, label %cond.false, !dbg !494
+
+cond.true:
+  %11 = load i32, i32* %used.addr, align 4, !dbg !495
+  br label %cond.end, !dbg !494
+
+cond.false:
+  %12 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !496
+  %13 = load i32, i32* %12, align 4, !tbaa !319, !dbg !496
+  br label %cond.end, !dbg !494
+
+cond.end:
+  %14 = phi i32 [ %11, %cond.true ], [ %13, %cond.false ], !dbg !494
+  %15 = load i32, i32* %used.addr, align 4, !dbg !497
+  %16 = call %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* %9, i32 %14, i32 %15), !dbg !492
+  store %struct.nish_array* %16, %struct.nish_array** %slots.addr, align 8, !dbg !491
+  call void @llvm.dbg.declare(metadata %struct.nish_array** %slots.addr, metadata !498, metadata !DIExpression()), !dbg !491
+  %17 = load i1, i1* %walking.addr, align 1, !dbg !501
+  %18 = xor i1 %17, true, !dbg !500
+  br i1 %18, label %land.rhs, label %land.end, !dbg !500
+
+land.rhs:
+  %19 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3, !dbg !502
+  %20 = load i32, i32* %19, align 4, !tbaa !319, !dbg !502
+  %21 = load i32, i32* %used.addr, align 4, !dbg !503
+  %22 = icmp slt i32 %20, %21, !dbg !502
+  br label %land.end, !dbg !500
+
+land.end:
+  %23 = phi i1 [ false, %cond.end ], [ %22, %land.rhs ], !dbg !500
+  br i1 %23, label %if.then, label %if.end, !dbg !499
 
 if.then:
-  %15 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !486
-  %16 = load %struct.nish_array*, %struct.nish_array** %15, align 8, !tbaa !318, !dbg !486
-  %17 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !487
-  %18 = load %struct.nish_array*, %struct.nish_array** %17, align 8, !tbaa !324, !dbg !487
-  call void @nish.compactEntries$str(%struct.nish_array* %16, %struct.nish_array* %18), !dbg !485
-  %19 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !489
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !321, !dbg !489
-  %21 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !490
-  %22 = load %struct.nish_array*, %struct.nish_array** %21, align 8, !tbaa !324, !dbg !490
-  call void @nish.compactEntries$i32(%struct.nish_array* %20, %struct.nish_array* %22), !dbg !488
-  %23 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !492
-  %24 = load %struct.nish_array*, %struct.nish_array** %23, align 8, !tbaa !324, !dbg !492
-  call void @nish.compactHashes(%struct.nish_array* %24), !dbg !491
-  br label %if.end, !dbg !481
+  %24 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !506
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !327, !dbg !506
+  %26 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !507
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !333, !dbg !507
+  call void @nish.compactEntries$str(%struct.nish_array* %25, %struct.nish_array* %27), !dbg !505
+  %28 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !509
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !330, !dbg !509
+  %30 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !510
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !333, !dbg !510
+  call void @nish.compactEntries$i32(%struct.nish_array* %29, %struct.nish_array* %31), !dbg !508
+  %32 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !512
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !333, !dbg !512
+  call void @nish.compactHashes(%struct.nish_array* %33), !dbg !511
+  br label %if.end, !dbg !499
 
 if.end:
-  %25 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8, !dbg !494
-  %26 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !493
-  store %struct.nish_array* %25, %struct.nish_array** %26, align 8, !tbaa !315, !dbg !493
-  %27 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8, !dbg !497
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0, !dbg !497
-  %29 = load i64, i64* %28, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !497
-  %30 = trunc i64 %29 to i32, !dbg !497
-  %31 = sub nsw i32 %30, 1, !dbg !496
-  %32 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !495
-  store i32 %31, i32* %32, align 4, !tbaa !310, !dbg !495
-  %33 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8, !dbg !500
-  %34 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !501
-  %35 = load %struct.nish_array*, %struct.nish_array** %34, align 8, !tbaa !324, !dbg !501
-  call void @nish.refile(%struct.nish_array* %33, %struct.nish_array* %35), !dbg !499
-  ret void, !dbg !469
+  %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8, !dbg !514
+  %35 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !513
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !324, !dbg !513
+  %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8, !dbg !517
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0, !dbg !517
+  %38 = load i64, i64* %37, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !517
+  %39 = trunc i64 %38 to i32, !dbg !517
+  %40 = sub nsw i32 %39, 1, !dbg !516
+  %41 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2, !dbg !515
+  store i32 %40, i32* %41, align 4, !tbaa !318, !dbg !515
+  %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8, !dbg !520
+  %43 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !521
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !333, !dbg !521
+  call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44), !dbg !519
+  ret void, !dbg !480
 }
 
-define internal noundef i64 @nish.probeTable$str(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots, i32 noundef %mask, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %keys, i8* noundef nonnull noalias readonly align 8 %key) #0 !dbg !504 {
+define internal noundef i64 @nish.probeTable$str(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots, i32 noundef %mask, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %keys, i8* noundef nonnull noalias readonly align 8 %key) #0 !dbg !524 {
 entry:
   %h.addr = alloca i32, align 4
   %hash.i = alloca i64, align 8
@@ -889,460 +940,460 @@ entry:
   %bucket.addr = alloca i32, align 4
   %word.addr = alloca i32, align 4
   %at.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !506, metadata !DIExpression()), !dbg !505
-  call void @llvm.dbg.value(metadata i32 %mask, metadata !507, metadata !DIExpression()), !dbg !505
-  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !508, metadata !DIExpression()), !dbg !505
-  call void @llvm.dbg.value(metadata %struct.nish_array* %keys, metadata !509, metadata !DIExpression()), !dbg !505
-  call void @llvm.dbg.value(metadata i8* %key, metadata !510, metadata !DIExpression()), !dbg !505
-  %0 = bitcast i8* %key to i64*, !dbg !512
-  %1 = load i64, i64* %0, align 8, !dbg !512
-  %2 = getelementptr inbounds i8, i8* %key, i64 8, !dbg !512
-  store i64 0, i64* %hash.i, align 8, !dbg !512
-  store i32 -2128831035, i32* %hash.h, align 4, !dbg !512
-  br label %hash.test, !dbg !512
+  call void @llvm.dbg.value(metadata %struct.nish_array* %slots, metadata !526, metadata !DIExpression()), !dbg !525
+  call void @llvm.dbg.value(metadata i32 %mask, metadata !527, metadata !DIExpression()), !dbg !525
+  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !528, metadata !DIExpression()), !dbg !525
+  call void @llvm.dbg.value(metadata %struct.nish_array* %keys, metadata !529, metadata !DIExpression()), !dbg !525
+  call void @llvm.dbg.value(metadata i8* %key, metadata !530, metadata !DIExpression()), !dbg !525
+  %0 = bitcast i8* %key to i64*, !dbg !532
+  %1 = load i64, i64* %0, align 8, !dbg !532
+  %2 = getelementptr inbounds i8, i8* %key, i64 8, !dbg !532
+  store i64 0, i64* %hash.i, align 8, !dbg !532
+  store i32 -2128831035, i32* %hash.h, align 4, !dbg !532
+  br label %hash.test, !dbg !532
 
 hash.test:
-  %3 = load i64, i64* %hash.i, align 8, !dbg !512
-  %4 = icmp ult i64 %3, %1, !dbg !512
-  br i1 %4, label %hash.byte, label %hash.done, !dbg !512
+  %3 = load i64, i64* %hash.i, align 8, !dbg !532
+  %4 = icmp ult i64 %3, %1, !dbg !532
+  br i1 %4, label %hash.byte, label %hash.done, !dbg !532
 
 hash.byte:
-  %5 = getelementptr inbounds i8, i8* %2, i64 %3, !dbg !512
-  %6 = load i8, i8* %5, !dbg !512
-  %7 = zext i8 %6 to i32, !dbg !512
-  %8 = load i32, i32* %hash.h, align 4, !dbg !512
-  %9 = xor i32 %8, %7, !dbg !512
-  %10 = mul i32 %9, 16777619, !dbg !512
-  store i32 %10, i32* %hash.h, align 4, !dbg !512
-  %11 = add i64 %3, 1, !dbg !512
-  store i64 %11, i64* %hash.i, align 8, !dbg !512
-  br label %hash.test, !dbg !512
+  %5 = getelementptr inbounds i8, i8* %2, i64 %3, !dbg !532
+  %6 = load i8, i8* %5, !dbg !532
+  %7 = zext i8 %6 to i32, !dbg !532
+  %8 = load i32, i32* %hash.h, align 4, !dbg !532
+  %9 = xor i32 %8, %7, !dbg !532
+  %10 = mul i32 %9, 16777619, !dbg !532
+  store i32 %10, i32* %hash.h, align 4, !dbg !532
+  %11 = add i64 %3, 1, !dbg !532
+  store i64 %11, i64* %hash.i, align 8, !dbg !532
+  br label %hash.test, !dbg !532
 
 hash.done:
-  %12 = load i32, i32* %hash.h, align 4, !dbg !512
-  %13 = icmp eq i32 %12, 0, !dbg !512
-  %14 = select i1 %13, i32 1, i32 %12, !dbg !512
-  store i32 %14, i32* %h.addr, align 4, !dbg !511
-  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !514, metadata !DIExpression()), !dbg !511
-  %15 = load i32, i32* %h.addr, align 4, !dbg !516
-  %16 = lshr i32 %15, 24, !dbg !516
-  store i32 %16, i32* %fingerprint.addr, align 4, !dbg !515
-  call void @llvm.dbg.declare(metadata i32* %fingerprint.addr, metadata !517, metadata !DIExpression()), !dbg !515
-  %17 = load i32, i32* %h.addr, align 4, !dbg !520
-  %18 = call i32 @nish.homeBucket(i32 %17, i32 %mask), !dbg !519
-  store i32 %18, i32* %bucket.addr, align 4, !dbg !518
-  call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !522, metadata !DIExpression()), !dbg !518
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !523
-  %20 = load i64, i64* %19, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !523
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !523
-  %22 = load i8*, i8** %21, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !523
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !523
-  %24 = load i64, i64* %23, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !523
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !523
-  %26 = load i8*, i8** %25, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !523
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0, !dbg !523
-  %28 = load i64, i64* %27, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !523
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2, !dbg !523
-  %30 = load i8*, i8** %29, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !523
-  br label %while.cond, !dbg !523
+  %12 = load i32, i32* %hash.h, align 4, !dbg !532
+  %13 = icmp eq i32 %12, 0, !dbg !532
+  %14 = select i1 %13, i32 1, i32 %12, !dbg !532
+  store i32 %14, i32* %h.addr, align 4, !dbg !531
+  call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !534, metadata !DIExpression()), !dbg !531
+  %15 = load i32, i32* %h.addr, align 4, !dbg !536
+  %16 = lshr i32 %15, 24, !dbg !536
+  store i32 %16, i32* %fingerprint.addr, align 4, !dbg !535
+  call void @llvm.dbg.declare(metadata i32* %fingerprint.addr, metadata !537, metadata !DIExpression()), !dbg !535
+  %17 = load i32, i32* %h.addr, align 4, !dbg !540
+  %18 = call i32 @nish.homeBucket(i32 %17, i32 %mask), !dbg !539
+  store i32 %18, i32* %bucket.addr, align 4, !dbg !538
+  call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !542, metadata !DIExpression()), !dbg !538
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !543
+  %20 = load i64, i64* %19, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !543
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !543
+  %22 = load i8*, i8** %21, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !543
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !543
+  %24 = load i64, i64* %23, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !543
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !543
+  %26 = load i8*, i8** %25, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !543
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0, !dbg !543
+  %28 = load i64, i64* %27, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !543
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2, !dbg !543
+  %30 = load i8*, i8** %29, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !543
+  br label %while.cond, !dbg !543
 
 while.cond:
-  %31 = load i32, i32* %bucket.addr, align 4, !dbg !527
-  %32 = icmp sge i32 %31, 0, !dbg !527
-  br i1 %32, label %land.rhs, label %land.end, !dbg !527
+  %31 = load i32, i32* %bucket.addr, align 4, !dbg !547
+  %32 = icmp sge i32 %31, 0, !dbg !547
+  br i1 %32, label %land.rhs, label %land.end, !dbg !547
 
 land.rhs:
-  %33 = load i32, i32* %bucket.addr, align 4, !dbg !529
-  %34 = trunc i64 %20 to i32, !dbg !524
-  %35 = icmp slt i32 %33, %34, !dbg !529
-  br label %land.end, !dbg !527
+  %33 = load i32, i32* %bucket.addr, align 4, !dbg !549
+  %34 = trunc i64 %20 to i32, !dbg !544
+  %35 = icmp slt i32 %33, %34, !dbg !549
+  br label %land.end, !dbg !547
 
 land.end:
-  %36 = phi i1 [ false, %while.cond ], [ %35, %land.rhs ], !dbg !527
-  br i1 %36, label %while.body, label %while.end, !dbg !523
+  %36 = phi i1 [ false, %while.cond ], [ %35, %land.rhs ], !dbg !547
+  br i1 %36, label %while.body, label %while.end, !dbg !543
 
 while.body:
-  %37 = load i32, i32* %bucket.addr, align 4, !dbg !534
-  %38 = sext i32 %37 to i64, !dbg !533
-  %39 = bitcast i8* %22 to i32*, !dbg !533
-  %40 = getelementptr inbounds i32, i32* %39, i64 %38, !dbg !533
-  %41 = load i32, i32* %40, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !533
-  store i32 %41, i32* %word.addr, align 4, !dbg !532
-  call void @llvm.dbg.declare(metadata i32* %word.addr, metadata !535, metadata !DIExpression()), !dbg !532
-  %42 = load i32, i32* %word.addr, align 4, !dbg !537
-  %43 = icmp eq i32 %42, 0, !dbg !537
-  br i1 %43, label %if.then, label %if.end, !dbg !536
+  %37 = load i32, i32* %bucket.addr, align 4, !dbg !554
+  %38 = sext i32 %37 to i64, !dbg !553
+  %39 = bitcast i8* %22 to i32*, !dbg !553
+  %40 = getelementptr inbounds i32, i32* %39, i64 %38, !dbg !553
+  %41 = load i32, i32* %40, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !553
+  store i32 %41, i32* %word.addr, align 4, !dbg !552
+  call void @llvm.dbg.declare(metadata i32* %word.addr, metadata !555, metadata !DIExpression()), !dbg !552
+  %42 = load i32, i32* %word.addr, align 4, !dbg !557
+  %43 = icmp eq i32 %42, 0, !dbg !557
+  br i1 %43, label %if.then, label %if.end, !dbg !556
 
 if.then:
-  %44 = load i32, i32* %bucket.addr, align 4, !dbg !542
-  %45 = load i32, i32* %h.addr, align 4, !dbg !543
-  %46 = tail call i64 @nish.absentAt(i32 %44, i32 %45), !dbg !541
-  ret i64 %46, !dbg !540
+  %44 = load i32, i32* %bucket.addr, align 4, !dbg !562
+  %45 = load i32, i32* %h.addr, align 4, !dbg !563
+  %46 = tail call i64 @nish.absentAt(i32 %44, i32 %45), !dbg !561
+  ret i64 %46, !dbg !560
 
 if.end:
-  %47 = load i32, i32* %word.addr, align 4, !dbg !545
-  %48 = lshr i32 %47, 24, !dbg !545
-  %49 = load i32, i32* %fingerprint.addr, align 4, !dbg !546
-  %50 = icmp eq i32 %48, %49, !dbg !545
-  br i1 %50, label %if.then.1, label %if.end.1, !dbg !544
+  %47 = load i32, i32* %word.addr, align 4, !dbg !565
+  %48 = lshr i32 %47, 24, !dbg !565
+  %49 = load i32, i32* %fingerprint.addr, align 4, !dbg !566
+  %50 = icmp eq i32 %48, %49, !dbg !565
+  br i1 %50, label %if.then.1, label %if.end.1, !dbg !564
 
 if.then.1:
-  %51 = load i32, i32* %word.addr, align 4, !dbg !550
-  %52 = and i32 %51, 16777215, !dbg !550
-  %53 = sub nsw i32 %52, 1, !dbg !549
-  store i32 %53, i32* %at.addr, align 4, !dbg !548
-  call void @llvm.dbg.declare(metadata i32* %at.addr, metadata !553, metadata !DIExpression()), !dbg !548
-  %54 = load i32, i32* %at.addr, align 4, !dbg !555
-  %55 = icmp sge i32 %54, 0, !dbg !555
-  br i1 %55, label %land.rhs.4, label %land.end.4, !dbg !555
+  %51 = load i32, i32* %word.addr, align 4, !dbg !570
+  %52 = and i32 %51, 16777215, !dbg !570
+  %53 = sub nsw i32 %52, 1, !dbg !569
+  store i32 %53, i32* %at.addr, align 4, !dbg !568
+  call void @llvm.dbg.declare(metadata i32* %at.addr, metadata !573, metadata !DIExpression()), !dbg !568
+  %54 = load i32, i32* %at.addr, align 4, !dbg !575
+  %55 = icmp sge i32 %54, 0, !dbg !575
+  br i1 %55, label %land.rhs.4, label %land.end.4, !dbg !575
 
 land.rhs.4:
-  %56 = load i32, i32* %at.addr, align 4, !dbg !557
-  %57 = trunc i64 %24 to i32, !dbg !525
-  %58 = icmp slt i32 %56, %57, !dbg !557
-  br label %land.end.4, !dbg !555
+  %56 = load i32, i32* %at.addr, align 4, !dbg !577
+  %57 = trunc i64 %24 to i32, !dbg !545
+  %58 = icmp slt i32 %56, %57, !dbg !577
+  br label %land.end.4, !dbg !575
 
 land.end.4:
-  %59 = phi i1 [ false, %if.then.1 ], [ %58, %land.rhs.4 ], !dbg !555
-  br i1 %59, label %land.rhs.3, label %land.end.3, !dbg !555
+  %59 = phi i1 [ false, %if.then.1 ], [ %58, %land.rhs.4 ], !dbg !575
+  br i1 %59, label %land.rhs.3, label %land.end.3, !dbg !575
 
 land.rhs.3:
-  %60 = load i32, i32* %at.addr, align 4, !dbg !560
-  %61 = sext i32 %60 to i64, !dbg !559
-  %62 = bitcast i8* %26 to i32*, !dbg !559
-  %63 = getelementptr inbounds i32, i32* %62, i64 %61, !dbg !559
-  %64 = load i32, i32* %63, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !559
-  %65 = load i32, i32* %h.addr, align 4, !dbg !561
-  %66 = icmp eq i32 %64, %65, !dbg !559
-  br label %land.end.3, !dbg !555
+  %60 = load i32, i32* %at.addr, align 4, !dbg !580
+  %61 = sext i32 %60 to i64, !dbg !579
+  %62 = bitcast i8* %26 to i32*, !dbg !579
+  %63 = getelementptr inbounds i32, i32* %62, i64 %61, !dbg !579
+  %64 = load i32, i32* %63, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !579
+  %65 = load i32, i32* %h.addr, align 4, !dbg !581
+  %66 = icmp eq i32 %64, %65, !dbg !579
+  br label %land.end.3, !dbg !575
 
 land.end.3:
-  %67 = phi i1 [ false, %land.end.4 ], [ %66, %land.rhs.3 ], !dbg !555
-  br i1 %67, label %land.rhs.2, label %land.end.2, !dbg !555
+  %67 = phi i1 [ false, %land.end.4 ], [ %66, %land.rhs.3 ], !dbg !575
+  br i1 %67, label %land.rhs.2, label %land.end.2, !dbg !575
 
 land.rhs.2:
-  %68 = load i32, i32* %at.addr, align 4, !dbg !562
-  %69 = trunc i64 %28 to i32, !dbg !526
-  %70 = icmp slt i32 %68, %69, !dbg !562
-  br label %land.end.2, !dbg !555
+  %68 = load i32, i32* %at.addr, align 4, !dbg !582
+  %69 = trunc i64 %28 to i32, !dbg !546
+  %70 = icmp slt i32 %68, %69, !dbg !582
+  br label %land.end.2, !dbg !575
 
 land.end.2:
-  %71 = phi i1 [ false, %land.end.3 ], [ %70, %land.rhs.2 ], !dbg !555
-  br i1 %71, label %land.rhs.1, label %land.end.1, !dbg !555
+  %71 = phi i1 [ false, %land.end.3 ], [ %70, %land.rhs.2 ], !dbg !575
+  br i1 %71, label %land.rhs.1, label %land.end.1, !dbg !575
 
 land.rhs.1:
-  %72 = load i32, i32* %at.addr, align 4, !dbg !566
-  %73 = sext i32 %72 to i64, !dbg !565
-  %74 = bitcast i8* %30 to i8**, !dbg !565
-  %75 = getelementptr inbounds i8*, i8** %74, i64 %73, !dbg !565
-  %76 = load i8*, i8** %75, align 8, !alias.scope !138, !noalias !137, !tbaa !438, !dbg !565
-  %77 = call zeroext i1 @nish_str_eq(i8* %76, i8* %key), !dbg !564
-  br label %land.end.1, !dbg !555
+  %72 = load i32, i32* %at.addr, align 4, !dbg !586
+  %73 = sext i32 %72 to i64, !dbg !585
+  %74 = bitcast i8* %30 to i8**, !dbg !585
+  %75 = getelementptr inbounds i8*, i8** %74, i64 %73, !dbg !585
+  %76 = load i8*, i8** %75, align 8, !alias.scope !139, !noalias !138, !tbaa !449, !dbg !585
+  %77 = call zeroext i1 @nish_str_eq(i8* %76, i8* %key), !dbg !584
+  br label %land.end.1, !dbg !575
 
 land.end.1:
-  %78 = phi i1 [ false, %land.end.2 ], [ %77, %land.rhs.1 ], !dbg !555
-  br i1 %78, label %if.then.2, label %if.end.2, !dbg !554
+  %78 = phi i1 [ false, %land.end.2 ], [ %77, %land.rhs.1 ], !dbg !575
+  br i1 %78, label %if.then.2, label %if.end.2, !dbg !574
 
 if.then.2:
-  %79 = load i32, i32* %bucket.addr, align 4, !dbg !571
-  %80 = load i32, i32* %at.addr, align 4, !dbg !572
-  %81 = tail call i64 @nish.foundAt(i32 %79, i32 %80), !dbg !570
-  ret i64 %81, !dbg !569
+  %79 = load i32, i32* %bucket.addr, align 4, !dbg !591
+  %80 = load i32, i32* %at.addr, align 4, !dbg !592
+  %81 = tail call i64 @nish.foundAt(i32 %79, i32 %80), !dbg !590
+  ret i64 %81, !dbg !589
 
 if.end.2:
-  br label %if.end.1, !dbg !544
+  br label %if.end.1, !dbg !564
 
 if.end.1:
-  %82 = load i32, i32* %bucket.addr, align 4, !dbg !575
-  %83 = add nsw i32 %82, 1, !dbg !575
-  %84 = and i32 %83, %mask, !dbg !574
-  store i32 %84, i32* %bucket.addr, align 4, !dbg !573
-  br label %while.cond, !dbg !523
+  %82 = load i32, i32* %bucket.addr, align 4, !dbg !595
+  %83 = add nsw i32 %82, 1, !dbg !595
+  %84 = and i32 %83, %mask, !dbg !594
+  store i32 %84, i32* %bucket.addr, align 4, !dbg !593
+  br label %while.cond, !dbg !543
 
 while.end:
-  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !578
-  call void @nish_exit(i32 1), !dbg !578
-  unreachable, !dbg !578
+  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !598
+  call void @nish_exit(i32 1), !dbg !598
+  unreachable, !dbg !598
 }
 
-define internal void @nish.compactEntries$str(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 !dbg !582 {
+define internal void @nish.compactEntries$str(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 !dbg !602 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
   %from.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %items, metadata !584, metadata !DIExpression()), !dbg !583
-  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !585, metadata !DIExpression()), !dbg !583
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !588
-  %1 = load i64, i64* %0, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !588
-  %2 = trunc i64 %1 to i32, !dbg !588
-  store i32 %2, i32* %used.addr, align 4, !dbg !586
-  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !589, metadata !DIExpression()), !dbg !586
-  store i32 0, i32* %to.addr, align 4, !dbg !590
-  call void @llvm.dbg.declare(metadata i32* %to.addr, metadata !592, metadata !DIExpression()), !dbg !590
-  store i32 0, i32* %from.addr, align 4, !dbg !593
-  call void @llvm.dbg.declare(metadata i32* %from.addr, metadata !595, metadata !DIExpression()), !dbg !593
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !593
-  %4 = load i64, i64* %3, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !593
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !593
-  %6 = load i8*, i8** %5, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !593
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !593
-  %8 = load i64, i64* %7, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !593
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !593
-  %10 = load i8*, i8** %9, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !593
-  br label %for.cond, !dbg !593
+  call void @llvm.dbg.value(metadata %struct.nish_array* %items, metadata !604, metadata !DIExpression()), !dbg !603
+  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !605, metadata !DIExpression()), !dbg !603
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !608
+  %1 = load i64, i64* %0, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !608
+  %2 = trunc i64 %1 to i32, !dbg !608
+  store i32 %2, i32* %used.addr, align 4, !dbg !606
+  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !609, metadata !DIExpression()), !dbg !606
+  store i32 0, i32* %to.addr, align 4, !dbg !610
+  call void @llvm.dbg.declare(metadata i32* %to.addr, metadata !612, metadata !DIExpression()), !dbg !610
+  store i32 0, i32* %from.addr, align 4, !dbg !613
+  call void @llvm.dbg.declare(metadata i32* %from.addr, metadata !615, metadata !DIExpression()), !dbg !613
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !613
+  %4 = load i64, i64* %3, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !613
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !613
+  %6 = load i8*, i8** %5, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !613
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !613
+  %8 = load i64, i64* %7, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !613
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !613
+  %10 = load i8*, i8** %9, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !613
+  br label %for.cond, !dbg !613
 
 for.cond:
-  %11 = load i32, i32* %from.addr, align 4, !dbg !598
-  %12 = load i32, i32* %used.addr, align 4, !dbg !599
-  %13 = icmp slt i32 %11, %12, !dbg !598
-  br i1 %13, label %land.rhs, label %land.end, !dbg !598
+  %11 = load i32, i32* %from.addr, align 4, !dbg !618
+  %12 = load i32, i32* %used.addr, align 4, !dbg !619
+  %13 = icmp slt i32 %11, %12, !dbg !618
+  br i1 %13, label %land.rhs, label %land.end, !dbg !618
 
 land.rhs:
-  %14 = load i32, i32* %from.addr, align 4, !dbg !600
-  %15 = trunc i64 %4 to i32, !dbg !596
-  %16 = icmp slt i32 %14, %15, !dbg !600
-  br label %land.end, !dbg !598
+  %14 = load i32, i32* %from.addr, align 4, !dbg !620
+  %15 = trunc i64 %4 to i32, !dbg !616
+  %16 = icmp slt i32 %14, %15, !dbg !620
+  br label %land.end, !dbg !618
 
 land.end:
-  %17 = phi i1 [ false, %for.cond ], [ %16, %land.rhs ], !dbg !598
-  br i1 %17, label %for.body, label %for.end, !dbg !593
+  %17 = phi i1 [ false, %for.cond ], [ %16, %land.rhs ], !dbg !618
+  br i1 %17, label %for.body, label %for.end, !dbg !613
 
 for.body:
-  %18 = load i32, i32* %from.addr, align 4, !dbg !605
-  %19 = sext i32 %18 to i64, !dbg !604
-  %20 = bitcast i8* %6 to i32*, !dbg !604
-  %21 = getelementptr inbounds i32, i32* %20, i64 %19, !dbg !604
-  %22 = load i32, i32* %21, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !604
-  %23 = icmp ne i32 %22, 0, !dbg !604
-  br i1 %23, label %land.rhs.3, label %land.end.3, !dbg !604
+  %18 = load i32, i32* %from.addr, align 4, !dbg !625
+  %19 = sext i32 %18 to i64, !dbg !624
+  %20 = bitcast i8* %6 to i32*, !dbg !624
+  %21 = getelementptr inbounds i32, i32* %20, i64 %19, !dbg !624
+  %22 = load i32, i32* %21, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !624
+  %23 = icmp ne i32 %22, 0, !dbg !624
+  br i1 %23, label %land.rhs.3, label %land.end.3, !dbg !624
 
 land.rhs.3:
-  %24 = load i32, i32* %to.addr, align 4, !dbg !607
-  %25 = icmp sge i32 %24, 0, !dbg !607
-  br label %land.end.3, !dbg !604
+  %24 = load i32, i32* %to.addr, align 4, !dbg !627
+  %25 = icmp sge i32 %24, 0, !dbg !627
+  br label %land.end.3, !dbg !624
 
 land.end.3:
-  %26 = phi i1 [ false, %for.body ], [ %25, %land.rhs.3 ], !dbg !604
-  br i1 %26, label %land.rhs.2, label %land.end.2, !dbg !604
+  %26 = phi i1 [ false, %for.body ], [ %25, %land.rhs.3 ], !dbg !624
+  br i1 %26, label %land.rhs.2, label %land.end.2, !dbg !624
 
 land.rhs.2:
-  %27 = load i32, i32* %to.addr, align 4, !dbg !609
-  %28 = load i32, i32* %used.addr, align 4, !dbg !610
-  %29 = icmp slt i32 %27, %28, !dbg !609
-  br label %land.end.2, !dbg !604
+  %27 = load i32, i32* %to.addr, align 4, !dbg !629
+  %28 = load i32, i32* %used.addr, align 4, !dbg !630
+  %29 = icmp slt i32 %27, %28, !dbg !629
+  br label %land.end.2, !dbg !624
 
 land.end.2:
-  %30 = phi i1 [ false, %land.end.3 ], [ %29, %land.rhs.2 ], !dbg !604
-  br i1 %30, label %land.rhs.1, label %land.end.1, !dbg !604
+  %30 = phi i1 [ false, %land.end.3 ], [ %29, %land.rhs.2 ], !dbg !624
+  br i1 %30, label %land.rhs.1, label %land.end.1, !dbg !624
 
 land.rhs.1:
-  %31 = load i32, i32* %from.addr, align 4, !dbg !611
-  %32 = trunc i64 %8 to i32, !dbg !597
-  %33 = icmp slt i32 %31, %32, !dbg !611
-  br label %land.end.1, !dbg !604
+  %31 = load i32, i32* %from.addr, align 4, !dbg !631
+  %32 = trunc i64 %8 to i32, !dbg !617
+  %33 = icmp slt i32 %31, %32, !dbg !631
+  br label %land.end.1, !dbg !624
 
 land.end.1:
-  %34 = phi i1 [ false, %land.end.2 ], [ %33, %land.rhs.1 ], !dbg !604
-  br i1 %34, label %if.then, label %if.end, !dbg !603
+  %34 = phi i1 [ false, %land.end.2 ], [ %33, %land.rhs.1 ], !dbg !624
+  br i1 %34, label %if.then, label %if.end, !dbg !623
 
 if.then:
-  %35 = load i32, i32* %to.addr, align 4, !dbg !615
-  %36 = sext i32 %35 to i64, !dbg !614
-  %37 = load i32, i32* %from.addr, align 4, !dbg !617
-  %38 = sext i32 %37 to i64, !dbg !616
-  %39 = bitcast i8* %10 to i8**, !dbg !616
-  %40 = getelementptr inbounds i8*, i8** %39, i64 %38, !dbg !616
-  %41 = load i8*, i8** %40, align 8, !alias.scope !138, !noalias !137, !tbaa !438, !dbg !616
-  %42 = bitcast i8* %10 to i8**, !dbg !614
-  %43 = getelementptr inbounds i8*, i8** %42, i64 %36, !dbg !614
-  store i8* %41, i8** %43, align 8, !alias.scope !138, !noalias !137, !tbaa !438, !dbg !614
-  %44 = load i32, i32* %to.addr, align 4, !dbg !618
-  %45 = add nsw i32 %44, 1, !dbg !618
-  store i32 %45, i32* %to.addr, align 4, !dbg !618
-  br label %if.end, !dbg !603
+  %35 = load i32, i32* %to.addr, align 4, !dbg !635
+  %36 = sext i32 %35 to i64, !dbg !634
+  %37 = load i32, i32* %from.addr, align 4, !dbg !637
+  %38 = sext i32 %37 to i64, !dbg !636
+  %39 = bitcast i8* %10 to i8**, !dbg !636
+  %40 = getelementptr inbounds i8*, i8** %39, i64 %38, !dbg !636
+  %41 = load i8*, i8** %40, align 8, !alias.scope !139, !noalias !138, !tbaa !449, !dbg !636
+  %42 = bitcast i8* %10 to i8**, !dbg !634
+  %43 = getelementptr inbounds i8*, i8** %42, i64 %36, !dbg !634
+  store i8* %41, i8** %43, align 8, !alias.scope !139, !noalias !138, !tbaa !449, !dbg !634
+  %44 = load i32, i32* %to.addr, align 4, !dbg !638
+  %45 = add nsw i32 %44, 1, !dbg !638
+  store i32 %45, i32* %to.addr, align 4, !dbg !638
+  br label %if.end, !dbg !623
 
 if.end:
-  br label %for.inc, !dbg !593
+  br label %for.inc, !dbg !613
 
 for.inc:
-  %46 = load i32, i32* %from.addr, align 4, !dbg !619
-  %47 = add nsw i32 %46, 1, !dbg !619
-  store i32 %47, i32* %from.addr, align 4, !dbg !619
-  br label %for.cond, !dbg !593
+  %46 = load i32, i32* %from.addr, align 4, !dbg !639
+  %47 = add nsw i32 %46, 1, !dbg !639
+  store i32 %47, i32* %from.addr, align 4, !dbg !639
+  br label %for.cond, !dbg !613
 
 for.end:
-  br label %while.cond, !dbg !620
+  br label %while.cond, !dbg !640
 
 while.cond:
-  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !622
-  %49 = load i64, i64* %48, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !622
-  %50 = trunc i64 %49 to i32, !dbg !622
-  %51 = load i32, i32* %to.addr, align 4, !dbg !623
-  %52 = icmp sgt i32 %50, %51, !dbg !621
-  br i1 %52, label %while.body, label %while.end, !dbg !620
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !642
+  %49 = load i64, i64* %48, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !642
+  %50 = trunc i64 %49 to i32, !dbg !642
+  %51 = load i32, i32* %to.addr, align 4, !dbg !643
+  %52 = icmp sgt i32 %50, %51, !dbg !641
+  br i1 %52, label %while.body, label %while.end, !dbg !640
 
 while.body:
-  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !625
-  %54 = load i64, i64* %53, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !625
-  %55 = icmp eq i64 %54, 0, !dbg !625
-  br i1 %55, label %pop.empty, label %pop.ok, !dbg !625
+  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !645
+  %54 = load i64, i64* %53, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !645
+  %55 = icmp eq i64 %54, 0, !dbg !645
+  br i1 %55, label %pop.empty, label %pop.ok, !dbg !645
 
 pop.empty:
-  call void @nish_panic_index(i64 0, i64 0), !dbg !625
-  unreachable, !dbg !625
+  call void @nish_panic_index(i64 0, i64 0), !dbg !645
+  unreachable, !dbg !645
 
 pop.ok:
-  %56 = sub i64 %54, 1, !dbg !625
-  store i64 %56, i64* %53, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !625
-  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !625
-  %58 = load i8*, i8** %57, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !625
-  %59 = bitcast i8* %58 to i8**, !dbg !625
-  %60 = getelementptr inbounds i8*, i8** %59, i64 %56, !dbg !625
-  %61 = load i8*, i8** %60, align 8, !alias.scope !138, !noalias !137, !tbaa !438, !dbg !625
-  br label %while.cond, !dbg !620
+  %56 = sub i64 %54, 1, !dbg !645
+  store i64 %56, i64* %53, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !645
+  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !645
+  %58 = load i8*, i8** %57, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !645
+  %59 = bitcast i8* %58 to i8**, !dbg !645
+  %60 = getelementptr inbounds i8*, i8** %59, i64 %56, !dbg !645
+  %61 = load i8*, i8** %60, align 8, !alias.scope !139, !noalias !138, !tbaa !449, !dbg !645
+  br label %while.cond, !dbg !640
 
 while.end:
-  ret void, !dbg !583
+  ret void, !dbg !603
 }
 
-define internal void @nish.compactEntries$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 !dbg !628 {
+define internal void @nish.compactEntries$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 !dbg !648 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
   %from.addr = alloca i32, align 4
-  call void @llvm.dbg.value(metadata %struct.nish_array* %items, metadata !630, metadata !DIExpression()), !dbg !629
-  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !631, metadata !DIExpression()), !dbg !629
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !634
-  %1 = load i64, i64* %0, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !634
-  %2 = trunc i64 %1 to i32, !dbg !634
-  store i32 %2, i32* %used.addr, align 4, !dbg !632
-  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !635, metadata !DIExpression()), !dbg !632
-  store i32 0, i32* %to.addr, align 4, !dbg !636
-  call void @llvm.dbg.declare(metadata i32* %to.addr, metadata !638, metadata !DIExpression()), !dbg !636
-  store i32 0, i32* %from.addr, align 4, !dbg !639
-  call void @llvm.dbg.declare(metadata i32* %from.addr, metadata !641, metadata !DIExpression()), !dbg !639
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !639
-  %4 = load i64, i64* %3, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !639
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !639
-  %6 = load i8*, i8** %5, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !639
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !639
-  %8 = load i64, i64* %7, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !639
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !639
-  %10 = load i8*, i8** %9, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !639
-  br label %for.cond, !dbg !639
+  call void @llvm.dbg.value(metadata %struct.nish_array* %items, metadata !650, metadata !DIExpression()), !dbg !649
+  call void @llvm.dbg.value(metadata %struct.nish_array* %hashes, metadata !651, metadata !DIExpression()), !dbg !649
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !654
+  %1 = load i64, i64* %0, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !654
+  %2 = trunc i64 %1 to i32, !dbg !654
+  store i32 %2, i32* %used.addr, align 4, !dbg !652
+  call void @llvm.dbg.declare(metadata i32* %used.addr, metadata !655, metadata !DIExpression()), !dbg !652
+  store i32 0, i32* %to.addr, align 4, !dbg !656
+  call void @llvm.dbg.declare(metadata i32* %to.addr, metadata !658, metadata !DIExpression()), !dbg !656
+  store i32 0, i32* %from.addr, align 4, !dbg !659
+  call void @llvm.dbg.declare(metadata i32* %from.addr, metadata !661, metadata !DIExpression()), !dbg !659
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !659
+  %4 = load i64, i64* %3, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !659
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !659
+  %6 = load i8*, i8** %5, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !659
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !659
+  %8 = load i64, i64* %7, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !659
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !659
+  %10 = load i8*, i8** %9, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !659
+  br label %for.cond, !dbg !659
 
 for.cond:
-  %11 = load i32, i32* %from.addr, align 4, !dbg !644
-  %12 = load i32, i32* %used.addr, align 4, !dbg !645
-  %13 = icmp slt i32 %11, %12, !dbg !644
-  br i1 %13, label %land.rhs, label %land.end, !dbg !644
+  %11 = load i32, i32* %from.addr, align 4, !dbg !664
+  %12 = load i32, i32* %used.addr, align 4, !dbg !665
+  %13 = icmp slt i32 %11, %12, !dbg !664
+  br i1 %13, label %land.rhs, label %land.end, !dbg !664
 
 land.rhs:
-  %14 = load i32, i32* %from.addr, align 4, !dbg !646
-  %15 = trunc i64 %4 to i32, !dbg !642
-  %16 = icmp slt i32 %14, %15, !dbg !646
-  br label %land.end, !dbg !644
+  %14 = load i32, i32* %from.addr, align 4, !dbg !666
+  %15 = trunc i64 %4 to i32, !dbg !662
+  %16 = icmp slt i32 %14, %15, !dbg !666
+  br label %land.end, !dbg !664
 
 land.end:
-  %17 = phi i1 [ false, %for.cond ], [ %16, %land.rhs ], !dbg !644
-  br i1 %17, label %for.body, label %for.end, !dbg !639
+  %17 = phi i1 [ false, %for.cond ], [ %16, %land.rhs ], !dbg !664
+  br i1 %17, label %for.body, label %for.end, !dbg !659
 
 for.body:
-  %18 = load i32, i32* %from.addr, align 4, !dbg !651
-  %19 = sext i32 %18 to i64, !dbg !650
-  %20 = bitcast i8* %6 to i32*, !dbg !650
-  %21 = getelementptr inbounds i32, i32* %20, i64 %19, !dbg !650
-  %22 = load i32, i32* %21, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !650
-  %23 = icmp ne i32 %22, 0, !dbg !650
-  br i1 %23, label %land.rhs.3, label %land.end.3, !dbg !650
+  %18 = load i32, i32* %from.addr, align 4, !dbg !671
+  %19 = sext i32 %18 to i64, !dbg !670
+  %20 = bitcast i8* %6 to i32*, !dbg !670
+  %21 = getelementptr inbounds i32, i32* %20, i64 %19, !dbg !670
+  %22 = load i32, i32* %21, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !670
+  %23 = icmp ne i32 %22, 0, !dbg !670
+  br i1 %23, label %land.rhs.3, label %land.end.3, !dbg !670
 
 land.rhs.3:
-  %24 = load i32, i32* %to.addr, align 4, !dbg !653
-  %25 = icmp sge i32 %24, 0, !dbg !653
-  br label %land.end.3, !dbg !650
+  %24 = load i32, i32* %to.addr, align 4, !dbg !673
+  %25 = icmp sge i32 %24, 0, !dbg !673
+  br label %land.end.3, !dbg !670
 
 land.end.3:
-  %26 = phi i1 [ false, %for.body ], [ %25, %land.rhs.3 ], !dbg !650
-  br i1 %26, label %land.rhs.2, label %land.end.2, !dbg !650
+  %26 = phi i1 [ false, %for.body ], [ %25, %land.rhs.3 ], !dbg !670
+  br i1 %26, label %land.rhs.2, label %land.end.2, !dbg !670
 
 land.rhs.2:
-  %27 = load i32, i32* %to.addr, align 4, !dbg !655
-  %28 = load i32, i32* %used.addr, align 4, !dbg !656
-  %29 = icmp slt i32 %27, %28, !dbg !655
-  br label %land.end.2, !dbg !650
+  %27 = load i32, i32* %to.addr, align 4, !dbg !675
+  %28 = load i32, i32* %used.addr, align 4, !dbg !676
+  %29 = icmp slt i32 %27, %28, !dbg !675
+  br label %land.end.2, !dbg !670
 
 land.end.2:
-  %30 = phi i1 [ false, %land.end.3 ], [ %29, %land.rhs.2 ], !dbg !650
-  br i1 %30, label %land.rhs.1, label %land.end.1, !dbg !650
+  %30 = phi i1 [ false, %land.end.3 ], [ %29, %land.rhs.2 ], !dbg !670
+  br i1 %30, label %land.rhs.1, label %land.end.1, !dbg !670
 
 land.rhs.1:
-  %31 = load i32, i32* %from.addr, align 4, !dbg !657
-  %32 = trunc i64 %8 to i32, !dbg !643
-  %33 = icmp slt i32 %31, %32, !dbg !657
-  br label %land.end.1, !dbg !650
+  %31 = load i32, i32* %from.addr, align 4, !dbg !677
+  %32 = trunc i64 %8 to i32, !dbg !663
+  %33 = icmp slt i32 %31, %32, !dbg !677
+  br label %land.end.1, !dbg !670
 
 land.end.1:
-  %34 = phi i1 [ false, %land.end.2 ], [ %33, %land.rhs.1 ], !dbg !650
-  br i1 %34, label %if.then, label %if.end, !dbg !649
+  %34 = phi i1 [ false, %land.end.2 ], [ %33, %land.rhs.1 ], !dbg !670
+  br i1 %34, label %if.then, label %if.end, !dbg !669
 
 if.then:
-  %35 = load i32, i32* %to.addr, align 4, !dbg !661
-  %36 = sext i32 %35 to i64, !dbg !660
-  %37 = load i32, i32* %from.addr, align 4, !dbg !663
-  %38 = sext i32 %37 to i64, !dbg !662
-  %39 = bitcast i8* %10 to i32*, !dbg !662
-  %40 = getelementptr inbounds i32, i32* %39, i64 %38, !dbg !662
-  %41 = load i32, i32* %40, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !662
-  %42 = bitcast i8* %10 to i32*, !dbg !660
-  %43 = getelementptr inbounds i32, i32* %42, i64 %36, !dbg !660
-  store i32 %41, i32* %43, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !660
-  %44 = load i32, i32* %to.addr, align 4, !dbg !664
-  %45 = add nsw i32 %44, 1, !dbg !664
-  store i32 %45, i32* %to.addr, align 4, !dbg !664
-  br label %if.end, !dbg !649
+  %35 = load i32, i32* %to.addr, align 4, !dbg !681
+  %36 = sext i32 %35 to i64, !dbg !680
+  %37 = load i32, i32* %from.addr, align 4, !dbg !683
+  %38 = sext i32 %37 to i64, !dbg !682
+  %39 = bitcast i8* %10 to i32*, !dbg !682
+  %40 = getelementptr inbounds i32, i32* %39, i64 %38, !dbg !682
+  %41 = load i32, i32* %40, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !682
+  %42 = bitcast i8* %10 to i32*, !dbg !680
+  %43 = getelementptr inbounds i32, i32* %42, i64 %36, !dbg !680
+  store i32 %41, i32* %43, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !680
+  %44 = load i32, i32* %to.addr, align 4, !dbg !684
+  %45 = add nsw i32 %44, 1, !dbg !684
+  store i32 %45, i32* %to.addr, align 4, !dbg !684
+  br label %if.end, !dbg !669
 
 if.end:
-  br label %for.inc, !dbg !639
+  br label %for.inc, !dbg !659
 
 for.inc:
-  %46 = load i32, i32* %from.addr, align 4, !dbg !665
-  %47 = add nsw i32 %46, 1, !dbg !665
-  store i32 %47, i32* %from.addr, align 4, !dbg !665
-  br label %for.cond, !dbg !639
+  %46 = load i32, i32* %from.addr, align 4, !dbg !685
+  %47 = add nsw i32 %46, 1, !dbg !685
+  store i32 %47, i32* %from.addr, align 4, !dbg !685
+  br label %for.cond, !dbg !659
 
 for.end:
-  br label %while.cond, !dbg !666
+  br label %while.cond, !dbg !686
 
 while.cond:
-  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !668
-  %49 = load i64, i64* %48, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !668
-  %50 = trunc i64 %49 to i32, !dbg !668
-  %51 = load i32, i32* %to.addr, align 4, !dbg !669
-  %52 = icmp sgt i32 %50, %51, !dbg !667
-  br i1 %52, label %while.body, label %while.end, !dbg !666
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !688
+  %49 = load i64, i64* %48, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !688
+  %50 = trunc i64 %49 to i32, !dbg !688
+  %51 = load i32, i32* %to.addr, align 4, !dbg !689
+  %52 = icmp sgt i32 %50, %51, !dbg !687
+  br i1 %52, label %while.body, label %while.end, !dbg !686
 
 while.body:
-  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !671
-  %54 = load i64, i64* %53, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !671
-  %55 = icmp eq i64 %54, 0, !dbg !671
-  br i1 %55, label %pop.empty, label %pop.ok, !dbg !671
+  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 0, !dbg !691
+  %54 = load i64, i64* %53, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !691
+  %55 = icmp eq i64 %54, 0, !dbg !691
+  br i1 %55, label %pop.empty, label %pop.ok, !dbg !691
 
 pop.empty:
-  call void @nish_panic_index(i64 0, i64 0), !dbg !671
-  unreachable, !dbg !671
+  call void @nish_panic_index(i64 0, i64 0), !dbg !691
+  unreachable, !dbg !691
 
 pop.ok:
-  %56 = sub i64 %54, 1, !dbg !671
-  store i64 %56, i64* %53, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !671
-  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !671
-  %58 = load i8*, i8** %57, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !671
-  %59 = bitcast i8* %58 to i32*, !dbg !671
-  %60 = getelementptr inbounds i32, i32* %59, i64 %56, !dbg !671
-  %61 = load i32, i32* %60, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !671
-  br label %while.cond, !dbg !666
+  %56 = sub i64 %54, 1, !dbg !691
+  store i64 %56, i64* %53, align 8, !alias.scope !138, !noalias !139, !tbaa !145, !dbg !691
+  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %items, i64 0, i32 2, !dbg !691
+  %58 = load i8*, i8** %57, align 8, !alias.scope !138, !noalias !139, !tbaa !146, !dbg !691
+  %59 = bitcast i8* %58 to i32*, !dbg !691
+  %60 = getelementptr inbounds i32, i32* %59, i64 %56, !dbg !691
+  %61 = load i32, i32* %60, align 4, !alias.scope !139, !noalias !138, !tbaa !156, !dbg !691
+  br label %while.cond, !dbg !686
 
 while.end:
-  ret void, !dbg !629
+  ret void, !dbg !649
 }
 
 attributes #0 = { nounwind }
@@ -1367,10 +1418,10 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !8 = !DILocation(line: 4, column: 1, scope: !7)
 !9 = !DILocation(line: 5, column: 3, scope: !7)
 !10 = !DILocation(line: 5, column: 13, scope: !7)
-!11 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Map<string, i32>", file: !13, line: 235, size: 384, align: 64, elements: !46)
+!11 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Map<string, i32>", file: !13, line: 266, size: 448, align: 64, elements: !47)
 !12 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !11, size: 64)
 !13 = !DIFile(filename: "std/collections.ts", directory: ".")
-!14 = !DIDerivedType(tag: DW_TAG_member, name: "size", scope: !11, file: !13, line: 237, baseType: !4, size: 32, offset: 0)
+!14 = !DIDerivedType(tag: DW_TAG_member, name: "size", scope: !11, file: !13, line: 268, baseType: !4, size: 32, offset: 0)
 !15 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "u32[]", file: !1, size: 192, align: 64, elements: !22)
 !16 = !DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)
 !17 = !DIDerivedType(tag: DW_TAG_member, name: "len", scope: !15, baseType: !16, size: 64, offset: 0)
@@ -1380,9 +1431,9 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !21 = !DIDerivedType(tag: DW_TAG_member, name: "data", scope: !15, baseType: !20, size: 64, offset: 128)
 !22 = !{!17, !18, !21}
 !23 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !15, size: 64)
-!24 = !DIDerivedType(tag: DW_TAG_member, name: "slots", scope: !11, file: !13, line: 239, baseType: !23, size: 64, offset: 64)
-!25 = !DIDerivedType(tag: DW_TAG_member, name: "mask", scope: !11, file: !13, line: 241, baseType: !4, size: 32, offset: 128)
-!26 = !DIDerivedType(tag: DW_TAG_member, name: "live", scope: !11, file: !13, line: 243, baseType: !4, size: 32, offset: 160)
+!24 = !DIDerivedType(tag: DW_TAG_member, name: "slots", scope: !11, file: !13, line: 270, baseType: !23, size: 64, offset: 64)
+!25 = !DIDerivedType(tag: DW_TAG_member, name: "mask", scope: !11, file: !13, line: 272, baseType: !4, size: 32, offset: 128)
+!26 = !DIDerivedType(tag: DW_TAG_member, name: "live", scope: !11, file: !13, line: 274, baseType: !4, size: 32, offset: 160)
 !27 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "string[]", file: !1, size: 192, align: 64, elements: !34)
 !28 = !DIDerivedType(tag: DW_TAG_member, name: "len", scope: !27, baseType: !16, size: 64, offset: 0)
 !29 = !DIDerivedType(tag: DW_TAG_member, name: "cap", scope: !27, baseType: !16, size: 64, offset: 64)
@@ -1392,7 +1443,7 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !33 = !DIDerivedType(tag: DW_TAG_member, name: "data", scope: !27, baseType: !32, size: 64, offset: 128)
 !34 = !{!28, !29, !33}
 !35 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !27, size: 64)
-!36 = !DIDerivedType(tag: DW_TAG_member, name: "entryKeys", scope: !11, file: !13, line: 244, baseType: !35, size: 64, offset: 192)
+!36 = !DIDerivedType(tag: DW_TAG_member, name: "entryKeys", scope: !11, file: !13, line: 275, baseType: !35, size: 64, offset: 192)
 !37 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "i32[]", file: !1, size: 192, align: 64, elements: !42)
 !38 = !DIDerivedType(tag: DW_TAG_member, name: "len", scope: !37, baseType: !16, size: 64, offset: 0)
 !39 = !DIDerivedType(tag: DW_TAG_member, name: "cap", scope: !37, baseType: !16, size: 64, offset: 64)
@@ -1400,631 +1451,651 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !41 = !DIDerivedType(tag: DW_TAG_member, name: "data", scope: !37, baseType: !40, size: 64, offset: 128)
 !42 = !{!38, !39, !41}
 !43 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !37, size: 64)
-!44 = !DIDerivedType(tag: DW_TAG_member, name: "entryValues", scope: !11, file: !13, line: 245, baseType: !43, size: 64, offset: 256)
-!45 = !DIDerivedType(tag: DW_TAG_member, name: "entryHashes", scope: !11, file: !13, line: 247, baseType: !23, size: 64, offset: 320)
-!46 = !{!14, !24, !25, !26, !36, !44, !45}
-!47 = !DILocalVariable(name: "m", scope: !7, file: !1, line: 5, type: !12)
-!48 = !DILocation(line: 6, column: 3, scope: !7)
-!49 = !DILocation(line: 6, column: 9, scope: !7)
-!50 = !DILocation(line: 6, column: 14, scope: !7)
-!51 = !DILocation(line: 7, column: 3, scope: !7)
-!52 = !DILocation(line: 7, column: 13, scope: !7)
-!53 = !DILocation(line: 7, column: 19, scope: !7)
-!54 = !DILocalVariable(name: "n", scope: !7, file: !1, line: 7, type: !4)
-!55 = !DILocation(line: 8, column: 3, scope: !7)
-!56 = !DILocation(line: 8, column: 7, scope: !7)
-!57 = !DILocation(line: 8, column: 24, scope: !7)
-!58 = !DILocation(line: 9, column: 5, scope: !7)
-!59 = !DILocation(line: 9, column: 17, scope: !7)
-!60 = !DILocation(line: 9, column: 20, scope: !7)
-!61 = !DILocation(line: 11, column: 3, scope: !7)
-!62 = !DILocation(line: 11, column: 10, scope: !7)
-!63 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 4, type: !6, scopeLine: 4, flags: DIFlagPrototyped | DIFlagArtificial, spFlags: DISPFlagDefinition, unit: !0)
-!64 = !DILocation(line: 4, column: 1, scope: !63)
-!65 = !{!4, !19, !4}
-!66 = !DISubroutineType(types: !65)
-!67 = distinct !DISubprogram(name: "homeBucket", linkageName: "nish.homeBucket", scope: !13, file: !13, line: 74, type: !66, scopeLine: 74, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!68 = !DILocation(line: 74, column: 1, scope: !67)
-!69 = !DILocalVariable(name: "h", arg: 1, scope: !67, file: !13, line: 74, type: !19)
-!70 = !DILocalVariable(name: "mask", arg: 2, scope: !67, file: !13, line: 74, type: !4)
-!71 = !DILocation(line: 74, column: 48, scope: !67)
-!72 = !DILocation(line: 74, column: 54, scope: !67)
-!73 = !DILocation(line: 74, column: 58, scope: !67)
-!74 = !DILocation(line: 74, column: 59, scope: !67)
-!75 = !DILocation(line: 74, column: 72, scope: !67)
-!76 = !{!19, !19, !4}
-!77 = !DISubroutineType(types: !76)
-!78 = distinct !DISubprogram(name: "slotWord", linkageName: "nish.slotWord", scope: !13, file: !13, line: 77, type: !77, scopeLine: 77, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!79 = !DILocation(line: 77, column: 1, scope: !78)
-!80 = !DILocalVariable(name: "h", arg: 1, scope: !78, file: !13, line: 77, type: !19)
-!81 = !DILocalVariable(name: "index", arg: 2, scope: !78, file: !13, line: 77, type: !4)
-!82 = !DILocation(line: 77, column: 47, scope: !78)
-!83 = !DILocation(line: 77, column: 48, scope: !78)
-!84 = !DILocation(line: 77, column: 49, scope: !78)
-!85 = !DILocation(line: 77, column: 68, scope: !78)
-!86 = !DILocation(line: 77, column: 74, scope: !78)
-!87 = !DILocation(line: 77, column: 82, scope: !78)
-!88 = !{!16, !4, !4}
-!89 = !DISubroutineType(types: !88)
-!90 = distinct !DISubprogram(name: "foundAt", linkageName: "nish.foundAt", scope: !13, file: !13, line: 80, type: !89, scopeLine: 80, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!91 = !DILocation(line: 80, column: 1, scope: !90)
-!92 = !DILocalVariable(name: "bucket", arg: 1, scope: !90, file: !13, line: 80, type: !4)
-!93 = !DILocalVariable(name: "index", arg: 2, scope: !90, file: !13, line: 80, type: !4)
-!94 = !DILocation(line: 80, column: 51, scope: !90)
-!95 = !DILocation(line: 80, column: 52, scope: !90)
-!96 = !DILocation(line: 80, column: 58, scope: !90)
-!97 = !DILocation(line: 80, column: 75, scope: !90)
-!98 = !DILocation(line: 80, column: 81, scope: !90)
-!99 = !{!16, !4, !19}
-!100 = !DISubroutineType(types: !99)
-!101 = distinct !DISubprogram(name: "absentAt", linkageName: "nish.absentAt", scope: !13, file: !13, line: 83, type: !100, scopeLine: 83, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!102 = !DILocation(line: 83, column: 1, scope: !101)
-!103 = !DILocalVariable(name: "bucket", arg: 1, scope: !101, file: !13, line: 83, type: !4)
-!104 = !DILocalVariable(name: "h", arg: 2, scope: !101, file: !13, line: 83, type: !19)
-!105 = !DILocation(line: 83, column: 48, scope: !101)
-!106 = !DILocation(line: 83, column: 54, scope: !101)
-!107 = !DILocation(line: 83, column: 55, scope: !101)
-!108 = !DILocation(line: 83, column: 60, scope: !101)
-!109 = !DILocation(line: 83, column: 61, scope: !101)
-!110 = !DILocation(line: 83, column: 62, scope: !101)
-!111 = !DILocation(line: 83, column: 68, scope: !101)
-!112 = !DILocation(line: 83, column: 85, scope: !101)
-!113 = !DILocation(line: 83, column: 91, scope: !101)
-!114 = !{null, !23, !4, !19, !4}
-!115 = !DISubroutineType(types: !114)
-!116 = distinct !DISubprogram(name: "fileEntry", linkageName: "nish.fileEntry", scope: !13, file: !13, line: 119, type: !115, scopeLine: 119, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!117 = !DILocation(line: 119, column: 1, scope: !116)
-!118 = !DILocalVariable(name: "slots", arg: 1, scope: !116, file: !13, line: 119, type: !23)
-!119 = !DILocalVariable(name: "mask", arg: 2, scope: !116, file: !13, line: 119, type: !4)
-!120 = !DILocalVariable(name: "h", arg: 3, scope: !116, file: !13, line: 119, type: !19)
-!121 = !DILocalVariable(name: "index", arg: 4, scope: !116, file: !13, line: 119, type: !4)
-!122 = !DILocation(line: 120, column: 3, scope: !116)
-!123 = !DILocation(line: 120, column: 16, scope: !116)
-!124 = !DILocation(line: 120, column: 25, scope: !116)
-!125 = !DILocation(line: 120, column: 28, scope: !116)
-!126 = !DILocalVariable(name: "word", scope: !116, file: !13, line: 120, type: !19)
-!127 = !DILocation(line: 121, column: 3, scope: !116)
-!128 = !DILocation(line: 121, column: 16, scope: !116)
-!129 = !DILocation(line: 121, column: 27, scope: !116)
-!130 = !DILocation(line: 121, column: 30, scope: !116)
-!131 = !DILocalVariable(name: "bucket", scope: !116, file: !13, line: 121, type: !4)
-!132 = !DILocation(line: 122, column: 3, scope: !116)
-!133 = !DILocation(line: 122, column: 40, scope: !116)
-!134 = !{!"nish array"}
-!135 = !{!"header", !134}
-!136 = !{!"elements", !134}
-!137 = !{!135}
+!44 = !DIDerivedType(tag: DW_TAG_member, name: "entryValues", scope: !11, file: !13, line: 276, baseType: !43, size: 64, offset: 256)
+!45 = !DIDerivedType(tag: DW_TAG_member, name: "entryHashes", scope: !11, file: !13, line: 278, baseType: !23, size: 64, offset: 320)
+!46 = !DIDerivedType(tag: DW_TAG_member, name: "walks", scope: !11, file: !13, line: 284, baseType: !4, size: 32, offset: 384)
+!47 = !{!14, !24, !25, !26, !36, !44, !45, !46}
+!48 = !DILocalVariable(name: "m", scope: !7, file: !1, line: 5, type: !12)
+!49 = !DILocation(line: 6, column: 3, scope: !7)
+!50 = !DILocation(line: 6, column: 9, scope: !7)
+!51 = !DILocation(line: 6, column: 14, scope: !7)
+!52 = !DILocation(line: 7, column: 3, scope: !7)
+!53 = !DILocation(line: 7, column: 13, scope: !7)
+!54 = !DILocation(line: 7, column: 19, scope: !7)
+!55 = !DILocalVariable(name: "n", scope: !7, file: !1, line: 7, type: !4)
+!56 = !DILocation(line: 8, column: 3, scope: !7)
+!57 = !DILocation(line: 8, column: 7, scope: !7)
+!58 = !DILocation(line: 8, column: 24, scope: !7)
+!59 = !DILocation(line: 9, column: 5, scope: !7)
+!60 = !DILocation(line: 9, column: 17, scope: !7)
+!61 = !DILocation(line: 9, column: 20, scope: !7)
+!62 = !DILocation(line: 11, column: 3, scope: !7)
+!63 = !DILocation(line: 11, column: 10, scope: !7)
+!64 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 4, type: !6, scopeLine: 4, flags: DIFlagPrototyped | DIFlagArtificial, spFlags: DISPFlagDefinition, unit: !0)
+!65 = !DILocation(line: 4, column: 1, scope: !64)
+!66 = !{!4, !19, !4}
+!67 = !DISubroutineType(types: !66)
+!68 = distinct !DISubprogram(name: "homeBucket", linkageName: "nish.homeBucket", scope: !13, file: !13, line: 78, type: !67, scopeLine: 78, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!69 = !DILocation(line: 78, column: 1, scope: !68)
+!70 = !DILocalVariable(name: "h", arg: 1, scope: !68, file: !13, line: 78, type: !19)
+!71 = !DILocalVariable(name: "mask", arg: 2, scope: !68, file: !13, line: 78, type: !4)
+!72 = !DILocation(line: 78, column: 48, scope: !68)
+!73 = !DILocation(line: 78, column: 54, scope: !68)
+!74 = !DILocation(line: 78, column: 58, scope: !68)
+!75 = !DILocation(line: 78, column: 59, scope: !68)
+!76 = !DILocation(line: 78, column: 72, scope: !68)
+!77 = !{!19, !19, !4}
+!78 = !DISubroutineType(types: !77)
+!79 = distinct !DISubprogram(name: "slotWord", linkageName: "nish.slotWord", scope: !13, file: !13, line: 81, type: !78, scopeLine: 81, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!80 = !DILocation(line: 81, column: 1, scope: !79)
+!81 = !DILocalVariable(name: "h", arg: 1, scope: !79, file: !13, line: 81, type: !19)
+!82 = !DILocalVariable(name: "index", arg: 2, scope: !79, file: !13, line: 81, type: !4)
+!83 = !DILocation(line: 81, column: 47, scope: !79)
+!84 = !DILocation(line: 81, column: 48, scope: !79)
+!85 = !DILocation(line: 81, column: 49, scope: !79)
+!86 = !DILocation(line: 81, column: 68, scope: !79)
+!87 = !DILocation(line: 81, column: 74, scope: !79)
+!88 = !DILocation(line: 81, column: 82, scope: !79)
+!89 = !{!16, !4, !4}
+!90 = !DISubroutineType(types: !89)
+!91 = distinct !DISubprogram(name: "foundAt", linkageName: "nish.foundAt", scope: !13, file: !13, line: 84, type: !90, scopeLine: 84, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!92 = !DILocation(line: 84, column: 1, scope: !91)
+!93 = !DILocalVariable(name: "bucket", arg: 1, scope: !91, file: !13, line: 84, type: !4)
+!94 = !DILocalVariable(name: "index", arg: 2, scope: !91, file: !13, line: 84, type: !4)
+!95 = !DILocation(line: 84, column: 51, scope: !91)
+!96 = !DILocation(line: 84, column: 52, scope: !91)
+!97 = !DILocation(line: 84, column: 58, scope: !91)
+!98 = !DILocation(line: 84, column: 75, scope: !91)
+!99 = !DILocation(line: 84, column: 81, scope: !91)
+!100 = !{!16, !4, !19}
+!101 = !DISubroutineType(types: !100)
+!102 = distinct !DISubprogram(name: "absentAt", linkageName: "nish.absentAt", scope: !13, file: !13, line: 87, type: !101, scopeLine: 87, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!103 = !DILocation(line: 87, column: 1, scope: !102)
+!104 = !DILocalVariable(name: "bucket", arg: 1, scope: !102, file: !13, line: 87, type: !4)
+!105 = !DILocalVariable(name: "h", arg: 2, scope: !102, file: !13, line: 87, type: !19)
+!106 = !DILocation(line: 87, column: 48, scope: !102)
+!107 = !DILocation(line: 87, column: 54, scope: !102)
+!108 = !DILocation(line: 87, column: 55, scope: !102)
+!109 = !DILocation(line: 87, column: 60, scope: !102)
+!110 = !DILocation(line: 87, column: 61, scope: !102)
+!111 = !DILocation(line: 87, column: 62, scope: !102)
+!112 = !DILocation(line: 87, column: 68, scope: !102)
+!113 = !DILocation(line: 87, column: 85, scope: !102)
+!114 = !DILocation(line: 87, column: 91, scope: !102)
+!115 = !{null, !23, !4, !19, !4}
+!116 = !DISubroutineType(types: !115)
+!117 = distinct !DISubprogram(name: "fileEntry", linkageName: "nish.fileEntry", scope: !13, file: !13, line: 123, type: !116, scopeLine: 123, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!118 = !DILocation(line: 123, column: 1, scope: !117)
+!119 = !DILocalVariable(name: "slots", arg: 1, scope: !117, file: !13, line: 123, type: !23)
+!120 = !DILocalVariable(name: "mask", arg: 2, scope: !117, file: !13, line: 123, type: !4)
+!121 = !DILocalVariable(name: "h", arg: 3, scope: !117, file: !13, line: 123, type: !19)
+!122 = !DILocalVariable(name: "index", arg: 4, scope: !117, file: !13, line: 123, type: !4)
+!123 = !DILocation(line: 124, column: 3, scope: !117)
+!124 = !DILocation(line: 124, column: 16, scope: !117)
+!125 = !DILocation(line: 124, column: 25, scope: !117)
+!126 = !DILocation(line: 124, column: 28, scope: !117)
+!127 = !DILocalVariable(name: "word", scope: !117, file: !13, line: 124, type: !19)
+!128 = !DILocation(line: 125, column: 3, scope: !117)
+!129 = !DILocation(line: 125, column: 16, scope: !117)
+!130 = !DILocation(line: 125, column: 27, scope: !117)
+!131 = !DILocation(line: 125, column: 30, scope: !117)
+!132 = !DILocalVariable(name: "bucket", scope: !117, file: !13, line: 125, type: !4)
+!133 = !DILocation(line: 126, column: 3, scope: !117)
+!134 = !DILocation(line: 126, column: 40, scope: !117)
+!135 = !{!"nish array"}
+!136 = !{!"header", !135}
+!137 = !{!"elements", !135}
 !138 = !{!136}
-!139 = !{!"nish TBAA"}
-!140 = !{!"omnipotent char", !139, i64 0}
-!141 = !{!"header i64", !140, i64 0}
-!142 = !{!"header ptr", !140, i64 0}
-!143 = !{!"array header", !141, i64 0, !141, i64 8, !142, i64 16}
-!144 = !{!143, !141, i64 0}
-!145 = !{!143, !142, i64 16}
-!146 = !DILocation(line: 122, column: 10, scope: !116)
-!147 = !DILocation(line: 122, column: 20, scope: !116)
-!148 = !DILocation(line: 122, column: 25, scope: !116)
-!149 = !DILocation(line: 122, column: 34, scope: !116)
-!150 = !DILocation(line: 122, column: 55, scope: !116)
-!151 = !DILocation(line: 123, column: 5, scope: !116)
-!152 = !DILocation(line: 123, column: 9, scope: !116)
-!153 = !DILocation(line: 123, column: 15, scope: !116)
-!154 = !{!"element i32", !140, i64 0}
-!155 = !{!154, !154, i64 0}
-!156 = !DILocation(line: 123, column: 27, scope: !116)
-!157 = !DILocation(line: 123, column: 30, scope: !116)
-!158 = !DILocation(line: 124, column: 7, scope: !116)
-!159 = !DILocation(line: 124, column: 13, scope: !116)
-!160 = !DILocation(line: 124, column: 23, scope: !116)
-!161 = !DILocation(line: 125, column: 7, scope: !116)
-!162 = !DILocation(line: 127, column: 5, scope: !116)
-!163 = !DILocation(line: 127, column: 14, scope: !116)
-!164 = !DILocation(line: 127, column: 15, scope: !116)
-!165 = !DILocation(line: 127, column: 24, scope: !116)
-!166 = !DILocation(line: 127, column: 29, scope: !116)
-!167 = !{null, !23}
-!168 = !DISubroutineType(types: !167)
-!169 = distinct !DISubprogram(name: "compactHashes", linkageName: "nish.compactHashes", scope: !13, file: !13, line: 147, type: !168, scopeLine: 147, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!170 = !DILocation(line: 147, column: 1, scope: !169)
-!171 = !DILocalVariable(name: "hashes", arg: 1, scope: !169, file: !13, line: 147, type: !23)
-!172 = !DILocation(line: 148, column: 3, scope: !169)
-!173 = !DILocation(line: 148, column: 16, scope: !169)
-!174 = !DILocation(line: 148, column: 22, scope: !169)
-!175 = !DILocalVariable(name: "used", scope: !169, file: !13, line: 148, type: !4)
-!176 = !DILocation(line: 149, column: 3, scope: !169)
-!177 = !DILocation(line: 149, column: 17, scope: !169)
-!178 = !DILocalVariable(name: "to", scope: !169, file: !13, line: 149, type: !4)
-!179 = !DILocation(line: 150, column: 3, scope: !169)
-!180 = !DILocation(line: 150, column: 24, scope: !169)
-!181 = !DILocalVariable(name: "from", scope: !169, file: !13, line: 150, type: !4)
-!182 = !DILocation(line: 151, column: 15, scope: !169)
-!183 = !DILocation(line: 150, column: 27, scope: !169)
-!184 = !DILocation(line: 150, column: 34, scope: !169)
-!185 = !DILocation(line: 150, column: 48, scope: !169)
-!186 = !DILocation(line: 151, column: 5, scope: !169)
-!187 = !DILocation(line: 151, column: 22, scope: !169)
-!188 = !DILocalVariable(name: "h", scope: !169, file: !13, line: 151, type: !19)
-!189 = !DILocation(line: 152, column: 5, scope: !169)
-!190 = !DILocation(line: 152, column: 9, scope: !169)
-!191 = !DILocation(line: 152, column: 15, scope: !169)
-!192 = !DILocation(line: 152, column: 20, scope: !169)
-!193 = !DILocation(line: 152, column: 26, scope: !169)
-!194 = !DILocation(line: 152, column: 31, scope: !169)
-!195 = !DILocation(line: 152, column: 36, scope: !169)
-!196 = !DILocation(line: 152, column: 42, scope: !169)
-!197 = !DILocation(line: 153, column: 7, scope: !169)
-!198 = !DILocation(line: 153, column: 14, scope: !169)
-!199 = !DILocation(line: 153, column: 20, scope: !169)
-!200 = !DILocation(line: 154, column: 7, scope: !169)
-!201 = !DILocation(line: 150, column: 40, scope: !169)
-!202 = !DILocation(line: 157, column: 3, scope: !169)
-!203 = !DILocation(line: 157, column: 10, scope: !169)
-!204 = !DILocation(line: 157, column: 16, scope: !169)
-!205 = !DILocation(line: 157, column: 33, scope: !169)
-!206 = !DILocation(line: 157, column: 37, scope: !169)
-!207 = !DILocation(line: 158, column: 5, scope: !169)
-!208 = !{!23, !23, !4, !4}
-!209 = !DISubroutineType(types: !208)
-!210 = distinct !DISubprogram(name: "rebuiltSlots", linkageName: "nish.rebuiltSlots", scope: !13, file: !13, line: 169, type: !209, scopeLine: 169, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!211 = !DILocation(line: 169, column: 1, scope: !210)
-!212 = !DILocalVariable(name: "slots", arg: 1, scope: !210, file: !13, line: 169, type: !23)
-!213 = !DILocalVariable(name: "live", arg: 2, scope: !210, file: !13, line: 169, type: !4)
-!214 = !DILocalVariable(name: "used", arg: 3, scope: !210, file: !13, line: 169, type: !4)
-!215 = !DILocation(line: 170, column: 3, scope: !210)
-!216 = !DILocation(line: 170, column: 13, scope: !210)
-!217 = !DILocation(line: 170, column: 19, scope: !210)
-!218 = !DILocalVariable(name: "n", scope: !210, file: !13, line: 170, type: !4)
-!219 = !DILocation(line: 171, column: 3, scope: !210)
-!220 = !DILocation(line: 171, column: 7, scope: !210)
-!221 = !DILocation(line: 171, column: 14, scope: !210)
-!222 = !DILocation(line: 171, column: 18, scope: !210)
-!223 = !DILocation(line: 171, column: 24, scope: !210)
-!224 = !DILocation(line: 172, column: 5, scope: !210)
-!225 = !DILocation(line: 172, column: 16, scope: !210)
-!226 = !DILocation(line: 173, column: 5, scope: !210)
-!227 = !DILocation(line: 173, column: 12, scope: !210)
-!228 = !DILocation(line: 175, column: 3, scope: !210)
-!229 = !DILocation(line: 175, column: 10, scope: !210)
-!230 = !DILocation(line: 175, column: 25, scope: !210)
-!231 = !DILocation(line: 175, column: 29, scope: !210)
-!232 = !{!143, !141, i64 8}
-!233 = !{null, !23, !23}
-!234 = !DISubroutineType(types: !233)
-!235 = distinct !DISubprogram(name: "refile", linkageName: "nish.refile", scope: !13, file: !13, line: 179, type: !234, scopeLine: 179, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!236 = !DILocation(line: 179, column: 1, scope: !235)
-!237 = !DILocalVariable(name: "slots", arg: 1, scope: !235, file: !13, line: 179, type: !23)
-!238 = !DILocalVariable(name: "hashes", arg: 2, scope: !235, file: !13, line: 179, type: !23)
-!239 = !DILocation(line: 180, column: 3, scope: !235)
-!240 = !DILocation(line: 180, column: 16, scope: !235)
-!241 = !DILocation(line: 180, column: 22, scope: !235)
-!242 = !DILocation(line: 180, column: 38, scope: !235)
-!243 = !DILocalVariable(name: "mask", scope: !235, file: !13, line: 180, type: !4)
-!244 = !DILocation(line: 181, column: 3, scope: !235)
-!245 = !DILocation(line: 181, column: 21, scope: !235)
-!246 = !DILocalVariable(name: "i", scope: !235, file: !13, line: 181, type: !4)
-!247 = !DILocation(line: 181, column: 34, scope: !235)
-!248 = !DILocation(line: 181, column: 24, scope: !235)
-!249 = !DILocation(line: 181, column: 28, scope: !235)
-!250 = !DILocation(line: 181, column: 55, scope: !235)
-!251 = !DILocation(line: 182, column: 5, scope: !235)
-!252 = !DILocation(line: 182, column: 15, scope: !235)
-!253 = !DILocation(line: 182, column: 22, scope: !235)
-!254 = !DILocation(line: 182, column: 28, scope: !235)
-!255 = !DILocation(line: 182, column: 35, scope: !235)
-!256 = !DILocation(line: 182, column: 39, scope: !235)
-!257 = !DILocation(line: 181, column: 50, scope: !235)
-!258 = distinct !DISubprogram(name: "clearSlots", linkageName: "nish.clearSlots", scope: !13, file: !13, line: 203, type: !168, scopeLine: 203, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!259 = !DILocation(line: 203, column: 1, scope: !258)
-!260 = !DILocalVariable(name: "slots", arg: 1, scope: !258, file: !13, line: 203, type: !23)
-!261 = !DILocation(line: 204, column: 3, scope: !258)
-!262 = !DILocation(line: 204, column: 21, scope: !258)
-!263 = !DILocalVariable(name: "i", scope: !258, file: !13, line: 204, type: !4)
-!264 = !DILocation(line: 204, column: 34, scope: !258)
-!265 = !DILocation(line: 204, column: 24, scope: !258)
-!266 = !DILocation(line: 204, column: 28, scope: !258)
-!267 = !DILocation(line: 204, column: 54, scope: !258)
-!268 = !DILocation(line: 205, column: 5, scope: !258)
-!269 = !DILocation(line: 205, column: 11, scope: !258)
-!270 = !DILocation(line: 205, column: 16, scope: !258)
-!271 = !DILocation(line: 204, column: 49, scope: !258)
-!272 = !{null, !23, !4, !4, !19, !4}
-!273 = !DISubroutineType(types: !272)
-!274 = distinct !DISubprogram(name: "fileAppended", linkageName: "nish.fileAppended", scope: !13, file: !13, line: 221, type: !273, scopeLine: 221, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!275 = !DILocation(line: 221, column: 1, scope: !274)
-!276 = !DILocalVariable(name: "slots", arg: 1, scope: !274, file: !13, line: 221, type: !23)
-!277 = !DILocalVariable(name: "mask", arg: 2, scope: !274, file: !13, line: 221, type: !4)
-!278 = !DILocalVariable(name: "bucket", arg: 3, scope: !274, file: !13, line: 221, type: !4)
-!279 = !DILocalVariable(name: "h", arg: 4, scope: !274, file: !13, line: 221, type: !19)
-!280 = !DILocalVariable(name: "used", arg: 5, scope: !274, file: !13, line: 221, type: !4)
-!281 = !DILocation(line: 222, column: 3, scope: !274)
-!282 = !DILocation(line: 222, column: 7, scope: !274)
-!283 = !DILocation(line: 222, column: 17, scope: !274)
-!284 = !DILocation(line: 222, column: 22, scope: !274)
-!285 = !DILocation(line: 222, column: 31, scope: !274)
-!286 = !DILocation(line: 222, column: 37, scope: !274)
-!287 = !DILocation(line: 222, column: 52, scope: !274)
-!288 = !DILocation(line: 223, column: 5, scope: !274)
-!289 = !DILocation(line: 223, column: 11, scope: !274)
-!290 = !DILocation(line: 223, column: 21, scope: !274)
-!291 = !DILocation(line: 223, column: 30, scope: !274)
-!292 = !DILocation(line: 223, column: 33, scope: !274)
-!293 = !DILocation(line: 223, column: 40, scope: !274)
-!294 = !DILocation(line: 224, column: 10, scope: !274)
-!295 = !DILocation(line: 225, column: 5, scope: !274)
-!296 = !DILocation(line: 225, column: 15, scope: !274)
-!297 = !DILocation(line: 225, column: 22, scope: !274)
-!298 = !DILocation(line: 225, column: 28, scope: !274)
-!299 = !DILocation(line: 225, column: 31, scope: !274)
-!300 = !DILocation(line: 225, column: 38, scope: !274)
-!301 = !{null, !12}
-!302 = !DISubroutineType(types: !301)
-!303 = distinct !DISubprogram(name: "Map<string, i32>.constructor", linkageName: "nish.Map$str$i32.constructor", scope: !13, file: !13, line: 249, type: !302, scopeLine: 249, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!304 = !DILocation(line: 249, column: 3, scope: !303)
-!305 = !DILocalVariable(name: "this", arg: 1, scope: !303, file: !13, line: 249, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!306 = !{!"i32", !140, i64 0}
-!307 = !{!"ptr", !140, i64 0}
-!308 = !{!"Map$str$i32", !306, i64 0, !307, i64 8, !306, i64 16, !306, i64 20, !307, i64 24, !307, i64 32, !307, i64 40}
-!309 = !{!308, !306, i64 0}
-!310 = !{!308, !306, i64 16}
-!311 = !{!308, !306, i64 20}
-!312 = !DILocation(line: 250, column: 5, scope: !303)
-!313 = !DILocation(line: 250, column: 18, scope: !303)
-!314 = !DILocation(line: 250, column: 33, scope: !303)
-!315 = !{!308, !307, i64 8}
-!316 = !DILocation(line: 251, column: 5, scope: !303)
-!317 = !DILocation(line: 251, column: 22, scope: !303)
-!318 = !{!308, !307, i64 24}
-!319 = !DILocation(line: 252, column: 5, scope: !303)
-!320 = !DILocation(line: 252, column: 24, scope: !303)
-!321 = !{!308, !307, i64 32}
-!322 = !DILocation(line: 253, column: 5, scope: !303)
-!323 = !DILocation(line: 253, column: 24, scope: !303)
-!324 = !{!308, !307, i64 40}
-!325 = !{!16, !12, !31}
-!326 = !DISubroutineType(types: !325)
-!327 = distinct !DISubprogram(name: "Map<string, i32>.probe", linkageName: "nish.Map$str$i32.probe", scope: !13, file: !13, line: 257, type: !326, scopeLine: 257, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!328 = !DILocation(line: 257, column: 3, scope: !327)
-!329 = !DILocalVariable(name: "this", arg: 1, scope: !327, file: !13, line: 257, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!330 = !DILocalVariable(name: "key", arg: 2, scope: !327, file: !13, line: 257, type: !31)
-!331 = !DILocation(line: 258, column: 5, scope: !327)
-!332 = !DILocation(line: 258, column: 12, scope: !327)
-!333 = !DILocation(line: 258, column: 23, scope: !327)
-!334 = !DILocation(line: 258, column: 35, scope: !327)
-!335 = !DILocation(line: 258, column: 46, scope: !327)
-!336 = !DILocation(line: 258, column: 64, scope: !327)
-!337 = !DILocation(line: 258, column: 80, scope: !327)
-!338 = !{!12, !12, !31, !4}
-!339 = !DISubroutineType(types: !338)
-!340 = distinct !DISubprogram(name: "Map<string, i32>.set", linkageName: "nish.Map$str$i32.set", scope: !13, file: !13, line: 266, type: !339, scopeLine: 266, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!341 = !DILocation(line: 266, column: 3, scope: !340)
-!342 = !DILocalVariable(name: "this", arg: 1, scope: !340, file: !13, line: 266, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!343 = !DILocalVariable(name: "key", arg: 2, scope: !340, file: !13, line: 266, type: !31)
-!344 = !DILocalVariable(name: "value", arg: 3, scope: !340, file: !13, line: 266, type: !4)
-!345 = !DILocation(line: 267, column: 5, scope: !340)
-!346 = !DILocation(line: 267, column: 19, scope: !340)
-!347 = !DILocation(line: 267, column: 30, scope: !340)
-!348 = !DILocalVariable(name: "found", scope: !340, file: !13, line: 267, type: !16)
-!349 = !DILocation(line: 268, column: 5, scope: !340)
-!350 = !DILocation(line: 268, column: 9, scope: !340)
-!351 = !DILocation(line: 268, column: 18, scope: !340)
-!352 = !DILocation(line: 268, column: 21, scope: !340)
-!353 = !DILocation(line: 269, column: 7, scope: !340)
-!354 = !DILocation(line: 269, column: 23, scope: !340)
-!355 = !DILocation(line: 269, column: 29, scope: !340)
-!356 = !DILocation(line: 269, column: 37, scope: !340)
-!357 = !DILocation(line: 270, column: 12, scope: !340)
-!358 = !DILocation(line: 271, column: 7, scope: !340)
-!359 = !DILocation(line: 271, column: 21, scope: !340)
-!360 = !DILocation(line: 271, column: 28, scope: !340)
-!361 = !DILocation(line: 271, column: 33, scope: !340)
-!362 = !DILocation(line: 273, column: 5, scope: !340)
-!363 = !DILocation(line: 273, column: 12, scope: !340)
-!364 = !{!4, !12, !4}
-!365 = !DISubroutineType(types: !364)
-!366 = distinct !DISubprogram(name: "Map<string, i32>.valueAt", linkageName: "nish.Map$str$i32.valueAt", scope: !13, file: !13, line: 298, type: !365, scopeLine: 298, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!367 = !DILocation(line: 298, column: 3, scope: !366)
-!368 = !DILocalVariable(name: "this", arg: 1, scope: !366, file: !13, line: 298, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!369 = !DILocalVariable(name: "index", arg: 2, scope: !366, file: !13, line: 298, type: !4)
-!370 = !DILocation(line: 299, column: 5, scope: !366)
-!371 = !DILocation(line: 299, column: 9, scope: !366)
-!372 = !DILocation(line: 299, column: 17, scope: !366)
-!373 = !DILocation(line: 299, column: 22, scope: !366)
-!374 = !DILocation(line: 299, column: 31, scope: !366)
-!375 = !DILocation(line: 299, column: 37, scope: !366)
-!376 = !DILocation(line: 299, column: 63, scope: !366)
-!377 = !DILocation(line: 300, column: 7, scope: !366)
-!378 = !DILocation(line: 300, column: 13, scope: !366)
-!379 = !DILocation(line: 302, column: 5, scope: !366)
-!380 = !DILocation(line: 302, column: 12, scope: !366)
-!381 = !DILocation(line: 302, column: 29, scope: !366)
-!382 = !{null, !12, !4, !4}
-!383 = !DISubroutineType(types: !382)
-!384 = distinct !DISubprogram(name: "Map<string, i32>.setValueAt", linkageName: "nish.Map$str$i32.setValueAt", scope: !13, file: !13, line: 306, type: !383, scopeLine: 306, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!385 = !DILocation(line: 306, column: 3, scope: !384)
-!386 = !DILocalVariable(name: "this", arg: 1, scope: !384, file: !13, line: 306, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!387 = !DILocalVariable(name: "index", arg: 2, scope: !384, file: !13, line: 306, type: !4)
-!388 = !DILocalVariable(name: "value", arg: 3, scope: !384, file: !13, line: 306, type: !4)
-!389 = !DILocation(line: 307, column: 5, scope: !384)
-!390 = !DILocation(line: 307, column: 9, scope: !384)
-!391 = !DILocation(line: 307, column: 18, scope: !384)
-!392 = !DILocation(line: 307, column: 23, scope: !384)
-!393 = !DILocation(line: 307, column: 31, scope: !384)
-!394 = !DILocation(line: 307, column: 37, scope: !384)
-!395 = !DILocation(line: 307, column: 63, scope: !384)
-!396 = !DILocation(line: 308, column: 7, scope: !384)
-!397 = !DILocation(line: 308, column: 24, scope: !384)
-!398 = !DILocation(line: 308, column: 33, scope: !384)
-!399 = !{null, !12, !16, !31, !4}
-!400 = !DISubroutineType(types: !399)
-!401 = distinct !DISubprogram(name: "Map<string, i32>.insertAt", linkageName: "nish.Map$str$i32.insertAt", scope: !13, file: !13, line: 313, type: !400, scopeLine: 313, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!402 = !DILocation(line: 313, column: 3, scope: !401)
-!403 = !DILocalVariable(name: "this", arg: 1, scope: !401, file: !13, line: 313, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!404 = !DILocalVariable(name: "absent", arg: 2, scope: !401, file: !13, line: 313, type: !16)
-!405 = !DILocalVariable(name: "key", arg: 3, scope: !401, file: !13, line: 313, type: !31)
-!406 = !DILocalVariable(name: "value", arg: 4, scope: !401, file: !13, line: 313, type: !4)
-!407 = !DILocation(line: 314, column: 5, scope: !401)
-!408 = !DILocation(line: 314, column: 20, scope: !401)
-!409 = !DILocation(line: 314, column: 21, scope: !401)
-!410 = !DILocation(line: 314, column: 25, scope: !401)
-!411 = !DILocalVariable(name: "packed", scope: !401, file: !13, line: 314, type: !16)
-!412 = !DILocation(line: 315, column: 5, scope: !401)
-!413 = !DILocation(line: 315, column: 18, scope: !401)
-!414 = !DILocation(line: 315, column: 24, scope: !401)
-!415 = !DILocalVariable(name: "bucket", scope: !401, file: !13, line: 315, type: !4)
-!416 = !DILocation(line: 316, column: 5, scope: !401)
-!417 = !DILocation(line: 316, column: 15, scope: !401)
-!418 = !DILocation(line: 316, column: 21, scope: !401)
-!419 = !DILocalVariable(name: "h", scope: !401, file: !13, line: 316, type: !19)
-!420 = !DILocation(line: 317, column: 5, scope: !401)
-!421 = !DILocation(line: 317, column: 9, scope: !401)
-!422 = !DILocation(line: 317, column: 15, scope: !401)
-!423 = !DILocation(line: 317, column: 41, scope: !401)
-!424 = !DILocation(line: 317, column: 52, scope: !401)
-!425 = !DILocation(line: 318, column: 7, scope: !401)
-!426 = !DILocation(line: 318, column: 11, scope: !401)
-!427 = !DILocation(line: 318, column: 24, scope: !401)
-!428 = !DILocation(line: 318, column: 35, scope: !401)
-!429 = !DILocation(line: 319, column: 9, scope: !401)
-!430 = !DILocation(line: 319, column: 15, scope: !401)
-!431 = !DILocation(line: 322, column: 7, scope: !401)
-!432 = !DILocation(line: 323, column: 7, scope: !401)
-!433 = !DILocation(line: 323, column: 16, scope: !401)
-!434 = !DILocation(line: 323, column: 17, scope: !401)
-!435 = !DILocation(line: 325, column: 5, scope: !401)
-!436 = !DILocation(line: 325, column: 25, scope: !401)
-!437 = !{!"element ptr", !140, i64 0}
-!438 = !{!437, !437, i64 0}
-!439 = !DILocation(line: 326, column: 5, scope: !401)
-!440 = !DILocation(line: 326, column: 27, scope: !401)
-!441 = !DILocation(line: 327, column: 5, scope: !401)
-!442 = !DILocation(line: 327, column: 27, scope: !401)
-!443 = !DILocation(line: 328, column: 5, scope: !401)
-!444 = !DILocation(line: 328, column: 17, scope: !401)
-!445 = !DILocation(line: 328, column: 29, scope: !401)
-!446 = !DILocation(line: 329, column: 5, scope: !401)
-!447 = !DILocation(line: 329, column: 17, scope: !401)
-!448 = !DILocation(line: 329, column: 29, scope: !401)
-!449 = !DILocation(line: 332, column: 5, scope: !401)
-!450 = !DILocation(line: 332, column: 18, scope: !401)
-!451 = !DILocation(line: 332, column: 24, scope: !401)
-!452 = !DILocalVariable(name: "used", scope: !401, file: !13, line: 332, type: !4)
-!453 = !DILocation(line: 333, column: 5, scope: !401)
-!454 = !DILocation(line: 333, column: 9, scope: !401)
-!455 = !DILocation(line: 333, column: 16, scope: !401)
-!456 = !DILocation(line: 333, column: 20, scope: !401)
-!457 = !DILocation(line: 333, column: 26, scope: !401)
-!458 = !DILocation(line: 333, column: 47, scope: !401)
-!459 = !DILocation(line: 333, column: 50, scope: !401)
-!460 = !DILocation(line: 334, column: 7, scope: !401)
-!461 = !DILocation(line: 335, column: 12, scope: !401)
-!462 = !DILocation(line: 336, column: 7, scope: !401)
-!463 = !DILocation(line: 336, column: 20, scope: !401)
-!464 = !DILocation(line: 336, column: 32, scope: !401)
-!465 = !DILocation(line: 336, column: 43, scope: !401)
-!466 = !DILocation(line: 336, column: 51, scope: !401)
-!467 = !DILocation(line: 336, column: 54, scope: !401)
-!468 = distinct !DISubprogram(name: "Map<string, i32>.rebuild", linkageName: "nish.Map$str$i32.rebuild", scope: !13, file: !13, line: 341, type: !302, scopeLine: 341, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!469 = !DILocation(line: 341, column: 3, scope: !468)
-!470 = !DILocalVariable(name: "this", arg: 1, scope: !468, file: !13, line: 341, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!471 = !DILocation(line: 342, column: 5, scope: !468)
-!472 = !DILocation(line: 342, column: 18, scope: !468)
-!473 = !DILocation(line: 342, column: 24, scope: !468)
-!474 = !DILocalVariable(name: "used", scope: !468, file: !13, line: 342, type: !4)
-!475 = !DILocation(line: 343, column: 5, scope: !468)
-!476 = !DILocation(line: 343, column: 19, scope: !468)
-!477 = !DILocation(line: 343, column: 32, scope: !468)
-!478 = !DILocation(line: 343, column: 44, scope: !468)
-!479 = !DILocation(line: 343, column: 55, scope: !468)
-!480 = !DILocalVariable(name: "slots", scope: !468, file: !13, line: 343, type: !23)
-!481 = !DILocation(line: 344, column: 5, scope: !468)
-!482 = !DILocation(line: 344, column: 9, scope: !468)
-!483 = !DILocation(line: 344, column: 21, scope: !468)
-!484 = !DILocation(line: 344, column: 27, scope: !468)
-!485 = !DILocation(line: 345, column: 7, scope: !468)
-!486 = !DILocation(line: 345, column: 22, scope: !468)
-!487 = !DILocation(line: 345, column: 38, scope: !468)
-!488 = !DILocation(line: 346, column: 7, scope: !468)
-!489 = !DILocation(line: 346, column: 22, scope: !468)
-!490 = !DILocation(line: 346, column: 40, scope: !468)
-!491 = !DILocation(line: 347, column: 7, scope: !468)
-!492 = !DILocation(line: 347, column: 21, scope: !468)
-!493 = !DILocation(line: 349, column: 5, scope: !468)
-!494 = !DILocation(line: 349, column: 18, scope: !468)
-!495 = !DILocation(line: 350, column: 5, scope: !468)
-!496 = !DILocation(line: 350, column: 17, scope: !468)
-!497 = !DILocation(line: 350, column: 23, scope: !468)
-!498 = !DILocation(line: 350, column: 39, scope: !468)
-!499 = !DILocation(line: 351, column: 5, scope: !468)
-!500 = !DILocation(line: 351, column: 12, scope: !468)
-!501 = !DILocation(line: 351, column: 19, scope: !468)
-!502 = !{!16, !23, !4, !23, !35, !31}
-!503 = !DISubroutineType(types: !502)
-!504 = distinct !DISubprogram(name: "probeTable<string>", linkageName: "nish.probeTable$str", scope: !13, file: !13, line: 92, type: !503, scopeLine: 92, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!505 = !DILocation(line: 92, column: 1, scope: !504)
-!506 = !DILocalVariable(name: "slots", arg: 1, scope: !504, file: !13, line: 92, type: !23)
-!507 = !DILocalVariable(name: "mask", arg: 2, scope: !504, file: !13, line: 92, type: !4)
-!508 = !DILocalVariable(name: "hashes", arg: 3, scope: !504, file: !13, line: 92, type: !23)
-!509 = !DILocalVariable(name: "keys", arg: 4, scope: !504, file: !13, line: 92, type: !35)
-!510 = !DILocalVariable(name: "key", arg: 5, scope: !504, file: !13, line: 92, type: !31)
-!511 = !DILocation(line: 93, column: 3, scope: !504)
-!512 = !DILocation(line: 93, column: 13, scope: !504)
-!513 = !DILocation(line: 93, column: 21, scope: !504)
-!514 = !DILocalVariable(name: "h", scope: !504, file: !13, line: 93, type: !19)
-!515 = !DILocation(line: 94, column: 3, scope: !504)
-!516 = !DILocation(line: 94, column: 23, scope: !504)
-!517 = !DILocalVariable(name: "fingerprint", scope: !504, file: !13, line: 94, type: !19)
-!518 = !DILocation(line: 95, column: 3, scope: !504)
-!519 = !DILocation(line: 95, column: 16, scope: !504)
-!520 = !DILocation(line: 95, column: 27, scope: !504)
-!521 = !DILocation(line: 95, column: 30, scope: !504)
-!522 = !DILocalVariable(name: "bucket", scope: !504, file: !13, line: 95, type: !4)
-!523 = !DILocation(line: 98, column: 3, scope: !504)
-!524 = !DILocation(line: 98, column: 40, scope: !504)
-!525 = !DILocation(line: 105, column: 33, scope: !504)
-!526 = !DILocation(line: 105, column: 82, scope: !504)
-!527 = !DILocation(line: 98, column: 10, scope: !504)
-!528 = !DILocation(line: 98, column: 20, scope: !504)
-!529 = !DILocation(line: 98, column: 25, scope: !504)
-!530 = !DILocation(line: 98, column: 34, scope: !504)
-!531 = !DILocation(line: 98, column: 55, scope: !504)
-!532 = !DILocation(line: 99, column: 5, scope: !504)
-!533 = !DILocation(line: 99, column: 18, scope: !504)
-!534 = !DILocation(line: 99, column: 24, scope: !504)
-!535 = !DILocalVariable(name: "word", scope: !504, file: !13, line: 99, type: !19)
-!536 = !DILocation(line: 100, column: 5, scope: !504)
-!537 = !DILocation(line: 100, column: 9, scope: !504)
-!538 = !DILocation(line: 100, column: 18, scope: !504)
-!539 = !DILocation(line: 100, column: 21, scope: !504)
-!540 = !DILocation(line: 101, column: 7, scope: !504)
-!541 = !DILocation(line: 101, column: 14, scope: !504)
-!542 = !DILocation(line: 101, column: 23, scope: !504)
-!543 = !DILocation(line: 101, column: 31, scope: !504)
-!544 = !DILocation(line: 103, column: 5, scope: !504)
-!545 = !DILocation(line: 103, column: 9, scope: !504)
-!546 = !DILocation(line: 103, column: 25, scope: !504)
-!547 = !DILocation(line: 103, column: 38, scope: !504)
-!548 = !DILocation(line: 104, column: 7, scope: !504)
-!549 = !DILocation(line: 104, column: 18, scope: !504)
-!550 = !DILocation(line: 104, column: 24, scope: !504)
-!551 = !DILocation(line: 104, column: 31, scope: !504)
-!552 = !DILocation(line: 104, column: 43, scope: !504)
-!553 = !DILocalVariable(name: "at", scope: !504, file: !13, line: 104, type: !4)
-!554 = !DILocation(line: 105, column: 7, scope: !504)
-!555 = !DILocation(line: 105, column: 11, scope: !504)
-!556 = !DILocation(line: 105, column: 17, scope: !504)
-!557 = !DILocation(line: 105, column: 22, scope: !504)
-!558 = !DILocation(line: 105, column: 27, scope: !504)
-!559 = !DILocation(line: 105, column: 51, scope: !504)
-!560 = !DILocation(line: 105, column: 58, scope: !504)
-!561 = !DILocation(line: 105, column: 66, scope: !504)
-!562 = !DILocation(line: 105, column: 71, scope: !504)
-!563 = !DILocation(line: 105, column: 76, scope: !504)
-!564 = !DILocation(line: 105, column: 98, scope: !504)
-!565 = !DILocation(line: 105, column: 106, scope: !504)
-!566 = !DILocation(line: 105, column: 111, scope: !504)
-!567 = !DILocation(line: 105, column: 116, scope: !504)
-!568 = !DILocation(line: 105, column: 122, scope: !504)
-!569 = !DILocation(line: 106, column: 9, scope: !504)
-!570 = !DILocation(line: 106, column: 16, scope: !504)
-!571 = !DILocation(line: 106, column: 24, scope: !504)
-!572 = !DILocation(line: 106, column: 32, scope: !504)
-!573 = !DILocation(line: 109, column: 5, scope: !504)
-!574 = !DILocation(line: 109, column: 14, scope: !504)
-!575 = !DILocation(line: 109, column: 15, scope: !504)
-!576 = !DILocation(line: 109, column: 24, scope: !504)
-!577 = !DILocation(line: 109, column: 29, scope: !504)
-!578 = !DILocation(line: 111, column: 3, scope: !504)
-!579 = !DILocation(line: 111, column: 9, scope: !504)
-!580 = !{null, !35, !23}
-!581 = !DISubroutineType(types: !580)
-!582 = distinct !DISubprogram(name: "compactEntries<string>", linkageName: "nish.compactEntries$str", scope: !13, file: !13, line: 132, type: !581, scopeLine: 132, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!583 = !DILocation(line: 132, column: 1, scope: !582)
-!584 = !DILocalVariable(name: "items", arg: 1, scope: !582, file: !13, line: 132, type: !35)
-!585 = !DILocalVariable(name: "hashes", arg: 2, scope: !582, file: !13, line: 132, type: !23)
-!586 = !DILocation(line: 133, column: 3, scope: !582)
-!587 = !DILocation(line: 133, column: 16, scope: !582)
-!588 = !DILocation(line: 133, column: 22, scope: !582)
-!589 = !DILocalVariable(name: "used", scope: !582, file: !13, line: 133, type: !4)
-!590 = !DILocation(line: 134, column: 3, scope: !582)
-!591 = !DILocation(line: 134, column: 17, scope: !582)
-!592 = !DILocalVariable(name: "to", scope: !582, file: !13, line: 134, type: !4)
-!593 = !DILocation(line: 135, column: 3, scope: !582)
-!594 = !DILocation(line: 135, column: 24, scope: !582)
-!595 = !DILocalVariable(name: "from", scope: !582, file: !13, line: 135, type: !4)
-!596 = !DILocation(line: 135, column: 55, scope: !582)
-!597 = !DILocation(line: 136, column: 68, scope: !582)
-!598 = !DILocation(line: 135, column: 27, scope: !582)
-!599 = !DILocation(line: 135, column: 34, scope: !582)
-!600 = !DILocation(line: 135, column: 42, scope: !582)
-!601 = !DILocation(line: 135, column: 49, scope: !582)
-!602 = !DILocation(line: 135, column: 79, scope: !582)
-!603 = !DILocation(line: 136, column: 5, scope: !582)
-!604 = !DILocation(line: 136, column: 9, scope: !582)
-!605 = !DILocation(line: 136, column: 16, scope: !582)
-!606 = !DILocation(line: 136, column: 26, scope: !582)
-!607 = !DILocation(line: 136, column: 31, scope: !582)
-!608 = !DILocation(line: 136, column: 37, scope: !582)
-!609 = !DILocation(line: 136, column: 42, scope: !582)
-!610 = !DILocation(line: 136, column: 47, scope: !582)
-!611 = !DILocation(line: 136, column: 55, scope: !582)
-!612 = !DILocation(line: 136, column: 62, scope: !582)
-!613 = !DILocation(line: 136, column: 83, scope: !582)
-!614 = !DILocation(line: 137, column: 7, scope: !582)
-!615 = !DILocation(line: 137, column: 13, scope: !582)
-!616 = !DILocation(line: 137, column: 19, scope: !582)
-!617 = !DILocation(line: 137, column: 25, scope: !582)
-!618 = !DILocation(line: 138, column: 7, scope: !582)
-!619 = !DILocation(line: 135, column: 71, scope: !582)
-!620 = !DILocation(line: 141, column: 3, scope: !582)
-!621 = !DILocation(line: 141, column: 10, scope: !582)
-!622 = !DILocation(line: 141, column: 16, scope: !582)
-!623 = !DILocation(line: 141, column: 32, scope: !582)
-!624 = !DILocation(line: 141, column: 36, scope: !582)
-!625 = !DILocation(line: 142, column: 5, scope: !582)
-!626 = !{null, !43, !23}
-!627 = !DISubroutineType(types: !626)
-!628 = distinct !DISubprogram(name: "compactEntries<i32>", linkageName: "nish.compactEntries$i32", scope: !13, file: !13, line: 132, type: !627, scopeLine: 132, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!629 = !DILocation(line: 132, column: 1, scope: !628)
-!630 = !DILocalVariable(name: "items", arg: 1, scope: !628, file: !13, line: 132, type: !43)
-!631 = !DILocalVariable(name: "hashes", arg: 2, scope: !628, file: !13, line: 132, type: !23)
-!632 = !DILocation(line: 133, column: 3, scope: !628)
-!633 = !DILocation(line: 133, column: 16, scope: !628)
-!634 = !DILocation(line: 133, column: 22, scope: !628)
-!635 = !DILocalVariable(name: "used", scope: !628, file: !13, line: 133, type: !4)
-!636 = !DILocation(line: 134, column: 3, scope: !628)
-!637 = !DILocation(line: 134, column: 17, scope: !628)
-!638 = !DILocalVariable(name: "to", scope: !628, file: !13, line: 134, type: !4)
-!639 = !DILocation(line: 135, column: 3, scope: !628)
-!640 = !DILocation(line: 135, column: 24, scope: !628)
-!641 = !DILocalVariable(name: "from", scope: !628, file: !13, line: 135, type: !4)
-!642 = !DILocation(line: 135, column: 55, scope: !628)
-!643 = !DILocation(line: 136, column: 68, scope: !628)
-!644 = !DILocation(line: 135, column: 27, scope: !628)
-!645 = !DILocation(line: 135, column: 34, scope: !628)
-!646 = !DILocation(line: 135, column: 42, scope: !628)
-!647 = !DILocation(line: 135, column: 49, scope: !628)
-!648 = !DILocation(line: 135, column: 79, scope: !628)
-!649 = !DILocation(line: 136, column: 5, scope: !628)
-!650 = !DILocation(line: 136, column: 9, scope: !628)
-!651 = !DILocation(line: 136, column: 16, scope: !628)
-!652 = !DILocation(line: 136, column: 26, scope: !628)
-!653 = !DILocation(line: 136, column: 31, scope: !628)
-!654 = !DILocation(line: 136, column: 37, scope: !628)
-!655 = !DILocation(line: 136, column: 42, scope: !628)
-!656 = !DILocation(line: 136, column: 47, scope: !628)
-!657 = !DILocation(line: 136, column: 55, scope: !628)
-!658 = !DILocation(line: 136, column: 62, scope: !628)
-!659 = !DILocation(line: 136, column: 83, scope: !628)
-!660 = !DILocation(line: 137, column: 7, scope: !628)
-!661 = !DILocation(line: 137, column: 13, scope: !628)
-!662 = !DILocation(line: 137, column: 19, scope: !628)
-!663 = !DILocation(line: 137, column: 25, scope: !628)
-!664 = !DILocation(line: 138, column: 7, scope: !628)
-!665 = !DILocation(line: 135, column: 71, scope: !628)
-!666 = !DILocation(line: 141, column: 3, scope: !628)
-!667 = !DILocation(line: 141, column: 10, scope: !628)
-!668 = !DILocation(line: 141, column: 16, scope: !628)
-!669 = !DILocation(line: 141, column: 32, scope: !628)
-!670 = !DILocation(line: 141, column: 36, scope: !628)
-!671 = !DILocation(line: 142, column: 5, scope: !628)
+!139 = !{!137}
+!140 = !{!"nish TBAA"}
+!141 = !{!"omnipotent char", !140, i64 0}
+!142 = !{!"header i64", !141, i64 0}
+!143 = !{!"header ptr", !141, i64 0}
+!144 = !{!"array header", !142, i64 0, !142, i64 8, !143, i64 16}
+!145 = !{!144, !142, i64 0}
+!146 = !{!144, !143, i64 16}
+!147 = !DILocation(line: 126, column: 10, scope: !117)
+!148 = !DILocation(line: 126, column: 20, scope: !117)
+!149 = !DILocation(line: 126, column: 25, scope: !117)
+!150 = !DILocation(line: 126, column: 34, scope: !117)
+!151 = !DILocation(line: 126, column: 55, scope: !117)
+!152 = !DILocation(line: 127, column: 5, scope: !117)
+!153 = !DILocation(line: 127, column: 9, scope: !117)
+!154 = !DILocation(line: 127, column: 15, scope: !117)
+!155 = !{!"element i32", !141, i64 0}
+!156 = !{!155, !155, i64 0}
+!157 = !DILocation(line: 127, column: 27, scope: !117)
+!158 = !DILocation(line: 127, column: 30, scope: !117)
+!159 = !DILocation(line: 128, column: 7, scope: !117)
+!160 = !DILocation(line: 128, column: 13, scope: !117)
+!161 = !DILocation(line: 128, column: 23, scope: !117)
+!162 = !DILocation(line: 129, column: 7, scope: !117)
+!163 = !DILocation(line: 131, column: 5, scope: !117)
+!164 = !DILocation(line: 131, column: 14, scope: !117)
+!165 = !DILocation(line: 131, column: 15, scope: !117)
+!166 = !DILocation(line: 131, column: 24, scope: !117)
+!167 = !DILocation(line: 131, column: 29, scope: !117)
+!168 = !{null, !23}
+!169 = !DISubroutineType(types: !168)
+!170 = distinct !DISubprogram(name: "compactHashes", linkageName: "nish.compactHashes", scope: !13, file: !13, line: 151, type: !169, scopeLine: 151, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!171 = !DILocation(line: 151, column: 1, scope: !170)
+!172 = !DILocalVariable(name: "hashes", arg: 1, scope: !170, file: !13, line: 151, type: !23)
+!173 = !DILocation(line: 152, column: 3, scope: !170)
+!174 = !DILocation(line: 152, column: 16, scope: !170)
+!175 = !DILocation(line: 152, column: 22, scope: !170)
+!176 = !DILocalVariable(name: "used", scope: !170, file: !13, line: 152, type: !4)
+!177 = !DILocation(line: 153, column: 3, scope: !170)
+!178 = !DILocation(line: 153, column: 17, scope: !170)
+!179 = !DILocalVariable(name: "to", scope: !170, file: !13, line: 153, type: !4)
+!180 = !DILocation(line: 154, column: 3, scope: !170)
+!181 = !DILocation(line: 154, column: 24, scope: !170)
+!182 = !DILocalVariable(name: "from", scope: !170, file: !13, line: 154, type: !4)
+!183 = !DILocation(line: 155, column: 15, scope: !170)
+!184 = !DILocation(line: 154, column: 27, scope: !170)
+!185 = !DILocation(line: 154, column: 34, scope: !170)
+!186 = !DILocation(line: 154, column: 48, scope: !170)
+!187 = !DILocation(line: 155, column: 5, scope: !170)
+!188 = !DILocation(line: 155, column: 22, scope: !170)
+!189 = !DILocalVariable(name: "h", scope: !170, file: !13, line: 155, type: !19)
+!190 = !DILocation(line: 156, column: 5, scope: !170)
+!191 = !DILocation(line: 156, column: 9, scope: !170)
+!192 = !DILocation(line: 156, column: 15, scope: !170)
+!193 = !DILocation(line: 156, column: 20, scope: !170)
+!194 = !DILocation(line: 156, column: 26, scope: !170)
+!195 = !DILocation(line: 156, column: 31, scope: !170)
+!196 = !DILocation(line: 156, column: 36, scope: !170)
+!197 = !DILocation(line: 156, column: 42, scope: !170)
+!198 = !DILocation(line: 157, column: 7, scope: !170)
+!199 = !DILocation(line: 157, column: 14, scope: !170)
+!200 = !DILocation(line: 157, column: 20, scope: !170)
+!201 = !DILocation(line: 158, column: 7, scope: !170)
+!202 = !DILocation(line: 154, column: 40, scope: !170)
+!203 = !DILocation(line: 161, column: 3, scope: !170)
+!204 = !DILocation(line: 161, column: 10, scope: !170)
+!205 = !DILocation(line: 161, column: 16, scope: !170)
+!206 = !DILocation(line: 161, column: 33, scope: !170)
+!207 = !DILocation(line: 161, column: 37, scope: !170)
+!208 = !DILocation(line: 162, column: 5, scope: !170)
+!209 = !{!23, !23, !4, !4}
+!210 = !DISubroutineType(types: !209)
+!211 = distinct !DISubprogram(name: "rebuiltSlots", linkageName: "nish.rebuiltSlots", scope: !13, file: !13, line: 173, type: !210, scopeLine: 173, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!212 = !DILocation(line: 173, column: 1, scope: !211)
+!213 = !DILocalVariable(name: "slots", arg: 1, scope: !211, file: !13, line: 173, type: !23)
+!214 = !DILocalVariable(name: "live", arg: 2, scope: !211, file: !13, line: 173, type: !4)
+!215 = !DILocalVariable(name: "used", arg: 3, scope: !211, file: !13, line: 173, type: !4)
+!216 = !DILocation(line: 174, column: 3, scope: !211)
+!217 = !DILocation(line: 174, column: 13, scope: !211)
+!218 = !DILocation(line: 174, column: 19, scope: !211)
+!219 = !DILocalVariable(name: "n", scope: !211, file: !13, line: 174, type: !4)
+!220 = !DILocation(line: 175, column: 3, scope: !211)
+!221 = !DILocation(line: 175, column: 7, scope: !211)
+!222 = !DILocation(line: 175, column: 14, scope: !211)
+!223 = !DILocation(line: 175, column: 18, scope: !211)
+!224 = !DILocation(line: 175, column: 24, scope: !211)
+!225 = !DILocation(line: 176, column: 5, scope: !211)
+!226 = !DILocation(line: 176, column: 16, scope: !211)
+!227 = !DILocation(line: 177, column: 5, scope: !211)
+!228 = !DILocation(line: 177, column: 12, scope: !211)
+!229 = !DILocation(line: 179, column: 3, scope: !211)
+!230 = !DILocation(line: 179, column: 10, scope: !211)
+!231 = !DILocation(line: 179, column: 25, scope: !211)
+!232 = !DILocation(line: 179, column: 29, scope: !211)
+!233 = !{!144, !142, i64 8}
+!234 = !{null, !23, !23}
+!235 = !DISubroutineType(types: !234)
+!236 = distinct !DISubprogram(name: "refile", linkageName: "nish.refile", scope: !13, file: !13, line: 187, type: !235, scopeLine: 187, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!237 = !DILocation(line: 187, column: 1, scope: !236)
+!238 = !DILocalVariable(name: "slots", arg: 1, scope: !236, file: !13, line: 187, type: !23)
+!239 = !DILocalVariable(name: "hashes", arg: 2, scope: !236, file: !13, line: 187, type: !23)
+!240 = !DILocation(line: 188, column: 3, scope: !236)
+!241 = !DILocation(line: 188, column: 16, scope: !236)
+!242 = !DILocation(line: 188, column: 22, scope: !236)
+!243 = !DILocation(line: 188, column: 38, scope: !236)
+!244 = !DILocalVariable(name: "mask", scope: !236, file: !13, line: 188, type: !4)
+!245 = !DILocation(line: 189, column: 3, scope: !236)
+!246 = !DILocation(line: 189, column: 21, scope: !236)
+!247 = !DILocalVariable(name: "i", scope: !236, file: !13, line: 189, type: !4)
+!248 = !DILocation(line: 189, column: 34, scope: !236)
+!249 = !DILocation(line: 189, column: 24, scope: !236)
+!250 = !DILocation(line: 189, column: 28, scope: !236)
+!251 = !DILocation(line: 189, column: 55, scope: !236)
+!252 = !DILocation(line: 190, column: 5, scope: !236)
+!253 = !DILocation(line: 190, column: 15, scope: !236)
+!254 = !DILocation(line: 190, column: 22, scope: !236)
+!255 = !DILocalVariable(name: "h", scope: !236, file: !13, line: 190, type: !19)
+!256 = !DILocation(line: 191, column: 5, scope: !236)
+!257 = !DILocation(line: 191, column: 9, scope: !236)
+!258 = !DILocation(line: 191, column: 15, scope: !236)
+!259 = !DILocation(line: 191, column: 18, scope: !236)
+!260 = !DILocation(line: 192, column: 7, scope: !236)
+!261 = !DILocation(line: 192, column: 17, scope: !236)
+!262 = !DILocation(line: 192, column: 24, scope: !236)
+!263 = !DILocation(line: 192, column: 30, scope: !236)
+!264 = !DILocation(line: 192, column: 33, scope: !236)
+!265 = !DILocation(line: 189, column: 50, scope: !236)
+!266 = distinct !DISubprogram(name: "clearSlots", linkageName: "nish.clearSlots", scope: !13, file: !13, line: 218, type: !169, scopeLine: 218, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!267 = !DILocation(line: 218, column: 1, scope: !266)
+!268 = !DILocalVariable(name: "slots", arg: 1, scope: !266, file: !13, line: 218, type: !23)
+!269 = !DILocation(line: 219, column: 3, scope: !266)
+!270 = !DILocation(line: 219, column: 21, scope: !266)
+!271 = !DILocalVariable(name: "i", scope: !266, file: !13, line: 219, type: !4)
+!272 = !DILocation(line: 219, column: 34, scope: !266)
+!273 = !DILocation(line: 219, column: 24, scope: !266)
+!274 = !DILocation(line: 219, column: 28, scope: !266)
+!275 = !DILocation(line: 219, column: 54, scope: !266)
+!276 = !DILocation(line: 220, column: 5, scope: !266)
+!277 = !DILocation(line: 220, column: 11, scope: !266)
+!278 = !DILocation(line: 220, column: 16, scope: !266)
+!279 = !DILocation(line: 219, column: 49, scope: !266)
+!280 = !{null, !23, !4, !4, !19, !4}
+!281 = !DISubroutineType(types: !280)
+!282 = distinct !DISubprogram(name: "fileAppended", linkageName: "nish.fileAppended", scope: !13, file: !13, line: 252, type: !281, scopeLine: 252, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!283 = !DILocation(line: 252, column: 1, scope: !282)
+!284 = !DILocalVariable(name: "slots", arg: 1, scope: !282, file: !13, line: 252, type: !23)
+!285 = !DILocalVariable(name: "mask", arg: 2, scope: !282, file: !13, line: 252, type: !4)
+!286 = !DILocalVariable(name: "bucket", arg: 3, scope: !282, file: !13, line: 252, type: !4)
+!287 = !DILocalVariable(name: "h", arg: 4, scope: !282, file: !13, line: 252, type: !19)
+!288 = !DILocalVariable(name: "used", arg: 5, scope: !282, file: !13, line: 252, type: !4)
+!289 = !DILocation(line: 253, column: 3, scope: !282)
+!290 = !DILocation(line: 253, column: 7, scope: !282)
+!291 = !DILocation(line: 253, column: 17, scope: !282)
+!292 = !DILocation(line: 253, column: 22, scope: !282)
+!293 = !DILocation(line: 253, column: 31, scope: !282)
+!294 = !DILocation(line: 253, column: 37, scope: !282)
+!295 = !DILocation(line: 253, column: 52, scope: !282)
+!296 = !DILocation(line: 254, column: 5, scope: !282)
+!297 = !DILocation(line: 254, column: 11, scope: !282)
+!298 = !DILocation(line: 254, column: 21, scope: !282)
+!299 = !DILocation(line: 254, column: 30, scope: !282)
+!300 = !DILocation(line: 254, column: 33, scope: !282)
+!301 = !DILocation(line: 254, column: 40, scope: !282)
+!302 = !DILocation(line: 255, column: 10, scope: !282)
+!303 = !DILocation(line: 256, column: 5, scope: !282)
+!304 = !DILocation(line: 256, column: 15, scope: !282)
+!305 = !DILocation(line: 256, column: 22, scope: !282)
+!306 = !DILocation(line: 256, column: 28, scope: !282)
+!307 = !DILocation(line: 256, column: 31, scope: !282)
+!308 = !DILocation(line: 256, column: 38, scope: !282)
+!309 = !{null, !12}
+!310 = !DISubroutineType(types: !309)
+!311 = distinct !DISubprogram(name: "Map<string, i32>.constructor", linkageName: "nish.Map$str$i32.constructor", scope: !13, file: !13, line: 286, type: !310, scopeLine: 286, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!312 = !DILocation(line: 286, column: 3, scope: !311)
+!313 = !DILocalVariable(name: "this", arg: 1, scope: !311, file: !13, line: 286, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!314 = !{!"i32", !141, i64 0}
+!315 = !{!"ptr", !141, i64 0}
+!316 = !{!"Map$str$i32", !314, i64 0, !315, i64 8, !314, i64 16, !314, i64 20, !315, i64 24, !315, i64 32, !315, i64 40, !314, i64 48}
+!317 = !{!316, !314, i64 0}
+!318 = !{!316, !314, i64 16}
+!319 = !{!316, !314, i64 20}
+!320 = !{!316, !314, i64 48}
+!321 = !DILocation(line: 287, column: 5, scope: !311)
+!322 = !DILocation(line: 287, column: 18, scope: !311)
+!323 = !DILocation(line: 287, column: 33, scope: !311)
+!324 = !{!316, !315, i64 8}
+!325 = !DILocation(line: 288, column: 5, scope: !311)
+!326 = !DILocation(line: 288, column: 22, scope: !311)
+!327 = !{!316, !315, i64 24}
+!328 = !DILocation(line: 289, column: 5, scope: !311)
+!329 = !DILocation(line: 289, column: 24, scope: !311)
+!330 = !{!316, !315, i64 32}
+!331 = !DILocation(line: 290, column: 5, scope: !311)
+!332 = !DILocation(line: 290, column: 24, scope: !311)
+!333 = !{!316, !315, i64 40}
+!334 = !{!16, !12, !31}
+!335 = !DISubroutineType(types: !334)
+!336 = distinct !DISubprogram(name: "Map<string, i32>.probe", linkageName: "nish.Map$str$i32.probe", scope: !13, file: !13, line: 294, type: !335, scopeLine: 294, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!337 = !DILocation(line: 294, column: 3, scope: !336)
+!338 = !DILocalVariable(name: "this", arg: 1, scope: !336, file: !13, line: 294, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!339 = !DILocalVariable(name: "key", arg: 2, scope: !336, file: !13, line: 294, type: !31)
+!340 = !DILocation(line: 295, column: 5, scope: !336)
+!341 = !DILocation(line: 295, column: 12, scope: !336)
+!342 = !DILocation(line: 295, column: 23, scope: !336)
+!343 = !DILocation(line: 295, column: 35, scope: !336)
+!344 = !DILocation(line: 295, column: 46, scope: !336)
+!345 = !DILocation(line: 295, column: 64, scope: !336)
+!346 = !DILocation(line: 295, column: 80, scope: !336)
+!347 = !{!12, !12, !31, !4}
+!348 = !DISubroutineType(types: !347)
+!349 = distinct !DISubprogram(name: "Map<string, i32>.set", linkageName: "nish.Map$str$i32.set", scope: !13, file: !13, line: 303, type: !348, scopeLine: 303, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!350 = !DILocation(line: 303, column: 3, scope: !349)
+!351 = !DILocalVariable(name: "this", arg: 1, scope: !349, file: !13, line: 303, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!352 = !DILocalVariable(name: "key", arg: 2, scope: !349, file: !13, line: 303, type: !31)
+!353 = !DILocalVariable(name: "value", arg: 3, scope: !349, file: !13, line: 303, type: !4)
+!354 = !DILocation(line: 304, column: 5, scope: !349)
+!355 = !DILocation(line: 304, column: 19, scope: !349)
+!356 = !DILocation(line: 304, column: 30, scope: !349)
+!357 = !DILocalVariable(name: "found", scope: !349, file: !13, line: 304, type: !16)
+!358 = !DILocation(line: 305, column: 5, scope: !349)
+!359 = !DILocation(line: 305, column: 9, scope: !349)
+!360 = !DILocation(line: 305, column: 18, scope: !349)
+!361 = !DILocation(line: 305, column: 21, scope: !349)
+!362 = !DILocation(line: 306, column: 7, scope: !349)
+!363 = !DILocation(line: 306, column: 23, scope: !349)
+!364 = !DILocation(line: 306, column: 29, scope: !349)
+!365 = !DILocation(line: 306, column: 37, scope: !349)
+!366 = !DILocation(line: 307, column: 12, scope: !349)
+!367 = !DILocation(line: 308, column: 7, scope: !349)
+!368 = !DILocation(line: 308, column: 21, scope: !349)
+!369 = !DILocation(line: 308, column: 28, scope: !349)
+!370 = !DILocation(line: 308, column: 33, scope: !349)
+!371 = !DILocation(line: 310, column: 5, scope: !349)
+!372 = !DILocation(line: 310, column: 12, scope: !349)
+!373 = !{!4, !12, !4}
+!374 = !DISubroutineType(types: !373)
+!375 = distinct !DISubprogram(name: "Map<string, i32>.valueAt", linkageName: "nish.Map$str$i32.valueAt", scope: !13, file: !13, line: 369, type: !374, scopeLine: 369, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!376 = !DILocation(line: 369, column: 3, scope: !375)
+!377 = !DILocalVariable(name: "this", arg: 1, scope: !375, file: !13, line: 369, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!378 = !DILocalVariable(name: "index", arg: 2, scope: !375, file: !13, line: 369, type: !4)
+!379 = !DILocation(line: 370, column: 5, scope: !375)
+!380 = !DILocation(line: 370, column: 9, scope: !375)
+!381 = !DILocation(line: 370, column: 17, scope: !375)
+!382 = !DILocation(line: 370, column: 22, scope: !375)
+!383 = !DILocation(line: 370, column: 31, scope: !375)
+!384 = !DILocation(line: 370, column: 37, scope: !375)
+!385 = !DILocation(line: 370, column: 63, scope: !375)
+!386 = !DILocation(line: 371, column: 7, scope: !375)
+!387 = !DILocation(line: 371, column: 13, scope: !375)
+!388 = !DILocation(line: 373, column: 5, scope: !375)
+!389 = !DILocation(line: 373, column: 12, scope: !375)
+!390 = !DILocation(line: 373, column: 29, scope: !375)
+!391 = !{null, !12, !4, !4}
+!392 = !DISubroutineType(types: !391)
+!393 = distinct !DISubprogram(name: "Map<string, i32>.setValueAt", linkageName: "nish.Map$str$i32.setValueAt", scope: !13, file: !13, line: 377, type: !392, scopeLine: 377, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!394 = !DILocation(line: 377, column: 3, scope: !393)
+!395 = !DILocalVariable(name: "this", arg: 1, scope: !393, file: !13, line: 377, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!396 = !DILocalVariable(name: "index", arg: 2, scope: !393, file: !13, line: 377, type: !4)
+!397 = !DILocalVariable(name: "value", arg: 3, scope: !393, file: !13, line: 377, type: !4)
+!398 = !DILocation(line: 378, column: 5, scope: !393)
+!399 = !DILocation(line: 378, column: 9, scope: !393)
+!400 = !DILocation(line: 378, column: 18, scope: !393)
+!401 = !DILocation(line: 378, column: 23, scope: !393)
+!402 = !DILocation(line: 378, column: 31, scope: !393)
+!403 = !DILocation(line: 378, column: 37, scope: !393)
+!404 = !DILocation(line: 378, column: 63, scope: !393)
+!405 = !DILocation(line: 379, column: 7, scope: !393)
+!406 = !DILocation(line: 379, column: 24, scope: !393)
+!407 = !DILocation(line: 379, column: 33, scope: !393)
+!408 = !{null, !12, !16, !31, !4}
+!409 = !DISubroutineType(types: !408)
+!410 = distinct !DISubprogram(name: "Map<string, i32>.insertAt", linkageName: "nish.Map$str$i32.insertAt", scope: !13, file: !13, line: 384, type: !409, scopeLine: 384, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!411 = !DILocation(line: 384, column: 3, scope: !410)
+!412 = !DILocalVariable(name: "this", arg: 1, scope: !410, file: !13, line: 384, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!413 = !DILocalVariable(name: "absent", arg: 2, scope: !410, file: !13, line: 384, type: !16)
+!414 = !DILocalVariable(name: "key", arg: 3, scope: !410, file: !13, line: 384, type: !31)
+!415 = !DILocalVariable(name: "value", arg: 4, scope: !410, file: !13, line: 384, type: !4)
+!416 = !DILocation(line: 385, column: 5, scope: !410)
+!417 = !DILocation(line: 385, column: 20, scope: !410)
+!418 = !DILocation(line: 385, column: 21, scope: !410)
+!419 = !DILocation(line: 385, column: 25, scope: !410)
+!420 = !DILocalVariable(name: "packed", scope: !410, file: !13, line: 385, type: !16)
+!421 = !DILocation(line: 386, column: 5, scope: !410)
+!422 = !DILocation(line: 386, column: 18, scope: !410)
+!423 = !DILocation(line: 386, column: 24, scope: !410)
+!424 = !DILocalVariable(name: "bucket", scope: !410, file: !13, line: 386, type: !4)
+!425 = !DILocation(line: 387, column: 5, scope: !410)
+!426 = !DILocation(line: 387, column: 15, scope: !410)
+!427 = !DILocation(line: 387, column: 21, scope: !410)
+!428 = !DILocalVariable(name: "h", scope: !410, file: !13, line: 387, type: !19)
+!429 = !DILocation(line: 388, column: 5, scope: !410)
+!430 = !DILocation(line: 388, column: 9, scope: !410)
+!431 = !DILocation(line: 388, column: 15, scope: !410)
+!432 = !DILocation(line: 388, column: 41, scope: !410)
+!433 = !DILocation(line: 388, column: 52, scope: !410)
+!434 = !DILocation(line: 391, column: 7, scope: !410)
+!435 = !DILocation(line: 391, column: 11, scope: !410)
+!436 = !DILocation(line: 391, column: 24, scope: !410)
+!437 = !DILocation(line: 391, column: 37, scope: !410)
+!438 = !DILocation(line: 391, column: 50, scope: !410)
+!439 = !DILocation(line: 391, column: 53, scope: !410)
+!440 = !DILocation(line: 392, column: 9, scope: !410)
+!441 = !DILocation(line: 392, column: 15, scope: !410)
+!442 = !DILocation(line: 394, column: 7, scope: !410)
+!443 = !DILocation(line: 395, column: 7, scope: !410)
+!444 = !DILocation(line: 395, column: 16, scope: !410)
+!445 = !DILocation(line: 395, column: 17, scope: !410)
+!446 = !DILocation(line: 397, column: 5, scope: !410)
+!447 = !DILocation(line: 397, column: 25, scope: !410)
+!448 = !{!"element ptr", !141, i64 0}
+!449 = !{!448, !448, i64 0}
+!450 = !DILocation(line: 398, column: 5, scope: !410)
+!451 = !DILocation(line: 398, column: 27, scope: !410)
+!452 = !DILocation(line: 399, column: 5, scope: !410)
+!453 = !DILocation(line: 399, column: 27, scope: !410)
+!454 = !DILocation(line: 400, column: 5, scope: !410)
+!455 = !DILocation(line: 400, column: 17, scope: !410)
+!456 = !DILocation(line: 400, column: 29, scope: !410)
+!457 = !DILocation(line: 401, column: 5, scope: !410)
+!458 = !DILocation(line: 401, column: 17, scope: !410)
+!459 = !DILocation(line: 401, column: 29, scope: !410)
+!460 = !DILocation(line: 404, column: 5, scope: !410)
+!461 = !DILocation(line: 404, column: 18, scope: !410)
+!462 = !DILocation(line: 404, column: 24, scope: !410)
+!463 = !DILocalVariable(name: "used", scope: !410, file: !13, line: 404, type: !4)
+!464 = !DILocation(line: 405, column: 5, scope: !410)
+!465 = !DILocation(line: 405, column: 9, scope: !410)
+!466 = !DILocation(line: 405, column: 16, scope: !410)
+!467 = !DILocation(line: 405, column: 20, scope: !410)
+!468 = !DILocation(line: 405, column: 26, scope: !410)
+!469 = !DILocation(line: 405, column: 47, scope: !410)
+!470 = !DILocation(line: 405, column: 50, scope: !410)
+!471 = !DILocation(line: 406, column: 7, scope: !410)
+!472 = !DILocation(line: 407, column: 12, scope: !410)
+!473 = !DILocation(line: 408, column: 7, scope: !410)
+!474 = !DILocation(line: 408, column: 20, scope: !410)
+!475 = !DILocation(line: 408, column: 32, scope: !410)
+!476 = !DILocation(line: 408, column: 43, scope: !410)
+!477 = !DILocation(line: 408, column: 51, scope: !410)
+!478 = !DILocation(line: 408, column: 54, scope: !410)
+!479 = distinct !DISubprogram(name: "Map<string, i32>.rebuild", linkageName: "nish.Map$str$i32.rebuild", scope: !13, file: !13, line: 417, type: !310, scopeLine: 417, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!480 = !DILocation(line: 417, column: 3, scope: !479)
+!481 = !DILocalVariable(name: "this", arg: 1, scope: !479, file: !13, line: 417, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!482 = !DILocation(line: 418, column: 5, scope: !479)
+!483 = !DILocation(line: 418, column: 18, scope: !479)
+!484 = !DILocation(line: 418, column: 24, scope: !479)
+!485 = !DILocalVariable(name: "used", scope: !479, file: !13, line: 418, type: !4)
+!486 = !DILocation(line: 419, column: 5, scope: !479)
+!487 = !DILocation(line: 419, column: 21, scope: !479)
+!488 = !DILocation(line: 419, column: 34, scope: !479)
+!489 = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
+!490 = !DILocalVariable(name: "walking", scope: !479, file: !13, line: 419, type: !489)
+!491 = !DILocation(line: 420, column: 5, scope: !479)
+!492 = !DILocation(line: 420, column: 19, scope: !479)
+!493 = !DILocation(line: 420, column: 32, scope: !479)
+!494 = !DILocation(line: 420, column: 44, scope: !479)
+!495 = !DILocation(line: 420, column: 54, scope: !479)
+!496 = !DILocation(line: 420, column: 61, scope: !479)
+!497 = !DILocation(line: 420, column: 72, scope: !479)
+!498 = !DILocalVariable(name: "slots", scope: !479, file: !13, line: 420, type: !23)
+!499 = !DILocation(line: 421, column: 5, scope: !479)
+!500 = !DILocation(line: 421, column: 9, scope: !479)
+!501 = !DILocation(line: 421, column: 10, scope: !479)
+!502 = !DILocation(line: 421, column: 21, scope: !479)
+!503 = !DILocation(line: 421, column: 33, scope: !479)
+!504 = !DILocation(line: 421, column: 39, scope: !479)
+!505 = !DILocation(line: 422, column: 7, scope: !479)
+!506 = !DILocation(line: 422, column: 22, scope: !479)
+!507 = !DILocation(line: 422, column: 38, scope: !479)
+!508 = !DILocation(line: 423, column: 7, scope: !479)
+!509 = !DILocation(line: 423, column: 22, scope: !479)
+!510 = !DILocation(line: 423, column: 40, scope: !479)
+!511 = !DILocation(line: 424, column: 7, scope: !479)
+!512 = !DILocation(line: 424, column: 21, scope: !479)
+!513 = !DILocation(line: 426, column: 5, scope: !479)
+!514 = !DILocation(line: 426, column: 18, scope: !479)
+!515 = !DILocation(line: 427, column: 5, scope: !479)
+!516 = !DILocation(line: 427, column: 17, scope: !479)
+!517 = !DILocation(line: 427, column: 23, scope: !479)
+!518 = !DILocation(line: 427, column: 39, scope: !479)
+!519 = !DILocation(line: 428, column: 5, scope: !479)
+!520 = !DILocation(line: 428, column: 12, scope: !479)
+!521 = !DILocation(line: 428, column: 19, scope: !479)
+!522 = !{!16, !23, !4, !23, !35, !31}
+!523 = !DISubroutineType(types: !522)
+!524 = distinct !DISubprogram(name: "probeTable<string>", linkageName: "nish.probeTable$str", scope: !13, file: !13, line: 96, type: !523, scopeLine: 96, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!525 = !DILocation(line: 96, column: 1, scope: !524)
+!526 = !DILocalVariable(name: "slots", arg: 1, scope: !524, file: !13, line: 96, type: !23)
+!527 = !DILocalVariable(name: "mask", arg: 2, scope: !524, file: !13, line: 96, type: !4)
+!528 = !DILocalVariable(name: "hashes", arg: 3, scope: !524, file: !13, line: 96, type: !23)
+!529 = !DILocalVariable(name: "keys", arg: 4, scope: !524, file: !13, line: 96, type: !35)
+!530 = !DILocalVariable(name: "key", arg: 5, scope: !524, file: !13, line: 96, type: !31)
+!531 = !DILocation(line: 97, column: 3, scope: !524)
+!532 = !DILocation(line: 97, column: 13, scope: !524)
+!533 = !DILocation(line: 97, column: 21, scope: !524)
+!534 = !DILocalVariable(name: "h", scope: !524, file: !13, line: 97, type: !19)
+!535 = !DILocation(line: 98, column: 3, scope: !524)
+!536 = !DILocation(line: 98, column: 23, scope: !524)
+!537 = !DILocalVariable(name: "fingerprint", scope: !524, file: !13, line: 98, type: !19)
+!538 = !DILocation(line: 99, column: 3, scope: !524)
+!539 = !DILocation(line: 99, column: 16, scope: !524)
+!540 = !DILocation(line: 99, column: 27, scope: !524)
+!541 = !DILocation(line: 99, column: 30, scope: !524)
+!542 = !DILocalVariable(name: "bucket", scope: !524, file: !13, line: 99, type: !4)
+!543 = !DILocation(line: 102, column: 3, scope: !524)
+!544 = !DILocation(line: 102, column: 40, scope: !524)
+!545 = !DILocation(line: 109, column: 33, scope: !524)
+!546 = !DILocation(line: 109, column: 82, scope: !524)
+!547 = !DILocation(line: 102, column: 10, scope: !524)
+!548 = !DILocation(line: 102, column: 20, scope: !524)
+!549 = !DILocation(line: 102, column: 25, scope: !524)
+!550 = !DILocation(line: 102, column: 34, scope: !524)
+!551 = !DILocation(line: 102, column: 55, scope: !524)
+!552 = !DILocation(line: 103, column: 5, scope: !524)
+!553 = !DILocation(line: 103, column: 18, scope: !524)
+!554 = !DILocation(line: 103, column: 24, scope: !524)
+!555 = !DILocalVariable(name: "word", scope: !524, file: !13, line: 103, type: !19)
+!556 = !DILocation(line: 104, column: 5, scope: !524)
+!557 = !DILocation(line: 104, column: 9, scope: !524)
+!558 = !DILocation(line: 104, column: 18, scope: !524)
+!559 = !DILocation(line: 104, column: 21, scope: !524)
+!560 = !DILocation(line: 105, column: 7, scope: !524)
+!561 = !DILocation(line: 105, column: 14, scope: !524)
+!562 = !DILocation(line: 105, column: 23, scope: !524)
+!563 = !DILocation(line: 105, column: 31, scope: !524)
+!564 = !DILocation(line: 107, column: 5, scope: !524)
+!565 = !DILocation(line: 107, column: 9, scope: !524)
+!566 = !DILocation(line: 107, column: 25, scope: !524)
+!567 = !DILocation(line: 107, column: 38, scope: !524)
+!568 = !DILocation(line: 108, column: 7, scope: !524)
+!569 = !DILocation(line: 108, column: 18, scope: !524)
+!570 = !DILocation(line: 108, column: 24, scope: !524)
+!571 = !DILocation(line: 108, column: 31, scope: !524)
+!572 = !DILocation(line: 108, column: 43, scope: !524)
+!573 = !DILocalVariable(name: "at", scope: !524, file: !13, line: 108, type: !4)
+!574 = !DILocation(line: 109, column: 7, scope: !524)
+!575 = !DILocation(line: 109, column: 11, scope: !524)
+!576 = !DILocation(line: 109, column: 17, scope: !524)
+!577 = !DILocation(line: 109, column: 22, scope: !524)
+!578 = !DILocation(line: 109, column: 27, scope: !524)
+!579 = !DILocation(line: 109, column: 51, scope: !524)
+!580 = !DILocation(line: 109, column: 58, scope: !524)
+!581 = !DILocation(line: 109, column: 66, scope: !524)
+!582 = !DILocation(line: 109, column: 71, scope: !524)
+!583 = !DILocation(line: 109, column: 76, scope: !524)
+!584 = !DILocation(line: 109, column: 98, scope: !524)
+!585 = !DILocation(line: 109, column: 106, scope: !524)
+!586 = !DILocation(line: 109, column: 111, scope: !524)
+!587 = !DILocation(line: 109, column: 116, scope: !524)
+!588 = !DILocation(line: 109, column: 122, scope: !524)
+!589 = !DILocation(line: 110, column: 9, scope: !524)
+!590 = !DILocation(line: 110, column: 16, scope: !524)
+!591 = !DILocation(line: 110, column: 24, scope: !524)
+!592 = !DILocation(line: 110, column: 32, scope: !524)
+!593 = !DILocation(line: 113, column: 5, scope: !524)
+!594 = !DILocation(line: 113, column: 14, scope: !524)
+!595 = !DILocation(line: 113, column: 15, scope: !524)
+!596 = !DILocation(line: 113, column: 24, scope: !524)
+!597 = !DILocation(line: 113, column: 29, scope: !524)
+!598 = !DILocation(line: 115, column: 3, scope: !524)
+!599 = !DILocation(line: 115, column: 9, scope: !524)
+!600 = !{null, !35, !23}
+!601 = !DISubroutineType(types: !600)
+!602 = distinct !DISubprogram(name: "compactEntries<string>", linkageName: "nish.compactEntries$str", scope: !13, file: !13, line: 136, type: !601, scopeLine: 136, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!603 = !DILocation(line: 136, column: 1, scope: !602)
+!604 = !DILocalVariable(name: "items", arg: 1, scope: !602, file: !13, line: 136, type: !35)
+!605 = !DILocalVariable(name: "hashes", arg: 2, scope: !602, file: !13, line: 136, type: !23)
+!606 = !DILocation(line: 137, column: 3, scope: !602)
+!607 = !DILocation(line: 137, column: 16, scope: !602)
+!608 = !DILocation(line: 137, column: 22, scope: !602)
+!609 = !DILocalVariable(name: "used", scope: !602, file: !13, line: 137, type: !4)
+!610 = !DILocation(line: 138, column: 3, scope: !602)
+!611 = !DILocation(line: 138, column: 17, scope: !602)
+!612 = !DILocalVariable(name: "to", scope: !602, file: !13, line: 138, type: !4)
+!613 = !DILocation(line: 139, column: 3, scope: !602)
+!614 = !DILocation(line: 139, column: 24, scope: !602)
+!615 = !DILocalVariable(name: "from", scope: !602, file: !13, line: 139, type: !4)
+!616 = !DILocation(line: 139, column: 55, scope: !602)
+!617 = !DILocation(line: 140, column: 68, scope: !602)
+!618 = !DILocation(line: 139, column: 27, scope: !602)
+!619 = !DILocation(line: 139, column: 34, scope: !602)
+!620 = !DILocation(line: 139, column: 42, scope: !602)
+!621 = !DILocation(line: 139, column: 49, scope: !602)
+!622 = !DILocation(line: 139, column: 79, scope: !602)
+!623 = !DILocation(line: 140, column: 5, scope: !602)
+!624 = !DILocation(line: 140, column: 9, scope: !602)
+!625 = !DILocation(line: 140, column: 16, scope: !602)
+!626 = !DILocation(line: 140, column: 26, scope: !602)
+!627 = !DILocation(line: 140, column: 31, scope: !602)
+!628 = !DILocation(line: 140, column: 37, scope: !602)
+!629 = !DILocation(line: 140, column: 42, scope: !602)
+!630 = !DILocation(line: 140, column: 47, scope: !602)
+!631 = !DILocation(line: 140, column: 55, scope: !602)
+!632 = !DILocation(line: 140, column: 62, scope: !602)
+!633 = !DILocation(line: 140, column: 83, scope: !602)
+!634 = !DILocation(line: 141, column: 7, scope: !602)
+!635 = !DILocation(line: 141, column: 13, scope: !602)
+!636 = !DILocation(line: 141, column: 19, scope: !602)
+!637 = !DILocation(line: 141, column: 25, scope: !602)
+!638 = !DILocation(line: 142, column: 7, scope: !602)
+!639 = !DILocation(line: 139, column: 71, scope: !602)
+!640 = !DILocation(line: 145, column: 3, scope: !602)
+!641 = !DILocation(line: 145, column: 10, scope: !602)
+!642 = !DILocation(line: 145, column: 16, scope: !602)
+!643 = !DILocation(line: 145, column: 32, scope: !602)
+!644 = !DILocation(line: 145, column: 36, scope: !602)
+!645 = !DILocation(line: 146, column: 5, scope: !602)
+!646 = !{null, !43, !23}
+!647 = !DISubroutineType(types: !646)
+!648 = distinct !DISubprogram(name: "compactEntries<i32>", linkageName: "nish.compactEntries$i32", scope: !13, file: !13, line: 136, type: !647, scopeLine: 136, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!649 = !DILocation(line: 136, column: 1, scope: !648)
+!650 = !DILocalVariable(name: "items", arg: 1, scope: !648, file: !13, line: 136, type: !43)
+!651 = !DILocalVariable(name: "hashes", arg: 2, scope: !648, file: !13, line: 136, type: !23)
+!652 = !DILocation(line: 137, column: 3, scope: !648)
+!653 = !DILocation(line: 137, column: 16, scope: !648)
+!654 = !DILocation(line: 137, column: 22, scope: !648)
+!655 = !DILocalVariable(name: "used", scope: !648, file: !13, line: 137, type: !4)
+!656 = !DILocation(line: 138, column: 3, scope: !648)
+!657 = !DILocation(line: 138, column: 17, scope: !648)
+!658 = !DILocalVariable(name: "to", scope: !648, file: !13, line: 138, type: !4)
+!659 = !DILocation(line: 139, column: 3, scope: !648)
+!660 = !DILocation(line: 139, column: 24, scope: !648)
+!661 = !DILocalVariable(name: "from", scope: !648, file: !13, line: 139, type: !4)
+!662 = !DILocation(line: 139, column: 55, scope: !648)
+!663 = !DILocation(line: 140, column: 68, scope: !648)
+!664 = !DILocation(line: 139, column: 27, scope: !648)
+!665 = !DILocation(line: 139, column: 34, scope: !648)
+!666 = !DILocation(line: 139, column: 42, scope: !648)
+!667 = !DILocation(line: 139, column: 49, scope: !648)
+!668 = !DILocation(line: 139, column: 79, scope: !648)
+!669 = !DILocation(line: 140, column: 5, scope: !648)
+!670 = !DILocation(line: 140, column: 9, scope: !648)
+!671 = !DILocation(line: 140, column: 16, scope: !648)
+!672 = !DILocation(line: 140, column: 26, scope: !648)
+!673 = !DILocation(line: 140, column: 31, scope: !648)
+!674 = !DILocation(line: 140, column: 37, scope: !648)
+!675 = !DILocation(line: 140, column: 42, scope: !648)
+!676 = !DILocation(line: 140, column: 47, scope: !648)
+!677 = !DILocation(line: 140, column: 55, scope: !648)
+!678 = !DILocation(line: 140, column: 62, scope: !648)
+!679 = !DILocation(line: 140, column: 83, scope: !648)
+!680 = !DILocation(line: 141, column: 7, scope: !648)
+!681 = !DILocation(line: 141, column: 13, scope: !648)
+!682 = !DILocation(line: 141, column: 19, scope: !648)
+!683 = !DILocation(line: 141, column: 25, scope: !648)
+!684 = !DILocation(line: 142, column: 7, scope: !648)
+!685 = !DILocation(line: 139, column: 71, scope: !648)
+!686 = !DILocation(line: 145, column: 3, scope: !648)
+!687 = !DILocation(line: 145, column: 10, scope: !648)
+!688 = !DILocation(line: 145, column: 16, scope: !648)
+!689 = !DILocation(line: 145, column: 32, scope: !648)
+!690 = !DILocation(line: 145, column: 36, scope: !648)
+!691 = !DILocation(line: 146, column: 5, scope: !648)

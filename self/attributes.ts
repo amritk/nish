@@ -137,7 +137,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types";
-import { valueReaderOf } from "./emit_map";
+import { valueReaderOf, walkMethodsOf } from "./emit_map";
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
@@ -699,6 +699,15 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       return use(USE_READ);
     }
     if (parent.kind === N_FOR_OF) {
+      // WP32: a walk of a `Set` itself hands it to the table's walk methods,
+      // `walkOpen` first, whose stores into the table are the walk's only
+      // writes; `m.keys()` reaches here as the receiver of that call instead.
+      const read = program.nodeCallees[parent.id];
+      if (read !== null && parent.children[1] === node) {
+        const owner = read.owner;
+        const open: FunctionSig | null = owner === null ? null : owner.method("walkOpen");
+        return open === null ? use(USE_ESCAPE) : argumentUse(open, 0);
+      }
       // The loop variable of an inline-element array is each slot's address,
       // so the array itself is what the body holds (`yieldsInteriorPointer`).
       if (parent.children[1] !== node) {
@@ -1212,6 +1221,16 @@ class FactCollector {
       const reads: FunctionSig | null = callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null;
       if (reads !== null) {
         this.facts.callees.add(reads.name);
+      }
+    }
+    // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
+    // (`emitWalk`); the loop records the reader, and the rest are its owner's.
+    if (node.kind === N_FOR_OF) {
+      const read = program.nodeCallees[node.id];
+      if (read !== null) {
+        for (const sig of walkMethodsOf(read)) {
+          this.facts.callees.add(sig.name);
+        }
       }
     }
     const param = this.paramRef(node);
@@ -2187,6 +2206,11 @@ export const isCountedLoop = (
 ): boolean => {
   const program = unit.program;
   if (loop.kind === N_FOR_OF) {
+    // WP32: a walk re-reads the entry count every pass, and a body that sets
+    // a new key extends it forever, as JavaScript's does; it is never counted.
+    if (program.nodeCallees[loop.id] !== null) {
+      return false;
+    }
     return !bodyMayExtend(unit, table, loop.children[2], known);
   }
   if (loop.kind !== N_FOR) {

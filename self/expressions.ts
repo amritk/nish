@@ -1168,7 +1168,7 @@ const ELSEWHERE: string =
  * for an instantiation can belong to another module's tree, whose ids are not
  * this table's, so the link is confirmed rather than trusted.
  */
-const linkedParent = (parents: ParentTable, node: Node): Node | null => {
+export const linkedParent = (parents: ParentTable, node: Node): Node | null => {
   if (node.id < 0 || node.id >= parents.parents.length) {
     return null;
   }

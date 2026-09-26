@@ -125,6 +125,116 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/map_iter_exit_edges.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/link/map_walk_two_modules/main.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_generic.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/dbg_map_iter.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_break.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_callee.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_clear.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_compaction_deferred.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_delete_ahead.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_delete_reset.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_growth.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_keys.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_nested.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_or_return.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_return.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_set_existing.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_set_new.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/map_iter_values.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/set_iter.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/set_iter_keys.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/cases/set_iter_values.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "docs/cookbook/map_iter.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
     program: "tests/cases/map_get_default_escapes.ts",
     changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
     why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",

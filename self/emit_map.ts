@@ -33,7 +33,7 @@
 // every integer, boolean, enum and pointer, and for a float `a == b`
 // (`fcmp oeq`, so -0 equals +0) or both NaN.
 
-import { Emitter } from "./emit";
+import { Emitter, LoopTarget } from "./emit";
 import { FactsTable } from "./attributes";
 import { internalErrorFor } from "./ice";
 import { intrinsicType, unwrapParens } from "./emit_util";
@@ -495,4 +495,134 @@ const isPlainOperand = (emitter: Emitter, expr: Node): boolean => {
     expr.kind === N_FALSE ||
     expr.kind === N_NULL
   );
+};
+
+// ---- `for (const k of m.keys())`: a walk ------------------------------------------
+
+/**
+ * A `for...of` over `m.keys()`, `m.values()`, a `Set` or its two iterators
+ * (docs/wp32-map.md §6.2, §6.3), lowered to the table's four walk methods:
+ *
+ *     walkOpen(m)                   where the loop is entered: the count of live walks
+ *     i = walkNext(m, 0)            the first live entry, or -1
+ *   walk.cond:  i >= 0 ?
+ *   walk.body:  x = keyAt(m, i)     (`valueAt` for `values()`), then the body
+ *   walk.inc:   i = walkNext(m, i + 1)
+ *   walk.end:   walkClose(m)
+ *
+ * `walkNext` reads the entry count on every call and skips a dead entry, and
+ * no entry moves while the count is above zero, so each mutation of the table
+ * during the walk has JavaScript's effect. `break` and the fall-through both
+ * leave through `walk.end`; `continue` goes to `walk.inc` and stays inside;
+ * a `return`, or an `orReturn()`, leaves every walk around it, and
+ * `emitScopeExit` closes each (`emitWalkExits`). The receiver is evaluated
+ * once, where the loop is entered, as JavaScript evaluates the iterable once.
+ */
+export const emitWalk = (emitter: Emitter, stmt: Node): void => {
+  const decl = stmt.children[0].children[0].children[0];
+  const local = emitter.program.nodeLocals[decl.id];
+  if (local === null) {
+    process.exit(internalErrorFor("emitter: a walk with no variable recorded", emitter.opts.json));
+  }
+  const read = emitter.program.nodeCallees[stmt.id];
+  if (read === null) {
+    process.exit(internalErrorFor("emitter: a walk with no reader recorded", emitter.opts.json));
+  }
+  const owner = read.owner;
+  if (owner === null) {
+    process.exit(internalErrorFor("emitter: a walk reader outside its class", emitter.opts.json));
+  }
+  const open = owner.method("walkOpen");
+  const next = owner.method("walkNext");
+  const close = owner.method("walkClose");
+  if (open === null || next === null || close === null) {
+    process.exit(internalErrorFor("emitter: the global `Map` or `Set` has no walk", emitter.opts.json));
+  }
+  const fn = emitter.fn;
+  const elem = local.type;
+  const ty = emitter.llvm(elem);
+  const condBlock = fn.newBlock("walk.cond");
+  const bodyBlock = fn.newBlock("walk.body");
+  const incBlock = fn.newBlock("walk.inc");
+  const endBlock = fn.newBlock("walk.end");
+  const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(elem));
+  emitter.setSlot(local, slot);
+  const debug = emitter.debug;
+  if (debug !== null) {
+    debug.declareLocal(fn, local, slot, decl); // `-g`
+  }
+  const idxSlot = fn.emitAlloca("walk.idx", "i32", emitter.align(T_I32));
+
+  const iterable = unwrapParens(stmt.children[1]);
+  // `m.keys()` was checked as a call of `walkOpen`; any other iterable, a call
+  // that answers a `Set` included, is the table itself.
+  const recorded = emitter.program.nodeCallees[iterable.id];
+  const isCall = iterable.kind === N_CALL && recorded !== null && recorded === open;
+  const receiverExpr = isCall ? iterable.children[0].children[0] : iterable;
+  const receiver = `${emitter.llvm(open.paramTypes[0])} ${emitter.emitExpression(receiverExpr)}`;
+  fn.emit(`call void @${open.name}(${receiver})`);
+  const first = fn.emitValue(`call i32 @${next.name}(${receiver}, i32 0)`);
+  fn.emit(`store i32 ${first}, i32* ${idxSlot}${emitter.alignSuffix(T_I32)}`);
+  fn.emit(`br label %${condBlock.label}`);
+
+  fn.placeBlock(condBlock);
+  const at = fn.emitValue(`load i32, i32* ${idxSlot}${emitter.alignSuffix(T_I32)}`);
+  const more = fn.emitValue(`icmp sge i32 ${at}, 0`);
+  fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`);
+
+  fn.placeBlock(bodyBlock);
+  const value = fn.emitValue(`call ${emitter.llvm(read.returnType)} @${read.name}(${receiver}, i32 ${at})`);
+  fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`);
+  const target = new LoopTarget(endBlock, incBlock);
+  target.walkClose = `call void @${close.name}(${receiver})`;
+  emitter.loops.push(target);
+  emitter.emitStatement(stmt.children[2]);
+  emitter.loops.pop();
+  if (!fn.currentBlock().terminated()) {
+    fn.emit(`br label %${incBlock.label}`);
+  }
+
+  fn.placeBlock(incBlock);
+  const after = fn.emitValue(`add i32 ${at}, 1`); // `walk.cond`'s load dominates this block
+  const found = fn.emitValue(`call i32 @${next.name}(${receiver}, i32 ${after})`);
+  fn.emit(`store i32 ${found}, i32* ${idxSlot}${emitter.alignSuffix(T_I32)}`);
+  fn.emit(`br label %${condBlock.label}`);
+
+  fn.placeBlock(endBlock);
+  fn.emit(target.walkClose);
+};
+
+/**
+ * The four methods a walk calls, given the reader its loop recorded: what
+ * the whole-program facts count as its callees, so each is copied into the
+ * module (`libraryReach`).
+ */
+export const walkMethodsOf = (read: FunctionSig): FunctionSig[] => {
+  const out: FunctionSig[] = [read];
+  const owner = read.owner;
+  if (owner === null) {
+    return out;
+  }
+  for (const name of ["walkOpen", "walkNext", "walkClose"]) {
+    const sig = owner.method(name);
+    if (sig !== null) {
+      out.push(sig);
+    }
+  }
+  return out;
+};
+
+/**
+ * Close every walk a `return` leaves, innermost first: each enclosing loop
+ * that is a walk decrements its table's count, so a compaction the walk
+ * deferred can happen once it is over (docs/wp32-map.md §6.2). Every exit of
+ * a function goes through `emitScopeExit`, which calls this.
+ */
+export const emitWalkExits = (emitter: Emitter): void => {
+  for (let i = emitter.loops.length - 1; i >= 0; i--) {
+    const close = emitter.loops[i].walkClose;
+    if (close.length > 0) {
+      emitter.fn.emit(close);
+    }
+  }
 };

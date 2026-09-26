@@ -135,6 +135,13 @@ export class CheckContext {
    */
   statementExpression: Node | null;
   /**
+   * WP32: the `for...of` whose iterable is being checked, while it is. A
+   * `keys()` or `values()` call of the global `Map` or `Set` is legal only as
+   * that iterable, and `checkMethodCall` asks this rather than a parent
+   * pointer the tree does not have, as `statementExpression` does.
+   */
+  forOfWalk: Node | null;
+  /**
    * Set by `error` and cleared at the start of each statement: the statement
    * has already been refused, so nothing further *in it* is checked or
    * reported.
@@ -173,6 +180,7 @@ export class CheckContext {
     this.loopKinds = [];
     this.loopBreaks = [];
     this.statementExpression = null;
+    this.forOfWalk = null;
     this.errored = false;
     this.typeBindings = new StringMap();
     this.functionBindings = new FunctionBindings();

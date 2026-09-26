@@ -1,0 +1,9 @@
+define internal void @nish.Map$str$i32.walkOpen(
+define internal noundef i32 @nish.Map$str$i32.walkNext(
+define internal void @nish.Map$str$i32.walkClose(
+define internal noundef i32 @nish.Map$str$i32.valueAt(
+define internal void @nish.Set$str.walkOpen(
+define internal noundef i32 @nish.Set$str.walkNext(
+define internal void @nish.Set$str.walkClose(
+define internal noundef nonnull align 8 i8* @nish.Set$str.keyAt(
+define internal noundef i32 @nish.nextLive(
