@@ -46,7 +46,9 @@
     "test:nish": "build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
     "test:cli": "build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
     "test:node": "node tests/differential/unmodified.js",
-    "lint": "node scripts/check-filenames.mjs --advisory && biome check --formatter-enabled=false .",
+    "lint": "node scripts/check-filenames.mjs && biome check .",
+    "lint:fix": "biome check --write .",
+    "lint:dead": "knip --no-progress",
     "format": "biome format --write .",
     "prepublishOnly": "npm run check && npm test",
     "changelog": "node scripts/changelog-gen.mjs"
@@ -83,6 +85,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@types/node": "^22.0.0",
+    "knip": "6.38.0",
     "typescript": "^5.6.0"
   }
 }

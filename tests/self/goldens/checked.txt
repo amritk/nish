@@ -5095,7 +5095,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -5418,7 +5418,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -7960,14 +7960,14 @@ function storedKey<i32>(key: i32): i32 -> @nish.storedKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   stackSites=0 stackLocals=0
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -8300,7 +8300,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -8581,7 +8581,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -8852,7 +8852,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -9170,7 +9170,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -9216,11 +9216,11 @@ function intern<f64>(ids: Map<f64, f64>, key: f64): f64 -> @intern$f64 [instance
   callee 8:10 getOrInsert<f64, f64> -> @nish.getOrInsert$f64$f64
 module std/map.ts [package nish]
 import Map from "nish/collections" -> generic class Map
-function reserve<string, f64>(m: Map<string, f64>, n: f64): void -> @nish.reserve$str$f64 [exported instance]
+function reserve<string, f64>(_m: Map<string, f64>, _n: f64): void -> @nish.reserve$str$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$str$f64.reserveSlots
   calls: nish.Map$str$f64.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$f64.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$f64.reserveSlots#0
   stackSites=0 stackLocals=0
 function getOrInsert<string, f64>(m: Map<string, f64>, key: string, value: f64): f64 -> @nish.getOrInsert$str$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -9232,11 +9232,11 @@ function getOrInsert<string, f64>(m: Map<string, f64>, key: string, value: f64):
   local 33:9 found: f64 | undefined (const)
   callee 33:17 Map<string, f64>.probe -> @nish.Map$str$f64.probe
   callee 37:3 Map<string, f64>.set -> @nish.Map$str$f64.set
-function reserve<f64, f64>(m: Map<f64, f64>, n: f64): void -> @nish.reserve$f64$f64 [exported instance]
+function reserve<f64, f64>(_m: Map<f64, f64>, _n: f64): void -> @nish.reserve$f64$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$f64$f64.reserveSlots
   calls: nish.Map$f64$f64.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$f64$f64.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$f64$f64.reserveSlots#0
   stackSites=0 stackLocals=0
 function getOrInsert<f64, f64>(m: Map<f64, f64>, key: f64, value: f64): f64 -> @nish.getOrInsert$f64$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -9729,14 +9729,14 @@ function storedKey<f64>(key: f64): f64 -> @nish.storedKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   stackSites=0 stackLocals=0
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -10084,7 +10084,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -10131,11 +10131,11 @@ function main(): i32 -> @nish_main [exported entry]
   callee 42:58 Map<f64, f64>.probe -> @nish.Map$f64$f64.probe
 module std/map.ts [package nish]
 import Map from "nish/collections" -> generic class Map
-function reserve<f64, f64>(m: Map<f64, f64>, n: f64): void -> @nish.reserve$f64$f64 [exported instance]
+function reserve<f64, f64>(_m: Map<f64, f64>, _n: f64): void -> @nish.reserve$f64$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$f64$f64.reserveSlots
   calls: nish.Map$f64$f64.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$f64$f64.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$f64$f64.reserveSlots#0
   stackSites=0 stackLocals=0
 module std/collections.ts [package nish]
 const INDEX_CAP: i32 = 16777215
@@ -10425,7 +10425,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -10454,11 +10454,11 @@ function main(): i32 -> @nish_main [exported entry]
   callee 17:25 getOrInsert<string, f64> -> @nish.getOrInsert$str$f64
 module std/map.ts [package nish]
 import Map from "nish/collections" -> generic class Map
-function reserve<string, f64>(m: Map<string, f64>, n: f64): void -> @nish.reserve$str$f64 [exported instance]
+function reserve<string, f64>(_m: Map<string, f64>, _n: f64): void -> @nish.reserve$str$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$str$f64.reserveSlots
   calls: nish.Map$str$f64.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$f64.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$f64.reserveSlots#0
   stackSites=0 stackLocals=0
 function getOrInsert<string, f64>(m: Map<string, f64>, key: string, value: f64): f64 -> @nish.getOrInsert$str$f64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -10774,7 +10774,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -11109,7 +11109,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -11780,14 +11780,14 @@ function storedKey<f64>(key: f64): f64 -> @nish.storedKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   stackSites=0 stackLocals=0
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -12122,7 +12122,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -12458,7 +12458,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -12791,7 +12791,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -13127,7 +13127,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -13463,7 +13463,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -13802,7 +13802,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -14138,7 +14138,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -14474,7 +14474,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -14812,7 +14812,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -15152,7 +15152,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -15439,7 +15439,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -15756,7 +15756,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -16091,7 +16091,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -16379,7 +16379,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -16850,7 +16850,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -17186,7 +17186,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -17631,7 +17631,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -17965,7 +17965,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -18323,7 +18323,7 @@ function compactEntries<Node>(items: Node[], hashes: u32[]): void -> @nish.compa
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -18673,7 +18673,7 @@ function compactEntries<Square>(items: Square[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -19017,7 +19017,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -19342,7 +19342,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -19672,7 +19672,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -20198,7 +20198,7 @@ function compactEntries<Node | null>(items: Node | null[], hashes: u32[]): void 
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -20549,7 +20549,7 @@ function compactEntries<boolean>(items: boolean[], hashes: u32[]): void -> @nish
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -20877,7 +20877,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -21184,7 +21184,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -21505,7 +21505,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -22385,14 +22385,14 @@ function compactEntries<f32>(items: f32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -22717,7 +22717,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -23043,7 +23043,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -23379,7 +23379,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -23710,7 +23710,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -24037,7 +24037,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -24349,7 +24349,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -24678,7 +24678,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -25242,13 +25242,13 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -25883,14 +25883,14 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -26200,7 +26200,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -26530,7 +26530,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -26859,7 +26859,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -27195,7 +27195,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -27536,7 +27536,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -27865,7 +27865,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -28192,7 +28192,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -28506,7 +28506,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -28831,7 +28831,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<boolean>(key: boolean): u32 -> @nish.hashKey$bool [instance]
+function hashKey<boolean>(_key: boolean): u32 -> @nish.hashKey$bool [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<boolean>(a: boolean, b: boolean): boolean -> @nish.sameKey$bool [instance]
@@ -29173,9 +29173,9 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<Point>(key: Point): u32 -> @nish.hashKey$$Point [instance]
+function hashKey<Point>(_key: Point): u32 -> @nish.hashKey$$Point [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer key: size=8 writesThrough=false captured=false
+  pointer _key: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function sameKey<Point>(a: Point, b: Point): boolean -> @nish.sameKey$$Point [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -29498,7 +29498,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<Fruit>(key: Fruit): u32 -> @nish.hashKey$en$Fruit [instance]
+function hashKey<Fruit>(_key: Fruit): u32 -> @nish.hashKey$en$Fruit [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<Fruit>(a: Fruit, b: Fruit): boolean -> @nish.sameKey$en$Fruit [instance]
@@ -29827,7 +29827,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f32>(key: f32): u32 -> @nish.hashKey$f32 [instance]
+function hashKey<f32>(_key: f32): u32 -> @nish.hashKey$f32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f32>(a: f32, b: f32): boolean -> @nish.sameKey$f32 [instance]
@@ -30342,7 +30342,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f32>(key: f32): u32 -> @nish.hashKey$f32 [instance]
+function hashKey<f32>(_key: f32): u32 -> @nish.hashKey$f32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f32>(a: f32, b: f32): boolean -> @nish.sameKey$f32 [instance]
@@ -30680,7 +30680,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -31003,7 +31003,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -31342,7 +31342,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i64>(key: i64): u32 -> @nish.hashKey$i64 [instance]
+function hashKey<i64>(_key: i64): u32 -> @nish.hashKey$i64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i64>(a: i64, b: i64): boolean -> @nish.sameKey$i64 [instance]
@@ -32033,7 +32033,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -32364,7 +32364,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -32704,7 +32704,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<u16>(key: u16): u32 -> @nish.hashKey$u16 [instance]
+function hashKey<u16>(_key: u16): u32 -> @nish.hashKey$u16 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<u16>(a: u16, b: u16): boolean -> @nish.sameKey$u16 [instance]
@@ -33037,7 +33037,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<u32>(key: u32): u32 -> @nish.hashKey$u32 [instance]
+function hashKey<u32>(_key: u32): u32 -> @nish.hashKey$u32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<u32>(a: u32, b: u32): boolean -> @nish.sameKey$u32 [instance]
@@ -33376,7 +33376,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<u64>(key: u64): u32 -> @nish.hashKey$u64 [instance]
+function hashKey<u64>(_key: u64): u32 -> @nish.hashKey$u64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<u64>(a: u64, b: u64): boolean -> @nish.sameKey$u64 [instance]
@@ -33715,7 +33715,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<u8>(key: u8): u32 -> @nish.hashKey$u8 [instance]
+function hashKey<u8>(_key: u8): u32 -> @nish.hashKey$u8 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<u8>(a: u8, b: u8): boolean -> @nish.sameKey$u8 [instance]
@@ -36618,7 +36618,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -36897,7 +36897,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -37176,7 +37176,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -37454,7 +37454,7 @@ function compactEntries<f64>(items: f64[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<f64>(key: f64): u32 -> @nish.hashKey$f64 [instance]
+function hashKey<f64>(_key: f64): u32 -> @nish.hashKey$f64 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<f64>(a: f64, b: f64): boolean -> @nish.sameKey$f64 [instance]
@@ -37734,7 +37734,7 @@ function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.c
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -38851,7 +38851,7 @@ function compactEntries<boolean>(items: boolean[], hashes: u32[]): void -> @nish
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -38914,11 +38914,11 @@ function main(): void -> @nish_main [exported entry]
   callee 49:57 Map<string, i32>.probe -> @nish.Map$str$i32.probe
 module std/map.ts [package nish]
 import Map from "nish/collections" -> generic class Map
-function reserve<string, i32>(m: Map<string, i32>, n: i32): void -> @nish.reserve$str$i32 [exported instance]
+function reserve<string, i32>(_m: Map<string, i32>, _n: i32): void -> @nish.reserve$str$i32 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$str$i32.reserveSlots
   calls: nish.Map$str$i32.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
   stackSites=0 stackLocals=0
 function getOrInsert<string, i32>(m: Map<string, i32>, key: string, value: i32): i32 -> @nish.getOrInsert$str$i32 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -39229,7 +39229,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -40206,11 +40206,11 @@ function getOrInsert<string, i32>(m: Map<string, i32>, key: string, value: i32):
   local 33:9 found: i32 | undefined (const)
   callee 33:17 Map<string, i32>.probe -> @nish.Map$str$i32.probe
   callee 37:3 Map<string, i32>.set -> @nish.Map$str$i32.set
-function reserve<string, i32>(m: Map<string, i32>, n: i32): void -> @nish.reserve$str$i32 [exported instance]
+function reserve<string, i32>(_m: Map<string, i32>, _n: i32): void -> @nish.reserve$str$i32 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$str$i32.reserveSlots
   calls: nish.Map$str$i32.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
   stackSites=0 stackLocals=0
 module std/collections.ts [package nish]
 const INDEX_CAP: i32 = 16777215
@@ -40511,7 +40511,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -40961,7 +40961,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -41288,7 +41288,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
@@ -41558,7 +41558,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -41859,7 +41859,7 @@ function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compact
   local 143:9 used: i32 (const)
   local 144:7 to: i32 (let)
   local 145:12 from: i32 (let)
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -43284,17 +43284,17 @@ function main(): i32 -> @nish_main [exported entry]
   callee 134:67 insertInt -> @insertInt
 module std/map.ts [package nish]
 import Map from "nish/collections" -> generic class Map
-function reserve<string, i32>(m: Map<string, i32>, n: i32): void -> @nish.reserve$str$i32 [exported instance]
+function reserve<string, i32>(_m: Map<string, i32>, _n: i32): void -> @nish.reserve$str$i32 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$str$i32.reserveSlots
   calls: nish.Map$str$i32.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
   stackSites=0 stackLocals=0
-function reserve<i32, i32>(m: Map<i32, i32>, n: i32): void -> @nish.reserve$i32$i32 [exported instance]
+function reserve<i32, i32>(_m: Map<i32, i32>, _n: i32): void -> @nish.reserve$i32$i32 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Map$i32$i32.reserveSlots
   calls: nish.Map$i32$i32.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$i32$i32.reserveSlots#0
+  pointer _m: size=56 writesThrough=true captured=false passedTo=nish.Map$i32$i32.reserveSlots#0
   stackSites=0 stackLocals=0
 module std/collections.ts [package nish]
 const INDEX_CAP: i32 = 16777215
@@ -43771,14 +43771,14 @@ function storedKey<i32>(key: i32): i32 -> @nish.storedKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   stackSites=0 stackLocals=0
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -46344,14 +46344,14 @@ function storedKey<i32>(key: i32): i32 -> @nish.storedKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   stackSites=0 stackLocals=0
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
@@ -47004,14 +47004,14 @@ function storedKey<i32>(key: i32): i32 -> @nish.storedKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   stackSites=0 stackLocals=0
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
+function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]

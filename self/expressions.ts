@@ -159,7 +159,7 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_UNARY:
       return checkUnary(ctx, expr, scope, want)
     case N_BINARY:
-      return checkBinary(ctx, expr, scope, want)
+      return checkBinary(ctx, expr, scope)
     case N_CONDITIONAL:
       return checkConditional(ctx, expr, scope, want)
     case N_CALL:
@@ -197,13 +197,7 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * five and `Math.sqrt(2)` an `f64` two. Without a context it is `number`,
  * which is `i32` unless `--number-mode f64`.
  */
-export const checkNumericLiteral = (
-  ctx: CheckContext,
-  expr: Node,
-  want: i32,
-  negated: boolean,
-  at: Node
-): i32 => {
+const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 => {
   const type = want >= 0 && isNumeric(want) ? want : ctx.numberType()
   if (isFloat(type)) {
     return type
@@ -517,7 +511,7 @@ export const checkBitwiseAssignOperands = (ctx: CheckContext, expr: Node, target
   return target
 }
 
-const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
+const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const op = expr.text
   if (op === "==" || op === "!=") {
     return ctx.errorType(expr, "Loose equality is forbidden; use === / !==")
@@ -1000,7 +994,7 @@ export const WANT_MAYBE: i32 = -2
  * The value `undefined`: the identifier, unless a local of that name shadows
  * it, as a parameter called `undefined` does under `tsc`.
  */
-export const isUndefinedValue = (node: Node, scope: Scope): boolean =>
+const isUndefinedValue = (node: Node, scope: Scope): boolean =>
   isUndefined(node) && scope.lookup("undefined") === null
 
 /** `a === undefined` / `a !== undefined`: a test of a maybe's found bit, and nothing else. */
@@ -1452,13 +1446,6 @@ const checkDirectCall = (
   }
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
-}
-
-/** Check every argument of a call against one expected type, for the builtins. */
-export const checkArguments = (ctx: CheckContext, args: Node, scope: Scope, want: i32): void => {
-  for (const arg of args.children) {
-    checkExpression(ctx, arg, scope, want)
-  }
 }
 
 /**

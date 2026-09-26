@@ -64,7 +64,7 @@ const INITIAL_SLOTS: i32 = 8
  * facts see, and the facts of the function that calls it are what decide its
  * attributes, because every call is inside a probe that reads the table.
  */
-const hashKey = <K>(key: K): u32 => 1
+const hashKey = <K>(_key: K): u32 => 1
 
 /**
  * JavaScript's key equality, SameValueZero: `===`, except that NaN equals NaN.

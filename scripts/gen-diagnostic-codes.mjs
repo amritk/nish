@@ -79,7 +79,8 @@ const MIN_FRAGMENT = 10
  * against a performance message.
  */
 const tableText = (text, name) => {
-  const open = text.indexOf(`export const ${name} = (): string[] => [`)
+  const header = new RegExp(`^(?:export )?const ${name} = \\(\\): string\\[\\] => \\[`, "m").exec(text)
+  const open = header === null ? -1 : header.index
   if (open < 0) {
     return null
   }

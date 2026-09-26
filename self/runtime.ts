@@ -65,13 +65,13 @@ export const maxEffect = (a: i32, b: i32): i32 => (a >= b ? a : b)
 // the `EFFECT_WRITE` entries on the harmless side of it.
 
 /** Writes nothing a program can observe: every `EFFECT_NONE` and `EFFECT_READ` entry, and a few more. */
-export const WRITES_NOTHING: i32 = 0
+const WRITES_NOTHING: i32 = 0
 /** Writes memory or external state a caller could observe. The default for `EFFECT_WRITE`. */
-export const WRITES_SHARED: i32 = 1
+const WRITES_SHARED: i32 = 1
 /** Prints to fd 2 and `_exit`s: no user memory is written, and no caller runs again to look. */
-export const WRITES_PANIC: i32 = 2
+const WRITES_PANIC: i32 = 2
 /** Writes only the arena and the fresh block it answers, or a header its caller already counted. */
-export const WRITES_ALLOC: i32 = 3
+const WRITES_ALLOC: i32 = 3
 
 export class RuntimeFunction {
   name: string
@@ -106,7 +106,6 @@ export class RuntimeFunction {
   }
 }
 
-const STR: string = "i8* noundef nonnull readonly align 8"
 const STR_NOCAP: string = "i8* noundef nonnull readonly align 8 nocapture"
 
 const attrs1 = (a: string): string[] => {

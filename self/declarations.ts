@@ -16,12 +16,12 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { functionTypeHereMessage, isFunctionParameter } from "./generics"
-import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes"
+import { FLAG_EXPORTED, N_EMPTY, N_LIST, Node } from "./nodes"
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
 import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types"
 
 /** Symbol the entry module's `export function main` is emitted under. */
-export const ENTRY_MAIN_SYMBOL: string = "nish_main"
+const ENTRY_MAIN_SYMBOL: string = "nish_main"
 
 export const isExported = (node: Node): boolean => (node.flags & FLAG_EXPORTED) !== 0
 
@@ -263,8 +263,3 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
     ctx.program.typeNames.add(spec.text)
   }
 }
-
-/** Whether a top-level node is a declaration this pass collects a signature for. */
-export const isFunctionDeclaration = (node: Node): boolean => node.kind === N_FUNCTION
-
-export const isImportDeclaration = (node: Node): boolean => node.kind === N_IMPORT

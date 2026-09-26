@@ -308,7 +308,7 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
 const UNNAMED: string = ""
 
 /** One array a call may change the length of, named for the message. */
-export class Mutation {
+class Mutation {
   root: string
   /** The element class, so an unnameable receiver cannot invalidate an unrelated array. */
   elem: string
@@ -322,7 +322,7 @@ export class Mutation {
 }
 
 /** A live element reference: the local naming it, the array it points into, what invalidated it. */
-export class ElementRef {
+class ElementRef {
   local: Local
   array: string
   elem: string
@@ -430,7 +430,7 @@ const collectMutations = (ctx: CheckContext, call: Node, out: Mutation[]): void 
 }
 
 /** The walk's state, a class because Nish-0 has no closures (as `PerfWalk` is). */
-export class RefWalk {
+class RefWalk {
   ctx: CheckContext
   live: ElementRef[]
   /** One report per body: `ctx.error` suppresses the rest anyway, and stage0 stops here too. */

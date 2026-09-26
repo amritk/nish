@@ -757,12 +757,12 @@ if (!only || "diagnostics".includes(only)) {
     [
       "a stray fragment in diagnosticRules",
       "diagnosticRules",
-      (t) => t.replace("export const diagnosticRules = (): string[] => [\n", (open) => open + codesStray),
+      (t) => t.replace("const diagnosticRules = (): string[] => [\n", (open) => open + codesStray),
     ],
     [
       "a stray fragment in performanceRules",
       "performanceRules",
-      (t) => t.replace("export const performanceRules = (): string[] => [\n", (open) => open + codesStray),
+      (t) => t.replace("const performanceRules = (): string[] => [\n", (open) => open + codesStray),
     ],
     ["a gap in the NL9xxx codes", "performanceRules", (t) => t.replace('"NL9010",', '"NL9011",')],
   ]
@@ -8367,9 +8367,12 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     fs.writeFileSync(
       config,
       // The options are `npm run check`'s, so the two cannot drift apart;
-      // `include: []` drops its file list for this project's own.
+      // `include: []` drops its file list for this project's own. The two
+      // unused-name checks are lint for the compiler's own source, not typing:
+      // a golden case declares a function it never calls on purpose.
       JSON.stringify({
         extends: path.join(root, "tsconfig.json"),
+        compilerOptions: { noUnusedLocals: false, noUnusedParameters: false },
         include: [],
         files: [declarations, ...files],
       })
@@ -11362,6 +11365,15 @@ if (!only || "attribution".includes(only) || "pr-body".includes(only)) {
     const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
     check(`attribution: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
   }
+}
+
+// `.claude/hooks/format-edited.mjs` formats each file an agent edits, the way a
+// pre-commit hook would. Its suite runs it in a scratch project with this checkout's
+// Biome, so it needs `npm ci` and nothing else.
+if (!only || "hooks".includes(only) || "format".includes(only)) {
+  const suite = ".claude/hooks/format-edited.test.mjs"
+  const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
+  check(`hooks: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
 }
 
 // ---- The release train's version: the implied bump and the `Release-As:` trailer -----

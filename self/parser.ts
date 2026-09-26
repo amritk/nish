@@ -201,7 +201,7 @@ const CH_CR: i32 = 13
  * `||` binds loosest, then `&&`, then the bitwise trio, equality, relational,
  * shifts, additive, multiplicative.
  */
-export const binaryPrecedence = (kind: i32): i32 => {
+const binaryPrecedence = (kind: i32): i32 => {
   if (kind === TOK_OR_OR) {
     return 1
   }
@@ -236,7 +236,7 @@ export const binaryPrecedence = (kind: i32): i32 => {
 }
 
 /** Whether the token assigns: `=` and the compound forms the language has. */
-export const isAssignment = (kind: i32): boolean =>
+const isAssignment = (kind: i32): boolean =>
   kind === TOK_ASSIGN ||
   kind === TOK_PLUS_ASSIGN ||
   kind === TOK_MINUS_ASSIGN ||
@@ -2131,6 +2131,3 @@ export class Parser {
     return node
   }
 }
-
-/** Parse `source`; the diagnostics are on the parser, which the caller keeps. */
-export const parse = (parser: Parser): Node => parser.parseSourceFile()

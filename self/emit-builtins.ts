@@ -61,7 +61,7 @@ const firstArgument = (expr: Node): Node => expr.children[1].children[0]
  * `fptoui.sat` clamps a negative double to 0 rather than to the type's
  * minimum, which is the only sensible answer for an unsigned type.
  */
-export const conversionIntrinsic = (table: TypeTable, from: i32, to: i32): string => {
+const conversionIntrinsic = (table: TypeTable, from: i32, to: i32): string => {
   if (!isFloat(from) || !isInteger(to)) {
     return ""
   }
@@ -78,7 +78,7 @@ export const conversionIntrinsic = (table: TypeTable, from: i32, to: i32): strin
  * signedness, narrow with `trunc`, and cross to or from a float with the
  * signed or unsigned form.
  */
-export const emitConversion = (emitter: Emitter, value: string, from: i32, to: i32): string => {
+const emitConversion = (emitter: Emitter, value: string, from: i32, to: i32): string => {
   if (from === to) {
     return value
   }
@@ -683,7 +683,7 @@ export const identifierBuiltinCalleesNamed = (
 // ---- Namespace properties -----------------------------------------------------------------
 
 /** `Math.PI`, `Math.E`, `process.argv` and the two machine strings: values rather than calls. */
-export const emitNamespaceProperty = (emitter: Emitter, expr: Node, name: string): string => {
+export const emitNamespaceProperty = (emitter: Emitter, name: string): string => {
   if (name === "Math.PI") {
     return f64Hex(Math.PI)
   }

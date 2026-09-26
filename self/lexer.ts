@@ -148,7 +148,6 @@ const CH_MINUS: i32 = 45
 const CH_DOT: i32 = 46
 const CH_SLASH: i32 = 47
 const CH_0: i32 = 48
-const CH_7: i32 = 55
 const CH_9: i32 = 57
 const CH_COLON: i32 = 58
 const CH_SEMICOLON: i32 = 59
@@ -198,7 +197,7 @@ export const isDigit = (c: i32): boolean => c >= CH_0 && c <= CH_9
  * UTF-8 identifier lexes as one token rather than as a run of errors; the
  * checker is where a name is judged, not here.
  */
-export const isIdentStart = (c: i32): boolean => {
+const isIdentStart = (c: i32): boolean => {
   if (c >= CH_A_LOWER && c <= CH_Z_LOWER) {
     return true
   }
@@ -208,10 +207,10 @@ export const isIdentStart = (c: i32): boolean => {
   return c === CH_UNDERSCORE || c === CH_DOLLAR || c > 127
 }
 
-export const isIdentPart = (c: i32): boolean => isIdentStart(c) || isDigit(c)
+const isIdentPart = (c: i32): boolean => isIdentStart(c) || isDigit(c)
 
 /** The value of a hex digit, or -1. */
-export const hexValue = (c: i32): i32 => {
+const hexValue = (c: i32): i32 => {
   if (isDigit(c)) {
     return c - CH_0
   }
@@ -237,7 +236,7 @@ export const hexValue = (c: i32): i32 => {
  * and `of`, which are only special where the grammar already expects them and
  * are ordinary names anywhere else.
  */
-export const keywordKind = (word: string): i32 => {
+const keywordKind = (word: string): i32 => {
   if (word === "function") {
     return TOK_FUNCTION
   }
@@ -323,7 +322,7 @@ export const keywordKind = (word: string): i32 => {
 }
 
 /** The UTF-8 bytes of one code point, as a string. */
-export const utf8Encode = (cp: i32): string => {
+const utf8Encode = (cp: i32): string => {
   if (cp < 0x80) {
     return String.fromCharCode(cp)
   }

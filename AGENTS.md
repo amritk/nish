@@ -15,7 +15,7 @@ For Claude Code the same rules live in
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
 - [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
-- [`.claude/linting.md`](./.claude/linting.md) — what the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, the cleanup pass
+- [`.claude/linting.md`](./.claude/linting.md) — what the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, knip and the format hook
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines
 - [`.claude/licensing.md`](./.claude/licensing.md) — third-party code: what counts as a copy, the notice it keeps, the licences allowed
@@ -46,7 +46,8 @@ npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
 npm test                    # the full suite (goldens, llvm-as, native, runtime, differential)
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
-npm run lint                # file names + biome; warnings are backlog, errors fail CI
+npm run lint                # file names + biome, formatting included; any finding fails CI
+npm run lint:dead           # knip: unused files, exports and dependencies
 npm run smoke               # build and run every example with a main
 ```
 
@@ -138,8 +139,7 @@ assumed:
   WP19 seed-matrix states), means the run did not prove what a green summary
   looks like it proved, and the change is therefore untested whatever the exit
   code said.
-- `npm run lint` no worse than `main` — the warning count is a backlog, so it
-  may not grow.
+- `npm run lint` and `npm run lint:dead` clean: every rule is an error.
 - `node docs/check-links.mjs` when the change touches Markdown.
 - The title is a conventional commit subject, because a squash merge lands it
   as the release-note heading. `node scripts/changelog-gen.mjs --check-subject`
@@ -250,15 +250,13 @@ what is blocking and what you need — and keep watching.
   (`self/`, an Nish program) and in the JavaScript tooling alike: the language
   has arrow functions ([wp22](./docs/wp22-arrow-functions.md)), so a function
   is `const f = (a: i32): i32 => ...` and the `function` keyword is the legacy
-  spelling. The rule is linted at `warn` while the tooling is migrated, so the
-  warning count is the backlog rather than a failure. Class methods stay
-  methods. A struct is a `class` or an `interface`: a `type` alias only renames
+  spelling, and the lint rule is an error. Class methods stay methods. A struct is a `class` or an `interface`: a `type` alias only renames
   a type that already exists.
 - Match the surrounding code's style, comment density, and naming. Biome
-  (`biome.json`) is the formatter and linter, run with the formatter disabled
-  in `npm run lint`; keep new files formatted and do not reformat files you did
-  not otherwise change. File and directory names are kebab-case, values
-  camelCase, types PascalCase, and new code clears every lint rule, the ones at
-  `warn` included; [`.claude/linting.md`](./.claude/linting.md) has the rule
-  set.
+  (`biome.json`) is the formatter and linter, and `npm run lint` checks both,
+  so run `npm run format` before committing (an agent's edits are formatted by
+  the `PostToolUse` hook). File and directory names are kebab-case, values
+  camelCase, types PascalCase, and the code has no semicolons except where
+  JavaScript's insertion rule needs one;
+  [`.claude/linting.md`](./.claude/linting.md) has the rule set.
 - Show the exact LLVM IR for every TypeScript snippet a PR adds to the tests.

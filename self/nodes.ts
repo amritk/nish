@@ -111,6 +111,7 @@ export const N_TYPE_FUNCTION: i32 = 61
 // parameter; it is never a value.
 export const N_ARROW: i32 = 62
 
+/** @public One past the last node kind: the size of a table indexed by kind. */
 export const N_COUNT: i32 = 63
 
 // `flags` on N_UNARY: which side the operator was written on.

@@ -63,7 +63,7 @@ import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
  * every other type is its own alignment, which is right for every scalar
  * and every pointer.
  */
-export const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type)
+const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type)
 
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
 export const roundUpTo = (value: i32, align: i32): i32 => {
@@ -72,7 +72,7 @@ export const roundUpTo = (value: i32, align: i32): i32 => {
 }
 
 /** Bytes of the `struct nish_array` header an inline array field starts with (`len`, `cap`, `data`). */
-export const INLINE_HEADER_BYTES: i32 = 24
+const INLINE_HEADER_BYTES: i32 = 24
 
 /**
  * Bytes one field occupies in its object: its value's size, or for an inline
@@ -81,7 +81,7 @@ export const INLINE_HEADER_BYTES: i32 = 24
  * `{ %struct.nish_array, [K x T] }` is. The slots are values, never records:
  * `self/inline-arrays.ts` refuses a record element type.
  */
-export const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
+const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
@@ -90,7 +90,7 @@ export const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
 }
 
 /** The alignment one field needs: its value's, or the header's 8 for an inline array. */
-export const fieldAlign = (table: TypeTable, field: FieldInfo): i32 =>
+const fieldAlign = (table: TypeTable, field: FieldInfo): i32 =>
   field.inline() ? 8 : table.alignOf(field.type)
 
 /**

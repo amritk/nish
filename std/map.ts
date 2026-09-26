@@ -15,12 +15,12 @@
  */
 
 /**
- * Make room in `m` for `n` entries in all, so that inserting up to `n` never
+ * Make room in `_m` for `_n` entries in all, so that inserting up to `_n` never
  * grows the table. Only the speed of a program depends on it: natively it
  * presizes the bucket table, and under Node, which has no such call, it does
  * nothing. A count that is not positive does nothing either way.
  */
-export const reserve = <K, V>(m: Map<K, V>, n: number): void => {
+export const reserve = <K, V>(_m: Map<K, V>, _n: number): void => {
   // Nothing to do here: natively the compiler lowers the call itself, and Node has no table to presize.
 }
 

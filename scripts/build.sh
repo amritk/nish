@@ -133,8 +133,12 @@ case "$(uname -s)" in
     # of one input to one output path, and differing on a link to another. That
     # is what scripts/bootstrap.sh links every comparable stage at one path for,
     # and it is why `stage3 == stage2` holds on Mach-O with the load command in.
-    gc=(-Wl,-dead_strip); strip_flag=(-Wl,-x) ;;
+    # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
+    gc=(-Wl,-dead_strip)
+    # shellcheck disable=SC2054
+    strip_flag=(-Wl,-x) ;;
   *)
+    # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
     gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
     elf=(-fno-plt)
     # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
@@ -265,6 +269,7 @@ case "$profile" in
     shared=(-shared -fPIC)
     # macOS: the napi_* symbols come from the node binary at load time, so the
     # linker must not insist on resolving them. ELF shared objects allow this.
+    # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
     case "$(uname -s)" in Darwin) shared+=(-Wl,-undefined,dynamic_lookup) ;; esac
     # runtime/nish.h is the public ABI header the generated shim includes.
     runtime_inc="$(cd "$(dirname "$0")/../runtime" && pwd)"

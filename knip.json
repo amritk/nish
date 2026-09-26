@@ -1,0 +1,33 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "self/compile.ts",
+    "self/dump-*.ts",
+    "std/*.ts",
+    "tests/nish/*.ts",
+    "tests/self/*.ts",
+    "tests/**/*.{js,mjs}",
+    "scripts/**/*.{js,mjs}",
+    "bin/*.js",
+    "web/*.mjs",
+    "examples/**/*.{ts,mjs}",
+    "docs/*.mjs",
+    "docs/cookbook/**/*.ts",
+    "bench/**/*.{ts,mjs}",
+    ".claude/hooks/*.mjs"
+  ],
+  "project": ["**/*.{ts,js,mjs}"],
+  "ignore": [
+    "tests/cases/**",
+    "tests/link/**",
+    "tests/wordings/**",
+    "tests/parser/**",
+    "tests/lexer/**",
+    "tests/layout/**",
+    "tests/differential/corpus/**",
+    "tests/differential/arrow-parity/**"
+  ],
+  "ignoreDependencies": ["nish", "cookbook-pkg"],
+  "ignoreBinaries": ["clang", "llvm-as", "llvm-dwarfdump", "opt", "size", "nish"],
+  "ignoreExportsUsedInFile": false
+}

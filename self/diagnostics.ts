@@ -58,7 +58,7 @@ const CH_TAB: i32 = 9
 export const MAX_REPORTED_ERRORS: i32 = 20
 
 /** The `kind` word of a WP15 §8 diagnostic, in the summary line and in `--json`. */
-export const PERFORMANCE: string = "performance"
+const PERFORMANCE: string = "performance"
 
 /**
  * One source file and the line index a diagnostic needs. The line starts are

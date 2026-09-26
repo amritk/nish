@@ -96,7 +96,7 @@ const HEX_UPPER: string = "0123456789ABCDEF"
 export const hexDigitLower = (value: i32): string => HEX_LOWER.substring(value & 15, (value & 15) + 1)
 
 /** The low nibble of `value` as one uppercase hex digit. */
-export const hexDigitUpper = (value: i32): string => HEX_UPPER.substring(value & 15, (value & 15) + 1)
+const hexDigitUpper = (value: i32): string => HEX_UPPER.substring(value & 15, (value & 15) + 1)
 
 /** `value` as exactly `digits` uppercase hex digits, most significant first. */
 export const hexOfI64 = (value: i64, digits: i32): string => {

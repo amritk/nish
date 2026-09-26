@@ -63,7 +63,7 @@ export const T_CPTR: i32 = 12
  */
 export const CPTR_NAME: string = "CPtr"
 /** The first id a `TypeTable` hands out; everything below is fixed. */
-export const T_FIRST_DERIVED: i32 = 13
+const T_FIRST_DERIVED: i32 = 13
 
 /**
  * A type that crosses the C boundary as exactly one machine value (WP27 S1) —
@@ -88,7 +88,7 @@ export const T_FIRST_DERIVED: i32 = 13
 export const isForeignType = (table: TypeTable, t: i32): boolean =>
   isForeignScalar(t) || table.stripNull(t) === T_CPTR
 
-export const isForeignScalar = (t: i32): boolean =>
+const isForeignScalar = (t: i32): boolean =>
   t === T_ERROR ||
   t === T_I32 ||
   t === T_I64 ||
@@ -124,7 +124,7 @@ export const K_ENUM: i32 = 17
  * so nothing asks for its layout: `llvmType` answers `V`'s, which is the type
  * of the payload half.
  */
-export const K_MAYBE: i32 = 18
+const K_MAYBE: i32 = 18
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is

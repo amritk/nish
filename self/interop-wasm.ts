@@ -238,7 +238,7 @@ const wasmUnsignedResult = (table: TypeTable, t: i32): boolean => {
 }
 
 /** The JS type of one packed `Result` payload, or `""` when it cannot cross. */
-export const wasmPayloadType = (table: TypeTable, t: i32): string => {
+const wasmPayloadType = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "number"
@@ -260,7 +260,7 @@ export const wasmPayloadType = (table: TypeTable, t: i32): string => {
 }
 
 /** `{ ok: true; value: number } | { ok: false; error: number }`. */
-export const wasmResultType = (table: TypeTable, t: i32): string => {
+const wasmResultType = (table: TypeTable, t: i32): string => {
   const error = wasmPayloadType(table, table.errOf(t))
   if (error.length === 0) {
     return ""

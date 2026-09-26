@@ -27,8 +27,7 @@ export const TOK_TEMPLATE_HEAD: i32 = 6
 export const TOK_TEMPLATE_MIDDLE: i32 = 7
 export const TOK_TEMPLATE_TAIL: i32 = 8
 
-// Keywords, contiguous so `isKeyword` is one range check.
-export const TOK_KEYWORD_FIRST: i32 = 9
+// Keywords, contiguous.
 export const TOK_FUNCTION: i32 = 9
 export const TOK_RETURN: i32 = 10
 export const TOK_IF: i32 = 11
@@ -63,7 +62,6 @@ export const TOK_DEFAULT: i32 = 33
 export const TOK_IMPLEMENTS: i32 = 34
 export const TOK_EXTENDS: i32 = 35
 export const TOK_SUPER: i32 = 37
-export const TOK_KEYWORD_LAST: i32 = 37
 
 // Punctuation and operators.
 export const TOK_LPAREN: i32 = 38
@@ -135,9 +133,8 @@ export const TOK_AT: i32 = 95 // @, a decorator
 export const TOK_PRIVATE_IDENT: i32 = 96 // #name
 export const TOK_BIGINT: i32 = 97 // 1n
 
+/** @public One past the last token kind: the size of a table indexed by kind. */
 export const TOK_COUNT: i32 = 98
-
-export const isKeyword = (kind: i32): boolean => kind >= TOK_KEYWORD_FIRST && kind <= TOK_KEYWORD_LAST
 
 // The name of each kind, for the token dump and for diagnostics. A `switch` on
 // a dense range is a jump table, which is why the kinds are numbered the way

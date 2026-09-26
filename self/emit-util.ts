@@ -122,7 +122,7 @@ export const isJoinCall = (program: CheckedProgram, table: TypeTable, node: Node
   arrayMethodName(program, table, node) === "join"
 
 /** The byte methods that lower inline on a string receiver (WP14 A2). */
-export const isStringMethod = (name: string): boolean =>
+const isStringMethod = (name: string): boolean =>
   name === "charCodeAt" ||
   name === "substring" ||
   name === "slice" ||

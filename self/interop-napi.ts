@@ -95,7 +95,7 @@ import {
  * only vowel-initial constructor in the table, and the unsigned rows are what
  * made it observable: `must be an Uint8Array` is what a host used to read.
  */
-export const withArticle = (noun: string): string => `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`
+const withArticle = (noun: string): string => `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`
 
 const napiStartsWithVowel = (noun: string): boolean => {
   if (noun.length === 0) {

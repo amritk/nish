@@ -203,7 +203,7 @@ const structText = (table: TypeTable, info: StructInfo, out: string[]): void => 
 }
 
 /** The folded value in source syntax, so a dump can be pasted back into a program. */
-const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
+const constantSyntax = (info: ConstInfo): string => {
   if (info.type === T_STRING) {
     return jsonQuote(info.textValue)
   }
@@ -334,7 +334,7 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
       continue // imported: listed by its own module
     }
     const tag = info.exported ? " [exported]" : ""
-    out.push(`const ${info.name}: ${table.typeName(info.type)} = ${constantSyntax(table, info)}${tag}`)
+    out.push(`const ${info.name}: ${table.typeName(info.type)} = ${constantSyntax(info)}${tag}`)
   }
   for (const info of program.structList) {
     if (info.origin === source) {

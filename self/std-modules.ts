@@ -15,7 +15,7 @@ const SLASH: i32 = 47
 const DOT: i32 = 46
 
 /** The directory the library lives in, relative to the package root. */
-export const STD_DIR: string = "std"
+const STD_DIR: string = "std"
 
 /**
  * `nish/text` -> `std/text.ts`: the name a standard-library module carries in
@@ -104,7 +104,7 @@ export const isCollectionsModule = (packageName: string, name: string): boolean 
  * to the table's `reserveSlots` and to one `probe` and a write through its
  * answer, so like `nish/collections` it writes no `.ll` of its own.
  */
-export const MAP_EXTRAS_SPECIFIER: string = "nish/map"
+const MAP_EXTRAS_SPECIFIER: string = "nish/map"
 
 /** Whether a module is the standard library's `std/map.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isMapExtrasModule = (packageName: string, name: string): boolean =>

@@ -334,7 +334,7 @@ const checkWalkIterable = (
  * (`takesDeclaredContext`). Everything else — an object literal, a `null` —
  * takes it either way.
  */
-export const checkMethodArguments = (
+const checkMethodArguments = (
   ctx: CheckContext,
   call: Node,
   callee: FunctionSig,
@@ -463,7 +463,7 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * stage0's walks, so they are transparent here too: `{ code: c ? 1 : 2 }` gets
  * no more context than `{ code: 1 }` does.
  */
-export const takesDeclaredContext = (value: Node): boolean => {
+const takesDeclaredContext = (value: Node): boolean => {
   if (value.kind === N_PAREN) {
     return takesDeclaredContext(value.children[0])
   }
@@ -745,7 +745,7 @@ const assignableReadonly = (
 
 const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith"
 
-export const checkStringProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
+const checkStringProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   if (expr.text === "length") {
     return ctx.numberType()
   }
@@ -770,13 +770,7 @@ const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
   }
 }
 
-export const checkStringMethod = (
-  ctx: CheckContext,
-  call: Node,
-  access: Node,
-  args: Node,
-  scope: Scope
-): i32 => {
+const checkStringMethod = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {
   const name = access.text
   const count = args.children.length
   if (name === "charCodeAt") {

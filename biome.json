@@ -47,9 +47,9 @@
         "noVoid": "error",
         "useOptionalChain": "off",
         "useArrowFunction": "error",
-        "noForEach": "warn",
-        "noUselessUndefinedInitialization": "warn",
-        "noUselessStringConcat": "warn"
+        "noForEach": "error",
+        "noUselessUndefinedInitialization": "error",
+        "noUselessStringConcat": "error"
       },
       "style": {
         "noEnum": "error",
@@ -64,7 +64,7 @@
         "useExplicitLengthCheck": "error",
         "useExponentiationOperator": "off",
         "useFilenamingConvention": {
-          "level": "warn",
+          "level": "error",
           "options": {
             "strictCase": false,
             "requireAscii": true,
@@ -75,13 +75,13 @@
         "useTemplate": "off",
         "noNonNullAssertion": "off",
         "useConsistentTypeDefinitions": {
-          "level": "warn",
+          "level": "error",
           "options": {
             "style": "type"
           }
         },
         "useConsistentMethodSignatures": {
-          "level": "warn",
+          "level": "error",
           "options": {
             "style": "property"
           }
@@ -89,7 +89,7 @@
         "useShorthandFunctionType": "error",
         "useConsistentArrowReturn": "error",
         "useNamingConvention": {
-          "level": "warn",
+          "level": "error",
           "options": {
             "strictCase": false,
             "requireAscii": true,
@@ -109,39 +109,39 @@
             ]
           }
         },
-        "useBlockStatements": "warn",
-        "useShorthandAssign": "warn",
-        "useConst": "warn",
-        "noUselessElse": "warn",
-        "useCollapsedElseIf": "warn",
-        "noUnusedTemplateLiteral": "warn",
+        "useBlockStatements": "error",
+        "useShorthandAssign": "error",
+        "useConst": "error",
+        "noUselessElse": "error",
+        "useCollapsedElseIf": "error",
+        "noUnusedTemplateLiteral": "error",
         "useForOf": "off",
-        "noNestedTernary": "warn",
-        "useNumberNamespace": "warn",
-        "noYodaExpression": "warn",
-        "useSingleVarDeclarator": "warn",
-        "useThrowNewError": "warn",
-        "useThrowOnlyError": "warn",
-        "noDefaultExport": "warn",
-        "noCommonJs": "warn",
-        "useNodejsImportProtocol": "warn",
-        "noExportedImports": "warn"
+        "noNestedTernary": "error",
+        "useNumberNamespace": "error",
+        "noYodaExpression": "error",
+        "useSingleVarDeclarator": "error",
+        "useThrowNewError": "error",
+        "useThrowOnlyError": "error",
+        "noDefaultExport": "error",
+        "noCommonJs": "error",
+        "useNodejsImportProtocol": "error",
+        "noExportedImports": "error"
       },
       "suspicious": {
         "noExplicitAny": "error",
         "noVar": "error",
-        "noShadow": "warn",
-        "noEmptyBlockStatements": "warn",
-        "useAwait": "warn",
-        "noEvolvingTypes": "warn",
-        "useErrorMessage": "warn",
+        "noShadow": "error",
+        "noEmptyBlockStatements": "error",
+        "useAwait": "error",
+        "noEvolvingTypes": "error",
+        "useErrorMessage": "error",
         "noTsIgnore": "error",
         "noExportsInTest": "error",
         "useGuardForIn": "error"
       },
       "correctness": {
-        "noUnusedImports": "warn",
-        "noUnusedPrivateClassMembers": "warn",
+        "noUnusedImports": "error",
+        "noUnusedPrivateClassMembers": "error",
         "noGlobalDirnameFilename": "error"
       },
       "performance": {
@@ -215,7 +215,7 @@
         "rules": {
           "style": {
             "useNamingConvention": {
-              "level": "warn",
+              "level": "error",
               "options": {
                 "strictCase": false,
                 "requireAscii": true,

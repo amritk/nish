@@ -31,10 +31,10 @@
  */
 
 /** No rule matched: the diagnostic has no code yet. */
-export const UNCODED: string = "NL0000"
+const UNCODED: string = "NL0000"
 
 /** Every syntax error shares one code: stage0 takes that text from the `typescript` package. */
-export const SYNTAX: string = "NL0001"
+const SYNTAX: string = "NL0001"
 
 /**
  * Band 0 is what is wrong with the *run* rather than with the program: the C
@@ -44,7 +44,10 @@ export const SYNTAX: string = "NL0001"
 export const TOOLCHAIN: string = "NL0002"
 export const INTERNAL: string = "NL0003"
 
-/** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
+/**
+ * @public Number of rules that carry a code. Nothing in the compiler reads it;
+ * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
+ */
 export const RULE_COUNT: i32 = 480
 
 /**
@@ -56,7 +59,7 @@ export const RULE_COUNT: i32 = 480
  * wants. Longest fragment first, so a specific rule wins over a general one it
  * contains.
  */
-export const diagnosticRules = (): string[] => [
+const diagnosticRules = (): string[] => [
   "`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`",
   "NL2353",
   "` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out",
@@ -996,7 +999,7 @@ export const diagnosticRules = (): string[] => [
 ]
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
-export const performanceRules = (): string[] => [
+const performanceRules = (): string[] => [
   "` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both",
   "NL9012",
   "allocates a dynamically sized array on every iteration of this loop",
