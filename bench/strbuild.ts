@@ -8,11 +8,9 @@
 // strbuild-naive.c with malloc/free per string, strbuild.rs with a fresh
 // String per concatenation. Prints the final length; a wrong join would change it.
 // (The fanout 32 is spelled inline: Nish has no top-level constants.)
-function piece(i: number): string {
-  return `${i},`;
-}
+const piece = (i: number): string => `${i},`;
 
-function join(lo: number, hi: number): string {
+const join = (lo: number, hi: number): string => {
   const count = hi - lo;
   if (count <= 32) {
     let s = "";
@@ -28,11 +26,11 @@ function join(lo: number, hi: number): string {
     s = s + join(start, end);
   }
   return s;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const N = 131072; // bench:n
   const s = join(0, N);
   console.log(s.length);
   return 0;
-}
+};

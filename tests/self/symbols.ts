@@ -12,16 +12,16 @@ import { Local, Scope, STORAGE_LOCAL, STORAGE_PARAM } from "../../self/symbols";
 import { T_F64, T_I32, T_STRING, TypeTable } from "../../self/types";
 
 /** `name -> declared type -> what it reads as here`, or that it is not in scope. */
-function report(out: string[], table: TypeTable, scope: Scope, where: string, name: string): void {
+const report = (out: string[], table: TypeTable, scope: Scope, where: string, name: string): void => {
   const found = scope.lookup(name);
   if (found === null) {
     out.push(`${where} ${name} absent`);
     return;
   }
   out.push(`${where} ${name} ${table.typeName(found.type)} reads ${table.typeName(scope.typeOf(found))}`);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const table = new TypeTable();
   const nullableString = table.nullableOf(T_STRING);
   const node = table.structOf("Node");
@@ -78,4 +78,4 @@ export function main(): number {
 
   write(`${out.join("\n")}\n`);
   return 0;
-}
+};

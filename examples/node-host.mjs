@@ -23,18 +23,18 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** Instantiate a freestanding Nish wasm module and return its exports (scalars only). */
-export async function load(bytes) {
+export const load = async (bytes) => {
   const { instance } = await WebAssembly.instantiate(bytes, {});
   return instance.exports;
-}
+};
 
 const TYPED = { i32: Int32Array, f64: Float64Array, i64: BigInt64Array };
-function parseArg(text) {
+const parseArg = (text) => {
   const m = /^(i32|f64|i64):(.*)$/.exec(text);
   if (!m) { return Number(text); }
   const items = m[2] === "" ? [] : m[2].split(",");
   return TYPED[m[1]].from(m[1] === "i64" ? items.map(BigInt) : items.map(Number));
-}
+};
 const show = (v) => (ArrayBuffer.isView(v) ? Array.from(v).join(", ") : String(v));
 
 const [file = "build/add.wasm", fn = "add", ...rawArgs] = process.argv.slice(2);

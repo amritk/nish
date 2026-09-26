@@ -41,7 +41,6 @@ import {
 } from "./members";
 import {
   FLAG_CONST,
-  FLAG_POSTFIX,
   N_ARRAY,
   N_ARROW,
   N_BIGINT,
@@ -86,7 +85,6 @@ import {
   isUnsigned,
   T_BOOL,
   T_ERROR,
-  T_F32,
   T_F64,
   T_I32,
   T_I64,
@@ -1391,10 +1389,10 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     const arg = args.children[i];
     const got = checkExpression(ctx, arg, scope, sig.paramTypes[i]);
     if (got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
-      const want = ctx.table.typeName(sig.paramTypes[i]);
+      const wantName = ctx.table.typeName(sig.paramTypes[i]);
       ctx.error(
         arg,
-        `Argument ${i + 1} of \`${sig.name}\`: expected ${want}, got ${ctx.table.typeName(got)}`
+        `Argument ${i + 1} of \`${sig.name}\`: expected ${wantName}, got ${ctx.table.typeName(got)}`
       );
     }
     i = i + 1;

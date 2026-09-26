@@ -18,7 +18,7 @@ import { DiagnosticSink, MAX_REPORTED_ERRORS, SourceFile } from "../../self/diag
  * across line boundaries, tabs and the long line rather than lining up with
  * them.
  */
-function spanStarts(length: i32): i32[] {
+const spanStarts = (length: i32): i32[] => {
   const starts: i32[] = [];
   let i = 0;
   while (i < length) {
@@ -26,9 +26,9 @@ function spanStarts(length: i32): i32[] {
     i = i + 13;
   }
   return starts;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   if (process.argv.length < 3) {
     console.error("usage: diagnostics <fixture> <second>");
     return 2;
@@ -94,4 +94,4 @@ export function main(): number {
 
   write(`${out.join("\n")}\n`);
   return 0;
-}
+};

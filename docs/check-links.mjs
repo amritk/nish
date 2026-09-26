@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function listMarkdown(dir) {
+const listMarkdown = (dir) => {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -27,7 +27,7 @@ function listMarkdown(dir) {
     } else if (entry.name.endsWith(".md")) { out.push(full); }
   }
   return out;
-}
+};
 
 const files = ["README.md", "CHANGELOG.md", "std/README.md"]
   .map((f) => path.join(root, f))
@@ -35,7 +35,7 @@ const files = ["README.md", "CHANGELOG.md", "std/README.md"]
   .concat(listMarkdown(path.join(root, "docs")));
 
 /** Lines of a file with fenced code blocks blanked out (links inside them are not links). */
-function proseLines(text) {
+const proseLines = (text) => {
   let inFence = false;
   return text.split("\n").map((line) => {
     if (/^\s*(```|~~~)/.test(line)) {
@@ -44,7 +44,7 @@ function proseLines(text) {
     }
     return inFence ? "" : line;
   });
-}
+};
 
 // GitHub slugs a heading with `github-slugger`, which is three steps and no
 // more: lower-case it, DELETE every character that is not a letter, a number, a
@@ -68,7 +68,7 @@ function proseLines(text) {
 // unassigned back then that are letters now, which is a difference in scripts
 // no heading here is written in.
 /** GitHub-style heading slugs for a Markdown file, in order. */
-function headingSlugs(text) {
+const headingSlugs = (text) => {
   const seen = new Map();
   const slugs = new Set();
   for (const line of proseLines(text)) {
@@ -86,13 +86,13 @@ function headingSlugs(text) {
     slugs.add(slug);
   }
   return slugs;
-}
+};
 
 const slugCache = new Map();
-function slugsOf(file) {
+const slugsOf = (file) => {
   if (!slugCache.has(file)) { slugCache.set(file, headingSlugs(fs.readFileSync(file, "utf8"))); }
   return slugCache.get(file);
-}
+};
 
 // Inline links `[text](target)` (target up to the first unbalanced `)`) and reference definitions `[ref]: target`.
 const INLINE = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;

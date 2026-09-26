@@ -9,6 +9,6 @@
 // `NISH_SIMULATE_ICE` provokes in the compiler itself.
 import { internalError } from "../../self/ice";
 
-export function main(): number {
+export const main = (): number => {
   process.exit(internalError("emitter: no callee recorded for `f`"));
-}
+};

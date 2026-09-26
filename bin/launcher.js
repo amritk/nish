@@ -103,11 +103,11 @@ const writeAndExit = (stream, text, status) => {
  * `build.sh`, the C runtime and the standard library one level up from itself
  * exactly as it does when unpacked by hand.
  */
-const nativeCompiler = (asset) => {
+const nativeCompiler = (assetName) => {
   const name = packageName();
   if (name === null) { return null; }
   try {
-    const manifest = createRequire(import.meta.url).resolve(`${platformPackageName(name, asset)}/package.json`);
+    const manifest = createRequire(import.meta.url).resolve(`${platformPackageName(name, assetName)}/package.json`);
     const binary = path.join(path.dirname(manifest), "bin", "nish");
     return fs.existsSync(binary) ? binary : null;
   } catch {

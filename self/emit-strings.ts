@@ -14,7 +14,7 @@
 
 import { Emitter } from "./emit";
 import { emitIndex, emitNumberFromI64, emitRangeCheck } from "./emit-arrays";
-import { isTemplateExpression, templateParts } from "./emit-util";
+import { templateParts } from "./emit-util";
 import { IRModule } from "./ir";
 import { N_TEMPLATE_TEXT, Node } from "./nodes";
 import { irEscape } from "./strings";

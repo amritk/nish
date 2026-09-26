@@ -37,7 +37,7 @@ import {
   emitIntBinary,
   isBitwiseAssignment,
 } from "./emit-ops";
-import { arrayMethodName, isAssignmentOperator, unwrapParens } from "./emit-util";
+import { isAssignmentOperator, unwrapParens } from "./emit-util";
 import { emitWalk } from "./emit-map";
 import { internalErrorFor } from "./ice";
 import {

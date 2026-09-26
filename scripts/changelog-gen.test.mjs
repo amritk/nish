@@ -26,16 +26,16 @@ const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: "1",
 };
 
-function git(dir, args) {
+const git = (dir, args) => {
   const r = spawnSync("git", args, { cwd: dir, env: GIT_ENV, encoding: "utf8" });
   if (r.status !== 0) { throw new Error(`git ${args.join(" ")}: ${r.stderr}`); }
-}
+};
 
 /**
  * A repository tagged `v<tag>` with package.json at that version, then one
  * commit per message. Returns the directory.
  */
-function repo(tag, messages) {
+const repo = (tag, messages) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "changelog-gen-"));
   fs.mkdirSync(path.join(dir, "scripts"));
   fs.copyFileSync(SCRIPT, path.join(dir, "scripts", "changelog-gen.mjs"));
@@ -46,14 +46,12 @@ function repo(tag, messages) {
   git(dir, ["tag", `v${tag}`]);
   for (const message of messages) { git(dir, ["commit", "-q", "--allow-empty", "-m", message]); }
   return dir;
-}
+};
 
-function run(dir, args) {
-  return spawnSync(process.execPath, [path.join(dir, "scripts", "changelog-gen.mjs"), ...args], {
+const run = (dir, args) => spawnSync(process.execPath, [path.join(dir, "scripts", "changelog-gen.mjs"), ...args], {
     cwd: dir,
     encoding: "utf8",
   });
-}
 
 const feat = "feat(checker): accept a thing\n\nThe prose.";
 const fix = "fix(codegen): mend a thing\n\nThe prose.";

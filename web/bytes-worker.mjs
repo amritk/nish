@@ -40,7 +40,7 @@ let compiled = null;
 let instance = null;
 
 /** `WebAssembly.compile` the module once; every later batch reuses it. */
-const load = async (source) => {
+const load = (source) => {
   if (source instanceof WebAssembly.Module) { return source; }
   if (typeof source === "string") { return WebAssembly.compileStreaming(fetch(source)); }
   return WebAssembly.compile(source);
@@ -101,8 +101,8 @@ export const scanBatch = (exports, docs, mode = "validate") => {
   if (docs.length === 0) { return results; }
 
   let widest = 0;
-  for (let i = 0; i < docs.length; i++) {
-    if (docs[i].length > widest) { widest = docs[i].length; }
+  for (const doc of docs) {
+    if (doc.length > widest) { widest = doc.length; }
   }
 
   const mark = exports.nish_arena_mark();

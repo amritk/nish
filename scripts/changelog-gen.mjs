@@ -114,8 +114,7 @@ const KNOWN_TRAILERS = /^(Measured|Refs|Tests|Release-Note|Release-As|BREAKING[ 
  */
 const SQUASH_RULE = /\n[ \t]*\n[ \t]*-{3,}[ \t]*$/;
 
-function git(args, quiet = false) {
-  return execFileSync("git", args, {
+const git = (args, quiet = false) => execFileSync("git", args, {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -125,22 +124,21 @@ function git(args, quiet = false) {
     // that succeeded, which is how a green log gets read as a broken one.
     stdio: quiet ? ["ignore", "pipe", "ignore"] : undefined,
   });
-}
 
 /** The previous release tag, or undefined when this is the first release. */
-function lastTag() {
+const lastTag = () => {
   try {
     return git(["describe", "--tags", "--abbrev=0", "--match", "v*"], true).trim() || undefined;
   } catch {
     return undefined; // no tags yet: the first release covers the whole history
   }
-}
+};
 
 /**
  * Split a commit body into prose and trailers. Only a trailing run of
  * trailer-shaped lines counts, so a colon inside the prose is safe.
  */
-function splitTrailers(body) {
+const splitTrailers = (body) => {
   const lines = body.replace(/\r\n/g, "\n").split("\n");
   const trailers = [];
   let end = lines.length;
@@ -158,9 +156,9 @@ function splitTrailers(body) {
     break;
   }
   return { prose: lines.slice(0, end).join("\n").trim(), trailers };
-}
+};
 
-function parseTrailers(lines) {
+const parseTrailers = (lines) => {
   const out = { metrics: [], refs: [], tests: [], releaseNote: undefined, releaseAs: [], breaking: undefined };
   for (const line of lines) {
     if (DROPPED_TRAILERS.test(line)) { continue; }
@@ -176,17 +174,17 @@ function parseTrailers(lines) {
     else if (key === "breakingchange") { out.breaking = value; }
   }
   return out;
-}
+};
 
 /** `type(scope)!: subject`, or undefined when the subject is not conventional. */
-function parseSubject(subject) {
+const parseSubject = (subject) => {
   const m = subject.match(/^([a-z]+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
   if (!m) { return undefined; }
   return { type: m[1], scope: m[2], bang: Boolean(m[3]), title: m[4].trim() };
-}
+};
 
 /** A stable, human-readable anchor. The website links entries by this. */
-function slug(title, taken) {
+const slug = (title, taken) => {
   const base =
     title
       .toLowerCase()
@@ -200,7 +198,7 @@ function slug(title, taken) {
   for (let n = 2; taken.has(id); n += 1) { id = `${base}-${n}`; }
   taken.add(id);
   return id;
-}
+};
 
 /**
  * The entries a release contains, the subjects that did not become one, and
@@ -218,8 +216,8 @@ function slug(title, taken) {
  * someone asked for is not lost because the commit that asked was the
  * work-in-progress half of a merge.
  */
-function collect(from, to, includeUnconventional = false) {
-  const range = from ? `${from}..${to}` : to;
+const collect = (fromRef, toRef, withUnconventional = false) => {
+  const range = fromRef ? `${fromRef}..${toRef}` : toRef;
   // \x00 between fields and \x1e between records: a commit body contains
   // newlines and may contain anything else, so the separators must be bytes
   // that cannot appear in one.
@@ -241,7 +239,7 @@ function collect(from, to, includeUnconventional = false) {
     const classified = parsed !== undefined && CONVENTIONAL_TYPES.includes(parsed.type);
     if (!classified) {
       skipped.push(`${sha.slice(0, 7)} ${subject}`);
-      if (!includeUnconventional) { continue; }
+      if (!withUnconventional) { continue; }
     }
 
     const prose = rawProse.replace(SQUASH_RULE, "");
@@ -266,13 +264,13 @@ function collect(from, to, includeUnconventional = false) {
     });
   }
   return { entries, skipped, releaseAs };
-}
+};
 
-function renderMarkdown(release) {
+const renderMarkdown = (releaseData) => {
   const out = [];
-  if (release.intro) { out.push(release.intro.trim(), ""); }
+  if (releaseData.intro) { out.push(releaseData.intro.trim(), ""); }
 
-  const group = (predicate) => release.entries.filter(predicate).map(renderEntry);
+  const group = (predicate) => releaseData.entries.filter(predicate).map(renderEntry);
 
   const breaking = group((e) => e.breaking);
   if (breaking.length > 0) { out.push("### Breaking changes", "", ...breaking, ""); }
@@ -283,19 +281,19 @@ function renderMarkdown(release) {
     out.push(`### ${heading}`, "", ...lines, "");
   }
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
-}
+};
 
 /**
  * Where to read the rest of an entry: the pull request it landed in, or the
  * commit when it landed without one. Every line carries one, so the index
  * always leads somewhere.
  */
-function entryLink(e) {
+const entryLink = (e) => {
   if (e.pr) { return REPO_URL ? `[#${e.pr}](${REPO_URL}/pull/${e.pr})` : `#${e.pr}`; }
   const sha = e.commits[0];
   if (!sha) { return undefined; }
   return REPO_URL ? `[\`${sha}\`](${REPO_URL}/commit/${sha})` : `\`${sha}\``;
-}
+};
 
 /**
  * One line: the scope, the title, and the link. A conventional subject is
@@ -303,11 +301,11 @@ function entryLink(e) {
  * title are joined and the first letter is raised -- unless the title starts
  * with `code`, which keeps its backtick and its case.
  */
-function renderEntry(e) {
+const renderEntry = (e) => {
   const title = e.title.startsWith("`") ? e.title : e.title.charAt(0).toUpperCase() + e.title.slice(1);
   const link = entryLink(e);
   return `- ${e.scope ? `${e.scope}: ` : ""}${title}${link ? ` (${link})` : ""}`;
-}
+};
 
 /**
  * The version the commits imply, from their types, as `[major, minor, patch]`.
@@ -319,7 +317,7 @@ function renderEntry(e) {
  * same branch is ordinary semver -- a break moves the major, a `feat` the
  * minor, anything else the patch -- so nothing changes here when 1.0 is cut.
  */
-function impliedVersion(current, entries, previousTag) {
+const impliedVersion = (current, commits, previousTag) => {
   // The first release is 0.1.0 whatever the commits say. Every commit before
   // the convention existed is typed `other`, so a type-driven bump would read
   // the entire history as a patch and ship 0.0.1 — a number that would claim
@@ -327,21 +325,19 @@ function impliedVersion(current, entries, previousTag) {
   // already names as the base case (docs/wp12-release.md, "The bootstrap seed").
   if (!previousTag) { return [0, 1, 0]; }
   const [major, minor, patch] = current.split(".").map(Number);
-  if (entries.some((e) => e.breaking)) { return major === 0 ? [0, minor + 1, 0] : [major + 1, 0, 0]; }
-  if (entries.some((e) => e.type === "feat")) { return [major, minor + 1, 0]; }
+  if (commits.some((e) => e.breaking)) { return major === 0 ? [0, minor + 1, 0] : [major + 1, 0, 0]; }
+  if (commits.some((e) => e.type === "feat")) { return [major, minor + 1, 0]; }
   return [major, minor, patch + 1];
-}
+};
 
 /** `X.Y.Z` as three numbers, or undefined when it is not one. No `v`, no pre-release, no leading zeros. */
-function parseVersion(text) {
+const parseVersion = (text) => {
   const m = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(text);
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
-}
+};
 
 /** Negative, zero or positive as `a` is below, at or above `b`. */
-function compareVersions(a, b) {
-  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-}
+const compareVersions = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
 /**
  * The next version: the one the commits imply, unless a `Release-As: X.Y.Z`
@@ -357,11 +353,11 @@ function compareVersions(a, b) {
  * release PR proposing some other number without saying so would be worse than
  * the train stopping.
  */
-function nextVersion(current, entries, previousTag, releaseAs = []) {
-  const implied = impliedVersion(current, entries, previousTag);
+const nextVersion = (current, commits, previousTag, releaseAsTrailers = []) => {
+  const implied = impliedVersion(current, commits, previousTag);
   let chosen;
   const byCommit = new Map();
-  for (const request of releaseAs) {
+  for (const request of releaseAsTrailers) {
     const parsed = parseVersion(request.version);
     if (!parsed) {
       return {
@@ -387,15 +383,15 @@ function nextVersion(current, entries, previousTag, releaseAs = []) {
     };
   }
   return { version: chosen.version };
-}
+};
 
 // ---- CLI ---------------------------------------------------------------------------------------
 
 const argv = process.argv.slice(2);
-function flag(name, fallback) {
+const flag = (name, fallback) => {
   const i = argv.indexOf(`--${name}`);
   return i === -1 ? fallback : argv[i + 1];
-}
+};
 
 // Validating one subject line. This lives here rather than in the workflow so
 // that what CI enforces and what the generator parses are the same rule: a

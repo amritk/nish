@@ -120,7 +120,6 @@ import {
   N_PAREN,
   N_RETURN,
   N_STRING,
-  N_SUPER,
   N_SWITCH,
   N_TEMPLATE,
   N_THIS,
@@ -141,7 +140,6 @@ import {
   MAP_NONE,
   MAP_STORED_KEY,
   ROLE_CONSTRUCTOR,
-  StructInfo,
 } from "./program";
 import {
   ARENA_GLOBAL,

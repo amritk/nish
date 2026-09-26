@@ -58,7 +58,12 @@ const accel = (p: Probe): f64 => {
     const dz = bj.z - bi.z;
     const d2 = dx * dx + dy * dy + dz * dz + SOFTENING;
     const inv = bj.mass / (d2 * Math.sqrt(d2));
-    const d = p.axis === 0 ? dx : p.axis === 1 ? dy : dz;
+    let d = dz;
+    if (p.axis === 0) {
+      d = dx;
+    } else if (p.axis === 1) {
+      d = dy;
+    }
     a = a + d * inv;
   }
   return a;

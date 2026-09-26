@@ -83,7 +83,7 @@ const SUPPORTED_FLAGS = new Set(["--number-mode"]);
  * strip one anywhere. A registered sentence can contain a `#` — a diagnostic
  * quotes what the programmer wrote — and no case name can.
  */
-function register(file) {
+const register = (file) => {
   const rows = new Map();
   if (!fs.existsSync(file)) { return rows; }
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
@@ -93,7 +93,7 @@ function register(file) {
     rows.set(at < 0 ? text : text.slice(0, at), at < 0 ? "" : text.slice(at).trim());
   }
   return rows;
-}
+};
 
 /**
  * The register against the bucket, in both directions, as a function of what a
@@ -240,7 +240,7 @@ const selfCheck = () => {
 };
 
 /** The flags this case is compiled with, split into what stage1 takes and what it does not. */
-function argsFor(file) {
+const argsFor = (file) => {
   const flags = [];
   const unsupported = [];
   const raw = extraArgs(file);
@@ -249,9 +249,9 @@ function argsFor(file) {
     else { unsupported.push(raw[i]); }
   }
   return { flags, unsupported };
-}
+};
 
-function compare(seed, binary, entry) {
+const compare = (seed, binary, entry) => {
   const { flags, unsupported } = argsFor(entry.file);
   if (unsupported.length > 0) { return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` }; }
   const named = path.relative(root, entry.file);
@@ -282,27 +282,27 @@ function compare(seed, binary, entry) {
   }
   if (failed !== null) { return { failed }; }
   return { fragments: entry.fragments.length };
-}
+};
 
 /** Whether the seed compiles the program at all, IR written to a directory it then forgets. */
-function compiles(seed, named, flags) {
+const compiles = (seed, named, flags) => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "nish-reject-"));
   const r = spawnSeed(seed, [named, "-o", `${out}${path.sep}`, ...flags]);
   fs.rmSync(out, { recursive: true, force: true });
   return r.status === 0;
-}
+};
 
-function firstLine(output) {
+const firstLine = (output) => {
   const line = output.trim().split("\n")[0] ?? "";
   return line.replace(/^[^:]*:\d+:\d+: /, "");
-}
+};
 
 /**
  * Every negative case: the single-module `reject_*` goldens, then the whole
  * programs of `tests/link/` that carry an `expected.err`. `name` is what the
  * backlog and the parser-refusal register list a case under.
  */
-function corpus() {
+const corpus = () => {
   const entries = [];
   for (const name of fs.readdirSync(CASES).sort()) {
     if (!name.startsWith("reject_") || !name.endsWith(".ts")) { continue; }
@@ -332,22 +332,20 @@ function corpus() {
     });
   }
   return entries;
-}
+};
 
 /**
  * `self/dump-checked.ts`, linked by the seed. What this oracle compares
  * against is each case's checked-in `.err` fragments, which outlive stage0's `src/`, so
  * the compiler that builds the binary must too (WP19 G2.3).
  */
-function build(seed) {
-  return linkWith(
+const build = (seed) => linkWith(
     seed,
     path.join("self", "dump-checked.ts"),
     path.join(root, "build", "self", "dump_checked")
   );
-}
 
-function main(argv) {
+const main = (argv) => {
   const verbose = argv.includes("--verbose");
   const named = withoutSeed(argv).filter((a) => !a.startsWith("--"));
   // Before anything is built, because a broken gate should cost a millisecond
@@ -429,7 +427,7 @@ function main(argv) {
       `seed ${seed.label}\n`
   );
   return failed.length === 0 ? 0 : 1;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { compare, corpus, build };

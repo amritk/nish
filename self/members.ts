@@ -10,7 +10,7 @@
 // keep in mind rather than something the shape enforces.
 
 import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
-import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
+import { checkBuiltinArity, checkNamespaceProperty, } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
 import { internalErrorFor } from "./ice";
@@ -41,7 +41,6 @@ import {
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
-  N_SUPER,
   N_THIS,
   N_UNARY,
   N_VAR_DECL,

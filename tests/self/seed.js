@@ -44,7 +44,7 @@ const root = path.resolve(import.meta.dirname, "..", "..");
 const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
 
 /** A spawnable compiler: `cmd` plus what comes before the program's own arguments. */
-function resolveSeed(spec) {
+const resolveSeed = (spec) => {
   const file = path.resolve(root, spec);
   const refuse = (why) => ({ error: `seed ${spec} ${why}` });
   if (!fs.existsSync(file)) { return refuse("does not exist"); }
@@ -61,7 +61,7 @@ function resolveSeed(spec) {
   }
   if (spawnSeed(seed, ["--version"]).status !== 0) { return refuse("is not runnable (`--version` failed)"); }
   return seed;
-}
+};
 
 /** Where `scripts/fetch-seed.sh` leaves the released compiler. */
 const FETCHED = path.join("build", "seed", "bin", "nish");
@@ -72,37 +72,37 @@ const FETCHED = path.join("build", "seed", "bin", "nish");
  * fetched. An empty `NISH_BOOTSTRAP` counts as unset, the way
  * `NISH_BOOTSTRAP= npm test` turns the seed off for one run.
  */
-function defaultSeedSpec() {
+const defaultSeedSpec = () => {
   const fromEnvironment = process.env.NISH_BOOTSTRAP;
   if (fromEnvironment !== undefined && fromEnvironment !== "") { return fromEnvironment; }
   for (const inTree of [path.join("build", "nish"), FETCHED]) {
     if (fs.existsSync(path.join(root, inTree))) { return inTree; }
   }
   return null;
-}
+};
 
 /** `--seed <path>` out of an argument list, or null when it is not there. */
-function namedSeedSpec(argv) {
+const namedSeedSpec = (argv) => {
   const at = argv.indexOf("--seed");
   return at >= 0 ? (argv[at + 1] ?? null) : null;
-}
+};
 
 /**
  * The same list without `--seed` and its value. Every oracle reads its
  * positional arguments as "the files to check", and a seed *path* is the one
  * value on the command line that looks exactly like one.
  */
-function withoutSeed(argv) {
+const withoutSeed = (argv) => {
   const at = argv.indexOf("--seed");
   return at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
-}
+};
 
 /**
  * The seed for `tests/run.js` and the oracles: the order above, then the
  * release `scripts/fetch-seed.sh` fetches, announced — the download is the
  * one step here that reaches the network, and a run should say when it did.
  */
-function seedForOracle(argv) {
+const seedForOracle = (argv) => {
   const named = namedSeedSpec(argv);
   const spec = named ?? defaultSeedSpec();
   if (spec !== null) { return resolveSeed(spec); }
@@ -121,16 +121,14 @@ function seedForOracle(argv) {
     };
   }
   return resolveSeed(FETCHED);
-}
+};
 
-function spawnSeed(seed, args, options = {}) {
-  return spawnSync(seed.cmd, [...seed.prefix, ...args], {
+const spawnSeed = (seed, args, options = {}) => spawnSync(seed.cmd, [...seed.prefix, ...args], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
     ...options,
   });
-}
 
 /**
  * Build one Nish program natively with the seed and answer where the binary
@@ -138,7 +136,7 @@ function spawnSeed(seed, args, options = {}) {
  * this call and a path; a failure here is the seed refusing the program, which
  * on a real seed is the rolling freeze doing its job and worth reading.
  */
-function linkWith(seed, source, out) {
+const linkWith = (seed, source, out) => {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const built = spawnSeed(seed, [path.join(root, source), "--link", out]);
   if (built.status !== 0) {
@@ -146,6 +144,6 @@ function linkWith(seed, source, out) {
     return null;
   }
   return out;
-}
+};
 
 export { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed, root, seedForOracle, spawnSeed, withoutSeed };

@@ -197,13 +197,13 @@ const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): 
     let chosenAlign = 0;
     let index = 0;
     for (const field of remaining) {
-      const fieldAlign = ctx.table.alignOf(field.type);
-      const pad = roundUpTo(offset, fieldAlign) - offset;
-      if (chosen === null || pad < chosenPad || (pad === chosenPad && fieldAlign > chosenAlign)) {
+      const alignment = ctx.table.alignOf(field.type);
+      const pad = roundUpTo(offset, alignment) - offset;
+      if (chosen === null || pad < chosenPad || (pad === chosenPad && alignment > chosenAlign)) {
         chosen = field;
         chosenAt = index;
         chosenPad = pad;
-        chosenAlign = fieldAlign;
+        chosenAlign = alignment;
       }
       index = index + 1;
     }

@@ -89,7 +89,6 @@ All three were clean when they were added.
 | `noUnusedImports` | | 20 |
 | `noNestedTernary` | Two levels of `?:` read better as an `if`. | 12 |
 | `useNamingConvention` | See Naming. | 5 |
-| `useForOf` | An index loop that only reads `a[i]` is a `for...of`. Tooling only. | 7 |
 | `noEmptyBlockStatements`, `useAwait`, `noYodaExpression`, `useNumberNamespace`, `noExportedImports`, `useConst`, `noUselessElse`, `useShorthandAssign`, `noUselessStringConcat` | Small ones, five or fewer hits each. | 21 |
 | `useConsistentTypeDefinitions`, `useConsistentMethodSignatures` | `type` over `interface`, and a function member written as a property. Off in Nish programs, where a struct is an `interface`. Every `.ts` file Biome reads today is a Nish program, so they have nothing to flag yet. | 0 |
 
@@ -109,6 +108,8 @@ that the compiler refuses or compiles worse:
   assignments, and the autofix would break the string ones.
 - `useForOf`: an index loop can be the shape the bounds prover needs.
 - `useNumberNamespace`: `parseInt` is the language's builtin.
+- `useParseIntRadix`: the builtin `parseInt` is base 10 only and takes one
+  argument, so the radix the rule asks for is a compile error.
 - The unused-variable and numeric-literal rules: these files are compiler
   inputs, and the n-body constants are the benchmark's own digits.
 
@@ -127,6 +128,7 @@ depends on, so it would stay noise however long the cleanup ran:
 | `noImportCycles` | 108 | The checker and emitter families recurse into each other by design. |
 | `noNegationElse`, `useSimplifiedLogicExpression` | 111 | Taste. They reorder branches and De Morgan guard conditions, which makes a guard harder to read, not easier. |
 | `noSubstr`, `useAtIndex` | 78 | They suggest methods that are not in the language's string and array surface. |
+| `useForOf` | 7 | Six of the seven hits were argument parsers that consume a flag's value with `argv[++i]`, which a `for...of` cannot do. The seventh was rewritten. |
 | `noInferrableTypes` | 8 | In Nish, `const n: i32 = 0` is not redundant. The annotation picks the width. |
 | tsc `noUncheckedIndexedAccess` | 2,574 | An out-of-range index in Nish panics instead of answering `undefined`, so `T` is the honest element type. |
 

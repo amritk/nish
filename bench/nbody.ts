@@ -27,7 +27,7 @@ class Body {
   }
 }
 
-function advance(bodies: Body[], n: i32, dt: number): void {
+const advance = (bodies: Body[], n: i32, dt: number): void => {
   for (let i: i32 = 0; i < n; i++) {
     const bi = bodies[i];
     for (let j: i32 = i + 1; j < n; j++) {
@@ -51,9 +51,9 @@ function advance(bodies: Body[], n: i32, dt: number): void {
     b.y = b.y + dt * b.vy;
     b.z = b.z + dt * b.vz;
   }
-}
+};
 
-function energy(bodies: Body[], n: i32): number {
+const energy = (bodies: Body[], n: i32): number => {
   let e = 0;
   for (let i: i32 = 0; i < n; i++) {
     const bi = bodies[i];
@@ -67,9 +67,9 @@ function energy(bodies: Body[], n: i32): number {
     }
   }
   return e;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const N: i32 = 20000000; // bench:n
   const PI = 3.141592653589793;
   const SOLAR_MASS = 4 * PI * PI;
@@ -99,4 +99,4 @@ export function main(): i32 {
   }
   console.log(energy(bodies, n));
   return 0;
-}
+};

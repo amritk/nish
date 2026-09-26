@@ -143,7 +143,7 @@ const takeLock = () => {
  * today and it stays inside the tree, so this is a door being closed before
  * anybody walks through it.
  */
-export const copyInto = (from, to, root) => {
+export const copyInto = (from, to, rootDir) => {
   if (!fs.lstatSync(from).isSymbolicLink()) {
     fs.copyFileSync(from, to);
     return "file";
@@ -151,7 +151,7 @@ export const copyInto = (from, to, root) => {
   const target = fs.readlinkSync(from);
   // Where the link lands once the copy holds it, and whether that is under root.
   const landing = path.resolve(path.dirname(to), target);
-  const inside = path.relative(root, landing);
+  const inside = path.relative(rootDir, landing);
   const escapes =
     path.isAbsolute(target) || path.isAbsolute(inside) || inside === ".." || inside.startsWith(`..${path.sep}`);
   if (escapes) { return "escapes"; }

@@ -28,7 +28,6 @@ import {
   N_MEMBER,
   N_PAREN,
   N_RETURN,
-  N_SUPER,
   N_THIS,
   N_THROW,
   N_VAR,
@@ -46,9 +45,9 @@ export class Assigned {
   fields: StringSet;
   terminated: boolean;
 
-  constructor(terminated: boolean) {
+  constructor(isTerminated: boolean) {
     this.fields = new StringSet();
-    this.terminated = terminated;
+    this.terminated = isTerminated;
   }
 
   copy(): Assigned {

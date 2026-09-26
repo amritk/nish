@@ -15,11 +15,9 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-// `pool` moved to tests/pool.js when the WP14 oracles needed it too; it is
-// still re-exported below, so the runners that import it from here are
-// unchanged. `run` below stays local: it is this harness's specialisation,
-// with a cwd and a kill timeout the oracles do not want.
-import { pool } from "../pool.js";
+// `pool` moved to tests/pool.js when the WP14 oracles needed it too, and the
+// runners import it from there. `run` below stays local: it is this harness's
+// specialisation, with a cwd and a kill timeout the oracles do not want.
 // The seed resolution is the one the WP14 oracles use (G2.3), so "the compiler
 // that is not stage0" is spelled once in the repository.
 import { defaultSeedSpec, resolveSeed } from "../self/seed.js";
@@ -44,7 +42,7 @@ const words = (file) =>
  * binary and the Node rewrite are handed the same environment, and only the
  * runner can set one.
  */
-function envFile(file) {
+const envFile = (file) => {
   if (!fs.existsSync(file)) { return process.env; }
   const env = { ...process.env };
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
@@ -58,7 +56,7 @@ function envFile(file) {
     else if (eq > 0) { env[text.slice(0, eq)] = text.slice(eq + 1); }
   }
   return env;
-}
+};
 
 /**
  * A program the harness can run: `{ name, entry, args, argv, env, kind }`.
@@ -66,23 +64,21 @@ function envFile(file) {
  * native binary and the Node rewrite receive (`<name>.argv`, WP7
  * `process.argv`), and `env` the environment both are given (`<name>.env`).
  */
-function program(name, entry, argsFile, kind) {
-  return {
+const program = (name, entry, argsFile, kind) => ({
     name,
     entry,
     args: words(argsFile),
     argv: words(argsFile.replace(/args$/, "argv")),
     env: envFile(argsFile.replace(/args$/, "env")),
     kind,
-  };
-}
+  });
 
 /**
  * Every `tests/cases/*.ts` with an exported `main` in either spelling (WP22) and no `.err`, and
  * every corpus program: `tests/differential/corpus/<name>.ts` (+ `<name>.args`)
  * or `tests/differential/corpus/<name>/main.ts` (+ `args`) for multi-module ones.
  */
-function discoverPrograms({ cases = true, corpus = true } = {}) {
+const discoverPrograms = ({ cases = true, corpus = true } = {}) => {
   const out = [];
   if (cases) {
     for (const file of fs.readdirSync(casesDir).sort()) {
@@ -106,11 +102,10 @@ function discoverPrograms({ cases = true, corpus = true } = {}) {
     }
   }
   return out;
-}
+};
 
 /** Spawn asynchronously; resolves with `{ status, signal, stdout, stderr }` (Buffers). */
-function run(cmd, args, opts = {}) {
-  return new Promise((resolve) => {
+const run = (cmd, args, opts = {}) => new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"], ...opts });
     const out = [];
     const err = [];
@@ -126,7 +121,6 @@ function run(cmd, args, opts = {}) {
       resolve({ status: null, signal: null, stdout: Buffer.concat(out), stderr: Buffer.from(String(e)) });
     });
   });
-}
 
 /**
  * The compiler that builds the native half of every comparison: `--compiler
@@ -231,7 +225,7 @@ const scratchRoot = (prog, side) => {
  * plus both sides' `{ status, signal, stdout, stderr }` when they ran.
  * `context` is `{ compiler, rewriter }`, from `compilerFor` and `rewriterFor`.
  */
-async function runProgram(prog, context) {
+const runProgram = async (prog, context) => {
   const t0 = Date.now();
   const refused = context.compiler.error ?? context.rewriter.error;
   if (refused !== undefined) { return { prog, verdict: "compile-error", detail: refused, ms: Date.now() - t0 }; }
@@ -278,9 +272,9 @@ async function runProgram(prog, context) {
   const same =
     native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
   return { prog, verdict: same ? "match" : "mismatch", native, node, ms: Date.now() - t0, work };
-}
+};
 
-function readKnownFailures() {
+const readKnownFailures = () => {
   if (!fs.existsSync(knownFile)) { return new Set(); }
   return new Set(
     fs
@@ -289,16 +283,16 @@ function readKnownFailures() {
       .map((l) => l.replace(/#.*/, "").trim())
       .filter(Boolean)
   );
-}
+};
 
-function summarize(side) {
+const summarize = (side) => {
   if (!side) { return "-"; }
   const exit = side.signal ? side.signal : `exit ${side.status}`;
   return `${exit}, ${side.stdout.length} B`;
-}
+};
 
 /** Human-readable explanation of a mismatch: exit status and the first differing stdout line. */
-function describeMismatch(r) {
+const describeMismatch = (r) => {
   const lines = [];
   const a = r.native;
   const b = r.node;
@@ -323,7 +317,7 @@ function describeMismatch(r) {
     lines.push(`native stderr: ${String(a.stderr).trim().split("\n")[0]}`);
   }
   return lines.join("\n");
-}
+};
 
 /** Whether clang is on PATH; the toolchain-dependent checks skip rather than fail without it. */
 const hasClang = () => spawnSync("which", ["clang"]).status === 0;
@@ -337,7 +331,6 @@ export {
   discoverPrograms,
   rewriterFor,
   runProgram,
-  pool,
   readKnownFailures,
   describeMismatch,
   summarize,

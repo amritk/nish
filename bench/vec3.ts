@@ -43,7 +43,7 @@ class Vec3 {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const N: i32 = 50000000; // bench:n
   const DT = 0.0000001;
   const p = new Vec3(0, 0, 0);
@@ -63,4 +63,4 @@ export function main(): i32 {
   console.log(p.z);
   console.log(energy);
   return 0;
-}
+};

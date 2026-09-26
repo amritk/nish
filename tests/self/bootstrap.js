@@ -46,20 +46,20 @@ const runtimeC = path.join(root, "runtime", "runtime.c");
 /** The entry of `self/`: the driver, which imports every other module. */
 const ENTRY = path.join("self", "compile.ts");
 
-function fresh(dir) {
+const fresh = (dir) => {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   return dir;
-}
+};
 
 /** A stage1-or-later compiler compiles `self/` into `dir`. */
-function compileWithStage(binary, dir) {
+const compileWithStage = (binary, dir) => {
   const r = spawnSync(binary, [ENTRY, "-o", `${dir}/`], { cwd: root, encoding: "utf8" });
   return r.status === 0 ? null : `${path.basename(binary)}: ${r.stderr || r.stdout}`;
-}
+};
 
 /** Link one stage's `.ll` files with the runtime into an executable. */
-function link(dir, exe) {
+const link = (dir, exe) => {
   const modules = fs
     .readdirSync(dir)
     .filter((f) => f.endsWith(".ll"))
@@ -70,13 +70,13 @@ function link(dir, exe) {
     encoding: "utf8",
   });
   return r.status === 0 ? null : `link ${path.basename(exe)}: ${r.stderr || r.stdout}`;
-}
+};
 
 /**
  * Compare two directories of `.ll` files. The module set must match too: a
  * stage that emitted one module fewer has not agreed about the rest.
  */
-function compareIR(a, b, labelA, labelB, verbose) {
+const compareIR = (a, b, labelA, labelB, verbose) => {
   const namesA = fs.readdirSync(a).filter((f) => f.endsWith(".ll")).sort();
   const namesB = fs.readdirSync(b).filter((f) => f.endsWith(".ll")).sort();
   if (namesA.join(",") !== namesB.join(",")) {
@@ -102,9 +102,9 @@ function compareIR(a, b, labelA, labelB, verbose) {
     if (verbose) { process.stdout.write(`  ok ${name} (${want.length} bytes)\n`); }
   }
   return { modules: namesA.length, bytes };
-}
+};
 
-function main(argv) {
+const main = (argv) => {
   const verbose = argv.includes("--verbose");
   const keep = argv.includes("--keep");
   const work = fresh(path.join(root, "build", "bootstrap"));
@@ -151,7 +151,7 @@ function main(argv) {
       `IR(stage1)==IR(stage2), stage3 == stage2 (${binary2.length} bytes), seed ${seed.label}\n`
   );
   return 0;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { main };

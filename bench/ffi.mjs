@@ -24,14 +24,14 @@ const nishc = compilerFrom(process.argv);
 const N = Number(nishc.rest[2] ?? 1e6);
 const REPEAT = 5;
 
-function run(cmd, args) {
+const run = (cmd, args) => {
   const r = spawnSync(cmd, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   if (r.status !== 0) {
     console.error(`${cmd} ${args.join(" ")}\n${r.stdout}${r.stderr}`);
     process.exit(1);
   }
   return String(r.stdout);
-}
+};
 
 // Compile once: IR + N-API shim + wasm typings and loader from the same signatures.
 run(nishc.cmd, [
@@ -51,7 +51,7 @@ if (spawnSync("clang", ["-print-prog-name=wasm-ld"]).status === 0) {
 }
 
 /** Best of REPEAT runs, in milliseconds, plus the value the last run produced. */
-function time(label, fn) {
+const time = (label, fn) => {
   let best = Number.POSITIVE_INFINITY;
   let value;
   for (let r = 0; r < REPEAT; r++) {
@@ -63,7 +63,7 @@ function time(label, fn) {
   const perElement = ((best * 1e6) / N).toFixed(2);
   console.log(`${label.padEnd(40)} ${best.toFixed(4).padStart(10)} ms   ${perElement.padStart(8)} ns/element   result ${value}`);
   return best;
-}
+};
 
 const expected = (N * (N + 1)) / 2;
 console.log(`sum of 1..${N.toLocaleString("en-US")}, best of ${REPEAT} runs (expected ${expected})\n`);

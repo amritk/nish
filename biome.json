@@ -124,7 +124,7 @@
         "noUselessElse": "warn",
         "useCollapsedElseIf": "warn",
         "noUnusedTemplateLiteral": "warn",
-        "useForOf": "warn",
+        "useForOf": "off",
         "noNestedTernary": "warn",
         "useNumberNamespace": "warn",
         "noYodaExpression": "warn",
@@ -181,7 +181,8 @@
           "correctness": {
             "noUnusedVariables": "off",
             "noUnusedFunctionParameters": "off",
-            "noPrecisionLoss": "off"
+            "noPrecisionLoss": "off",
+            "useParseIntRadix": "off"
           },
           "suspicious": {
             "noApproximativeNumericConstant": "off"
@@ -200,6 +201,12 @@
     {
       "includes": [
         "self/**/*.ts",
+        "std/**/*.ts",
+        "examples/**/*.ts",
+        "docs/cookbook/**/*.ts",
+        "!docs/cookbook/fn-add-function.ts",
+        "bench/**/*.ts",
+        "tests/self/**/*.ts",
         "tests/**/*.js",
         "docs/*.mjs",
         "bench/**/*.mjs",

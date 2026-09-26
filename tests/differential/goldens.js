@@ -325,7 +325,9 @@ const parse = (argv) => {
     if (arg === "--update") { options.update = true; }
     // Freshness is the only check left, so `--fresh` asks for what every run
     // does; it stays a flag because `tests/run.js` passes it.
-    else if (arg === "--fresh") { continue; }
+    else if (arg === "--fresh") {
+      // Every run checks freshness, so the flag asks for nothing extra.
+    }
     else if (arg === "--verbose") { options.verbose = true; }
     else if (arg === "--only") { options.only = argv[++i]; }
     else if (!arg.startsWith("-") && options.only === undefined) { options.only = arg; }

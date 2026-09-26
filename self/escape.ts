@@ -71,7 +71,6 @@ import {
   N_MEMBER,
   N_NEW,
   N_NULL,
-  N_NUMBER,
   N_OBJECT,
   N_PAREN,
   N_RETURN,
