@@ -2432,6 +2432,67 @@ if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
   );
 }
 
+// The soundness pin of the call-site ranges pass's narrowing and shortcuts
+// (`self/ranges.ts`; docs/ARCHITECTURE.md, the call-site ranges row).
+// `--range-reference` runs the pass by the rule #222 shipped — every access
+// pass 2 left checked opens a body, every round joins every entry again, every
+// reached caller is walked to its end — and the default must prove exactly
+// what it proves. `self/` is the largest program there is, and the closed world
+// of `--link` is where the pass has the most candidates, so both are compiled
+// both ways and every module's IR and every warning must be byte-identical. The
+// executable is not the point: `CC=true` turns the link into a no-op after the
+// IR is written. AWFY, whose recursions walk the most rounds, goes the same way.
+if (!only || "range_reference".includes(only) || only.startsWith("range_reference")) {
+  for (const [label, entry] of [
+    ["self/", path.join("self", "compile.ts")],
+    ["bench/awfy", path.join("bench", "awfy", "main.ts")],
+  ]) {
+    for (const [mode, args] of [
+      ["--link", (dir) => ["--link", path.join(dir, "exe")]],
+      ["IR only", (dir) => ["-o", `${dir}${path.sep}`]],
+    ]) {
+      const out = {};
+      for (const flavour of ["narrowed", "reference"]) {
+        const dir = path.join(buildDir, "range_reference", label.replace(/\W/g, "_"), mode === "--link" ? "link" : "ir", flavour);
+        fs.rmSync(dir, { recursive: true, force: true });
+        const extra = flavour === "reference" ? ["--range-reference"] : [];
+        const r = spawnSync(NISH, [entry, ...args(dir), "--json", ...extra], {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, CC: "true" },
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        const modules = mode === "--link" ? path.join(dir, "exe.modules") : dir;
+        const lls = fs.existsSync(modules) ? fs.readdirSync(modules).filter((f) => f.endsWith(".ll")).sort() : [];
+        out[flavour] = {
+          status: r.status,
+          warnings: r.stdout,
+          modules: lls.map((f) => [f, fs.readFileSync(path.join(modules, f), "utf8")]),
+        };
+      }
+      const a = out.narrowed;
+      const b = out.reference;
+      const differ = [];
+      if (a.modules.length !== b.modules.length) {
+        differ.push(`${a.modules.length} modules against ${b.modules.length}`);
+      }
+      for (let k = 0; k < a.modules.length && k < b.modules.length; k++) {
+        if (a.modules[k][0] !== b.modules[k][0] || a.modules[k][1] !== b.modules[k][1]) {
+          differ.push(a.modules[k][0]);
+        }
+      }
+      if (a.warnings !== b.warnings) {
+        differ.push("the --json warnings");
+      }
+      check(
+        `range_reference: ${label} (${mode}) proves the same with the narrowed candidates as with every candidate (${a.modules.length} modules)`,
+        a.status === 0 && b.status === 0 && a.modules.length > 0 && differ.length === 0,
+        `exit ${a.status} / ${b.status}; differ: ${differ.join(", ")}`
+      );
+    }
+  }
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.

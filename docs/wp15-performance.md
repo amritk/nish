@@ -370,8 +370,65 @@ mode).
 *What it bought.* Towers executes 5.6% fewer instructions and Storage 3.3%
 fewer (cachegrind, one pass at 50 inner iterations); the other five AWFY
 programs and all of `bench/`'s compile to the IR they did. Sixteen of the
-compiler's own warned checks (`tests/perf-baseline.json`) are proven away. It
-costs `self/`'s compile 2.6% more instructions and 1.4% more peak RSS.
+compiler's own warned checks (`tests/perf-baseline.json`) are proven away. As
+first shipped it cost `self/`'s compile 2.6% more instructions and 1.4% more
+peak RSS, and once exported functions were candidates in a closed world, 4.7%
+more instructions under `--link` (the next paragraph).
+
+*What it cost, and what took the cost back (#217, range-narrow).* A closed
+`--link` build makes every exported function a candidate, and `self/` exports
+nearly everything: 1,180 candidates and 1,057 walked bodies in 14 rounds,
+against 352, 295 and 7 in an IR-only build. Compiling `self/` with `--link`
+cost 4.7% more instructions than before the pass and the AWFY harness 6.8%,
+over the plan's 3%. Measured first, the obvious cut was the wrong one: a finer
+candidate test — only an access reading a parameter, only a caller whose
+arguments carry one — dropped 117 of 1,193 candidates and cost more to decide
+than it saved, because nearly every function in `self/` passes `this`, a
+context or a walk straight on. The walks were one per body already; what cost
+was everything around them and the walk machinery itself. What shipped, none
+of it at the price of a proof (docs/ARCHITECTURE.md, the call-site ranges row,
+has the argument, and `tests/run.js`'s `range_reference` compiles `self/` and
+AWFY both ways and requires byte-identical IR and warnings):
+
+  - a candidate needs an access *some* walk could prove: an index that is a
+    literal or a bare integer local, on a local or a plain struct path
+    (`isOpenAccess`); `program.nodeLocals[e.id]` never is;
+  - a round joins again only the entries its walks can have moved, and never
+    an empty one — 38,892 joins in `self/`'s rounds were each a fresh
+    `EntryFacts` and a name lookup;
+  - an entry that is empty stays empty, so a site for such a callee is not
+    worked out, a caller whose candidate callees are all entered with nothing
+    already is not walked for sites, and a body with nothing open stops
+    walking once it has noted every call to a candidate it makes;
+  - pass 2 does not walk a body with no access, `charCodeAt` or `substring`
+    in it, which is where most of the AWFY margin comes from;
+  - bookkeeping: the callee of a call looked up once by node rather than by
+    name at every visit, a branch's state handed over rather than copied,
+    later-argument effects collected only when a later argument can write,
+    the summaries swept callees first.
+
+Measured with cachegrind over one input — main's `self/` and
+`bench/awfy/main.ts` at `7d40e07`, compiled by each compiler — against
+`f2c2cfa`, main just before the pass. `#222` is main with the pass
+(`67bc669`); the next column is this stage on top of it and nothing else, the
+like-for-like number; main (`7d40e07`) and this stage on it also carry #229 and
+#230, whose own analyses cost the same 30.8 M instructions of `self/`'s
+`--link` compile on either side:
+
+| Compile, instructions | `f2c2cfa` | #222 | #222 + this stage | main | main + this stage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `self/`, `--link` | 1,263,591,465 | +4.71% | **+1.52%** | +7.14% | +3.96% (−2.97% vs main) |
+| `self/`, IR only | 1,263,551,862 | +2.60% | **+1.06%** | +4.80% | +3.25% (−1.48%) |
+| `bench/awfy`, `--link` | 10,674,647 | +6.78% | **+2.81%** | +6.94% | +2.96% (−3.72%) |
+| `bench/awfy`, IR only | 10,660,692 | +1.92% | **−0.50%** | +4.32% | +1.89% (−2.33%) |
+
+CPU time, the median of 100 runs pinned to one core and alternated between the
+compilers, moves with the instructions: `self/` under `--link` +7.8% for #222
+and +2.3% with this stage, IR only +2.4% and +1.3%; peak RSS, +4.3% under
+`--link` for #222, is 0.5% below `f2c2cfa` with this stage. A single batch of 20
+moves by ±2.5% on the machine it was measured on, which is why the pooled
+median is the number quoted. The proofs, the IR and every program's
+instruction count are unchanged.
 
 **Floor: the runtime check stays.** When none of the above proves it, the panic
 is emitted, as today. Safety is the default; speed is what the proofs buy.

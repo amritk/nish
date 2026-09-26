@@ -884,7 +884,7 @@ export class Compilation {
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.
     layoutInlineArrays(contexts, mode);
-    proveCallSiteRanges(contexts, mode);
+    proveCallSiteRanges(contexts, mode, this.opts.rangeReference);
     this.reportArenaLoops();
     this.checkParallel();
     return !this.sink.hasErrors();
