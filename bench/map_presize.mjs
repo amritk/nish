@@ -15,52 +15,63 @@ const timing = process.argv[2] === "time";
 const only = process.argv[timing ? 3 : 2] ?? "";
 
 /** `nish/map`'s `reserve` as Node runs it. */
-const reserve = (_m, _n) => {};
+const reserve = (_m, _n) => {
+  // Node's `Map` has nothing to presize.
+};
 
 const intKeys = (n) => {
   const keys = [];
-  for (let i = 0; i < 2 * n; i++) keys.push(Math.imul(i, 2654435761 | 0));
+  for (let i = 0; i < 2 * n; i++) {
+    keys.push(Math.imul(i, 2654435761 | 0));
+  }
   return keys;
 };
 
 const fill = (keys, n, presized) => {
   const m = new Map();
-  if (presized) reserve(m, n);
-  for (let i = 0; i < n; i++) m.set(keys[i], i);
+  if (presized) {
+    reserve(m, n);
+  }
+  for (let i = 0; i < n; i++) {
+    m.set(keys[i], i);
+  }
   return m;
 };
 
 const sum = (m) => {
   let total = 0;
-  for (const v of m.values()) total = (total + (v >>> 0)) >>> 0;
+  for (const v of m.values()) {
+    total = (total + (v >>> 0)) >>> 0;
+  }
   return total;
 };
 
 const insert = (keys, n, kind, presized) => {
   const t = process.hrtime.bigint();
   let built = 0;
-  for (let round = 0; round < 3; round++) built += fill(keys, n, presized).size;
+  for (let round = 0; round < 3; round++) {
+    built += fill(keys, n, presized).size;
+  }
   const m = fill(keys, n, presized);
   const line = `insert ${kind} ${built + m.size} ${sum(m)}`;
-  if (timing)
-    process.stderr.write(
-      `time insert ${kind} ${presized ? "reserve" : "grow"} ${process.hrtime.bigint() - t}\n`
-    );
+  if (timing) {
+    process.stderr.write(`time insert ${kind} ${presized ? "reserve" : "grow"} ${process.hrtime.bigint() - t}\n`);
+  }
   return line;
 };
 
 /** Print the checksum of whichever variants ran (`""` for one that did not), requiring both to be the same. */
-const settle = (grown, presized) => {
-  if (grown !== "" && presized !== "" && grown !== presized) {
-    throw new Error(`grown and presized maps disagree: ${grown} against ${presized}`);
+const settle = (byGrown, byPresized) => {
+  if (byGrown !== "" && byPresized !== "" && byGrown !== byPresized) {
+    throw new Error(`grown and presized maps disagree: ${byGrown} against ${byPresized}`);
   }
-  console.log(grown !== "" ? grown : presized);
+  console.log(byGrown !== "" ? byGrown : byPresized);
 };
-const grow = only === "" || only === "grow";
-const presize = only === "" || only === "reserve";
+const runGrow = only === "" || only === "grow";
+const runReserve = only === "" || only === "reserve";
 
-const n = 65536; // bench:n
-const ints = intKeys(n);
+const keyCount = 65536; // bench:n
+const ints = intKeys(keyCount);
 const strs = ints.map((k) => `k${k}`);
-settle(grow ? insert(strs, n, "str", false) : "", presize ? insert(strs, n, "str", true) : "");
-settle(grow ? insert(ints, n, "int", false) : "", presize ? insert(ints, n, "int", true) : "");
+settle(runGrow ? insert(strs, keyCount, "str", false) : "", runReserve ? insert(strs, keyCount, "str", true) : "");
+settle(runGrow ? insert(ints, keyCount, "int", false) : "", runReserve ? insert(ints, keyCount, "int", true) : "");

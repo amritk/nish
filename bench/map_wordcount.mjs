@@ -22,13 +22,17 @@ const countRng = (n) => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
     return state >>> 8;
   };
-  for (let j = 0; j < 16 * n; j++) next();
+  for (let j = 0; j < 16 * n; j++) {
+    next();
+  }
   return next;
 };
 
 const intKeys = (n) => {
   const keys = [];
-  for (let i = 0; i < 2 * n; i++) keys.push(Math.imul(i, 2654435761 | 0));
+  for (let i = 0; i < 2 * n; i++) {
+    keys.push(Math.imul(i, 2654435761 | 0));
+  }
   return keys;
 };
 
@@ -48,25 +52,27 @@ const count = (keys, n, kind, fused) => {
     }
   }
   let weighted = 0;
-  for (let i = 0; i < vocab; i++)
+  for (let i = 0; i < vocab; i++) {
     weighted = (weighted + (Math.imul(counts.get(keys[i]) ?? 0, i) >>> 0)) >>> 0;
-  if (timing)
+  }
+  if (timing) {
     process.stderr.write(`time count ${kind} ${fused ? "fused" : "double"} ${process.hrtime.bigint() - t}\n`);
+  }
   return `count ${kind} ${counts.size} ${weighted}`;
 };
 
 /** Print the checksum of whichever variants ran (`""` for one that did not), requiring both to be the same. */
-const settle = (fused, double) => {
-  if (fused !== "" && double !== "" && fused !== double) {
-    throw new Error(`fused and double lookup disagree: ${fused} against ${double}`);
+const settle = (byFused, byDouble) => {
+  if (byFused !== "" && byDouble !== "" && byFused !== byDouble) {
+    throw new Error(`fused and double lookup disagree: ${byFused} against ${byDouble}`);
   }
-  console.log(fused !== "" ? fused : double);
+  console.log(byFused !== "" ? byFused : byDouble);
 };
-const fused = only === "" || only === "fused";
-const double = only === "" || only === "double";
+const runFused = only === "" || only === "fused";
+const runDouble = only === "" || only === "double";
 
-const n = 65536; // bench:n
-const ints = intKeys(n);
+const keyCount = 65536; // bench:n
+const ints = intKeys(keyCount);
 const strs = ints.map((k) => `k${k}`);
-settle(fused ? count(strs, n, "str", true) : "", double ? count(strs, n, "str", false) : "");
-settle(fused ? count(ints, n, "int", true) : "", double ? count(ints, n, "int", false) : "");
+settle(runFused ? count(strs, keyCount, "str", true) : "", runDouble ? count(strs, keyCount, "str", false) : "");
+settle(runFused ? count(ints, keyCount, "int", true) : "", runDouble ? count(ints, keyCount, "int", false) : "");
